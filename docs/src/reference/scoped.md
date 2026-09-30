@@ -72,7 +72,7 @@ has nothing to bind.
 #### enter
 
 ```pepper
-T enter()
+enter(): T
 ```
 
 Enters the scope.

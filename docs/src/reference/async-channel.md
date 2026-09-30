@@ -68,7 +68,7 @@ threads.
 #### Channel()
 
 ```pepper
-construct(ulong capacity = 0)
+construct(capacity: ulong = 0)
 ```
 
 Creates an open, empty channel.
@@ -90,7 +90,7 @@ Creates an open, empty channel.
 #### send
 
 ```pepper
-bool send([Move] T value)
+send([Move] value: T): bool
 ```
 
 Queues `value`, first waiting while a bounded channel is full.
@@ -117,7 +117,7 @@ Pass `move(x)` to send a variable's value, or `copy(x)` to keep using
 #### try_send
 
 ```pepper
-bool try_send([Move] T value)
+try_send([Move] value: T): bool
 ```
 
 Queues `value` only if there is room right now, without waiting. The
@@ -132,7 +132,7 @@ value is dropped when it is not queued.
 #### receive
 
 ```pepper
-Result<T> receive()
+receive(): Result<T>
 ```
 
 Takes the next value, waiting until one arrives.
@@ -151,7 +151,7 @@ Takes the next value, waiting until one arrives.
 #### try_receive
 
 ```pepper
-Result<T> try_receive()
+try_receive(): Result<T>
 ```
 
 Takes the next value if one is waiting, without waiting.
@@ -162,7 +162,7 @@ Takes the next value if one is waiting, without waiting.
 #### receive_for
 
 ```pepper
-Result<T> receive_for(ulong milliseconds)
+receive_for(milliseconds: ulong): Result<T>
 ```
 
 Like `receive()`, but gives up after about `milliseconds` milliseconds.
@@ -176,7 +176,7 @@ Like `receive()`, but gives up after about `milliseconds` milliseconds.
 #### close
 
 ```pepper
-void close()
+close()
 ```
 
 Closes the channel and wakes every waiting sender and receiver.
@@ -188,7 +188,7 @@ end. Closing a closed channel does nothing.
 #### is_closed
 
 ```pepper
-bool is_closed()
+is_closed(): bool
 ```
 
 Reports whether `close()` has been called.
@@ -199,7 +199,7 @@ Reports whether `close()` has been called.
 #### count
 
 ```pepper
-ulong count()
+count(): ulong
 ```
 
 Returns the number of values waiting to be received. Other threads may
@@ -211,7 +211,7 @@ change it as soon as it returns.
 #### iterate
 
 ```pepper
-ChannelIterator<T> iterate()
+iterate(): ChannelIterator<T>
 ```
 
 Returns an iterator that receives until the channel is closed and
@@ -268,7 +268,7 @@ The value the last successful `next()` received.
 #### ChannelIterator()
 
 ```pepper
-construct(Channel<T> source)
+construct(source: Channel<T>)
 ```
 
 Creates an iterator that receives from `source`. `source.iterate()`
@@ -282,7 +282,7 @@ does the same.
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Waits for the next value.
@@ -293,7 +293,7 @@ Waits for the next value.
 #### current
 
 ```pepper
-T current()
+current(): T
 ```
 
 Returns the value the last successful `next()` received.

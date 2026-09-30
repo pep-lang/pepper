@@ -3,10 +3,10 @@
 # The raw types differ per platform; everything above the `_io_sys_*` layer
 # is written against these names only.
 
-import "sys_posix";
-import "sys_windows";
 import "socket_posix";
 import "socket_windows";
+import "sys_posix";
+import "sys_windows";
 
 # POSIX
 
@@ -19,7 +19,8 @@ import "socket_windows";
 ## @note code that must build for every target should not rely on this being
 ## an `int`
 ## @see File
-[Target(!OS(Windows))] export type FileHandle = int;
+[Target(!OS(Windows))]
+export type FileHandle = int;
 
 ## The raw operating-system handle of a socket: a POSIX file descriptor.
 ##
@@ -42,7 +43,8 @@ export type SocketHandle = int;
 ## predicates (`is_not_found()`, ...) rather than comparing codes.
 ##
 ## @see IoError
-[Target(!OS(Windows))] export type ErrorCode = int;
+[Target(!OS(Windows))]
+export type ErrorCode = int;
 
 ## File mode bits as reported in `Metadata.Permissions`: on POSIX the
 ## `mode_t` permission bits `mode & 07777` (the `rwx` bits for owner, group
@@ -51,7 +53,8 @@ export type SocketHandle = int;
 ## instead.
 ##
 ## @see Metadata
-[Target(!OS(Windows))] export type Mode = uint;
+[Target(!OS(Windows))]
+export type Mode = uint;
 
 # Windows
 
@@ -65,7 +68,8 @@ export type SocketHandle = int;
 ## @note code that must build for every target should not rely on this being
 ## a `__ptr<void>`
 ## @see File
-[Target(OS(Windows))] export type FileHandle = __ptr<void>;
+[Target(OS(Windows))]
+export type FileHandle = __ptr<void>;
 
 ## The raw operating-system handle of a socket: a Winsock `SOCKET`, an
 ## unsigned pointer-sized integer.
@@ -89,7 +93,8 @@ export type SocketHandle = ulong;
 ## comparing codes.
 ##
 ## @see IoError
-[Target(OS(Windows))] export type ErrorCode = uint;
+[Target(OS(Windows))]
+export type ErrorCode = uint;
 
 ## File attribute bits as reported in `Metadata.Permissions`: on Windows the
 ## whole `FILE_ATTRIBUTE_*` word of the file (`FILE_ATTRIBUTE_READONLY` is
@@ -97,7 +102,8 @@ export type SocketHandle = ulong;
 ## ...). On POSIX the same field holds `mode_t` permission bits instead.
 ##
 ## @see Metadata
-[Target(OS(Windows))] export type Mode = uint;
+[Target(OS(Windows))]
+export type Mode = uint;
 
 ## A byte position or distance within a file, as taken and returned by the
 ## `File.seek*` methods: a signed 64-bit integer on every target (`off_t` on
@@ -149,7 +155,7 @@ export struct IoError {
     ## @param code the raw platform error code (`errno` on POSIX,
     ## `GetLastError()` on Windows)
     ## @param message the human-readable description
-    construct(ErrorCode code = 0, String message = "") {
+    construct(code: ErrorCode = 0, message: String = "") {
         this.code = code;
         this.message = message;
     }
@@ -163,7 +169,7 @@ export struct IoError {
     ##
     ## @returns an error holding the current `errno` / `GetLastError()` code
     ## and its message
-    static IoError last() {
+    static last(): IoError {
         var code = _io_sys_last_error();
         return IoError(code, _io_sys_error_message(code));
     }
@@ -180,7 +186,7 @@ export struct IoError {
     ##
     ## @returns true when a path, or a directory on the way to it, is missing,
     ##   or a host name has no address
-    bool is_not_found() { return _io_sys_is_not_found(code); }
+    is_not_found(): bool { return _io_sys_is_not_found(code); }
 
     ## Returns whether the operation was refused for lack of permission.
     ##
@@ -189,7 +195,7 @@ export struct IoError {
     ## read-only file).
     ##
     ## @returns true when access was denied
-    bool is_permission_denied() { return _io_sys_is_permission_denied(code); }
+    is_permission_denied(): bool { return _io_sys_is_permission_denied(code); }
 
     ## Returns whether the operation failed because its target already
     ## exists, such as `Directory.create` on an existing path or opening with
@@ -199,7 +205,7 @@ export struct IoError {
     ## `ERROR_ALREADY_EXISTS` on Windows.
     ##
     ## @returns true when the target already exists
-    bool is_already_exists() { return _io_sys_is_already_exists(code); }
+    is_already_exists(): bool { return _io_sys_is_already_exists(code); }
 
     ## Returns whether a path that had to name a directory names something
     ## else, such as `Directory.open` or `Directory.remove` on a file (or,
@@ -209,7 +215,7 @@ export struct IoError {
     ## name is invalid") on Windows.
     ##
     ## @returns true when a directory was expected
-    bool is_not_a_directory() { return _io_sys_is_not_a_directory(code); }
+    is_not_a_directory(): bool { return _io_sys_is_not_a_directory(code); }
 
     ## Returns whether an operation that needs a file was given a directory,
     ## such as reading from a directory opened as a `File`.
@@ -218,7 +224,7 @@ export struct IoError {
     ## Windows (which `File` reads report for a directory handle).
     ##
     ## @returns true when a directory was given where a file was expected
-    bool is_is_a_directory() { return _io_sys_is_is_a_directory(code); }
+    is_is_a_directory(): bool { return _io_sys_is_is_a_directory(code); }
 
     ## Returns whether a directory could not be removed because it still has
     ## entries (`Directory.remove` on a non-empty directory).
@@ -227,7 +233,7 @@ export struct IoError {
     ## `ERROR_DIR_NOT_EMPTY` on Windows.
     ##
     ## @returns true when the directory is not empty
-    bool is_directory_not_empty() { return _io_sys_is_directory_not_empty(code); }
+    is_directory_not_empty(): bool { return _io_sys_is_directory_not_empty(code); }
 
     ## Returns whether an argument was invalid: bad options (such as opening
     ## with no access mode), data that is not valid UTF-8 where text was
@@ -237,7 +243,7 @@ export struct IoError {
     ## `ERROR_INVALID_NAME` on Windows.
     ##
     ## @returns true when the input was invalid
-    bool is_invalid_input() { return _io_sys_is_invalid_input(code); }
+    is_invalid_input(): bool { return _io_sys_is_invalid_input(code); }
 
     ## Returns whether the operation was interrupted before it finished.
     ##
@@ -246,7 +252,7 @@ export struct IoError {
     ## themselves, so callers rarely see this.
     ##
     ## @returns true when the operation was interrupted
-    bool is_interrupted() { return _io_sys_is_interrupted(code); }
+    is_interrupted(): bool { return _io_sys_is_interrupted(code); }
 
     ## Returns whether a connection attempt was refused: nothing listens on
     ## that port (the peer answered with a reset).
@@ -361,27 +367,35 @@ export _io_utf8_valid(p: __ptr<char>, n: ulong): bool {
             continue;
         }
         ulong extra = 0;
-        var lo = 128;    # allowed range of the first continuation byte
+        var lo = 128;  # allowed range of the first continuation byte
         var hi = 191;
         if (c >= 194 && c <= 223) {
             extra = 1;
         } else {
             if (c >= 224 && c <= 239) {
                 extra = 2;
-                if (c == 224) { lo = 160; }   # no overlong 3-byte forms
-                if (c == 237) { hi = 159; }   # no surrogates
+                if (c == 224) {
+                    lo = 160;
+                }  # no overlong 3-byte forms
+                if (c == 237) {
+                    hi = 159;
+                }  # no surrogates
             } else {
                 if (c >= 240 && c <= 244) {
                     extra = 3;
-                    if (c == 240) { lo = 144; }   # no overlong 4-byte forms
-                    if (c == 244) { hi = 143; }   # nothing past U+10FFFF
+                    if (c == 240) {
+                        lo = 144;
+                    }  # no overlong 4-byte forms
+                    if (c == 244) {
+                        hi = 143;
+                    }  # nothing past U+10FFFF
                 } else {
-                    return false;   # continuation byte, 0xC0/0xC1, >= 0xF5
+                    return false;  # continuation byte, 0xC0/0xC1, >= 0xF5
                 }
             }
         }
         if (i + extra >= n) {
-            return false;   # truncated sequence
+            return false;  # truncated sequence
         }
         var first = _io_byte(b, n, i + 1);
         if (first < lo || first > hi) {

@@ -127,7 +127,7 @@ fn pep_fmt_keeps_every_repository_file_meaning_and_is_idempotent() {
 
 #[test]
 fn pep_fmt_sources_are_formatted() {
-    let files = repo_pep_files(&["tools"]);
+    let files = repo_pep_files(&["tools", "runtime"]);
     let failures: Vec<String> = support::parallel_map(&files, |path| {
         let source = std::fs::read_to_string(path).unwrap();
         (format(&source).as_deref() != Ok(source.as_str())).then(|| path.display().to_string())

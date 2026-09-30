@@ -12,9 +12,9 @@
 # passed with `__function_pointer`) takes that reference, records it as the
 # thread's current Thread, runs the body, and marks the thread finished.
 
-import "thread_local";
 import "sys_posix";
 import "sys_windows";
+import "thread_local";
 
 extern void memcpy(void* dest, void* src, ulong n);
 
@@ -113,7 +113,7 @@ export struct Thread {
     ##
     ## @param name the thread's name; empty for an unnamed thread
     ## @param body the function the thread runs
-    construct(String name, ThreadBody body) {
+    construct(name: String, body: ThreadBody) {
         _id = _async_next_id.fetch_add(1);
         _name_size = name.size();
         _name_length = name.length();
@@ -147,7 +147,7 @@ export struct Thread {
     ## @example
     ##     var worker = Thread.spawn(do_work, "worker");
     ##     worker.join();
-    static Thread spawn(ThreadBody body, String name = "") {
+    static spawn(body: ThreadBody, name: String = ""): Thread {
         var thread = Thread(name, body);
         # The new thread's own reference, which its entry point takes over.
         __ptr<Thread> start = _pep_malloc(8);
@@ -174,7 +174,7 @@ export struct Thread {
     ## @example
     ##     var me = Thread.current();
     ##     print(me.name(), "\n");   # "main" on the main thread
-    static Thread current() {
+    static current(): Thread {
         var thread = _async_current.get();
         if (thread !== __null) {
             return thread;
@@ -194,7 +194,7 @@ export struct Thread {
     ## The operating system may sleep longer, but never shorter.
     ##
     ## @param milliseconds how long to sleep; 0 returns right away
-    static void sleep(ulong milliseconds) {
+    static sleep(milliseconds: ulong) {
         if (milliseconds > 0) {
             _async_sys_sleep(milliseconds);
         }
@@ -203,14 +203,14 @@ export struct Thread {
     ## Returns the thread's id, which no other thread in the program has.
     ##
     ## @returns the thread's id
-    ThreadId id() {
+    id(): ThreadId {
         return _id;
     }
 
     ## Returns the name the thread was given.
     ##
     ## @returns the name passed to `spawn`, `main` for the main thread, or an empty String for an unnamed thread
-    String name() {
+    name(): String {
         if (_name_size == 0) {
             return String();
         }
@@ -224,7 +224,7 @@ export struct Thread {
     ## `Thread` that was not started by `spawn`.
     ##
     ## @returns true once the body has returned
-    bool is_finished() {
+    is_finished(): bool {
         return _finished.load() == 1;
     }
 
@@ -232,7 +232,7 @@ export struct Thread {
     ## `spawn` and has not been joined yet.
     ##
     ## @returns true if the thread can be joined
-    bool is_joinable() {
+    is_joinable(): bool {
         return _handle.load() != __null;
     }
 
@@ -244,7 +244,7 @@ export struct Thread {
     ## to the caller after `join()` returns.
     ##
     ## @panics if the thread cannot be joined (see `is_joinable()`), or if a thread tries to join itself
-    void join() {
+    join() {
         if (_id == Thread.current().id()) {
             panic("Thread.join: a thread cannot join itself");
         }
@@ -273,11 +273,14 @@ export _async_thread_run(start: __ptr<void>) {
 
 # The C entry point of a spawned thread: `void* (*)(void*)` for pthreads, and
 # `DWORD (WINAPI *)(void*)` on Windows.
-[Target(!OS(Windows))] export _async_thread_main(start: __ptr<void>): __ptr<void> {
+[Target(!OS(Windows))]
+export _async_thread_main(start: __ptr<void>): __ptr<void> {
     _async_thread_run(start);
     return __null;
 }
-[Target(OS(Windows))] export _async_thread_main(start: __ptr<void>): uint {
+
+[Target(OS(Windows))]
+export _async_thread_main(start: __ptr<void>): uint {
     _async_thread_run(start);
     return 0;
 }

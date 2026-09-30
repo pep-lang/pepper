@@ -592,9 +592,11 @@ pub fn resolve_implicit_types(module: &mut Module) {
 }
 
 /// Whether `function`'s return type is inferred from its returns: it
-/// declares none and is not an unspecialized generic.
+/// declares none and is not an unspecialized generic. A specialization
+/// (`g<int>`) keeps its base's `generic_params`, so `is_generic_func` is
+/// what tells the two apart.
 fn infers_return(function: &FunctionDef) -> bool {
-    function.ty.is_auto() && function.generic_params.is_empty()
+    function.ty.is_auto() && !function.is_generic_func
 }
 
 /// Give `function` the type its returns agree on: `void` when it returns no

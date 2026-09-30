@@ -71,7 +71,7 @@ export struct String {
     ##     var empty = String();
     ##     var s = "abc";
     ##     var copy = String(s.c_str(), s.size(), s.length());
-    construct(__ptr<char> data = __null, ulong size = 0, ulong length = 0) {
+    construct(data: __ptr<char> = __null, size: ulong = 0, length: ulong = 0) {
         _size = size;
         _length = length;
         if (data) {
@@ -108,7 +108,7 @@ export struct String {
     ## @param data the UTF-8 bytes to measure
     ## @param size the number of bytes to measure
     ## @returns the number of code points, or 0 for invalid UTF-8
-    static ulong length_of(__ptr<char> data, ulong size) {
+    static length_of(data: __ptr<char>, size: ulong): ulong {
         return _pep_utf8_length(data, size);
     }
 
@@ -116,7 +116,7 @@ export struct String {
     ##
     ## @returns the length in code points, not bytes
     ## @see size
-    ulong length() {
+    length(): ulong {
         return _length;
     }
 
@@ -130,7 +130,7 @@ export struct String {
     ## pointers from `c_str()`. Runs in O(new_size).
     ##
     ## @param new_size the new byte length
-    void grow(ulong new_size) {
+    grow(new_size: ulong) {
         if (new_size > _size) {
             _version = _version + 1;
             _data = _pep_realloc(_data, _size + 1, new_size + 1);
@@ -150,7 +150,7 @@ export struct String {
     ## @example
     ##     var s = "TEST";
     ##     s.append("ING");   # s == "TESTING"
-    void append(String rhs) {
+    append(rhs: String) {
         _version = _version + 1;
         # Read rhs before growing: `s.append(s)` makes rhs this String, whose
         # _size grow() changes and whose _data it may move.
@@ -180,7 +180,7 @@ export struct String {
     ##     var s = "TEST";
     ##     assert(s[0] == "T", "first");
     ##     assert(s[-1] == "T", "last");
-    String [](int idx) {
+    [](idx: int): String {
         # Normalize a negative index to the end-relative offset *before* the
         # bounds check: `idx < _length` compares int against ulong, which
         # promotes to unsigned (a negative idx would wrap to ~2^64).
@@ -200,7 +200,7 @@ export struct String {
     ##
     ## @param rhs the String to compare with
     ## @returns true when both hold the same bytes
-    bool ==(String rhs) {
+    ==(rhs: String): bool {
         if (_length != rhs._length) {
             return false;
         }
@@ -220,7 +220,7 @@ export struct String {
     ## @example
     ##     var s = "a";
     ##     s += "b";   # s == "ab"
-    String +=(String rhs) {
+    +=(rhs: String): String {
         append(rhs);
         return this;
     }
@@ -230,7 +230,7 @@ export struct String {
     ##
     ## @returns the length in bytes, not code points
     ## @see length
-    ulong size() {
+    size(): ulong {
         return _size;
     }
 
@@ -248,7 +248,7 @@ export struct String {
     ##     for (var c in "héllo") {
     ##         n = n + 1;   # 5 iterations
     ##     }
-    StringIterator iterate() {
+    iterate(): StringIterator {
         var it = StringIterator();
         it._source = this;
         it._version = _version;
@@ -258,7 +258,7 @@ export struct String {
     ## Returns whether the String has no code points. O(1).
     ##
     ## @returns true when `length()` is 0
-    bool empty() {
+    empty(): bool {
         return _length == 0;
     }
 
@@ -270,7 +270,7 @@ export struct String {
     ## pass it to C. C functions stop at the first NUL byte in the content.
     ##
     ## @returns the String's NUL-terminated byte buffer, or `__null`
-    __ptr<char> c_str() {
+    c_str(): __ptr<char> {
         return _data;
     }
 
@@ -286,7 +286,7 @@ export struct String {
     ##     var a = "abc";
     ##     var b = a.copy();
     ##     b.append("d");   # a is still "abc"
-    String copy(Copies copies = __null) {
+    copy(copies: Copies = __null): String {
         return String(_data, _size, _length);
     }
 
@@ -295,7 +295,7 @@ export struct String {
     ##
     ## @returns an independent copy of this String
     [Deprecated("use 'copy' instead", "copy")]
-    String clone() {
+    clone(): String {
         return this.copy();
     }
 
@@ -314,7 +314,7 @@ export struct String {
     ##     var s = "TESTING";
     ##     assert(s.find("STI") == 2, "byte offset");
     ##     assert(s.find("xyz") == -1, "absent");
-    long find(String needle) {
+    find(needle: String): long {
         return _pep_utf8_find(_data, _size, needle._data, needle._size);
     }
 
@@ -324,7 +324,7 @@ export struct String {
     ##
     ## @param needle the text to search for
     ## @returns true when `needle` occurs
-    bool contains(String needle) {
+    contains(needle: String): bool {
         return find(needle) >= 0;
     }
 
@@ -333,7 +333,7 @@ export struct String {
     ##
     ## @param prefix the text to test for
     ## @returns true when the first `prefix.size()` bytes equal `prefix`
-    bool starts_with(String prefix) {
+    starts_with(prefix: String): bool {
         if (prefix._size > _size) {
             return false;
         }
@@ -348,7 +348,7 @@ export struct String {
     ##
     ## @param suffix the text to test for
     ## @returns true when the last `suffix.size()` bytes equal `suffix`
-    bool ends_with(String suffix) {
+    ends_with(suffix: String): bool {
         if (suffix._size > _size) {
             return false;
         }
@@ -372,7 +372,7 @@ export struct String {
     ##     assert(s.substr(1, 2) == "ES", "middle");
     ##     assert(s.substr(0, 99) == "TEST", "count is clamped");
     ##     assert(s.substr(4, 5) == "", "start past the end");
-    String substr(ulong start, ulong count) {
+    substr(start: ulong, count: ulong): String {
         if (start >= _length) {
             return String();
         }
@@ -395,7 +395,7 @@ export struct String {
     ##
     ## @param rhs the String to compare with
     ## @returns true when the contents differ
-    bool !=(String rhs) {
+    !=(rhs: String): bool {
         return !(this == rhs);
     }
 
@@ -406,7 +406,7 @@ export struct String {
     ## @returns a new concatenated String
     ## @example
     ##     var greeting = "Hello, " + "world";
-    String +(String rhs) {
+    +(rhs: String): String {
         String result = this.copy();
         result.append(rhs);
         return result;
@@ -884,7 +884,7 @@ export struct StringBuilder {
     }
 
     ## Removes all the text and keeps the buffer for reuse. O(1).
-    clear(): void {
+    clear() {
         _size = 0;
         _length = 0;
     }
@@ -940,7 +940,7 @@ export struct StringIterator {
     ## @returns true when positioned on a code point, false at the end
     ## @panics if the String was modified since the
     ##   iterator was created
-    bool next() {
+    next(): bool {
         assert(_source._version == _version, "String modified during iteration");
         if (_started) {
             _offset = _next_offset;
@@ -962,7 +962,7 @@ export struct StringIterator {
     ## @panics if the String was modified since the iterator was created
     ## @panics if `next()` has not been called yet
     ## @panics if `next()` has returned false (the iterator is past the end)
-    String current() {
+    current(): String {
         assert(_source._version == _version, "String modified during iteration");
         assert(_started, "StringIterator.current() before next()");
         assert(_offset < _source._size, "StringIterator.current() past the end");

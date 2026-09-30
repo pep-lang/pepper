@@ -7,7 +7,7 @@ Source: `runtime/hash.pep`
 ## hash
 
 ```pepper
-hash<T>(T value): u64
+hash<T>(value: T): u64
 ```
 
 Returns a 64-bit FNV-1a hash of `value`, the hash `HashMap` and `HashSet`
@@ -48,7 +48,7 @@ argument is released afterwards.
 ## hash
 
 ```pepper
-hash<String>(String value): u64
+hash<String>(value: String): u64
 ```
 
 Returns a 64-bit FNV-1a hash of a String's bytes, so equal strings hash
@@ -113,7 +113,7 @@ stays small.
 #### HashMap()
 
 ```pepper
-construct(ulong initial_capacity = 8)
+construct(initial_capacity: ulong = 8)
 ```
 
 Creates an empty map whose table has room for at least
@@ -137,7 +137,7 @@ three arrays of that many slots.
 #### grow
 
 ```pepper
-void grow()
+grow()
 ```
 
 Doubles the table and reinserts every entry, dropping all tombstones.
@@ -150,7 +150,7 @@ each entry is acquired by the new arrays and released by the old ones.
 #### count
 
 ```pepper
-int count()
+count(): int
 ```
 
 Returns the number of entries in the map. O(1).
@@ -161,7 +161,7 @@ Returns the number of entries in the map. O(1).
 #### empty
 
 ```pepper
-bool empty()
+empty(): bool
 ```
 
 Returns whether the map has no entries. O(1).
@@ -172,7 +172,7 @@ Returns whether the map has no entries. O(1).
 #### capacity
 
 ```pepper
-ulong capacity()
+capacity(): ulong
 ```
 
 Returns the number of slots in the table, a power of two and at least 8.
@@ -184,7 +184,7 @@ The map grows before its entries and tombstones reach half of it. O(1).
 #### cap
 
 ```pepper
-[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
 ```
 
 Deprecated: use `capacity` instead. Returns the number of slots in
@@ -196,7 +196,7 @@ the table.
 #### clear
 
 ```pepper
-void clear()
+clear()
 ```
 
 Removes every entry and releases the map's references to their keys
@@ -205,7 +205,7 @@ and values. The table keeps its capacity. Runs in O(capacity).
 #### copy
 
 ```pepper
-HashMap<K, V> copy(Copies copies)
+copy(copies: Copies): HashMap<K, V>
 ```
 
 Returns a deep copy: a new map holding a copy of each key and value,
@@ -226,7 +226,7 @@ cost of copying the entries.
 #### contains
 
 ```pepper
-bool contains(K key)
+contains(key: K): bool
 ```
 
 Returns whether the map has an entry for `key`. Expected O(1).
@@ -240,7 +240,7 @@ Returns whether the map has an entry for `key`. Expected O(1).
 #### insert
 
 ```pepper
-bool insert(K key, V value)
+insert(key: K, value: V): bool
 ```
 
 Maps `key` to `value`, adding a new entry or overwriting the value of
@@ -268,7 +268,7 @@ table (see `grow`). Expected O(1); a grow costs O(capacity).
 #### get
 
 ```pepper
-V get(K key)
+get(key: K): V
 ```
 
 Returns the value stored for `key`, or the default of `V` when `key`
@@ -289,7 +289,7 @@ value. Expected O(1).
 #### remove
 
 ```pepper
-bool remove(K key)
+remove(key: K): bool
 ```
 
 Removes the entry for `key`, releasing the map's references to its key
@@ -308,7 +308,7 @@ table grows. Expected O(1).
 #### operator []
 
 ```pepper
-V [](K key)
+[](key: K): V
 ```
 
 Reads `m[key]`: returns the value for `key`, or the default of `V`
@@ -330,7 +330,7 @@ same as `get`. A missing key is not inserted.
 #### operator []
 
 ```pepper
-V [](K key, V value)
+[](key: K, value: V): V
 ```
 
 Writes `m[key] = value`: inserts `key` or overwrites its value, the
@@ -414,7 +414,7 @@ may change, and writing to them breaks the set.
 #### HashSet()
 
 ```pepper
-construct(ulong initial_capacity = 8)
+construct(initial_capacity: ulong = 8)
 ```
 
 Creates an empty set whose table has room for at least
@@ -451,7 +451,7 @@ a set is expected, so an array literal can initialize one.
 #### grow
 
 ```pepper
-void grow()
+grow()
 ```
 
 Doubles the table and reinserts every member, dropping all tombstones.
@@ -463,7 +463,7 @@ moves members to new slots.
 #### count
 
 ```pepper
-int count()
+count(): int
 ```
 
 Returns the number of members in the set. O(1).
@@ -474,7 +474,7 @@ Returns the number of members in the set. O(1).
 #### empty
 
 ```pepper
-bool empty()
+empty(): bool
 ```
 
 Returns whether the set has no members. O(1).
@@ -485,7 +485,7 @@ Returns whether the set has no members. O(1).
 #### capacity
 
 ```pepper
-ulong capacity()
+capacity(): ulong
 ```
 
 Returns the number of slots in the table, a power of two and at least 8.
@@ -497,7 +497,7 @@ O(1).
 #### cap
 
 ```pepper
-[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
 ```
 
 Deprecated: use `capacity` instead. Returns the number of slots in
@@ -509,7 +509,7 @@ the table.
 #### clear
 
 ```pepper
-void clear()
+clear()
 ```
 
 Removes every member and releases the set's references to them. The
@@ -518,7 +518,7 @@ table keeps its capacity. Runs in O(capacity).
 #### contains
 
 ```pepper
-bool contains(K key)
+contains(key: K): bool
 ```
 
 Returns whether `key` is a member of the set. Expected O(1).
@@ -532,7 +532,7 @@ Returns whether `key` is a member of the set. Expected O(1).
 #### insert
 
 ```pepper
-bool insert(K key)
+insert(key: K): bool
 ```
 
 Adds `key` to the set if it is not already a member.
@@ -551,7 +551,7 @@ O(capacity).
 #### remove
 
 ```pepper
-bool remove(K key)
+remove(key: K): bool
 ```
 
 Removes `key` from the set, releasing the set's reference to the
@@ -567,7 +567,7 @@ tombstone (see `_tombstones`). Expected O(1).
 #### operator []
 
 ```pepper
-K [](K key)
+[](key: K): K
 ```
 
 Reads `s[key]`: returns the stored member equal to `key`, or the
@@ -587,7 +587,7 @@ element is not inserted.
 #### operator []
 
 ```pepper
-K [](K key, K value)
+[](key: K, value: K): K
 ```
 
 Writes `s[key] = value`: makes `key` a member, the same as
@@ -627,7 +627,7 @@ while iterating makes the iterator's next `next()` or `current()` panic.
 #### copy
 
 ```pepper
-HashSet<K> copy(Copies copies)
+copy(copies: Copies): HashSet<K>
 ```
 
 Returns a deep copy: a new set holding a copy of each element, made

@@ -11,7 +11,7 @@ Source: `runtime/copy.pep`
 ## copy
 
 ```pepper
-copy<T>(T value): T
+copy<T>(value: T): T
 ```
 
 Returns a copy of `value` that shares no non-thread-safe object with it,
@@ -53,7 +53,7 @@ Runs in O(size of the value) and allocates each copied object.
 ## move
 
 ```pepper
-move<T>([MoveSource] T value): T
+move<T>([MoveSource] value: T): T
 ```
 
 Hands over the reference `value` holds and leaves it null, with no copy
@@ -134,7 +134,7 @@ already made, so objects referenced twice stay shared.
 #### copy
 
 ```pepper
-T copy(Copies copies)
+copy(copies: Copies): T
 ```
 
 Returns a copy of this value, for `copy`.

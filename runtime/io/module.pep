@@ -29,12 +29,12 @@
 # platform layer (`_io_sys_*` in sys_posix.pep / sys_windows.pep) and the
 # `_io_*` helpers are exported between the io files but not from the module.
 
-import "types";
-import "path";
-import "file";
-import "directory";
 import "address";
+import "directory";
+import "file";
+import "path";
 import "socket";
+import "types";
 
 export FileHandle;
 export ErrorCode;

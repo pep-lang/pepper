@@ -8,35 +8,44 @@
 # `&&` and `||` evaluate both operands, so bytes are read through `_io_byte`,
 # which is bounds-checked (an empty String has no buffer at all).
 
-import "types";
 import "file";
 import "sys_posix";
 import "sys_windows";
+import "types";
 
 # ── Path syntax per platform (pure; no C calls) ─────────────────────────────
 
-[Target(!OS(Windows))] export _io_path_is_sep(b: int): bool {
+[Target(!OS(Windows))]
+export _io_path_is_sep(b: int): bool {
     return b == '/';
 }
-[Target(OS(Windows))] export _io_path_is_sep(b: int): bool {
+
+[Target(OS(Windows))]
+export _io_path_is_sep(b: int): bool {
     return b == '/' || b == '\\';
 }
 
-[Target(!OS(Windows))] export _io_path_separator(): String {
+[Target(!OS(Windows))]
+export _io_path_separator(): String {
     return "/";
 }
-[Target(OS(Windows))] export _io_path_separator(): String {
+
+[Target(OS(Windows))]
+export _io_path_separator(): String {
     return "\\";
 }
 
 # Length of the prefix before any root separator: always 0 on POSIX; on
 # Windows a drive (`C:`) or a UNC `\\server\share`.
-[Target(!OS(Windows))] export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
+[Target(!OS(Windows))]
+export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
     return 0;
 }
-[Target(OS(Windows))] export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
+
+[Target(OS(Windows))]
+export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
     if (_io_byte(p, n, 1) == ':') {
-        var c = _io_byte(p, n, 0) | 32;   # ASCII lower case
+        var c = _io_byte(p, n, 0) | 32;  # ASCII lower case
         if (c >= 'a' && c <= 'z') {
             return 2;
         }
@@ -44,9 +53,15 @@ import "sys_windows";
     if (_io_path_is_sep(_io_byte(p, n, 0)) && _io_path_is_sep(_io_byte(p, n, 1))) {
         # \\server\share: the prefix runs through the share name.
         ulong i = 2;
-        while (i < n && !_io_path_is_sep(_io_byte(p, n, i))) { i = i + 1; }
-        if (i < n) { i = i + 1; }
-        while (i < n && !_io_path_is_sep(_io_byte(p, n, i))) { i = i + 1; }
+        while (i < n && !_io_path_is_sep(_io_byte(p, n, i))) {
+            i = i + 1;
+        }
+        if (i < n) {
+            i = i + 1;
+        }
+        while (i < n && !_io_path_is_sep(_io_byte(p, n, i))) {
+            i = i + 1;
+        }
         return i;
     }
     return 0;
@@ -54,12 +69,15 @@ import "sys_windows";
 
 # True when a path with this prefix and root is absolute. POSIX: it has a
 # root. Windows: a drive with a root (`C:\x`) or any UNC path.
-[Target(!OS(Windows))] export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
+[Target(!OS(Windows))]
+export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
     return has_root;
 }
-[Target(OS(Windows))] export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
+
+[Target(OS(Windows))]
+export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
     if (prefix > 2) {
-        return true;   # UNC
+        return true;  # UNC
     }
     return prefix == 2 && has_root;
 }
@@ -78,7 +96,9 @@ export _io_path_root_end(s: String): ulong {
     var p = s.c_str() as __ptr<u8>;
     var n = s.size();
     var i = _io_path_prefix_len(p, n);
-    while (i < n && _io_path_is_sep(_io_byte(p, n, i))) { i = i + 1; }
+    while (i < n && _io_path_is_sep(_io_byte(p, n, i))) {
+        i = i + 1;
+    }
     return i;
 }
 
@@ -87,7 +107,9 @@ export _io_path_trimmed_end(s: String): ulong {
     var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
     var e = s.size();
-    while (e > root && _io_path_is_sep(_io_byte(p, s.size(), e - 1))) { e = e - 1; }
+    while (e > root && _io_path_is_sep(_io_byte(p, s.size(), e - 1))) {
+        e = e - 1;
+    }
     return e;
 }
 
@@ -96,7 +118,9 @@ export _io_path_name_start(s: String, e: ulong): ulong {
     var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
     var i = e;
-    while (i > root && !_io_path_is_sep(_io_byte(p, s.size(), i - 1))) { i = i - 1; }
+    while (i > root && !_io_path_is_sep(_io_byte(p, s.size(), i - 1))) {
+        i = i - 1;
+    }
     return i;
 }
 
@@ -121,7 +145,9 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
     var first = true;
     while (i < n) {
         var j = i;
-        while (j < n && !_io_path_is_sep(_io_byte(p, n, j))) { j = j + 1; }
+        while (j < n && !_io_path_is_sep(_io_byte(p, n, j))) {
+            j = j + 1;
+        }
         if (j > i) {
             var part = _io_slice(s, i, j);
             if (!_io_is_dot(part) || (first && keep_leading_dot)) {
@@ -181,7 +207,7 @@ export struct Path {
     ##     var empty = io.Path();   # is_empty() is true
     ##     var q: io.Path = "docs";   # converted implicitly
     [Implicit]
-    construct(String value = "") {
+    construct(value: String = "") {
         this._value = value;
     }
 
@@ -189,14 +215,14 @@ export struct Path {
     ##
     ## @returns `"/"` on POSIX, `"\"` on Windows (where `/` is also accepted
     ## as a separator on input)
-    static String separator() {
+    static separator(): String {
         return _io_path_separator();
     }
 
     ## Returns the path's text, the same String the Path holds, not a copy.
     ##
     ## @returns the path as a String
-    String to_string() {
+    to_string(): String {
         return _value;
     }
 
@@ -205,7 +231,7 @@ export struct Path {
     ## file-system operations on it fail.
     ##
     ## @returns true when the path's text is `""`
-    bool is_empty() {
+    is_empty(): bool {
         return _value.size() == 0;
     }
 
@@ -219,7 +245,7 @@ export struct Path {
     ## path is relative.
     ##
     ## @returns true when the path is absolute
-    bool is_absolute() {
+    is_absolute(): bool {
         var p = _value.c_str() as __ptr<u8>;
         var n = _value.size();
         var prefix = _io_path_prefix_len(p, n);
@@ -231,7 +257,7 @@ export struct Path {
     ## `is_absolute()`. The empty path is relative.
     ##
     ## @returns true when the path is not absolute
-    bool is_relative() {
+    is_relative(): bool {
         return !is_absolute();
     }
 
@@ -253,7 +279,7 @@ export struct Path {
     ##     var q = io.Path("a/").join(io.Path("b"));      # "a/b"
     ##     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
     ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
-    Path join(Path other) {
+    join(other: Path): Path {
         if (other._value.size() == 0) {
             return Path(_value.copy());
         }
@@ -281,7 +307,7 @@ export struct Path {
     ##     var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
     ## @see join
     [Deprecated("use 'join', which accepts a String", "join")]
-    Path join_str(String other) {
+    join_str(other: String): Path {
         return join(Path(other));
     }
 
@@ -291,7 +317,7 @@ export struct Path {
     ## as `\x` and `C:x`. On POSIX it equals `is_absolute()`.
     ##
     ## @returns true when the path has a root separator or a prefix
-    bool has_root_or_prefix() {
+    has_root_or_prefix(): bool {
         var p = _value.c_str() as __ptr<u8>;
         var n = _value.size();
         if (_io_path_prefix_len(p, n) > 0) {
@@ -316,7 +342,7 @@ export struct Path {
     ##     var p = io.Path("/a/b/c.txt").parent();   # "/a/b"
     ##     var root = io.Path("/a").parent();        # "/"
     ##     var none = io.Path("/").parent();         # "" (empty)
-    Path parent() {
+    parent(): Path {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
@@ -328,7 +354,9 @@ export struct Path {
         }
         var p = _value.c_str() as __ptr<u8>;
         var j = start;
-        while (j > root && _io_path_is_sep(_io_byte(p, _value.size(), j - 1))) { j = j - 1; }
+        while (j > root && _io_path_is_sep(_io_byte(p, _value.size(), j - 1))) {
+            j = j - 1;
+        }
         return Path(_io_slice(_value, 0, j));
     }
 
@@ -342,7 +370,7 @@ export struct Path {
     ##
     ##     var name = io.Path("/a/b/c.txt").file_name();   # "c.txt"
     ##     var none = io.Path("a/..").file_name();         # ""
-    String file_name() {
+    file_name(): String {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
@@ -362,7 +390,7 @@ export struct Path {
     ## @param name a file name (one component, as `file_name()` returns)
     ## @returns the index of the extension's dot, or `name.size` when the
     ## name has no extension (including the empty name)
-    static ulong dot_index(String name) {
+    static dot_index(name: String): ulong {
         var p = name.c_str() as __ptr<u8>;
         var i = name.size();
         while (i > 1) {
@@ -380,7 +408,7 @@ export struct Path {
     ## @returns the stem (`c.tar` for `c.tar.gz`, `.bashrc` for `.bashrc`,
     ## `foo` for `foo.`), or `""` when there is no file name (see
     ## `file_name()`)
-    String file_stem() {
+    file_stem(): String {
         var name = file_name();
         return _io_slice(name, 0, Path.dot_index(name));
     }
@@ -391,7 +419,7 @@ export struct Path {
     ##
     ## @returns the extension (`gz` for `c.tar.gz`), or `""` when there is
     ## none (`noext`, `.bashrc`, `foo.`) or no file name
-    String extension() {
+    extension(): String {
         var name = file_name();
         var dot = Path.dot_index(name);
         if (dot >= name.size()) {
@@ -414,7 +442,7 @@ export struct Path {
     ##     var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
     ##     var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
     ##     var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
-    Path with_extension(String ext) {
+    with_extension(ext: String): Path {
         var name = file_name();
         if (name.size() == 0) {
             return Path(_value.copy());
@@ -444,7 +472,7 @@ export struct Path {
     ##
     ##     var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
     ##     var d = io.Path("./a/b").components();            # [".", "a", "b"]
-    Array<String> components() {
+    components(): Array<String> {
         var out = Array<String>();
         var p = _value.c_str() as __ptr<u8>;
         var n = _value.size();
@@ -480,7 +508,7 @@ export struct Path {
     ##     var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
     ##     var q = io.Path("a/..").normalize();         # "."
     ## @see canonicalize
-    Path normalize() {
+    normalize(): Path {
         if (_value.size() == 0) {
             return Path();
         }
@@ -537,7 +565,7 @@ export struct Path {
     ## `metadata()` to tell those apart.
     ##
     ## @returns true when the path (or a symlink's target) can be stat'ed
-    bool exists() {
+    exists(): bool {
         return _io_sys_stat(this, true).is_ok();
     }
 
@@ -545,7 +573,7 @@ export struct Path {
     ##
     ## @returns true for a regular file or a symlink to one; false for
     ## anything else, and on any error (including a missing path)
-    bool is_file() {
+    is_file(): bool {
         var r = _io_sys_stat(this, true);
         if (r.is_err()) {
             return false;
@@ -557,7 +585,7 @@ export struct Path {
     ##
     ## @returns true for a directory or a symlink to one; false for anything
     ## else, and on any error (including a missing path)
-    bool is_directory() {
+    is_directory(): bool {
         var r = _io_sys_stat(this, true);
         if (r.is_err()) {
             return false;
@@ -570,7 +598,7 @@ export struct Path {
     ##
     ## @returns the same as `is_directory()`
     [Deprecated("use 'is_directory' instead", "is_directory")]
-    bool is_dir() {
+    is_dir(): bool {
         return is_directory();
     }
 
@@ -593,7 +621,7 @@ export struct Path {
     ##         var size = m.value().size;
     ##     }
     ## @see symlink_metadata
-    IoResult<Metadata> metadata() {
+    metadata(): IoResult<Metadata> {
         return _io_sys_stat(this, true);
     }
 
@@ -608,7 +636,7 @@ export struct Path {
     ## @returns the `Metadata` of the path itself; an error as for
     ## `metadata()`, except that a dangling symlink succeeds
     ## @see metadata
-    IoResult<Metadata> symlink_metadata() {
+    symlink_metadata(): IoResult<Metadata> {
         return _io_sys_stat(this, false);
     }
 
@@ -632,7 +660,7 @@ export struct Path {
     ##         print(real.value().to_string());
     ##     }
     ## @see normalize
-    IoResult<Path> canonicalize() {
+    canonicalize(): IoResult<Path> {
         return _io_sys_realpath(this);
     }
 
@@ -644,7 +672,7 @@ export struct Path {
     ##
     ## @param rhs the path to compare with
     ## @returns true when both paths' texts are equal
-    bool ==(Path rhs) {
+    ==(rhs: Path): bool {
         return _value == rhs._value;
     }
 
@@ -653,7 +681,7 @@ export struct Path {
     ##
     ## @param rhs the path to compare with
     ## @returns true when the paths' texts differ
-    bool !=(Path rhs) {
+    !=(rhs: Path): bool {
         return !(_value == rhs._value);
     }
 }

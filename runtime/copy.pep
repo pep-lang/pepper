@@ -16,8 +16,8 @@
 # alive until `copy` returns: it is referenced from the copy of the object
 # that contains it, and all of those from the copy being returned.
 
-import "hash";
 import "array";
+import "hash";
 
 ## Returns a copy of `value` that shares no non-thread-safe object with it,
 ## so the copy can be handed to another thread.
@@ -46,7 +46,7 @@ import "array";
 ##     names.append("ada");
 ##     var copied = copy(names);
 ##     copied[0].append(" lovelace");   # names[0] is still "ada"
-export copy<T>(T value): T {
+export copy<T>(value: T): T {
     var copies = Copies();
     var result = copies.copy<T>(value);
     copies._finish();
@@ -70,7 +70,7 @@ export copy<T>(T value): T {
 ##     var lines = Array<String>();
 ##     lines.append("first");
 ##     var log = async.Mutex<Array<String>>(move(lines));   # lines is null now
-export move<T>([MoveSource] T value): T {
+export move<T>([MoveSource] value: T): T {
     return value;
 }
 
@@ -120,7 +120,7 @@ export trait Copyable<T> {
     ##
     ## @param copies the objects copied so far
     ## @returns the copy
-    T copy(Copies copies);
+    copy(copies: Copies): T;
 }
 
 ## The objects one `copy` call has copied so far, so each is copied once:
@@ -267,7 +267,7 @@ struct DeferredFix {
 # may have, so an object whose strong count (the `u32` every struct object
 # starts with) is higher is still referenced from outside it: a hole in the
 # confinement checks, or a promise raw memory or extern code broke.
-export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>): void {
+export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>) {
     if (!_PEP_CHECK_SYNC_ON) {
         return;
     }
@@ -281,7 +281,11 @@ export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>): void {
         __ptr<__ptr<uint>> object = raw;
         var count = object[0][0];
         if (count as ulong != edges) {
-            panic("PEP_CHECK_SYNC: an object in the value locked by a '" + String(locked) + "' is still referenced from outside it");
+            panic(
+                "PEP_CHECK_SYNC: an object in the value locked by a '"
+                    + String(locked)
+                    + "' is still referenced from outside it"
+            );
         }
     }
     copies._cell[0] = 0;

@@ -94,7 +94,7 @@ false. Entries are normally obtained from `Directory.entries()`.
 #### metadata
 
 ```pepper
-IoResult<Metadata> metadata()
+metadata(): IoResult<Metadata>
 ```
 
 Returns the metadata of the entry, following symlinks, exactly like
@@ -160,7 +160,7 @@ Use `Directory.open` to get one for an existing directory.
 #### open
 
 ```pepper
-static IoResult<Directory> open(Path path)
+static open(path: Path): IoResult<Directory>
 ```
 
 Checks that `path` exists and is a directory (following symlinks) and
@@ -186,7 +186,7 @@ can still be renamed or removed afterwards.
 #### create
 
 ```pepper
-static IoResult<void> create(Path path)
+static create(path: Path): IoResult<void>
 ```
 
 Creates one directory (`mkdir` on POSIX, with mode 0777 less the
@@ -204,7 +204,7 @@ umask; `CreateDirectoryW` on Windows). Its parent must already exist.
 #### create_all
 
 ```pepper
-static IoResult<void> create_all(Path path)
+static create_all(path: Path): IoResult<void>
 ```
 
 Creates a directory and any missing parents, like `mkdir -p`.
@@ -230,7 +230,7 @@ directories at the same time.
 #### remove
 
 ```pepper
-static IoResult<void> remove(Path path)
+static remove(path: Path): IoResult<void>
 ```
 
 Removes an empty directory (`rmdir` on POSIX, `RemoveDirectoryW` on
@@ -248,7 +248,7 @@ Windows).
 #### remove_all
 
 ```pepper
-static IoResult<void> remove_all(Path path)
+static remove_all(path: Path): IoResult<void>
 ```
 
 Removes `path` and, if it is a directory, everything inside it,
@@ -283,7 +283,7 @@ Windows a read-only file inside the tree is such a failure
 #### current
 
 ```pepper
-static IoResult<Path> current()
+static current(): IoResult<Path>
 ```
 
 Returns the process's current directory, against which relative paths
@@ -298,7 +298,7 @@ are resolved (`getcwd` on POSIX, `GetCurrentDirectoryW` on Windows).
 #### set_current
 
 ```pepper
-static IoResult<void> set_current(Path path)
+static set_current(path: Path): IoResult<void>
 ```
 
 Changes the process's current directory (`chdir` on POSIX,
@@ -318,7 +318,7 @@ resolve against the new directory.
 #### temp
 
 ```pepper
-static Path temp()
+static temp(): Path
 ```
 
 Returns the directory for temporary files. It is not created or
@@ -345,7 +345,7 @@ a root, or `.` if that call fails.
 #### entries
 
 ```pepper
-IoResult<DirEntry[]> entries()
+entries(): IoResult<DirEntry[]>
 ```
 
 Reads the directory's listing now, all at once: every entry except

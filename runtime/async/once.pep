@@ -8,9 +8,9 @@
 # arrived meanwhile, which sleep on a platform condition variable. The done
 # store is a release, so a caller that sees 2 also sees what the body did.
 
-import "thread";
 import "sys_posix";
 import "sys_windows";
+import "thread";
 
 ## Runs a function exactly once, however many threads ask, like C++
 ## `std::call_once` or Rust's `std::sync::Once`.
@@ -74,7 +74,7 @@ export struct Once {
     ## @panics if `body` itself calls `call` on the same Once (it would wait for itself forever)
     ## @example
     ##     config_once.call(load_config);
-    void call(ThreadBody body) {
+    call(body: ThreadBody) {
         if (this._start()) {
             body();
             this._finish();
@@ -84,13 +84,13 @@ export struct Once {
     ## Reports whether a body has finished running.
     ##
     ## @returns true once a `call` has completed its body on some thread
-    bool is_done() {
+    is_done(): bool {
         return _state.load() == 2;
     }
 
     # True if the caller must run the body (and then call `_finish`); false
     # once another thread's run has finished.
-    bool _start() {
+    _start(): bool {
         if (_state.load() == 2) {
             return false;
         }
@@ -114,7 +114,7 @@ export struct Once {
     }
 
     # Marks the body finished and wakes every waiting caller.
-    void _finish() {
+    _finish() {
         _async_sys_mutex_lock(_lock);
         _runner.store(0);
         _state.store(2);
@@ -171,7 +171,7 @@ export struct Lazy<T> {
     ##
     ## @param initializer builds the value; runs at most once, on the thread that first calls `get()`
     ## @panics if the operating system cannot create a mutex or condition variable
-    construct(shared () => T initializer) {
+    construct(initializer: shared () => T) {
         _initializer = initializer;
         _value = _pep_malloc(sizeof<T>());
         _built = Once();
@@ -188,7 +188,7 @@ export struct Lazy<T> {
     ##
     ## @returns the value the initializer built
     ## @panics if the initializer itself calls `get()` on the same Lazy
-    T get() {
+    get(): T {
         if (_built._start()) {
             _value[0] = _initializer();
             _built._finish();
@@ -199,7 +199,7 @@ export struct Lazy<T> {
     ## Reports whether the value has been built.
     ##
     ## @returns true once a `get()` has finished running the initializer
-    bool is_built() {
+    is_built(): bool {
         return _built.is_done();
     }
 }

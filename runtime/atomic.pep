@@ -47,7 +47,7 @@ export struct Atomic<T> {
     ## @example
     ##     var a = Atomic<int>(41);
     ##     var p = Atomic<Point>();   # holds null until a store
-    construct(T value = __default<T>()) {
+    construct(value: T = __default<T>()) {
         # A struct T occupies its reference pointer in the slot; a POD T
         # occupies sizeof(T) bytes of the value itself.
         ulong sz = __is_pod<T>() ? sizeof<T>() : 8;
@@ -67,7 +67,7 @@ export struct Atomic<T> {
     ## it stays valid even if another thread stores a new value afterwards.
     ##
     ## @returns the value currently stored
-    T load() {
+    load(): T {
         return __atomic_load<T>(this._data);
     }
 
@@ -78,7 +78,7 @@ export struct Atomic<T> {
     ## exchange, so concurrent stores never leak or double-release.
     ##
     ## @param v the new value
-    void store(T v) {
+    store(v: T) {
         __atomic_store<T>(this._data, v);
     }
 
@@ -100,7 +100,7 @@ export struct Atomic<T> {
     ##     while (!counter.compare_exchange(cur, cur + 1)) {
     ##         cur = counter.load();
     ##     }
-    bool compare_exchange(T expected, T desired) {
+    compare_exchange(expected: T, desired: T): bool {
         return __atomic_cmpxchg<T>(this._data, expected, desired);
     }
 
@@ -116,7 +116,7 @@ export struct Atomic<T> {
     ## @example
     ##     var e = Atomic<int>(1);
     ##     var old = e.exchange(2);   # old == 1, e.load() == 2
-    T exchange(T v) {
+    exchange(v: T): T {
         var old = this.load();
         while (true) {
             if (__atomic_cmpxchg<T>(this._data, old, v)) {
@@ -134,7 +134,7 @@ export struct Atomic<T> {
     ## the stored value.
     ##
     ## @returns true when the operations are lock-free
-    bool is_lock_free() {
+    is_lock_free(): bool {
         return __is_pod<T>() ? sizeof<T>() <= 8 : true;
     }
 
@@ -153,7 +153,7 @@ export struct Atomic<T> {
     ## @example
     ##     var c = Atomic<long>(10);
     ##     var old = c.fetch_add(5);   # old == 10, c.load() == 15
-    T fetch_add(T v) {
+    fetch_add(v: T): T {
         return __atomic_fetch_add<T>(this._data, v);
     }
 
@@ -165,7 +165,7 @@ export struct Atomic<T> {
     ##
     ## @param v the amount to subtract
     ## @returns the value stored immediately before the subtraction
-    T fetch_sub(T v) {
+    fetch_sub(v: T): T {
         return __atomic_fetch_sub<T>(this._data, v);
     }
 
@@ -178,7 +178,7 @@ export struct Atomic<T> {
     ##
     ## @param v the mask to AND with
     ## @returns the value stored immediately before the operation
-    T fetch_and(T v) {
+    fetch_and(v: T): T {
         return __atomic_fetch_and<T>(this._data, v);
     }
 
@@ -191,7 +191,7 @@ export struct Atomic<T> {
     ##
     ## @param v the bits to OR in
     ## @returns the value stored immediately before the operation
-    T fetch_or(T v) {
+    fetch_or(v: T): T {
         return __atomic_fetch_or<T>(this._data, v);
     }
 
@@ -204,7 +204,7 @@ export struct Atomic<T> {
     ##
     ## @param v the bits to XOR with
     ## @returns the value stored immediately before the operation
-    T fetch_xor(T v) {
+    fetch_xor(v: T): T {
         return __atomic_fetch_xor<T>(this._data, v);
     }
 }

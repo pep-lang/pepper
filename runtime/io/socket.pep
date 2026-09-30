@@ -9,12 +9,12 @@
 # `_io_sys_*`. The sockaddr encoding below is shared; only its header (the
 # family field) differs per platform.
 
-import "types";
 import "address";
-import "sys_posix";
-import "sys_windows";
 import "socket_posix";
 import "socket_windows";
+import "sys_posix";
+import "sys_windows";
+import "types";
 
 # The listen backlog: how many connections the system queues before
 # `accept` takes them (the system may cap it lower).

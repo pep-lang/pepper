@@ -278,6 +278,10 @@ On a syntax error it prints a clang-style `file.pep:line:column: error: ...`
 to standard error, leaves that file untouched, and exits with 1. The style it applies is described in the
 book's [Formatting with pep-fmt](docs/src/tools/pep-fmt.md) chapter.
 
+`runtime/` and `tools/` are kept formatted: `pep_fmt_sources_are_formatted`
+fails when a file there is not, so run `./pep-fmt -w runtime tools` before
+committing a change to them.
+
 ## VS Code extension from any branch
 
 The released extension comes from the `vsix-v*` GitHub release, which the VSIX

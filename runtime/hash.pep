@@ -28,7 +28,7 @@ import "internals";
 ## @example
 ##     var a = hash<int>(5);
 ##     var b = hash<int>(5);   # a == b
-export hash<T>(T value): u64 {
+export hash<T>(value: T): u64 {
     return __address<T>(value);
 }
 
@@ -47,7 +47,7 @@ export hash<T>(T value): u64 {
 ## @returns the 64-bit hash of the String's content
 ## @example
 ##     assert(hash<String>("hello") == hash<String>("hello"), "content hash");
-export hash<String>(String value): u64 {
+export hash<String>(value: String): u64 {
     return _pep_hash_bytes(value.c_str(), value.size());
 }
 
@@ -124,7 +124,7 @@ export struct HashMap<K, V> {
     ## @param initial_capacity the minimum number of slots in the table
     ## @example
     ##     var m = HashMap<int, int>(64);   # 64 slots, 32 entries before growing
-    construct(ulong initial_capacity = 8) {
+    construct(initial_capacity: ulong = 8) {
         ulong cap = 8;
         while (cap < initial_capacity) {
             cap = cap * 2;
@@ -152,7 +152,7 @@ export struct HashMap<K, V> {
     ## @param key the key to look up
     ## @returns the index of the slot that holds `key` in `_keys` and `_values`,
     ##   or -1 when `key` is absent
-    long _find_slot(K key) {
+    _find_slot(key: K): long {
         ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
@@ -180,7 +180,7 @@ export struct HashMap<K, V> {
     ## costs memory. Runs in O(capacity). It replaces the table's arrays and
     ## moves entries to new slots. Reference counts are unchanged overall:
     ## each entry is acquired by the new arrays and released by the old ones.
-    void grow() {
+    grow() {
         # Reinsertion goes through Array store semantics (acquire), so the
         # outgoing arrays can be dropped from the fields right after: the
         # field store releases them, their Size == capacity makes the
@@ -226,14 +226,14 @@ export struct HashMap<K, V> {
     ## Returns the number of entries in the map. O(1).
     ##
     ## @returns the number of live key-value pairs
-    int count() {
+    count(): int {
         return _size;
     }
 
     ## Returns whether the map has no entries. O(1).
     ##
     ## @returns true when `count()` is 0
-    bool empty() {
+    empty(): bool {
         return _size == 0;
     }
 
@@ -241,7 +241,7 @@ export struct HashMap<K, V> {
     ## The map grows before its entries and tombstones reach half of it. O(1).
     ##
     ## @returns the current slot count
-    ulong capacity() {
+    capacity(): ulong {
         return _capacity;
     }
 
@@ -250,13 +250,13 @@ export struct HashMap<K, V> {
     ##
     ## @returns the same as `capacity()`
     [Deprecated("use 'capacity' instead", "capacity")]
-    ulong cap() {
+    cap(): ulong {
         return capacity();
     }
 
     ## Removes every entry and releases the map's references to their keys
     ## and values. The table keeps its capacity. Runs in O(capacity).
-    void clear() {
+    clear() {
         ulong i = 0;
         while (i < _capacity) {
             if (_state._data[i] == 2) {
@@ -282,7 +282,7 @@ export struct HashMap<K, V> {
     ##
     ## @param copies the objects copied so far
     ## @returns the copy
-    HashMap<K, V> copy(Copies copies) {
+    copy(copies: Copies): HashMap<K, V> {
         HashMap<K, V> made = HashMap<K, V>(_capacity);
         copies.register<HashMap<K, V>>(this, made);
         ulong i = 0;
@@ -299,7 +299,7 @@ export struct HashMap<K, V> {
     ##
     ## @param key the key to look up
     ## @returns true when `key` is present
-    bool contains(K key) {
+    contains(key: K): bool {
         return _find_slot(key) >= 0;
     }
 
@@ -327,7 +327,7 @@ export struct HashMap<K, V> {
     ##     var m = HashMap<int, int>();
     ##     m.insert(1, 10);   # true: added
     ##     m.insert(1, 20);   # false: overwritten; m.get(1) == 20
-    bool insert(K key, V value) {
+    insert(key: K, value: V): bool {
         long slot = _find_slot(key);
         if (slot >= 0) {
             _values._data[slot] = value;
@@ -379,7 +379,7 @@ export struct HashMap<K, V> {
     ##
     ## @param key the key to look up
     ## @returns the value for `key`, or the default of `V` when absent
-    V get(K key) {
+    get(key: K): V {
         long slot = _find_slot(key);
         if (slot >= 0) {
             return _values._data[slot];
@@ -396,7 +396,7 @@ export struct HashMap<K, V> {
     ##
     ## @param key the key to remove
     ## @returns true when `key` was present and removed, false when absent
-    bool remove(K key) {
+    remove(key: K): bool {
         long slot = _find_slot(key);
         if (slot < 0) {
             return false;
@@ -419,7 +419,7 @@ export struct HashMap<K, V> {
     ## @example
     ##     var m = HashMap<String, int>();
     ##     var n = m["missing"];   # 0; m is still empty
-    V [](K key) {
+    [](key: K): V {
         return get(key);
     }
 
@@ -432,7 +432,7 @@ export struct HashMap<K, V> {
     ## @example
     ##     var m = HashMap<String, int>();
     ##     m["hello"] = 5;
-    V [](K key, V value) {
+    [](key: K, value: V): V {
         insert(key, value);
         return value;
     }
@@ -459,8 +459,7 @@ export struct HashMap<K, V> {
     # every slot (Size == capacity), releasing it exactly once. The field
     # releases that release_field_refs appends run after this body, dropping
     # the arrays' own refs last.
-    destruct {
-    }
+    destruct {}
 }
 
 # ── HashSet<K> ──────────────────────────────────────────────────────────────
@@ -519,7 +518,7 @@ export struct HashSet<K> {
     ## The set holds up to half its slot count before the first grow.
     ##
     ## @param initial_capacity the minimum number of slots in the table
-    construct(ulong initial_capacity = 8) {
+    construct(initial_capacity: ulong = 8) {
         _init(initial_capacity);
     }
 
@@ -541,7 +540,7 @@ export struct HashSet<K> {
     }
 
     # Sets up an empty table of at least `initial_capacity` slots.
-    _init(initial_capacity: ulong): void {
+    _init(initial_capacity: ulong) {
         ulong cap = 8;
         while (cap < initial_capacity) {
             cap = cap * 2;
@@ -567,7 +566,7 @@ export struct HashSet<K> {
     ## @param key the element to look up
     ## @returns the index of the slot that holds `key` in `_keys`, or -1 when
     ##   `key` is not a member
-    long _find_slot(K key) {
+    _find_slot(key: K): long {
         ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
@@ -594,7 +593,7 @@ export struct HashSet<K> {
     ## `insert` calls it automatically. Calling it directly is safe but only
     ## costs memory. Runs in O(capacity). It replaces the table's arrays and
     ## moves members to new slots.
-    void grow() {
+    grow() {
         # Dropping the old arrays from the fields releases them (field stores
         # transfer ownership), and their Size == capacity makes the
         # destructor visit every slot.
@@ -634,14 +633,14 @@ export struct HashSet<K> {
     ## Returns the number of members in the set. O(1).
     ##
     ## @returns the number of members
-    int count() {
+    count(): int {
         return _size;
     }
 
     ## Returns whether the set has no members. O(1).
     ##
     ## @returns true when `count()` is 0
-    bool empty() {
+    empty(): bool {
         return _size == 0;
     }
 
@@ -649,7 +648,7 @@ export struct HashSet<K> {
     ## O(1).
     ##
     ## @returns the current slot count
-    ulong capacity() {
+    capacity(): ulong {
         return _capacity;
     }
 
@@ -658,13 +657,13 @@ export struct HashSet<K> {
     ##
     ## @returns the same as `capacity()`
     [Deprecated("use 'capacity' instead", "capacity")]
-    ulong cap() {
+    cap(): ulong {
         return capacity();
     }
 
     ## Removes every member and releases the set's references to them. The
     ## table keeps its capacity. Runs in O(capacity).
-    void clear() {
+    clear() {
         ulong i = 0;
         while (i < _capacity) {
             if (_state._data[i] == 2) {
@@ -682,7 +681,7 @@ export struct HashSet<K> {
     ##
     ## @param key the element to look up
     ## @returns true when `key` is a member
-    bool contains(K key) {
+    contains(key: K): bool {
         return _find_slot(key) >= 0;
     }
 
@@ -695,7 +694,7 @@ export struct HashSet<K> {
     ##
     ## @param key the element to add
     ## @returns true when `key` was added, false when it was already a member
-    bool insert(K key) {
+    insert(key: K): bool {
         long slot = _find_slot(key);
         if (slot >= 0) {
             return false;
@@ -740,7 +739,7 @@ export struct HashSet<K> {
     ##
     ## @param key the element to remove
     ## @returns true when `key` was a member and was removed, false otherwise
-    bool remove(K key) {
+    remove(key: K): bool {
         long slot = _find_slot(key);
         if (slot < 0) {
             return false;
@@ -763,7 +762,7 @@ export struct HashSet<K> {
     ##
     ## @param key the element to look up
     ## @returns the stored member equal to `key`, or the default of `K`
-    K [](K key) {
+    [](key: K): K {
         long slot = _find_slot(key);
         if (slot >= 0) {
             return _keys._data[slot];
@@ -780,7 +779,7 @@ export struct HashSet<K> {
     ## @param value ignored
     ## @returns `key` (the argument, not an existing equal member), the value
     ##   of the assignment expression
-    K [](K key, K value) {
+    [](key: K, value: K): K {
         insert(key);
         return key;
     }
@@ -811,7 +810,7 @@ export struct HashSet<K> {
     ##
     ## @param copies the objects copied so far
     ## @returns the copy
-    HashSet<K> copy(Copies copies) {
+    copy(copies: Copies): HashSet<K> {
         HashSet<K> made = HashSet<K>(_capacity);
         copies.register<HashSet<K>>(this, made);
         ulong i = 0;
@@ -829,8 +828,7 @@ export struct HashSet<K> {
     # (Size == capacity), releasing it exactly once. The field release that
     # release_field_refs appends runs after this body, dropping the Array's
     # own ref last.
-    destruct {
-    }
+    destruct {}
 }
 
 ## An `Iterator<(K, V)>` over the entries of a `HashMap`, as `(key, value)`

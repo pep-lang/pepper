@@ -73,7 +73,7 @@ extern int TlsSetValue(uint index, void* value);
 [Target(OS(Windows))]
 export _async_fiber_key_create(): ulong {
     var index = TlsAlloc();
-    assert(index != 4294967295, "async: no thread-local keys left");   # TLS_OUT_OF_INDEXES
+    assert(index != 4294967295, "async: no thread-local keys left");  # TLS_OUT_OF_INDEXES
     return index as ulong;
 }
 

@@ -51,13 +51,13 @@
 # `_async_*` helpers are exported between the async files but not from the
 # module.
 
-import "thread";
-import "thread_local";
+import "channel";
 import "cpus";
 import "mutex";
 import "once";
-import "channel";
 import "task";
+import "thread";
+import "thread_local";
 
 export ThreadId;
 export ThreadBody;

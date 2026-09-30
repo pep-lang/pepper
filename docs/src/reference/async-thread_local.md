@@ -74,7 +74,7 @@ Creates a thread-local variable. No thread has a value yet.
 #### get
 
 ```pepper
-T get()
+get(): T
 ```
 
 Returns the calling thread's value.
@@ -89,7 +89,7 @@ local.enter())`.
 #### set
 
 ```pepper
-void set([Move] T value)
+set([Move] value: T)
 ```
 
 Stores `value` as the calling thread's value, replacing (and, for a
@@ -106,7 +106,7 @@ checks.
 #### enter
 
 ```pepper
-ThreadLocalGuard<T> enter()
+enter(): ThreadLocalGuard<T>
 ```
 
 Returns the guard that a `with` block enters to reach the calling
@@ -134,7 +134,7 @@ no value (for a struct `T`).
 #### is_set
 
 ```pepper
-bool is_set()
+is_set(): bool
 ```
 
 Reports whether the calling thread has stored a value since it started
@@ -146,7 +146,7 @@ or last called `clear()`.
 #### clear
 
 ```pepper
-void clear()
+clear()
 ```
 
 Removes the calling thread's value, releasing it for a struct `T`.
@@ -172,7 +172,7 @@ the compiler checks the block with the confinement rule (see `Mutex`).
 #### ThreadLocalGuard()
 
 ```pepper
-construct(ThreadLocal<T> local)
+construct(local: ThreadLocal<T>)
 ```
 
 Creates the guard for the calling thread's value of `local`; the same
@@ -186,7 +186,7 @@ as `local.enter()`.
 #### enter
 
 ```pepper
-T enter()
+enter(): T
 ```
 
 Returns the calling thread's value, for the `with` header to bind.
@@ -197,7 +197,7 @@ Returns the calling thread's value, for the `with` header to bind.
 #### exit
 
 ```pepper
-void exit()
+exit()
 ```
 
 Does nothing: the value stays with the thread.

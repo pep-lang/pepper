@@ -103,7 +103,7 @@ export struct Channel<T> {
     ## @example
     ##     var bounded = async.Channel<long>(16);
     ##     var unbounded = async.Channel<long>();
-    construct(ulong capacity = 0) {
+    construct(capacity: ulong = 0) {
         _capacity = capacity;
         _lock = _async_sys_mutex_create();
         _not_empty = _async_sys_condition_create();
@@ -148,7 +148,7 @@ export struct Channel<T> {
     ##     lines.send(copy(line));
     ##     line.append(" again");   # the receiver still gets "hello"
     ##     lines.send(move(line));   # line is null now
-    bool send([Move] T value) {
+    send([Move] value: T): bool {
         _async_sys_mutex_lock(_lock);
         while (_capacity > 0 && _state[1] == _capacity && _state[3] == 0) {
             _async_sys_condition_wait(_not_full, _lock);
@@ -163,7 +163,7 @@ export struct Channel<T> {
     ##
     ## @param value the value to send; a new value, as for `send`
     ## @returns true if the value was queued, false if the channel is full or closed
-    bool try_send([Move] T value) {
+    try_send([Move] value: T): bool {
         _async_sys_mutex_lock(_lock);
         var queued = false;
         if (_capacity == 0 || _state[1] < _capacity) {
@@ -181,7 +181,7 @@ export struct Channel<T> {
     ##     if (job.is_ok()) {
     ##         run(job.value());
     ##     }
-    Result<T> receive() {
+    receive(): Result<T> {
         _async_sys_mutex_lock(_lock);
         while (_state[1] == 0 && _state[3] == 0) {
             _async_sys_condition_wait(_not_empty, _lock);
@@ -194,7 +194,7 @@ export struct Channel<T> {
     ## Takes the next value if one is waiting, without waiting.
     ##
     ## @returns the value, or an error if none is waiting (see `is_closed()` to tell an empty channel from a closed one)
-    Result<T> try_receive() {
+    try_receive(): Result<T> {
         _async_sys_mutex_lock(_lock);
         var received = this._pop();
         _async_sys_mutex_unlock(_lock);
@@ -205,7 +205,7 @@ export struct Channel<T> {
     ##
     ## @param milliseconds the longest time to wait
     ## @returns the value, or an error if the time ran out or once the channel is closed and empty
-    Result<T> receive_for(ulong milliseconds) {
+    receive_for(milliseconds: ulong): Result<T> {
         var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
         _async_sys_mutex_lock(_lock);
         while (_state[1] == 0 && _state[3] == 0) {
@@ -225,7 +225,7 @@ export struct Channel<T> {
     ## Later sends fail. Values already queued stay, and receivers still get
     ## them; after the last one, `receive()` returns an error and `for` loops
     ## end. Closing a closed channel does nothing.
-    void close() {
+    close() {
         _async_sys_mutex_lock(_lock);
         _state[3] = 1;
         _async_sys_condition_notify_all(_not_empty);
@@ -236,7 +236,7 @@ export struct Channel<T> {
     ## Reports whether `close()` has been called.
     ##
     ## @returns true once the channel is closed, even while values are still queued
-    bool is_closed() {
+    is_closed(): bool {
         _async_sys_mutex_lock(_lock);
         var closed = _state[3] != 0;
         _async_sys_mutex_unlock(_lock);
@@ -247,7 +247,7 @@ export struct Channel<T> {
     ## change it as soon as it returns.
     ##
     ## @returns the number of queued values
-    ulong count() {
+    count(): ulong {
         _async_sys_mutex_lock(_lock);
         var queued = _state[1];
         _async_sys_mutex_unlock(_lock);
@@ -265,14 +265,14 @@ export struct Channel<T> {
     ##     for (var line in lines) {
     ##         print(line, "\n");
     ##     }   # ends once `lines` is closed and empty
-    ChannelIterator<T> iterate() {
+    iterate(): ChannelIterator<T> {
         return ChannelIterator<T>(this);
     }
 
     # Queues `value` at the tail, growing an unbounded buffer when full; false
     # if closed, when `value` is dropped here, under the lock. The caller
     # holds the lock and has checked a bounded channel's capacity.
-    bool _push([Move] T value) {
+    _push([Move] value: T): bool {
         if (_state[3] != 0) {
             return false;
         }
@@ -288,7 +288,7 @@ export struct Channel<T> {
 
     # Takes the value at the head; an error if none is queued. The caller
     # holds the lock.
-    Result<T> _pop() {
+    _pop(): Result<T> {
         if (_state[1] == 0) {
             if (_state[3] != 0) {
                 return Result<T>.err(Error("the channel is closed"));
@@ -305,14 +305,14 @@ export struct Channel<T> {
     }
 
     # The ring buffer, as `T` slots.
-    __ptr<T> _slots() {
+    _slots(): __ptr<T> {
         __ptr<void> raw = _buffer[0];
         return raw;
     }
 
     # Moves the queued values, in order, into a buffer twice the size. The
     # caller holds the lock.
-    void _grow() {
+    _grow() {
         __ptr<T> old = this._slots();
         var slots = _state[2];
         __ptr<T> grown = _pep_malloc(2 * slots * sizeof<T>());
@@ -353,14 +353,14 @@ export struct ChannelIterator<T> {
     ## does the same.
     ##
     ## @param source the channel to receive from
-    construct(Channel<T> source) {
+    construct(source: Channel<T>) {
         _source = source;
     }
 
     ## Waits for the next value.
     ##
     ## @returns true if a value arrived (read it with `current()`), false once the channel is closed and empty
-    bool next() {
+    next(): bool {
         var received = _source.receive();
         if (received.is_err()) {
             Current = __default<T>();
@@ -373,7 +373,7 @@ export struct ChannelIterator<T> {
     ## Returns the value the last successful `next()` received.
     ##
     ## @returns the current value
-    T current() {
+    current(): T {
         return Current;
     }
 }

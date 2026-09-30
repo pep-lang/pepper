@@ -66,7 +66,7 @@ export trait Iterator<T> {
     ## false it must keep returning false.
     ##
     ## @returns true if there is a current element, false when the elements are exhausted
-    bool next();
+    next(): bool;
 
     ## Returns the element the last successful `next()` moved to.
     ##
@@ -74,7 +74,7 @@ export trait Iterator<T> {
     ## is an error; the runtime's iterators panic in that case.
     ##
     ## @returns the current element
-    T current();
+    current(): T;
 
     ## Returns an iterator over `transform` applied to each element, in order.
     ##
@@ -131,7 +131,7 @@ export struct MapIterator<T, U> {
     ##
     ## @param source the iterator to transform
     ## @param transform the function applied to each element
-    construct(Iterator<T> source, (T) => U transform) {
+    construct(source: Iterator<T>, transform: (T) => U) {
         _source = source;
         _transform = transform;
     }
@@ -139,7 +139,7 @@ export struct MapIterator<T, U> {
     ## Advances to the next element, and applies the transform function to it.
     ##
     ## @returns true if there is a current element, false when the source is exhausted
-    bool next() {
+    next(): bool {
         if (_source.next()) {
             _value = _transform(_source.current());
             return true;
@@ -150,7 +150,7 @@ export struct MapIterator<T, U> {
     ## Returns the transformed element the last successful `next()` produced.
     ##
     ## @returns the current element
-    U current() {
+    current(): U {
         return _value;
     }
 }
@@ -172,7 +172,7 @@ export struct FilterIterator<T> {
     ##
     ## @param source the iterator to filter
     ## @param keep the test an element must pass
-    construct(Iterator<T> source, (T) => bool keep) {
+    construct(source: Iterator<T>, keep: (T) => bool) {
         _source = source;
         _keep = keep;
     }
@@ -180,7 +180,7 @@ export struct FilterIterator<T> {
     ## Advances to the next element that the test function accepts.
     ##
     ## @returns true if there is a current element, false when the source is exhausted
-    bool next() {
+    next(): bool {
         while (_source.next()) {
             if (_keep(_source.current())) {
                 return true;
@@ -192,7 +192,7 @@ export struct FilterIterator<T> {
     ## Returns the element the last successful `next()` moved to.
     ##
     ## @returns the current element
-    T current() {
+    current(): T {
         return _source.current();
     }
 }

@@ -19,7 +19,7 @@ export struct Error {
     ##
     ## @param message the description of the failure; defaults to the empty string
     [Implicit]
-    construct(String message = "") {
+    construct(message: String = "") {
         this.message = message;
     }
 }

@@ -33,7 +33,7 @@ The description of what went wrong; empty when none was given.
 #### Error()
 
 ```pepper
-[Implicit] construct(String message = "")
+[Implicit] construct(message: String = "")
 ```
 
 Creates an Error carrying `message`.

@@ -48,7 +48,7 @@ while a `for` loop iterates it panics.
 #### String()
 
 ```pepper
-construct(__ptr<char> data = __null, ulong size = 0, ulong length = 0)
+construct(data: __ptr<char> = __null, size: ulong = 0, length: ulong = 0)
 ```
 
 Creates a String by copying `size` bytes of `data` into a new
@@ -82,7 +82,7 @@ trusted, not checked against the data. Runs in O(size).
 #### length_of
 
 ```pepper
-static ulong length_of(__ptr<char> data, ulong size)
+static length_of(data: __ptr<char>, size: ulong): ulong
 ```
 
 Returns the number of Unicode code points in the first `size` bytes at
@@ -104,7 +104,7 @@ whole count 0.
 #### length
 
 ```pepper
-ulong length()
+length(): ulong
 ```
 
 Returns the number of Unicode code points. O(1).
@@ -118,7 +118,7 @@ Returns the number of Unicode code points. O(1).
 #### grow
 
 ```pepper
-void grow(ulong new_size)
+grow(new_size: ulong)
 ```
 
 Extends the byte buffer to `new_size` bytes and fills the new bytes
@@ -136,7 +136,7 @@ pointers from `c_str()`. Runs in O(new_size).
 #### append
 
 ```pepper
-void append(String rhs)
+append(rhs: String)
 ```
 
 Appends the content of `rhs` to this String in place, updating `size()`
@@ -158,7 +158,7 @@ this String sees the change. Runs in O(size() + rhs.size()).
 #### operator []
 
 ```pepper
-String [](int idx)
+[](idx: int): String
 ```
 
 Returns the code point at code-point index `idx` as a new
@@ -189,7 +189,7 @@ visit every code point in O(size).
 #### operator ==
 
 ```pepper
-bool ==(String rhs)
+==(rhs: String): bool
 ```
 
 Returns whether this String and `rhs` have the same content, compared
@@ -205,7 +205,7 @@ comparing bytes. Runs in O(size()).
 #### operator +=
 
 ```pepper
-String +=(String rhs)
++=(rhs: String): String
 ```
 
 Appends `rhs` in place, like `append`, and returns this same String,
@@ -227,7 +227,7 @@ shares, and invalidates running iterators.
 #### size
 
 ```pepper
-ulong size()
+size(): ulong
 ```
 
 Returns the number of bytes of UTF-8, not counting the NUL
@@ -242,7 +242,7 @@ terminator. O(1).
 #### iterate
 
 ```pepper
-StringIterator iterate()
+iterate(): StringIterator
 ```
 
 Returns an iterator over the String's code points, which makes String
@@ -267,7 +267,7 @@ panic.
 #### empty
 
 ```pepper
-bool empty()
+empty(): bool
 ```
 
 Returns whether the String has no code points. O(1).
@@ -278,7 +278,7 @@ Returns whether the String has no code points. O(1).
 #### c_str
 
 ```pepper
-__ptr<char> c_str()
+c_str(): __ptr<char>
 ```
 
 Returns the String's buffer as a NUL-terminated C string.
@@ -294,7 +294,7 @@ pass it to C. C functions stop at the first NUL byte in the content.
 #### copy
 
 ```pepper
-String copy(Copies copies = __null)
+copy(copies: Copies = __null): String
 ```
 
 Returns a new String with the same content and its own buffer, so
@@ -319,7 +319,7 @@ implementation), which passes `copies`.
 #### clone
 
 ```pepper
-[Deprecated("use 'copy' instead", "copy")] String clone()
+[Deprecated("use 'copy' instead", "copy")] clone(): String
 ```
 
 Deprecated: use `copy` instead. Returns a new String with the same
@@ -331,7 +331,7 @@ content and its own buffer.
 #### find
 
 ```pepper
-long find(String needle)
+find(needle: String): long
 ```
 
 Returns the **byte offset** of the first occurrence of `needle`, or -1
@@ -359,7 +359,7 @@ valid UTF-8. Runs in O(size() * needle.size()).
 #### contains
 
 ```pepper
-bool contains(String needle)
+contains(needle: String): bool
 ```
 
 Returns whether `needle` occurs in this String (`find(needle) >= 0`).
@@ -375,7 +375,7 @@ Runs in O(size() * needle.size()).
 #### starts_with
 
 ```pepper
-bool starts_with(String prefix)
+starts_with(prefix: String): bool
 ```
 
 Returns whether this String begins with the bytes of `prefix`. An
@@ -390,7 +390,7 @@ empty `prefix` always matches. Runs in O(prefix.size()).
 #### ends_with
 
 ```pepper
-bool ends_with(String suffix)
+ends_with(suffix: String): bool
 ```
 
 Returns whether this String ends with the bytes of `suffix`. An empty
@@ -405,7 +405,7 @@ Returns whether this String ends with the bytes of `suffix`. An empty
 #### substr
 
 ```pepper
-String substr(ulong start, ulong count)
+substr(start: ulong, count: ulong): String
 ```
 
 Returns a new String of up to `count` code points starting at
@@ -432,7 +432,7 @@ or past `length()`, the result is an empty String. Runs in O(size()).
 #### operator !=
 
 ```pepper
-bool !=(String rhs)
+!=(rhs: String): bool
 ```
 
 Returns whether this String and `rhs` differ in content, the negation
@@ -447,7 +447,7 @@ of `==`. Runs in O(size()).
 #### operator +
 
 ```pepper
-String +(String rhs)
++(rhs: String): String
 ```
 
 Returns a new String that holds this String followed by `rhs`. Neither
@@ -995,7 +995,7 @@ created or last cleared. O(1).
 #### clear
 
 ```pepper
-clear(): void
+clear()
 ```
 
 Removes all the text and keeps the buffer for reuse. O(1).
@@ -1039,7 +1039,7 @@ default-constructed `StringIterator()` has no String to walk.
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Advances to the next code point. Runs in O(1) per code point.
@@ -1057,7 +1057,7 @@ bytes, as one final "code point".
 #### current
 
 ```pepper
-String current()
+current(): String
 ```
 
 Returns the code point that the last successful `next()` moved to, as

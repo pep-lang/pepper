@@ -65,7 +65,7 @@ Creates an `OpenOptions` with every option off. Set at least one of
 #### read
 
 ```pepper
-OpenOptions read(bool v)
+read(v: bool): OpenOptions
 ```
 
 Sets whether the file is opened for reading.
@@ -79,7 +79,7 @@ Sets whether the file is opened for reading.
 #### write
 
 ```pepper
-OpenOptions write(bool v)
+write(v: bool): OpenOptions
 ```
 
 Sets whether the file is opened for writing. Writes go to the
@@ -94,7 +94,7 @@ current position and overwrite what is there.
 #### append
 
 ```pepper
-OpenOptions append(bool v)
+append(v: bool): OpenOptions
 ```
 
 Sets append mode: the file is opened for writing and every write
@@ -111,7 +111,7 @@ precedence over `write`.
 #### truncate
 
 ```pepper
-OpenOptions truncate(bool v)
+truncate(v: bool): OpenOptions
 ```
 
 Sets whether an existing file is truncated to 0 bytes when it is
@@ -126,7 +126,7 @@ opened. Requires `write` or `append`.
 #### create
 
 ```pepper
-OpenOptions create(bool v)
+create(v: bool): OpenOptions
 ```
 
 Sets whether a missing file is created. An existing file is opened as
@@ -141,7 +141,7 @@ it is unless `truncate` is also set. Requires `write` or `append`.
 #### create_new
 
 ```pepper
-OpenOptions create_new(bool v)
+create_new(v: bool): OpenOptions
 ```
 
 Sets whether the file must be newly created: opening fails with
@@ -157,7 +157,7 @@ creation are one atomic step. Requires `write` or `append`.
 #### open
 
 ```pepper
-IoResult<File> open(Path path)
+open(path: Path): IoResult<File>
 ```
 
 Opens `path` with these options. The same as
@@ -299,7 +299,7 @@ normally obtained from a query such as `File.metadata()`.
 ## File
 
 ```pepper
-[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")] struct File
+[NotCopyable( "owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread" )] struct File
 ```
 
 An open file, or a standard stream, read and written through its
@@ -365,7 +365,7 @@ every I/O method fails. Use `File.open`, `File.create` or
 #### open
 
 ```pepper
-static IoResult<File> open(Path path)
+static open(path: Path): IoResult<File>
 ```
 
 Opens an existing file for reading only. The position starts at 0.
@@ -391,7 +391,7 @@ A directory can be opened this way too, but reading it fails with
 #### create
 
 ```pepper
-static IoResult<File> create(Path path)
+static create(path: Path): IoResult<File>
 ```
 
 Opens a file for writing only, creating it if it is missing and
@@ -414,7 +414,7 @@ On POSIX a created file gets mode 0666 less the process umask.
 #### open_with
 
 ```pepper
-static IoResult<File> open_with(Path path, OpenOptions options)
+static open_with(path: Path, options: OpenOptions): IoResult<File>
 ```
 
 Opens `path` as `options` describe. `OpenOptions.open` is the same
@@ -444,7 +444,7 @@ still writes at the end).
 #### std_file
 
 ```pepper
-static File std_file(int which, String name)
+static std_file(which: int, name: String): File
 ```
 
 Returns a File for one of the process's standard streams. The File
@@ -467,7 +467,7 @@ redirection may get a null handle, and the File is then not open.
 #### stdin
 
 ```pepper
-static File stdin()
+static stdin(): File
 ```
 
 Returns a File reading the process's standard input. Each call
@@ -481,7 +481,7 @@ writing end of a pipe has closed).
 #### stdout
 
 ```pepper
-static File stdout()
+static stdout(): File
 ```
 
 Returns a File writing to the process's standard output. Each call
@@ -502,7 +502,7 @@ and from this File comes out in program order.
 #### stderr
 
 ```pepper
-static File stderr()
+static stderr(): File
 ```
 
 Returns a File writing to the process's standard error. Each call
@@ -516,7 +516,7 @@ one first flushes what `print` has buffered.
 #### read_bytes
 
 ```pepper
-static IoResult<u8[]> read_bytes(Path path)
+static read_bytes(path: Path): IoResult<u8[]>
 ```
 
 Reads the whole file at `path` into a byte array (Rust's
@@ -539,7 +539,7 @@ Reads the whole file at `path` into a byte array (Rust's
 #### read_to_string
 
 ```pepper
-static IoResult<String> read_to_string(Path path)
+static read_to_string(path: Path): IoResult<String>
 ```
 
 Reads the whole file at `path` as UTF-8 text (Rust's
@@ -563,7 +563,7 @@ Reads the whole file at `path` as UTF-8 text (Rust's
 #### write_bytes
 
 ```pepper
-static IoResult<void> write_bytes(Path path, u8[] data)
+static write_bytes(path: Path, data: u8[]): IoResult<void>
 ```
 
 Writes `data` as the whole contents of the file at `path`, creating
@@ -589,7 +589,7 @@ leaves it truncated or partly written.
 #### write_text
 
 ```pepper
-static IoResult<void> write_text(Path path, String s)
+static write_text(path: Path, s: String): IoResult<void>
 ```
 
 Writes `s` as UTF-8 as the whole contents of the file at `path`,
@@ -620,7 +620,7 @@ leaves it truncated or partly written.
 #### copy
 
 ```pepper
-static IoResult<ulong> copy(Path from, Path to)
+static copy(from: Path, to: Path): IoResult<ulong>
 ```
 
 Copies the contents of the file `from` to `to`, creating `to` or
@@ -645,7 +645,7 @@ part way leaves `to` partly written.
 #### rename
 
 ```pepper
-static IoResult<void> rename(Path from, Path to)
+static rename(from: Path, to: Path): IoResult<void>
 ```
 
 Renames or moves `from` to `to`, replacing an existing file at `to`
@@ -670,7 +670,7 @@ fails rather than copying.
 #### remove
 
 ```pepper
-static IoResult<void> remove(Path path)
+static remove(path: Path): IoResult<void>
 ```
 
 Deletes the file at `path`. A symlink is removed itself, not its
@@ -696,7 +696,7 @@ target. Directories are not removed: use `Directory.remove` or
 #### is_open
 
 ```pepper
-bool is_open()
+is_open(): bool
 ```
 
 Returns whether the File holds a valid handle: true after a
@@ -709,7 +709,7 @@ opened.
 #### check_open
 
 ```pepper
-IoResult<void> check_open()
+check_open(): IoResult<void>
 ```
 
 Checks that the File is open, for use before an operation.
@@ -720,7 +720,7 @@ Checks that the File is open, for use before an operation.
 #### read
 
 ```pepper
-IoResult<ulong> read(u8[] buf, ulong max)
+read(buf: u8[], max: ulong): IoResult<ulong>
 ```
 
 Reads up to `max` bytes from the current position and appends them
@@ -755,7 +755,7 @@ failure `buf` keeps its previous contents.
 #### read_all
 
 ```pepper
-IoResult<u8[]> read_all()
+read_all(): IoResult<u8[]>
 ```
 
 Reads everything from the current position to the end of the file,
@@ -767,7 +767,7 @@ in 64 KiB chunks, leaving the position at the end.
 #### read_string
 
 ```pepper
-IoResult<String> read_string()
+read_string(): IoResult<String>
 ```
 
 Reads everything from the current position to the end of the file,
@@ -783,7 +783,7 @@ as part of the text.
 #### write
 
 ```pepper
-IoResult<ulong> write(u8[] data)
+write(data: u8[]): IoResult<ulong>
 ```
 
 Writes bytes from `data` at the current position (or at the end, in
@@ -803,7 +803,7 @@ write (`EINTR`) is retried.
 #### write_all
 
 ```pepper
-IoResult<void> write_all(u8[] data)
+write_all(data: u8[]): IoResult<void>
 ```
 
 Writes all of `data`, repeating the write until every byte is
@@ -862,7 +862,7 @@ Deprecated: use `write_all` instead. Writes all of the UTF-8 bytes of
 #### seek_start
 
 ```pepper
-IoResult<Offset> seek_start(Offset pos)
+seek_start(pos: Offset): IoResult<Offset>
 ```
 
 Moves the position to `pos` bytes from the start of the file.
@@ -882,7 +882,7 @@ with zeros.
 #### seek_end
 
 ```pepper
-IoResult<Offset> seek_end(Offset delta)
+seek_end(delta: Offset): IoResult<Offset>
 ```
 
 Moves the position to `delta` bytes from the end of the file.
@@ -900,7 +900,7 @@ Moves the position to `delta` bytes from the end of the file.
 #### seek_current
 
 ```pepper
-IoResult<Offset> seek_current(Offset delta)
+seek_current(delta: Offset): IoResult<Offset>
 ```
 
 Moves the position by `delta` bytes from where it is.
@@ -918,7 +918,7 @@ Moves the position by `delta` bytes from where it is.
 #### seek
 
 ```pepper
-IoResult<Offset> seek(Offset offset, int whence)
+seek(offset: Offset, whence: int): IoResult<Offset>
 ```
 
 Moves the position by `offset` relative to the origin `whence`.
@@ -938,7 +938,7 @@ and has platform-defined results on Windows.
 #### set_length
 
 ```pepper
-IoResult<void> set_length(ulong size)
+set_length(size: ulong): IoResult<void>
 ```
 
 Truncates or extends the file to exactly `size` bytes; bytes added
@@ -955,7 +955,7 @@ The File must have been opened for writing.
 #### set_len
 
 ```pepper
-[Deprecated("use 'set_length' instead", "set_length")] IoResult<void> set_len(ulong size)
+[Deprecated("use 'set_length' instead", "set_length")] set_len(size: ulong): IoResult<void>
 ```
 
 Deprecated: use `set_length` instead. Truncates or extends the file to
@@ -970,7 +970,7 @@ exactly `size` bytes.
 #### sync
 
 ```pepper
-IoResult<void> sync()
+sync(): IoResult<void>
 ```
 
 Flushes the file's contents and metadata to the storage device,
@@ -986,7 +986,7 @@ On Windows the File must have been opened with write access.
 #### metadata
 
 ```pepper
-IoResult<Metadata> metadata()
+metadata(): IoResult<Metadata>
 ```
 
 Queries the metadata of the open file itself (the target, when it
@@ -1004,7 +1004,7 @@ permission bits and timestamps.
 #### close
 
 ```pepper
-IoResult<void> close()
+close(): IoResult<void>
 ```
 
 Closes the File now, to observe the error the system reports (for

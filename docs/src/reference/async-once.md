@@ -57,7 +57,7 @@ Creates a Once whose body has not run.
 #### call
 
 ```pepper
-void call(ThreadBody body)
+call(body: ThreadBody)
 ```
 
 Runs `body` if no call has run a body yet; otherwise waits until that
@@ -80,7 +80,7 @@ Only one body ever runs, even if later calls pass different ones.
 #### is_done
 
 ```pepper
-bool is_done()
+is_done(): bool
 ```
 
 Reports whether a body has finished running.
@@ -135,7 +135,7 @@ compile error.
 #### Lazy()
 
 ```pepper
-construct(shared () => T initializer)
+construct(initializer: shared () => T)
 ```
 
 Creates a Lazy whose value `initializer` builds on the first `get()`.
@@ -152,7 +152,7 @@ Nothing runs yet.
 #### get
 
 ```pepper
-T get()
+get(): T
 ```
 
 Returns the value, building it with the initializer on the first call.
@@ -168,7 +168,7 @@ For a struct `T` the caller gets its own reference.
 #### is_built
 
 ```pepper
-bool is_built()
+is_built(): bool
 ```
 
 Reports whether the value has been built.

@@ -1241,7 +1241,7 @@ dogfooding of the language.
   the repository: each must format, be idempotent, and give the same AST
   (the compiler's `Display` of `Module`, imports sorted) before and after.
   So a grammar change to `parsers.rs` that `tools/syntax` does not mirror
-  fails there. The tool's own sources must be pep-fmt formatted.
+  fails there. The tool's own sources and `runtime/` must be pep-fmt formatted.
 
 ---
 

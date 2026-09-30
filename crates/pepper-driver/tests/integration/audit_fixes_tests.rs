@@ -167,6 +167,31 @@ main() {
 }
 
 #[test]
+fn generic_function_return_type_is_inferred_per_specialization() {
+    let (ok, out) = run_binary(
+        "inferred_generic_return",
+        r#"
+skip<T>(value: T, early: bool) {
+    if (early) {
+        return;
+    }
+    print(value);
+}
+first<T>(a: T, b: T) {
+    return a;
+}
+main() {
+    skip<int>(1, true);
+    skip<String>("shown", false);
+    print(first<int>(7, 8));
+}
+"#,
+    );
+    assert!(ok, "{}", out);
+    assert_eq!(out, "shown\n7\n");
+}
+
+#[test]
 fn large_integer_literal_infers_long() {
     assert_eq!(jit("test(): int { var x = 5000000000; return x / 1000000000 == 5 ? 1 : 0; }"), 1);
 }

@@ -7,7 +7,7 @@ Source: `runtime/internals.pep`
 ## assert
 
 ```pepper
-assert(condition: bool, message: String): void
+assert(condition: bool, message: String)
 ```
 
 Panics with `message` when `condition` is false; otherwise does nothing.
@@ -31,7 +31,7 @@ builds no `String`. Any other message is evaluated before the call.
 ## assert
 
 ```pepper
-assert(condition: bool, message: __ptr<char>): void
+assert(condition: bool, message: __ptr<char>)
 ```
 
 Checks that `condition` holds; if not, panics with `message`, a

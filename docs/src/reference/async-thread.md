@@ -86,7 +86,7 @@ outside. A `panic` or failed `assert` on any thread ends the whole program.
 #### Thread()
 
 ```pepper
-construct(String name, ThreadBody body)
+construct(name: String, body: ThreadBody)
 ```
 
 Creates a `Thread` value for a thread that is already running. Programs
@@ -102,7 +102,7 @@ directly is not attached to any thread and cannot be joined.
 #### spawn
 
 ```pepper
-static Thread spawn(ThreadBody body, String name = "")
+static spawn(body: ThreadBody, name: String = ""): Thread
 ```
 
 Starts a new thread that runs `body`.
@@ -129,7 +129,7 @@ The new thread starts right away and runs until `body` returns. Its
 #### current
 
 ```pepper
-static Thread current()
+static current(): Thread
 ```
 
 Returns the `Thread` of the thread that calls it.
@@ -152,7 +152,7 @@ cannot be joined.
 #### sleep
 
 ```pepper
-static void sleep(ulong milliseconds)
+static sleep(milliseconds: ulong)
 ```
 
 Pauses the calling thread for at least `milliseconds` milliseconds.
@@ -167,7 +167,7 @@ The operating system may sleep longer, but never shorter.
 #### id
 
 ```pepper
-ThreadId id()
+id(): ThreadId
 ```
 
 Returns the thread's id, which no other thread in the program has.
@@ -178,7 +178,7 @@ Returns the thread's id, which no other thread in the program has.
 #### name
 
 ```pepper
-String name()
+name(): String
 ```
 
 Returns the name the thread was given.
@@ -189,7 +189,7 @@ Returns the name the thread was given.
 #### is_finished
 
 ```pepper
-bool is_finished()
+is_finished(): bool
 ```
 
 Reports whether the thread's body has returned.
@@ -204,7 +204,7 @@ result can be out of date by the time it is used. Always false for a
 #### is_joinable
 
 ```pepper
-bool is_joinable()
+is_joinable(): bool
 ```
 
 Reports whether `join()` can be called: the thread was started by
@@ -216,7 +216,7 @@ Reports whether `join()` can be called: the thread was started by
 #### join
 
 ```pepper
-void join()
+join()
 ```
 
 Waits for the thread's body to return.

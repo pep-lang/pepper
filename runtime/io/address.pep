@@ -7,11 +7,11 @@
 # formatting are pure Pepper, so every platform accepts and prints exactly
 # the same text.
 
-import "types";
-import "sys_posix";
-import "sys_windows";
 import "socket_posix";
 import "socket_windows";
+import "sys_posix";
+import "sys_windows";
+import "types";
 
 ## An IPv4 or IPv6 address.
 ##
@@ -41,8 +41,7 @@ export struct IpAddress {
     ulong _low;
 
     ## Creates the IPv4 unspecified address, `0.0.0.0`.
-    construct() {
-    }
+    construct() {}
 
     ## Creates an IPv4 address from its four bytes, `a.b.c.d`.
     ##
@@ -368,7 +367,7 @@ export struct SocketAddress {
             while (i < n) {
                 if (_io_byte(p, n, i) == ':') {
                     if (colon != n) {
-                        return bad;   # a second colon: IPv6 needs brackets
+                        return bad;  # a second colon: IPv6 needs brackets
                     }
                     colon = i;
                 }
@@ -547,7 +546,7 @@ export _io_append_hex(out: u8[], value: ulong) {
     if (digit < 10) {
         out.append((48 + digit) as u8);
     } else {
-        out.append((87 + digit) as u8);   # 'a' - 10
+        out.append((87 + digit) as u8);  # 'a' - 10
     }
 }
 
@@ -633,8 +632,8 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
     if (start >= end) {
         return fail;
     }
-    var head = Array<ulong>();   # groups before `::`
-    var tail = Array<ulong>();   # groups after it
+    var head = Array<ulong>();  # groups before `::`
+    var tail = Array<ulong>();  # groups after it
     var gap = false;
     var i = start;
     if (_io_byte(p, n, i) == ':') {
@@ -688,14 +687,14 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
         i = i + 1;
         if (i < end && _io_byte(p, n, i) == ':') {
             if (gap) {
-                return fail;   # a second `::`
+                return fail;  # a second `::`
             }
             gap = true;
             i = i + 1;
             continue;
         }
         if (i == end) {
-            return fail;   # a trailing single colon
+            return fail;  # a trailing single colon
         }
     }
     var count = head.count() + tail.count();

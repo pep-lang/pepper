@@ -68,7 +68,7 @@ export trait Scoped<T> {
     ## body is skipped and its `else` block runs instead.
     ##
     ## @returns the value the `with` header binds
-    T enter();
+    enter(): T;
 
     ## Leaves the scope. Implementations call it from their destructor.
     exit();

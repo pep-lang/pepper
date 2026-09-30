@@ -23,7 +23,7 @@ extern int fflush(void* stream);
 ## @panics if `condition` is false: prints `message` and aborts (see `panic`)
 ## @example
 ##     assert(count > 0, "count must be positive");
-export assert(condition: bool, message: String): void {
+export assert(condition: bool, message: String) {
     if (!condition) {
         panic(message);
     }
@@ -39,7 +39,7 @@ export assert(condition: bool, message: String): void {
 ## @panics if `condition` is false: prints `message` and aborts (see `panic`)
 ## @example
 ##     assert(count > 0, "count must be positive");
-export assert(condition: bool, message: __ptr<char>): void {
+export assert(condition: bool, message: __ptr<char>) {
     if (!condition) {
         _pep_panic(message);
     }
@@ -48,7 +48,7 @@ export assert(condition: bool, message: __ptr<char>): void {
 # The allocation-free form of `assert` that compiler-generated checks (index
 # bounds, null function and trait values) lower to: `message` is a
 # NUL-terminated C string, or `__null`.
-export _pep_assert(condition: bool, message: __ptr<char>): void {
+export _pep_assert(condition: bool, message: __ptr<char>) {
     if (!condition) {
         _pep_panic(message);
     }
@@ -66,6 +66,7 @@ _pep_new_live_allocs_slot(): __ptr<long> {
     memset(slot, 0, 8);
     return slot;
 }
+
 const _pep_live_allocs_slot: __ptr<long> = _pep_new_live_allocs_slot();
 
 # `getenv` needs a NUL-terminated C string; a Pepper `String` buffer is not
@@ -74,6 +75,7 @@ _pep_trace_enabled(): bool {
     var name = "PEP_TRACE";
     return getenv(name.c_str()) != __null;
 }
+
 const _pep_trace_on = _pep_trace_enabled();
 
 # `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
@@ -85,6 +87,7 @@ _pep_check_sync_enabled(): bool {
     var name = "PEP_CHECK_SYNC";
     return getenv(name.c_str()) != __null;
 }
+
 export const _PEP_CHECK_SYNC_ON = _pep_check_sync_enabled();
 
 export _pep_malloc(size: ulong): __ptr<void> {
@@ -118,6 +121,7 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
     }
     return np;
 }
+
 export _pep_live_allocs(): long {
     return __atomic_load<long>(_pep_live_allocs_slot);
 }
@@ -185,14 +189,23 @@ dec(v: long): __ptr<char> {
     var buf = _pep_malloc(24);
     var n = 0;
     var neg = 0;
-    if (v < 0) { neg = 1; v = -v; }
-    if (v == 0) { buf[n] = 48; n = n + 1; }
+    if (v < 0) {
+        neg = 1;
+        v = -v;
+    }
+    if (v == 0) {
+        buf[n] = 48;
+        n = n + 1;
+    }
     while (v > 0) {
         buf[n] = ('0' + (v % 10));
         n = n + 1;
         v = v / 10;
     }
-    if (neg == 1) { buf[n] = '-'; n = n + 1; }
+    if (neg == 1) {
+        buf[n] = '-';
+        n = n + 1;
+    }
     # Digits were produced least-significant first: reverse in place by
     # swapping pairs (copying buf[n-1-i] over buf[i] for every i mirrors the
     # second half onto the first instead).
@@ -212,7 +225,10 @@ floatstr(v: double): __ptr<char> {
     var buf = _pep_malloc(64);
     var n = 0;
     if (v != v) {
-        buf[0] = 110; buf[1] = 97; buf[2] = 110; buf[3] = 0;   # "nan"
+        buf[0] = 110;
+        buf[1] = 97;
+        buf[2] = 110;
+        buf[3] = 0;  # "nan"
         return buf;
     }
     if (v < 0.0) {
@@ -221,7 +237,10 @@ floatstr(v: double): __ptr<char> {
         v = -v;
     }
     if (v > 9.0e18) {
-        buf[n] = 105; buf[n + 1] = 110; buf[n + 2] = 102; buf[n + 3] = 0;   # "inf" (or too large for long)
+        buf[n] = 105;
+        buf[n + 1] = 110;
+        buf[n + 2] = 102;
+        buf[n + 3] = 0;  # "inf" (or too large for long)
         return buf;
     }
     var ip = v as long;
@@ -233,7 +252,11 @@ floatstr(v: double): __ptr<char> {
     }
     var s = dec(ip);
     var i = 0;
-    while (s[i] != 0) { buf[n] = s[i]; n = n + 1; i = i + 1; }
+    while (s[i] != 0) {
+        buf[n] = s[i];
+        n = n + 1;
+        i = i + 1;
+    }
     _pep_free(s);
     buf[n] = '.';
     n = n + 1;
@@ -257,7 +280,9 @@ _pep_trace_prefix(buf: __ptr<char>, name: __ptr<char>): ulong {
     var n = 0;
     if (name != __null) {
         var nl = _pep_c_strlen(name);
-        if (nl > 400) { nl = 400; }
+        if (nl > 400) {
+            nl = 400;
+        }
         memcpy(buf, name, nl);
         n = nl;
     }
@@ -270,7 +295,10 @@ _pep_trace_prefix(buf: __ptr<char>, name: __ptr<char>): ulong {
 # the new length.
 _pep_trace_append(buf: __ptr<char>, n: ulong, text: __ptr<char>): ulong {
     var i = 0;
-    while (text[i] != 0) { buf[n + i] = text[i]; i = i + 1; }
+    while (text[i] != 0) {
+        buf[n + i] = text[i];
+        i = i + 1;
+    }
     _pep_free(text);
     return n + i;
 }
@@ -321,6 +349,7 @@ export _pep_swap_refs(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
         _pep_free(tmp);
     }
 }
+
 # ── Move one `stride`-byte slot into another (raw reference transfer, no
 # refcount change) and zero the source so it releases nothing later: a
 # shifted slot must not keep a stale copy of the reference. ───────────────────
@@ -351,7 +380,9 @@ export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
 # the only way to measure them (never used for language string data).
 export _pep_c_strlen(s: __ptr<char>): ulong {
     var i = 0;
-    while (s[i] != 0) { i = i + 1; }
+    while (s[i] != 0) {
+        i = i + 1;
+    }
     return i;
 }
 
@@ -364,15 +395,17 @@ export _pep_utf8_length(s: __ptr<char>, size: ulong): ulong {
         var b = s[i] & 0xFF;
         var n = 1;
         if (b >= 240 && b < 248) {
-            if (i + 4 > size || (s[i+1] & 0xC0) != 0x80 || (s[i+2] & 0xC0) != 0x80 || (s[i+3] & 0xC0) != 0x80) { return 0; }
+            if (i + 4 > size || (s[i + 1] & 0xC0) != 0x80 || (s[i + 2] & 0xC0) != 0x80 || (s[i + 3] & 0xC0) != 0x80) {
+                return 0;
+            }
             n = 4;
         }
         if (b >= 224 && b < 240) {
-            if (i + 3 > size || (s[i+1] & 0xC0) != 0x80 || (s[i+2] & 0xC0) != 0x80) { return 0; }
+            if (i + 3 > size || (s[i + 1] & 0xC0) != 0x80 || (s[i + 2] & 0xC0) != 0x80) { return 0; }
             n = 3;
         }
         if (b >= 192 && b < 224) {
-            if (i + 2 > size || (s[i+1] & 0xC0) != 0x80) { return 0; }
+            if (i + 2 > size || (s[i + 1] & 0xC0) != 0x80) { return 0; }
             n = 2;
         }
         if (b >= 128 && b < 192) {
@@ -397,6 +430,7 @@ export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: 
     }
     return a_size >= size && b_size >= size && memcmp(a, b, size) == 0;
 }
+
 _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     if (data == __null || size == 0) { return true; }
     var i = 0;
@@ -404,15 +438,18 @@ _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
         # Byte reads are signed; mask to the unsigned value.
         var b = data[i] & 0xFF;
         if (b >= 240 && b < 248) {
-            if (i + 4 > size || (data[i+1] & 0xC0) != 0x80 || (data[i+2] & 0xC0) != 0x80 || (data[i+3] & 0xC0) != 0x80) { return false; }
+            if (i + 4 > size
+                || (data[i + 1] & 0xC0) != 0x80
+                || (data[i + 2] & 0xC0) != 0x80
+                || (data[i + 3] & 0xC0) != 0x80) { return false; }
             i = i + 4;
         }
         if (b >= 224 && b < 240) {
-            if (i + 3 > size || (data[i+1] & 0xC0) != 0x80 || (data[i+2] & 0xC0) != 0x80) { return false; }
+            if (i + 3 > size || (data[i + 1] & 0xC0) != 0x80 || (data[i + 2] & 0xC0) != 0x80) { return false; }
             i = i + 3;
         }
         if (b >= 192 && b < 224) {
-            if (i + 2 > size || (data[i+1] & 0xC0) != 0x80) { return false; }
+            if (i + 2 > size || (data[i + 1] & 0xC0) != 0x80) { return false; }
             i = i + 2;
         }
         if (b >= 128 && b < 192) {
@@ -424,6 +461,7 @@ _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     }
     return true;
 }
+
 export _pep_utf8_find(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): long {
     if (haystack == __null || haystack_size == 0) { return -1; }
     if (needle_size == 0) { return 0; }
@@ -453,15 +491,18 @@ export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulon
         var b = data[i] & 0xFF;
         var n = 1;
         if (b >= 240 && b < 248) {
-            if (i + 4 > size || (data[i+1] & 0xC0) != 0x80 || (data[i+2] & 0xC0) != 0x80 || (data[i+3] & 0xC0) != 0x80) { return size; }
+            if (i + 4 > size
+                || (data[i + 1] & 0xC0) != 0x80
+                || (data[i + 2] & 0xC0) != 0x80
+                || (data[i + 3] & 0xC0) != 0x80) { return size; }
             n = 4;
         }
         if (b >= 224 && b < 240) {
-            if (i + 3 > size || (data[i+1] & 0xC0) != 0x80 || (data[i+2] & 0xC0) != 0x80) { return size; }
+            if (i + 3 > size || (data[i + 1] & 0xC0) != 0x80 || (data[i + 2] & 0xC0) != 0x80) { return size; }
             n = 3;
         }
         if (b >= 192 && b < 224) {
-            if (i + 2 > size || (data[i+1] & 0xC0) != 0x80) { return size; }
+            if (i + 2 > size || (data[i + 1] & 0xC0) != 0x80) { return size; }
             n = 2;
         }
         if (b >= 128 && b < 192) {
@@ -476,7 +517,9 @@ export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulon
 # ── print backing (the `print` builtin lowers to these by name) ─────────────
 # Exported so they keep their names: a private name is mangled per file.
 export _pep_print(s: __ptr<char>) {
-    if (s != __null) { puts(s); }
+    if (s != __null) {
+        puts(s);
+    }
 }
 
 export _pep_print_int(v: long) {

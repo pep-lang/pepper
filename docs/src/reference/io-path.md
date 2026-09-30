@@ -45,7 +45,7 @@ dots are ASCII, so splitting at them never cuts a character in two.
 #### Path()
 
 ```pepper
-[Implicit] construct(String value = "")
+[Implicit] construct(value: String = "")
 ```
 
 Creates a path holding `value` as is: no validation, normalization or
@@ -72,7 +72,7 @@ takes a `Path` also accepts text.
 #### separator
 
 ```pepper
-static String separator()
+static separator(): String
 ```
 
 Returns the separator this platform inserts when it builds a path.
@@ -83,7 +83,7 @@ Returns the separator this platform inserts when it builds a path.
 #### dot_index
 
 ```pepper
-static ulong dot_index(String name)
+static dot_index(name: String): ulong
 ```
 
 Returns the byte offset of the dot that starts the extension in the
@@ -101,7 +101,7 @@ dot (`.bashrc`) starts the name, not an extension.
 #### to_string
 
 ```pepper
-String to_string()
+to_string(): String
 ```
 
 Returns the path's text, the same String the Path holds, not a copy.
@@ -112,7 +112,7 @@ Returns the path's text, the same String the Path holds, not a copy.
 #### is_empty
 
 ```pepper
-bool is_empty()
+is_empty(): bool
 ```
 
 Returns whether the path has no text at all. The empty path means "no
@@ -125,7 +125,7 @@ file-system operations on it fail.
 #### is_absolute
 
 ```pepper
-bool is_absolute()
+is_absolute(): bool
 ```
 
 Returns whether the path is absolute, meaning it does not depend on
@@ -143,7 +143,7 @@ path is relative.
 #### is_relative
 
 ```pepper
-bool is_relative()
+is_relative(): bool
 ```
 
 Returns whether the path is relative: the opposite of
@@ -155,7 +155,7 @@ Returns whether the path is relative: the opposite of
 #### join
 
 ```pepper
-Path join(Path other)
+join(other: Path): Path
 ```
 
 Returns this path with `other` appended as further components.
@@ -186,7 +186,7 @@ normalized: `a` joined with `../b` is `a/../b`.
 #### join_str
 
 ```pepper
-[Deprecated("use 'join', which accepts a String", "join")] Path join_str(String other)
+[Deprecated("use 'join', which accepts a String", "join")] join_str(other: String): Path
 ```
 
 Returns this path with the String `other` appended, exactly like
@@ -212,7 +212,7 @@ since a `String` converts to a `Path` implicitly.
 #### has_root_or_prefix
 
 ```pepper
-bool has_root_or_prefix()
+has_root_or_prefix(): bool
 ```
 
 Returns whether the path starts with a root separator or, on Windows,
@@ -226,7 +226,7 @@ as `\x` and `C:x`. On POSIX it equals `is_absolute()`.
 #### parent
 
 ```pepper
-Path parent()
+parent(): Path
 ```
 
 Returns the path without its last component. Pure text: `..` is not
@@ -252,7 +252,7 @@ name keeps the root and prefix (`/a` gives `/`, `C:\x` gives `C:\`,
 #### file_name
 
 ```pepper
-String file_name()
+file_name(): String
 ```
 
 Returns the last component of the path, ignoring trailing separators
@@ -272,7 +272,7 @@ Returns the last component of the path, ignoring trailing separators
 #### file_stem
 
 ```pepper
-String file_stem()
+file_stem(): String
 ```
 
 Returns the file name without its extension: everything before the
@@ -284,7 +284,7 @@ last dot, unless that dot is the first character.
 #### extension
 
 ```pepper
-String extension()
+extension(): String
 ```
 
 Returns the file name's extension, without its dot: the text after
@@ -297,7 +297,7 @@ name counts; a dot in a directory name (`a.b/c`) is not an extension.
 #### with_extension
 
 ```pepper
-Path with_extension(String ext)
+with_extension(ext: String): Path
 ```
 
 Returns this path with its file name's extension replaced by `ext`,
@@ -322,7 +322,7 @@ separators after the file name are dropped.
 #### components
 
 ```pepper
-Array<String> components()
+components(): Array<String>
 ```
 
 Returns the path split into its components: the prefix (Windows drive
@@ -347,7 +347,7 @@ are dropped, except a leading one in a path with no prefix or root
 #### normalize
 
 ```pepper
-Path normalize()
+normalize(): Path
 ```
 
 Returns the path cleaned up lexically, without touching the file
@@ -378,7 +378,7 @@ resolves.
 #### exists
 
 ```pepper
-bool exists()
+exists(): bool
 ```
 
 Returns whether something exists at this path, following symlinks. A
@@ -394,7 +394,7 @@ directory that cannot be read, and the empty path all give false. Use
 #### is_file
 
 ```pepper
-bool is_file()
+is_file(): bool
 ```
 
 Returns whether the path names a regular file, following symlinks.
@@ -405,7 +405,7 @@ Returns whether the path names a regular file, following symlinks.
 #### is_directory
 
 ```pepper
-bool is_directory()
+is_directory(): bool
 ```
 
 Returns whether the path names a directory, following symlinks.
@@ -416,7 +416,7 @@ Returns whether the path names a directory, following symlinks.
 #### is_dir
 
 ```pepper
-[Deprecated("use 'is_directory' instead", "is_directory")] bool is_dir()
+[Deprecated("use 'is_directory' instead", "is_directory")] is_dir(): bool
 ```
 
 Deprecated: use `is_directory` instead. Returns whether the path
@@ -428,7 +428,7 @@ names a directory, following symlinks.
 #### metadata
 
 ```pepper
-IoResult<Metadata> metadata()
+metadata(): IoResult<Metadata>
 ```
 
 Returns the metadata of the file or directory at this path, following
@@ -455,7 +455,7 @@ opened for attributes only.
 #### symlink_metadata
 
 ```pepper
-IoResult<Metadata> symlink_metadata()
+symlink_metadata(): IoResult<Metadata>
 ```
 
 Returns the metadata of the path itself without following a symlink
@@ -475,7 +475,7 @@ link. For anything that is not a symlink it equals `metadata()`.
 #### canonicalize
 
 ```pepper
-IoResult<Path> canonicalize()
+canonicalize(): IoResult<Path>
 ```
 
 Returns the absolute path the file system resolves this path to:
@@ -505,7 +505,7 @@ removed (`\\?\UNC\server\share` becomes `\\server\share`).
 #### operator ==
 
 ```pepper
-bool ==(Path rhs)
+==(rhs: Path): bool
 ```
 
 Returns whether two paths have exactly the same text. The comparison
@@ -523,7 +523,7 @@ results to ignore spelling differences.
 #### operator !=
 
 ```pepper
-bool !=(Path rhs)
+!=(rhs: Path): bool
 ```
 
 Returns whether two paths differ in their text: the opposite of `==`,

@@ -67,7 +67,7 @@ which a `for` loop drives through the trait.
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Advances to the next element.
@@ -81,7 +81,7 @@ false it must keep returning false.
 #### current
 
 ```pepper
-T current()
+current(): T
 ```
 
 Returns the element the last successful `next()` moved to.
@@ -169,7 +169,7 @@ passed through the transform function.
 #### MapIterator()
 
 ```pepper
-construct(Iterator<T> source, (T) => U transform)
+construct(source: Iterator<T>, transform: (T) => U)
 ```
 
 Makes an iterator over `transform` applied to the elements of `source`.
@@ -183,7 +183,7 @@ Makes an iterator over `transform` applied to the elements of `source`.
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Advances to the next element, and applies the transform function to it.
@@ -194,7 +194,7 @@ Advances to the next element, and applies the transform function to it.
 #### current
 
 ```pepper
-U current()
+current(): U
 ```
 
 Returns the transformed element the last successful `next()` produced.
@@ -222,7 +222,7 @@ iterator that the test function accepts.
 #### FilterIterator()
 
 ```pepper
-construct(Iterator<T> source, (T) => bool keep)
+construct(source: Iterator<T>, keep: (T) => bool)
 ```
 
 Makes an iterator over the elements of `source` that `keep` accepts.
@@ -236,7 +236,7 @@ Makes an iterator over the elements of `source` that `keep` accepts.
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Advances to the next element that the test function accepts.
@@ -247,7 +247,7 @@ Advances to the next element that the test function accepts.
 #### current
 
 ```pepper
-T current()
+current(): T
 ```
 
 Returns the element the last successful `next()` moved to.

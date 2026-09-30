@@ -57,7 +57,7 @@ next step of such a loop panics with "Array modified during iteration".
 #### Array()
 
 ```pepper
-construct(ulong capacity = 0)
+construct(capacity: ulong = 0)
 ```
 
 Creates an empty Array, optionally preallocating room for `capacity`
@@ -80,7 +80,7 @@ would otherwise perform while the Array grows to a known size.
 #### iterate
 
 ```pepper
-ArrayIterator<T> iterate()
+iterate(): ArrayIterator<T>
 ```
 
 Returns an iterator over the elements in index order; this is what
@@ -104,7 +104,7 @@ panic.
 #### count
 
 ```pepper
-ulong count()
+count(): ulong
 ```
 
 Returns the number of elements in the Array.
@@ -115,7 +115,7 @@ Returns the number of elements in the Array.
 #### capacity
 
 ```pepper
-ulong capacity()
+capacity(): ulong
 ```
 
 Returns the number of elements the Array can hold before its buffer
@@ -127,7 +127,7 @@ must be reallocated.
 #### empty
 
 ```pepper
-bool empty()
+empty(): bool
 ```
 
 Reports whether the Array has no elements.
@@ -138,7 +138,7 @@ Reports whether the Array has no elements.
 #### reserve
 
 ```pepper
-void reserve(ulong capacity)
+reserve(capacity: ulong)
 ```
 
 Ensures the buffer has room for at least `capacity` elements,
@@ -162,7 +162,7 @@ existing elements, which costs O(count).
 #### grow
 
 ```pepper
-void grow()
+grow()
 ```
 
 Makes room for one more element: when the buffer is full, doubles its
@@ -174,7 +174,7 @@ Does not change the elements or invalidate iterators.
 #### operator []
 
 ```pepper
-T [](ulong idx)
+[](idx: ulong): T
 ```
 
 Returns the element at `idx`; this is the indexer read `a[idx]`.
@@ -199,7 +199,7 @@ itself; binding it to a variable acquires it like any shared copy.
 #### operator []
 
 ```pepper
-T [](ulong idx, T value)
+[](idx: ulong, value: T): T
 ```
 
 Replaces the element at `idx` with `value`; this is the indexer write
@@ -229,7 +229,7 @@ unchanged.
 #### append
 
 ```pepper
-void append(T item)
+append(item: T)
 ```
 
 Adds `item` to the end of the Array.
@@ -251,7 +251,7 @@ Invalidates running iterators.
 #### insert
 
 ```pepper
-void insert(ulong idx, T item)
+insert(idx: ulong, item: T)
 ```
 
 Inserts `item` at position `idx`, shifting the element there and every
@@ -280,7 +280,7 @@ Invalidates running iterators.
 #### remove_at
 
 ```pepper
-T remove_at(ulong idx)
+remove_at(idx: ulong): T
 ```
 
 Removes and returns the element at `idx`, shifting every later element
@@ -311,7 +311,7 @@ capacity is unchanged. Invalidates running iterators.
 #### pop
 
 ```pepper
-T pop()
+pop(): T
 ```
 
 Removes and returns the last element.
@@ -333,7 +333,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.
 #### first
 
 ```pepper
-T first()
+first(): T
 ```
 
 Returns the first element without removing it; the same as `a[0]`.
@@ -347,7 +347,7 @@ Returns the first element without removing it; the same as `a[0]`.
 #### last
 
 ```pepper
-T last()
+last(): T
 ```
 
 Returns the last element without removing it; the same as
@@ -362,7 +362,7 @@ Returns the last element without removing it; the same as
 #### clear
 
 ```pepper
-void clear()
+clear()
 ```
 
 Removes every element, leaving the Array empty.
@@ -375,7 +375,7 @@ Array.
 #### truncate
 
 ```pepper
-void truncate(ulong count)
+truncate(count: ulong)
 ```
 
 Shortens the Array to its first `count` elements, removing the rest.
@@ -397,7 +397,7 @@ actual shrink invalidates them. The capacity is kept.
 #### swap
 
 ```pepper
-void swap(ulong a, ulong b)
+swap(a: ulong, b: ulong)
 ```
 
 Exchanges the elements at positions `a` and `b`.
@@ -417,7 +417,7 @@ element, but still invalidates running iterators like every swap.
 #### reverse
 
 ```pepper
-void reverse()
+reverse()
 ```
 
 Reverses the order of the elements in place.
@@ -434,7 +434,7 @@ stay valid; otherwise running iterators are invalidated.
 #### sort
 
 ```pepper
-sort(compare: (T, T) => int): void
+sort(compare: (T, T) => int)
 ```
 
 Sorts the elements in place into the order `compare` defines. The
@@ -468,7 +468,7 @@ there are two or more elements.
 #### find
 
 ```pepper
-long find(T item)
+find(item: T): long
 ```
 
 Returns the position of the first element equal to `item`.
@@ -492,7 +492,7 @@ only the very same object matches.
 #### contains
 
 ```pepper
-bool contains(T item)
+contains(item: T): bool
 ```
 
 Reports whether any element equals `item`, compared as `find` does.
@@ -508,7 +508,7 @@ Runs in O(count).
 #### append_all
 
 ```pepper
-void append_all(Array<T> rhs)
+append_all(rhs: Array<T>)
 ```
 
 Appends every element of `rhs`, in order, to the end of this Array.
@@ -528,7 +528,7 @@ Array's running iterators when `rhs` is not empty.
 #### clone
 
 ```pepper
-Array<T> clone()
+clone(): Array<T>
 ```
 
 Returns a new Array holding the same elements in the same order.
@@ -550,7 +550,7 @@ capacity equals this Array's `count()`.
 #### copy
 
 ```pepper
-Array<T> copy(Copies copies)
+copy(copies: Copies): Array<T>
 ```
 
 Returns a deep copy: a new Array holding a copy of each element, made
@@ -579,7 +579,7 @@ copying the elements.
 #### operator ==
 
 ```pepper
-bool ==(Array<T> rhs)
+==(rhs: Array<T>): bool
 ```
 
 Reports whether both Arrays have the same count and pairwise equal
@@ -597,7 +597,7 @@ equal. `capacity()` is not compared.
 #### operator !=
 
 ```pepper
-bool !=(Array<T> rhs)
+!=(rhs: Array<T>): bool
 ```
 
 Reports whether the Arrays differ in count or in any element; the
@@ -612,7 +612,7 @@ negation of `==`.
 #### operator +=
 
 ```pepper
-Array<T> +=(Array<T> rhs)
++=(rhs: Array<T>): Array<T>
 ```
 
 Appends every element of `rhs` to this Array in place (`a += b`); the
@@ -637,7 +637,7 @@ same as `append_all`.
 #### operator +
 
 ```pepper
-Array<T> +(Array<T> rhs)
++(rhs: Array<T>): Array<T>
 ```
 
 Returns a new Array holding this Array's elements followed by those of
@@ -690,7 +690,7 @@ the iterator was created (see `Array` for which operations count), its next
 #### next
 
 ```pepper
-bool next()
+next(): bool
 ```
 
 Advances to the next element.
@@ -707,7 +707,7 @@ returning false.
 #### current
 
 ```pepper
-T current()
+current(): T
 ```
 
 Returns the element the last successful `next()` moved to.

@@ -1,10 +1,10 @@
 # Directory, DirEntry.
 
-import "types";
-import "path";
 import "file";
+import "path";
 import "sys_posix";
 import "sys_windows";
+import "types";
 
 ## One entry of a directory listing, as `Directory.entries()` returns it.
 ##
@@ -43,8 +43,7 @@ export struct DirEntry {
 
     ## Creates an empty entry: empty `path` and `name`, all kind flags
     ## false. Entries are normally obtained from `Directory.entries()`.
-    construct() {
-    }
+    construct() {}
 
     ## Returns the metadata of the entry, following symlinks, exactly like
     ## `Path.metadata()` on the entry's `path`. The file system is queried
@@ -55,7 +54,7 @@ export struct DirEntry {
     ## error when it cannot be stat'ed, with `is_not_found()` when the entry
     ## was removed since the listing or is a dangling symlink
     ## @see Path.metadata
-    IoResult<Metadata> metadata() {
+    metadata(): IoResult<Metadata> {
         return _io_sys_stat(path, true);
     }
 }
@@ -83,8 +82,7 @@ export struct Directory {
 
     ## Creates a `Directory` with an empty `path`, which names no directory.
     ## Use `Directory.open` to get one for an existing directory.
-    construct() {
-    }
+    construct() {}
 
     ## Checks that `path` exists and is a directory (following symlinks) and
     ## returns a `Directory` for it. Nothing is kept open, so the directory
@@ -103,7 +101,7 @@ export struct Directory {
     ##     if (d.is_err() && d.error().is_not_a_directory()) {
     ##         print("src is a file");
     ##     }
-    static IoResult<Directory> open(Path path) {
+    static open(path: Path): IoResult<Directory> {
         var m = _io_sys_stat(path, true);
         if (m.is_err()) {
             return IoResult<Directory>.err(m.error());
@@ -132,7 +130,7 @@ export struct Directory {
     ##     if (list.is_ok()) {
     ##         var n = list.value().count();
     ##     }
-    IoResult<DirEntry[]> entries() {
+    entries(): IoResult<DirEntry[]> {
         return _io_sys_list(path);
     }
 
@@ -145,7 +143,7 @@ export struct Directory {
     ## at `path`, `is_not_found()` when the parent is missing or the path is
     ## empty, `is_permission_denied()` when the parent is not writable
     ## @see create_all
-    static IoResult<void> create(Path path) {
+    static create(path: Path): IoResult<void> {
         return _io_sys_mkdir(path);
     }
 
@@ -165,7 +163,7 @@ export struct Directory {
     ##     import io;
     ##
     ##     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
-    static IoResult<void> create_all(Path path) {
+    static create_all(path: Path): IoResult<void> {
         if (path._value.size() == 0) {
             return _io_ok_void();
         }
@@ -199,7 +197,7 @@ export struct Directory {
     ## when it is missing or the path is empty, `is_not_a_directory()` when
     ## `path` is a file, `is_permission_denied()`
     ## @see remove_all
-    static IoResult<void> remove(Path path) {
+    static remove(path: Path): IoResult<void> {
         return _io_sys_rmdir(path);
     }
 
@@ -226,7 +224,7 @@ export struct Directory {
     ##         print(r.error().message);
     ##     }
     ## @see remove
-    static IoResult<void> remove_all(Path path) {
+    static remove_all(path: Path): IoResult<void> {
         var m = _io_sys_stat(path, false);
         if (m.is_err()) {
             return IoResult<void>.err(m.error());
@@ -265,7 +263,7 @@ export struct Directory {
     ## cannot be determined, such as `is_not_found()` on POSIX when the
     ## directory has been removed
     ## @see set_current
-    static IoResult<Path> current() {
+    static current(): IoResult<Path> {
         return _io_sys_getcwd();
     }
 
@@ -280,7 +278,7 @@ export struct Directory {
     ## entered: `is_not_found()` when it is missing or the path is empty,
     ## `is_not_a_directory()` when it is a file, `is_permission_denied()`
     ## @see current
-    static IoResult<void> set_current(Path path) {
+    static set_current(path: Path): IoResult<void> {
         return _io_sys_chdir(path);
     }
 
@@ -298,7 +296,7 @@ export struct Directory {
     ##     import io;
     ##
     ##     var scratch = io.Directory.temp().join("my-tool");
-    static Path temp() {
+    static temp(): Path {
         return _io_sys_temp_dir();
     }
 }

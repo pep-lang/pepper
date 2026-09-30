@@ -44,7 +44,7 @@ thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
 #### Atomic()
 
 ```pepper
-construct(T value = __default<T>())
+construct(value: T = __default<T>())
 ```
 
 Creates an Atomic holding `value`.
@@ -65,7 +65,7 @@ For a struct `T` the Atomic acquires a reference to `value`.
 #### load
 
 ```pepper
-T load()
+load(): T
 ```
 
 Atomically reads the current value, with acquire ordering.
@@ -79,7 +79,7 @@ it stays valid even if another thread stores a new value afterwards.
 #### store
 
 ```pepper
-void store(T v)
+store(v: T)
 ```
 
 Atomically replaces the stored value with `v`, with release ordering.
@@ -94,7 +94,7 @@ exchange, so concurrent stores never leak or double-release.
 #### compare_exchange
 
 ```pepper
-bool compare_exchange(T expected, T desired)
+compare_exchange(expected: T, desired: T): bool
 ```
 
 Atomically replaces the stored value with `desired` if and only if it
@@ -125,7 +125,7 @@ failure no reference count changes.
 #### exchange
 
 ```pepper
-T exchange(T v)
+exchange(v: T): T
 ```
 
 Atomically replaces the stored value with `v` and returns the value it
@@ -150,7 +150,7 @@ acquires `v`, and the caller owns the returned reference.
 #### is_lock_free
 
 ```pepper
-bool is_lock_free()
+is_lock_free(): bool
 ```
 
 Reports whether this Atomic's slot fits a native atomic instruction,
@@ -166,7 +166,7 @@ the stored value.
 #### fetch_add
 
 ```pepper
-T fetch_add(T v)
+fetch_add(v: T): T
 ```
 
 Atomically adds `v` to the stored value and returns the value before
@@ -191,7 +191,7 @@ program when it runs.
 #### fetch_sub
 
 ```pepper
-T fetch_sub(T v)
+fetch_sub(v: T): T
 ```
 
 Atomically subtracts `v` from the stored value and returns the value
@@ -209,7 +209,7 @@ compiles but aborts the program when it runs.
 #### fetch_and
 
 ```pepper
-T fetch_and(T v)
+fetch_and(v: T): T
 ```
 
 Atomically replaces the stored value with its bitwise AND with `v` and
@@ -228,7 +228,7 @@ the program when it runs.
 #### fetch_or
 
 ```pepper
-T fetch_or(T v)
+fetch_or(v: T): T
 ```
 
 Atomically replaces the stored value with its bitwise OR with `v` and
@@ -247,7 +247,7 @@ the program when it runs.
 #### fetch_xor
 
 ```pepper
-T fetch_xor(T v)
+fetch_xor(v: T): T
 ```
 
 Atomically replaces the stored value with its bitwise XOR with `v` and

@@ -86,8 +86,10 @@ main.pep:2:5: error: non-void function 'f' should return a value
 A function without a return type gets one from its `return` statements. It
 returns `void` when no `return` has a value, and otherwise the type of the first
 `return` that has one, so `half(x: double) { return x / 2; }` returns a
-`double`. `main` with no return type returns an `int`, and reaching its closing
-brace exits with 0.
+`double`. A generic function's return type is inferred for each
+specialization, so `first<T>(a: T, b: T) { return a; }` returns an `int` for
+`first<int>`. `main` with no return type returns an `int`, and reaching its
+closing brace exits with 0.
 
 Writing the return type is still clearer for a function that returns a value,
 and it lets the compiler check each `return` against it.

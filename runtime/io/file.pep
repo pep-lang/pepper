@@ -1,9 +1,9 @@
 # OpenOptions, Metadata, File.
 
-import "types";
 import "path";
 import "sys_posix";
 import "sys_windows";
+import "types";
 
 extern int fflush(void* stream);
 
@@ -58,14 +58,13 @@ export struct OpenOptions {
 
     ## Creates an `OpenOptions` with every option off. Set at least one of
     ## `read`, `write` or `append` before opening.
-    construct() {
-    }
+    construct() {}
 
     ## Sets whether the file is opened for reading.
     ##
     ## @param v true to request read access
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions read(bool v) {
+    read(v: bool): OpenOptions {
         _read = v;
         return this;
     }
@@ -75,7 +74,7 @@ export struct OpenOptions {
     ##
     ## @param v true to request write access
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions write(bool v) {
+    write(v: bool): OpenOptions {
         _write = v;
         return this;
     }
@@ -87,7 +86,7 @@ export struct OpenOptions {
     ##
     ## @param v true to open in append mode
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions append(bool v) {
+    append(v: bool): OpenOptions {
         _append = v;
         return this;
     }
@@ -97,7 +96,7 @@ export struct OpenOptions {
     ##
     ## @param v true to truncate an existing file
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions truncate(bool v) {
+    truncate(v: bool): OpenOptions {
         _truncate = v;
         return this;
     }
@@ -107,7 +106,7 @@ export struct OpenOptions {
     ##
     ## @param v true to create the file when it is missing
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions create(bool v) {
+    create(v: bool): OpenOptions {
         _create = v;
         return this;
     }
@@ -118,7 +117,7 @@ export struct OpenOptions {
     ##
     ## @param v true to require that the file does not exist yet
     ## @returns this `OpenOptions`, for chaining
-    OpenOptions create_new(bool v) {
+    create_new(v: bool): OpenOptions {
         _create_new = v;
         return this;
     }
@@ -136,7 +135,7 @@ export struct OpenOptions {
     ## @example
     ##     var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     ##     log.write_all("started");
-    IoResult<File> open(Path path) {
+    open(path: Path): IoResult<File> {
         return File.open_with(path, this);
     }
 }
@@ -187,8 +186,7 @@ export struct Metadata {
 
     ## Creates a `Metadata` with every field zero or false. Metadata is
     ## normally obtained from a query such as `File.metadata()`.
-    construct() {
-    }
+    construct() {}
 }
 
 # Bytes per read when a whole file or stream is read.
@@ -243,7 +241,9 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
 ##     f.write_all("hello");
 ##     f.close();
 ##     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
-[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")]
+[NotCopyable(
+    "owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread"
+)]
 export struct File {
     ## The platform handle: a file descriptor on POSIX (-1 when closed), a
     ## `HANDLE` on Windows (null when closed).
@@ -288,7 +288,7 @@ export struct File {
     ##         return 0;
     ##     }
     ##     var text = r.value().read_string();
-    static IoResult<File> open(Path path) {
+    static open(path: Path): IoResult<File> {
         return File.open_with(path, OpenOptions().read(true));
     }
 
@@ -306,7 +306,7 @@ export struct File {
     ## @example
     ##     var f = File.create(Path("report.txt")).value();
     ##     f.write_all("done");
-    static IoResult<File> create(Path path) {
+    static create(path: Path): IoResult<File> {
         return File.open_with(path, OpenOptions().write(true).create(true).truncate(true));
     }
 
@@ -333,15 +333,19 @@ export struct File {
     ##     if (r.is_err() && r.error().is_already_exists()) {
     ##         return 1;
     ##     }
-    static IoResult<File> open_with(Path path, OpenOptions options) {
+    static open_with(path: Path, options: OpenOptions): IoResult<File> {
         # As Rust: some access is required, and creating or truncating needs
         # write access.
         var writes = options._write || options._append;
         if (!options._read && !writes) {
-            return IoResult<File>.err(IoError(_io_sys_code_invalid_input(), "no access mode: set read, write or append"));
+            return IoResult<File>.err(
+                IoError(_io_sys_code_invalid_input(), "no access mode: set read, write or append")
+            );
         }
         if ((options._create || options._create_new || options._truncate) && !writes) {
-            return IoResult<File>.err(IoError(_io_sys_code_invalid_input(), "create and truncate need write or append"));
+            return IoResult<File>.err(
+                IoError(_io_sys_code_invalid_input(), "create and truncate need write or append")
+            );
         }
         if (path._value.size() == 0) {
             return IoResult<File>.err(IoError(_io_sys_code_not_found(), "empty path"));
@@ -371,7 +375,7 @@ export struct File {
     ## @param name the display name stored in the File's `path`, such as
     ##   `<stdout>`
     ## @returns a File on that stream, that does not close the stream when released
-    static File std_file(int which, String name) {
+    static std_file(which: int, name: String): File {
         var f = File();
         f._handle = _io_sys_std_handle(which);
         f.path = Path(name);
@@ -385,7 +389,7 @@ export struct File {
     ## writing end of a pipe has closed).
     ##
     ## @returns a File on standard input, named `<stdin>`
-    static File stdin() {
+    static stdin(): File {
         return File.std_file(0, "<stdin>");
     }
 
@@ -399,7 +403,7 @@ export struct File {
     ## @example
     ##     var out = File.stdout();
     ##     out.write_all("hello");
-    static File stdout() {
+    static stdout(): File {
         return File.std_file(1, "<stdout>");
     }
 
@@ -409,7 +413,7 @@ export struct File {
     ## one first flushes what `print` has buffered.
     ##
     ## @returns a File on standard error, named `<stderr>`
-    static File stderr() {
+    static stderr(): File {
         return File.std_file(2, "<stderr>");
     }
 
@@ -418,7 +422,7 @@ export struct File {
     ## opened.
     ##
     ## @returns true while the File is open
-    bool is_open() {
+    is_open(): bool {
         return _io_sys_handle_valid(_handle);
     }
 
@@ -427,7 +431,7 @@ export struct File {
     ## @returns an Ok result when the File is open; an error with the message
     ##   "file is closed" otherwise (code `EBADF` on POSIX,
     ##   `ERROR_INVALID_HANDLE` on Windows; no `IoError` predicate holds)
-    IoResult<void> check_open() {
+    check_open(): IoResult<void> {
         if (!_io_sys_handle_valid(_handle)) {
             return IoResult<void>.err(IoError(_io_sys_code_bad_handle(), "file is closed"));
         }
@@ -469,7 +473,7 @@ export struct File {
     ##             break;
     ##         }
     ##     }
-    IoResult<ulong> read(u8[] buf, ulong max) {
+    read(buf: u8[], max: ulong): IoResult<ulong> {
         var c = check_open();
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
@@ -492,7 +496,7 @@ export struct File {
     ##   error when the File is closed, `is_is_a_directory()` when it is a
     ##   directory, or another platform error, in which case the bytes read
     ##   so far are discarded
-    IoResult<u8[]> read_all() {
+    read_all(): IoResult<u8[]> {
         var buf = Array<u8>();
         while (true) {
             var r = read(buf, _io_chunk_size());
@@ -516,7 +520,7 @@ export struct File {
     ## @returns the text read (empty at end of file); an error with
     ##   `is_invalid_input()` when the bytes are not valid UTF-8, or any error
     ##   `read_all` returns
-    IoResult<String> read_string() {
+    read_string(): IoResult<String> {
         var r = read_all();
         if (r.is_err()) {
             return IoResult<String>.err(r.error());
@@ -541,7 +545,7 @@ export struct File {
     ## @returns the number of bytes written, which may be less than
     ##   `data.count()`; an error when the File is closed or was not opened
     ##   for writing, or another platform error
-    IoResult<ulong> write(u8[] data) {
+    write(data: u8[]): IoResult<ulong> {
         var c = _check_writable();
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
@@ -559,7 +563,7 @@ export struct File {
     ##   closed or was not opened for writing, when a write makes no
     ##   progress ("failed to write the whole buffer", with code `EIO` on
     ##   POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
-    IoResult<void> write_all(u8[] data) {
+    write_all(data: u8[]): IoResult<void> {
         var c = _check_writable();
         if (c.is_err()) {
             return c;
@@ -609,7 +613,7 @@ export struct File {
     ## @returns the new position, in bytes from the start of the file; an
     ##   error as for `seek`
     ## @see seek
-    IoResult<Offset> seek_start(Offset pos) {
+    seek_start(pos: Offset): IoResult<Offset> {
         return seek(pos, 0);
     }
 
@@ -621,7 +625,7 @@ export struct File {
     ## @returns the new position, in bytes from the start of the file; an
     ##   error as for `seek`
     ## @see seek
-    IoResult<Offset> seek_end(Offset delta) {
+    seek_end(delta: Offset): IoResult<Offset> {
         return seek(delta, 2);
     }
 
@@ -633,7 +637,7 @@ export struct File {
     ## @returns the new position, in bytes from the start of the file; an
     ##   error as for `seek`
     ## @see seek
-    IoResult<Offset> seek_current(Offset delta) {
+    seek_current(delta: Offset): IoResult<Offset> {
         return seek(delta, 1);
     }
 
@@ -652,7 +656,7 @@ export struct File {
     ##   error when the File is closed, `whence` is not 0, 1 or 2, the
     ##   resulting position would be negative (on POSIX, with
     ##   `is_invalid_input()`), or the stream cannot seek
-    IoResult<Offset> seek(Offset offset, int whence) {
+    seek(offset: Offset, whence: int): IoResult<Offset> {
         var c = check_open();
         if (c.is_err()) {
             return IoResult<Offset>.err(c.error());
@@ -668,7 +672,7 @@ export struct File {
     ## @param size the new length, in bytes
     ## @returns an Ok result on success; an error when the File is closed, was not
     ##   opened for writing, or the system refuses the size
-    IoResult<void> set_length(ulong size) {
+    set_length(size: ulong): IoResult<void> {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -682,7 +686,7 @@ export struct File {
     ## @param size the new length, in bytes
     ## @returns the same as `set_length(size)`
     [Deprecated("use 'set_length' instead", "set_length")]
-    IoResult<void> set_len(ulong size) {
+    set_len(size: ulong): IoResult<void> {
         return set_length(size);
     }
 
@@ -695,7 +699,7 @@ export struct File {
     ##
     ## @returns an Ok result once the data is durable; an error when the File is
     ##   closed or the device reports a failure, or another platform error
-    IoResult<void> sync() {
+    sync(): IoResult<void> {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -711,7 +715,7 @@ export struct File {
     ##   another platform error
     ## @example
     ##     var size = f.metadata().value().size;
-    IoResult<Metadata> metadata() {
+    metadata(): IoResult<Metadata> {
         var c = check_open();
         if (c.is_err()) {
             return IoResult<Metadata>.err(c.error());
@@ -736,7 +740,7 @@ export struct File {
     ##     if (f.close().is_err()) {
     ##         return 1;
     ##     }
-    IoResult<void> close() {
+    close(): IoResult<void> {
         if (!_io_sys_handle_valid(_handle)) {
             return _io_ok_void();
         }
@@ -761,7 +765,7 @@ export struct File {
     ##     if (r.is_ok()) {
     ##         var n = r.value().count();
     ##     }
-    static IoResult<u8[]> read_bytes(Path path) {
+    static read_bytes(path: Path): IoResult<u8[]> {
         var f = File.open(path);
         if (f.is_err()) {
             return IoResult<u8[]>.err(f.error());
@@ -782,7 +786,7 @@ export struct File {
     ##         return 1;
     ##     }
     ##     var text = r.value();
-    static IoResult<String> read_to_string(Path path) {
+    static read_to_string(path: Path): IoResult<String> {
         var f = File.open(path);
         if (f.is_err()) {
             return IoResult<String>.err(f.error());
@@ -805,7 +809,7 @@ export struct File {
     ##     var data = Array<u8>();
     ##     data.append(1 as u8);
     ##     File.write_bytes(Path("one.bin"), data);
-    static IoResult<void> write_bytes(Path path, u8[] data) {
+    static write_bytes(path: Path, data: u8[]): IoResult<void> {
         var f = File.create(path);
         if (f.is_err()) {
             return IoResult<void>.err(f.error());
@@ -837,7 +841,7 @@ export struct File {
     ##     if (r.is_err()) {
     ##         return 1;
     ##     }
-    static IoResult<void> write_text(Path path, String s) {
+    static write_text(path: Path, s: String): IoResult<void> {
         var f = File.create(path);
         if (f.is_err()) {
             return IoResult<void>.err(f.error());
@@ -866,7 +870,7 @@ export struct File {
     ##   `File.create` on `to`, or a read, write or close failure
     ## @example
     ##     var n = File.copy(Path("a.txt"), Path("b.txt")).value();
-    static IoResult<ulong> copy(Path from, Path to) {
+    static copy(from: Path, to: Path): IoResult<ulong> {
         var src = File.open(from);
         if (src.is_err()) {
             return IoResult<ulong>.err(src.error());
@@ -874,7 +878,9 @@ export struct File {
         var from_real = from.canonicalize();
         var to_real = to.canonicalize();
         if (from_real.is_ok() && to_real.is_ok() && from_real.value()._value == to_real.value()._value) {
-            return IoResult<ulong>.err(IoError(_io_sys_code_invalid_input(), "source and destination are the same file"));
+            return IoResult<ulong>.err(
+                IoError(_io_sys_code_invalid_input(), "source and destination are the same file")
+            );
         }
         var dst = File.create(to);
         if (dst.is_err()) {
@@ -922,7 +928,7 @@ export struct File {
     ##   platform error
     ## @example
     ##     File.rename(Path("draft.txt"), Path("final.txt"));
-    static IoResult<void> rename(Path from, Path to) {
+    static rename(from: Path, to: Path): IoResult<void> {
         return _io_sys_rename(from, to);
     }
 
@@ -942,7 +948,7 @@ export struct File {
     ##     if (r.is_err() && !r.error().is_not_found()) {
     ##         return 1;
     ##     }
-    static IoResult<void> remove(Path path) {
+    static remove(path: Path): IoResult<void> {
         return _io_sys_unlink(path);
     }
 }

@@ -55,7 +55,7 @@ freely.
 #### Weak()
 
 ```pepper
-construct(T target)
+construct(target: T)
 ```
 
 Creates a weak reference to `target`'s object.
@@ -68,7 +68,7 @@ Creates a weak reference to `target`'s object.
 #### expired
 
 ```pepper
-bool expired()
+expired(): bool
 ```
 
 Reports whether the object has been destroyed.
@@ -82,7 +82,7 @@ reference with `with` to use the object.
 #### enter
 
 ```pepper
-T enter()
+enter(): T
 ```
 
 Upgrades the weak reference for a `with` block.
@@ -93,7 +93,7 @@ Upgrades the weak reference for a `with` block.
 #### exit
 
 ```pepper
-void exit()
+exit()
 ```
 
 Leaves the scope. The strong reference `enter()` returned is released

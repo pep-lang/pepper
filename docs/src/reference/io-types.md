@@ -216,7 +216,7 @@ trailing period and line break), or Pepper's own text such as
 #### IoError()
 
 ```pepper
-construct(ErrorCode code = 0, String message = "")
+construct(code: ErrorCode = 0, message: String = "")
 ```
 
 Creates an error from a platform code and a message.
@@ -233,7 +233,7 @@ predicate holds for it.
 #### last
 
 ```pepper
-static IoError last()
+static last(): IoError
 ```
 
 Captures the calling thread's last platform error now: `errno` on
@@ -251,7 +251,7 @@ between (including one that allocates) may overwrite the code.
 #### is_not_found
 
 ```pepper
-bool is_not_found()
+is_not_found(): bool
 ```
 
 Returns whether the error means the file or directory does not exist.
@@ -270,7 +270,7 @@ host name has no address.
 #### is_permission_denied
 
 ```pepper
-bool is_permission_denied()
+is_permission_denied(): bool
 ```
 
 Returns whether the operation was refused for lack of permission.
@@ -285,7 +285,7 @@ read-only file).
 #### is_already_exists
 
 ```pepper
-bool is_already_exists()
+is_already_exists(): bool
 ```
 
 Returns whether the operation failed because its target already
@@ -301,7 +301,7 @@ Matches `EEXIST` on POSIX, and `ERROR_FILE_EXISTS` or
 #### is_not_a_directory
 
 ```pepper
-bool is_not_a_directory()
+is_not_a_directory(): bool
 ```
 
 Returns whether a path that had to name a directory names something
@@ -317,7 +317,7 @@ name is invalid") on Windows.
 #### is_is_a_directory
 
 ```pepper
-bool is_is_a_directory()
+is_is_a_directory(): bool
 ```
 
 Returns whether an operation that needs a file was given a directory,
@@ -332,7 +332,7 @@ Windows (which `File` reads report for a directory handle).
 #### is_directory_not_empty
 
 ```pepper
-bool is_directory_not_empty()
+is_directory_not_empty(): bool
 ```
 
 Returns whether a directory could not be removed because it still has
@@ -347,7 +347,7 @@ Matches `ENOTEMPTY` on POSIX (39 on Linux, 66 on macOS) and
 #### is_invalid_input
 
 ```pepper
-bool is_invalid_input()
+is_invalid_input(): bool
 ```
 
 Returns whether an argument was invalid: bad options (such as opening
@@ -363,7 +363,7 @@ Matches `EINVAL` on POSIX, and `ERROR_INVALID_PARAMETER` or
 #### is_interrupted
 
 ```pepper
-bool is_interrupted()
+is_interrupted(): bool
 ```
 
 Returns whether the operation was interrupted before it finished.

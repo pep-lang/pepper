@@ -76,7 +76,7 @@ export struct ThreadLocal<T> {
 
     # Releases the value in `slot` and frees it: the key's destructor, which
     # the operating system calls on each exiting thread that has a value.
-    static void _release_slot(__ptr<void> slot) {
+    static _release_slot(slot: __ptr<void>) {
         __ptr<T> value = slot;
         value[0] = __default<T>();
         _pep_free(slot);
@@ -89,7 +89,7 @@ export struct ThreadLocal<T> {
     ## local.enter())`.
     ##
     ## @returns the value this thread last stored, or the default of `T` (zero or null) if it has not stored one
-    T get() {
+    get(): T {
         __ptr<T> slot = _async_sys_key_get(_key);
         if (slot == __null) {
             return __default<T>();
@@ -106,7 +106,7 @@ export struct ThreadLocal<T> {
     ## checks.
     ##
     ## @param value the new value for this thread
-    void set([Move] T value) {
+    set([Move] value: T) {
         __ptr<T> slot = _async_sys_key_get(_key);
         if (slot == __null) {
             # sizeof<T>() is the size of a stored T: one pointer for a
@@ -135,7 +135,7 @@ export struct ThreadLocal<T> {
     ##             list.append(name.copy());
     ##         }
     ##     }
-    ThreadLocalGuard<T> enter() {
+    enter(): ThreadLocalGuard<T> {
         return ThreadLocalGuard<T>(this);
     }
 
@@ -143,13 +143,13 @@ export struct ThreadLocal<T> {
     ## or last called `clear()`.
     ##
     ## @returns true if this thread has a value
-    bool is_set() {
+    is_set(): bool {
         return _async_sys_key_get(_key) != __null;
     }
 
     ## Removes the calling thread's value, releasing it for a struct `T`.
     ## `get()` returns the default of `T` afterwards.
-    void clear() {
+    clear() {
         var slot = _async_sys_key_get(_key);
         if (slot != __null) {
             _async_sys_key_set(_key, __null);
@@ -174,14 +174,14 @@ export struct ThreadLocalGuard<T> {
     ## as `local.enter()`.
     ##
     ## @param local the thread-local variable
-    construct(ThreadLocal<T> local) {
+    construct(local: ThreadLocal<T>) {
         _local = local;
     }
 
     ## Returns the calling thread's value, for the `with` header to bind.
     ##
     ## @returns this thread's value, or the default of `T` (null for a struct) when it has none
-    T enter() {
+    enter(): T {
         __ptr<T> slot = _async_sys_key_get(_local._key);
         if (slot == __null) {
             return __default<T>();
@@ -190,8 +190,7 @@ export struct ThreadLocalGuard<T> {
     }
 
     ## Does nothing: the value stays with the thread.
-    void exit() {
-    }
+    exit() {}
 }
 
 extend ThreadLocalGuard<T> with Scoped<T> {}

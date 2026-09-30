@@ -45,7 +45,7 @@ export struct Weak<T> {
     ## Creates a weak reference to `target`'s object.
     ##
     ## @param target the object to point at; a null reference makes a weak reference that is always expired
-    construct(T target) {
+    construct(target: T) {
         _target = __weak_from<T>(target);
     }
 
@@ -55,20 +55,20 @@ export struct Weak<T> {
     ## reference with `with` to use the object.
     ##
     ## @returns true once the object has been destroyed, or if the reference was made from null
-    bool expired() {
+    expired(): bool {
         return __weak_expired<T>(_target);
     }
 
     ## Upgrades the weak reference for a `with` block.
     ##
     ## @returns a new strong reference to the object, or null once it has been destroyed
-    T enter() {
+    enter(): T {
         return __weak_upgrade<T>(_target);
     }
 
     ## Leaves the scope. The strong reference `enter()` returned is released
     ## by the `with` block itself, so there is nothing to do.
-    void exit() {}
+    exit() {}
 
     ## Leaves the scope; a weak reference has nothing to clean up.
     destruct {

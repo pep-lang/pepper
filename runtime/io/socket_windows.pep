@@ -8,10 +8,10 @@
 # not inherited by child processes. Errors come from WSAGetLastError, whose
 # WSAE* codes FormatMessageW describes like any other system error.
 
-import "types";
-import "sys_windows";
 import "address";
 import "socket";
+import "sys_windows";
+import "types";
 
 # ── C functions (ws2_32, kernel32) ───────────────────────────────────────────
 
@@ -70,7 +70,7 @@ extern int GetAddrInfoW(ushort* node, ushort* service, void* hints, void* result
 [Link("ws2_32")]
 extern void FreeAddrInfoW(void* list);
 [Target(OS(Windows))]
-extern int SetHandleInformation(ulong h, uint mask, uint flags);   # the SOCKET as a HANDLE
+extern int SetHandleInformation(ulong h, uint mask, uint flags);  # the SOCKET as a HANDLE
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 
@@ -84,8 +84,8 @@ export _io_win_socket_startup() {
     if (_io_winsock_started.load() != 0) {
         return;
     }
-    var data = _pep_malloc(1024);   # WSADATA (408 bytes on 64-bit)
-    WSAStartup(514, data);          # version 2.2
+    var data = _pep_malloc(1024);  # WSADATA (408 bytes on 64-bit)
+    WSAStartup(514, data);         # version 2.2
     _pep_free(data);
     _io_winsock_started.store(1);
 }
@@ -94,23 +94,27 @@ export _io_win_socket_startup() {
 
 [Target(OS(Windows))]
 export _io_sys_is_connection_refused(code: ErrorCode): bool {
-    return code == 10061;                               # WSAECONNREFUSED
+    return code == 10061;  # WSAECONNREFUSED
 }
+
 [Target(OS(Windows))]
 export _io_sys_is_connection_reset(code: ErrorCode): bool {
-    return code == 10054 || code == 10053;              # WSAECONNRESET, WSAECONNABORTED
+    return code == 10054 || code == 10053;  # WSAECONNRESET, WSAECONNABORTED
 }
+
 [Target(OS(Windows))]
 export _io_sys_is_address_in_use(code: ErrorCode): bool {
-    return code == 10048;                               # WSAEADDRINUSE
+    return code == 10048;  # WSAEADDRINUSE
 }
+
 [Target(OS(Windows))]
 export _io_sys_is_address_not_available(code: ErrorCode): bool {
-    return code == 10049;                               # WSAEADDRNOTAVAIL
+    return code == 10049;  # WSAEADDRNOTAVAIL
 }
+
 [Target(OS(Windows))]
 export _io_sys_is_timed_out(code: ErrorCode): bool {
-    return code == 10060;                               # WSAETIMEDOUT
+    return code == 10060;  # WSAETIMEDOUT
 }
 
 # Code for a stream that ended before the bytes asked for: ERROR_HANDLE_EOF.
@@ -137,7 +141,7 @@ export _io_win_socket_check(rc: int): IoResult<void> {
 [Target(OS(Windows))]
 export _io_win_max_socket_rw(n: ulong): int {
     if (n > 1073741824) {
-        return 1073741824;   # 1 GiB, as File does
+        return 1073741824;  # 1 GiB, as File does
     }
     return n as int;
 }
@@ -146,7 +150,7 @@ export _io_win_max_socket_rw(n: ulong): int {
 
 [Target(OS(Windows))]
 export _io_sys_socket_invalid(): SocketHandle {
-    return ~(0 as ulong);   # INVALID_SOCKET
+    return ~(0 as ulong);  # INVALID_SOCKET
 }
 
 [Target(OS(Windows))]
@@ -198,7 +202,7 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     if (stream) {
         kind = 1;
     }
-    var s = WSASocketW(family, kind, 0, __null, 0, 129);   # WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
+    var s = WSASocketW(family, kind, 0, __null, 0, 129);  # WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
     if (!_io_sys_socket_valid(s)) {
         return IoResult<SocketHandle>.err(_io_win_socket_error());
     }
@@ -228,7 +232,7 @@ export _io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<voi
     if (enabled) {
         value = 1;
     }
-    return _io_win_set_int_option(h, 6, 1, value);        # IPPROTO_TCP, TCP_NODELAY
+    return _io_win_set_int_option(h, 6, 1, value);  # IPPROTO_TCP, TCP_NODELAY
 }
 
 [Target(OS(Windows))]
@@ -237,7 +241,7 @@ export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<vo
     if (enabled) {
         value = 1;
     }
-    return _io_win_set_int_option(h, 65535, 32, value);   # SOL_SOCKET, SO_BROADCAST
+    return _io_win_set_int_option(h, 65535, 32, value);  # SOL_SOCKET, SO_BROADCAST
 }
 
 [Target(OS(Windows))]
@@ -275,7 +279,7 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
         _pep_free(length);
         return IoResult<(SocketHandle, SocketAddress)>.err(e);
     }
-    SetHandleInformation(s, 1, 0);   # HANDLE_FLAG_INHERIT off
+    SetHandleInformation(s, 1, 0);  # HANDLE_FLAG_INHERIT off
     var peer = _io_sockaddr_read(buffer);
     _pep_free(buffer);
     _pep_free(length);
@@ -318,7 +322,9 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
 # as WSAEMSGSIZE with the buffer filled, which counts as success here, as on
 # POSIX.
 [Target(OS(Windows))]
-export _io_sys_socket_receive_from(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<(ulong, SocketAddress)> {
+export _io_sys_socket_receive_from(
+    h: SocketHandle, destination: __ptr<u8>, n: ulong
+): IoResult<(ulong, SocketAddress)> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _pep_malloc(4) as __ptr<int>;
     length[0] = _io_sockaddr_capacity() as int;
@@ -326,7 +332,7 @@ export _io_sys_socket_receive_from(h: SocketHandle, destination: __ptr<u8>, n: u
     var r = recvfrom(h, destination, limit, 0, buffer, length);
     if (r < 0) {
         var e = _io_win_socket_error();
-        if (e.code != 10040) {   # WSAEMSGSIZE
+        if (e.code != 10040) {  # WSAEMSGSIZE
             _pep_free(buffer);
             _pep_free(length);
             return IoResult<(ulong, SocketAddress)>.err(e);
@@ -388,7 +394,7 @@ export _io_win_address_result(rc: int, buffer: __ptr<u8>, length: __ptr<int>): I
 export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     _io_win_socket_startup();
     var hints = _pep_malloc(48) as __ptr<int>;
-    hints[2] = 1;   # ai_socktype = SOCK_STREAM: one entry per address
+    hints[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
     var list = _pep_malloc(8) as __ptr<__ptr<u8>>;
     var node = _io_win_wide(host);
     var rc = GetAddrInfoW(node, __null, hints, list);
@@ -398,7 +404,7 @@ export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
         _pep_free(list);
         var code = rc as ErrorCode;
         var message = "failed to resolve '" + host + "': " + _io_sys_error_message(code);
-        if (code == 11001 || code == 11004) {   # WSAHOST_NOT_FOUND, WSANO_DATA
+        if (code == 11001 || code == 11004) {  # WSAHOST_NOT_FOUND, WSANO_DATA
             return IoResult<SocketAddress[]>.err(IoError(_io_sys_code_not_found(), message));
         }
         return IoResult<SocketAddress[]>.err(IoError(code, message));

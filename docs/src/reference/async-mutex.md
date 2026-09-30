@@ -70,7 +70,7 @@ program, so a Mutex is never left "poisoned".
 #### Mutex()
 
 ```pepper
-construct([Move] T value)
+construct([Move] value: T)
 ```
 
 Creates an unlocked Mutex that owns `value`.
@@ -95,7 +95,7 @@ its reference over, so nothing is copied.
 #### lock
 
 ```pepper
-MutexGuard<T> lock()
+lock(): MutexGuard<T>
 ```
 
 Waits until the calling thread holds the lock, and returns the guard
@@ -122,7 +122,7 @@ else holds the lock until its last reference is released.
 #### try_lock
 
 ```pepper
-MutexGuard<T> try_lock()
+try_lock(): MutexGuard<T>
 ```
 
 Takes the lock only if no thread holds it right now, without waiting.
@@ -146,7 +146,7 @@ calling thread already holding the lock counts as busy.
 #### replace
 
 ```pepper
-T replace([Move] T value)
+replace([Move] value: T): T
 ```
 
 Replaces the whole value and returns the one the Mutex held, which the
@@ -172,7 +172,7 @@ the constructor, and is handed over without a copy.
 #### is_held
 
 ```pepper
-bool is_held()
+is_held(): bool
 ```
 
 Reports whether the calling thread holds the lock.
@@ -183,7 +183,7 @@ Reports whether the calling thread holds the lock.
 #### condition
 
 ```pepper
-Condition<T> condition()
+condition(): Condition<T>
 ```
 
 Returns a new condition variable that waits on this Mutex.
@@ -244,7 +244,7 @@ a `try_lock()` that found the lock busy.
 #### MutexGuard()
 
 ```pepper
-construct(Mutex<T> source, bool wait = true)
+construct(source: Mutex<T>, wait: bool = true)
 ```
 
 Locks `source` and creates the guard that holds it; the same as
@@ -262,7 +262,7 @@ Locks `source` and creates the guard that holds it; the same as
 #### enter
 
 ```pepper
-T enter()
+enter(): T
 ```
 
 Returns the Mutex's value, for the `with` header to bind.
@@ -275,7 +275,7 @@ For a struct `T` the caller gets its own reference.
 #### exit
 
 ```pepper
-void exit()
+exit()
 ```
 
 Unlocks the Mutex if the guard holds it. The destructor calls it;
@@ -339,7 +339,7 @@ A Condition is `[Shared]`, like its Mutex.
 #### Condition()
 
 ```pepper
-construct(Mutex<T> mutex)
+construct(mutex: Mutex<T>)
 ```
 
 Creates a condition variable that waits on `mutex`. `mutex.condition()`
@@ -356,7 +356,7 @@ does the same.
 #### wait
 
 ```pepper
-void wait()
+wait()
 ```
 
 Unlocks the Mutex, sleeps until another thread calls `notify_one()` or
@@ -380,7 +380,7 @@ that re-checks what it waits for.
 #### wait_for
 
 ```pepper
-bool wait_for(ulong milliseconds)
+wait_for(milliseconds: ulong): bool
 ```
 
 Like `wait()`, but gives up after about `milliseconds` milliseconds.
@@ -398,7 +398,7 @@ The Mutex is locked again before it returns either way.
 #### notify_one
 
 ```pepper
-void notify_one()
+notify_one()
 ```
 
 Wakes one thread waiting on this condition, if any. The caller does
@@ -408,7 +408,7 @@ value.
 #### notify_all
 
 ```pepper
-void notify_all()
+notify_all()
 ```
 
 Wakes every thread waiting on this condition. Each locks the Mutex in
