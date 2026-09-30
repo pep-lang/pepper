@@ -81,6 +81,8 @@
     - [async/task_local.pep](reference/async-task_local.md)
   - [copy.pep](reference/copy.md)
     - [io/unix.pep](reference/io-unix.md)
+  - [tls/module.pep](reference/tls-module.md)
+    - [tls/stream.pep](reference/tls-stream.md)
 <!-- reference:end -->
 
 # Contributing

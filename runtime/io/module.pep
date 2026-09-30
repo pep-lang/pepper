@@ -35,6 +35,8 @@ import "directory";
 import "file";
 import "path";
 import "socket";
+import "socket_posix";
+import "socket_windows";
 import "types";
 import "unix";
 import "wait";
@@ -81,3 +83,7 @@ export _IO_WAIT_CANCELLED;
 export _IO_WAIT_TIMED_OUT;
 export _IO_WAIT_UNWATCHED;
 export _FileTransfer;
+
+# For the tls module only: the socket calls its BIO makes.
+export _io_sys_socket_receive;
+export _io_sys_socket_send;

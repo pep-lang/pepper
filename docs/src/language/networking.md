@@ -1,8 +1,9 @@
 # Networking
 
-The `io` module has TCP, UDP and Unix domain sockets, IP and socket addresses, and host
-name lookup. In a plain program every call blocks the calling thread until
-it completes, like `File`. To serve several connections at once, give each
+The `io` module has TCP, UDP and Unix domain sockets, IP and socket
+addresses, and host name lookup; the `tls` module encrypts TCP connections.
+In a plain program every call blocks the calling thread until it completes,
+like `File`. To serve several connections at once, give each
 one its own [thread](threads.md), or its own [task](tasks.md#sockets): in a
 task, a call that has to wait parks only that task.
 
@@ -103,6 +104,41 @@ in the file system instead of an IP address and port. `UnixListener` and
 Only stream sockets are supported, since Windows (10 version 1803 and later)
 has no Unix datagram sockets.
 
+## TLS
+
+The `tls` module encrypts a TCP connection with TLS 1.2 or 1.3. A
+`TlsConnector` makes client connections and checks the server's
+certificate. A `TlsAcceptor` serves them with a certificate and key. Both
+produce a `TlsStream`, which reads and writes like a `TcpStream`:
+
+```pepper
+{{#include ../../examples/networking-tls/main.pep}}
+```
+
+- `TlsConnector.create()` trusts the system's root certificates, and
+  `add_root_certificate(path)` adds more from a PEM file, such as a private
+  certificate authority. Make one connector and share it: it is `[Shared]`.
+- `connector.connect(tcp, host)` runs the handshake over a connected
+  `TcpStream`. It checks that the certificate is valid and was issued for
+  `host`, which is also sent to the server (SNI). `connect_host(host, port)`
+  connects the TCP stream first. An IP address in `host` is checked against
+  the certificate's addresses.
+- `TlsAcceptor.create(certificate_chain, private_key)` reads PEM files, and
+  `acceptor.accept(tcp)` runs the handshake over a connection a
+  `TcpListener` accepted.
+- `read`, `read_exact`, `write`, `write_all` and `write_string` work on the
+  decrypted bytes. `shutdown()` sends the TLS close_notify, and `read`
+  returns 0 once the peer has sent one or closed the connection.
+- A failed handshake returns an error whose message says why, such as
+  `certificate verify failed: self-signed certificate`.
+
+On Linux and macOS the module uses OpenSSL 3, loaded when the first
+connector or acceptor is made: install it with the system's package
+manager, or `brew install openssl@3` on macOS. If it is missing,
+`create()` returns an error. On Windows it uses the system's SChannel,
+which needs nothing installed; a server's private key must be PKCS #8
+(`BEGIN PRIVATE KEY`), and TLS 1.3 needs Windows 11 or Server 2022.
+
 ## Errors
 
 Every operation returns an `IoResult`. Besides the file-system predicates,
@@ -140,9 +176,11 @@ program take over the port.
 - Outside a task every call blocks its thread, with no timeout. In a task
   a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
   limits how long it may wait.
-- TLS is not supported yet, nor Unix datagram sockets.
+- TLS clients cannot present certificates.
+- Unix datagram sockets are not supported.
 - IPv6 scope ids (`fe80::1%eth0`) are not supported.
 
 The reference pages for [addresses](../reference/io-address.md),
 [sockets](../reference/io-socket.md) and
-[Unix domain sockets](../reference/io-unix.md) document every method.
+[Unix domain sockets](../reference/io-unix.md) and
+[TLS](../reference/tls-stream.md) document every method.
