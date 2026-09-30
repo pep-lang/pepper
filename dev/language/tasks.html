@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-219f8346.js";
+            window.path_to_searchindex_js = "../searchindex-4e00c1b3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -182,13 +182,14 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="tasks"><a class="header" href="#tasks">Tasks</a></h1>
-<p>A task is a function that runs alongside others on the same thread. Each task
-has its own small stack, and tasks take turns: one runs until it waits (for
-a timer, for another task, or by yielding), and then another runs. This is
+<p>A task is a function that runs alongside others. Each task has its own small
+stack, and the tasks on a thread take turns: one runs until it waits (for a
+timer, for another task, or by yielding), and then another runs. A runtime
+has a few such threads, its <em>workers</em>, so tasks also run in parallel. This is
 the model of Go’s goroutines and of libuv or tokio event loops, without
 <code>async</code>/<code>await</code>: a function that waits looks like any other function, and
 any function can wait, however deep in the call stack. A socket call that
-has to wait parks only its task, so one thread can serve thousands of
+has to wait parks only its task, so one worker can serve thousands of
 connections.</p>
 <p>Tasks live in the <code>async</code> module:</p>
 <pre><code class="language-pepper">import async;
@@ -218,18 +219,57 @@ main(): int {
 returned and every task it started has finished. <code>run_with(options, body)</code>
 does the same with settings; <code>RuntimeOptions().stack_size(bytes)</code> sets how
 much stack each task reserves (256 KiB by default).</li>
-<li><code>Task&lt;T&gt;.spawn_local(body)</code> starts a task and returns its <code>Task&lt;T&gt;</code>. The
-new task runs the next time the running task waits. <code>T</code> is the body’s
-result type; use <code>Task&lt;void&gt;</code> for a body that returns nothing.</li>
+<li><code>Task&lt;T&gt;.spawn_local(body)</code> starts a task on the running task’s worker and
+returns its <code>Task&lt;T&gt;</code>. The new task runs the next time the running task
+waits. <code>T</code> is the body’s result type; use <code>Task&lt;void&gt;</code> for a body that
+returns nothing.</li>
 <li><code>task.join()</code> waits for the task and returns a <code>Result&lt;T, TaskError&gt;</code>:
 the body’s value, or an error if the task was cancelled.</li>
 <li><code>async.yield_now()</code> lets every other ready task run first.</li>
 <li><code>task.is_finished()</code> says whether the body has returned.</li>
 </ul>
-<p>Because every task of a <code>run</code> stays on the thread that called it, a task may
-use any value the others use, as the closures above share <code>log</code>. Nothing
-needs to be thread-safe. For work on several threads at once, use
-<a href="threads.html">threads</a>.</p>
+<p>A task from <code>spawn_local</code> stays on the thread of the task that started it,
+so it may use any value that task uses, as the closures above share <code>log</code>.
+Nothing needs to be thread-safe.</p>
+<h2 id="several-workers"><a class="header" href="#several-workers">Several workers</a></h2>
+<p><code>run</code> turns the calling thread into the first worker and starts one more
+thread per logical CPU after it (<code>RuntimeOptions().workers(count)</code> sets how
+many workers in all). <code>async.spawn&lt;T&gt;(body)</code> starts a task that whichever
+worker is free first runs, in parallel with the others:</p>
+<pre><code class="language-pepper">import async;
+
+sum(from: long, to: long): long {
+    var total: long = 0;
+    var i = from;
+    while (i &lt; to) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
+        # Two halves of the work, on two workers at the same time.
+        var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
+        var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
+        var total = low.join().value() + high.join().value();
+        assert(total == 499999500000, "both halves were added");
+    });
+    return 0;
+}
+</code></pre>
+<p>Because such a task may run on another thread, its body must be a <code>shared</code>
+function: it may capture only thread-safe values, as a
+<a href="threads.html">thread</a>’s body. Its result crosses threads too, so <code>T</code> must be
+thread-safe (a number, a <code>[Shared]</code> struct, or a <code>shared</code> function type);
+<code>async.spawn&lt;String&gt;</code> is a compile error. <code>join</code>, <code>cancel</code> and
+<code>is_finished</code> work as for <code>spawn_local</code>, from the task that started it.</p>
+<p>A task, once started, stays on its worker until it finishes, so the tasks it
+starts with <code>spawn_local</code> share values with it safely. An idle worker takes
+the next task that no worker has started yet. A task that computes without
+waiting still holds up the other tasks on its own worker (not the other
+workers), so a long computation should call <code>yield_now()</code> now and then.</p>
 <h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
 <p><code>async.sleep(milliseconds)</code> puts a task to sleep and runs the others
 meanwhile, so many tasks can wait at the same time on one thread:</p>
@@ -323,9 +363,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Outside a task, the same calls block the thread as before.</p>
-<p>When no task is ready to run, the runtime blocks until a socket is ready or
-the next timer is due; while tasks are running, it also checks the sockets
+<p>Outside a task, the same calls block the thread as before. A socket belongs
+to the worker whose task made it: tasks started with <code>spawn_local</code> can share
+it, and each spawned task makes its own.</p>
+<p>When no task is ready to run, a worker blocks until a socket is ready, the
+next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
 every few dozen tasks, so a busy task cannot starve the network.</p>
 <h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
 <p>How the runtime waits for sockets is its I/O <em>backend</em>, an <code>async.Backend</code>:</p>
@@ -394,7 +436,7 @@ task waiting in <code>join</code> returns the same error when it is cancelled it
 and a socket call waiting in a cancelled task fails with an <code>IoError</code> whose
 <code>is_cancelled()</code> is true.
 When the first task of a <code>run</code> returns, every task still running is
-cancelled, and <code>run</code> waits for each to finish:</p>
+cancelled, on every worker, and <code>run</code> waits for each to finish:</p>
 <pre><code class="language-pepper">import async;
 
 main(): int {
@@ -431,11 +473,17 @@ and restores the other’s, a few instructions of assembly on Linux and macOS
 stack is reserved address space with a guard page below it; only the pages
 the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.</p>
+<p>Each worker has its own ready queue, timers and backend. Workers talk
+through a queue of messages each (a spawned task finished, or was
+cancelled) and a <em>doorbell</em> that ends a worker’s wait in its backend from
+another thread: an eventfd with epoll, a user event with kqueue, a posted
+completion with IOCP, and a pipe (a loopback UDP socket on Windows) with
+<code>poll()</code>.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li>A runtime runs on one thread: <code>spawn_local</code> is the only way to start a
-task. Tasks that run on several threads at once, and <code>run_blocking</code> for
-work that would block the thread, are planned.</li>
+<li><code>run_blocking</code>, which runs work that would block the thread on a pool of
+threads while the task waits, is planned, as are listeners that accept on
+every worker and handing a socket to another worker.</li>
 <li>Files block the thread on every platform. io_uring on Linux, and
 asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is

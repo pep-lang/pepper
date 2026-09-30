@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-219f8346.js";
+            window.path_to_searchindex_js = "../searchindex-4e00c1b3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -183,13 +183,15 @@
                     <main>
                         <!-- Generated from runtime/async/task.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="tasks"><a class="header" href="#tasks">Tasks</a></h1>
-<p>Tasks: functions that run concurrently on one thread, each on its own
-small stack, switching only where they wait.</p>
-<p><code>run(body)</code> turns the calling thread into a worker and runs <code>body</code> as its
-first task. A task starts others with <code>Task&lt;T&gt;.spawn_local</code>, and gives
-the thread to the others whenever it waits: <code>sleep</code>, <code>yield_now</code>, and
-<code>Task.join</code>, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
-time without waiting keeps every other task on its worker waiting too.</p>
+<p>Tasks: functions that run concurrently on a few worker threads, each on
+its own small stack, switching only where they wait.</p>
+<p><code>run(body)</code> turns the calling thread into the first worker, starts the
+others, and runs <code>body</code> as the first task. A task starts others with
+<code>Task&lt;T&gt;.spawn_local</code> (on its own worker) or <code>spawn</code> (on any worker), and
+gives its worker to the other tasks there whenever it waits: <code>sleep</code>,
+<code>yield_now</code>, and <code>Task.join</code>, and whenever a socket call would block.
+Nothing preempts a task, so a task that computes for a long time without
+waiting keeps every other task on its worker waiting too.</p>
 <p>A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
 function called in a task can wait without being marked in any way.</p>
@@ -238,9 +240,29 @@ finished. The task itself carries on.</p>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates the default options: 256 KiB of stack per task, and the
-system’s best I/O backend.</p>
+<p>Creates the default options: one worker per logical CPU, 256 KiB of
+stack per task, and the system’s best I/O backend.</p>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="workers"><a class="header" href="#workers">workers</a></h4>
+<pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
+</code></pre>
+<p>Sets how many workers (threads that run tasks) the runtime has. The
+thread that calls <code>run_with</code> is the first; the rest are new threads.
+Tasks from <code>spawn_local</code> run on the worker that started them; tasks
+from <code>spawn</code> run on whichever worker is free. The default is
+<code>logical_cpus()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of workers</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>these options</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is 0</li>
+</ul>
 <h4 id="backend"><a class="header" href="#backend">backend</a></h4>
 <pre><code class="language-pepper">backend(kind: Backend): RuntimeOptions
 </code></pre>
@@ -280,7 +302,8 @@ crashes the program, as a thread that overflows its stack does.</p>
 <h2 id="task"><a class="header" href="#task">Task</a></h2>
 <pre><code class="language-pepper">struct Task&lt;T&gt;
 </code></pre>
-<p>A task started with <code>spawn_local</code>, and the value its body returns.</p>
+<p>A task started with <code>spawn_local</code> or <code>spawn</code>, and the value its body
+returns.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the body’s result; <code>void</code> when there is none</li>
@@ -301,8 +324,8 @@ crashes the program, as a thread that overflows its stack does.</p>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
 <pre><code class="language-pepper">construct(core: _TaskCore)
 </code></pre>
-<p>Wraps the scheduler’s record of a task. Only <code>spawn_local</code> has one;
-start tasks with <code>spawn_local</code>.</p>
+<p>Wraps the scheduler’s record of a task. Only <code>spawn_local</code> and <code>spawn</code>
+have one; start tasks with those.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>core</code> — the scheduler’s record of the task</li>
@@ -357,10 +380,12 @@ stopped by force; it finishes when its body returns.</p>
 <h2 id="run"><a class="header" href="#run">run</a></h2>
 <pre><code class="language-pepper">run(body: () =&gt; void)
 </code></pre>
-<p>Runs <code>body</code> as the first task of a new runtime on the calling thread, and
-returns once <code>body</code> has returned and every task it started has finished.
-When <code>body</code> returns, the tasks still running are cancelled (see
-<code>Task.cancel</code>), and <code>run</code> waits for them to finish.</p>
+<p>Runs <code>body</code> as the first task of a new runtime, and returns once <code>body</code>
+has returned and every task it started has finished. The calling thread
+is the first worker; the runtime starts one more thread per logical CPU
+after it (see <code>RuntimeOptions.workers</code>). When <code>body</code> returns, the tasks
+still running are cancelled (see <code>Task.cancel</code>), on every worker, and
+<code>run</code> waits for them to finish.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>body</code> — the first task</li>
@@ -397,6 +422,55 @@ When <code>body</code> returns, the tasks still running are cancelled (see
 <ul>
 <li>if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend <code>options</code> asks for</li>
 </ul>
+<h2 id="spawn"><a class="header" href="#spawn">spawn</a></h2>
+<pre><code class="language-pepper">spawn&lt;T&gt;(body: shared () =&gt; T): Task&lt;T&gt;
+</code></pre>
+<p>Starts a task that runs <code>body</code> on whichever worker is free first, and
+returns it. Unlike <code>Task&lt;T&gt;.spawn_local</code>, the task may run on another
+thread, in parallel with the calling task, so the body must be a
+<code>shared</code> function (it may capture only thread-safe values) and its result
+crosses threads, so <code>T</code> must be thread-safe too: a number, a <code>[Shared]</code>
+struct, or a <code>shared</code> function type (<code>spawn&lt;String&gt;</code> is a compile error).</p>
+<p>A task, once started, stays on the worker that started it. Joining and
+cancelling work as for <code>spawn_local</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the task’s code</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the task</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>run</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    sum(from: long, to: long): long {
+        var total: long = 0;
+        var i = from;
+        while (i &lt; to) {
+            total = total + i;
+            i = i + 1;
+        }
+        return total;
+    }
+
+    main(): int {
+        async.run(() =&gt; {
+            var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
+            var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
+            print(low.join().value() + high.join().value());   # 499999500000
+        });
+        return 0;
+    }
+</code></pre>
 <h2 id="yield_now"><a class="header" href="#yield_now">yield_now</a></h2>
 <pre><code class="language-pepper">yield_now()
 </code></pre>
