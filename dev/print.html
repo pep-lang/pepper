@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-228482de.js";
+            window.path_to_searchindex_js = "searchindex-eacce21c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b106f5d9.js"></script>
+        <script src="toc-432e2c46.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -225,7 +225,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 structs with constructors, destructors and methods, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules, <code>Result</code>-based error handling, iteration (with <code>map</code> and
+closures, modules, <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
@@ -3008,7 +3008,8 @@ structs for you; some library types offer a method for it, such as
 <code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
 calling a method through a null reference crashes the program. Use <code>===</code> or
 <code>!==</code> to check whether two references name the same object, or whether one is
-null (<code>next === __null</code>).</p>
+null (<code>next === __null</code>). For a value that may be absent, prefer
+<a href="#optional-values"><code>Optional&lt;T&gt;</code></a>, whose type says so.</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an
@@ -4720,6 +4721,99 @@ main(): int {
 </code></pre>
 <p>See <a href="#errors-and-platform-types">io: errors and platform types</a> for the full list
 of <code>IoError</code> predicates.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="optional-values"><a class="header" href="#optional-values">Optional values</a></h1>
+<p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>: either <strong>Some</strong>,
+holding a <code>T</code>, or <strong>None</strong>, holding nothing. It plays the role of Rust’s
+<code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>. Use it instead of a null reference or a
+sentinel such as <code>-1</code> or <code>""</code>: the type tells the caller that the value can be
+absent, and reading it goes through a method that checks.</p>
+<p><code>Optional</code> is part of the runtime, so you can use it without an import. The
+<a href="#optional">Optional reference</a> lists every member.</p>
+<pre><code class="language-pepper"># A lookup that may find nothing returns an Optional instead of a sentinel.
+struct Person {
+    String name;
+    int age;
+
+    construct(this.name = "", this.age = 0) {}
+}
+
+find_adult(people: Array&lt;Person&gt;): Optional&lt;Person&gt; {
+    for (var p in people) {
+        if (p.age &gt;= 18) { return Optional&lt;Person&gt;.some(p); }
+    }
+    return Optional&lt;Person&gt;.none();
+}
+
+index_of(text: String, wanted: String): Optional&lt;ulong&gt; {
+    var i: ulong = 0;
+    while (i &lt; text.length()) {
+        if (text[i] == wanted) { return Optional&lt;ulong&gt;.some(i); }
+        i = i + 1;
+    }
+    return Optional&lt;ulong&gt;.none();
+}
+
+main(): int {
+    var people = Array&lt;Person&gt;();
+    people.append(Person("ada", 12));
+    assert(find_adult(people).is_none(), "no adult yet");
+
+    people.append(Person("grace", 45));
+    var adult = find_adult(people);
+    assert(adult.is_some(), "grace is an adult");
+    assert(adult.value().name == "grace", "value() returns the Person");
+
+    # Works for types that have no null, too.
+    assert(index_of("pepper", "e").value() == 1, "first 'e' is at 1");
+    assert(index_of("pepper", "z").is_none(), "no 'z'");
+
+    # value_or supplies a fallback instead of panicking.
+    assert(index_of("pepper", "z").value_or(99) == 99, "fallback for None");
+
+    # Optional&lt;T&gt;() is None, like Optional&lt;T&gt;.none().
+    var nothing = Optional&lt;int&gt;();
+    assert(nothing.is_none(), "Optional() is None");
+    return 0;
+}
+</code></pre>
+<h2 id="creating-and-checking-optionals"><a class="header" href="#creating-and-checking-optionals">Creating and checking optionals</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Member</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Optional&lt;T&gt;.some(value)</code></td><td>Creates a Some optional holding <code>value</code>.</td></tr>
+<tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;()</code></td><td>Create a None optional.</td></tr>
+<tr><td><code>is_some()</code>, <code>is_none()</code></td><td>Report which kind the optional is.</td></tr>
+<tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on a None value</code> if the optional is None.</td></tr>
+<tr><td><code>value_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the optional is None. Never panics.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Use <code>value()</code> when a None would be a bug in your program, since it stops the
+program. When a missing value is an expected outcome, test with <code>is_some()</code> or
+<code>is_none()</code> first, or supply a fallback with <code>value_or</code>.</p>
+<p><code>Optional&lt;T&gt;</code> works for every <code>T</code>, including types that have no null at all,
+such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
+reference to the object, like any other struct slot (see
+<a href="#memory-and-reference-counting">Memory and reference counting</a>).</p>
+<h2 id="optional-or-result"><a class="header" href="#optional-or-result">Optional or Result</a></h2>
+<p>An <code>Optional&lt;T&gt;</code> says only that a value is missing. When the caller needs to
+know <em>why</em>, return a <a href="#error-handling-with-result"><code>Result</code></a> instead, whose Err carries an
+error.</p>
+<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<ul>
+<li>There is no <code>T?</code> shorthand yet: write <code>Optional&lt;T&gt;</code>.</li>
+<li>Pepper has no <code>match</code> yet, so an optional is checked with <code>is_some()</code> or
+<code>is_none()</code> and read with <code>value()</code> or <code>value_or</code>. <code>Optional</code> will become an
+enum with <code>None</code> and <code>Some(value)</code> cases once enums with payloads exist; its
+methods stay the same.</li>
+<li>The runtime’s own APIs still use null references or default values for
+“missing” (a <code>HashMap</code> returns the default value for a missing key, for
+example).</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
 <p>Visibility decides which declarations other files may use. Every top-level
@@ -9426,6 +9520,129 @@ is used.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = Result&lt;int&gt;.err(Error("e")).ok_or(-1);   # -1
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/optional.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="optional"><a class="header" href="#optional">Optional</a></h1>
+<p>Source: <code>runtime/optional.pep</code></p>
+<h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
+<pre><code class="language-pepper">struct Optional&lt;T&gt;
+</code></pre>
+<p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
+None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
+<p>Use it instead of a null reference or a sentinel (<code>-1</code>, <code>""</code>) wherever a
+value may be missing: the type says so, and reading the value goes through
+<code>value()</code>, which checks, or <code>value_or()</code>, which cannot fail. It works for
+every type, including those that have no null, such as <code>int</code>.</p>
+<p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
+for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value a Some optional holds</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    find_even(values: Array&lt;int&gt;): Optional&lt;int&gt; {
+        for (var v in values) {
+            if (v % 2 == 0) { return Optional&lt;int&gt;.some(v); }
+        }
+        return Optional&lt;int&gt;.none();
+    }
+
+    main(): int {
+        var values = Array&lt;int&gt;();
+        values.append(3);
+        values.append(4);
+        var found = find_even(values);
+        if (found.is_none()) { return 1; }
+        return found.value() - 4;   # 0
+    }
+</code></pre>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h4 id="optional-2"><a class="header" href="#optional-2">Optional()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a None optional, one holding no value.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var nothing = Optional&lt;int&gt;();   # nothing.is_none() == true
+</code></pre>
+<h3 id="static-methods-3"><a class="header" href="#static-methods-3">Static methods</a></h3>
+<h4 id="some"><a class="header" href="#some">some</a></h4>
+<pre><code class="language-pepper">static some(value: T): Optional&lt;T&gt;
+</code></pre>
+<p>Returns a Some optional holding <code>value</code>.</p>
+<p>For a struct <code>T</code> the optional acquires a reference to <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to hold</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a Some optional whose value is <code>value</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var answer = Optional&lt;int&gt;.some(42);
+</code></pre>
+<h4 id="none"><a class="header" href="#none">none</a></h4>
+<pre><code class="language-pepper">static none(): Optional&lt;T&gt;
+</code></pre>
+<p>Returns a None optional, one holding no value; the same as
+<code>Optional&lt;T&gt;()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a None optional</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var nothing = Optional&lt;String&gt;.none();
+</code></pre>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
+<pre><code class="language-pepper">is_some(): bool
+</code></pre>
+<p>Reports whether this optional holds a value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is Some</li>
+</ul>
+<h4 id="is_none"><a class="header" href="#is_none">is_none</a></h4>
+<pre><code class="language-pepper">is_none(): bool
+</code></pre>
+<p>Reports whether this optional holds no value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is None</li>
+</ul>
+<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
+<pre><code class="language-pepper">value(): T
+</code></pre>
+<p>Returns the value, panicking if this optional is None.</p>
+<p>For a struct <code>T</code> the caller gets its own reference; the optional keeps
+its reference too.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value of a Some optional</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the optional is None (“Optional.value on a None value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.some(42).value();   # 42
+</code></pre>
+<h4 id="value_or"><a class="header" href="#value_or">value_or</a></h4>
+<pre><code class="language-pepper">value_or(fallback: T): T
+</code></pre>
+<p>Returns the value, or <code>fallback</code> if this optional is None.</p>
+<p>Never panics. <code>fallback</code> is evaluated by the caller whether or not it
+is used.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>fallback</code> — the value to return when the optional is None</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value when the optional is Some, otherwise <code>fallback</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.none().value_or(-1);   # -1
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/atomic.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
 <p>Source: <code>runtime/atomic.pep</code></p>
@@ -9457,7 +9674,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
         return 0;
     }
 </code></pre>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
 </code></pre>
@@ -9471,7 +9688,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 <pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
     var p = Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">T load()
 </code></pre>
@@ -9794,7 +10011,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(ErrorCode code = 0, String message = "")
 </code></pre>
@@ -9806,7 +10023,7 @@ predicate holds for it.</p>
 <li><code>code</code> — the raw platform error code (<code>errno</code> on POSIX, <code>GetLastError()</code> on Windows)</li>
 <li><code>message</code> — the human-readable description</li>
 </ul>
-<h3 id="static-methods-3"><a class="header" href="#static-methods-3">Static methods</a></h3>
+<h3 id="static-methods-4"><a class="header" href="#static-methods-4">Static methods</a></h3>
 <h4 id="last-1"><a class="header" href="#last-1">last</a></h4>
 <pre><code class="language-pepper">static IoError last()
 </code></pre>
@@ -9819,7 +10036,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">bool is_not_found()
 </code></pre>
@@ -9968,12 +10185,12 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
     }
 </code></pre>
 <h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
-<h4 id="value-2"><a class="header" href="#value-2">Value</a></h4>
+<h4 id="value-3"><a class="header" href="#value-3">Value</a></h4>
 <pre><code class="language-pepper">String Value
 </code></pre>
 <p>The path’s text, exactly as given or built: UTF-8, not normalized,
 possibly empty.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String value = "")
 </code></pre>
@@ -9993,7 +10210,7 @@ takes a <code>Path</code> also accepts text.</p>
     var empty = io.Path();   # is_empty() is true
     var q: io.Path = "docs";   # converted implicitly
 </code></pre>
-<h3 id="static-methods-4"><a class="header" href="#static-methods-4">Static methods</a></h3>
+<h3 id="static-methods-5"><a class="header" href="#static-methods-5">Static methods</a></h3>
 <h4 id="separator"><a class="header" href="#separator">separator</a></h4>
 <pre><code class="language-pepper">static String separator()
 </code></pre>
@@ -10016,7 +10233,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.Size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
@@ -10428,13 +10645,13 @@ sharing read, write and delete access with other openers.</p>
 <pre><code class="language-pepper">bool CreateNew
 </code></pre>
 <p>Whether the file must be newly created: opening fails if it exists (<code>O_EXCL</code> on POSIX, <code>CREATE_NEW</code> on Windows); needs write or append. Off by default.</p>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
@@ -10658,7 +10875,7 @@ standard streams (stdin, stdout, stderr), which a File never closes.</p>
 <p>Creates a closed File that owns nothing yet: <code>is_open()</code> is false and
 every I/O method fails. Use <code>File.open</code>, <code>File.create</code> or
 <code>File.open_with</code> to get an open one.</p>
-<h3 id="static-methods-5"><a class="header" href="#static-methods-5">Static methods</a></h3>
+<h3 id="static-methods-6"><a class="header" href="#static-methods-6">Static methods</a></h3>
 <h4 id="open-1"><a class="header" href="#open-1">open</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;File&gt; open(Path path)
 </code></pre>
@@ -11224,13 +11441,13 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>Path</code> and <code>Name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>
@@ -11276,7 +11493,7 @@ afresh.</p>
 </code></pre>
 <p>Creates a <code>Directory</code> with an empty <code>Path</code>, which names no directory.
 Use <code>Directory.open</code> to get one for an existing directory.</p>
-<h3 id="static-methods-6"><a class="header" href="#static-methods-6">Static methods</a></h3>
+<h3 id="static-methods-7"><a class="header" href="#static-methods-7">Static methods</a></h3>
 <h4 id="open-2"><a class="header" href="#open-2">open</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;Directory&gt; open(Path path)
 </code></pre>
@@ -11596,7 +11813,7 @@ detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.
 <pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
 </code></pre>
 <p>1 once the body has returned, else 0.</p>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
 </code></pre>
@@ -11608,7 +11825,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <li><code>name</code> — the thread’s name; empty for an unnamed thread</li>
 <li><code>body</code> — the function the thread runs</li>
 </ul>
-<h3 id="static-methods-7"><a class="header" href="#static-methods-7">Static methods</a></h3>
+<h3 id="static-methods-8"><a class="header" href="#static-methods-8">Static methods</a></h3>
 <h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
 <pre><code class="language-pepper">static Thread spawn(ThreadBody body, String name = "")
 </code></pre>
@@ -11658,7 +11875,7 @@ cannot be joined.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
@@ -11751,7 +11968,7 @@ so destroy one only after the threads that used it have exited.</p>
 <pre><code class="language-pepper">const Key: ulong
 </code></pre>
 <p>The operating-system thread-local key.</p>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -11760,7 +11977,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
 <pre><code class="language-pepper">T get()
 </code></pre>
@@ -11917,7 +12134,7 @@ the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p
 <pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;T&gt;&gt;
 </code></pre>
 <p>Holds the ring buffer of values. Read and written only under <code>Lock</code>.</p>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
 </code></pre>
@@ -11934,7 +12151,7 @@ the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="send"><a class="header" href="#send">send</a></h4>
 <pre><code class="language-pepper">bool send(T value)
 </code></pre>
@@ -12149,7 +12366,7 @@ program, so a Mutex is never left “poisoned”.</p>
 </code></pre>
 <p>The platform lock: a heap block holding a <code>pthread_mutex_t</code>, or a
 Windows <code>SRWLOCK</code>. It never moves, which a pthread mutex requires.</p>
-<h4 id="value-3"><a class="header" href="#value-3">Value</a></h4>
+<h4 id="value-4"><a class="header" href="#value-4">Value</a></h4>
 <pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
 </code></pre>
 <p>A heap slot holding the value: <code>sizeof&lt;T&gt;()</code> bytes, one reference for
@@ -12159,7 +12376,7 @@ a struct <code>T</code>. Read and written only while the lock is held.</p>
 </code></pre>
 <p>The operating-system id of the thread holding the lock, or 0 when the
 Mutex is unlocked.</p>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct(T value)
 </code></pre>
@@ -12174,7 +12391,7 @@ releases it when the Mutex is destroyed.</p>
 <ul>
 <li>if the operating system cannot create a mutex</li>
 </ul>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="lock-1-1"><a class="header" href="#lock-1-1">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
@@ -12457,7 +12674,7 @@ threads.</p>
 <pre><code class="language-pepper">const Finished: __ptr&lt;void&gt;
 </code></pre>
 <p>The platform condition variable that waiting callers sleep on.</p>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -12466,7 +12683,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">void call(ThreadBody body)
 </code></pre>
@@ -12533,7 +12750,7 @@ compile error.</p>
 <pre><code class="language-pepper">const Initializer: shared () =&gt; T
 </code></pre>
 <p>The function that builds the value.</p>
-<h4 id="value-4"><a class="header" href="#value-4">Value</a></h4>
+<h4 id="value-5"><a class="header" href="#value-5">Value</a></h4>
 <pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
 </code></pre>
 <p>A heap slot holding the value once it is built: <code>sizeof&lt;T&gt;()</code> bytes,
