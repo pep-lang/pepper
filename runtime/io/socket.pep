@@ -511,7 +511,7 @@ export struct TcpStream {
         if (c.is_err()) {
             return c;
         }
-        return _io_socket_send_all(_handle, data._data, data._size);
+        return _io_socket_send_bytes(_handle, data);
     }
 
     ## Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
@@ -524,7 +524,7 @@ export struct TcpStream {
         if (c.is_err()) {
             return c;
         }
-        return _io_socket_send_all(_handle, text.c_str() as __ptr<u8>, text.size());
+        return _io_socket_send_text(_handle, text);
     }
 
     ## Closes the sending side of the connection: the peer's reads return 0
@@ -711,6 +711,28 @@ export _io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoRes
         done = done + r.value();
     }
     return _io_ok_void();
+}
+
+# Sends all of `data`, pinned so no other task can grow it while a send
+# waits.
+export _io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
+    data._pins = data._pins + 1;
+    var r = _io_socket_send_all(h, data._data, data._size);
+    data._pins = data._pins - 1;
+    return r;
+}
+
+# Sends all of `text`'s bytes. Inside a task a send can wait, and another
+# task could change `text` meanwhile, so a copy is sent, as
+# `File.write_all` does.
+export _io_socket_send_text(h: SocketHandle, text: String): IoResult<void> {
+    if (!_io_in_task()) {
+        return _io_socket_send_all(h, text.c_str() as __ptr<u8>, text.size());
+    }
+    var bytes = _io_text_copy(text);
+    var r = _io_socket_send_all(h, bytes, text.size());
+    _pep_free(bytes);
+    return r;
 }
 
 # Sends all `n` bytes at `p`, looping over partial sends.

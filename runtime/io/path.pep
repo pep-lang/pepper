@@ -5,8 +5,8 @@
 # separators and dots are ASCII, so splitting at them never cuts a UTF-8
 # sequence. "No value" is the empty Path / String (there is no Option).
 #
-# `&&` and `||` evaluate both operands, so bytes are read through `_io_byte`,
-# which is bounds-checked (an empty String has no buffer at all).
+# Bytes are read through `_io_byte`, which is bounds-checked (an empty String
+# has no buffer at all).
 
 import "file";
 import "sys_posix";

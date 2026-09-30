@@ -602,8 +602,7 @@ export struct File {
         }
         # Another task could change `s` while the write waits, so write a
         # copy.
-        __ptr<u8> bytes = _pep_malloc(s.size() + 1);
-        _io_copy_bytes(bytes, s.c_str() as __ptr<u8>, s.size());
+        var bytes = _io_text_copy(s);
         var r = _io_write_all_raw(_handle, bytes, s.size());
         _pep_free(bytes);
         return r;
@@ -969,11 +968,4 @@ export struct File {
     static remove(path: Path): IoResult<void> {
         return _io_sys_unlink(path);
     }
-}
-
-extern void memcpy(void* dest, void* src, ulong n);
-
-# Copies `n` bytes from `source` to `target`.
-_io_copy_bytes(target: __ptr<u8>, source: __ptr<u8>, n: ulong) {
-    memcpy(target, source, n);
 }

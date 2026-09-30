@@ -345,6 +345,16 @@ export _io_string_from_byte(b: int): String {
     return s;
 }
 
+extern void memcpy(void* dest, void* src, ulong n);
+
+# A new buffer (free it with `_pep_free`) holding a copy of `text`'s bytes,
+# for a write that may wait while another task changes `text`.
+export _io_text_copy(text: String): __ptr<u8> {
+    __ptr<u8> bytes = _pep_malloc(text.size() + 1);
+    memcpy(bytes, text.c_str(), text.size());
+    return bytes;
+}
+
 # A String from a NUL-terminated C string.
 export _io_string_from_c(p: __ptr<char>): String {
     if (p == __null) {
@@ -353,10 +363,8 @@ export _io_string_from_c(p: __ptr<char>): String {
     return _io_string_from(p, _pep_c_strlen(p));
 }
 
-# Byte `i` of the `n` bytes at `p`, or 0 past the end. `&&` and `||` evaluate
-# both operands, so a guard such as `i < n && p[i] == 47` still reads
-# `p[i]`; reading through this keeps that in bounds (an empty String has no
-# buffer at all).
+# Byte `i` of the `n` bytes at `p`, or 0 past the end: a bounds-checked read
+# for scanning a String's bytes (an empty String has no buffer at all).
 export _io_byte(p: __ptr<u8>, n: ulong, i: ulong): int {
     if (i >= n) {
         return 0;

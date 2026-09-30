@@ -699,18 +699,10 @@ _tls_session_started(session: __ptr<u8>): bool {
     return _tls_word(session, 8) != 0;
 }
 
-# Sends all `n` bytes at `data`.
+# Sends all `n` bytes at `data`, failing when a send makes no progress.
 [Target(OS(Windows))]
 _tls_send_all(session: __ptr<u8>, data: __ptr<u8>, n: ulong): io.IoResult<void> {
-    ulong done = 0;
-    while (done < n) {
-        var sent = io._io_sys_socket_send(_tls_session_socket(session), data + done, n - done);
-        if (sent.is_err()) {
-            return io.IoResult<void>.err(sent.error());
-        }
-        done = done + sent.value();
-    }
-    return io.IoResult<void>.ok();
+    return io._io_socket_send_all(_tls_session_socket(session), data, n);
 }
 
 # Receives more bytes after the ones waiting to be decrypted; how many (0 at

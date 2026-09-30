@@ -37,6 +37,8 @@ import "path";
 import "socket";
 import "socket_posix";
 import "socket_windows";
+import "sys_posix";
+import "sys_windows";
 import "types";
 import "unix";
 import "wait";
@@ -87,3 +89,7 @@ export _FileTransfer;
 # For the tls module only: the socket calls its BIO makes.
 export _io_sys_socket_receive;
 export _io_sys_socket_send;
+export _io_socket_send_all;
+export _io_sys_code_write_zero;
+export _io_in_task;
+export _io_text_copy;

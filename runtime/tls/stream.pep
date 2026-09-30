@@ -316,7 +316,11 @@ export struct TlsStream {
     ## @param data the bytes to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
     write_all(data: u8[]): io.IoResult<void> {
-        return _write_all(data._data, data._size);
+        # Pinned so no other task can grow `data` while a send waits.
+        data._pins = data._pins + 1;
+        var r = _write_all(data._data, data._size);
+        data._pins = data._pins - 1;
+        return r;
     }
 
     ## Sends all of the UTF-8 bytes of `text`, as `write_all` does.
@@ -324,7 +328,15 @@ export struct TlsStream {
     ## @param text the text to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
     write_string(text: String): io.IoResult<void> {
-        return _write_all(text.c_str() as __ptr<u8>, text.size());
+        if (!io._io_in_task()) {
+            return _write_all(text.c_str() as __ptr<u8>, text.size());
+        }
+        # Another task could change `text` while a send waits, so send a
+        # copy, as `io.File.write_all` does.
+        var bytes = io._io_text_copy(text);
+        var r = _write_all(bytes, text.size());
+        _pep_free(bytes);
+        return r;
     }
 
     _write_all(p: __ptr<u8>, n: ulong): io.IoResult<void> {
@@ -337,6 +349,11 @@ export struct TlsStream {
             var r = _tls_sys_write(_session, p + done, n - done);
             if (r.is_err()) {
                 return io.IoResult<void>.err(r.error());
+            }
+            if (r.value() == 0) {
+                return io.IoResult<void>.err(
+                    io.IoError(io._io_sys_code_write_zero(), "failed to write the whole buffer")
+                );
             }
             done = done + r.value();
         }

@@ -90,7 +90,7 @@ import io;
 s(p: io.Path): String { return p.to_string(); }
 
 # The expected text of a path the implementation builds: `/` written here is
-# the platform separator, `\` on Windows. (String literals have no escapes.)
+# the platform separator, `\` on Windows. (Kept as `/` in the sources so one string serves every platform.)
 w(text: String): String {
     var out = text.clone();
     [Target(OS(Windows))] {

@@ -438,7 +438,7 @@ export struct UnixStream {
         if (c.is_err()) {
             return c;
         }
-        return _io_socket_send_all(_handle, data._data, data._size);
+        return _io_socket_send_bytes(_handle, data);
     }
 
     ## Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
@@ -451,7 +451,7 @@ export struct UnixStream {
         if (c.is_err()) {
             return c;
         }
-        return _io_socket_send_all(_handle, text.c_str() as __ptr<u8>, text.size());
+        return _io_socket_send_text(_handle, text);
     }
 
     ## Closes the sending side of the connection: the peer's reads return 0
