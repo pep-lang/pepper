@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7c0c84cf.js";
+            window.path_to_searchindex_js = "searchindex-d55bbaee.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-3bfac41d.js"></script>
+        <script src="toc-b106f5d9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -229,7 +229,8 @@ closures, modules, <code>Result</code>-based error handling, iteration (with <co
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
-programs, but expect gaps.
+programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
+itself written in Pepper.
 Some that you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, a method (<code>p.norm</code>,
@@ -7270,6 +7271,89 @@ private to its file unless it is exported (see <a href="#visibility">Visibility<
 The runtime also uses the prefix on top-level helpers that its own files
 export to each other, such as <code>_pep_malloc</code>: they are not part of its public
 API, and the reference leaves them out too.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="formatting-with-pep-fmt"><a class="header" href="#formatting-with-pep-fmt">Formatting with pep-fmt</a></h1>
+<p><code>pep-fmt</code> rewrites Pepper source in one standard style, so that every Pepper
+file reads the same and nobody has to argue about layout. It changes only
+whitespace, line breaks, the order of imports, and the form of function
+declarations; the program means exactly what it meant before.</p>
+<p><code>pep-fmt</code> is written in Pepper. Its parser is a separate library,
+<code>tools/syntax</code>, that other tools can use.</p>
+<h2 id="running-it"><a class="header" href="#running-it">Running it</a></h2>
+<p>Build it with the compiler, with the <code>tools</code> folder on the import path:</p>
+<pre><code class="language-bash">pepper -I tools tools/pep-fmt/main.pep -o pep-fmt
+</code></pre>
+<p>It reads a source file on standard input and writes the formatted file to
+standard output:</p>
+<pre><code class="language-bash">pep-fmt &lt; main.pep &gt; formatted.pep
+</code></pre>
+<p>If the file does not parse, <code>pep-fmt</code> writes nothing to standard output,
+prints the first syntax error to standard error, and exits with status 1:</p>
+<pre><code class="language-text">&lt;stdin&gt;:2:14: error: expected ')'
+</code></pre>
+<h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
+<p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
+declaration or statement that owns it, and <code>else</code> goes between the braces:</p>
+<pre><code class="language-pepper">if count &gt; 0 {
+    print(count);
+} else {
+    print("none");
+}
+</code></pre>
+<p>A block stays on one line only when it holds a single <code>break</code>, <code>continue</code>
+or <code>return</code> and was written on one line: <code>if done { return; }</code>.</p>
+<p><strong>Line width.</strong> Lines are at most 120 columns. A list that does not fit
+(arguments, parameters, an import list) moves to its own indented line, and
+if it still does not fit, puts one item on each line:</p>
+<pre><code class="language-pepper">report_values(
+    first_argument, second_argument, third_argument, fourth_argument, fifth_argument, a_much_longer_argument
+);
+report_values(
+    first_argument,
+    second_argument,
+    an_argument_so_long_that_the_whole_list_no_longer_fits_on_one_line_even_after_moving_it_down_one
+);
+</code></pre>
+<p>A long condition breaks after an operator:</p>
+<pre><code class="language-pepper">if (first_condition_that_is_long(value) and second_condition_that_is_long(value) or
+    third_condition_that_is_long(value)) {
+    run();
+}
+</code></pre>
+<p>A Pepper expression ends at a line break that directly follows a complete
+operand, so <code>pep-fmt</code> never breaks a line before an operator or before the
+<code>.</code> of a method call. Comments and string literals are never reflowed, so a
+line can stay longer than 120 columns when it has nowhere to break.</p>
+<p><strong>Attributes</strong> go one per line, each on its own line above the declaration:</p>
+<pre><code class="language-pepper">[Target(OS(Linux))]
+[Deprecated("use 'open' instead", "open")]
+export open_file(path: String): int { return 0; }
+</code></pre>
+<p><strong>Declarations.</strong> Pepper functions and methods are written with the
+parameter types after the names and the return type last,
+<code>add(a: int, b: int): int</code>. The C-style form, <code>int add(int a, int b)</code>, is
+kept for <code>extern</code> functions, which mirror C prototypes; <code>pep-fmt</code> rewrites
+it everywhere else. Operator methods and indexers (<code>bool ==(other: Point)</code>,
+<code>T [](index: ulong)</code>) keep their return type in front, because the grammar
+has no other way to write them, and constructor parameters keep the form
+they were written in.</p>
+<p><strong>Blank lines.</strong> At most one blank line in a row. Top-level structs,
+traits, extensions and functions with a body are separated by one blank
+line.</p>
+<p><strong>Comments</strong> stay where they are, attached to the code next to them.
+Trailing comments on consecutive lines are aligned, two spaces after the
+longest line:</p>
+<pre><code class="language-pepper">var total = 0;      # the running sum
+var count = 0;      # how many values
+var average = 0.0;  # total / count
+</code></pre>
+<p><strong>Imports</strong> that are next to each other (no blank line or comment between
+them) are sorted: modules first (<code>import io;</code>), then files of this module
+(<code>import "util";</code>), each by name.</p>
+<p><strong>Kept as written:</strong> semicolons (the grammar lets a line break end a
+statement, and <code>pep-fmt</code> neither adds nor removes them), parentheses around
+conditions (<code>if x</code> and <code>if (x)</code> are both fine), fields declared either way
+(<code>int x;</code> or <code>var x: int;</code>), and the file’s line endings (<code>\n</code> or <code>\r\n</code>).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="standard-library-reference"><a class="header" href="#standard-library-reference">Standard library reference</a></h1>
 <p>The standard library is the Pepper runtime: the files under <code>runtime/</code> that
