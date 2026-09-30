@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-30aecd96.js";
+            window.path_to_searchindex_js = "../searchindex-1e39abf2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -273,6 +273,9 @@ indexers.</li>
 They can use <code>this</code> and name the struct’s fields directly, and they are
 called the same way.</li>
 <li>A type can have any number of extensions.</li>
+<li>An extension method may share its name with the struct’s methods if its
+parameter types differ: it joins their
+<a href="overloading.html#extensions-and-traits">overload set</a>.</li>
 <li>An extension in another file is usable only where that file (or its
 module) is imported, and only if it is exported; the standard library’s
 extensions are usable everywhere. See
@@ -341,6 +344,9 @@ main(): int {
 stands for the type that has the trait.</li>
 <li><code>extend Square with Shape, Printable { ... }</code> attaches several traits at
 once.</li>
+<li>A trait can declare several methods of one name with different parameter
+types; the type implements each with the method whose parameter types
+match (see <a href="overloading.html#extensions-and-traits">Overloading</a>).</li>
 <li>The methods in the extension are ordinary methods of the struct, so you
 call them on a <code>Square</code> as usual.</li>
 </ul>

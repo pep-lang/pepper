@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-30aecd96.js";
+            window.path_to_searchindex_js = "../searchindex-1e39abf2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -413,6 +413,70 @@ expected function type, like a free function below; without one the
 error is <code>cannot infer the type of 'f' from overloaded method 'Money.add'</code>.</p>
 </li>
 </ul>
+<h2 id="extensions-and-traits"><a class="header" href="#extensions-and-traits">Extensions and traits</a></h2>
+<p>An <a href="traits-and-extensions.html#extensions">extension</a>’s methods join the
+struct’s overload set of their name, and a trait may declare several methods
+of one name. Each of a trait’s overloads is implemented by the conforming
+type’s method with the same parameter types, and a call through a value of
+the trait type picks among the trait’s members the same way:</p>
+<pre><code class="language-pepper">struct Square {
+    var side: int = 0;
+
+    construct(this.side = 0) {}
+
+    area(): int {
+        return side * side;
+    }
+}
+
+# An extension's methods join the struct's overload set of their name.
+extend Square {
+    area(scale: int): int {
+        return area() * scale;
+    }
+}
+
+# A trait may declare overloads too; each is its own member.
+trait Shape {
+    area(): int;
+    area(scale: int): int;
+
+    # A default joins the conforming type's set of its name.
+    describe(): int {
+        return area() * 100 + area(2);
+    }
+}
+
+# Each trait member is implemented by the method with its parameter types.
+extend Square with Shape {}
+
+total(shape: Shape): int {
+    return shape.area() + shape.area(10);
+}
+
+main(): int {
+    var square = Square(3);
+    assert(square.area(2) == 18, "the extension's overload");
+    assert(total(square) == 99, "each call through the trait takes its own member");
+    assert(square.describe() == 918, "the default body calls both");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>An extension member with a body method’s parameters</strong> is
+<code>redefinition of 'area'</code>, with a note at the method it repeats.</li>
+<li><strong>A call sees only the extensions visible in its file</strong> (see
+<a href="visibility.html#members-of-structs-and-extensions">Visibility</a>): a private
+extension’s overload is never a candidate in another file, so importing a
+file can add candidates to a call. If an added candidate makes a call
+ambiguous, the error’s notes point at each candidate, the extension’s
+included.</li>
+<li><strong>A trait’s default method</strong> is copied into a conforming type that lacks a
+method with its parameter types, even when the type has other methods of
+that name; the copy joins their set.</li>
+<li><strong>A missing overload</strong> is named with its parameter types:
+<code>'Square' does not implement 'area(int)', required by trait 'Shape'</code>.</li>
+</ul>
 <h2 id="overloaded-functions-as-values"><a class="header" href="#overloaded-functions-as-values">Overloaded functions as values</a></h2>
 <p>The name of an overload set, written without a call, is a value only where
 the expected function type picks one member exactly: a typed variable, an
@@ -465,8 +529,6 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <li><strong>Constructors</strong> do not overload: a struct has one constructor. Use
 default arguments, or a <a href="structs.html#static-methods">static method</a> for each
 alternative.</li>
-<li><strong>Extension methods</strong> do not join a struct’s overload set: an extension
-method with the name of one of the struct’s methods is not a new member.</li>
 <li><strong>Unary operators</strong> cannot be declared at all yet.</li>
 <li><strong><code>extern</code> functions</strong> do not overload.</li>
 <li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name

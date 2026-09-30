@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-30aecd96.js";
+            window.path_to_searchindex_js = "searchindex-1e39abf2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-432e2c46.js"></script>
@@ -244,9 +244,8 @@ can be stored, passed and called through a function type such as
 <li>A constructor marked <code>[Implicit]</code> converts a value into its struct
 wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
 (see <a href="language/structs.html#implicit-conversions">implicit conversions</a>).</li>
-<li>Free functions, methods and operators can be
-<a href="language/overloading.html">overloaded</a>; constructors and extension methods
-cannot yet.</li>
+<li>Free functions, methods, operators, extension methods and trait members
+can be <a href="language/overloading.html">overloaded</a>; constructors cannot yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. Channels, mutexes, <code>Once</code> and <code>Lazy</code> carry and
