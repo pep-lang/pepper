@@ -153,7 +153,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
     step!(check_shared_types::check_shared_types(module));
-    // What `with` blocks over `[Isolated]` guards may do, `[Sending]`
+    // What `with` blocks over `[Isolated]` guards may do, `[Move]`
     // arguments, and the guards' own rules, once every type is final.
     step!(check_confinement::check_confinement(module));
     // `with` conditions need the final types of `enter()`.
@@ -269,7 +269,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             }
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
-        Expression::Destructure { value, .. } => walk_expression(value, f),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => walk_expression(value, f),
         Expression::MatchArm(test) => {
             walk_expression(&mut test.subject, f);
             for literal in test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()) {
@@ -360,7 +360,8 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         }
         Expression::MakeClosure { value, .. }
         | Expression::ToTrait { value, .. }
-        | Expression::Destructure { value, .. } => vec![value.as_mut()],
+        | Expression::Destructure { value, .. }
+        | Expression::Move { value, .. } => vec![value.as_mut()],
     }
 }
 

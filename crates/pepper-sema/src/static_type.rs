@@ -134,7 +134,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),
         Expression::IntLiteral(v) => Some(TypeName::new(crate::type_name::int_literal_type(*v))),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
-        Expression::Destructure { value, .. } => of(value, table, current),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => of(value, table, current),
         Expression::StaticCase { ty, .. } => Some(ty.clone()),
         Expression::Subject { ty, .. } if !ty.is_auto() => Some(ty.clone()),
         Expression::WithSubject(with) => of(&with.body, table, current),

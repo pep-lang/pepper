@@ -27,14 +27,14 @@
 //! is its own promise), and `copy(x)` is fresh by definition. A reference
 //! read through raw memory that a `[Shared]` struct's field holds is
 //! tainted too: other threads may reach it. A runtime function that hands
-//! out a value nothing else references through such memory says so with
-//! `[ReturnsOwned]` (`Channel.receive`, `Mutex.replace`), an unchecked
+//! out a value nothing else references through such memory takes it out
+//! with `move(p[i])` (`Channel.receive`, `Mutex.replace`), an unchecked
 //! promise only runtime files may make.
 //!
 //! The pass also checks, everywhere:
 //!
 //! - an `[Isolated]` guard is used only as the scope of a `with` header;
-//! - an argument to a `[Sending]` parameter is **disconnected**: a value of
+//! - an argument to a `[Move]` parameter is **disconnected**: a value of
 //!   a thread-safe type, or a call whose result is fresh or whose linked
 //!   operands are all disconnected (a constructor call, a string literal,
 //!   `copy(x)`); never a named variable;
@@ -42,6 +42,7 @@
 //!   value with `with (var v = local.enter())`), and `Mutex<T>` of a number.
 
 use crate::model::*;
+use pepper_parser::diagnostic::Fix;
 use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in, use_site};
 use crate::passes::gather_generics::parse_type_string;
 use crate::static_type::StructTable;
@@ -52,13 +53,20 @@ use std::collections::HashMap;
 pub const ISOLATED_ATTRIBUTE: &str = "Isolated";
 
 /// A parameter whose argument must be disconnected.
-pub const SENDING_ATTRIBUTE: &str = "Sending";
+pub const MOVE_ATTRIBUTE: &str = "Move";
 
-/// A runtime function whose results are fresh whatever its body shows: it
-/// hands out a value nothing else references, through raw memory the
-/// compiler cannot follow (`Channel.receive`, `Mutex.replace`). Only runtime
-/// files may use it.
-pub const RETURNS_OWNED_ATTRIBUTE: &str = "ReturnsOwned";
+/// A free function's parameter whose argument is moved in: the argument
+/// must be a place (a local, or a raw slot in the runtime), which gives up
+/// its reference and is left null (`move(x)` in `runtime/copy.pep`). Only
+/// runtime files may declare one, so every hand-off shows at the call as
+/// `move(x)`.
+pub const MOVE_SOURCE_ATTRIBUTE: &str = "MoveSource";
+
+/// Whether a parameter with these attributes takes over the caller's
+/// reference instead of acquiring one: `[Move]` and `[MoveSource]`.
+pub fn takes_over(attributes: &[pepper_parser::ast::Attribute]) -> bool {
+    has_attribute(attributes, MOVE_ATTRIBUTE) || has_attribute(attributes, MOVE_SOURCE_ATTRIBUTE)
+}
 
 /// How many rounds the summaries may take to settle.
 const MAX_ROUNDS: usize = 64;
@@ -190,6 +198,12 @@ struct Region {
     /// A tuple value: the region of each element (`None` for a
     /// thread-safe one). Never unioned: linking goes element by element.
     parts: Vec<Option<usize>>,
+    /// The locals and parameters whose value is in the region.
+    holders: Vec<String>,
+    /// Reachable from outside the function: a parameter's or `this`'s
+    /// value (a check's outer operands). A local declared before a `with`
+    /// block is outer to the block, but not shared until linked to one.
+    shared: bool,
 }
 
 /// A `with` block over an `[Isolated]` guard.
@@ -233,6 +247,8 @@ struct Program<'a> {
     isolated: std::collections::HashSet<String>,
     /// `has_region` by type, as computed.
     regions: std::cell::RefCell<HashMap<String, bool>>,
+    /// The runtime's directory, found on first use.
+    runtime_directory: std::cell::OnceCell<Option<std::path::PathBuf>>,
 }
 
 impl<'a> Program<'a> {
@@ -251,6 +267,7 @@ impl<'a> Program<'a> {
             constructors,
             isolated,
             regions: std::cell::RefCell::new(HashMap::new()),
+            runtime_directory: std::cell::OnceCell::new(),
         }
     }
 
@@ -273,6 +290,23 @@ impl<'a> Program<'a> {
         };
         self.regions.borrow_mut().insert(key, answer);
         answer
+    }
+
+    /// Whether `file` is part of the runtime (under the discovered runtime
+    /// directory). With no runtime or no source to compare with (a harness
+    /// that registers none), everything is.
+    fn is_runtime_file(&self, file: pepper_parser::diagnostic::FileId) -> bool {
+        use pepper_parser::diagnostic::Sources;
+        let directory = self.runtime_directory.get_or_init(|| {
+            let (sources, _, _) = pepper_files::runtime::discover();
+            sources.first().and_then(|s| s.parent()).and_then(|d| d.canonicalize().ok())
+        });
+        match (directory, self.module.sources.get(file)) {
+            (Some(directory), Some((name, _))) => {
+                std::path::Path::new(name).canonicalize().is_ok_and(|path| path.starts_with(directory.as_path()))
+            }
+            (Some(_), None) | (None, _) => true,
+        }
     }
 
     fn struct_named(&self, name: &str) -> Option<&'a StructDef> {
@@ -319,12 +353,14 @@ struct Walk<'p, 'a> {
     operands: Vec<Option<usize>>,
     /// The summary keys of the functions the walk called.
     called: Vec<String>,
+    /// The operand slots of `[Move]` parameters (summaries).
+    sending: Vec<usize>,
     error: Option<Diagnostic>,
 }
 
 impl<'p, 'a> Walk<'p, 'a> {
     fn new(program: &'p Program<'a>, mode: Mode, current: Option<TypeName>) -> Self {
-        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], error: None }
+        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], sending: vec![], error: None }
     }
 
     fn region(&mut self, part: Part) -> usize {
@@ -332,7 +368,7 @@ impl<'p, 'a> Walk<'p, 'a> {
             Part::Operand(n) => vec![n],
             _ => vec![],
         };
-        self.regions.push(Region { parent: self.regions.len(), part, tainted: false, untracked: false, operands, parts: vec![] });
+        self.regions.push(Region { parent: self.regions.len(), part, tainted: false, untracked: false, operands, parts: vec![], holders: vec![], shared: false });
         self.regions.len() - 1
     }
 
@@ -399,6 +435,9 @@ impl<'p, 'a> Walk<'p, 'a> {
         self.regions[a].untracked |= self.regions[b].untracked;
         let moved = std::mem::take(&mut self.regions[b].operands);
         self.regions[a].operands.extend(moved);
+        let holders = std::mem::take(&mut self.regions[b].holders);
+        self.regions[a].holders.extend(holders);
+        self.regions[a].shared |= self.regions[b].shared;
         Ok(a)
     }
 
@@ -505,6 +544,12 @@ impl<'p, 'a> Walk<'p, 'a> {
     }
 
     fn declare(&mut self, name: &str, region: Option<usize>, ty: TypeName) {
+        if let Some(region) = region {
+            let root = self.find(region);
+            if !self.regions[root].holders.iter().any(|h| h == name) {
+                self.regions[root].holders.push(name.to_string());
+            }
+        }
         self.scopes.last_mut().unwrap().push((name.to_string(), region, ty));
     }
 
@@ -537,12 +582,26 @@ impl<'p, 'a> Walk<'p, 'a> {
         {
             operands.push(("this".to_string(), owner.clone()));
         }
+        let first_parameter = operands.len();
         operands.extend(function.parameters.iter().map(|p| (p.name.clone(), p.ty.clone())));
         for (slot, (name, ty)) in operands.into_iter().enumerate() {
+            // A `[Move]` parameter's value is disconnected on entry (the
+            // caller checked): the function owns it outright.
+            let sending = slot >= first_parameter
+                && takes_over(&function.parameters[slot - first_parameter].attributes);
             let region = if !self.program.has_region(&ty) {
                 None
+            } else if sending {
+                let region = self.fresh();
+                if self.mode == Mode::Summarize {
+                    self.regions[region].operands.push(slot);
+                    self.sending.push(slot);
+                }
+                Some(region)
             } else if self.mode == Mode::Check {
-                Some(self.region(Part::Outer))
+                let region = self.region(Part::Outer);
+                self.regions[region].shared = true;
+                Some(region)
             } else {
                 Some(self.region(Part::Operand(slot)))
             };
@@ -883,6 +942,7 @@ impl<'p, 'a> Walk<'p, 'a> {
             }
             Expression::ForIterator(source) => self.eval(source),
             Expression::Destructure { value, .. } => self.eval(value),
+            Expression::Move { value, .. } => self.eval_move(value),
             Expression::MatchArm(test) => {
                 self.eval(&test.subject);
                 for literal in test.patterns.iter().filter_map(|p| p.literal.as_ref()) {
@@ -895,6 +955,57 @@ impl<'p, 'a> Walk<'p, 'a> {
                 None
             }
             Expression::ToTrait { value, .. } => self.eval(value),
+        }
+    }
+
+    /// `move(value)`: a local or parameter that is the only holder of a
+    /// disconnected value hands it over; a raw slot (runtime only) hands
+    /// over a value the runtime promises nothing else references.
+    fn eval_move(&mut self, value: &Expression) -> Option<usize> {
+        match value {
+            Expression::SymbolRef { id, loc, .. } if self.local(id).is_some() => {
+                let region = self.local(id).and_then(|(_, r, _)| *r)?;
+                let root = self.find(region);
+                let r = &self.regions[root];
+                let others: Vec<String> = r.holders.iter().filter(|h| *h != id && !h.starts_with("__")).cloned().collect();
+                let shares = matches!(r.part, Part::Locked(_) | Part::Operand(_))
+                    || r.shared
+                    || r.tainted
+                    || r.operands.iter().any(|slot| !self.sending.contains(slot));
+                if self.mode == Mode::Check && (shares || !others.is_empty()) {
+                    let why = match others.first() {
+                        Some(other) => format!("'{other}' also references its value"),
+                        None => "its value shares objects with the rest of the program".to_string(),
+                    };
+                    self.report(
+                        Diagnostic::error(format!("'{id}' cannot be moved: {why}"))
+                            .at(*loc)
+                            .with_note("only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead", None),
+                    );
+                }
+                // The variable gives the value up: it goes on as a new one.
+                Some(self.fresh())
+            }
+            Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } if self.ty(lhs).is_some_and(|t| t.is_pointer()) => {
+                self.eval(value);
+                if self.mode == Mode::Check && !self.program.is_runtime_file(value.loc().file) {
+                    self.report(
+                        Diagnostic::error("only the runtime may move a value out of raw memory")
+                            .at(value.loc())
+                            .with_note("it promises that the slot held the only reference, which the compiler cannot check", None),
+                    );
+                }
+                Some(self.fresh())
+            }
+            other => {
+                if self.mode == Mode::Check {
+                    self.report(
+                        Diagnostic::error(format!("'{}' cannot be moved: only a local variable or parameter can hand over its value", describe(other)))
+                            .at(other.loc()),
+                    );
+                }
+                self.eval(other)
+            }
         }
     }
 
@@ -1205,13 +1316,6 @@ fn summarize(program: &Program, owner: &Option<TypeName>, key: &str, function: &
         summary.tainted[k] = walk.regions[root].tainted;
     }
     summary.blame = blame;
-    if has_attribute(&function.attributes, RETURNS_OWNED_ATTRIBUTE) {
-        for k in 0..results {
-            summary.class[n + k] = n + k;
-            summary.tainted[k] = false;
-        }
-        summary.blame = None;
-    }
     (summary, walk.called)
 }
 
@@ -1267,24 +1371,24 @@ fn summaries(program: &mut Program, roots: Vec<String>) {
 
 /// The functions whose checks need summaries: those with a `with` block
 /// (over an `[Isolated]` guard or not; the walk tells) or a call to a
-/// function with a `[Sending]` parameter (by name, generously).
+/// function with a `[Move]` parameter (by name, generously).
 fn roots(module: &Module) -> Vec<String> {
     let mut sending: std::collections::HashSet<String> = std::collections::HashSet::new();
     for st in &module.structs {
         for constructor in &st.constructors {
-            if constructor.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+            if constructor.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
                 sending.insert(st.name.clone());
                 sending.insert(constructor.name.clone());
             }
         }
         for m in &st.method_members {
-            if m.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+            if m.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
                 sending.insert(m.name.clone());
             }
         }
     }
     for f in &module.functions {
-        if f.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+        if f.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
             sending.insert(f.name.clone());
         }
     }
@@ -1295,6 +1399,7 @@ fn roots(module: &Module) -> Vec<String> {
         let mut found = false;
         crate::passes::walk_block(&mut body, &mut |e: &mut Expression| match e {
             Expression::SymbolRef { id, .. } if id.starts_with("__with_scope_") => found = true,
+            Expression::Move { .. } => found = true,
             Expression::FunctionCall { function, .. } | Expression::MethodCall { method: function, .. } if sending.contains(function.as_str()) => {
                 found = true
             }
@@ -1308,9 +1413,10 @@ fn roots(module: &Module) -> Vec<String> {
 }
 
 pub fn check_confinement(module: &mut Module) {
+    lower_moved_arguments(module);
     let module: &Module = module;
     let mut program = Program::new(module);
-    if check_mutex_arguments(&program) || check_guard_fields(&program) || check_returns_owned(&program) {
+    if check_parameter_attributes(&program) || check_mutex_arguments(&program) || check_guard_fields(&program) {
         return;
     }
     let roots = roots(module);
@@ -1334,7 +1440,7 @@ pub fn check_confinement(module: &mut Module) {
 
 /// The names a function must mention for the expression checks to find
 /// anything: methods that return a guard, guard types (constructed or
-/// declared), `get` (on a `ThreadLocal`), and callees with a `[Sending]`
+/// declared), `get` (on a `ThreadLocal`), and callees with a `[Move]`
 /// parameter.
 fn triggers(program: &Program) -> std::collections::HashSet<String> {
     let mut names: std::collections::HashSet<String> = ["get".to_string()].into_iter().collect();
@@ -1343,19 +1449,19 @@ fn triggers(program: &Program) -> std::collections::HashSet<String> {
             names.insert(st.name.clone());
         }
         for m in &st.method_members {
-            if program.is_isolated(&m.ty) || m.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+            if program.is_isolated(&m.ty) || m.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
                 names.insert(m.name.clone());
             }
         }
         for constructor in &st.constructors {
-            if constructor.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+            if constructor.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
                 names.insert(st.name.clone());
                 names.insert(constructor.name.clone());
             }
         }
     }
     for f in &program.module.functions {
-        if program.is_isolated(&f.ty) || f.parameters.iter().any(|p| has_attribute(&p.attributes, SENDING_ATTRIBUTE)) {
+        if program.is_isolated(&f.ty) || f.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
             names.insert(f.name.clone());
         }
     }
@@ -1394,7 +1500,7 @@ fn mentions(function: &FunctionDef, names: &std::collections::HashSet<String>) -
 /// Whether the function or method with summary key `key` (a function's
 /// name, or `Struct.method`) returns a fresh value: one that shares nothing
 /// with its inputs, so it may move into a locked value or be passed to a
-/// `[Sending]` parameter. `None` when it has no body or returns a value of
+/// `[Move]` parameter. `None` when it has no body or returns a value of
 /// a thread-safe type (which crosses freely anyway). For the language
 /// server's hover.
 pub fn returns_fresh(module: &Module, key: &str) -> Option<bool> {
@@ -1407,39 +1513,101 @@ pub fn returns_fresh(module: &Module, key: &str) -> Option<bool> {
     program.summaries.get(key).map(Summary::fresh)
 }
 
-/// `[ReturnsOwned]` is an unchecked promise: only the runtime may make it.
-fn check_returns_owned(program: &Program) -> bool {
-    let mut runtime: Option<Option<std::path::PathBuf>> = None;
-    for (_, _, function) in bodies(program.module) {
-        let Some(attribute) = function.attributes.iter().find(|a| {
-            matches!(&a.body, pepper_parser::ast::Expression::SymbolRef { id, .. } if id == RETURNS_OWNED_ATTRIBUTE)
-        }) else {
-            continue;
-        };
-        let file = function.loc.file;
-        let directory = runtime.get_or_insert_with(|| {
-            let (sources, _, _) = pepper_files::runtime::discover();
-            sources.first().and_then(|s| s.parent()).and_then(|d| d.canonicalize().ok())
-        });
-        use pepper_parser::diagnostic::Sources;
-        let in_runtime = match (directory, program.module.sources.get(file)) {
-            (Some(directory), Some((name, _))) => {
-                std::path::Path::new(name).canonicalize().is_ok_and(|path| path.starts_with(directory.as_path()))
+/// Wrap each argument to a `[MoveSource]` parameter in `Expression::Move`, so
+/// the checks below treat `move(x)` as moving `x` and codegen hands its
+/// reference over.
+fn lower_moved_arguments(module: &mut Module) {
+    let moved: HashMap<String, Vec<bool>> = module
+        .functions
+        .iter()
+        .filter(|f| !f.is_generic_func && f.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_SOURCE_ATTRIBUTE)))
+        .map(|f| (f.name.clone(), f.parameters.iter().map(|p| has_attribute(&p.attributes, MOVE_SOURCE_ATTRIBUTE)).collect()))
+        .collect();
+    if moved.is_empty() {
+        return;
+    }
+    let lower = |function: &mut FunctionDef| {
+        if function.is_generic_func {
+            return;
+        }
+        crate::passes::walk_function(function, &mut |e: &mut Expression| {
+            let Expression::FunctionCall { function, args, loc } = e else { return };
+            let Some(flags) = moved.get(function.as_str()) else { return };
+            for (arg, _) in args.iter_mut().zip(flags).filter(|(_, moved)| **moved) {
+                if !matches!(arg, Expression::Move { .. }) {
+                    let value = std::mem::replace(arg, Expression::Move { value: Box::new(Expression::BoolLiteral(false)), loc: *loc });
+                    *arg = Expression::Move { value: Box::new(value), loc: *loc };
+                }
             }
-            // No runtime to compare with: nothing to protect.
-            (None, _) => true,
-            _ => false,
-        };
-        if !in_runtime {
-            crate::errors::report(
-                Diagnostic::error(format!("'[{}]' is only allowed in the runtime", RETURNS_OWNED_ATTRIBUTE))
-                    .at(Loc::new(file, attribute.span))
-                    .with_note("it promises the result shares nothing with any other value, which the compiler cannot check", None),
-            );
+        });
+    };
+    for function in module.functions.iter_mut() {
+        lower(function);
+    }
+    for st in module.structs.iter_mut().filter(|st| !(st.name == st.ty.name && st.ty.is_generic())) {
+        for function in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
+            lower(function);
+        }
+    }
+}
+
+/// A parameter takes `[Move]`, or `[MoveSource]` on a runtime free
+/// function's parameter only: elsewhere a hand-off would not show at the
+/// call. Any other parameter attribute is an error (`[Sending]` was
+/// renamed `[Move]`).
+fn check_parameter_attributes(program: &Program) -> bool {
+    let module = program.module;
+    let methods = module
+        .structs
+        .iter()
+        .flat_map(|st| st.method_members.iter().chain(st.constructors.iter()).chain(st.generic_methods.iter()));
+    let functions = module.functions.iter().map(|f| (f, true)).chain(methods.map(|m| (m, false)));
+    for (function, free) in functions {
+        for attribute in function.parameters.iter().flat_map(|p| p.attributes.iter()) {
+            let at = Loc::new(function.loc.file, attribute.span);
+            let name = match &attribute.body {
+                pepper_parser::ast::Expression::SymbolRef { id, .. } => id.as_str(),
+                _ => "",
+            };
+            if name == MOVE_ATTRIBUTE {
+                continue;
+            }
+            if name != MOVE_SOURCE_ATTRIBUTE {
+                let mut error = Diagnostic::error(format!("unknown parameter attribute '{}'", attribute_text(program, at)))
+                    .at(at)
+                    .with_note(format!("a parameter takes '[{MOVE_ATTRIBUTE}]'"), None);
+                if name == "Sending" {
+                    error = error.with_fix(Fix::replace(format!("Replace '[Sending]' with '[{MOVE_ATTRIBUTE}]'"), at, format!("[{MOVE_ATTRIBUTE}]")));
+                }
+                crate::errors::report(error);
+                return true;
+            }
+            let error = if !program.is_runtime_file(function.loc.file) {
+                Diagnostic::error(format!("'[{MOVE_SOURCE_ATTRIBUTE}]' is only allowed in the runtime"))
+                    .at(at)
+                    .with_note("take the value with '[Move]', and have callers pass 'move(x)'", None)
+            } else if !free {
+                Diagnostic::error(format!("'[{MOVE_SOURCE_ATTRIBUTE}]' is only supported on a free function's parameter")).at(at)
+            } else {
+                continue;
+            };
+            crate::errors::report(error);
             return true;
         }
     }
     false
+}
+
+/// The source text at `loc`, or `?` when it is not available.
+fn attribute_text(program: &Program, loc: Loc) -> String {
+    use pepper_parser::diagnostic::Sources;
+    program
+        .module
+        .sources
+        .get(loc.file)
+        .and_then(|(_, text)| text.get(loc.span.start..loc.span.end))
+        .unwrap_or("?")
+        .to_string()
 }
 
 /// A guard kept in a struct's field would hold its lock past any block.
@@ -1491,6 +1659,11 @@ fn check_function(program: &Program, owner: &Option<TypeName>, function: &Functi
         if let Some(error) = walk.error {
             return Some(error);
         }
+        if let Some(body) = &function.body
+            && let Err(error) = Moves::default().block(body)
+        {
+            return Some(error);
+        }
     }
     let mut checks = Checks { program, walk: Walk::new(program, Mode::Check, owner.clone()), exempt, error: None };
     checks.walk.function(&FunctionDef { body: None, ..function.clone() }, is_static);
@@ -1500,7 +1673,7 @@ fn check_function(program: &Program, owner: &Option<TypeName>, function: &Functi
     checks.error
 }
 
-/// The checks that look at single expressions: guard use, `[Sending]`
+/// The checks that look at single expressions: guard use, `[Move]`
 /// arguments and `ThreadLocal.get`.
 struct Checks<'p, 'a> {
     program: &'p Program<'a>,
@@ -1623,11 +1796,11 @@ impl Checks<'_, '_> {
         );
     }
 
-    /// Each argument to a `[Sending]` parameter must be disconnected.
+    /// Each argument to a `[Move]` parameter must be disconnected.
     fn sending(&mut self, callee: &Callee, args: &[Expression]) {
         let Callee::Known(_, function) = callee else { return };
         for (parameter, arg) in function.parameters.iter().zip(args) {
-            if self.error.is_some() || !has_attribute(&parameter.attributes, SENDING_ATTRIBUTE) {
+            if self.error.is_some() || !has_attribute(&parameter.attributes, MOVE_ATTRIBUTE) {
                 continue;
             }
             if self.disconnected(arg) {
@@ -1639,11 +1812,20 @@ impl Checks<'_, '_> {
                 parameter.name
             ))
             .at(arg.loc())
-            .with_note(format!("'{}' is declared [Sending] here", parameter.name), parameter.loc.known());
+            .with_note(format!("'{}' is declared [Move] here", parameter.name), parameter.loc.known());
             if let Some(blame) = self.blame(arg) {
                 diagnostic = diagnostic.with_note(format!("'{}' does not return a new value: this return shares its inputs", describe(arg)), blame.known());
             }
-            self.error = Some(diagnostic.with_note(format!("pass a new value, such as 'copy({what})'"), None));
+            // A local can hand its value over instead of copying it; the
+            // language server offers both as quick fixes.
+            let diagnostic = match arg {
+                Expression::SymbolRef { id, loc, .. } if self.walk.local(id).is_some() => diagnostic
+                    .with_note(format!("hand it over with 'move({what})', or pass a new value, such as 'copy({what})'"), None)
+                    .with_fix(Fix::replace(format!("Hand '{id}' over with 'move({id})'"), *loc, format!("move({id})")))
+                    .with_fix(Fix::replace(format!("Pass a copy with 'copy({id})'"), *loc, format!("copy({id})"))),
+                _ => diagnostic.with_note(format!("pass a new value, such as 'copy({what})'"), None),
+            };
+            self.error = Some(diagnostic);
         }
     }
 
@@ -1665,6 +1847,8 @@ impl Checks<'_, '_> {
         }
         match expr {
             Expression::StringLiteral { .. } | Expression::PointerLiteral | Expression::Default(_) | Expression::Allocate(_) => true,
+            // The region walk checks what may be moved.
+            Expression::Move { .. } => true,
             Expression::Cast { expr, .. } | Expression::ToTrait { value: expr, .. } => self.disconnected(expr),
             Expression::Ternary { true_expr, false_expr, .. } => self.disconnected(true_expr) && self.disconnected(false_expr),
             Expression::FunctionCall { function, args, .. } => {
@@ -1751,7 +1935,7 @@ fn children(expr: &Expression) -> Vec<&Expression> {
             children.extend(test.patterns.iter().filter_map(|p| p.literal.as_ref()));
             children
         }
-        Expression::Destructure { value, .. } => vec![value],
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => vec![value],
         Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => vec![a, b],
         Expression::AtomicCmpXchg(_, a, b, c) => vec![a, b, c],
         Expression::FunctionCall { args, .. } => args.iter().collect(),
@@ -1760,4 +1944,149 @@ fn children(expr: &Expression) -> Vec<&Expression> {
         Expression::CallPointer { pointer, args } => std::iter::once(pointer.as_ref()).chain(args.iter()).collect(),
         Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => vec![value],
     }
+}
+
+/// Use after `move`: a forward walk over a function's statements that
+/// tracks the locals moved on some path and not assigned since.
+#[derive(Default, Clone)]
+struct Moves {
+    moved: HashMap<String, Loc>,
+}
+
+/// How a statement or block ends every path through it, if it does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Exit {
+    /// `return` or `break`: nothing after it in the loop runs again.
+    Leave,
+    /// `continue`: the loop runs again.
+    Continue,
+}
+
+impl Moves {
+    fn block(&mut self, block: &Block) -> Result<Option<Exit>, Diagnostic> {
+        let declared_before: Vec<String> = self.moved.keys().cloned().collect();
+        let mut local: Vec<String> = vec![];
+        for statement in &block.items {
+            if let Some(exit) = self.statement(statement, &mut local)? {
+                return Ok(Some(exit));
+            }
+        }
+        // A local declared in the block goes out of scope with it.
+        self.moved.retain(|name, _| declared_before.contains(name) || !local.contains(name));
+        Ok(None)
+    }
+
+    fn statement(&mut self, statement: &Statement, local: &mut Vec<String>) -> Result<Option<Exit>, Diagnostic> {
+        match statement {
+            Statement::Expression(e) => self.expression(e)?,
+            Statement::Block(inner) => return self.block(inner),
+            Statement::Declaration(Declaration::Variable(var)) => {
+                if let Some(d) = &var.default {
+                    self.expression(d)?;
+                }
+                // A new variable of the name starts with a value.
+                self.moved.remove(&var.name);
+                local.push(var.name.clone());
+            }
+            Statement::Declaration(_) => {}
+            Statement::Branch(branch) => {
+                self.expression(&branch.condition)?;
+                let mut then = self.clone();
+                let then_exit = then.block(&branch.if_block)?;
+                let mut other = self.clone();
+                let other_exit = match &branch.else_block {
+                    Some(b) => other.block(b)?,
+                    None => None,
+                };
+                let mut merged = HashMap::new();
+                if then_exit.is_none() {
+                    merged.extend(then.moved);
+                }
+                if other_exit.is_none() {
+                    merged.extend(other.moved);
+                }
+                self.moved = merged;
+                return Ok(match (then_exit, other_exit) {
+                    (Some(Exit::Leave), Some(Exit::Leave)) => Some(Exit::Leave),
+                    (Some(_), Some(_)) => Some(Exit::Continue),
+                    _ => None,
+                });
+            }
+            Statement::While(wh) => {
+                // Again after the first pass, unless the body always leaves:
+                // a move(late) in the body reaches its next iteration.
+                for _ in 0..2 {
+                    self.expression(&wh.condition)?;
+                    let mut body = self.clone();
+                    let exit = body.block(&wh.block)?;
+                    self.moved.extend(body.moved);
+                    if exit == Some(Exit::Leave) {
+                        break;
+                    }
+                }
+            }
+            Statement::Return(ret) => {
+                if let Some(e) = &ret.expr {
+                    self.expression(e)?;
+                }
+                return Ok(Some(Exit::Leave));
+            }
+            Statement::LoopBreak(b) => {
+                return Ok(Some(if b.kind == LoopBreakKind::Continue { Exit::Continue } else { Exit::Leave }));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Uses in `expr` of moved locals are errors; then its moves take
+    /// effect, and a plain assignment gives a local its value back.
+    fn expression(&mut self, expr: &Expression) -> Result<(), Diagnostic> {
+        let mut moves: Vec<(String, Loc)> = vec![];
+        let mut assigned: Vec<String> = vec![];
+        self.visit(expr, &mut moves, &mut assigned)?;
+        for name in assigned {
+            self.moved.remove(&name);
+        }
+        for (name, loc) in moves {
+            self.moved.insert(name, loc);
+        }
+        Ok(())
+    }
+
+    fn visit(&self, expr: &Expression, moves: &mut Vec<(String, Loc)>, assigned: &mut Vec<String>) -> Result<(), Diagnostic> {
+        match expr {
+            Expression::Move { value, loc } => {
+                if let Expression::SymbolRef { id, .. } = value.as_ref() {
+                    if let Some(earlier) = self.moved.get(id) {
+                        return Err(use_after_move(id, value.loc(), *earlier));
+                    }
+                    moves.push((id.clone(), *loc));
+                    return Ok(());
+                }
+            }
+            Expression::SymbolRef { id, loc, .. } => {
+                if let Some(earlier) = self.moved.get(id) {
+                    return Err(use_after_move(id, *loc, *earlier));
+                }
+            }
+            Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. } if matches!(lhs.as_ref(), Expression::SymbolRef { .. }) => {
+                self.visit(rhs, moves, assigned)?;
+                if let Expression::SymbolRef { id, .. } = lhs.as_ref() {
+                    assigned.push(id.clone());
+                }
+                return Ok(());
+            }
+            _ => {}
+        }
+        for child in children(expr) {
+            self.visit(child, moves, assigned)?;
+        }
+        Ok(())
+    }
+}
+
+fn use_after_move(name: &str, at: Loc, moved: Loc) -> Diagnostic {
+    Diagnostic::error(format!("'{name}' is used after its value was moved"))
+        .at(at)
+        .with_note(format!("'{name}' was moved here; assign it a new value before using it again"), moved.known())
 }

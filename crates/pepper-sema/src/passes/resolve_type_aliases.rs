@@ -204,7 +204,8 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         Expression::MemberRef { lhs, .. }
         | Expression::ForIterator(lhs)
         | Expression::WithEntered(lhs)
-        | Expression::Destructure { value: lhs, .. } => subst_expr(lhs, aliases, values),
+        | Expression::Destructure { value: lhs, .. }
+        | Expression::Move { value: lhs, .. } => subst_expr(lhs, aliases, values),
         Expression::CaseValue(value) => subst_expr(&mut value.subject, aliases, values),
         Expression::MatchArm(test) => {
             subst_expr(&mut test.subject, aliases, values);

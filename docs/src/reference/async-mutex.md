@@ -70,14 +70,14 @@ program, so a Mutex is never left "poisoned".
 #### Mutex()
 
 ```pepper
-construct([Sending] T value)
+construct([Move] T value)
 ```
 
 Creates an unlocked Mutex that owns `value`.
 
-`value` must be a new value, such as a constructor call or `copy(x)`:
-nothing outside the Mutex may reference it. The Mutex stores a copy of
-it (`copy`), so the argument's own references never reach the Mutex.
+`value` must be a new value, such as a constructor call, `copy(x)` or
+`move(x)`: nothing outside the Mutex may reference it. The caller hands
+its reference over, so nothing is copied.
 
 **Parameters**
 - `value` — the value to protect; a new value, which the compiler checks
@@ -146,14 +146,14 @@ calling thread already holding the lock counts as busy.
 #### replace
 
 ```pepper
-[ReturnsOwned] T replace([Sending] T value)
+T replace([Move] T value)
 ```
 
 Replaces the whole value and returns the one the Mutex held, which the
 caller then owns outright: nothing else references it any more.
 
 Waits for the lock like `lock()`. `value` must be a new value, as for
-the constructor; the Mutex stores a copy of it.
+the constructor, and is handed over without a copy.
 
 **Parameters**
 - `value` — the new value; a new value, which the compiler checks

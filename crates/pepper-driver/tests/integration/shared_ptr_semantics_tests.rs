@@ -804,6 +804,87 @@ test(): int {{
 }
 
 #[test]
+fn census_send_hands_the_reference_over() {
+    // `send` is `[Move]`: the value queued and the one `receive` hands
+    // back are the object sent, holding only the receiver's count.
+    let (code, delta) = compile_jit_census(
+        r#"
+import async;
+
+struct Note {
+    var id: int;
+    construct(int id) {
+        this.id = id;
+    }
+}
+
+test(): int {
+    var c = async.Channel<Note>();
+    var first = Note(1);
+    c.send(move(first));
+    c.send(Note(2));
+    var kept = Note(3);
+    c.send(copy(kept));
+    var one = c.receive().value();
+    if (one.id != 1 or __refcount<Note>(one) != 1) { return 1; }
+    var two = c.receive().value();
+    if (two.id != 2 or __refcount<Note>(two) != 1) { return 2; }
+    var three = c.receive().value();
+    if (three.id != 3 or three === kept or __refcount<Note>(three) != 1) { return 3; }
+    if (__refcount<Note>(kept) != 1) { return 4; }
+    var bounded = async.Channel<Note>(1);
+    var fits = Note(4);
+    if (!bounded.try_send(move(fits))) { return 5; }
+    var spare = Note(5);
+    if (bounded.try_send(move(spare))) { return 6; }
+    bounded.close();
+    var late = Note(6);
+    if (bounded.send(move(late))) { return 7; }
+    return 0;
+}"#,
+    );
+    assert_eq!(code, 0, "each value arrives holding only the receiver's count");
+    assert_eq!(delta, 0, "sent, refused and dropped values must net zero");
+}
+
+#[test]
+fn census_channel_of_trait_values() {
+    // `send` no longer copies, so a channel carries trait values too.
+    let (code, delta) = compile_jit_census(
+        r#"
+import async;
+
+trait Shape {
+    area(): int;
+}
+
+struct Square {
+    var side: int;
+    construct(int side) {
+        this.side = side;
+    }
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+test(): int {
+    var shapes = async.Channel<Shape>();
+    shapes.send(Square(3));
+    Shape s = Square(4);
+    shapes.send(move(s));
+    shapes.send(Square(5));
+    var total = shapes.receive().value().area() + shapes.receive().value().area();
+    if (total != 25) { return 1; }
+    return 0;
+}"#,
+    );
+    assert_eq!(code, 0);
+    assert_eq!(delta, 0, "trait values sent, received and left queued must net zero");
+}
+
+#[test]
 fn census_once_and_lazy() {
     let (code, delta) = compile_jit_census(&format!(
         r#"{LABEL}
@@ -863,6 +944,40 @@ test(): int {
     );
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "copying a graph must net zero once both are dropped");
+}
+
+#[test]
+fn census_sending_hands_the_reference_over() {
+    // `[Move]` takes the caller's reference: the value moved into the
+    // Mutex and the one `replace` hands back each hold exactly one count.
+    let (code, delta) = compile_jit_census(
+        r#"
+import async;
+
+struct Box {
+    var id: int;
+    construct(int id) {
+        this.id = id;
+    }
+}
+
+test(): int {
+    var first = Box(1);
+    var m = async.Mutex<Box>(move(first));
+    var old = m.replace(Box(2));
+    if (old.id != 1 or __refcount<Box>(old) != 1) { return 1; }
+    var next = Box(3);
+    var second = m.replace(move(next));
+    if (second.id != 2 or __refcount<Box>(second) != 1) { return 2; }
+    var kept = Box(4);
+    var third = m.replace(copy(kept));
+    if (third.id != 3 or __refcount<Box>(third) != 1) { return 3; }
+    if (__refcount<Box>(kept) != 1) { return 4; }
+    return 0;
+}"#,
+    );
+    assert_eq!(code, 0, "each value leaves the Mutex holding only the caller's count");
+    assert_eq!(delta, 0, "moving into and out of a Mutex must net zero");
 }
 
 #[test]

@@ -15,9 +15,10 @@
 ## Only thread-safe values can be shared between threads: numbers, `shared`
 ## function values (such as a thread's body), and `[Shared]` structs such as
 ## `Atomic<T>`, `Thread`, `ThreadLocal<T>`, `Channel<T>` and `Mutex<T>`. Any
-## other value crosses threads as a copy (`Channel.send` copies what it sends
-## with `copy`) or stays inside a `Mutex`, whose `with` blocks the compiler
-## keeps apart from the rest of the program. `Lazy<T>` holds thread-safe
+## other value crosses threads only as a new value that nothing else
+## references (`Channel.send(move(x))`, or `send(copy(x))`), or stays inside
+## a `Mutex`, whose `with` blocks the compiler keeps apart from the rest of
+## the program. `Lazy<T>` holds thread-safe
 ## values only. See the language guide's Threads chapter.
 ##
 ## @example

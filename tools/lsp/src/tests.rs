@@ -337,6 +337,44 @@ fn deprecated_declarations_offer_quick_fixes() {
     assert_eq!(action.title, "Replace 'dup' with 'twice'");
 }
 
+const SEND_NAMED: &str = r#"import async;
+
+const lines = async.Channel<String>();
+
+main(): int {
+    var line = "hello";
+    lines.send(line);
+    return 0;
+}
+"#;
+
+#[test]
+fn sending_a_variable_offers_move_and_copy() {
+    let (uri, text, program) = load("send_named", SEND_NAMED, "main.pep");
+    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
+    assert!(error.message.starts_with("'line' is not a new value"), "{}", error.message);
+    let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(6, 17), Position::new(6, 17)));
+    let titles: Vec<String> = actions
+        .iter()
+        .map(|a| match a {
+            CodeActionOrCommand::CodeAction(action) => action.title.clone(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(titles, ["Hand 'line' over with 'move(line)'", "Pass a copy with 'copy(line)'"]);
+    let replacements: Vec<String> = actions
+        .iter()
+        .map(|a| {
+            let CodeActionOrCommand::CodeAction(action) = a else { unreachable!() };
+            let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+            assert_eq!(edits[0].range, Range::new(Position::new(6, 15), Position::new(6, 19)));
+            edits[0].new_text.clone()
+        })
+        .collect();
+    assert_eq!(replacements, ["move(line)", "copy(line)"]);
+}
+
 const NOT_COPYABLE: &str = r#"struct Handle {
     int fd;
     destruct {

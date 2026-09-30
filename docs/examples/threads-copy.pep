@@ -1,8 +1,8 @@
 import async;
 
 # A plain struct: no destructor and no raw pointer, so `copy` copies it field
-# by field. Its Strings and Array are not thread-safe, but a Channel copies
-# every value it is sent.
+# by field. Its Strings and Array are not thread-safe, but a Channel takes
+# only new values, and a copy is one.
 struct Order {
     String customer;
     Array<String> items;
@@ -42,14 +42,18 @@ main(): int {
     a.next = __null;
     pair.next = __null;
 
-    # send() copies, so the order can change after it is sent.
+    # send() takes a new value: send a copy to keep changing the order.
     var worker = async.Thread.spawn(count_letters);
     var order = Order("grace");
     order.items.append("coffee");
-    orders.send(order);
+    orders.send(copy(order));
     order.items.append("biscuits");
+    # Or hand the value itself over with `move`; `last` is null afterwards.
+    var last = Order("hopper");
+    last.items.append("tea");
+    orders.send(move(last));
     orders.close();
     worker.join();
-    assert(letters.load() == 6, "the worker saw only what was sent");
+    assert(letters.load() == 9, "the worker saw only what was sent");
     return 0;
 }

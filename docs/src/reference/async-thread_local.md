@@ -89,7 +89,7 @@ local.enter())`.
 #### set
 
 ```pepper
-void set([Sending] T value)
+void set([Move] T value)
 ```
 
 Stores `value` as the calling thread's value, replacing (and, for a

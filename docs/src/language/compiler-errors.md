@@ -127,6 +127,8 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
 | `io.File.write_string(String)` | `io.File.write_all(String)` |
 | `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
+| `Channel.send(x)`, `try_send(x)` with a variable something else references (now an error: `send` no longer copies) | `send(move(x))`, or `send(copy(x))` to keep using `x` |
+| `[Sending]` parameter attribute (now an error) | `[Move]` |
 
 ## Errors in the editor
 

@@ -682,19 +682,19 @@ fn cannot_copy_shows_each_field_on_the_way() {
 
 #[test]
 fn cannot_copy_a_runtime_type_that_forbids_it() {
-    // Through an Array in a Channel, whose `send` copies: at the Channel,
-    // and the runtime's reason instead of a skeleton.
+    // Through an Array: at the copy, and the runtime's reason instead of a
+    // skeleton.
     let error = error_of(
         "cannot_copy_file",
-        "import io;\nimport async;\n\nstruct Log {\n    io.File out;\n}\n\nmain(): int {\n    var lines = async.Channel<Array<Log>>();\n    return 0;\n}\n",
+        "import io;\n\nstruct Log {\n    io.File out;\n}\n\nmain(): int {\n    var lines = Array<Log>();\n    var copied = copy(lines);\n    return 0;\n}\n",
     );
     assert!(
         error.starts_with(
-            "main.pep:9:17: error: cannot copy 'Array<Log>' because it contains 'File', which cannot be copied\n\
-             \x20   9 |     var lines = async.Channel<Array<Log>>();\n\
-             \x20     |                 ^~~~~~~~~~~~~~~~~~~~~~~~~\n\
+            "main.pep:9:18: error: cannot copy 'Array<Log>' because it contains 'File', which cannot be copied\n\
+             \x20   9 |     var copied = copy(lines);\n\
+             \x20     |                  ^~~~\n\
              note: 'Array<Log>' copies its values of type 'Log'\n\
-             main.pep:5:5: note: 'Log' reaches it through field 'out'\n"
+             main.pep:4:5: note: 'Log' reaches it through field 'out'\n"
         ),
         "{error}"
     );
@@ -885,7 +885,7 @@ fn each_tuple_element_has_its_own_fresh_bit() {
 #[test]
 fn raw_memory_behind_a_shared_struct_is_not_fresh() {
     // A reference read through a `[Shared]` struct's raw field may be
-    // referenced elsewhere; a channel's `receive` is `[ReturnsOwned]`.
+    // referenced elsewhere; a channel's `receive` moves its value out of the buffer.
     let program = |taken: &str| {
         format!(
             "const jobs = async.Channel<String>();\n\n[Shared]\nstruct Box {{\n    const _slot: __ptr<void>;\n    construct() {{\n        _slot = _pep_malloc(8);\n    }}\n    String take() {{\n        __ptr<String> typed = _slot;\n        return typed[0];\n    }}\n}}\n\n\
@@ -904,13 +904,89 @@ fn raw_memory_behind_a_shared_struct_is_not_fresh() {
 }
 
 #[test]
-fn returns_owned_is_only_for_the_runtime() {
+fn move_of_an_aliased_local_is_an_error() {
     assert_eq!(
-        error_of("returns_owned_user", "[ReturnsOwned]\nmake(): String {\n    return \"x\";\n}\n\nmain(): int {\n    return 0;\n}\n"),
-        "main.pep:1:1: error: '[ReturnsOwned]' is only allowed in the runtime\n\
-         \x20   1 | [ReturnsOwned]\n\
-         \x20     | ^~~~~~~~~~~~~~\n\
-         note: it promises the result shares nothing with any other value, which the compiler cannot check"
+        confinement_error(
+            "move_alias",
+            "main(): int {\n    var a = Array<String>();\n    var b = a;\n    names.replace(move(a));\n    return 0;\n}\n"
+        ),
+        "main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value\n\
+         \x20   8 |     names.replace(move(a));\n\
+         \x20     |                        ^\n\
+         note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead"
+    );
+}
+
+#[test]
+fn move_of_a_parameter_is_an_error() {
+    assert_eq!(
+        confinement_error(
+            "move_parameter",
+            "give(Array<String> s) {\n    names.replace(move(s));\n}\n\nmain(): int {\n    give(Array<String>());\n    return 0;\n}\n"
+        ),
+        "main.pep:6:24: error: 's' cannot be moved: its value shares objects with the rest of the program\n\
+         \x20   6 |     names.replace(move(s));\n\
+         \x20     |                        ^\n\
+         note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead"
+    );
+}
+
+#[test]
+fn move_of_a_field_is_an_error() {
+    assert_eq!(
+        confinement_error(
+            "move_field",
+            "struct Holder {\n    var s: Array<String>;\n    construct() {\n        s = Array<String>();\n    }\n}\n\nmain(): int {\n    var h = Holder();\n    names.replace(move(h.s));\n    return 0;\n}\n"
+        ),
+        "main.pep:14:26: error: 'h.s' cannot be moved: only a local variable or parameter can hand over its value\n\
+         \x20  14 |     names.replace(move(h.s));\n\
+         \x20     |                          ^"
+    );
+}
+
+#[test]
+fn use_after_move_is_an_error() {
+    assert_eq!(
+        confinement_error(
+            "move_use_after",
+            "main(): int {\n    var a = Array<String>();\n    names.replace(move(a));\n    return a.count();\n}\n"
+        ),
+        "main.pep:8:12: error: 'a' is used after its value was moved\n\
+         \x20   8 |     return a.count();\n\
+         \x20     |            ^\n\
+         main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again\n\
+         \x20   7 |     names.replace(move(a));\n\
+         \x20     |                   ^~~~"
+    );
+}
+
+#[test]
+fn move_in_a_loop_is_a_use_after_move() {
+    assert_eq!(
+        confinement_error(
+            "move_in_loop",
+            "main(): int {\n    var a = Array<String>();\n    while (true) {\n        names.replace(move(a));\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:8:28: error: 'a' is used after its value was moved\n\
+         \x20   8 |         names.replace(move(a));\n\
+         \x20     |                            ^\n\
+         main.pep:8:23: note: 'a' was moved here; assign it a new value before using it again\n\
+         \x20   8 |         names.replace(move(a));\n\
+         \x20     |                       ^~~~"
+    );
+}
+
+#[test]
+fn move_out_of_raw_memory_is_only_for_the_runtime() {
+    assert_eq!(
+        confinement_error(
+            "move_raw",
+            "main(): int {\n    __ptr<String> p = _pep_malloc(8);\n    var s = move(p[0]);\n    return 0;\n}\n"
+        ),
+        "main.pep:7:18: error: only the runtime may move a value out of raw memory\n\
+         \x20   7 |     var s = move(p[0]);\n\
+         \x20     |                  ^~~~\n\
+         note: it promises that the slot held the only reference, which the compiler cannot check"
     );
 }
 
@@ -939,7 +1015,40 @@ fn a_mutex_cannot_protect_a_number() {
 }
 
 #[test]
-fn a_sending_parameter_takes_a_new_value() {
+fn move_source_is_only_for_the_runtime() {
+    assert_eq!(
+        error_of("move_source_user", "take([MoveSource] String s): String {\n    return s;\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:6: error: '[MoveSource]' is only allowed in the runtime\n\
+         \x20   1 | take([MoveSource] String s): String {\n\
+         \x20     |      ^~~~~~~~~~~~\n\
+         note: take the value with '[Move]', and have callers pass 'move(x)'"
+    );
+}
+
+#[test]
+fn sending_was_renamed_move() {
+    assert_eq!(
+        error_of("sending_renamed", "keep([Sending] String s) {\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:6: error: unknown parameter attribute '[Sending]'\n\
+         \x20   1 | keep([Sending] String s) {\n\
+         \x20     |      ^~~~~~~~~\n\
+         \x20     |      [Move]\n\
+         note: a parameter takes '[Move]'"
+    );
+}
+
+#[test]
+fn a_moved_variable_may_move_into_a_locked_value() {
+    // `move(x)` is a new value, so it may join the locked one even when `x`
+    // was declared outside the block.
+    compile_ok(
+        "move_into_lock",
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var line = \"x\";\n    with (var list = names.lock()) {\n        list.append(move(line));\n    }\n    return 0;\n}\n",
+    );
+}
+
+#[test]
+fn a_move_parameter_takes_a_new_value() {
     let error = error_of(
         "sending_named",
         "import async;\n\nmain(): int {\n    var list = Array<String>();\n    var m = async.Mutex<Array<String>>(list);\n    return 0;\n}\n",
@@ -952,8 +1061,8 @@ fn a_sending_parameter_takes_a_new_value() {
         ),
         "{error}"
     );
-    assert!(error.contains("note: 'value' is declared [Sending] here"), "{error}");
-    assert!(error.ends_with("note: pass a new value, such as 'copy(list)'"), "{error}");
+    assert!(error.contains("note: 'value' is declared [Move] here"), "{error}");
+    assert!(error.ends_with("note: hand it over with 'move(list)', or pass a new value, such as 'copy(list)'"), "{error}");
     // A call that returns one of its inputs is not new; the note points at
     // the return that shares it.
     let blamed = error_of(
@@ -961,6 +1070,44 @@ fn a_sending_parameter_takes_a_new_value() {
         "import async;\n\nsame(a: Array<String>): Array<String> {\n    return a;\n}\n\nmain(): int {\n    var list = Array<String>();\n    var m = async.Mutex<Array<String>>(same(list));\n    return 0;\n}\n",
     );
     assert!(blamed.contains("main.pep:4:12: note: 'same(list)' does not return a new value: this return shares its inputs"), "{blamed}");
+}
+
+#[test]
+fn channel_send_takes_a_new_value() {
+    let error = error_of(
+        "send_named",
+        "import async;\n\nconst lines = async.Channel<String>();\n\nmain(): int {\n    var line = \"hello\";\n    lines.send(line);\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:7:16: error: 'line' is not a new value, but parameter 'value' takes a value that nothing else references\n\
+             \x20   7 |     lines.send(line);\n\
+             \x20     |                ^~~~\n\
+             \x20     |                move(line)\n"
+        ),
+        "{error}"
+    );
+    assert!(error.ends_with("note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'"), "{error}");
+}
+
+/// Compile `source` as `main.pep`, panicking with the error if it fails.
+fn compile_ok(test: &str, source: &str) {
+    let dir = std::env::temp_dir().join(format!("pepper_diagnostic_{}_{}", test, std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.pep");
+    std::fs::write(&main, source).unwrap();
+    std::env::set_current_dir(repo_root()).unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", main.to_str().unwrap()]);
+    pepper_driver::compiler::compile(&options, "main").unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn a_channel_carries_values_that_cannot_be_copied() {
+    // `send` no longer copies, so the value type need not be copyable.
+    compile_ok(
+        "channel_of_files",
+        "import io;\nimport async;\n\nstruct Log {\n    io.File out;\n}\n\nmain(): int {\n    var lines = async.Channel<Array<Log>>();\n    lines.send(Array<Log>());\n    return 0;\n}\n",
+    );
 }
 
 #[test]

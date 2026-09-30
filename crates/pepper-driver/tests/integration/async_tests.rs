@@ -36,6 +36,11 @@ fn write_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
 
 /// Compile, link and run `source`; panic with its output unless it exits 0.
 fn assert_runs(name: &str, source: &str) -> String {
+    assert_runs_with(name, source, &[])
+}
+
+/// [`assert_runs`] with extra environment variables for the program.
+fn assert_runs_with(name: &str, source: &str, env: &[(&str, &str)]) -> String {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     let (src, dir) = write_source(name, source);
@@ -50,7 +55,7 @@ fn assert_runs(name: &str, source: &str) -> String {
     ]);
     let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
     assert_eq!(code, 0);
-    let output = Command::new(&exe).output().expect("spawn");
+    let output = Command::new(&exe).envs(env.iter().copied()).output().expect("spawn");
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     let code = output.status.code().unwrap_or(-1);
@@ -422,6 +427,11 @@ fn exported_globals_are_shared() {
 /// Compile, link and run `source`, which must panic: a nonzero exit whose
 /// last line of stdout (the panic message) contains `message`.
 fn assert_panics(name: &str, source: &str, message: &str) {
+    assert_panics_with(name, source, message, &[])
+}
+
+/// [`assert_panics`] with extra environment variables for the program.
+fn assert_panics_with(name: &str, source: &str, message: &str, env: &[(&str, &str)]) {
     std::env::set_current_dir(repo_root()).unwrap();
     let (src, dir) = write_source(name, source);
     let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
@@ -435,7 +445,7 @@ fn assert_panics(name: &str, source: &str, message: &str) {
     ]);
     let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
     assert_eq!(code, 0);
-    let output = Command::new(&exe).output().expect("spawn");
+    let output = Command::new(&exe).envs(env.iter().copied()).output().expect("spawn");
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     assert!(!output.status.success(), "{name} was expected to panic\nstdout:\n{stdout}");
     let last = stdout.lines().last().unwrap_or("");
@@ -989,7 +999,7 @@ produce() {
         var order = Order("ada");
         order.items.append("tea");
         order.items.append("cake");
-        orders.send(order);
+        orders.send(copy(order));
         # Changing the original after sending does not reach the receiver.
         order.items.append("extra");
         order.customer.append("!");
@@ -1029,9 +1039,12 @@ exchange() {
 
 main(): int {
     var line = "hello";
-    first.send(line);
+    first.send(copy(line));
     line.append(" world");
-    assert(first.receive().value() == "hello", "a String is sent as a copy");
+    assert(first.receive().value() == "hello", "a copy is independent");
+    var word = "moved";
+    first.send(move(word));
+    assert(first.receive().value() == "moved", "the moved value arrives");
 
     # Warm up the main thread's lazily made Thread (join() asks for it).
     async.Thread.current();
@@ -1043,7 +1056,7 @@ main(): int {
 "#;
 
 #[test]
-fn channels_copy_values_that_are_not_thread_safe() {
+fn channels_send_new_values_that_are_not_thread_safe() {
     assert_runs("channel_copy", CHANNEL_COPY_PROGRAM);
 }
 
@@ -1140,6 +1153,46 @@ main(): int {
 #[test]
 fn mutex_of_values_that_are_not_thread_safe() {
     assert_runs("mutex_confined", MUTEX_CONFINED_PROGRAM);
+}
+
+/// `PEP_CHECK_SYNC=1` walks the locked value at every unlock: a program
+/// the compiler accepts passes it.
+#[test]
+fn check_sync_passes_a_confined_program() {
+    assert_runs_with("check_sync_confined", MUTEX_CONFINED_PROGRAM, &[("PEP_CHECK_SYNC", "1")]);
+}
+
+/// A reference into the locked value kept in raw memory, which the
+/// compiler cannot follow, fails the census at unlock.
+const CHECK_SYNC_LEAK_PROGRAM: &str = r#"
+import async;
+
+struct Box {
+    var items: Array<String>;
+    construct() {
+        items = Array<String>();
+    }
+}
+
+main(): int {
+    var m = async.Mutex<Box>(Box());
+    with (var b = m.lock()) {
+        __ptr<Array<String>> cell = _pep_malloc(8);
+        cell[0] = b.items;
+    }
+    return 0;
+}
+"#;
+
+#[test]
+fn check_sync_catches_a_reference_kept_in_raw_memory() {
+    assert_runs("check_sync_off", CHECK_SYNC_LEAK_PROGRAM);
+    assert_panics_with(
+        "check_sync_leak",
+        CHECK_SYNC_LEAK_PROGRAM,
+        "PEP_CHECK_SYNC: an object in the value locked by a 'Mutex<Box>' is still referenced from outside it",
+        &[("PEP_CHECK_SYNC", "1")],
+    );
 }
 
 #[test]

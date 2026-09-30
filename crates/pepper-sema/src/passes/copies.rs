@@ -26,14 +26,19 @@
 //! The copies a program asks for are checked through everything they
 //! reach: each `copy<T>(x)` call, and each `copies.copy<T>(x)` outside a
 //! `Copyable` implementation. The error is reported at the code that asked
-//! (a `copy(x)` call, or a `Channel<T>`, whose `send` copies), with a note
-//! for each field on the way to the type that blocks it. Every struct method
+//! (a `copy(x)` call), with a note for each field on the way to the type
+//! that blocks it. Every struct method
 //! is compiled, so a `Copyable` implementation (`Array<T>.copy`) may hold a
 //! `__copy<X>` that nothing asks for; one that cannot copy lowers to a call
 //! of `_pep_copy_failed<X>`, which panics.
+//!
+//! `__census<T>(slot)` (in `MutexGuard.exit`) lowers here too: to
+//! `_pep_check_sync<T>(slot, "Mutex<T>")`, which copies the locked value to
+//! count the references inside it when `PEP_CHECK_SYNC` is set, for a `T`
+//! that can be copied; to nothing for any other `T`.
 
 use crate::model::*;
-use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in, use_site};
+use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in};
 use crate::passes::gather_generics::parse_type_string;
 use crate::type_name::TypeName;
 use pepper_parser::diagnostic::{Edit, Fix, Sources};
@@ -41,6 +46,13 @@ use std::collections::HashSet;
 
 /// The intrinsic `Copies.copy<T>` lowers to.
 const COPY_INTRINSIC: &str = "__copy";
+
+/// The intrinsic `MutexGuard.exit` calls before it unlocks: a
+/// `PEP_CHECK_SYNC` census of the locked value, done by copying it.
+const CENSUS_INTRINSIC: &str = "__census";
+
+/// The runtime function a census of a copyable `T` lowers to.
+const CENSUS_FUNCTION: &str = "_pep_check_sync";
 
 /// `[NotCopyable("why")]`: a struct that must never be copied, such as one
 /// owning an operating-system handle. The message says why and what to do
@@ -438,12 +450,13 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             return false;
         }
     }
+    let censuses_added = lower_censuses(module, &safe);
     let mut calls: Vec<(TypeName, Loc)> = vec![];
     for function in compiled_functions(module) {
         collect_calls(function, &mut calls);
     }
     if calls.is_empty() {
-        return false;
+        return censuses_added;
     }
     // What each `__copy<T>` becomes: the value, a `_copy_object<T>` call, or
     // a panic.
@@ -497,7 +510,58 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             };
         });
     }
-    added || lowered.iter().any(|(_, l)| matches!(l, Lowering::Fail(_)))
+    added || censuses_added || lowered.iter().any(|(_, l)| matches!(l, Lowering::Fail(_)))
+}
+
+/// The `T` of a `__census<T>(slot)` call.
+fn census_intrinsic(expr: &Expression) -> Option<TypeName> {
+    let Expression::FunctionCall { function, args, .. } = expr else { return None };
+    if args.len() != 1 || function.split('<').next() != Some(CENSUS_INTRINSIC) {
+        return None;
+    }
+    parse_type_string(function).sub_types.into_iter().next()
+}
+
+/// Lower every concrete `__census<T>(slot)`: to a `_pep_check_sync<T>` call
+/// when a `T` can be copied, and to the slot alone (which does nothing) when
+/// `T` is thread-safe, so nothing outside can share it, or cannot be copied.
+/// Returns whether it added a call to specialize.
+fn lower_censuses(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
+    let mut types: Vec<TypeName> = vec![];
+    for function in compiled_functions(module) {
+        crate::passes::walk_function(function, &mut |e: &mut Expression| {
+            if let Some(ty) = census_intrinsic(e)
+                && !types.contains(&ty)
+            {
+                types.push(ty);
+            }
+        });
+    }
+    let checked: Vec<(TypeName, bool)> = types
+        .into_iter()
+        .map(|ty| {
+            let can = !matches!(plan(module, safe, &ty), Plan::Same) && first_blocker(module, safe, &ty).is_none();
+            (ty, can)
+        })
+        .collect();
+    let mut added = false;
+    for function in compiled_functions(module) {
+        crate::passes::walk_function(function, &mut |e: &mut Expression| {
+            let Some(ty) = census_intrinsic(e) else { return };
+            let Some((_, can)) = checked.iter().find(|(t, _)| *t == ty) else { return };
+            let Expression::FunctionCall { args, loc, .. } = e else { return };
+            let slot = args.pop().unwrap();
+            let loc = *loc;
+            *e = if *can {
+                added = true;
+                let locked = Expression::StringLiteral { value: format!("Mutex<{}>", ty.display()), is_raw: true, loc: Loc::NONE };
+                Expression::FunctionCall { function: format!("{CENSUS_FUNCTION}<{ty}>"), args: vec![slot, locked], loc }
+            } else {
+                slot
+            };
+        });
+    }
+    added
 }
 
 /// What a `__copy<T>` call lowers to.
@@ -574,8 +638,8 @@ fn collect_calls(function: &mut FunctionDef, calls: &mut Vec<(TypeName, Loc)>) {
 
 // ── The error ────────────────────────────────────────────────────────────────
 
-/// Where the program asks to copy a `ty`: a `copy(x)` call, a
-/// `copies.copy(x)` call, or a `Channel<T>` (whose `send` copies). The one
+/// Where the program asks to copy a `ty`: a `copy(x)` call or a
+/// `copies.copy(x)` call. The one
 /// in the earliest file wins: the program's own files come before the
 /// runtime's.
 fn request_site(module: &Module, ty: &TypeName) -> Option<Loc> {
@@ -600,7 +664,6 @@ fn request_site(module: &Module, ty: &TypeName) -> Option<Loc> {
             look(m);
         }
     }
-    found.extend(use_site(module, &format!("Channel<{}>", ty)));
     found.into_iter().min_by_key(|loc| loc.file.0)
 }
 

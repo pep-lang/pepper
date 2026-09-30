@@ -50,6 +50,38 @@ Runs in O(size of the value) and allocates each copied object.
     copied[0].append(" lovelace");   # names[0] is still "ada"
 ```
 
+## move
+
+```pepper
+move<T>([MoveSource] T value): T
+```
+
+Hands over the reference `value` holds and leaves it null, with no copy
+and no change to any count: the result is the same object.
+
+`value` must be a local variable (or a `[Move]` parameter) that holds
+the only reference to its value: nothing else may refer to it or to
+anything it reaches. The compiler checks that, and that the variable is
+not used again until it is assigned a new value. Use it to pass a value
+you built to a parameter that takes a new value, such as `Channel.send`
+or `Mutex.replace`, without the cost of `copy`.
+
+**Type parameters**
+- `T` — the type of the value
+
+**Parameters**
+- `value` — the variable to move from
+
+**Returns**
+- the value `value` held, which nothing else references
+
+**Example**
+```pepper
+    var lines = Array<String>();
+    lines.append("first");
+    var log = async.Mutex<Array<String>>(move(lines));   # lines is null now
+```
+
 ## Copyable
 
 ```pepper

@@ -13,9 +13,9 @@
 # - `MutexGuard` is `[Isolated]`, so `passes/check_confinement.rs` keeps the
 #   block from letting a reference into the value outlive the lock, or a
 #   reference from outside into it;
-# - the constructor and `replace` take `[Sending]` values and store a copy,
-#   made before locking and dropped by this thread under the lock, so no
-#   reference the caller still holds reaches the Mutex.
+# - the constructor and `replace` take `[Move]` values: the caller hands
+#   its one reference over (it keeps none), and `replace` moves it into the
+#   slot under the lock, so no count step on the value happens outside it.
 #
 # `_owner` holds the operating-system id of the thread holding the lock (0
 # when unlocked), so a second `lock()` on that thread panics instead of
@@ -89,19 +89,19 @@ export struct Mutex<T> {
 
     ## Creates an unlocked Mutex that owns `value`.
     ##
-    ## `value` must be a new value, such as a constructor call or `copy(x)`:
-    ## nothing outside the Mutex may reference it. The Mutex stores a copy of
-    ## it (`copy`), so the argument's own references never reach the Mutex.
+    ## `value` must be a new value, such as a constructor call, `copy(x)` or
+    ## `move(x)`: nothing outside the Mutex may reference it. The caller hands
+    ## its reference over, so nothing is copied.
     ##
     ## @param value the value to protect; a new value, which the compiler checks
     ## @panics if the operating system cannot create a mutex
     ## @example
     ##     const names = async.Mutex<Array<String>>(Array<String>());
-    construct([Sending] T value) {
+    construct([Move] T value) {
         _lock = _async_sys_mutex_create();
         _value = _pep_malloc(sizeof<T>());
         _owner = Atomic<ulong>(0);
-        this._slot()[0] = copy<T>(value);
+        this._slot()[0] = move(value);
     }
 
     destruct {
@@ -150,25 +150,22 @@ export struct Mutex<T> {
     ## caller then owns outright: nothing else references it any more.
     ##
     ## Waits for the lock like `lock()`. `value` must be a new value, as for
-    ## the constructor; the Mutex stores a copy of it.
+    ## the constructor, and is handed over without a copy.
     ##
     ## @param value the new value; a new value, which the compiler checks
     ## @returns the value the Mutex held
     ## @panics if the calling thread already holds the lock
     ## @example
     ##     var done = pending.replace(Array<Job>());   # take every job at once
-    [ReturnsOwned]
-    T replace([Sending] T value) {
-        var copied = copy<T>(value);
+    T replace([Move] T value) {
         this._lock();
         __ptr<T> slot = this._slot();
-        T old = slot[0];
-        slot[0] = copied;
-        # Drop this thread's references to the new value under the lock: the
-        # slot holds the only one.
-        copied = __default<T>();
+        # Both references change hands under the lock, with no count step:
+        # the slot's goes to the caller, the caller's to the slot.
+        T old = move(slot[0]);
+        slot[0] = move(value);
         this._unlock();
-        return old;
+        return move(old);
     }
 
     ## Reports whether the calling thread holds the lock.
@@ -286,6 +283,9 @@ export struct MutexGuard<T> {
     void exit() {
         if (Locked) {
             Locked = false;
+            # With `PEP_CHECK_SYNC` set, check that nothing outside the
+            # locked value refers into it (`_pep_check_sync`).
+            __census<T>(_source._slot());
             _source._unlock();
         }
     }

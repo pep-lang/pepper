@@ -76,6 +76,17 @@ _pep_trace_enabled(): bool {
 }
 const _pep_trace_on = _pep_trace_enabled();
 
+# `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
+# Mutex checks at each unlock that nothing outside the locked value refers
+# into it (`_pep_check_sync` in copy.pep). It lives here because module
+# constants initialize file by file, and this file's allocation counter must
+# exist before any String is built.
+_pep_check_sync_enabled(): bool {
+    var name = "PEP_CHECK_SYNC";
+    return getenv(name.c_str()) != __null;
+}
+export const _PEP_CHECK_SYNC_ON = _pep_check_sync_enabled();
+
 export _pep_malloc(size: ulong): __ptr<void> {
     var p = malloc(size);
     # Zero the payload: refcount machinery reads old slot values from fresh

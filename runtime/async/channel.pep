@@ -13,16 +13,14 @@
 # `_buffer` is a `__ptr<__ptr<void>>`, so `check_shared_types` accepts any
 # `T`; the methods view the buffer as `T` slots. A value that is not
 # thread-safe counts its references plainly, so no two threads may ever
-# touch its counts. `send` therefore copies the value with `copy` first, on
-# the sending thread and before locking, then, under the lock, stores the
-# copy in its slot and drops its own reference to it, so after unlocking
-# only the slot references the copy. `receive` takes the value out of its
-# slot under the lock the same way. Every count step on a copy happens on
-# the sender before it unlocks or on the receiver after it locks. A
-# thread-safe value is not copied (`copy` returns it); its counts are atomic.
-# The receiving methods are `[ReturnsOwned]`: what they hand out, read from
-# the buffer, is the copy `send` made, which nothing else references (the
-# compiler cannot follow raw memory to see that).
+# touch its counts. `send` takes a `[Move]` value, which nothing else
+# references (the compiler checks the caller), and the caller hands its one
+# reference over; under the lock `_push` moves it into its slot, so after
+# unlocking only the slot references the value. `_pop` takes it out with
+# `move(buffer[head])` under the lock the same way: the runtime's promise (the
+# compiler cannot follow raw memory) that the slot held the only reference.
+# No count step on a sent value happens on either side, and what `receive`
+# returns is a new value, which may move into a locked value.
 #
 # Senders wait on `_not_full` (bounded channels only) and receivers on
 # `_not_empty`; `close` wakes both.
@@ -42,14 +40,13 @@ import "sys_windows";
 ## or the threads that use it does not. `for (var v in channel)` receives
 ## until the channel is closed and empty.
 ##
-## `send` copies each value with `copy`, so the receiver gets a value that
-## nothing on the sending thread references: a `String` or an `Array` can be
-## sent, and changing the original afterwards does not affect what was sent.
-## A thread-safe value (a number, a `[Shared]` struct, a `shared` function
-## value such as a `ThreadBody`) is not copied but passed by reference. A
-## type that `copy` cannot copy (a struct with a destructor or a raw pointer
-## field that does not implement `Copyable<T>`, a plain function value, a
-## trait value) is a compile error where the `Channel` is named.
+## `send` takes a new value, which nothing on the sending thread references,
+## and hands it to the receiver without copying it: a constructor call, a
+## literal, a call that returns a fresh value, `move(x)` (a variable that
+## holds the only reference) or `copy(x)` (a copy, when the sender keeps
+## using `x`). Sending a variable that something else still references is a
+## compile error. A thread-safe value (a number, a `[Shared]` struct, a
+## `shared` function value such as a `ThreadBody`) passes freely.
 ##
 ## A Channel is `[Shared]`: keep it in a module-scope variable or pass it to
 ## threads.
@@ -137,46 +134,41 @@ export struct Channel<T> {
         _async_sys_mutex_destroy(_lock);
     }
 
-    ## Queues a copy of `value`, first waiting while a bounded channel is
-    ## full.
+    ## Queues `value`, first waiting while a bounded channel is full.
     ##
-    ## The copy is made with `copy` before waiting, so the value can be
-    ## changed or dropped as soon as `send` returns; a thread-safe value is
-    ## queued itself.
+    ## `value` must be a new value: nothing else may reference it. The caller
+    ## hands its reference over and the value itself is queued, with no copy.
+    ## Pass `move(x)` to send a variable's value, or `copy(x)` to keep using
+    ## `x`.
     ##
-    ## @param value the value to send
-    ## @returns true if the value was queued, false if the channel is closed (the copy is dropped)
+    ## @param value the value to send; a new value, which the compiler checks
+    ## @returns true if the value was queued, false if the channel is closed (the value is dropped)
     ## @example
     ##     var line = "hello";
-    ##     lines.send(line);
+    ##     lines.send(copy(line));
     ##     line.append(" again");   # the receiver still gets "hello"
-    bool send(T value) {
-        var copied = copy<T>(value);
+    ##     lines.send(move(line));   # line is null now
+    bool send([Move] T value) {
         _async_sys_mutex_lock(_lock);
         while (_capacity > 0 && _state[1] == _capacity && _state[3] == 0) {
             _async_sys_condition_wait(_not_full, _lock);
         }
-        var queued = this._push(copied);
-        # Drop this thread's reference before unlocking: the slot now holds
-        # the only one.
-        copied = __default<T>();
+        var queued = this._push(move(value));
         _async_sys_mutex_unlock(_lock);
         return queued;
     }
 
-    ## Queues a copy of `value` only if there is room right now, without
-    ## waiting. The copy is made even when it is not queued.
+    ## Queues `value` only if there is room right now, without waiting. The
+    ## value is dropped when it is not queued.
     ##
-    ## @param value the value to send
+    ## @param value the value to send; a new value, as for `send`
     ## @returns true if the value was queued, false if the channel is full or closed
-    bool try_send(T value) {
-        var copied = copy<T>(value);
+    bool try_send([Move] T value) {
         _async_sys_mutex_lock(_lock);
         var queued = false;
         if (_capacity == 0 || _state[1] < _capacity) {
-            queued = this._push(copied);
+            queued = this._push(move(value));
         }
-        copied = __default<T>();
         _async_sys_mutex_unlock(_lock);
         return queued;
     }
@@ -189,7 +181,6 @@ export struct Channel<T> {
     ##     if (job.is_ok()) {
     ##         run(job.value());
     ##     }
-    [ReturnsOwned]
     Result<T> receive() {
         _async_sys_mutex_lock(_lock);
         while (_state[1] == 0 && _state[3] == 0) {
@@ -203,7 +194,6 @@ export struct Channel<T> {
     ## Takes the next value if one is waiting, without waiting.
     ##
     ## @returns the value, or an error if none is waiting (see `is_closed()` to tell an empty channel from a closed one)
-    [ReturnsOwned]
     Result<T> try_receive() {
         _async_sys_mutex_lock(_lock);
         var received = this._pop();
@@ -215,7 +205,6 @@ export struct Channel<T> {
     ##
     ## @param milliseconds the longest time to wait
     ## @returns the value, or an error if the time ran out or once the channel is closed and empty
-    [ReturnsOwned]
     Result<T> receive_for(ulong milliseconds) {
         var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
         _async_sys_mutex_lock(_lock);
@@ -281,9 +270,9 @@ export struct Channel<T> {
     }
 
     # Queues `value` at the tail, growing an unbounded buffer when full; false
-    # if closed. The caller holds the lock and has checked a bounded
-    # channel's capacity.
-    bool _push(T value) {
+    # if closed, when `value` is dropped here, under the lock. The caller
+    # holds the lock and has checked a bounded channel's capacity.
+    bool _push([Move] T value) {
         if (_state[3] != 0) {
             return false;
         }
@@ -291,7 +280,7 @@ export struct Channel<T> {
             this._grow();
         }
         __ptr<T> buffer = this._slots();
-        buffer[(_state[0] + _state[1]) % _state[2]] = value;
+        buffer[(_state[0] + _state[1]) % _state[2]] = move(value);
         _state[1] = _state[1] + 1;
         _async_sys_condition_notify_one(_not_empty);
         return true;
@@ -308,8 +297,7 @@ export struct Channel<T> {
         }
         __ptr<T> buffer = this._slots();
         var head = _state[0];
-        var received = Result<T>.ok(buffer[head]);
-        buffer[head] = __default<T>();
+        var received = Result<T>.ok(move(buffer[head]));
         _state[0] = (head + 1) % _state[2];
         _state[1] = _state[1] - 1;
         _async_sys_condition_notify_one(_not_full);

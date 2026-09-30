@@ -358,6 +358,17 @@ pub enum Expression {
     /// once types are known: a null test for a struct or pointer value, no
     /// branch at all otherwise. Never reaches codegen.
     WithEntered(Box<Expression>),
+    /// The argument of `move(value)` (a `[MoveSource]` parameter; wrapped by
+    /// `check_confinement::lower_moved_arguments`): the reference the place
+    /// `value` holds (a local, or a raw slot `p[i]` in the runtime), which
+    /// the place gives up: it is
+    /// left null without a release, and the expression is an owned rvalue
+    /// carrying that reference. `check_confinement` checks what may be
+    /// moved and that a moved local is not used again.
+    Move {
+        value: Box<Expression>,
+        loc: Loc,
+    },
     /// The tuple a destructuring (`var (a, b) = value;`, `(a, b) = value;`)
     /// reads, with the number of places it names: the builder emits it only
     /// as the default of the hidden `__tuple_N` local.
@@ -436,6 +447,7 @@ impl Expression {
             | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. }
             | Expression::Destructure { loc, .. }
+            | Expression::Move { loc, .. }
             | Expression::StringLiteral { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
             _ => Loc::NONE,

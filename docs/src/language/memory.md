@@ -143,8 +143,9 @@ such as `shared () => void` has atomic counts.
 ## Copying a value with copy
 
 `copy(value)` makes a copy of a value that shares no object that is not
-thread-safe with the original, so the copy can go to another thread. A
-[channel](threads.md#channels) copies every value it is sent this way.
+thread-safe with the original, so the copy can go to another thread: pass
+`copy(x)` to a [channel](threads.md#channels) to send a value you keep
+using.
 
 ```pepper
 var names = Array<String>();
@@ -202,6 +203,53 @@ handle, so the error says to send its path instead. A plain function value
 cannot be copied, because it may capture anything; declare it `shared`. A
 trait value cannot be copied yet.
 
+## Handing a reference over with move
+
+`move(x)` gives up `x`'s reference: the call returns the same object, and
+`x` is left null. Nothing is copied and no count changes. It is how a value
+built in a local variable goes to a [channel](threads.md#channels), a
+[Mutex](threads.md#mutexes-and-conditions) or another `[Move]` parameter,
+which takes a new value, without the cost of `copy(x)`:
+
+```pepper
+var lines = Array<String>();
+lines.append("first");
+var log = async.Mutex<Array<String>>(move(lines));   # lines is now null
+```
+
+`move` is an ordinary function from the prelude (`runtime/copy.pep`), but
+the compiler checks every call:
+
+- Only a local variable can be moved (`move(h.s)` is an error), and only
+  when it holds the one reference to a new value: nothing else refers to it
+  or to anything it reaches. A parameter can be moved only when it is
+  `[Move]`, since the caller handed its value over.
+
+  ```text
+  main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value
+      8 |     names.replace(move(a));
+        |                        ^
+  note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
+  ```
+
+- A moved variable cannot be read again until it is assigned a new value,
+  including on the next pass through a loop:
+
+  ```text
+  main.pep:8:12: error: 'a' is used after its value was moved
+      8 |     return a.count();
+        |            ^
+  main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
+      7 |     names.replace(move(a));
+        |                   ^~~~
+  ```
+
+The runtime also moves values out of raw memory (`move(buffer[head])`), which
+is a promise the compiler cannot check: only runtime files may do it. The
+parameter of `move` is marked `[MoveSource]`, which is also only allowed in
+the runtime, so a hand-off always shows at the call as `move(x)`; a function
+of your own that takes over its argument uses `[Move]`.
+
 ## Summary
 
 | Code | What happens to references |
@@ -211,6 +259,7 @@ trait value cannot be copied yet.
 | `f(a)` | The parameter takes a reference for the duration of the call. |
 | `return a;` | The caller receives a reference to `a`'s object. |
 | `a.method()` | No change: `this` refers to `a`'s object. |
+| `f(move(a))` | No change: `a`'s reference goes to the call, and `a` is left null. |
 | `make();` (result unused) | The result is released at the end of the statement. |
 | `var w = Weak<T>(a);` | No change to `a`'s count; `w` does not keep the object alive. |
 | `var c = copy(a);` | `c` refers to new objects; `a`'s count does not change. |

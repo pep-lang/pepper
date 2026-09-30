@@ -1502,7 +1502,7 @@ struct Parser {
     }
 
     _parameter(): Node {
-        # Attributes on a parameter (`[Sending] value: T`).
+        # Attributes on a parameter (`[Move] value: T`).
         var attributes = _attributes();
         if (_failed) {
             var failed = Node(NODE_PARAMETER);

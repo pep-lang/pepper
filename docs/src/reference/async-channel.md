@@ -25,14 +25,13 @@ left and then get an error. Only `close()` closes a channel; dropping it
 or the threads that use it does not. `for (var v in channel)` receives
 until the channel is closed and empty.
 
-`send` copies each value with `copy`, so the receiver gets a value that
-nothing on the sending thread references: a `String` or an `Array` can be
-sent, and changing the original afterwards does not affect what was sent.
-A thread-safe value (a number, a `[Shared]` struct, a `shared` function
-value such as a `ThreadBody`) is not copied but passed by reference. A
-type that `copy` cannot copy (a struct with a destructor or a raw pointer
-field that does not implement `Copyable<T>`, a plain function value, a
-trait value) is a compile error where the `Channel` is named.
+`send` takes a new value, which nothing on the sending thread references,
+and hands it to the receiver without copying it: a constructor call, a
+literal, a call that returns a fresh value, `move(x)` (a variable that
+holds the only reference) or `copy(x)` (a copy, when the sender keeps
+using `x`). Sending a variable that something else still references is a
+compile error. A thread-safe value (a number, a `[Shared]` struct, a
+`shared` function value such as a `ThreadBody`) passes freely.
 
 A Channel is `[Shared]`: keep it in a module-scope variable or pass it to
 threads.
@@ -91,40 +90,41 @@ Creates an open, empty channel.
 #### send
 
 ```pepper
-bool send(T value)
+bool send([Move] T value)
 ```
 
-Queues a copy of `value`, first waiting while a bounded channel is
-full.
+Queues `value`, first waiting while a bounded channel is full.
 
-The copy is made with `copy` before waiting, so the value can be
-changed or dropped as soon as `send` returns; a thread-safe value is
-queued itself.
+`value` must be a new value: nothing else may reference it. The caller
+hands its reference over and the value itself is queued, with no copy.
+Pass `move(x)` to send a variable's value, or `copy(x)` to keep using
+`x`.
 
 **Parameters**
-- `value` — the value to send
+- `value` — the value to send; a new value, which the compiler checks
 
 **Returns**
-- true if the value was queued, false if the channel is closed (the copy is dropped)
+- true if the value was queued, false if the channel is closed (the value is dropped)
 
 **Example**
 ```pepper
     var line = "hello";
-    lines.send(line);
+    lines.send(copy(line));
     line.append(" again");   # the receiver still gets "hello"
+    lines.send(move(line));   # line is null now
 ```
 
 #### try_send
 
 ```pepper
-bool try_send(T value)
+bool try_send([Move] T value)
 ```
 
-Queues a copy of `value` only if there is room right now, without
-waiting. The copy is made even when it is not queued.
+Queues `value` only if there is room right now, without waiting. The
+value is dropped when it is not queued.
 
 **Parameters**
-- `value` — the value to send
+- `value` — the value to send; a new value, as for `send`
 
 **Returns**
 - true if the value was queued, false if the channel is full or closed
@@ -132,7 +132,7 @@ waiting. The copy is made even when it is not queued.
 #### receive
 
 ```pepper
-[ReturnsOwned] Result<T> receive()
+Result<T> receive()
 ```
 
 Takes the next value, waiting until one arrives.
@@ -151,7 +151,7 @@ Takes the next value, waiting until one arrives.
 #### try_receive
 
 ```pepper
-[ReturnsOwned] Result<T> try_receive()
+Result<T> try_receive()
 ```
 
 Takes the next value if one is waiting, without waiting.
@@ -162,7 +162,7 @@ Takes the next value if one is waiting, without waiting.
 #### receive_for
 
 ```pepper
-[ReturnsOwned] Result<T> receive_for(ulong milliseconds)
+Result<T> receive_for(ulong milliseconds)
 ```
 
 Like `receive()`, but gives up after about `milliseconds` milliseconds.

@@ -75,7 +75,8 @@ Some that you will meet quickly:
   trait members can be [overloaded](language/overloading.md).
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, which the compiler checks,
-  closure captures included. A channel copies what it is sent, and a
+  closure captures included. A channel hands over what it is sent without
+  copying it (`send(move(x))`, or `send(copy(x))` to keep `x`), and a
   `Mutex` holds any struct, with the compiler keeping each locked value apart
   from the rest of the program (see
   [threads](language/threads.md#what-a-lock-body-may-do)). A trait value

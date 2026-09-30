@@ -1333,7 +1333,7 @@ impl PepperLsp {
                     .unwrap_or_else(|| "unknown".to_string());
                 let mut head = format!("`{}` — `{}`", id, rendered);
                 // A function whose result shares nothing with its inputs
-                // may cross a lock or go to a `[Sending]` parameter.
+                // may cross a lock or go to a `[Move]` parameter.
                 if !locals.iter().chain(&struct_members).any(|s| s.name == *id)
                     && sema.and_then(|m| pepper_sema::passes::check_confinement::returns_fresh(m, id)) == Some(true)
                 {

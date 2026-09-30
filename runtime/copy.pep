@@ -53,6 +53,27 @@ export copy<T>(T value): T {
     return result;
 }
 
+## Hands over the reference `value` holds and leaves it null, with no copy
+## and no change to any count: the result is the same object.
+##
+## `value` must be a local variable (or a `[Move]` parameter) that holds
+## the only reference to its value: nothing else may refer to it or to
+## anything it reaches. The compiler checks that, and that the variable is
+## not used again until it is assigned a new value. Use it to pass a value
+## you built to a parameter that takes a new value, such as `Channel.send`
+## or `Mutex.replace`, without the cost of `copy`.
+##
+## @typeParam T the type of the value
+## @param value the variable to move from
+## @returns the value `value` held, which nothing else references
+## @example
+##     var lines = Array<String>();
+##     lines.append("first");
+##     var log = async.Mutex<Array<String>>(move(lines));   # lines is null now
+export move<T>([MoveSource] T value): T {
+    return value;
+}
+
 ## A type that says how `copy` copies it, for a struct that `copy` cannot
 ## copy field by field: one with a destructor or a raw pointer field, such as
 ## a container that owns a buffer.
@@ -118,6 +139,11 @@ export struct Copies {
     ## Scratch space for turning an address back into a reference.
     __ptr<ulong> _cell;
 
+    ## For a `PEP_CHECK_SYNC` census (`_pep_check_sync`): how many of the
+    ## references the copy passed through lead to each original object, by
+    ## address. Null for an ordinary copy.
+    HashMap<ulong, ulong> _edges;
+
     ## Creates an empty set of copies.
     construct() {
         _made = HashMap<ulong, ulong>();
@@ -166,6 +192,10 @@ export struct Copies {
     _copy_object<T>(value: T): T {
         if (value === __null) {
             return value;
+        }
+        if (_edges !== __null) {
+            var address = this._address<T>(value);
+            _edges[address] = (_edges.contains(address) ? _edges.get(address) : 0) + 1;
         }
         var made = this._find<T>(value);
         if (made !== __null) {
@@ -226,6 +256,35 @@ struct DeferredFix {
     (Copies) => void run;
 
     construct(this.run = (copies: Copies) => {}) {}
+}
+
+# What `__census<T>(slot)` lowers to in `MutexGuard.exit` for a `T` that can
+# be copied (passes/copies.rs; for any other `T` it lowers to nothing). With
+# `PEP_CHECK_SYNC` set (`_PEP_CHECK_SYNC_ON`), it copies the value in `slot`
+# with a census that counts, for each original object, the references the copy passes through:
+# each field and element that holds it, and the slot itself for the root.
+# Once the copy is dropped, those are the only references the locked value
+# may have, so an object whose strong count (the `u32` every struct object
+# starts with) is higher is still referenced from outside it: a hole in the
+# confinement checks, or a promise raw memory or extern code broke.
+export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>): void {
+    if (!_PEP_CHECK_SYNC_ON) {
+        return;
+    }
+    var copies = Copies();
+    copies._edges = HashMap<ulong, ulong>();
+    copies.copy<T>(slot[0]);
+    copies._finish();
+    for (var (address, edges) in copies._edges) {
+        copies._cell[0] = address;
+        __ptr<void> raw = copies._cell;
+        __ptr<__ptr<uint>> object = raw;
+        var count = object[0][0];
+        if (count as ulong != edges) {
+            panic("PEP_CHECK_SYNC: an object in the value locked by a '" + String(locked) + "' is still referenced from outside it");
+        }
+    }
+    copies._cell[0] = 0;
 }
 
 # What `__copy<T>` lowers to where `T` cannot be copied and nothing the

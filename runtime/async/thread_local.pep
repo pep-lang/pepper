@@ -11,7 +11,7 @@
 # For a `T` that is not thread-safe, a thread's value is reached only through
 # `with (var value = local.enter())`: `ThreadLocalGuard` is `[Isolated]`, so
 # `passes/check_confinement.rs` keeps references into the value inside the
-# block, `get()` is a compile error, and `set` takes a new value (`[Sending]`).
+# block, `get()` is a compile error, and `set` takes a new value (`[Move]`).
 # Otherwise a function called under a lock could park part of the locked
 # value in a thread-local, and a later `get()` would hand it out after the
 # lock is released.
@@ -106,7 +106,7 @@ export struct ThreadLocal<T> {
     ## checks.
     ##
     ## @param value the new value for this thread
-    void set([Sending] T value) {
+    void set([Move] T value) {
         __ptr<T> slot = _async_sys_key_get(_key);
         if (slot == __null) {
             # sizeof<T>() is the size of a stored T: one pointer for a

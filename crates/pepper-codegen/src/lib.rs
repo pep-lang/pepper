@@ -92,6 +92,9 @@ pub struct CodeGenerator<'ctx> {
     /// (keyed like `functions`; `""` for a method's `this`), so a call
     /// converts a numeric argument by its parameter's signedness.
     fn_param_types: HashMap<String, Vec<String>>,
+    /// Per function, which parameters are `[Move]`: the caller hands its
+    /// reference over instead of the callee acquiring one (zero-copy send).
+    sending_params: HashMap<String, Vec<bool>>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
     /// File-scope globals: name → Address (frame locals miss falls back here).
@@ -165,6 +168,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             param_defaults: HashMap::new(),
             fn_signatures: HashMap::new(),
             fn_param_types: HashMap::new(),
+            sending_params: HashMap::new(),
             global_strings: HashMap::new(),
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
@@ -818,6 +822,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 mangled.clone(),
                 method.parameters.iter().map(|p| p.default.clone()).collect(),
             );
+            let sending: Vec<bool> = method
+                .parameters
+                .iter()
+                .map(|p| pepper_sema::passes::check_confinement::takes_over(&p.attributes))
+                .collect();
+            if sending.iter().any(|s| *s) {
+                self.sending_params.insert(mangled.clone(), sending);
+            }
             if method.is_static {
                 static_names.insert(method.name.clone());
             }
@@ -957,6 +969,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             (function.parameters.iter().map(|p| p.ty.to_string()).collect(), function.loc),
         );
         self.fn_param_types.insert(function.name.clone(), function.parameters.iter().map(|p| p.ty.to_string()).collect());
+        let sending: Vec<bool> = function
+            .parameters
+            .iter()
+            .map(|p| pepper_sema::passes::check_confinement::takes_over(&p.attributes))
+            .collect();
+        if sending.iter().any(|s| *s) {
+            self.sending_params.insert(function.name.clone(), sending);
+        }
         Ok(())
     }
 
@@ -1811,8 +1831,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
             // Pass-by-value struct parameter: a copy arrives (acquire), and
             // the function's scope owns it until exit. `this` is never copied.
+            // A `[Move]` parameter's reference is handed over by the
+            // caller, so it arrives owned.
             if name != "this" && self.is_reference_name(ty_name) {
-                self.acquire_ref(ty_name, *arg)?;
+                let sending = function.parameters.iter().any(|p| {
+                    p.name == *name && pepper_sema::passes::check_confinement::takes_over(&p.attributes)
+                });
+                if !sending {
+                    self.acquire_ref(ty_name, *arg)?;
+                }
                 self.track_scope_local(name, ty_name, *alloca);
             }
         }
@@ -2611,6 +2638,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::CountStep { .. } => Some("u32".to_string()),
             Expression::FunctionPointer { .. } => Some("void*".to_string()),
             Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) => Some(ty.to_string()),
+            Expression::Move { value, .. } => self.value_sema_type(value),
             Expression::AtomicStore(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
             Expression::AtomicFetch(_, ty, _, _) => Some(ty.to_string()),
@@ -2717,6 +2745,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::AtomicLoad(ty, _) => self.is_struct_ref_name(&Some(ty.to_string())),
             // A new object owns its one reference, like a constructor result.
             Expression::Allocate(ty) => self.is_struct_ref_name(&Some(ty.to_string())),
+            // A moved reference is handed over: the place gave it up.
+            Expression::Move { value, .. } => self.is_struct_ref_name(&self.value_sema_type(value)),
             // An atomic fetch returns the old slot occupant (struct T): the
             // return site acquires it, so the result is an owned rvalue.
             Expression::AtomicFetch(_, ty, _, _) => self.is_struct_ref_name(&Some(ty.to_string())),
@@ -3734,6 +3764,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::WithEntered(_) => {
                 Err("internal error: unlowered 'with' condition".to_string())
             }
+            Expression::Move { value, .. } => self.codegen_move(value),
             // tuples::lower_destructures replaces every one before codegen.
             Expression::Destructure { .. } => {
                 Err("internal error: unlowered destructuring".to_string())
@@ -3808,11 +3839,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // full expression. Lvalue reads are not — the callee's param
                     // entry owns them.
                     let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
-                    for arg in args {
+                    for (index, arg) in args.iter().enumerate() {
                         let v = self.codegen_expr(arg)?;
-                        if let Some(ty) = self.owned_temp_type(arg) {
-                            owned_arg_temps.push((v, ty));
-                        }
+                        self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                         arg_names.push(self.numeric_source_name(arg, &v));
                         arg_vals.push(v);
                     }
@@ -3884,11 +3913,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // full expression. Lvalue reads are not — the callee's param
                 // entry owns them.
                 let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
-                for arg in args {
+                for (index, arg) in args.iter().enumerate() {
                     let v = self.codegen_expr(arg)?;
-                    if let Some(ty) = self.owned_temp_type(arg) {
-                        owned_arg_temps.push((v, ty));
-                    }
+                    self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                     arg_names.push(self.numeric_source_name(arg, &v));
                     arg_vals.push(v);
                 }
@@ -4106,9 +4133,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.check_extern_struct_arg(&target, arg_names.len(), arg)?;
             }
             let v = self.codegen_expr(arg)?;
-            if let Some(ty) = self.owned_temp_type(arg) {
-                owned_arg_temps.push((v, ty));
-            }
+            let index = arg_names.len();
+            self.pass_argument(&target, index, arg, v, &mut owned_arg_temps)?;
             arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);
         }
@@ -4226,6 +4252,59 @@ impl<'ctx> CodeGenerator<'ctx> {
         instruction.set_alignment(4).map_err(|e| e.to_string())?;
         instruction.set_atomic_ordering(inkwell::AtomicOrdering::Monotonic).map_err(|e| e.to_string())?;
         Ok(load.into_int_value())
+    }
+
+    /// Pass argument `index` (a parameter index, `this` not counted) of a
+    /// call to `callee`: an owned temporary is released after the call,
+    /// unless the parameter is `[Move]`, which takes it over; an lvalue
+    /// passed to a `[Move]` parameter is acquired for it.
+    fn pass_argument(
+        &mut self,
+        callee: &str,
+        index: usize,
+        arg: &Expression,
+        value: BasicValueEnum<'ctx>,
+        owned_arg_temps: &mut Vec<(BasicValueEnum<'ctx>, String)>,
+    ) -> Result<(), String> {
+        let sending = self.sending_params.get(callee).and_then(|s| s.get(index)).copied().unwrap_or(false);
+        match self.owned_temp_type(arg) {
+            Some(ty) if !sending => owned_arg_temps.push((value, ty)),
+            Some(_) => {}
+            None if sending => {
+                if let Some(ty) = self.value_sema_type(arg).filter(|t| self.is_reference_name(t)) {
+                    self.acquire_ref(&ty, value)?;
+                }
+            }
+            None => {}
+        }
+        Ok(())
+    }
+
+    /// `move(value)`: load the reference the place holds and store null in
+    /// its place, with no count step; the result carries the reference.
+    fn codegen_move(&mut self, value: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let ty = self.value_sema_type(value).ok_or_else(|| "cannot move a value of unknown type".to_string())?;
+        let address = self.codegen_lvalue(value)?;
+        let slot_ty: BasicTypeEnum<'ctx> = match self.types.get(&ty) {
+            Some(BasicTypeEnum::StructType(_)) if !self.tuples.contains_key(&ty) => {
+                self.context.ptr_type(inkwell::AddressSpace::default()).into()
+            }
+            Some(other) => other,
+            None => return Err(format!("cannot move a value of type '{}'", ty)),
+        };
+        let moved = self.builder.build_load(slot_ty, address.ptr, "moved").map_err(|e| e.to_string())?;
+        let null = match slot_ty {
+            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().into(),
+            BasicTypeEnum::IntType(it) => it.const_zero().into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
+            BasicTypeEnum::ScalableVectorType(vt) => vt.const_zero().into(),
+        };
+        let _: BasicValueEnum<'ctx> = null;
+        self.builder.build_store(address.ptr, null).map_err(|e| e.to_string())?;
+        Ok(moved)
     }
 
     /// Address of head count `field` in the object at `object`.

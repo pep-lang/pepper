@@ -92,8 +92,8 @@ Mutex's (see [What a lock body may do](#what-a-lock-body-may-do)):
 - `with (var value = local.enter()) { ... }` binds this thread's value; the
   `else` block runs when the thread has none;
 - `get()` is a compile error;
-- `set(value)` takes a new value: a constructor call, a string literal, or
-  `copy(x)`.
+- `set(value)` takes a new value: a constructor call, a string literal,
+  `copy(x)`, or `move(x)`.
 
 Otherwise a function called while a Mutex is locked could keep part of the
 locked value in a thread-local, and a later `get()` would hand it out after
@@ -236,30 +236,37 @@ receive, with any number of each, like a Go channel:
 - `count()` and `is_closed()` report the channel's state, which other
   threads may change right after.
 
-`send` [copies](memory.md#copying-a-value-with-copy) each value with
-`copy`, so the receiver gets a value that nothing on the sending thread
-references. A `String`, an `Array` or a struct of them can be sent, and
-changing the original after `send` does not change what was sent:
+`send` and `try_send` take a **new** value, which nothing on the sending
+thread references, and hand it to the receiver without copying it: a
+constructor call, a literal, a call that returns a fresh value,
+[`move(x)`](memory.md#handing-a-reference-over-with-move) (a variable that
+holds the only reference) or [`copy(x)`](memory.md#copying-a-value-with-copy)
+(when the sender keeps using `x`). A `String`, an `Array` or a struct of them
+can be sent, and changing the original after sending a copy does not change
+what was sent:
 
 ```pepper
 {{#include ../../examples/threads-copy.pep}}
 ```
 
-A thread-safe value (a number, a `[Shared]` struct, a `shared` function value
-such as a `ThreadBody`) is not copied but passed by reference, which makes a
-channel of `ThreadBody` values a work queue. A type that `copy` cannot copy
-is an error where the `Channel` is named:
+Sending a variable that something else may still reference is an error, and
+the editor offers both fixes:
 
 ```text
-main.pep:9:17: error: cannot copy 'Array<Log>' because it contains 'File', which cannot be copied
-    9 |     var lines = async.Channel<Array<Log>>();
-      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~
-note: 'Array<Log>' copies its values of type 'Log'
-main.pep:5:5: note: 'Log' reaches it through field 'out'
-    5 |     io.File out;
-      |     ^~~~~~~
-runtime/io/file.pep:244:15: note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread
+main.pep:7:16: error: 'line' is not a new value, but parameter 'value' takes a value that nothing else references
+    7 |     lines.send(line);
+      |                ^~~~
+      |                move(line)
+runtime/async/channel.pep:151:27: note: 'value' is declared [Move] here
+  151 |     bool send([Move] T value) {
+      |                           ^~~~~
+note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'
 ```
+
+A thread-safe value (a number, a `[Shared]` struct, a `shared` function value
+such as a `ThreadBody`) passes freely, which makes a channel of `ThreadBody`
+values a work queue. Since nothing is copied, a channel can carry any type,
+trait values and values that cannot be copied (an `io.File`) included.
 
 The [Channel reference](../reference/async-channel.md) documents every
 method.
@@ -293,11 +300,19 @@ thread-safe is kept apart from the rest of the program by the compiler; see
 [What a lock body may do](#what-a-lock-body-may-do).
 
 - `Mutex<T>(value)` and `replace(value)` take a **new** value: a constructor
-  call, a string literal, a call that returns a fresh value, or `copy(x)`,
-  never a variable something else still references. The Mutex stores a copy
-  of it.
+  call, a string literal, a call that returns a fresh value, `copy(x)`, or
+  `move(x)`, never a variable something else still references. The caller
+  hands its reference over, so nothing is copied.
 - `replace(value)` swaps the whole value under the lock and returns the old
   one, which the caller then owns outright.
+
+A value built in a local variable goes in with
+[`move`](memory.md#handing-a-reference-over-with-move), which hands over the
+variable's reference instead of copying the value:
+
+```pepper
+{{#include ../../examples/threads-move.pep}}
+```
 
 A `Condition<T>` lets a thread that holds a Mutex sleep until another thread
 changes the value. Get one with `mutex.condition()`:
@@ -337,7 +352,8 @@ two must never meet:
 - **Moving in.** A call, constructor or assignment that would link an
   outside value with the locked one is an error. Pass a new value instead:
   `copy(line)`, a literal, or the result of a call that returns a fresh
-  value.
+  value. A variable that holds the only reference to its value can hand it
+  over with `move(line)`.
 
   ```text
   main.pep:8:21: error: 'line' cannot move into the value locked by 'names'
@@ -372,10 +388,10 @@ arguments. A result that shares nothing, such as that of `+`, `substr`,
 The language server shows "Returns a fresh value" when hovering over such a
 function. A call through a function value, a value an `extern` function
 hands back, and a value read through raw memory that a `[Shared]` struct
-holds are never fresh: something else may reference them. The runtime marks
-the few functions that hand out such a value that nothing else references
-`[ReturnsOwned]`, a promise the compiler cannot check and allows only in the
-runtime: a channel's `receive()` (the copy `send` made) and a Mutex's
+holds are never fresh: something else may reference them. The runtime takes
+the few values it hands out that nothing else references out of raw memory
+with `move(p[i])`, a promise the compiler cannot check and allows only in the
+runtime: a channel's `receive()` (the value `send` handed over) and a Mutex's
 `replace()`.
 
 A function that returns a [tuple](tuples.md) has one such fact per element:
@@ -391,9 +407,28 @@ too:
 - `[Isolated]` on a struct makes it a guard: it can only be the scope of a
   `with` header, and the block is checked as above. `MutexGuard<T>` and
   `ThreadLocalGuard<T>` are `[Isolated]`.
-- `[Sending]` on a parameter (`construct([Sending] T value)`) requires a new
+- `[Move]` on a parameter (`construct([Move] T value)`) requires a new
   value for it at every call: a constructor call, a literal, a fresh result,
-  `copy(x)`, or any thread-safe value.
+  `copy(x)`, `move(x)`, or any thread-safe value. The caller hands its
+  reference over, so the function receives it without a count step.
+
+### Checking confinement at run time
+
+Raw memory (`__ptr<T>`) and `extern` code are promises the compiler cannot
+check, so a program that uses them can still keep a reference into a locked
+value. Set the environment variable `PEP_CHECK_SYNC` when running a program
+to check at every unlock that nothing outside the locked value refers into
+it:
+
+```text
+$ PEP_CHECK_SYNC=1 ./main
+PEP_CHECK_SYNC: an object in the value locked by a 'Mutex<Box>' is still referenced from outside it
+```
+
+The check copies the locked value to count the references inside it, so it
+costs time and memory in proportion to the value's size at each unlock; it
+is off unless the variable is set. It checks a `Mutex<T>` whose `T` is not
+thread-safe and can be [copied](memory.md#copying-a-value-with-copy).
 
 ## Once and Lazy
 
@@ -422,11 +457,10 @@ The [Once reference](../reference/async-once.md) has the details.
 - A value received from a channel moves into a locked value directly
   (`list.append(jobs.receive().value())`), but not through a variable
   declared outside the block: such a variable is an outside value, whatever
-  it holds, so it needs `copy`.
-- `Mutex<T>(value)` and `replace(value)` copy the new value; passing it
-  without a copy needs a later compiler change.
-- `copy` cannot copy a trait value yet, so a `Channel` of a trait type, or of
-  an `Array` of one, is an error.
+  it holds, so it needs `copy`, or `move` when it holds the only reference
+  (`list.append(move(job))`).
+- `copy` cannot copy a trait value yet, so sending a trait value that the
+  sender keeps using is an error; send `move(x)` or a new value instead.
 - There is no reader-writer lock, no `select` over several channels, and no
   barrier or semaphore. A Mutex is not re-entrant.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,

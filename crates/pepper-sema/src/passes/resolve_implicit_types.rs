@@ -263,7 +263,7 @@ impl<'t> Scopes<'t> {
 /// Best-effort type of an expression (port of `typeOfExpr`).
 fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&TypeName>) -> TypeName {
     match expr {
-        Expression::Destructure { value, .. } => type_of_expr(value, scopes, current_struct),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => type_of_expr(value, scopes, current_struct),
         Expression::StaticCase { ty, .. } => ty.clone(),
         Expression::Subject { ty, .. } => ty.clone(),
         Expression::WithSubject(with) => type_of_expr(&with.body, scopes, current_struct),

@@ -2210,7 +2210,7 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
             *input = &input[1..];
             break;
         }
-        // Attributes on a parameter (`[Sending] value: T`).
+        // Attributes on a parameter (`[Move] value: T`).
         let parameter_attributes = if input.starts_with('[') { attributes(input)? } else { vec![] };
         ws(input)?;
         // C++ param grammar (Parser.cpp:1094-1140): `name: Type [= expr]`,
@@ -3065,7 +3065,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             loop {
                 ws(input)?;
                 if input.starts_with(')') { break; }
-                // Attributes on a parameter (`[Sending] T value`).
+                // Attributes on a parameter (`[Move] T value`).
                 let parameter_attributes = if input.starts_with('[') { attributes(input)? } else { vec![] };
                 ws(input)?;
                 let mut parameter = constructor_parameter(input)?;
@@ -3993,12 +3993,12 @@ mod tests {
 
     #[test]
     fn parameters_carry_attributes() {
-        let source = "struct S {\n    construct([Sending] T value, int n = 0) {}\n    put([Sending] item: T) {}\n}";
+        let source = "struct S {\n    construct([Move] T value, int n = 0) {}\n    put([Move] item: T) {}\n}";
         let module = parse(source);
         let Declaration::Struct(s) = &module.declarations[0] else { panic!("expected a struct") };
         let ctor = &s.constructors[0];
         assert_eq!(ctor.parameters[0].attributes.len(), 1);
-        assert_eq!(ctor.parameters[0].span.start, source.find("[Sending] T").unwrap());
+        assert_eq!(ctor.parameters[0].span.start, source.find("[Move] T").unwrap());
         assert!(ctor.parameters[1].attributes.is_empty());
         assert_eq!(s.methods[0].parameters[0].attributes.len(), 1);
         assert_eq!(s.methods[0].parameters[0].name, "item");
