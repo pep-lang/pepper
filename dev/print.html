@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2eb4247d.js";
+            window.path_to_searchindex_js = "searchindex-228482de.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b106f5d9.js"></script>
@@ -930,9 +930,49 @@ is a <code>double</code>.</p>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
 <code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
 <h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
-<p><code>char</code> is an 8-bit signed integer, the same type as <code>i8</code>. Pepper has no character
-literals (<code>'a'</code> is a syntax error); text is a <code>String</code>, and a single character is
-a one-code-point <code>String</code>.</p>
+<p>A character literal is one ASCII character between single quotes: <code>'a'</code>, <code>'"'</code>,
+<code>'#'</code>. Its value is the character’s code, and its type is <code>byte</code> (<code>u8</code>), the type
+of one byte of a UTF-8 string. Like any <code>byte</code> it widens to the other integer
+types, so it compares with, and stores into, an <code>int</code> or a <code>char</code> as well:</p>
+<pre><code class="language-pepper"># Character literals are bytes.
+is_lower(c: int): bool {
+    return c &gt;= 'a' and c &lt;= 'z';
+}
+
+main(): int {
+    var letter = 'a';   # a byte holding 97
+    assert(letter == 97, "a character literal is its ASCII code");
+    assert('"' == 34 and '\n' == 10 and '\'' == 39, "escapes work as in strings");
+
+    # Compare the bytes of a String with character literals.
+    var text = "x = 1";
+    var bytes = text.c_str();
+    assert(bytes[0] == 'x' and bytes[2] == '=', "compare raw bytes");
+    assert(is_lower(bytes[0]), "a byte widens to int");
+
+    # Arithmetic works as on any integer.
+    int digit = bytes[4] - '0';
+    assert(digit == 1, "the digit's value");
+
+    print(letter);
+    return 0;
+}
+</code></pre>
+<p>The escapes are the same as a string’s (see the table under
+<a href="#strings">Strings</a>), plus <code>\xHH</code> for any byte, <code>'\xFF'</code> included. A
+character literal holds exactly one ASCII character; for anything else use a
+string:</p>
+<pre><code class="language-text">main.pep:2:13: error: character literal may only contain one character; use a string for more
+    2 |     var x = 'ab';
+      |             ^~~~
+main.pep:2:14: error: character literal must be a single ASCII character; use a string for other characters
+    2 |     var x = 'é';
+      |              ^
+</code></pre>
+<p><code>char</code> is an 8-bit <strong>signed</strong> integer, the same type as <code>i8</code>, used mostly for C
+strings (<code>__ptr&lt;char&gt;</code>). The ASCII characters have the same value as a <code>char</code>
+and as a <code>byte</code>; <code>'\xFF'</code> is 255 as a <code>byte</code> but -1 read through a <code>char</code>.
+Text is a <code>String</code>, and a single character of it is a one-code-point <code>String</code>.</p>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
 value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
@@ -983,7 +1023,7 @@ method.</p>
 <tr><td><code>\\</code></td><td>a backslash</td></tr>
 <tr><td><code>\"</code></td><td>a double quote</td></tr>
 <tr><td><code>\'</code></td><td>a single quote</td></tr>
-<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code></td></tr>
+<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code> (any byte in a <a href="#characters">character literal</a>)</td></tr>
 <tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
 </tbody>
 </table>
