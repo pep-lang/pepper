@@ -153,8 +153,11 @@ with no extension, and `module_name()` is the output's stem.
   model resolves it, with no two files' private names alike. Runtime
   functions the compiler calls by name (`_pep_malloc`, `_pep_print*`) must
   therefore be exported. For each file it records a
-  `FileScope`: `imported` (span start → declaration, used by visibility) and
-  `named` (used by the LSP). Errors are `ModuleError { file, span, message,
+  `FileScope`: `imported` (span start → declaration, used by visibility),
+  `named` (used by the LSP), and `extensions` (`visible_extensions`: the
+  prelude and forced-module files, the files it imports, and every file of
+  a module it imports, whose exported extensions it may use; `load` records
+  each file's `module_root` for this). Errors are `ModuleError { file, span, message,
   unresolved }`.
 - **`scope_walk.rs`** is the traversal linking and visibility share: it
   tracks the names bound at each point (parameters, locals, generic
@@ -171,7 +174,21 @@ with no extension, and `module_name()` is the output's stem.
   `visibility::check_visibility`. That check covers private symbols (a
   reference linking left unrenamed is matched against other files' mangled
   names by its demangled spelling), symbols that were not imported,
-  duplicate exports, and concrete overrides declared in several files. Extern
+  extension methods of a private extension or of an exported one in a file
+  the referencing file does not import (`FileScope::extensions`), a bare
+  call in a method, or in a trait's default method, that such an invisible
+  extension would capture (sema binds it to any extension's method;
+  `visit_callee`). A member access is accepted when a trait the file
+  can see declares the method (`Members::in_traits`: a call may go through
+  a trait value), or when its receiver's type is unknown here (`this` in a
+  trait default, or a chain starting from a parameter, local, or closure
+  parameter whose type is a generic parameter in scope, or that is
+  initialized from such a value: `visit_binding` marks the binding in
+  `Scopes`, and `Scopes::is_marked_value` finds the innermost binding),
+  and when the trait is declared by a file the checking file's imports
+  bind, spelled or not (`FileScope::bound`),
+  duplicate
+  exports, and concrete overrides declared in several files. Extern
   redeclarations are exempt.
 
 ### 2.3 Parsing (`crates/pepper-parser`)

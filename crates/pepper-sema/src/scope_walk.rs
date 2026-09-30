@@ -27,11 +27,16 @@ pub(crate) enum Scope {
     /// The members of a struct visible in this file, looked up through the
     /// walker's `is_member` rather than copied.
     Members(String),
+    /// A trait whose default method bodies are being walked. It binds no
+    /// names.
+    Trait(String),
 }
 
-/// The locally bound names at one point of the walk, innermost last.
+/// The locally bound names at one point of the walk, innermost last, each
+/// scope with the names bound in it that its walker marked (see
+/// `visit_binding`).
 #[derive(Default)]
-pub(crate) struct Scopes(Vec<Scope>);
+pub(crate) struct Scopes(Vec<Scope>, Vec<HashSet<String>>);
 
 impl Scopes {
     /// `name` is bound locally where a value is expected: a parameter,
@@ -40,6 +45,7 @@ impl Scopes {
         self.0.iter().any(|s| match s {
             Scope::Values(names) | Scope::Generics(names) => names.contains(name),
             Scope::Members(st) => is_member(st, name),
+            Scope::Trait(_) => false,
         })
     }
 
@@ -51,6 +57,22 @@ impl Scopes {
         self.0.iter().any(|s| matches!(s, Scope::Generics(names) if names.contains(name)))
     }
 
+    /// `name` is bound here as a parameter or local.
+    pub(crate) fn is_value_bound(&self, name: &str) -> bool {
+        self.0.iter().any(|s| matches!(s, Scope::Values(names) if names.contains(name)))
+    }
+
+    /// The value `name` refers to here (the innermost binding of it) was
+    /// marked when it was bound.
+    pub(crate) fn is_marked_value(&self, name: &str) -> bool {
+        self.0
+            .iter()
+            .zip(&self.1)
+            .rev()
+            .find(|(s, _)| matches!(s, Scope::Values(names) if names.contains(name)))
+            .is_some_and(|(_, marked)| marked.contains(name))
+    }
+
     /// The struct whose body or extension is being walked, if any.
     pub(crate) fn current_struct(&self) -> Option<&str> {
         self.0.iter().rev().find_map(|s| match s {
@@ -59,12 +81,34 @@ impl Scopes {
         })
     }
 
+    /// The trait whose default method bodies are being walked, if any.
+    pub(crate) fn current_trait(&self) -> Option<&str> {
+        self.0.iter().rev().find_map(|s| match s {
+            Scope::Trait(t) => Some(t.as_str()),
+            _ => None,
+        })
+    }
+
     fn push(&mut self, scope: Scope) {
         self.0.push(scope);
+        self.1.push(HashSet::new());
     }
 
     fn pop(&mut self) {
         self.0.pop();
+        self.1.pop();
+    }
+
+    /// Bind the value `name` in the innermost scope, marked or not.
+    fn bind_value(&mut self, name: &str, marked: bool) {
+        self.bind(name);
+        if let Some(m) = self.1.last_mut() {
+            if marked {
+                m.insert(name.to_string());
+            } else {
+                m.remove(name);
+            }
+        }
     }
 
     fn bind(&mut self, name: &str) {
@@ -103,6 +147,17 @@ macro_rules! scope_walker {
             /// function a concrete override rather than a generic.
             fn visit_function_generics(&mut self, _params: &$($m)? [GenericParam]) {}
 
+            /// A value is about to be bound (a parameter, local, loop or
+            /// `with` binding, or closure parameter), with its declared type
+            /// and initializer. True marks the binding (see
+            /// `Scopes::is_marked_value`).
+            fn visit_binding(&mut self, _ty: &TypeName, _init: Option<&Expression>) -> bool {
+                false
+            }
+
+            /// The callee of a call, before it is walked.
+            fn visit_callee(&mut self, _function: &Expression) {}
+
             /// The member name of `x.name`, after `x` is walked.
             fn visit_member(&mut self, _name: &str, _name_span: Span) {}
 
@@ -129,7 +184,8 @@ macro_rules! scope_walker {
                         if let Some(e) = &$($m)? v.default_value {
                             self.visit_expression(e);
                         }
-                        self.scopes_mut().bind(&v.name);
+                        let marked = self.visit_binding(&v.type_name, v.default_value.as_ref());
+                        self.scopes_mut().bind_value(&v.name, marked);
                     }
                     Declaration::Function(f) => self.walk_function(f),
                     Declaration::Struct(s) => {
@@ -157,9 +213,21 @@ macro_rules! scope_walker {
                     }
                     Declaration::Trait(t) => {
                         self.push_generics(&$($m)? t.generic_params);
+                        self.scopes_mut().push(Scope::Trait(t.name.clone()));
+                        // In a default method, the trait's methods are
+                        // members of `this`: a bare call binds to them.
+                        let methods = t
+                            .methods
+                            .iter()
+                            .filter(|m| keep(&m.attributes).unwrap_or(true))
+                            .map(|m| m.name.clone())
+                            .collect();
+                        self.scopes_mut().push(Scope::Values(methods));
                         for m in &$($m)? t.methods {
                             self.walk_function(m);
                         }
+                        self.scopes_mut().pop();
+                        self.scopes_mut().pop();
                         self.scopes_mut().pop();
                     }
                     Declaration::Extend(e) => {
@@ -203,7 +271,8 @@ macro_rules! scope_walker {
                     if let Some(e) = &$($m)? p.default_value {
                         self.visit_expression(e);
                     }
-                    self.scopes_mut().bind(&p.name);
+                    let marked = self.visit_binding(&p.type_name, None);
+                    self.scopes_mut().bind_value(&p.name, marked);
                 }
                 if let Some(body) = &$($m)? f.body {
                     self.walk_block(body);
@@ -249,7 +318,8 @@ macro_rules! scope_walker {
                         self.visit_expression(&$($m)? f.iterable);
                         self.scopes_mut().push(Scope::Values(HashSet::new()));
                         self.visit_type_name(&$($m)? f.binding.type_name);
-                        self.scopes_mut().bind(&f.binding.name);
+                        let marked = self.visit_binding(&f.binding.type_name, Some(&f.iterable));
+                        self.scopes_mut().bind_value(&f.binding.name, marked);
                         self.walk_block(&$($m)? f.block);
                         self.scopes_mut().pop();
                     }
@@ -261,7 +331,8 @@ macro_rules! scope_walker {
                         self.scopes_mut().push(Scope::Values(HashSet::new()));
                         if let Some(b) = &$($m)? w.binding {
                             self.visit_type_name(&$($m)? b.type_name);
-                            self.scopes_mut().bind(&b.name);
+                            let marked = self.visit_binding(&b.type_name, Some(&w.scope));
+                            self.scopes_mut().bind_value(&b.name, marked);
                         }
                         self.walk_block(&$($m)? w.block);
                         self.scopes_mut().pop();
@@ -305,6 +376,7 @@ macro_rules! scope_walker {
                         self.visit_member(name, *name_span);
                     }
                     Expression::FunctionCall { function, arguments, .. } => {
+                        self.visit_callee(&**function);
                         self.visit_expression(function);
                         for a in arguments {
                             self.visit_expression(a);
@@ -315,7 +387,8 @@ macro_rules! scope_walker {
                         self.scopes_mut().push(Scope::Values(HashSet::new()));
                         for p in &$($m)? c.parameters {
                             self.visit_type_name(&$($m)? p.type_name);
-                            self.scopes_mut().bind(&p.name);
+                            let marked = self.visit_binding(&p.type_name, None);
+                            self.scopes_mut().bind_value(&p.name, marked);
                         }
                         self.visit_type_name(&$($m)? c.return_type);
                         self.walk_block(&$($m)? c.body);

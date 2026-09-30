@@ -831,3 +831,22 @@ fn private_name_is_shown_as_written() {
          \x20     |              ^"
     );
 }
+
+#[test]
+fn extension_method_from_a_file_not_imported() {
+    let files = [
+        ("types.pep", "export struct S { var x: int; }\n"),
+        ("ext.pep", "import \"types\";\nexport extend S { double(): int { return x * 2; } }\n"),
+        ("other.pep", "import \"ext\";\nexport other(): int { return 0; }\n"),
+    ];
+    let main = "import \"types\";\nimport \"other\";\nmain(): int {\n    var s = S();\n    return s.double() + other();\n}\n";
+    assert_eq!(
+        error_of_files("extension_not_imported", main, &files),
+        "main.pep:5:14: error: 'double' is declared in an extension in ext.pep, which this file does not import; add an import for it\n\
+         \x20   5 |     return s.double() + other();\n\
+         \x20     |              ^~~~~~\n\
+         ext.pep:2:19: note: declared here\n\
+         \x20   2 | export extend S { double(): int { return x * 2; } }\n\
+         \x20     |                   ^~~~~~"
+    );
+}

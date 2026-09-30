@@ -130,6 +130,9 @@ impl Program {
                 prelude: f.prelude,
                 duplicate_exempt: f.prelude || f.prelude_part,
                 imported: &scope.imported,
+                extensions: &scope.extensions,
+                module_root: f.module_root.as_deref(),
+                bound: &scope.bound,
             })
             .collect()
     }
@@ -339,9 +342,11 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
         index.insert(key, file);
         resolved.push(targets);
         let namespace = roots.namespace_of(&path);
+        let module_root = roots.module_of(&path);
         files.push(ProgramFile {
             name,
             namespace,
+            module_root,
             source,
             module,
             prelude,

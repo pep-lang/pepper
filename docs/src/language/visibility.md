@@ -74,13 +74,66 @@ lib.pep:42:5: note: declared here
       |     ^~~~
 ```
 
-Likewise, a trait that a private extension implements is only available
-through that extension in its own file. Extending a struct does not make a
-private struct visible to other files.
+An exported extension's methods are usable where its file is **imported**,
+not everywhere: a file sees the extensions it declares itself, the exported
+extensions of the files it imports, the exported extensions of every file of
+a module it imports (`import geo` reaches `geo/ext.pep`'s), and those of the
+runtime, which every file sees. Here `measure.pep` adds `manhattan()` to
+`Point`, and `main.pep` imports it to call it:
+
+```pepper
+{{#include ../../examples/visibility-extensions/measure.pep}}
+```
+
+```pepper
+{{#include ../../examples/visibility-extensions/main.pep}}
+```
+
+Without `import "measure";`, the call is an error. If no file of the program
+imports `measure.pep`, the method does not exist at all (`no member named
+'manhattan' in 'Point'`); if another file does, the error says which import
+is missing:
+
+```text
+main.pep:8:14: error: 'manhattan' is declared in an extension in measure.pep, which this file does not import; add an import for it
+    8 |     assert(p.manhattan() == 7, "an extension from an imported file");
+      |              ^~~~~~~~~
+measure.pep:5:5: note: declared here
+    5 |     manhattan(): int {
+      |     ^~~~~~~~~
+```
+
+Two kinds of call are checked where they take effect rather than here:
+
+- A method of a trait you can see (`s.area()` where `area` is a method of a
+  trait `Shape` you declare, import, or get from the standard library): the
+  call may go through a value of that trait, which works whatever file
+  declares the conformance. A file can return a `Shape` whose struct and
+  conformance stay private, and callers still call `area` on it.
+- A call on a receiver whose type is not known in this file: `this.m()` in a
+  trait's default method, or `x.m()` (or `x.f().m()`) where `x` is a
+  parameter typed by a type parameter, the function's or its struct's
+  (`measure<X>(x: X)`). Such a call resolves where the generic is used, with
+  that file's imports.
+
+When the extension is in a file of another module, the error names the
+module to import instead (`import its module 'geo'`), since a file of another
+module is reached only through its module.
+
+Inside a struct's methods (and a trait's default methods), a bare call to a
+name that an extension you cannot see adds as a method is an error too,
+rather than a call to the top-level function of that name: the compiler
+would otherwise bind it to the method.
+Rename one of them, or import the extension's file if the method is what you
+meant. That import may point back at a file that imports this one (a struct's
+file importing the file that extends it); such cycles are allowed.
+
+Extending a struct does not make a private struct visible to other files.
 
 Visibility is checked before types are known, so members are matched by name:
-a call `x.m()` in another file is accepted if any struct body or extension
-visible to that file (its own, or exported) declares a member named `m`.
+a call `x.m()` is accepted if any struct body visible to the file (its own,
+or exported) or any extension visible to it, as above, declares a member
+named `m`.
 
 ## Where `export` goes
 

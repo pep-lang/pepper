@@ -333,9 +333,10 @@ test(): int { return one(); }"),
 }
 
 #[test]
-fn extension_methods_shadow_imports_in_the_struct_body() {
-    // Counter's own `total` calls `bump`, a method main.pep's extension adds
-    // through a qualified target; the file's `bump` import must not capture it.
+fn an_extension_in_a_file_not_imported_does_not_shadow_imports() {
+    // main.pep's extension adds `bump` to Counter through a qualified target,
+    // but c/module.pep does not import main.pep, so in Counter's own `total`
+    // `bump` is still c's import.
     let files = [
         (
             "c/module.pep",
@@ -348,7 +349,7 @@ fn extension_methods_shadow_imports_in_the_struct_body() {
 export extend m.Counter { bump(): int { return 1; } }
 test(): int { var k = m.Counter(); return k.total() + m.use_bump(); }"),
     ];
-    assert_eq!(run("ext_members", &files), 101);
+    assert_eq!(run("ext_members", &files), 200);
 }
 
 #[test]
@@ -1316,4 +1317,334 @@ fn private_generics_with_private_overrides_stay_per_file() {
              export from_b(): int { return describe<int>(0) * 10 + describe<bool>(true); }";
     let main = "import \"a\";\nimport \"b\";\ntest(): int { return from_a() * 100 + from_b(); }";
     assert_eq!(run("private_overrides_per_file", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 2143);
+}
+
+/// A struct in one file and an exported extension of it in another.
+const EXTENDED: &[(&str, &str)] = &[
+    ("types.pep", "export struct S { var x: int; }"),
+    ("ext.pep", "import \"types\";\nexport extend S { double(): int { return x * 2; } }"),
+];
+
+#[test]
+fn an_exported_extension_is_usable_where_its_file_is_imported() {
+    let main = "import \"types\";\nimport \"ext\";\ntest(): int { var s = S(); s.x = 4; return s.double(); }";
+    let files = [EXTENDED, &[("main.pep", main)]].concat();
+    assert_eq!(run("extension_imported", &files), 8);
+}
+
+#[test]
+fn an_exported_extension_needs_an_import() {
+    // ext.pep is in the program, but only through other.pep's import.
+    let main = "import \"types\";\nimport \"other\";\ntest(): int { var s = S(); s.x = 4; return s.double() + other(); }";
+    let other = "import \"ext\";\nexport other(): int { return 0; }";
+    let files = [EXTENDED, &[("other.pep", other), ("main.pep", main)]].concat();
+    let err = error("extension_not_imported", &files);
+    assert!(err.contains("'double' is declared in an extension in") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn an_extension_in_another_module_names_the_module_to_import() {
+    // main.pep reaches `geo.Pt` only through `other`; `import "geo/ext"`
+    // would be rejected (a file of another module), so the error names the
+    // module.
+    let files = [
+        ("geo/module.pep", "import \"ext\";\nexport struct Pt { var x: int; }\nexport origin(): Pt { return Pt(); }"),
+        ("geo/ext.pep", "import \"module\";\nexport extend Pt { triple(): int { return x * 3; } }"),
+        ("other/module.pep", "import geo;\nexport mk(): geo.Pt { return geo.origin(); }"),
+        ("main.pep", "import other;\ntest(): int { return other.mk().triple(); }"),
+    ];
+    let err = error("extension_module_named", &files);
+    assert!(err.contains("which this file does not import; import its module 'geo'"), "{}", err);
+}
+
+#[test]
+fn a_module_import_reaches_the_extensions_of_its_files() {
+    // `import geo` makes the exported extensions of every file of geo
+    // usable, as `import "geo/ext"` could not (it is another module's file).
+    let files = [
+        ("geo/module.pep", "import \"ext\";\nexport struct Pt { var x: int; }"),
+        ("geo/ext.pep", "import \"module\";\nexport extend Pt { triple(): int { return x * 3; } }"),
+        ("main.pep", "import geo;\ntest(): int { var p = geo.Pt(); p.x = 2; return p.triple(); }"),
+    ];
+    assert_eq!(run("module_extensions", &files), 6);
+}
+
+#[test]
+fn an_extension_a_file_cannot_see_may_not_capture_its_calls() {
+    // b.pep's extension adds `helper` to S, but a.pep does not import b.pep:
+    // in S's own method, `helper()` would silently call the method instead
+    // of a.pep's function (or the runtime's `print`).
+    let a = "export struct S { var x: int; total(): int { return helper(); } show() { print(1); } }\n\
+             export helper(): int { return 1; }";
+    let b = "import \"a\";\nexport extend S { helper(): int { return 100; } print(v: int) { } }\nexport touch(): int { return 0; }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
+    let err = error("hidden_extension_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
+    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+    assert!(err.contains("'print' is declared in an extension in"), "{}", err);
+}
+
+#[test]
+fn only_a_call_can_be_captured_by_an_invisible_extension() {
+    // Sema binds a bare call to a method, but a bare value to the field or
+    // top-level declaration: a function reference and a global are fine.
+    let a = "export struct S { var x: int; total(): int { var f = helper; return f() + count; } }\n\
+             export helper(): int { return 1; }\nexport const count = 7;";
+    let b = "import \"a\";\nexport extend S { helper(): int { return 100; } count(): int { return 100; } }\nexport touch(): int { return 0; }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
+    assert_eq!(run("invisible_extension_values", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 8);
+}
+
+#[test]
+fn a_dropped_extension_method_captures_nothing() {
+    // The extension's `helper` is not compiled on this platform.
+    let dropped = if cfg!(windows) { "[Target(!OS(Windows))]" } else { "[Target(OS(Windows))]" };
+    let a = "export struct S { var x: int; total(): int { return helper(); } }\nexport helper(): int { return 1; }";
+    let b = format!("import \"a\";\nexport extend S {{ {} helper(): int {{ return 100; }} }}\nexport touch(): int {{ return 0; }}", dropped);
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
+    assert_eq!(run("dropped_extension_method", &[("a.pep", a), ("b.pep", &b), ("main.pep", main)]), 1);
+}
+
+#[test]
+fn an_invisible_extension_may_not_capture_a_call_in_a_trait_default() {
+    // S conforms to T in a.pep; b.pep, which a.pep does not import, adds
+    // `helper` to S, which T's default `total` would call instead.
+    let a = "export trait T { area(): int; total(): int { return helper(); } }\nexport struct S { var x: int; }\n\
+             export extend S with T { area(): int { return 0; } }\nexport helper(): int { return 1; }";
+    let b = "import \"a\";\nexport extend S { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
+    let err = error("trait_default_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
+    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+}
+
+#[test]
+fn a_trait_default_may_call_the_traits_own_methods() {
+    // `area` in T's default is a method of T, whichever file adopts it.
+    let a = "export trait T { area(): int; total(): int { return area() + 1; } }";
+    let b = "import \"a\";\nexport struct S { var x: int; }\nexport extend S with T { area(): int { return 41; } }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total(); }";
+    assert_eq!(run("trait_default_own_methods", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 42);
+}
+
+#[test]
+fn an_invisible_extension_through_an_alias_may_not_capture_a_call() {
+    // b.pep extends S as `C`; a.pep does not import b.pep.
+    let a = "export struct S { var x: int; total(): int { return helper(); } }\nexport helper(): int { return 1; }";
+    let b = "import \"a\";\ntype C = S;\nexport extend C { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
+    let err = error("alias_extension_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
+    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+}
+
+#[test]
+fn an_invisible_extension_through_a_generic_alias_may_not_capture_a_call() {
+    let a = "export struct Box<T> { var v: T; total(): int { return helper(); } }\nexport helper(): int { return 1; }";
+    let b = "import \"a\";\ntype B = Box<int>;\nexport extend B { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { var x = Box<int>(); return x.total() + touch(); }";
+    let err = error("generic_alias_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
+    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+}
+
+#[test]
+fn an_extension_through_an_alias_may_not_capture_a_renamed_import() {
+    // In S's method, `hh` is h's `helper`; b.pep's extension (written as
+    // `extend C`, C = S, and visible to a.pep) adds a `helper` method.
+    let files = [
+        ("h.pep", "export helper(): int { return 1; }"),
+        ("a.pep", "import [helper as hh] from \"h\";\nimport \"b\";\nexport struct S { var x: int; total(): int { return hh(); } }"),
+        ("b.pep", "import \"a\";\ntype C = S;\nexport extend C { helper(): int { return 100; } }"),
+        ("main.pep", "import \"a\";\ntest(): int { var s = S(); return s.total(); }"),
+    ];
+    let err = error("alias_capture_renamed_import", &files);
+    assert!(err.contains("'hh' refers to 'helper'"), "{}", err);
+}
+
+#[test]
+fn an_extension_may_not_capture_a_renamed_import_in_a_trait_default() {
+    let files = [
+        ("h.pep", "export helper(): int { return 1; }"),
+        ("a.pep", "import [helper as hh] from \"h\";\nimport \"b\";\nexport trait T { total(): int { return hh(); } }\n\
+                   export struct S { var x: int; }\nexport extend S with T { }"),
+        ("b.pep", "import \"a\";\nexport extend S { helper(): int { return 100; } }"),
+        ("main.pep", "import \"a\";\ntest(): int { var s = S(); return s.total(); }"),
+    ];
+    let err = error("trait_default_capture_renamed", &files);
+    assert!(err.contains("'hh' refers to"), "{}", err);
+}
+
+#[test]
+fn a_dropped_trait_method_does_not_hide_a_function() {
+    // On this platform `area` is not a method of T, so `area()` in the
+    // default is the private function.
+    let dropped = if cfg!(windows) { "[Target(!OS(Windows))]" } else { "[Target(OS(Windows))]" };
+    let a = format!(
+        "area(): int {{ return 41; }}\nexport trait T {{ {} area(): int; total(): int {{ return area() + 1; }} }}\n\
+         export struct S {{ var x: int; }}\nexport extend S with T {{ }}",
+        dropped
+    );
+    let main = "import \"a\";\ntest(): int { var s = S(); return s.total(); }";
+    assert_eq!(run("dropped_trait_method", &[("a.pep", &a), ("main.pep", main)]), 42);
+}
+
+#[test]
+fn a_method_a_visible_trait_declares_needs_no_import_of_its_extension() {
+    // main.pep sees Shape, which declares `area`; the extension that gives
+    // S its `area` is in ext.pep, reached only through other.pep.
+    let files = [
+        ("shape.pep", "export trait Shape { area(): int; }"),
+        ("types.pep", "export struct S { var x: int; }"),
+        ("ext.pep", "import \"shape\";\nimport \"types\";\nexport extend S with Shape { area(): int { return 7; } }"),
+        ("other.pep", "import \"ext\";\nexport other(): int { return 0; }"),
+        ("main.pep", "import \"shape\";\nimport \"types\";\nimport \"other\";\ntest(): int { var s = S(); return s.area() + other(); }"),
+    ];
+    assert_eq!(run("visible_trait_method", &files), 7);
+}
+
+#[test]
+fn a_generic_or_trait_receiver_is_checked_where_it_is_instantiated() {
+    // lib.pep's `measure<X>` and T's default call `area` on receivers whose
+    // type lib.pep cannot know; main.pep, which instantiates them, imports
+    // the extension.
+    let files = [
+        ("lib.pep", "export measure<X>(x: X): int { return x.area(); }\nexport trait T { twice(): int { return this.area() * 2; } }"),
+        ("types.pep", "export struct S { var x: int; }"),
+        ("ext.pep", "import \"types\";\nimport \"lib\";\nexport extend S with T { area(): int { return 5; } }"),
+        ("main.pep", "import \"lib\";\nimport \"types\";\nimport \"ext\";\ntest(): int { var s = S(); return measure<S>(s) + s.twice(); }"),
+    ];
+    assert_eq!(run("generic_receiver", &files), 15);
+}
+
+#[test]
+fn a_local_shadowing_a_generic_parameter_is_checked() {
+    // `x` is a local S here, not the generic parameter.
+    let files = [
+        ("types.pep", "export struct S { var x: int; }"),
+        ("ext.pep", "import \"types\";\nexport extend S { area(): int { return 5; } }"),
+        ("other.pep", "import \"ext\";\nexport other(): int { return 0; }"),
+        ("main.pep", "import \"types\";\nimport \"other\";\nf<X>(x: X): int { var x = S(); return x.area(); }\n\
+                      test(): int { return f<int>(1) + other(); }"),
+    ];
+    let err = error("local_shadows_generic", &files);
+    assert!(err.contains("'area' is declared in an extension in"), "{}", err);
+}
+
+#[test]
+fn a_call_through_a_visible_trait_needs_no_conformance_in_view() {
+    // shape.pep hides Sq and its conformance; main.pep calls `area`
+    // through a Shape value, directly or through a re-exporting file.
+    let shape = "export trait Shape { area(): int; }\nstruct Sq { var x: int; }\n\
+                 extend Sq with Shape { area(): int { return 9; } }\nexport make(): Shape { return Sq(); }";
+    let files = [
+        ("shape.pep", shape),
+        ("main.pep", "import \"shape\";\ntest(): int { var s: Shape = make(); var f = s.area; return s.area() + f(); }"),
+    ];
+    assert_eq!(run("trait_value_private_conformance", &files), 18);
+    let files = [
+        ("shape.pep", shape),
+        ("factory.pep", "import \"shape\";\nexport Shape;\nexport make;"),
+        ("main.pep", "import \"factory\";\ntest(): int { var s: Shape = make(); return s.area(); }"),
+    ];
+    assert_eq!(run("trait_value_reexported_trait", &files), 9);
+}
+
+#[test]
+fn values_typed_by_a_generic_parameter_are_checked_where_instantiated() {
+    // Locals and closure parameters of type X, declared or inferred.
+    let files = [
+        ("lib.pep", "export f<X>(x: X): int { var y: X = x; var z = y; var g = (w: X): int => w.double(); return y.double() + z.double() + g(x); }"),
+        ("types.pep", "export struct S { var x: int; }"),
+        ("ext.pep", "import \"types\";\nexport extend S { double(): int { return 2; } }"),
+        ("main.pep", "import \"lib\";\nimport \"types\";\nimport \"ext\";\ntest(): int { return f<S>(S()); }"),
+    ];
+    assert_eq!(run("generic_locals", &files), 6);
+}
+
+#[test]
+fn chained_and_struct_generic_receivers_are_checked_where_instantiated() {
+    let files = [
+        ("lib.pep", "export measure<X>(x: X): int { return x.me().area(); }\n\
+                     export struct Box<T> { var v: int; apply(t: T): int { return t.area(); } }"),
+        ("types.pep", "export struct S { var x: int; me(): S { return this; } }"),
+        ("ext.pep", "import \"types\";\nexport extend S { area(): int { return 5; } }"),
+        ("main.pep", "import \"lib\";\nimport \"types\";\nimport \"ext\";\n\
+                      test(): int { var s = S(); var b = Box<S>(); return measure<S>(s) + b.apply(s); }"),
+    ];
+    assert_eq!(run("chained_generic_receivers", &files), 10);
+}
+
+/// S, and an exported extension of it that files reach only by importing
+/// ext.pep.
+const HIDDEN: &[(&str, &str)] = &[
+    ("types.pep", "export struct S { var x: int; }"),
+    ("ext.pep", "import \"types\";\nexport extend S { hidden(): int { return 2; } }"),
+];
+
+#[test]
+fn a_generic_binding_ends_with_its_scope() {
+    // The inner `s` (or `x`) is generic, but it is out of scope, or
+    // shadowed, where `hidden` is called on a plain S.
+    for body in [
+        "{ var s = x; } var s = S(); return s.hidden();",
+        "{ var x: X = x; } var x = S(); return x.hidden();",
+        "{ var s = x; } var a = Array<S>(); a.append(S()); var n = 0; for (var s in a) { n = n + s.hidden(); } return n;",
+    ] {
+        let lib = format!("import \"types\";\nexport f<X>(x: X): int {{ {} }}", body);
+        let files = [HIDDEN, &[("lib.pep", lib.as_str()), ("main.pep", "import \"lib\";\nimport \"ext\";\ntest(): int { return f<int>(1); }")]].concat();
+        let err = error("generic_binding_scope", &files);
+        assert!(err.contains("'hidden' is declared in an extension in"), "{}\n{}", body, err);
+    }
+}
+
+#[test]
+fn generic_bindings_through_shadowing_and_loops() {
+    // Each receiver is a value of type X, checked where f<S> is used.
+    let lib = "export f<X>(x: X): int { var y = x; { var y = y; return y.hidden(); } }";
+    let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\nimport \"types\";\nimport \"ext\";\ntest(): int { return f<S>(S()); }")]].concat();
+    assert_eq!(run("generic_bindings_shadow", &files), 2);
+    // A loop binding typed X (compiled only: an `X[]` parameter does not
+    // generate code yet).
+    let lib = "export g<X>(a: X[]): int { var n = 0; for (X s in a) { n = n + s.hidden(); } return n; }";
+    let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return 0; }")]].concat();
+    compile("generic_bindings_loop", &files).expect("a loop binding typed X is checked where g is used");
+}
+
+#[test]
+fn a_trait_reached_through_a_reexport_is_visible_unspelled() {
+    let files = [
+        ("shape.pep", "export trait Shape { area(): int; }\nstruct Sq { var x: int; }\n\
+                       extend Sq with Shape { area(): int { return 9; } }\nexport make(): Shape { return Sq(); }"),
+        ("factory.pep", "import \"shape\";\nexport Shape;\nexport make;"),
+        ("main.pep", "import \"factory\";\ntest(): int { var s = make(); return s.area() + make().area(); }"),
+    ];
+    assert_eq!(run("trait_reexport_unspelled", &files), 18);
+}
+
+#[test]
+fn loop_and_with_bindings_from_generic_values_are_checked_where_instantiated() {
+    let lib = "export f<X>(x: X): int { var n = 0; for (var e in x) { n = n + e.hidden(); } return n; }\n\
+               export g<X>(x: X): int { with (var e = x) { return e.hidden(); } return 0; }";
+    let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return 0; }")]].concat();
+    compile("generic_loop_with_bindings", &files).expect("bindings from a generic value are checked where f and g are used");
+}
+
+#[test]
+fn this_in_a_default_and_generic_fields_are_checked_where_instantiated() {
+    let lib = "export trait Tr { area(): int; twice(): int { var me = this; return me.hidden(); } }\n\
+               export struct Box<T> { var v: T; get(): int { return v.hidden() + this.v.hidden(); } }";
+    let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\nimport \"types\";\nimport \"ext\";\n\
+                  extend S with Tr { area(): int { return 0; } }\n\
+                  test(): int { var s = S(); var b = Box<S>(); b.v = s; return s.twice() + b.get(); }")]].concat();
+    assert_eq!(run("this_and_generic_fields", &files), 6);
+}
+
+#[test]
+fn values_whose_type_contains_a_type_parameter_are_checked_where_instantiated() {
+    for lib in [
+        "export f<X>(a: Array<X>): int { var n = 0; for (var s in a) { n = n + s.hidden(); } return n; }",
+        "export f<X>(a: Array<X>): int { return a[0].hidden(); }",
+        "export f<X>(a: Array<X>): int { var y = a[0]; return y.hidden(); }",
+        "export struct Box<T> { var items: Array<T>; first(): int { return this.items[0].hidden(); } }",
+    ] {
+        let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return 0; }")]].concat();
+        compile("generic_containers", &files).unwrap_or_else(|e| panic!("{}\n{}", lib, e));
+    }
 }

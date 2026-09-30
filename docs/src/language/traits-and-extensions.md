@@ -24,6 +24,10 @@ same file, another file, or the standard library:
   They can use `this` and name the struct's fields directly, and they are
   called the same way.
 - A type can have any number of extensions.
+- An extension in another file is usable only where that file (or its
+  module) is imported, and only if it is exported; the standard library's
+  extensions are usable everywhere. See
+  [Visibility](visibility.md#members-of-structs-and-extensions).
 
 ### Extending generic structs
 

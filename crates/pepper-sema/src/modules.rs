@@ -37,6 +37,8 @@ pub struct ProgramFile {
     /// The namespace its private names are mangled with (see
     /// [`pepper_parser::namespace`]), unique in the program.
     pub namespace: String,
+    /// The folder of the module the file belongs to, if any.
+    pub module_root: Option<std::path::PathBuf>,
     pub source: String,
     pub module: Module,
     /// A runtime or forced-import file: its exports are visible to every file
@@ -67,6 +69,13 @@ pub struct FileScope {
     /// re-exports bind, as span start (of the list entry, or of the
     /// re-exported symbol) -> declaration name, for the editor to follow.
     pub named: HashMap<usize, String>,
+    /// The other files whose exported extensions this file may use: prelude
+    /// files and the files of a forced module, the files it imports, and
+    /// every file of a module it imports.
+    pub extensions: HashSet<usize>,
+    /// The declarations the file's imports bind, by the names they take in
+    /// the merged program, whether or not the file spells them.
+    pub bound: HashSet<String>,
 }
 
 /// A module-linking error, anchored in one file.
@@ -355,11 +364,23 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     // Struct members by struct name: inside a method, a member shadows an
     // import of the same name. Body members always count; an extension's
     // methods only where the extension is visible (its own file, or
-    // exported). Its target may be spelled through an import (`extend m.S`,
+    // exported by a file this one imports, or by the prelude). Its target may be spelled through an import (`extend m.S`,
     // an alias), so it is keyed by the declaration it names.
     // Only what platform selection keeps is a member at all.
     let mut members = Members::default();
     let kept_method = |m: &&FunctionDecl| keep(&m.attributes).unwrap_or(true);
+    let resolve = |i: usize, name: &str| {
+        resolve_top_level(name, &own[i], &bindings[i], &exports, &prelude).unwrap_or_else(|_| name.to_string())
+    };
+    // An extension may name its target or its traits through a type alias
+    // (`extend C` after `type C = S`).
+    for (i, f) in files.iter().enumerate() {
+        for d in f.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
+            if let Declaration::TypeAlias(t) = d {
+                members.aliases.insert(resolve(i, &t.name), resolve(i, &t.target.name));
+            }
+        }
+    }
     for (i, f) in files.iter().enumerate() {
         for d in f.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             match d {
@@ -367,8 +388,11 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
                     s.fields.iter().map(|x| x.name.clone()).chain(s.methods.iter().filter(kept_method).map(|m| m.name.clone())),
                 ),
                 Declaration::Extend(e) => {
-                    let target = resolve_top_level(&e.target.name, &own[i], &bindings[i], &exports, &prelude)
-                        .unwrap_or_else(|_| e.target.name.clone());
+                    let target = members.resolve(&resolve(i, &e.target.name)).to_string();
+                    for t in &e.traits {
+                        let t = members.resolve(&resolve(i, &t.name)).to_string();
+                        members.adopters.entry(t).or_default().push(target.clone());
+                    }
                     members
                         .of_extensions
                         .entry(target)
@@ -380,6 +404,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
         }
     }
 
+    let extensions = visible_extensions(files);
     let mut scopes = vec![];
     for i in 0..n {
         let named = named_bindings(i, files, &own[i], &bindings[i], &exports, &prelude);
@@ -397,17 +422,48 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             types: &types,
             names: &names,
             members: &members,
+            extensions: &extensions[i],
             scopes: Scopes::default(),
             imported: HashMap::new(),
             errors: &mut errors,
         };
         rewriter.module(&mut files[i].module);
         let imported = std::mem::take(&mut rewriter.imported);
-        scopes.push(FileScope { imported, named });
+        let bound = bindings[i]
+            .unqualified
+            .values()
+            .flatten()
+            .cloned()
+            .chain(bindings[i].qualified.values().flat_map(|&t| exports[t].values().cloned()))
+            .collect();
+        scopes.push(FileScope { imported, named, extensions: extensions[i].clone(), bound });
     }
     errors.sort_by_key(|e| (e.file, e.span.start));
     errors.dedup();
     (scopes, errors)
+}
+
+/// Per file, the other files whose exported extensions it may use (see
+/// [`FileScope::extensions`]). An import of a module (`import m`, or a
+/// local import of a module folder) reaches every file of that module; an
+/// import of a file reaches that file.
+fn visible_extensions(files: &[ProgramFile]) -> Vec<HashSet<usize>> {
+    let everywhere: HashSet<usize> = (0..files.len()).filter(|&j| files[j].prelude || files[j].prelude_part).collect();
+    files
+        .iter()
+        .map(|f| {
+            let mut out = everywhere.clone();
+            let kept = f.module.imports.iter().zip(&f.imports).zip(&f.folder_imports);
+            for ((imp, target), folder) in kept.filter(|((imp, _), _)| keep(&imp.attributes).unwrap_or(true)) {
+                let Some(t) = *target else { continue };
+                out.insert(t);
+                if (!imp.is_local || *folder) && let Some(root) = &files[t].module_root {
+                    out.extend((0..files.len()).filter(|&j| files[j].module_root.as_ref() == Some(root)));
+                }
+            }
+            out
+        })
+        .collect()
 }
 
 /// File `i`'s import-list entries and re-exports that denote a declaration,
@@ -709,6 +765,24 @@ struct Members {
     of_body: HashMap<String, HashSet<String>>,
     /// struct -> (method, declaring file, exported) from extensions.
     of_extensions: HashMap<String, Vec<(String, usize, bool)>>,
+    /// trait -> the structs extensions make conform to it.
+    adopters: HashMap<String, Vec<String>>,
+    /// type alias -> the type it names (its base name, for a generic one).
+    aliases: HashMap<String, String>,
+}
+
+impl Members {
+    /// The type `name` denotes, through any aliases.
+    fn resolve<'s>(&'s self, mut name: &'s str) -> &'s str {
+        // An alias cycle is reported elsewhere; stop rather than loop.
+        for _ in 0..=self.aliases.len() {
+            match self.aliases.get(name) {
+                Some(target) => name = target,
+                None => break,
+            }
+        }
+        name
+    }
 }
 
 struct Rewriter<'a, 'e> {
@@ -725,6 +799,8 @@ struct Rewriter<'a, 'e> {
     members: &'a Members,
     /// The types this file declares (structs, aliases, traits).
     own_types: HashSet<String>,
+    /// Other files whose exported extensions this file may use.
+    extensions: &'a HashSet<usize>,
     scopes: Scopes,
     imported: HashMap<usize, String>,
     errors: &'e mut Vec<ModuleError>,
@@ -856,11 +932,22 @@ impl Rewriter<'_, '_> {
     /// `name` is a method some extension (visible here or not) adds to the
     /// struct whose methods are being walked. Sema sees every extension, so
     /// a rewritten reference of that name would bind to the method.
+    /// In a trait's default methods, that is any struct an extension makes
+    /// conform to the trait.
     fn is_any_extension_method(&self, name: &str) -> bool {
-        self.scopes
-            .current_struct()
-            .and_then(|s| self.members.of_extensions.get(s))
-            .is_some_and(|ext| ext.iter().any(|(m, _, _)| m == name))
+        let structs: Vec<&str> = match (self.scopes.current_struct(), self.scopes.current_trait()) {
+            (Some(st), _) => vec![self.members.resolve(st)],
+            (None, Some(t)) => self
+                .members
+                .adopters
+                .get(self.members.resolve(t))
+                .map(|a| a.iter().map(String::as_str).collect())
+                .unwrap_or_default(),
+            _ => vec![],
+        };
+        structs
+            .into_iter()
+            .any(|st| self.members.of_extensions.get(st).is_some_and(|ext| ext.iter().any(|(m, _, _)| m == name)))
     }
 }
 
@@ -874,9 +961,12 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
     }
 
     fn is_member(&self, struct_name: &str, name: &str) -> bool {
+        let struct_name = self.members.resolve(struct_name);
         self.members.of_body.get(struct_name).is_some_and(|m| m.contains(name))
             || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
-                ext.iter().any(|(m, file, exported)| m == name && (*exported || *file == self.file))
+                ext.iter().any(|(m, file, exported)| {
+                    m == name && (*file == self.file || (*exported && self.extensions.contains(file)))
+                })
             })
     }
 
