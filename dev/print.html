@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-16cc205f.js";
+            window.path_to_searchindex_js = "searchindex-d077180a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e51e852e.js"></script>
@@ -8424,6 +8424,18 @@ main(): int {
 <p>Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with <code>spawn_local</code> can share
 it, and each spawned task makes its own.</p>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<p><code>File.read</code>, <code>write</code> and <code>write_all</code> in a task park the task until the
+system call is done, and the worker runs other tasks meanwhile. With the
+<code>IoUring</code> backend the kernel does the read or write itself; with the others
+a thread from <code>run_blocking</code>’s pool makes the blocking call. Opening,
+seeking, <code>metadata</code> and the other <code>File</code> calls still block the thread, as
+they are quick on local disks. A cancel or a <code>timeout</code> does not cut a read
+or write short: it takes effect once the call returns.</p>
+<p>The array a read fills or a write sends from is in use until the call
+returns, so growing it from another task meanwhile panics (“Array: the
+buffer is in use by an I/O operation”). A <code>String</code> passed to <code>write_all</code> is
+copied first.</p>
 <h3 id="accepting-on-every-worker"><a class="header" href="#accepting-on-every-worker">Accepting on every worker</a></h3>
 <p>An <code>io.SharedTcpListener</code> is a listening socket that any thread can accept
 on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
@@ -8624,8 +8636,8 @@ pipe (on Windows, a loopback UDP socket that a second socket sends to) with
 through the same messages.</p>
 <h2 id="current-status-1"><a class="header" href="#current-status-1">Current status</a></h2>
 <ul>
-<li>Files block the thread on every platform; asynchronous files come
-later.</li>
+<li><code>File</code> calls other than <code>read</code>, <code>write</code> and <code>write_all</code> (opening,
+seeking, <code>sync</code>, directories) block the thread in a task.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 </ul>
@@ -11382,6 +11394,10 @@ existing elements, which costs O(count).</p>
 <ul>
 <li><code>capacity</code> — the minimum number of element slots required</li>
 </ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
     a.reserve(8);   # a.capacity() &gt;= 8
@@ -11394,6 +11410,10 @@ existing elements, which costs O(count).</p>
 capacity (to at least 4); otherwise does nothing.</p>
 <p><code>append</code> and <code>insert</code> call this themselves; callers rarely need it.
 Does not change the elements or invalidate iterators.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong): T
 </code></pre>
@@ -11452,6 +11472,10 @@ Invalidates running iterators.</p>
 <ul>
 <li><code>item</code> — the element to add</li>
 </ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
     a.append(1);
@@ -11474,6 +11498,7 @@ Invalidates running iterators.</p>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if <code>idx &lt;= count()</code> does not hold (“Array insert index out of bounds”)</li>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
@@ -11673,6 +11698,10 @@ Array’s running iterators when <code>rhs</code> is not empty.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array whose elements are copied</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>

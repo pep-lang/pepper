@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-16cc205f.js";
+            window.path_to_searchindex_js = "../searchindex-d077180a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -478,6 +478,18 @@ main(): int {
 <p>Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with <code>spawn_local</code> can share
 it, and each spawned task makes its own.</p>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<p><code>File.read</code>, <code>write</code> and <code>write_all</code> in a task park the task until the
+system call is done, and the worker runs other tasks meanwhile. With the
+<code>IoUring</code> backend the kernel does the read or write itself; with the others
+a thread from <code>run_blocking</code>’s pool makes the blocking call. Opening,
+seeking, <code>metadata</code> and the other <code>File</code> calls still block the thread, as
+they are quick on local disks. A cancel or a <code>timeout</code> does not cut a read
+or write short: it takes effect once the call returns.</p>
+<p>The array a read fills or a write sends from is in use until the call
+returns, so growing it from another task meanwhile panics (“Array: the
+buffer is in use by an I/O operation”). A <code>String</code> passed to <code>write_all</code> is
+copied first.</p>
 <h3 id="accepting-on-every-worker"><a class="header" href="#accepting-on-every-worker">Accepting on every worker</a></h3>
 <p>An <code>io.SharedTcpListener</code> is a listening socket that any thread can accept
 on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
@@ -678,8 +690,8 @@ pipe (on Windows, a loopback UDP socket that a second socket sends to) with
 through the same messages.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li>Files block the thread on every platform; asynchronous files come
-later.</li>
+<li><code>File</code> calls other than <code>read</code>, <code>write</code> and <code>write_all</code> (opening,
+seeking, <code>sync</code>, directories) block the thread in a task.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 </ul>

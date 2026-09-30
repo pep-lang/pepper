@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-16cc205f.js";
+            window.path_to_searchindex_js = "../searchindex-d077180a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -298,6 +298,10 @@ existing elements, which costs O(count).</p>
 <ul>
 <li><code>capacity</code> — the minimum number of element slots required</li>
 </ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
     a.reserve(8);   # a.capacity() &gt;= 8
@@ -310,6 +314,10 @@ existing elements, which costs O(count).</p>
 capacity (to at least 4); otherwise does nothing.</p>
 <p><code>append</code> and <code>insert</code> call this themselves; callers rarely need it.
 Does not change the elements or invalidate iterators.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong): T
 </code></pre>
@@ -368,6 +376,10 @@ Invalidates running iterators.</p>
 <ul>
 <li><code>item</code> — the element to add</li>
 </ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
     a.append(1);
@@ -390,6 +402,7 @@ Invalidates running iterators.</p>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if <code>idx &lt;= count()</code> does not hold (“Array insert index out of bounds”)</li>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
@@ -589,6 +602,10 @@ Array’s running iterators when <code>rhs</code> is not empty.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array whose elements are copied</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
