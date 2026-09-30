@@ -88,6 +88,10 @@ pub struct CodeGenerator<'ctx> {
     /// Declared parameter types and the declaring location of each free
     /// function, for the string-literal fast path of `assert` and `panic`.
     fn_signatures: HashMap<String, (Vec<String>, Loc)>,
+    /// The sema type name of each LLVM parameter of every declared function
+    /// (keyed like `functions`; `""` for a method's `this`), so a call
+    /// converts a numeric argument by its parameter's signedness.
+    fn_param_types: HashMap<String, Vec<String>>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
     /// File-scope globals: name → Address (frame locals miss falls back here).
@@ -151,6 +155,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
             fn_signatures: HashMap::new(),
+            fn_param_types: HashMap::new(),
             global_strings: HashMap::new(),
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
@@ -777,6 +782,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.own(&mangled, owner);
             }
             self.functions.insert(mangled.clone(), fn_value);
+            let this_param = (!method.is_static).then(String::new);
+            self.fn_param_types.insert(
+                mangled.clone(),
+                this_param.into_iter().chain(method.parameters.iter().map(|p| p.ty.to_string())).collect(),
+            );
             self.param_defaults.insert(
                 mangled.clone(),
                 method.parameters.iter().map(|p| p.default.clone()).collect(),
@@ -808,6 +818,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn instantiate_extern_unlocated(&mut self, ext: &ExternDef) -> Result<(), String> {
         self.extern_names.insert(ext.name.clone());
         self.extern_params.insert(ext.name.clone(), ext.parameters.iter().map(|p| p.ty.to_string()).collect());
+        self.fn_param_types.insert(ext.name.clone(), ext.parameters.iter().map(|p| p.ty.to_string()).collect());
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
         for param in &ext.parameters {
             let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));            self.locate(&ty, param.type_loc);            let ty = ty?;
@@ -918,6 +929,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             function.name.clone(),
             (function.parameters.iter().map(|p| p.ty.to_string()).collect(), function.loc),
         );
+        self.fn_param_types.insert(function.name.clone(), function.parameters.iter().map(|p| p.ty.to_string()).collect());
         Ok(())
     }
 
@@ -4184,7 +4196,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);
         }
-        let coerced = self.coerce_args(c_type, &arg_vals, &arg_names);
+        let param_names: Vec<String> = fn_ty.function_params().iter().map(|p| p.to_string()).collect();
+        let coerced = self.coerce_args(c_type, &arg_vals, &arg_names, &param_names);
         let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
         let call = self
             .builder
@@ -4350,7 +4363,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
         let forwarded: Vec<BasicValueEnum<'ctx>> = thunk.get_param_iter().skip(1).collect();
-        let coerced = self.coerce_args(target.get_type(), &forwarded, &[]);
+        let param_names = self.fn_param_types.get(name).cloned().unwrap_or_default();
+        let coerced = self.coerce_args(target.get_type(), &forwarded, &[], &param_names);
         let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
         let call = self.builder.build_call(target, &meta, "forward").map_err(|e| e.to_string())?;
         match call.try_as_basic_value().basic() {
@@ -4487,7 +4501,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);
         }
-        let coerced = self.coerce_args(invoke_type, &arg_vals, &arg_names);
+        let param_names: Vec<String> =
+            std::iter::once(String::new()).chain(fn_ty.function_params().iter().map(|p| p.to_string())).collect();
+        let coerced = self.coerce_args(invoke_type, &arg_vals, &arg_names, &param_names);
         let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
         let call = self
             .builder
@@ -4694,7 +4710,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 })
             }
         };
-        let coerced = self.coerce_args(fn_value.get_type(), &args, arg_names);
+        let param_names = self.fn_param_types.get(name).cloned().unwrap_or_default();
+        let coerced = self.coerce_args(fn_value.get_type(), &args, arg_names, &param_names);
         let meta_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
             coerced.iter().map(|a| (*a).into()).collect();
         let call = self
@@ -4709,12 +4726,15 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Coerce call arguments to the parameter types of `fn_type` (e.g. i32
     /// refcount → i64 for trace_int), widening integers by the signedness
-    /// of their sema type names in `arg_names`.
+    /// of their sema type names in `arg_names`, and converting a float to
+    /// an integer parameter by the signedness of its sema type name in
+    /// `param_names` (empty when unknown: signed).
     fn coerce_args(
         &self,
         fn_type: inkwell::types::FunctionType<'ctx>,
         args: &[BasicValueEnum<'ctx>],
         arg_names: &[String],
+        param_names: &[String],
     ) -> Vec<BasicValueEnum<'ctx>> {
         let mut coerced: Vec<BasicValueEnum<'ctx>> = vec![];
         for (idx, arg) in args.iter().enumerate() {
@@ -4763,6 +4783,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 (Some(BasicTypeEnum::IntType(_)), BasicValueEnum::PointerValue(_)) => *arg,
+                // float -> integer parameter truncates toward zero, as
+                // assignment does (C 6.3.1.4); `bool` compares != 0.
+                (Some(BasicTypeEnum::IntType(it)), BasicValueEnum::FloatValue(_)) => {
+                    let unsigned = param_names.get(idx).is_some_and(|n| llvm_ops::is_unsigned_int_type(n));
+                    let target = match it.get_bit_width() {
+                        1 => "bool".to_string(),
+                        width if unsigned => format!("u{}", width),
+                        width => format!("i{}", width),
+                    };
+                    let source = value_type_name(arg);
+                    llvm_ops::coerce(self.context, &self.builder, *arg, &source, &target)
+                }
                 // int -> float parameter converts the value (C 6.3.1.4)
                 // instead of passing the integer bits.
                 (Some(BasicTypeEnum::FloatType(ft)), BasicValueEnum::IntValue(v)) => {

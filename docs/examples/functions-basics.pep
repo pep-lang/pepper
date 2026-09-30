@@ -30,6 +30,9 @@ main(): int {
     assert(perimeter(3, 4) == 14, "2 x (3 + 4)");
     assert(factorial(20) == 2432902008176640000, "20!");
     assert(is_even(10), "declared after main, still callable");
+    # An argument converts to its parameter's type as assignment does:
+    # a double passed to an int parameter truncates toward zero.
+    assert(area(2.9, 3) == 6, "2.9 becomes 2");
 
     log("starting");
     log("done");

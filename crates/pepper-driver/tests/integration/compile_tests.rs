@@ -368,6 +368,47 @@ test(): int {
     );
 }
 
+#[test]
+fn float_arguments_convert_to_integer_parameters() {
+    // A float argument to an integer parameter truncates toward zero, as
+    // `int n = 2.7;` does. This used to pass the double through unchanged,
+    // and LLVM rejected the call ("Call parameter type does not match").
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"to_int(x: int): int { return x; }
+to_uint(x: uint): uint { return x; }
+to_u8(x: u8): u8 { return x; }
+to_bool(x: bool): bool { return x; }
+to_long(x: long): long { return x; }
+struct Box {
+    var value: int = 0;
+    set(x: int) { value = x; }
+    static twice(x: short): short { return x * 2; }
+}
+
+test(): int {
+    if (to_int(3.5) != 3) { return 1; }
+    if (to_int(-7.9) != -7) { return 2; }
+    if (to_uint(3000000000.0) != 3000000000) { return 3; }
+    if (to_u8(200.7) != 200) { return 4; }
+    if (!to_bool(0.5) || to_bool(0.0)) { return 5; }
+    if (to_long(1e12) != 1000000000000) { return 6; }
+    var b = Box();
+    b.set(9.9);
+    if (b.value != 9) { return 7; }
+    if (Box.twice(2.5) != 4) { return 8; }
+    var f = to_int;
+    if (f(4.2) != 4) { return 9; }
+    var a = Array<int>();
+    a.append(3.5);
+    if (a[0] != 3) { return 10; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
 // ── [Target] on type aliases and module-scope variables ────────────────────
 
 #[test]
