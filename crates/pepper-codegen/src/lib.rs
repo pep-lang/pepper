@@ -258,7 +258,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.instantiate_ctor(&module.structs[idx])?;
         }
         for &idx in &externs {
-            self.instantiate_extern(&module.externs[idx])?;
+            // Externs are named by their C symbol, so two files may declare
+            // one differently, and the first declaration wins. A unit takes
+            // only its inputs' declarations, so another file's cannot change
+            // its code.
+            let ext = &module.externs[idx];
+            if self.unit.as_ref().is_some_and(|u| !u.is_input(ext.loc)) {
+                continue;
+            }
+            self.instantiate_extern(ext)?;
         }
         for &idx in &functions {
             self.instantiate_function(&module.functions[idx])?;
@@ -313,6 +321,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         callables.extend(module.functions.iter().map(|f| (f.clone(), f.loc)));
+        // In name order, not the program's: the order bodies are emitted in
+        // decides the order of the constants they create, and a unit's code
+        // must not depend on the rest of the program.
+        callables.sort_by(|a, b| a.0.name.cmp(&b.0.name));
         let mut shared = vec![];
         for (function, loc) in callables {
             match self.owners.get(&function.name) {
@@ -760,7 +772,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             // A method copy synthesizes on demand exists only in programs
             // that copy the struct, so it is shared, not owned by its file.
             if !pepper_sema::passes::copies::is_synthesized_method(&method.name) {
-                self.own(&mangled, if method.loc.is_none() { st.loc } else { method.loc });
+                let owner = [method.owner, method.loc, st.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+                self.own(&mangled, owner);
             }
             self.functions.insert(mangled.clone(), fn_value);
             self.param_defaults.insert(

@@ -335,6 +335,7 @@ fn method(st: &StructDef, name: &str, ty: TypeName, items: Vec<Statement>) -> Fu
         attributes: vec![],
         loc: st.loc,
         trait_default: None,
+        owner: Loc::NONE,
     }
 }
 

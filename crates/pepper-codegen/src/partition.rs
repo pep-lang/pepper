@@ -36,6 +36,16 @@ pub struct UnitFilter {
     pub unit_of_file: Vec<usize>,
     /// The unit to emit, or `None` for the program module.
     pub unit: Option<usize>,
+    /// Per file, whether the unit's code may depend on it (see
+    /// `Program::unit_inputs`); empty for every file.
+    pub inputs: Vec<bool>,
+}
+
+impl UnitFilter {
+    /// Whether a declaration at `loc` is one of the unit's inputs.
+    pub fn is_input(&self, loc: pepper_sema::model::Loc) -> bool {
+        loc.is_none() || self.inputs.is_empty() || self.inputs.get(loc.file.0 as usize).copied().unwrap_or(false)
+    }
 }
 
 /// Finish a unit's module: owned symbols are external (hidden unless

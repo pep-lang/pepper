@@ -235,7 +235,7 @@ impl Converter {
     /// A new plain closure of type `to` that holds `inner` (of the `shared`
     /// type `from`) and forwards every call to it.
     fn adapter(&mut self, inner: Expression, from: &TypeName, to: &TypeName, loc: Loc) -> Expression {
-        let (base, ty) = closure_name(&[]);
+        let (base, ty) = closure_name(&[], loc);
         let mut parameters = vec![];
         let mut forwarded = vec![];
         for (i, param_ty) in to.function_params().iter().enumerate() {

@@ -47,6 +47,7 @@ pub fn merge(program: &Program) -> Result<SemaModule, String> {
     };
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
+        module.namespaces.push(file.namespace.clone());
     }
     for (i, file) in program.files.iter().enumerate() {
         let built = build_file(&file.module, FileId(i as u32)).map_err(|d| module.sources.render(&d))?;

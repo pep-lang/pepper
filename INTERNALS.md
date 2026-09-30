@@ -79,12 +79,14 @@ compiler::compile → compile_sources                               (driver/src/
   ▼
   ├─ --emit-llvm ─→ CodeGenerator::generate (whole program) → <build>/<name>.ll
   ▼
-driver::objects: Program::units, then per unit, on parallel threads   (driver/src/lib.rs)
+driver::objects: Program::units, cache::unit_key, then per unit, on parallel threads (driver/src/lib.rs)
+  cache::Cache::object            source key hit → reuse the object, no codegen (locked)
+  otherwise:
   CodeGenerator::generate with a UnitFilter                     (codegen/src/lib.rs)
     instantiate structs → sizes → methods → ctors → externs → functions
     emit_globals → codegen_unit (own bodies, then called instantiations)
   partition::finish               linkage, globaldce, symbol_name spelling
-  cache::Cache::object            .pep/cache hit, or emit + store (locked)
+  cache::Cache::object            same bitcode → reuse the object, else emit + store
   → <build>/<name>.units/<unit>.o, plus the program module → <build>/<name>.o
 link_libraries (from [Link]) + -l + runtime/*.a
 linker::link → clang -o <out> <objs> -L… -l… (+ kernel32 user32 shell32 on Windows)
@@ -98,10 +100,11 @@ The CLI produces an executable and never runs it. Tests usually stop after
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-o`, `--build`, `--emit-llvm`, `--emit-ast`, and
-`--no-runtime`, `--no-cache`, `--cache <dir>` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
+`--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
 and build, sema passes, codegen and emission, link), and `-T cache`, which
-prints whether each unit's object was a cache hit. `-g`, `-v`, and the
+prints how the cache supplied each unit's object (`hit`, `hit (same code)`
+or `miss`). `-g`, `-v`, and the
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `output_path()` defaults to `<cwd>/<entry stem>`
 with no extension, and `module_name()` is the output's stem.
@@ -442,8 +445,9 @@ cross-compilation.
 ### 2.6 Struct bodies (`struct_body.rs`)
 
 `struct_body::apply` first runs `passes::closures::lift_closures`, which
-turns every closure literal into a synthesized struct `__closure_N` (generic
-over the enclosing code's type parameters) and a `MakeClosure` creation
+turns every closure literal into a synthesized struct
+`__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
+over the enclosing code's type parameters, and a `MakeClosure` creation
 expression, so the new structs get their bodies below like any other. The
 struct's fields are `__invoke` and `__destroy` (defaults `MethodAddress`
 of `__call` and `__dtor`), so its head matches the function type struct,
@@ -774,10 +778,10 @@ MSVC's link.exe writes unresolved symbols to stdout.
 
 ### 4.3 Build cache (`driver/src/cache.rs`, `codegen/src/partition.rs`)
 
-Phase 1 of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
+Phases 1 and 2a of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
 sema still runs over the whole program, but codegen and object emission run
-per **compilation unit**, and an unchanged unit's object comes from
-`.pep/cache`.
+per **compilation unit**, and a unit whose sources are unchanged takes its
+object from `.pep/cache` without generating any code.
 
 - **Units** (`Program::units`, `sema/src/program.rs`): the runtime's
   top-level files (prelude files outside any module) are the unit
@@ -788,17 +792,22 @@ per **compilation unit**, and an unchanged unit's object comes from
 - **Owners.** While instantiating, `CodeGenerator::own` records the file of
   every symbol a declaration defines (`owners`): methods, constructors,
   functions, globals, and each file's global initializer
-  `__pep_init@<namespace>`. Instantiations (a name with `<`), the
-  `_pep_copy`/`_pep_fix_weak` methods `copy` synthesizes on demand
-  (`copies::is_synthesized_method`: a program has them only for the types
-  it copies, so owning them would make a unit's object depend on the
-  program), and code with no location have no owner.
+  `__pep_init@<namespace>`. A method belongs to `FunctionDef::owner` when
+  set, else its own location's file, else its struct's: a trait's default
+  method copied into a struct (`apply_extensions`) is owned by the file
+  that declares the conformance, not the trait's file. Instantiations (a
+  name with `<`), the `_pep_copy`/`_pep_fix_weak` methods `copy`
+  synthesizes on demand (`copies::is_synthesized_method`: a program has
+  them only for the types it copies, so owning them would make a unit's
+  object depend on the program), and code with no location have no owner.
 - **Per-unit codegen.** With `CodeGenerator::unit` set (`UnitFilter`),
   `generate` declares everything in name order (so a unit's module does not
-  depend on load order), defines only globals and initializers of the unit's
-  files, and `codegen_unit` emits the unit's owned bodies, then every
-  unowned body something already emitted calls, until nothing new is
-  called. The program module (`unit: None`) defines only
+  depend on load order), declares only the externs its input files declare
+  (externs are first-wins by C name, so another file's declaration must not
+  change the unit's calls), defines only globals and initializers of the
+  unit's files, and `codegen_unit` emits, in name order, the unit's owned
+  bodies, then every unowned body something already emitted calls, until
+  nothing new is called. The program module (`unit: None`) defines only
   `__pep_global_init` and `llvm.global_ctors`, which call each file's
   initializer in initialization order. Each unit gets its own LLVM
   `Context` (struct type names are per context), so `objects` compiles
@@ -812,17 +821,41 @@ per **compilation unit**, and an unchanged unit's object comes from
   `_Phelper_40io_2ffile`). Externs keep their C names. The whole-program
   path (JIT tests, `--emit-llvm`) is unchanged: it keeps readable names and
   gives private names internal linkage.
+- **Unit inputs** (`Program::unit_inputs`): the files a unit's code can
+  depend on: its own files, every prelude file, the files these import or
+  take extensions from (transitively), and every file that declares a
+  concrete override (`hash<Point>`), since sema honours an override
+  wherever its generic is instantiated, imported or not.
+- **Keys.** `cache::unit_key` hashes (BLAKE3) the compiler's identity (crate
+  version, LLVM version, and the running executable's path, size and
+  modification time), the unit's name and files, and each input file's
+  name, namespace, prelude flags and text. A record also holds the hash of
+  the bitcode its object was emitted from.
 - **Cache** (`cache::Cache`): `<cache>/v1/<target triple>/<unit>.o`,
-  `<unit>.json` (`{"key": …}`, a BLAKE3 hash of the compiler's identity and
-  the unit's bitcode) and `<unit>.lock`. `object` takes an exclusive OS lock
-  (`File::lock`) on the unit, checks the record, on a miss writes the object
-  and then the record through temporary files and renames, and hard-links
-  (or copies) the object into `<build>/<module>.units/` before unlocking, so
-  a later writer cannot change what is linked. The OS releases the lock on
-  exit or crash. The cache directory is `--cache`, else
-  `$PEPPER_CACHE_DIR`, else `<cwd>/.pep/cache`; `--no-cache` skips it.
-- **Not yet** (phases 2 and 3): interfaces (`.pepi`), skipping sema for
-  unchanged units, and early cutoff.
+  `<unit>.json` (`{"key": …, "bitcode": …}`) and `<unit>.lock`. `object`
+  takes an exclusive OS lock (`File::lock`) on the unit. When the record's
+  key matches and the object exists, it is a **hit**: no code is generated.
+  Otherwise it generates the unit; when the bitcode hash matches the
+  record's (an edit that changed no code, such as a comment, or a body in a
+  file the unit imports), the object is reused (**same code**); else the
+  object and then the record are written through temporary files and
+  renames (**miss**). Either way the object is hard-linked (or copied) into
+  `<build>/<module>.units/` before unlocking, so a later writer cannot
+  change what is linked. The OS releases the lock on exit or crash. The
+  cache directory is `--cache`, else `$PEPPER_CACHE_DIR`, else
+  `<cwd>/.pep/cache`; `--no-cache` skips it.
+- **Verifying** (`--verify-cache`, or `PEPPER_CACHE_VERIFY=1`, which CI
+  sets): a hit generates the unit anyway and fails if its bitcode differs
+  from the record's, naming the unit; it keeps `<unit>.ll` beside each
+  object it stores and writes `<unit>.verify.ll` on a mismatch, to diff.
+  A mismatch means a unit's code depends on something its key leaves out:
+  add it to `unit_inputs`, or make codegen stop depending on it. So names
+  sema synthesizes are numbered per file, never per program: hidden locals
+  restart in each `build_file`, and closure structs are
+  `__closure_N@<namespace>` (`Module::namespaces`).
+- **Not yet** (phases 2b, 2c and 3): skipping sema of unchanged units'
+  bodies, interfaces (`.pepi`) that skip parsing, and early cutoff for
+  dependents by interface hash.
 
 ---
 
@@ -1079,7 +1112,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
-| Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits examples as unit objects through a scratch cache: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, and concurrent builds share one cache. |
+| Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 

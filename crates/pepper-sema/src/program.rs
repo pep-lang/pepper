@@ -234,6 +234,30 @@ impl Program {
         units
     }
 
+    /// The files whose text a unit's generated code can depend on, in index
+    /// order: its own files, every prelude file (visible everywhere), the
+    /// files they import or take extensions from, transitively, and every
+    /// file that declares a concrete override (`hash<Point>`), since sema
+    /// honours an override wherever its generic is instantiated.
+    pub fn unit_inputs(&self, unit: &Unit) -> Vec<usize> {
+        let mut seen = vec![false; self.files.len()];
+        let mut stack: Vec<usize> = unit.files.clone();
+        stack.extend((0..self.files.len()).filter(|&i| {
+            let file = &self.files[i];
+            file.prelude || file.prelude_part || declares_override(&file.module)
+        }));
+        while let Some(file) = stack.pop() {
+            if std::mem::replace(&mut seen[file], true) {
+                continue;
+            }
+            stack.extend(self.files[file].imports.iter().flatten().copied());
+            if let Some(scope) = self.scopes.get(file) {
+                stack.extend(scope.extensions.iter().copied());
+            }
+        }
+        (0..self.files.len()).filter(|&i| seen[i]).collect()
+    }
+
     /// Which files' extensions each file sees (see [`crate::model::ExtensionScopes`]).
     pub fn extension_scopes(&self) -> crate::model::ExtensionScopes {
         crate::model::ExtensionScopes {
@@ -545,4 +569,13 @@ fn describe_paths(paths: &[PathBuf]) -> String {
 /// Load a program rooted at the file `path`.
 pub fn load_file(path: &Path, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mode) -> Result<Program, String> {
     load(Root::from_file(path)?, prelude, search_paths, mode)
+}
+
+/// Whether `module` declares a concrete override of a generic function
+/// (module linking marked its generic parameters as type arguments).
+fn declares_override(module: &pepper_parser::ast::Module) -> bool {
+    module.declarations.iter().any(|d| match d {
+        pepper_parser::ast::Declaration::Function(f) => f.generic_params.iter().any(|p| p.is_argument),
+        _ => false,
+    })
 }

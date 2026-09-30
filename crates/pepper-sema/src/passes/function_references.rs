@@ -351,7 +351,7 @@ impl Replacer<'_> {
             }
         };
         let Some(signature) = signature.cloned() else { return };
-        let (base, ty) = closure_name(&[]);
+        let (base, ty) = closure_name(&[], loc);
 
         let param = |name: &str, ty: &TypeName| VariableDef { kind: Kind::Param, ..field(name, ty.clone(), None, loc) };
         let symbol = |name: &str, ty: &TypeName| Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc };

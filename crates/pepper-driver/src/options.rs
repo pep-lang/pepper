@@ -69,6 +69,12 @@ pub struct Options {
     #[arg(long = "cache", value_name = "DIR")]
     pub cache_dir: Option<PathBuf>,
 
+    /// Check the build cache: generate the code of every unit that hits
+    /// anyway, and fail if it differs from the cached object's (also
+    /// `PEPPER_CACHE_VERIFY=1`). For testing the compiler.
+    #[arg(long = "verify-cache")]
+    pub verify_cache: bool,
+
     /// Use the MSVC linker (not ported; errors on non-Windows).
     #[arg(long = "MSVC")]
     pub msvc: bool,
@@ -96,6 +102,12 @@ impl Options {
             return Some(PathBuf::from(dir));
         }
         Some(std::env::current_dir().unwrap_or_default().join(".pep").join("cache"))
+    }
+
+    /// Whether cache hits are checked (`--verify-cache`, or
+    /// `PEPPER_CACHE_VERIFY` set to anything but empty or `0`).
+    pub fn verifying_cache(&self) -> bool {
+        self.verify_cache || std::env::var_os("PEPPER_CACHE_VERIFY").is_some_and(|v| !v.is_empty() && v != "0")
     }
 
     /// Whether trace channel `channel` (`-T channel`, or `--Tall`) is on.

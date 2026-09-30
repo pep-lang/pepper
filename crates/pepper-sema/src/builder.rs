@@ -854,6 +854,7 @@ fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Functi
     }
     Ok(FunctionDef {
         trait_default: None,
+        owner: Loc::NONE,
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
         generic_params: decl.generic_params.iter().map(generic_param_from).collect(),
@@ -969,6 +970,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
     if constructors.is_empty() {
         constructors.push(FunctionDef {
             trait_default: None,
+            owner: Loc::NONE,
             name: ty.to_string(),
             ty: ty.clone(),
             generic_params: vec![],
@@ -989,6 +991,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
     let destructor = match &decl.destructor {
         Some(body) => FunctionDef {
             trait_default: None,
+            owner: Loc::NONE,
             name: "__dtor".to_string(),
             ty: TypeName::void(),
             generic_params: vec![],
@@ -1003,6 +1006,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         },
         None => FunctionDef {
             trait_default: None,
+            owner: Loc::NONE,
             name: "__dtor".to_string(),
             ty: TypeName::void(),
             generic_params: vec![],
@@ -1157,6 +1161,7 @@ fn constant_integer(e: &ast::Expression) -> Option<i128> {
 fn empty_method(parent: &str, name: &str) -> FunctionDef {
     FunctionDef {
         trait_default: None,
+        owner: Loc::NONE,
         name: name.to_string(),
         ty: TypeName::void(),
         generic_params: vec![],
@@ -1183,7 +1188,13 @@ pub fn build(module: &ast::Module) -> Result<Module, Diagnostic> {
 }
 
 /// [`build`], with every location pointing into `file`.
+///
+/// Hidden locals are numbered from zero in each file: they are local to their
+/// function, so they only need to be unique within it, and a file's code must
+/// not depend on how many loops the files built before it had (the build
+/// cache reuses a unit's object when its own sources match).
 pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnostic> {
+    reset_counters();
     let previous = FILE.with(|f| f.replace(file));
     let previous_error = LABEL_ERROR.with(|e| e.take());
     let built = build_module(module);

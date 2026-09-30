@@ -216,6 +216,7 @@ cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
+cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
 cargo run -- tests/hello.pep --no-cache    # compile everything, skip the build cache
 ```
 
@@ -240,7 +241,9 @@ cargo run -- tests/hello.pep
 Both print `Hello world!`. Intermediate artifacts land in `.pep/build/` next to
 where you ran the compiler, which is gitignored. Each file (each import cycle,
 and the runtime as one) becomes its own object, and `.pep/cache/` keeps them:
-a file whose generated code did not change is not emitted again. Delete
+a file whose sources (and the files it imports) did not change is not
+compiled again, and one whose generated code did not change is not emitted
+again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
 `PEPPER_CACHE_DIR`.
 

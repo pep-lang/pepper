@@ -56,6 +56,11 @@ env:
   # that exists only in #140). Dependencies are still reused; only the
   # workspace crates rebuild in full, which is seconds.
   CARGO_INCREMENTAL: 0
+  # Every build the tests make checks its build-cache hits: a unit whose
+  # sources matched is generated anyway and must produce the cached code, so
+  # an input missing from a unit's cache key fails here instead of linking
+  # stale code.
+  PEPPER_CACHE_VERIFY: 1
 
 jobs:
   # Whether the PR touches anything the build or the tests read. A PR that

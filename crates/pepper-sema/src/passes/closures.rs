@@ -6,7 +6,7 @@
 //! creation expression:
 //!
 //! ```text
-//! struct __closure_N<generic params of the enclosing code> {
+//! struct __closure_N@<namespace><generic params of the enclosing code> {
 //!     u32 __refcount;          # added by struct_body, like any struct
 //!     u32 __weakcount;
 //!     void* __invoke = <address of __call>;
@@ -53,15 +53,20 @@ pub const THIS_FIELD: &str = "__this";
 pub const CLOSURE_PREFIX: &str = "__closure_";
 
 thread_local! {
-    /// Numbers the closure structs; reset for each program
-    /// (`crate::reset_program_counters`) so their names, which become
-    /// symbols, do not depend on what the thread compiled before.
-    static CLOSURES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Numbers the closure structs of each file (`None`: code with no file
+    /// namespace); reset for each program (`crate::reset_program_counters`)
+    /// so their names, which become symbols, do not depend on what the
+    /// thread compiled before.
+    static CLOSURES: std::cell::RefCell<HashMap<Option<FileId>, usize>> = std::cell::RefCell::new(HashMap::new());
+    /// The program's file namespaces (`Module::namespaces`), set by
+    /// `lift_closures` for the passes that name closures after it.
+    static NAMESPACES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Restart closure numbering (see `crate::reset_program_counters`).
 pub(crate) fn reset_counter() {
-    CLOSURES.with(|c| c.set(0));
+    CLOSURES.with(|c| c.borrow_mut().clear());
+    NAMESPACES.with(|n| n.borrow_mut().clear());
 }
 
 /// Whether `name` (a struct name or type string) is a synthesized closure.
@@ -332,8 +337,8 @@ impl<'a> Lifter<'a> {
         let frame = self.frames.pop().expect("frame");
         self.level -= 1;
 
-        let (base, ty) = closure_name(&self.ctx.generics);
         let loc = literal.loc;
+        let (base, ty) = closure_name(&self.ctx.generics, loc);
 
         // Captured values, then `this`. Each capture field is located at the
         // closure's first use of the value, and its `type_loc` is where the
@@ -381,14 +386,23 @@ impl<'a> Lifter<'a> {
     }
 }
 
-/// A fresh closure struct name, and its type over `generics`.
-pub(crate) fn closure_name(generics: &[GenericParam]) -> (String, TypeName) {
+/// A fresh closure struct name for a literal at `loc`, and its type over
+/// `generics`. A closure in a file is `__closure_N@<namespace>`, numbered in
+/// that file alone: the build cache reuses a unit's code while its own
+/// sources match, so its names must not depend on the rest of the program.
+pub(crate) fn closure_name(generics: &[GenericParam], loc: Loc) -> (String, TypeName) {
+    let namespace = NAMESPACES.with(|n| n.borrow().get(loc.file.0 as usize).cloned()).filter(|_| !loc.is_none());
+    let key = namespace.as_ref().map(|_| loc.file);
     let n = CLOSURES.with(|c| {
-        let n = c.get();
-        c.set(n + 1);
-        n
+        let mut counters = c.borrow_mut();
+        let next = counters.entry(key).or_insert(0);
+        *next += 1;
+        *next - 1
     });
-    let base = format!("{}{}", CLOSURE_PREFIX, n);
+    let base = match namespace {
+        Some(namespace) => pepper_parser::namespace::mangle(&format!("{}{}", CLOSURE_PREFIX, n), &namespace),
+        None => format!("{}{}", CLOSURE_PREFIX, n),
+    };
     let ty = if generics.is_empty() {
         TypeName::new(&base)
     } else {
@@ -425,6 +439,7 @@ pub(crate) fn closure_struct(
     constructor.loc = loc;
     let call = FunctionDef {
         trait_default: None,
+        owner: Loc::NONE,
         name: CALL_METHOD.to_string(),
         ty: ret,
         generic_params: vec![],
@@ -504,6 +519,7 @@ fn lift_default(expr: &mut Expression, ctx: &Context, lifted: &mut Vec<StructDef
 /// `MakeClosure` (see the module docs). Runs first in `struct_body::apply`,
 /// so the new structs get their bodies synthesized with the rest.
 pub fn lift_closures(module: &mut Module) {
+    NAMESPACES.with(|n| *n.borrow_mut() = module.namespaces.clone());
     let mut lifted = vec![];
     // Every name a type can have: an `extend Box<T>` parameter is one that
     // names none of them.

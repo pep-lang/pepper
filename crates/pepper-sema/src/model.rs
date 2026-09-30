@@ -653,6 +653,10 @@ pub struct FunctionDef {
     /// trait: the trait's method names. A bare call in its body binds only
     /// to those (on `this`), never to a method only the struct declares.
     pub trait_default: Option<Vec<String>>,
+    /// Where the code is compiled when that is not `loc`'s file: a copied
+    /// trait default belongs to the file that declares the conformance
+    /// (`extend S with Trait`), not the trait's. [`Loc::NONE`] otherwise.
+    pub owner: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -927,6 +931,10 @@ pub struct Module {
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,
+    /// Each file's namespace, by `FileId`, filled with `sources`. Names sema
+    /// synthesizes for a file's code (closure structs) take it, so they do
+    /// not depend on the other files of the program. `merge` leaves it alone.
+    pub namespaces: Vec<String>,
     /// Warnings found while compiling: those the driver carried over from
     /// the loaded program (`Program::warnings`), then the uses of
     /// deprecated members `check_deprecated_members` found. `merge` leaves

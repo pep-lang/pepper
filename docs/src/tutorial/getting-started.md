@@ -114,7 +114,8 @@ error: cannot find the Pepper runtime: no runtime directory near /home/me/projec
 The compiler also writes intermediate files to `.pep/build/` under the
 directory you run it from, and keeps a build cache in `.pep/cache/`: each file
 of the program (and the standard library) is compiled to its own object, and
-an object whose code did not change is reused on the next build. Deleting
+on the next build a file whose sources and imports did not change reuses its
+object without being compiled again. Deleting
 `.pep/cache/` is always safe.
 
 ## When something is wrong
@@ -160,9 +161,10 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |
 | `-T time` | Print how long each stage of the compile took. |
-| `-T cache` | Print which objects came from the build cache. |
+| `-T cache` | Print how the build cache supplied each object: `hit` (sources unchanged), `hit (same code)` (recompiled, same code), or `miss`. |
 | `--no-cache` | Compile everything without reading or writing the build cache. |
 | `--cache <dir>` | Keep the build cache in `<dir>` instead of `.pep/cache/` (also `PEPPER_CACHE_DIR`). |
+| `--verify-cache` | Compile cache hits anyway and fail if their code differs from the cached object (for testing the compiler; also `PEPPER_CACHE_VERIFY=1`). |
 | `--help` | List every option. |
 
 A program can span several files: pass the entry file, and the compiler finds

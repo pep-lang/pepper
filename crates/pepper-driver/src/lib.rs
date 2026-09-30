@@ -98,9 +98,13 @@ pub fn run(options: Options) -> Result<i32, String> {
     let built = objects(&options, &sema_module, &program, &build_dir, &module_name)?;
     if options.tracing("cache") {
         for object in &built {
-            if let Some(hit) = object.hit {
-                eprintln!("cache: {} {}", object.unit, if hit { "hit" } else { "miss" });
-            }
+            let outcome = match object.outcome {
+                Some(cache::Outcome::Hit) => "hit",
+                Some(cache::Outcome::SameCode) => "hit (same code)",
+                Some(cache::Outcome::Miss) => "miss",
+                None => continue,
+            };
+            eprintln!("cache: {} {}", object.unit, outcome);
         }
     }
     let objects: Vec<PathBuf> = built.into_iter().map(|o| o.path).collect();
@@ -137,9 +141,9 @@ pub struct UnitObject {
     pub unit: String,
     /// Where the object is, in the build directory.
     pub path: PathBuf,
-    /// Whether it came from the build cache; `None` when it was not looked
-    /// up (the program module, or `--no-cache`).
-    pub hit: Option<bool>,
+    /// How the build cache supplied it; `None` when it was not looked up
+    /// (the program module, or `--no-cache`).
+    pub outcome: Option<cache::Outcome>,
 }
 
 /// Emit `program` (whose merged, checked module is `module`) as one object
@@ -157,18 +161,44 @@ pub fn objects(
     let units = program.units();
     let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root)).transpose()?;
     let build_units = build_dir.join(format!("{}.units", name));
+    let source_hashes: Vec<blake3::Hash> = program.files.iter().map(|f| blake3::hash(f.source.as_bytes())).collect();
     let mut jobs: Vec<UnitJob> = units
         .iter()
         .enumerate()
-        .map(|(i, u)| UnitJob { unit: Some(i), name: u.name.clone(), object: build_units.join(format!("{}.o", u.name)) })
+        .map(|(i, u)| {
+            let inputs = program.unit_inputs(u);
+            let mut is_input = vec![false; program.files.len()];
+            for &file in &inputs {
+                is_input[file] = true;
+            }
+            UnitJob {
+                unit: Some(i),
+                name: u.name.clone(),
+                object: build_units.join(format!("{}.o", u.name)),
+                key: cache.as_ref().map(|c| cache::unit_key(c.compiler(), program, u, &inputs, &source_hashes)),
+                inputs: is_input,
+            }
+        })
         .collect();
-    jobs.push(UnitJob { unit: None, name: "__program".to_string(), object: build_dir.join(format!("{}.o", name)) });
+    jobs.push(UnitJob {
+        unit: None,
+        name: "__program".to_string(),
+        object: build_dir.join(format!("{}.o", name)),
+        key: None,
+        inputs: vec![],
+    });
     let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
-    let setup = UnitSetup { module, namespaces: &namespaces, unit_of_file: unit_files(&units, program.files.len()), cache: cache.as_ref() };
+    let setup = UnitSetup {
+        module,
+        namespaces: &namespaces,
+        unit_of_file: unit_files(&units, program.files.len()),
+        cache: cache.as_ref(),
+        verify: options.verifying_cache(),
+    };
     // Register the backend once, before the threads use it.
     default_target_machine()?;
-    let hits = parallel(&jobs, |job| compile_unit(&setup, job))?;
-    Ok(jobs.into_iter().zip(hits).map(|(job, hit)| UnitObject { unit: job.name, path: job.object, hit }).collect())
+    let outcomes = parallel(&jobs, |job| compile_unit(&setup, job))?;
+    Ok(jobs.into_iter().zip(outcomes).map(|(job, outcome)| UnitObject { unit: job.name, path: job.object, outcome }).collect())
 }
 
 /// One object to build: a unit (`unit: Some(index into units)`) or the
@@ -177,6 +207,11 @@ struct UnitJob {
     unit: Option<usize>,
     name: String,
     object: PathBuf,
+    /// The unit's source key, when there is a cache.
+    key: Option<String>,
+    /// Per file, whether the unit's code may depend on it (see
+    /// `Program::unit_inputs`); empty for the program module.
+    inputs: Vec<bool>,
 }
 
 /// What every [`compile_unit`] shares.
@@ -185,6 +220,9 @@ struct UnitSetup<'a> {
     namespaces: &'a [String],
     unit_of_file: Vec<usize>,
     cache: Option<&'a cache::Cache>,
+    /// `--verify-cache`: generate hit units anyway and check their code
+    /// matches the cached object's.
+    verify: bool,
 }
 
 /// Each file's index in `units`.
@@ -198,21 +236,29 @@ fn unit_files(units: &[pepper_sema::program::Unit], files: usize) -> Vec<usize> 
     unit_of_file
 }
 
-/// Generate one unit's module and put its object at `job.object`, through
-/// the cache when there is one (the program module never is). Each unit
-/// gets its own LLVM context, so units compile on separate threads (and
-/// LLVM names struct types per context: a second `String` in one context
-/// would become `String.0`). Returns whether the object was a cache hit.
-fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<bool>, String> {
+/// Put one unit's object at `job.object`: from the cache when the unit's
+/// sources are unchanged, else by generating its module (see
+/// [`cache::Cache::object`]); the program module is always generated and
+/// never cached. Each unit gets its own LLVM context, so units compile on
+/// separate threads (and LLVM names struct types per context: a second
+/// `String` in one context would become `String.0`).
+fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Outcome>, String> {
     let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, &job.name);
-    generator.file_namespaces = setup.namespaces.to_vec();
-    generator.unit = Some(pepper_codegen::partition::UnitFilter { unit_of_file: setup.unit_of_file.clone(), unit: job.unit });
-    generator.generate(setup.module).map_err(|d| setup.module.sources.render(&d))?;
-    pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
-    match (setup.cache, job.unit) {
-        (Some(cache), Some(_)) => cache.object(&job.name, &generator.module, &job.object).map(Some),
-        _ => cache::emit(&generator.module, &job.object).map(|_| None),
+    let generate = || -> Result<inkwell::module::Module<'_>, String> {
+        let mut generator = CodeGenerator::new(&ctx, &job.name);
+        generator.file_namespaces = setup.namespaces.to_vec();
+        generator.unit = Some(pepper_codegen::partition::UnitFilter {
+            unit_of_file: setup.unit_of_file.clone(),
+            unit: job.unit,
+            inputs: job.inputs.clone(),
+        });
+        generator.generate(setup.module).map_err(|d| setup.module.sources.render(&d))?;
+        pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
+        Ok(generator.module)
+    };
+    match (setup.cache, &job.key) {
+        (Some(cache), Some(key)) => cache.object(&job.name, key, &job.object, setup.verify, generate).map(Some),
+        _ => cache::emit(&generate()?, &job.object).map(|_| None),
     }
 }
 

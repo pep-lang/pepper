@@ -79,6 +79,7 @@ fn conform(
                 // A copied default joins the struct's overload set of its name.
                 method.name = set.to_string();
                 method.trait_default = Some(def.methods.iter().map(|m| set_name(&m.name).to_string()).collect());
+                method.owner = ext.loc;
                 substitute(&mut method.ty, &type_map);
                 for param in &mut method.parameters {
                     substitute(&mut param.ty, &type_map);
