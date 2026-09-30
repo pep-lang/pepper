@@ -5,6 +5,8 @@ import "path";
 import "sys_posix";
 import "sys_windows";
 
+extern int fflush(void* stream);
+
 # Rust's OpenOptions as a plain builder: each setter returns this.
 ## Describes how `File.open_with` (or `OpenOptions.open`) opens a file:
 ## which access it asks for, and whether the file is created or truncated.
@@ -221,7 +223,8 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
 ##
 ## I/O is unbuffered: each `read` and `write` is one system call. Reads and
 ## writes start at the current position and move it forward; the `seek_*`
-## methods move it explicitly.
+## methods move it explicitly. A write to a standard stream first flushes
+## the output `print` has buffered, so the two never come out of order.
 ##
 ## Closing: the File's destructor closes an owned handle when the last
 ## reference to the File is released, and ignores any error. Call `close()`
@@ -388,7 +391,9 @@ export struct File {
 
     ## Returns a File writing to the process's standard output. Each call
     ## returns a new File on the same stream, and `close()` only marks that
-    ## File closed: the stream stays usable. Writes are unbuffered.
+    ## File closed: the stream stays usable. Writes are unbuffered, and each
+    ## one first flushes what `print` has buffered, so output from `print`
+    ## and from this File comes out in program order.
     ##
     ## @returns a File on standard output, named `<stdout>`
     ## @example
@@ -400,7 +405,8 @@ export struct File {
 
     ## Returns a File writing to the process's standard error. Each call
     ## returns a new File on the same stream, and `close()` only marks that
-    ## File closed: the stream stays usable. Writes are unbuffered.
+    ## File closed: the stream stays usable. Writes are unbuffered, and each
+    ## one first flushes what `print` has buffered.
     ##
     ## @returns a File on standard error, named `<stderr>`
     static File stderr() {
@@ -426,6 +432,17 @@ export struct File {
             return IoResult<void>.err(IoError(_io_sys_code_bad_handle(), "file is closed"));
         }
         return _io_ok_void();
+    }
+
+    # Before writing to a stream the File does not own (a standard stream),
+    # flush C stdio, where `print` buffers its output, so text printed
+    # earlier reaches the stream before these bytes.
+    _check_writable(): IoResult<void> {
+        var c = check_open();
+        if (c.is_ok() && !_owned) {
+            fflush(__null);
+        }
+        return c;
     }
 
     ## Reads up to `max` bytes from the current position and appends them
@@ -525,7 +542,7 @@ export struct File {
     ##   `data.count()`; an error when the File is closed or was not opened
     ##   for writing, or another platform error
     IoResult<ulong> write(u8[] data) {
-        var c = check_open();
+        var c = _check_writable();
         if (c.is_err()) {
             return IoResult<ulong>.err(c._error);
         }
@@ -543,7 +560,7 @@ export struct File {
     ##   progress ("failed to write the whole buffer", with code `EIO` on
     ##   POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
     IoResult<void> write_all(u8[] data) {
-        var c = check_open();
+        var c = _check_writable();
         if (c.is_err()) {
             return c;
         }
@@ -563,7 +580,7 @@ export struct File {
     ##         return 1;
     ##     }
     write_all(s: String): IoResult<void> {
-        var c = check_open();
+        var c = _check_writable();
         if (c.is_err()) {
             return c;
         }

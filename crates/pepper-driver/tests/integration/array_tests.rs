@@ -1033,3 +1033,71 @@ test(): int {
     );
 }
 
+
+#[test]
+fn sort_is_ordered_and_stable() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Item {
+    int key;
+    int tag;
+    construct(key: int, tag: int) {
+        this.key = key;
+        this.tag = tag;
+    }
+}
+check(): int {
+    var names = Array<String>();
+    names.append("pear");
+    names.append("apple");
+    names.append("fig");
+    names.sort((a, b) => a.compare(b));
+    if (!(names[0] == "apple" && names[1] == "fig" && names[2] == "pear")) { return -1; }
+    var numbers = Array<int>();
+    var i = 0;
+    while (i < 100) {
+        numbers.append((i * 37) % 101);
+        i = i + 1;
+    }
+    numbers.sort((a, b) => a - b);
+    i = 1;
+    while (i < 100) {
+        if (!(numbers[i - 1] <= numbers[i])) { return -2; }
+        i = i + 1;
+    }
+    numbers.sort((a, b) => b - a);
+    if (!(numbers[0] >= numbers[99])) { return -3; }
+    var items = Array<Item>();
+    i = 0;
+    while (i < 20) {
+        items.append(Item(i % 3, i));
+        i = i + 1;
+    }
+    items.sort((a, b) => a.key - b.key);
+    i = 1;
+    while (i < 20) {
+        if (!(items[i - 1].key <= items[i].key)) { return -4; }
+        if (!(items[i - 1].key != items[i].key || items[i - 1].tag < items[i].tag)) { return -5; }
+        i = i + 1;
+    }
+    var empty = Array<int>();
+    empty.sort((a, b) => a - b);
+    if (!(empty.count() == 0)) { return -6; }
+    return 0;
+}
+test(): int {
+    var before = _pep_live_allocs();
+    var result = check();
+    if (result != 0) {
+        return result;
+    }
+    if (_pep_live_allocs() != before) {
+        return -100;
+    }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

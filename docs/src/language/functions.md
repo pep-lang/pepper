@@ -157,7 +157,12 @@ number, or a [tuple](tuples.md) of these (printed as `(1, two)`).
 {{#include ../../examples/functions-print.pep}}
 ```
 
-To print several values on one line, build a `String` with `+` first.
+To print several values on one line, build a `String` with `+` first
+(`print("line " + to_string(n))`).
+
+`print` buffers its output. Writing to standard output through
+`io.File.stdout()` flushes that buffer first, so text from the two comes out
+in the order the program wrote it, even when standard output is a pipe.
 
 A `float` or `double` prints with six digits after the decimal point, rounded:
 `print(0.5)` prints `0.500000`.

@@ -406,6 +406,85 @@ export struct Array<T> {
         }
     }
 
+    ## Sorts the elements in place into the order `compare` defines. The
+    ## sort is stable: elements that compare equal keep their relative
+    ## order.
+    ##
+    ## `compare(a, b)` returns a negative number when `a` belongs before
+    ## `b`, 0 when their order does not matter, and a positive number when
+    ## `a` belongs after `b`, the convention `String.compare` follows. It is
+    ## a merge sort: O(count log count) calls to `compare`, plus a scratch
+    ## copy of the elements. For struct `T` the references are copied into
+    ## the scratch Array and back, which acquires and releases them but
+    ## leaves every count as it was. Invalidates running iterators when
+    ## there are two or more elements.
+    ##
+    ## @param compare returns the order of its two arguments, as above
+    ## @example
+    ##     var names = Array<String>();
+    ##     names.append("pear");
+    ##     names.append("apple");
+    ##     names.sort((a, b) => a.compare(b));   # ["apple", "pear"]
+    ##     var numbers = Array<int>();
+    ##     numbers.append(3);
+    ##     numbers.append(1);
+    ##     numbers.sort((a, b) => b - a);        # descending: [3, 1]
+    sort(compare: (T, T) => int): void {
+        if (_size < 2) {
+            return;
+        }
+        # Bottom-up merge sort, merging runs of `width` from `source` into
+        # `target` and swapping the two each pass.
+        var source = Array<T>(_size);
+        var target = Array<T>(_size);
+        ulong index = 0;
+        while (index < _size) {
+            source.append(this[index]);
+            target.append(this[index]);
+            index = index + 1;
+        }
+        ulong width = 1;
+        while (width < _size) {
+            ulong low = 0;
+            while (low < _size) {
+                ulong middle = _min(low + width, _size);
+                ulong high = _min(low + 2 * width, _size);
+                ulong left = low;
+                ulong right = middle;
+                ulong out = low;
+                while (out < high) {
+                    # Take from the right run only when it is strictly
+                    # smaller, which keeps equal elements in order.
+                    if (left < middle && (right >= high || compare(source[right], source[left]) >= 0)) {
+                        target[out] = source[left];
+                        left = left + 1;
+                    } else {
+                        target[out] = source[right];
+                        right = right + 1;
+                    }
+                    out = out + 1;
+                }
+                low = high;
+            }
+            var swapped = source;
+            source = target;
+            target = swapped;
+            width = width * 2;
+        }
+        index = 0;
+        while (index < _size) {
+            this[index] = source[index];
+            index = index + 1;
+        }
+    }
+
+    static _min(a: ulong, b: ulong): ulong {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
     ## Returns the position of the first element equal to `item`.
     ##
     ## Runs in O(count), scanning from the front. Elements are compared with

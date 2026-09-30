@@ -431,6 +431,40 @@ stay valid; otherwise running iterators are invalidated.
     a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 ```
 
+#### sort
+
+```pepper
+sort(compare: (T, T) => int): void
+```
+
+Sorts the elements in place into the order `compare` defines. The
+sort is stable: elements that compare equal keep their relative
+order.
+
+`compare(a, b)` returns a negative number when `a` belongs before
+`b`, 0 when their order does not matter, and a positive number when
+`a` belongs after `b`, the convention `String.compare` follows. It is
+a merge sort: O(count log count) calls to `compare`, plus a scratch
+copy of the elements. For struct `T` the references are copied into
+the scratch Array and back, which acquires and releases them but
+leaves every count as it was. Invalidates running iterators when
+there are two or more elements.
+
+**Parameters**
+- `compare` — returns the order of its two arguments, as above
+
+**Example**
+```pepper
+    var names = Array<String>();
+    names.append("pear");
+    names.append("apple");
+    names.sort((a, b) => a.compare(b));   # ["apple", "pear"]
+    var numbers = Array<int>();
+    numbers.append(3);
+    numbers.append(1);
+    numbers.sort((a, b) => b - a);        # descending: [3, 1]
+```
+
 #### find
 
 ```pepper

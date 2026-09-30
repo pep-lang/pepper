@@ -104,6 +104,18 @@ through both names. [Memory and reference counting](memory.md) explains how
 references work, and the [`String`](../reference/string.md) reference lists every
 method.
 
+`to_string` turns any integer into its decimal text. For parsing and
+generating text, `byte_at` and `substr_bytes` work in bytes (the offsets
+`find` returns), `compare` and `<`, `<=`, `>`, `>=` order strings byte by byte
+(code-point order for UTF-8), `lines()` splits on `"\n"` or `"\r\n"`,
+`trim_end()` drops trailing whitespace, and `repeat(n)` joins `n` copies. A
+`StringBuilder` builds a long String from many pieces without recopying the
+text built so far on every append:
+
+```pepper
+{{#include ../../examples/types-strings-text.pep}}
+```
+
 A backslash in a string literal starts an escape sequence, as in C and Rust:
 
 | Escape | Character |

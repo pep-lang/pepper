@@ -464,6 +464,444 @@ operand is modified. Runs in O(size() + rhs.size()).
     var greeting = "Hello, " + "world";
 ```
 
+#### byte_at
+
+```pepper
+byte_at(index: ulong): byte
+```
+
+Returns the byte at byte offset `index` of the UTF-8 data. O(1).
+
+The offset counts bytes, not code points, so a byte inside a
+multi-byte code point is returned as it is. Compare the result with a
+character literal (`s.byte_at(0) == '#'`).
+
+**Parameters**
+- `index` — the byte offset, less than `size()`
+
+**Returns**
+- the byte at `index`
+
+**Panics**
+- if `index` is not less than `size()` ("String byte_at index out of bounds")
+
+**Example**
+```pepper
+    var s = "a=b";
+    assert(s.byte_at(1) == '=', "second byte");
+```
+
+#### substr_bytes
+
+```pepper
+substr_bytes(start: ulong, size: ulong): String
+```
+
+Returns a new String of the `size` bytes starting at byte offset
+`start`. Both arguments count bytes, not code points, so offsets from
+`find` can be used directly. Runs in O(size).
+
+**Parameters**
+- `start` — the byte offset of the first byte to copy
+- `size` — the number of bytes to copy
+
+**Returns**
+- a new String that holds those bytes
+
+**Panics**
+- if `start + size` is greater than `size()` ("String substr_bytes range out of bounds")
+- if `start` or `start + size` falls inside a multi-byte code point ("String substr_bytes splits a code point")
+
+**Example**
+```pepper
+    var s = "key=value";
+    var eq = s.find("=") as ulong;
+    assert(s.substr_bytes(0, eq) == "key", "before '='");
+    assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+```
+
+#### compare
+
+```pepper
+compare(other: String): int
+```
+
+Compares this String with `other` byte by byte, for sorting. For
+valid UTF-8 this is code-point order; a String that is a prefix of the
+other orders first. Runs in O(min(size(), other.size())).
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- a negative number when this String orders before `other`, 0 when both hold the same bytes, and a positive number when it orders after
+
+**Example**
+```pepper
+    assert("apple".compare("banana") < 0, "a before b");
+    assert("ab".compare("abc") < 0, "a prefix orders first");
+    assert("x".compare("x") == 0, "equal");
+```
+
+#### operator <
+
+```pepper
+<(other: String): bool
+```
+
+Returns whether this String orders before `other`, as `compare` does.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when `compare(other) < 0`
+
+#### operator <=
+
+```pepper
+<=(other: String): bool
+```
+
+Returns whether this String orders before `other` or equals it, as
+`compare` does.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when `compare(other) <= 0`
+
+#### operator >
+
+```pepper
+>(other: String): bool
+```
+
+Returns whether this String orders after `other`, as `compare` does.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when `compare(other) > 0`
+
+#### operator >=
+
+```pepper
+>=(other: String): bool
+```
+
+Returns whether this String orders after `other` or equals it, as
+`compare` does.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when `compare(other) >= 0`
+
+#### trim_end
+
+```pepper
+trim_end(): String
+```
+
+Returns a new String without the whitespace at the end: spaces, tabs,
+carriage returns, line feeds, vertical tabs and form feeds (ASCII
+only). Runs in O(size()).
+
+**Returns**
+- a new String with the trailing whitespace removed
+
+**Example**
+```pepper
+    assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
+    assert("  indented".trim_end() == "  indented", "leading kept");
+```
+
+#### lines
+
+```pepper
+lines(): String[]
+```
+
+Splits the String into lines and returns them without their line
+endings. A line ends at `"\n"` or `"\r\n"`. A final line with no
+ending is included, but the end of the String after a final line
+ending does not start another line, so `"a\nb\n"` and `"a\nb"` both
+give `["a", "b"]`, and `""` gives no lines. Runs in O(size()).
+
+**Returns**
+- a new Array with one new String per line
+
+**Example**
+```pepper
+    var lines = "first\r\nsecond\n\nfourth".lines();
+    assert(lines.count() == 4, "four lines");
+    assert(lines[1] == "second", "\\r\\n removed");
+    assert(lines[2] == "", "an empty line");
+```
+
+#### repeat
+
+```pepper
+repeat(count: ulong): String
+```
+
+Returns a new String that holds this String `count` times in a row.
+`count` 0, or an empty String, gives an empty String. Runs in
+O(size() * count).
+
+**Parameters**
+- `count` — how many copies to join
+
+**Returns**
+- a new String of `size() * count` bytes
+
+**Example**
+```pepper
+    assert("ab".repeat(3) == "ababab", "three copies");
+    var indent = " ".repeat(8);   # eight spaces
+```
+
+## to_string
+
+```pepper
+to_string(value: long): String
+```
+
+Returns the decimal text of `value`, with a leading `-` when it is
+negative.
+
+`to_string` is overloaded for every integer type, so a call with any
+integer picks its own overload.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"-42"`
+
+**Example**
+```pepper
+    assert(to_string(-42) == "-42", "negative");
+    var where = to_string(line) + ":" + to_string(column);
+```
+
+## to_string
+
+```pepper
+to_string(value: ulong): String
+```
+
+Returns the decimal text of `value`.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"18446744073709551615"`
+
+## to_string
+
+```pepper
+to_string(value: int): String
+```
+
+Returns the decimal text of `value`, with a leading `-` when it is
+negative.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"7"`
+
+## to_string
+
+```pepper
+to_string(value: uint): String
+```
+
+Returns the decimal text of `value`.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"7"`
+
+## to_string
+
+```pepper
+to_string(value: short): String
+```
+
+Returns the decimal text of `value`, with a leading `-` when it is
+negative.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"-7"`
+
+## to_string
+
+```pepper
+to_string(value: ushort): String
+```
+
+Returns the decimal text of `value`.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"7"`
+
+## to_string
+
+```pepper
+to_string(value: char): String
+```
+
+Returns the decimal text of `value`, with a leading `-` when it is
+negative.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"-7"`
+
+## to_string
+
+```pepper
+to_string(value: byte): String
+```
+
+Returns the decimal text of `value`.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"7"`
+
+## StringBuilder
+
+```pepper
+struct StringBuilder
+```
+
+Builds a String from many pieces without copying the text built so far
+on every append.
+
+`String.append` grows its buffer to the exact new size, so a long run of
+appends can copy the text repeatedly. A StringBuilder doubles its buffer
+when it is full, so appending is amortized O(piece size). Call
+`to_string()` for the result; the builder can keep appending afterward.
+
+**Example**
+```pepper
+    var out = StringBuilder();
+    out.append("line ").append(to_string(3)).append("\n");
+    var text = out.to_string();   # "line 3\n"
+```
+
+### Constructor
+
+#### StringBuilder()
+
+```pepper
+construct(capacity: ulong = 0)
+```
+
+Creates an empty StringBuilder, optionally with room for `capacity`
+bytes before it has to grow.
+
+**Parameters**
+- `capacity` — the number of bytes to allocate up front
+
+### Methods
+
+#### append
+
+```pepper
+append(text: String): StringBuilder
+```
+
+Appends the text of `text` and returns this builder, so calls can be
+chained. Runs in amortized O(text.size()).
+
+**Parameters**
+- `text` — the String to append; it is not modified
+
+**Returns**
+- this StringBuilder
+
+**Example**
+```pepper
+    var b = StringBuilder();
+    b.append("a").append("b");   # b.to_string() == "ab"
+```
+
+#### size
+
+```pepper
+size(): ulong
+```
+
+Returns the number of bytes of UTF-8 appended so far. O(1).
+
+**Returns**
+- the size in bytes
+
+#### length
+
+```pepper
+length(): ulong
+```
+
+Returns the number of code points appended so far. O(1).
+
+**Returns**
+- the length in code points
+
+#### empty
+
+```pepper
+empty(): bool
+```
+
+Returns whether nothing has been appended since the builder was
+created or last cleared. O(1).
+
+**Returns**
+- true when `size()` is 0
+
+#### clear
+
+```pepper
+clear(): void
+```
+
+Removes all the text and keeps the buffer for reuse. O(1).
+
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+Returns a new String holding the text appended so far. The builder
+is unchanged. Runs in O(size()).
+
+**Returns**
+- a new String
+
 ## StringIterator
 
 ```pepper

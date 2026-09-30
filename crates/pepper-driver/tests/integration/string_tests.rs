@@ -253,3 +253,118 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn byte_access_substr_bytes_and_compare() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var s = "a=b";
+    if (!(s.byte_at(1) == '=')) { return -1; }
+    var kv = "key=value";
+    var eq = kv.find("=") as ulong;
+    if (!(kv.substr_bytes(0, eq) == "key")) { return -2; }
+    if (!(kv.substr_bytes(eq + 1, kv.size() - eq - 1) == "value")) { return -3; }
+    if (!(kv.substr_bytes(3, 0) == "")) { return -4; }
+    if (!("aé".substr_bytes(1, 2).length() == 1)) { return -5; }
+    if (!("apple".compare("banana") < 0)) { return -6; }
+    if (!("banana".compare("apple") > 0)) { return -7; }
+    if (!("ab".compare("abc") < 0)) { return -8; }
+    if (!("x".compare("x") == 0)) { return -9; }
+    if (!("".compare("") == 0)) { return -10; }
+    if (!("a" < "b" && "b" > "a" && "a" <= "a" && "a" >= "a")) { return -11; }
+    if (!(!("b" < "a") && !("a" > "b"))) { return -12; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn trim_end_lines_and_repeat() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    if (!("code;  \r\n".trim_end() == "code;")) { return -1; }
+    if (!("   ".trim_end() == "")) { return -2; }
+    if (!("  x".trim_end() == "  x")) { return -3; }
+    var lines = "first\r\nsecond\n\nfourth".lines();
+    if (!(lines.count() == 4)) { return -4; }
+    if (!(lines[0] == "first" && lines[1] == "second" && lines[2] == "" && lines[3] == "fourth")) { return -5; }
+    if (!("a\nb\n".lines().count() == 2)) { return -6; }
+    if (!("".lines().count() == 0)) { return -7; }
+    if (!("\n".lines().count() == 1)) { return -8; }
+    if (!("ab".repeat(3) == "ababab")) { return -9; }
+    if (!("é".repeat(2).length() == 2)) { return -10; }
+    if (!("x".repeat(0) == "")) { return -11; }
+    if (!("".repeat(5) == "")) { return -12; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn integer_to_string() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    if (!(to_string(-42) == "-42")) { return -1; }
+    if (!(to_string(0) == "0")) { return -2; }
+    int line = 3;
+    if (!(to_string(line) == "3")) { return -3; }
+    ulong big = 0xFFFFFFFFFFFFFFFF;
+    if (!(to_string(big) == "18446744073709551615")) { return -4; }
+    long small = -9223372036854775807 - 1;
+    if (!(to_string(small) == "-9223372036854775808")) { return -5; }
+    byte b = 200;
+    if (!(to_string(b) == "200")) { return -6; }
+    uint u = 7;
+    if (!(to_string(u) == "7")) { return -7; }
+    short s = -5;
+    if (!(to_string(s) == "-5")) { return -8; }
+    ushort us = 5;
+    if (!(to_string(us) == "5")) { return -9; }
+    char c = -1;
+    if (!(to_string(c) == "-1")) { return -10; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn string_builder() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var out = StringBuilder();
+    if (!(out.empty() && out.to_string() == "")) { return -1; }
+    out.append("line ").append(to_string(3)).append("\n");
+    if (!(out.to_string() == "line 3\n")) { return -2; }
+    if (!(out.length() == 7 && out.size() == 7)) { return -3; }
+    var many = StringBuilder(4);
+    var i = 0;
+    while (i < 1000) {
+        many.append("é");
+        i = i + 1;
+    }
+    var t = many.to_string();
+    if (!(t.length() == 1000 && t.size() == 2000)) { return -4; }
+    many.clear();
+    if (!(many.empty() && many.to_string() == "")) { return -5; }
+    many.append("again");
+    if (!(many.to_string() == "again")) { return -6; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

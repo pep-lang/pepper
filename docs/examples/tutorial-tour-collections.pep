@@ -15,6 +15,10 @@ main(): int {
     }
     assert(total == 250, "90 + 75 + 85");
 
+    # sort orders the elements by a comparison function.
+    scores.sort((a, b) => a - b);
+    assert(scores[0] == 75 && scores[2] == 90, "sorted ascending");
+
     int[] none = Array<int>();
     assert(none.empty(), "a new array is empty");
 

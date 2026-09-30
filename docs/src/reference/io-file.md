@@ -313,7 +313,8 @@ whole file by path.
 
 I/O is unbuffered: each `read` and `write` is one system call. Reads and
 writes start at the current position and move it forward; the `seek_*`
-methods move it explicitly.
+methods move it explicitly. A write to a standard stream first flushes
+the output `print` has buffered, so the two never come out of order.
 
 Closing: the File's destructor closes an owned handle when the last
 reference to the File is released, and ignores any error. Call `close()`
@@ -485,7 +486,9 @@ static File stdout()
 
 Returns a File writing to the process's standard output. Each call
 returns a new File on the same stream, and `close()` only marks that
-File closed: the stream stays usable. Writes are unbuffered.
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what `print` has buffered, so output from `print`
+and from this File comes out in program order.
 
 **Returns**
 - a File on standard output, named `<stdout>`
@@ -504,7 +507,8 @@ static File stderr()
 
 Returns a File writing to the process's standard error. Each call
 returns a new File on the same stream, and `close()` only marks that
-File closed: the stream stays usable. Writes are unbuffered.
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what `print` has buffered.
 
 **Returns**
 - a File on standard error, named `<stderr>`

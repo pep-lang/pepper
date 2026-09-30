@@ -70,7 +70,8 @@ not need to import them:
 - [`Array<T>`](../reference/array.md) is a list that grows as you `append`.
   `int[]` is a shorter way to write the type `Array<int>`. Indexing is checked:
   reading past the end stops the program with an error rather than reading
-  stray memory.
+  stray memory. `sort` takes a function that compares two elements, such as
+  the closure `(a, b) => a - b`.
 - [`String`](../reference/string.md) holds UTF-8 text. `length()` counts
   characters (code points), and `s[i]` is the character at index `i`, as a
   one-character string. Strings compare by content with `==`.

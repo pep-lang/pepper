@@ -1,6 +1,7 @@
 import "internals";
 
 extern void memcpy(void* dest, void* src, ulong n);
+extern int memcmp(void* a, void* b, ulong n);
 
 ## A mutable, reference-counted string of UTF-8 text. String literals
 ## (`"text"`) are `String` values.
@@ -409,6 +410,409 @@ export struct String {
         String result = this.copy();
         result.append(rhs);
         return result;
+    }
+
+    ## Returns the byte at byte offset `index` of the UTF-8 data. O(1).
+    ##
+    ## The offset counts bytes, not code points, so a byte inside a
+    ## multi-byte code point is returned as it is. Compare the result with a
+    ## character literal (`s.byte_at(0) == '#'`).
+    ##
+    ## @param index the byte offset, less than `size()`
+    ## @returns the byte at `index`
+    ## @panics if `index` is not less than `size()` ("String byte_at index out of bounds")
+    ## @example
+    ##     var s = "a=b";
+    ##     assert(s.byte_at(1) == '=', "second byte");
+    byte_at(index: ulong): byte {
+        assert(index < _size, "String byte_at index out of bounds");
+        return _data[index] as byte;
+    }
+
+    ## Returns a new String of the `size` bytes starting at byte offset
+    ## `start`. Both arguments count bytes, not code points, so offsets from
+    ## `find` can be used directly. Runs in O(size).
+    ##
+    ## @param start the byte offset of the first byte to copy
+    ## @param size the number of bytes to copy
+    ## @returns a new String that holds those bytes
+    ## @panics if `start + size` is greater than `size()` ("String substr_bytes range out of bounds")
+    ## @panics if `start` or `start + size` falls inside a multi-byte code point
+    ##   ("String substr_bytes splits a code point")
+    ## @example
+    ##     var s = "key=value";
+    ##     var eq = s.find("=") as ulong;
+    ##     assert(s.substr_bytes(0, eq) == "key", "before '='");
+    ##     assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+    substr_bytes(start: ulong, size: ulong): String {
+        assert(start <= _size && size <= _size - start, "String substr_bytes range out of bounds");
+        assert(_is_boundary(start) && _is_boundary(start + size), "String substr_bytes splits a code point");
+        # A zero size would tell the constructor to measure the C string.
+        if (size == 0) {
+            return String();
+        }
+        return String(_data + start, size);
+    }
+
+    # Whether byte offset `offset` starts a code point or is the end: the
+    # byte there is not a UTF-8 continuation byte (10xxxxxx).
+    _is_boundary(offset: ulong): bool {
+        if (offset >= _size) {
+            return true;
+        }
+        return ((_data[offset] as byte) & 0xC0) != 0x80;
+    }
+
+    ## Compares this String with `other` byte by byte, for sorting. For
+    ## valid UTF-8 this is code-point order; a String that is a prefix of the
+    ## other orders first. Runs in O(min(size(), other.size())).
+    ##
+    ## @param other the String to compare with
+    ## @returns a negative number when this String orders before `other`, 0
+    ##   when both hold the same bytes, and a positive number when it orders
+    ##   after
+    ## @example
+    ##     assert("apple".compare("banana") < 0, "a before b");
+    ##     assert("ab".compare("abc") < 0, "a prefix orders first");
+    ##     assert("x".compare("x") == 0, "equal");
+    compare(other: String): int {
+        ulong common = _size;
+        if (other._size < common) {
+            common = other._size;
+        }
+        if (common > 0) {
+            int result = memcmp(_data, other._data, common);
+            if (result != 0) {
+                return result;
+            }
+        }
+        if (_size < other._size) {
+            return -1;
+        }
+        if (_size > other._size) {
+            return 1;
+        }
+        return 0;
+    }
+
+    ## Returns whether this String orders before `other`, as `compare` does.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when `compare(other) < 0`
+    <(other: String): bool {
+        return compare(other) < 0;
+    }
+
+    ## Returns whether this String orders before `other` or equals it, as
+    ## `compare` does.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when `compare(other) <= 0`
+    <=(other: String): bool {
+        return compare(other) <= 0;
+    }
+
+    ## Returns whether this String orders after `other`, as `compare` does.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when `compare(other) > 0`
+    >(other: String): bool {
+        return compare(other) > 0;
+    }
+
+    ## Returns whether this String orders after `other` or equals it, as
+    ## `compare` does.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when `compare(other) >= 0`
+    >=(other: String): bool {
+        return compare(other) >= 0;
+    }
+
+    ## Returns a new String without the whitespace at the end: spaces, tabs,
+    ## carriage returns, line feeds, vertical tabs and form feeds (ASCII
+    ## only). Runs in O(size()).
+    ##
+    ## @returns a new String with the trailing whitespace removed
+    ## @example
+    ##     assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
+    ##     assert("  indented".trim_end() == "  indented", "leading kept");
+    trim_end(): String {
+        ulong end = _size;
+        while (end > 0 && _is_space(_data[end - 1] as byte)) {
+            end = end - 1;
+        }
+        return substr_bytes(0, end);
+    }
+
+    # Whether `value` is ASCII whitespace: space, \t, \n, \v, \f or \r.
+    static _is_space(value: byte): bool {
+        return value == ' ' || (value >= 9 && value <= 13);
+    }
+
+    ## Splits the String into lines and returns them without their line
+    ## endings. A line ends at `"\n"` or `"\r\n"`. A final line with no
+    ## ending is included, but the end of the String after a final line
+    ## ending does not start another line, so `"a\nb\n"` and `"a\nb"` both
+    ## give `["a", "b"]`, and `""` gives no lines. Runs in O(size()).
+    ##
+    ## @returns a new Array with one new String per line
+    ## @example
+    ##     var lines = "first\r\nsecond\n\nfourth".lines();
+    ##     assert(lines.count() == 4, "four lines");
+    ##     assert(lines[1] == "second", "\\r\\n removed");
+    ##     assert(lines[2] == "", "an empty line");
+    lines(): String[] {
+        var result = Array<String>();
+        ulong start = 0;
+        ulong index = 0;
+        while (index < _size) {
+            if ((_data[index] as byte) == '\n') {
+                ulong end = index;
+                if (end > start && (_data[end - 1] as byte) == '\r') {
+                    end = end - 1;
+                }
+                result.append(substr_bytes(start, end - start));
+                start = index + 1;
+            }
+            index = index + 1;
+        }
+        if (start < _size) {
+            result.append(substr_bytes(start, _size - start));
+        }
+        return result;
+    }
+
+    ## Returns a new String that holds this String `count` times in a row.
+    ## `count` 0, or an empty String, gives an empty String. Runs in
+    ## O(size() * count).
+    ##
+    ## @param count how many copies to join
+    ## @returns a new String of `size() * count` bytes
+    ## @example
+    ##     assert("ab".repeat(3) == "ababab", "three copies");
+    ##     var indent = " ".repeat(8);   # eight spaces
+    repeat(count: ulong): String {
+        if (count == 0 || _size == 0) {
+            return String();
+        }
+        var result = String();
+        result.grow(_size * count);
+        ulong index = 0;
+        while (index < count) {
+            memcpy(result._data + index * _size, _data, _size);
+            index = index + 1;
+        }
+        result._length = _length * count;
+        return result;
+    }
+}
+
+## Returns the decimal text of `value`, with a leading `-` when it is
+## negative.
+##
+## `to_string` is overloaded for every integer type, so a call with any
+## integer picks its own overload.
+##
+## @param value the number to convert
+## @returns a new String such as `"-42"`
+## @example
+##     assert(to_string(-42) == "-42", "negative");
+##     var where = to_string(line) + ":" + to_string(column);
+export to_string(value: long): String {
+    if (value < 0) {
+        # Negate as unsigned: -value overflows for the most negative long.
+        return _decimal(0 - (value as ulong), true);
+    }
+    return _decimal(value as ulong, false);
+}
+
+## Returns the decimal text of `value`.
+##
+## @param value the number to convert
+## @returns a new String such as `"18446744073709551615"`
+export to_string(value: ulong): String {
+    return _decimal(value, false);
+}
+
+## Returns the decimal text of `value`, with a leading `-` when it is
+## negative.
+##
+## @param value the number to convert
+## @returns a new String such as `"7"`
+export to_string(value: int): String {
+    return to_string(value as long);
+}
+
+## Returns the decimal text of `value`.
+##
+## @param value the number to convert
+## @returns a new String such as `"7"`
+export to_string(value: uint): String {
+    return _decimal(value as ulong, false);
+}
+
+## Returns the decimal text of `value`, with a leading `-` when it is
+## negative.
+##
+## @param value the number to convert
+## @returns a new String such as `"-7"`
+export to_string(value: short): String {
+    return to_string(value as long);
+}
+
+## Returns the decimal text of `value`.
+##
+## @param value the number to convert
+## @returns a new String such as `"7"`
+export to_string(value: ushort): String {
+    return _decimal(value as ulong, false);
+}
+
+## Returns the decimal text of `value`, with a leading `-` when it is
+## negative.
+##
+## @param value the number to convert
+## @returns a new String such as `"-7"`
+export to_string(value: char): String {
+    return to_string(value as long);
+}
+
+## Returns the decimal text of `value`.
+##
+## @param value the number to convert
+## @returns a new String such as `"7"`
+export to_string(value: byte): String {
+    return _decimal(value as ulong, false);
+}
+
+# The decimal digits of `magnitude`, after a `-` when `negative`.
+_decimal(magnitude: ulong, negative: bool): String {
+    # 20 digits hold the largest ulong; one more for the sign.
+    var digits = _pep_malloc(21) as __ptr<char>;
+    ulong start = 21;
+    while (true) {
+        start = start - 1;
+        digits[start] = ('0' + (magnitude % 10)) as char;
+        magnitude = magnitude / 10;
+        if (magnitude == 0) {
+            break;
+        }
+    }
+    if (negative) {
+        start = start - 1;
+        digits[start] = '-' as char;
+    }
+    var result = String(digits + start, 21 - start, 21 - start);
+    _pep_free(digits);
+    return result;
+}
+
+## Builds a String from many pieces without copying the text built so far
+## on every append.
+##
+## `String.append` grows its buffer to the exact new size, so a long run of
+## appends can copy the text repeatedly. A StringBuilder doubles its buffer
+## when it is full, so appending is amortized O(piece size). Call
+## `to_string()` for the result; the builder can keep appending afterward.
+##
+## @example
+##     var out = StringBuilder();
+##     out.append("line ").append(to_string(3)).append("\n");
+##     var text = out.to_string();   # "line 3\n"
+export struct StringBuilder {
+    ## The buffer: `_capacity` bytes, of which the first `_size` hold the
+    ## text built so far. `__null` until the first append.
+    __ptr<char> _data;
+    ## The number of bytes of text in `_data`.
+    ulong _size;
+    ## The number of bytes allocated in `_data`.
+    ulong _capacity;
+    ## The number of code points in the text.
+    ulong _length;
+
+    ## Creates an empty StringBuilder, optionally with room for `capacity`
+    ## bytes before it has to grow.
+    ##
+    ## @param capacity the number of bytes to allocate up front
+    construct(capacity: ulong = 0) {
+        if (capacity > 0) {
+            _data = _pep_malloc(capacity) as __ptr<char>;
+            _capacity = capacity;
+        }
+    }
+
+    destruct {
+        _pep_free(_data);
+    }
+
+    ## Appends the text of `text` and returns this builder, so calls can be
+    ## chained. Runs in amortized O(text.size()).
+    ##
+    ## @param text the String to append; it is not modified
+    ## @returns this StringBuilder
+    ## @example
+    ##     var b = StringBuilder();
+    ##     b.append("a").append("b");   # b.to_string() == "ab"
+    append(text: String): StringBuilder {
+        ulong needed = _size + text._size;
+        if (needed > _capacity) {
+            ulong capacity = _capacity * 2;
+            if (capacity < 16) {
+                capacity = 16;
+            }
+            if (capacity < needed) {
+                capacity = needed;
+            }
+            _data = _pep_realloc(_data, _capacity, capacity) as __ptr<char>;
+            _capacity = capacity;
+        }
+        if (text._size > 0) {
+            memcpy(_data + _size, text._data, text._size);
+        }
+        _size = needed;
+        _length = _length + text._length;
+        return this;
+    }
+
+    ## Returns the number of bytes of UTF-8 appended so far. O(1).
+    ##
+    ## @returns the size in bytes
+    size(): ulong {
+        return _size;
+    }
+
+    ## Returns the number of code points appended so far. O(1).
+    ##
+    ## @returns the length in code points
+    length(): ulong {
+        return _length;
+    }
+
+    ## Returns whether nothing has been appended since the builder was
+    ## created or last cleared. O(1).
+    ##
+    ## @returns true when `size()` is 0
+    empty(): bool {
+        return _size == 0;
+    }
+
+    ## Removes all the text and keeps the buffer for reuse. O(1).
+    clear(): void {
+        _size = 0;
+        _length = 0;
+    }
+
+    ## Returns a new String holding the text appended so far. The builder
+    ## is unchanged. Runs in O(size()).
+    ##
+    ## @returns a new String
+    to_string(): String {
+        # A zero size would tell the constructor to measure the C string.
+        if (_size == 0) {
+            return String();
+        }
+        return String(_data, _size, _length);
     }
 }
 

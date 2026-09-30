@@ -611,6 +611,29 @@ fn stdout_is_a_file() {
     assert_eq!(out, "io-stdout-ok|still-open");
 }
 
+const PRINT_ORDER_PROGRAM: &str = r##"
+import io;
+
+main(): int {
+    print("one");
+    assert(io.File.stdout().write_all("two\n").is_ok(), "write two");
+    print("three");
+    assert(io.File.stdout().write_all("four\n").is_ok(), "write four");
+    print("five");
+    return 0;
+}
+"##;
+
+/// `print` buffers in C stdio and `File.stdout()` writes the descriptor
+/// directly; with stdout a pipe, the File write flushes `print`'s buffer
+/// first so the lines come out in program order.
+#[test]
+fn print_and_stdout_keep_order() {
+    let out = assert_runs("print_order", PRINT_ORDER_PROGRAM);
+    // On Windows, C stdio writes `print`'s newline as "\r\n".
+    assert_eq!(out.replace("\r\n", "\n"), "one\ntwo\nthree\nfour\nfive\n");
+}
+
 #[test]
 fn file_closes_on_last_release() {
     let scratch = scratch_name("close");
