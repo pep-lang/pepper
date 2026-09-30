@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
+            window.path_to_searchindex_js = "../searchindex-024482db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-ed0801d1.js"></script>
@@ -742,6 +742,9 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 </ol>
 <p>As in C, <code>&amp;</code> binds more loosely than <code>==</code>, so write <code>(flags &amp; mask) == mask</code>
 with the parentheses.</p>
+<p>An expression can nest at most 256 levels deep, counting each operator of a
+chain as one level, so a sum of more than about 250 terms is a compile error
+(see <a href="compiler-errors.html#common-errors">Compiler errors</a>).</p>
 
                     </main>
 

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
+            window.path_to_searchindex_js = "../searchindex-024482db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-ed0801d1.js"></script>
@@ -438,6 +438,16 @@ main.pep:2:9: note: previous definition is here
     1 | import "nope";
       |        ^~~~~~
 </code></pre>
+<p><strong>Code nested too deeply.</strong> Parentheses, blocks, calls, and each operator of
+a chain (<code>a + b + c</code> is two levels) nest the program one level deeper, and a
+file may nest at most 256 levels. The error points at the token that crosses
+the limit, here the 255th <code>+</code> of a long sum:</p>
+<pre><code class="language-text">main.pep:2:1030: error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions
+    2 |     return 0 + 1 + 1 + ... + 1;
+      |                             ^
+</code></pre>
+<p>Split the expression into steps (<code>var part = ...;</code>), or move the inner part
+into a function.</p>
 <h2 id="errors-while-the-program-runs"><a class="header" href="#errors-while-the-program-runs">Errors while the program runs</a></h2>
 <p>Some problems can only be found while the program runs, such as an array index
 out of range or a failed <code>assert</code>. These are not compiler errors: the program
