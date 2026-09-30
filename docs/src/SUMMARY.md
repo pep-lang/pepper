@@ -15,6 +15,7 @@
 - [Function types and closures](language/function-types.md)
 - [Overloading](language/overloading.md)
 - [Structs](language/structs.md)
+- [Enums and `match`](language/enums.md)
 - [Memory and reference counting](language/memory.md)
 - [Generics](language/generics.md)
 - [Type aliases](language/type-aliases.md)

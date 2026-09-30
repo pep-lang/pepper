@@ -103,6 +103,9 @@ pub(crate) fn is_zero(value: Expression) -> Expression {
 /// 0.0 for floats, 0 for everything else (port of `zero_value` in
 /// `StructGen.cpp:35`).
 pub(crate) fn zero_for(ty: &TypeName) -> Expression {
+    if let Some(default) = crate::enums::default_expression(ty) {
+        return default;
+    }
     if ty.is_pointer() || ty.is_struct() {
         Expression::PointerLiteral
     } else if matches!(ty.name.as_str(), "f32" | "float" | "f64" | "double") {
@@ -383,6 +386,8 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
+    // Enum names are integer types from here on (closure lifting asks).
+    crate::enums::install(&module.enums);
     // Closure literals become structs first, so they get bodies below.
     crate::passes::closures::lift_closures(module);
     if let Some(error) = crate::errors::take() {

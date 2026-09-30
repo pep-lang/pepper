@@ -77,6 +77,12 @@ pub fn is_concrete_override<'a>(mut params: impl Iterator<Item = &'a str>) -> bo
     params.all(|p| INTEGRAL_TYPES.contains(p) || p == "String")
 }
 
+/// A primitive (`int`, `bool`, `void*`, ...) or an enum, which is stored as
+/// an integer (`crate::enums`).
+pub fn is_integral_name(name: &str) -> bool {
+    INTEGRAL_TYPES.contains(name) || crate::enums::is_enum(name)
+}
+
 /// Whether a function with these generic parameters, as spelled, is a
 /// concrete override (`hash<int>`): it has some, and all are concrete. Module
 /// linking and the visibility check both decide overrides by this.
@@ -251,7 +257,7 @@ impl TypeName {
     }
 
     pub fn is_integral(&self) -> bool {
-        self.is_scalar() && INTEGRAL_TYPES.contains(self.name.as_str())
+        self.is_scalar() && is_integral_name(&self.name)
     }
 
     pub fn is_struct(&self) -> bool {

@@ -1,6 +1,7 @@
 pub mod arithmetic;
 pub mod builder;
 pub mod deprecation;
+pub mod enums;
 pub(crate) mod errors;
 pub mod model;
 pub mod modules;

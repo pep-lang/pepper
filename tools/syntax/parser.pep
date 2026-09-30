@@ -37,6 +37,8 @@ reserved_words(): HashSet<String> {
     words.insert("type");
     words.insert("export");
     words.insert("with");
+    words.insert("enum");
+    words.insert("match");
     return words;
 }
 
@@ -64,6 +66,8 @@ statement_keywords(): HashSet<String> {
     words.insert("trait");
     words.insert("extend");
     words.insert("with");
+    words.insert("enum");
+    words.insert("match");
     return words;
 }
 
@@ -1018,6 +1022,9 @@ struct Parser {
         if (_at_word("with")) {
             return _with_statement();
         }
+        if (_at_word("match")) {
+            return _match_statement();
+        }
         if (_at_word("return")) {
             var node = Node(NODE_RETURN);
             _take(node);
@@ -1163,6 +1170,90 @@ struct Parser {
             node.add(_block(Array<Node>()));
             _skip();
         }
+        return node;
+    }
+
+    _match_statement(): Node {
+        var node = Node(NODE_MATCH);
+        _take(node);
+        _skip();
+        node.add(_expression());
+        if (_failed) {
+            return node;
+        }
+        _skip();
+        var arms = Node(NODE_MATCH_ARMS);
+        node.add(arms);
+        _expect(arms, "{");
+        while (!_failed) {
+            _skip();
+            if (_at("}") or _at_end()) {
+                break;
+            }
+            var arm = Node(NODE_MATCH_ARM);
+            arms.add(arm);
+            if (_at_word("else")) {
+                _take(arm);
+            } else {
+                arm.add(_pattern());
+                _skip();
+                while (!_failed and _at(",")) {
+                    _take(arm);
+                    _skip();
+                    arm.add(_pattern());
+                    _skip();
+                }
+            }
+            if (_failed) {
+                return node;
+            }
+            _skip();
+            _expect(arm, "=>");
+            if (_failed) {
+                return node;
+            }
+            _skip();
+            arm.add(_block(Array<Node>()));
+        }
+        if (_failed) {
+            return node;
+        }
+        _expect(arms, "}");
+        _skip();
+        return node;
+    }
+
+    # A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or
+    # `Case(x, _)`.
+    _pattern(): Node {
+        var node = Node(NODE_PATTERN);
+        _expect_name(node, "a case name");
+        while (!_failed and _at(".") and _adjacent(0) and _peek_at(1).kind == TOKEN_IDENTIFIER and _adjacent(1)) {
+            _take(node);
+            _take(node);
+        }
+        if (_failed) {
+            return node;
+        }
+        _skip();
+        if (!_at("(")) {
+            return node;
+        }
+        _take(node);
+        while (!_failed) {
+            _skip();
+            if (_at(")")) {
+                break;
+            }
+            _expect_name(node, "a name to bind");
+            _skip();
+            if (_at(",")) {
+                _take(node);
+                continue;
+            }
+            break;
+        }
+        _expect(node, ")");
         return node;
     }
 
@@ -1774,6 +1865,121 @@ struct Parser {
         return node;
     }
 
+    # `enum Name [: Type] { cases, methods }`. A case list ends at a case
+    # without a `,`, or at a name that starts a method, as in the compiler's
+    # `enum_declaration`.
+    _enum(prefix: Node[]): Node {
+        var node = Node(NODE_ENUM);
+        for (var item in prefix) {
+            node.add(item);
+        }
+        _take(node);
+        _skip();
+        _expect_name(node, "an enum name");
+        if (_failed) {
+            return node;
+        }
+        _skip();
+        if (_at("<")) {
+            node.add(_generic_parameters());
+            if (_failed) {
+                return node;
+            }
+            _skip();
+        }
+        if (_at(":")) {
+            _take(node);
+            _skip();
+            node.add(_type_name());
+            if (_failed) {
+                return node;
+            }
+            _skip();
+        }
+        var members = Node(NODE_MEMBERS);
+        node.add(members);
+        _expect(members, "{");
+        if (_failed) {
+            return node;
+        }
+        while (true) {
+            _skip();
+            if (_at("}") or _at_end()) {
+                break;
+            }
+            ulong position = _position;
+            bool skipped = _skipped;
+            ulong children = members.count();
+            var item = Node(NODE_ENUM_CASE);
+            for (var attribute in _attributes()) {
+                item.add(attribute);
+            }
+            if (_failed) {
+                return node;
+            }
+            _skip();
+            if (!_at_name() or _at_word("static")) {
+                _restore(position, skipped);
+                break;
+            }
+            _take(item);
+            _skip();
+            if (_at("(")) {
+                item.add(_parameters());
+                if (!_failed) {
+                    _skip();
+                }
+                if (_failed or _at(":") or _at("{")) {
+                    # A method: the cases are over.
+                    _restore(position, skipped);
+                    members.children.truncate(children);
+                    break;
+                }
+            } else if (_at(":") or _at("{") or _at("<")) {
+                _restore(position, skipped);
+                break;
+            }
+            if (_at("=")) {
+                _take(item);
+                _skip();
+                item.add(_expression());
+                if (_failed) {
+                    return node;
+                }
+                _skip();
+            }
+            members.add(item);
+            if (_at(",")) {
+                _take(item);
+                continue;
+            }
+            break;
+        }
+        while (true) {
+            _skip();
+            if (_at("}") or _at_end()) {
+                break;
+            }
+            if (_at(";")) {
+                var empty = Node(NODE_EMPTY);
+                _take(empty);
+                members.add(empty);
+                continue;
+            }
+            var attributes = _attributes();
+            if (_failed) {
+                return node;
+            }
+            members.add(_method(attributes, false));
+            if (_failed) {
+                return node;
+            }
+        }
+        _skip();
+        _expect(members, "}");
+        return node;
+    }
+
     _extension(prefix: Node[]): Node {
         var node = Node(NODE_EXTEND);
         for (var item in prefix) {
@@ -1855,6 +2061,9 @@ struct Parser {
         }
         if (_at_word("trait")) {
             return _aggregate(prefix, NODE_TRAIT);
+        }
+        if (_at_word("enum")) {
+            return _enum(prefix);
         }
         if (_at_word("extend")) {
             return _extension(prefix);

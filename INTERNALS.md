@@ -316,6 +316,17 @@ with no extension, and `module_name()` is the output's stem.
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
     (Expression::WithEntered(x)) { body } else { other }`. The model has no
     `with` statement; `lower_with_blocks` resolves the condition.
+  - An `enum` is an `ast::StructDecl` whose `enumeration` is set, so
+    linking, visibility, exports and name mangling treat it as a struct.
+    `enum_def` builds an `EnumDef` in `module.enums` instead (cases with
+    their values folded, checked for range and duplicates); an enum is not
+    a struct in the model.
+  - A `match (e) { arms }` becomes a block holding a hidden `__match_N`
+    local (`e`) and an `if`/`else if` chain whose conditions are
+    `Expression::MatchArm` (the subject, the arm's `CasePattern`s, and a
+    `MatchSite` shared by the arms of one `match`); the `else` arm is the
+    chain's last `else`. The model has no `match` statement;
+    `enums::lower_matches` turns each test into `==` comparisons.
   - A character literal (`ast::Literal::Char`) becomes
     `Cast { IntLiteral(byte), byte }`, so it is typed `byte` where nothing
     else gives it a type and widens like any `byte` value.
@@ -442,6 +453,7 @@ several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
+| 0 | `enums::resolve_enum_cases` (`enums.rs`) | Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
 | 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
@@ -471,6 +483,7 @@ several passes run more than once on purpose.
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). A C function pointer slot takes only the same C function pointer type (`extern_flows_into`, with a hint saying what converts), and a C function pointer converts only to `void*`. An extern call's arguments are checked here only for its function-typed parameters; codegen checks the rest. It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
+| final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` and checks each `match` (`MatchSite`): the subject must be an enum, a pattern's qualifier must name it, each case is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case). An `else` after every case is a warning in `module.warnings`. `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -886,8 +899,15 @@ diagnostics"). The mechanics:
   returns `To(` / `)` around each one in the document (`conversion_hints`),
   unless the client's `inlayHints.implicitConversions` initialization option
   is `false`.
-- Completion lists keywords, globals, locals, and struct members.
-  Document symbols come from the AST.
+- Completion lists keywords, globals, locals, and struct members; after
+  `Enum.` it lists that enum's cases alone (`enum_cases_before`, on a parse
+  with a placeholder after the dot, `parse_after_dot`, since `Color.` alone
+  does not parse). Document symbols come from the AST.
+- Enums: hover on `Enum.Case` shows its value from the sema model
+  (`enum_case_of`), or the bare case while the program does not build
+  (`enum_case_in`). A `match on 'E' does not handle ...` error offers a
+  quick fix that adds an empty arm per missing case before the `match`'s
+  closing brace (`missing_arms_fix`, `find_match`).
 - Runtime discovery is the same as the compiler's (section 2.2): from the
   directory the server was started in, then from the `pepper-lsp`
   executable's directory, unless `PEPPER_RUNTIME` is set. In `Lenient`

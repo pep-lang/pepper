@@ -309,6 +309,12 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
     for a in &module.type_aliases {
         validate(&a.attributes, a.loc.file)?;
     }
+    for e in &module.enums {
+        validate(&e.attributes, e.loc.file)?;
+        for case in &e.cases {
+            validate(&case.attributes, e.loc.file)?;
+        }
+    }
 
     // Top-level functions: keep iff all attributes match. Bodies are walked
     // whether or not the function survives, so a malformed predicate inside is
@@ -362,6 +368,11 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
     // `!OS(Windows)` twin) must lose its dropped half here.
     module.globals.retain(|g| keep(&g.attributes).unwrap_or(false));
     module.type_aliases.retain(|a| keep(&a.attributes).unwrap_or(false));
+    // A dropped case keeps the others' values: the builder numbered them all.
+    module.enums.retain(|e| keep(&e.attributes).unwrap_or(false));
+    for e in &mut module.enums {
+        e.cases.retain(|c| keep(&c.attributes).unwrap_or(false));
+    }
 
     // Members of surviving declarations: drop the ones that don't match.
     for s in &mut module.structs {

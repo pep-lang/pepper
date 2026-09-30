@@ -25,6 +25,8 @@ A type name is `PascalCase`: each word starts with a capital letter, and there
 are no underscores. Write an acronym as a word, so `IoError` and `HttpClient`,
 not `IOError` or `HTTPClient`.
 
+An enum's cases are `PascalCase` too (`Color.Red`, `Status.NotFound`).
+
 A generic parameter is either a single capital letter (`T`, `U`, `K`, `V`) or
 a `PascalCase` name, which by convention starts with `T` (`TValue`,
 `TError`). Use a single letter when the parameter's role is obvious, and a

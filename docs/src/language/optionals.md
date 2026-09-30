@@ -41,10 +41,10 @@ error.
 ## Current limits
 
 - There is no `T?` shorthand yet: write `Optional<T>`.
-- Pepper has no `match` yet, so an optional is checked with `is_some()` or
-  `is_none()` and read with `value()` or `value_or`. `Optional` will become an
-  enum with `None` and `Some(value)` cases once enums with payloads exist; its
-  methods stay the same.
+- An optional is checked with `is_some()` or `is_none()` and read with
+  `value()` or `value_or`; `match` does not work on it yet. `Optional` will
+  become an [enum](enums.md) with `None` and `Some(value)` cases once enum
+  cases can carry values; its methods stay the same.
 - The runtime's own APIs still use null references or default values for
   "missing" (a `HashMap` returns the default value for a missing key, for
   example).

@@ -67,6 +67,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
+    // Enum cases (`Color.Red`) before anything infers a type from them.
+    step!(crate::enums::resolve_enum_cases(module));
     step!(check_bindings::check_bindings(module));
     step!(synthesize_function_types(module));
     step!(resolve_literals(module));
@@ -140,6 +142,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_shared_types::check_shared_types(module));
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
+    // `match` arms need the final type of the value matched.
+    step!(crate::enums::lower_matches(module));
     // Warnings only: uses of deprecated fields and methods, by final type.
     step!(check_deprecated_members::check_deprecated_members(module));
     Ok(())
@@ -249,6 +253,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             }
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
+        Expression::MatchArm(test) => walk_expression(&mut test.subject, f),
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
@@ -296,6 +301,7 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::AtomicLoad(_, arg)
         | Expression::ForIterator(arg)
         | Expression::WithEntered(arg) => vec![arg.as_mut()],
+        Expression::MatchArm(test) => vec![&mut test.subject],
         Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => vec![ptr.as_mut(), val.as_mut()],
         Expression::AtomicCmpXchg(_, ptr, expected, desired) => vec![ptr.as_mut(), expected.as_mut(), desired.as_mut()],
         Expression::FunctionCall { args, .. } => args.iter_mut().collect(),

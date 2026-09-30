@@ -1346,6 +1346,118 @@ fn c_function_pointer_type_with_a_struct() {
 }
 
 #[test]
+fn match_missing_cases() {
+    assert_eq!(
+        error_of(
+            "match_missing_cases",
+            "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red => { return 1; }\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:9:5: error: match on 'Color' does not handle 'Green' and 'Blue'\n\
+         \x20   9 |     match (c) {\n\
+         \x20     |     ^~~~~\n\
+         note: handle each case, or add an 'else' arm\n\
+         main.pep:3:5: note: 'Green' declared here\n\
+         \x20   3 |     Green,\n\
+         \x20     |     ^~~~~\n\
+         main.pep:4:5: note: 'Blue' declared here\n\
+         \x20   4 |     Blue,\n\
+         \x20     |     ^~~~"
+    );
+}
+
+#[test]
+fn enum_no_such_case() {
+    assert_eq!(
+        error_of("enum_no_such_case", "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Pink;\n    return 0;\n}\n"),
+        "main.pep:3:19: error: no case named 'Pink' in 'Color'\n\
+         \x20   3 |     var c = Color.Pink;\n\
+         \x20     |                   ^~~~\n\
+         main.pep:1:6: note: 'Color' declared here\n\
+         \x20   1 | enum Color { Red, Green }\n\
+         \x20     |      ^~~~~"
+    );
+}
+
+#[test]
+fn match_case_handled_twice() {
+    assert_eq!(
+        error_of(
+            "match_case_handled_twice",
+            "enum Color { Red, Green }\nmain(): int {\n    match (Color.Red) {\n        Red => {}\n        Green, Red => {}\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:5:16: error: case 'Red' is already handled\n\
+         \x20   5 |         Green, Red => {}\n\
+         \x20     |                ^~~\n\
+         main.pep:4:9: note: first handled here\n\
+         \x20   4 |         Red => {}\n\
+         \x20     |         ^~~"
+    );
+}
+
+#[test]
+fn enum_value_out_of_range() {
+    assert_eq!(
+        error_of("enum_value_out_of_range", "enum Kind: u8 {\n    Small,\n    Big = 256,\n}\nmain(): int { return 0; }\n"),
+        "main.pep:3:11: error: value 256 of case 'Big' does not fit in 'u8'\n\
+         \x20   3 |     Big = 256,\n\
+         \x20     |           ^~~"
+    );
+}
+
+#[test]
+fn enum_duplicate_value() {
+    assert_eq!(
+        error_of("enum_duplicate_value", "enum Kind {\n    A = 1,\n    B = 1,\n}\nmain(): int { return 0; }\n"),
+        "main.pep:3:5: error: case 'B' has the same value as 'A' (1)\n\
+         \x20   3 |     B = 1,\n\
+         \x20     |     ^\n\
+         main.pep:2:5: note: 'A' declared here\n\
+         \x20   2 |     A = 1,\n\
+         \x20     |     ^"
+    );
+}
+
+#[test]
+fn enum_to_integer_needs_as() {
+    assert_eq!(
+        error_of("enum_to_integer_needs_as", "enum Color { Red }\nmain(): int {\n    int x = Color.Red;\n    return x;\n}\n"),
+        "main.pep:3:19: error: cannot initialize variable 'x' of type 'int' with a value of type 'Color'\n\
+         \x20   3 |     int x = Color.Red;\n\
+         \x20     |                   ^~~"
+    );
+}
+
+#[test]
+fn match_on_a_non_enum() {
+    assert_eq!(
+        error_of("match_on_a_non_enum", "main(): int {\n    match (1) {\n    }\n    return 0;\n}\n"),
+        "main.pep:2:12: error: cannot match on a value of 'i32': 'match' needs an enum\n\
+         \x20   2 |     match (1) {\n\
+         \x20     |            ^"
+    );
+}
+
+#[test]
+fn enum_payloads_not_supported_yet() {
+    assert_eq!(
+        error_of("enum_payloads_not_supported_yet", "enum Shape {\n    Circle(radius: int),\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:5: error: cases that carry values are not supported yet ('Circle')\n\
+         \x20   2 |     Circle(radius: int),\n\
+         \x20     |     ^~~~~~"
+    );
+}
+
+#[test]
+fn unreachable_else_warns() {
+    assert_eq!(
+        warnings_of("enum Color { Red, Green }\ntest(): int {\n    match (Color.Red) {\n        Red, Green => {}\n        else => {}\n    }\n    return 0;\n}\n"),
+        "main.pep:5:9: warning: 'else' is unreachable: every case of 'Color' is handled\n\
+         \x20   5 |         else => {}\n\
+         \x20     |         ^~~~"
+    );
+}
+
+#[test]
 fn overloaded_method_diagnostics() {
     let main = "struct S {\n    get(x: long): int { return 1; }\n    get(x: short): int { return 2; }\n}\nmain(): int { var s = S(); return s.get(1); }\n";
     assert_eq!(

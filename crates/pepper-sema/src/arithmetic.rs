@@ -14,6 +14,8 @@
 /// Floats promote to the wider float; non-numeric operands keep the lhs type
 /// (pointer arithmetic is handled by `apply_op`).
 pub fn result_type(lhs: &str, rhs: &str) -> String {
+    // An enum computes as the integer type it is stored as.
+    let (lhs, rhs) = (&*crate::enums::stored_as(lhs), &*crate::enums::stored_as(rhs));
     if !is_numeric_type(lhs) || !is_numeric_type(rhs) {
         // Non-numeric operand: keep the lhs type.
         return lhs.to_string();
@@ -49,6 +51,10 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
 /// Whether a type name is a numeric primitive (bool, integer or float,
 /// including the C-style aliases).
 pub fn is_numeric_type(n: &str) -> bool {
+    is_primitive_numeric(n) || crate::enums::representation(n).is_some()
+}
+
+fn is_primitive_numeric(n: &str) -> bool {
     matches!(
         n,
         "bool"
@@ -79,7 +85,7 @@ pub fn is_numeric_type(n: &str) -> bool {
 /// Whether a type name is one of the unsigned integer primitives (or an
 /// alias). Selects zext/udiv/urem/lshr/ULT and fptoui/uitofp.
 pub fn is_unsigned_int_type(name: &str) -> bool {
-    matches!(name, "u8" | "byte" | "u16" | "ushort" | "u32" | "uint" | "u64" | "ulong")
+    matches!(&*crate::enums::stored_as(name), "u8" | "byte" | "u16" | "ushort" | "u32" | "uint" | "u64" | "ulong")
 }
 
 pub fn is_float_type(name: &str) -> bool {

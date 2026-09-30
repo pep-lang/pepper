@@ -54,7 +54,7 @@ impl SymbolTable {
     /// Type lookup: integral types resolve to themselves; known structs too
     /// (port of `SymbolTable::find(TypeName)`).
     pub fn find_type(&self, module: &Module, name: &TypeName) -> Option<TypeName> {
-        if crate::type_name::INTEGRAL_TYPES.contains(name.to_string().as_str()) {
+        if crate::type_name::is_integral_name(&name.to_string()) {
             return Some(name.clone());
         }
         if self.structs.contains_key(&name.to_string()) {

@@ -288,6 +288,7 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         })),
         ast::Statement::For(f) => for_loop(f),
         ast::Statement::With(w) => with_block(w),
+        ast::Statement::Match(m) => match_statement(m),
         ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
             expr: ret.expr.as_ref().map(expression).transpose()?,
             loc: loc(ret.expr.as_ref().map_or(ret.span, |e| e.span())),
@@ -306,12 +307,15 @@ thread_local! {
     static FOR_LOOPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Numbers each lowered `with` block's hidden locals.
     static WITH_BLOCKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Numbers each lowered `match` statement's hidden subject local.
+    static MATCHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Restart hidden-local numbering (see `crate::reset_program_counters`).
 pub(crate) fn reset_counters() {
     FOR_LOOPS.with(|c| c.set(0));
     WITH_BLOCKS.with(|c| c.set(0));
+    MATCHES.with(|c| c.set(0));
 }
 
 /// Lower `for (var x in source) body` to
@@ -387,6 +391,76 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
 /// first and the scope object's destructor (which calls `exit()`) can run
 /// last. `lower_with_blocks` resolves the condition once `enter()`'s type is
 /// known.
+/// `match (e) { A, B => { x } C => { y } else => { z } }` becomes
+///
+/// ```text
+/// { var __match_N = e; if (MatchArm(__match_N is A, B)) { x } else if (MatchArm(... C)) { y } else { z } }
+/// ```
+///
+/// `enums::lower_matches` turns each `MatchArm` test into `==` tests once
+/// the subject's type is known. A `match` with no arms still gets one test,
+/// with no patterns, so its exhaustiveness is checked.
+fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
+    let n = MATCHES.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    });
+    let subject = format!("__match_{}", n);
+    let at = loc(m.value.span());
+    let hidden = VariableDef {
+        name: subject.clone(),
+        ty: TypeName::auto(),
+        default: Some(expression(&m.value)?),
+        hidden: true,
+        kind: Kind::Variable,
+        attributes: vec![],
+        loc: at,
+        type_loc: Loc::NONE,
+        is_const: false,
+    };
+    let site = MatchSite {
+        id: n,
+        keyword: loc(m.keyword_span),
+        else_arm: m.else_arm.as_ref().map(|(span, _)| loc(*span)),
+    };
+    let test = |patterns: Vec<CasePattern>| {
+        Expression::MatchArm(Box::new(MatchArmTest {
+            subject: Expression::SymbolRef { id: subject.clone(), ty: TypeName::auto(), loc: at },
+            patterns,
+            site: site.clone(),
+        }))
+    };
+    let mut chain: Option<Block> = match &m.else_arm {
+        Some((_, b)) => Some(block(b)?),
+        None => None,
+    };
+    let mut arms: Vec<(Vec<CasePattern>, Block)> = vec![];
+    for arm in &m.arms {
+        let patterns = arm
+            .patterns
+            .iter()
+            .map(|p| CasePattern {
+                qualifier: p.qualifier.as_ref().map(type_name_from),
+                case: p.case.clone(),
+                loc: loc(p.case_span),
+                bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
+            })
+            .collect();
+        arms.push((patterns, block(&arm.body)?));
+    }
+    if arms.is_empty() {
+        arms.push((vec![], Block { name: String::new(), items: vec![], attributes: vec![] }));
+    }
+    for (patterns, body) in arms.into_iter().rev() {
+        let branch = Statement::Branch(Branch { condition: test(patterns), if_block: body, else_block: chain.take() });
+        chain = Some(Block { name: String::new(), items: vec![branch], attributes: vec![] });
+    }
+    let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
+    items.extend(chain.map(|b| b.items).unwrap_or_default());
+    Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
+}
+
 fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
     let n = WITH_BLOCKS.with(|c| {
         let n = c.get();
@@ -563,6 +637,9 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
             Ok(Declaration::Variable(variable_def(v, Kind::Variable)?))
         }
         ast::Declaration::Function(f) => Ok(Declaration::Function(function_def(f, None)?)),
+        ast::Declaration::Struct(s) if s.enumeration.is_some() => {
+            Err(Diagnostic::error("enums are top-level declarations").at(loc(s.name_span)))
+        }
         ast::Declaration::Struct(s) => Ok(Declaration::Struct(struct_def(s)?)),
         ast::Declaration::Trait(t) => Ok(Declaration::Trait(trait_def(t)?)),
         ast::Declaration::Extend(e) => Ok(Declaration::Extension(extension_def(e)?)),
@@ -705,6 +782,122 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
     })
 }
 
+/// Build an [`EnumDef`] from an `enum` declaration: its cases and their
+/// values. Cases number from 0 in order; `= N` sets a case's value and the
+/// cases after it continue from `N + 1`.
+fn enum_def(decl: &ast::StructDecl) -> Result<EnumDef, Diagnostic> {
+    check_deprecation(&decl.attributes)?;
+    reject_implicit(&decl.attributes)?;
+    let body = decl.enumeration.as_ref().expect("an enum declaration");
+    if let Some(p) = decl.generic_params.first() {
+        return Err(Diagnostic::error(format!(
+            "enum '{}' cannot be generic: its cases carry no values",
+            decl.name
+        ))
+        .at(loc(p.name_span)));
+    }
+    if let Some(m) = decl.methods.first() {
+        return Err(Diagnostic::error(format!("methods on enums are not supported yet ('{}')", decl.name))
+            .at(loc(m.name_span)));
+    }
+    let representation = match &body.representation {
+        Some(t) => {
+            let ty = type_name_from(t);
+            if !ty.is_integral() || ty.name == "bool" {
+                return Err(Diagnostic::error(format!(
+                    "'{}' is not an integer type; an enum is stored as one of 'byte', 'short', 'int', 'long' or their unsigned forms",
+                    t
+                ))
+                .at(loc(t.span)));
+            }
+            ty
+        }
+        None => TypeName::new("int"),
+    };
+    let (min, max) = integer_range(&representation.name);
+    let mut cases: Vec<EnumCaseDef> = vec![];
+    let mut next: i128 = 0;
+    for case in &body.cases {
+        check_deprecation(&case.attributes)?;
+        reject_implicit(&case.attributes)?;
+        if case.payload.is_some() {
+            return Err(Diagnostic::error(format!(
+                "cases that carry values are not supported yet ('{}')",
+                case.name
+            ))
+            .at(loc(case.name_span)));
+        }
+        if let Some(previous) = cases.iter().find(|c| c.name == case.name) {
+            return Err(Diagnostic::error(format!("redefinition of case '{}'", case.name))
+                .at(loc(case.name_span))
+                .with_note("previous definition is here", Some(previous.loc)));
+        }
+        let value = match &case.value {
+            Some(e) => constant_integer(e).ok_or_else(|| {
+                Diagnostic::error(format!("the value of case '{}' must be an integer constant", case.name))
+                    .at(loc(e.span()))
+            })?,
+            None => next,
+        };
+        if value < min || value > max {
+            let at = case.value.as_ref().map_or(case.name_span, |e| e.span());
+            return Err(Diagnostic::error(format!(
+                "value {} of case '{}' does not fit in '{}'",
+                value, case.name, representation.name
+            ))
+            .at(loc(at)));
+        }
+        if let Some(previous) = cases.iter().find(|c| c.value as i128 == value) {
+            return Err(Diagnostic::error(format!(
+                "case '{}' has the same value as '{}' ({})",
+                case.name, previous.name, value
+            ))
+            .at(loc(case.name_span))
+            .with_note(format!("'{}' declared here", previous.name), Some(previous.loc)));
+        }
+        cases.push(EnumCaseDef {
+            name: case.name.clone(),
+            value: value as i64,
+            attributes: case.attributes.clone(),
+            loc: loc(case.name_span),
+        });
+        next = value + 1;
+    }
+    Ok(EnumDef {
+        name: decl.name.clone(),
+        representation,
+        cases,
+        attributes: decl.attributes.clone(),
+        loc: loc(decl.name_span),
+    })
+}
+
+/// The smallest and largest value of an integer type.
+fn integer_range(name: &str) -> (i128, i128) {
+    match name {
+        "i8" | "char" => (i8::MIN as i128, i8::MAX as i128),
+        "u8" | "byte" => (0, u8::MAX as i128),
+        "i16" | "short" => (i16::MIN as i128, i16::MAX as i128),
+        "u16" | "ushort" => (0, u16::MAX as i128),
+        "u32" | "uint" => (0, u32::MAX as i128),
+        "i64" | "long" => (i64::MIN as i128, i64::MAX as i128),
+        "u64" | "ulong" => (0, u64::MAX as i128),
+        _ => (i32::MIN as i128, i32::MAX as i128),
+    }
+}
+
+/// The value of an integer constant: a literal, a character literal, or
+/// either negated.
+fn constant_integer(e: &ast::Expression) -> Option<i128> {
+    match e {
+        ast::Expression::Literal { value: ast::Literal::Integer(v), .. } => Some(*v as i128),
+        ast::Expression::Literal { value: ast::Literal::Char(v), .. } => Some(*v as i128),
+        ast::Expression::Unary { op, prefix: true, operand, .. } if op == "-" => constant_integer(operand).map(|v| -v),
+        ast::Expression::Unary { op, prefix: true, operand, .. } if op == "+" => constant_integer(operand),
+        _ => None,
+    }
+}
+
 fn empty_method(parent: &str, name: &str) -> FunctionDef {
     FunctionDef {
         trait_default: None,
@@ -772,6 +965,7 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
                     out.functions.push(function_def(f, None)?);
                 }
             }
+            ast::Declaration::Struct(s) if s.enumeration.is_some() => out.enums.push(enum_def(s)?),
             ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
             ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
             ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),

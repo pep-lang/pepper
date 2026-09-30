@@ -28,7 +28,7 @@
 
 use crate::model::*;
 use crate::passes::gather_generics::parse_type_string;
-use crate::type_name::{INTEGRAL_TYPES, TypeName};
+use crate::type_name::TypeName;
 
 /// The first type inside `ty` that is not thread-safe, if any.
 fn unsafe_part(ty: &TypeName, module: &Module) -> Option<TypeName> {
@@ -56,7 +56,7 @@ impl ThreadSafeStructs {
 pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<TypeName> {
     let name = ty.to_string();
     // A C function pointer is a code address, the same on every thread.
-    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_shared_function_type() || ty.is_extern_function_type() {
+    if crate::type_name::is_integral_name(&name) || ty.is_shared_function_type() || ty.is_extern_function_type() {
         return None;
     }
     if ty.is_function_type() {

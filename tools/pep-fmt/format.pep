@@ -61,7 +61,10 @@ blank_before(node: syntax.Node): bool {
 # extension, or a function with a body), so it gets blank lines around it.
 is_big(node: syntax.Node): bool {
     int kind = node.kind;
-    if (kind == syntax.NODE_STRUCT or kind == syntax.NODE_TRAIT or kind == syntax.NODE_EXTEND) {
+    if (kind == syntax.NODE_STRUCT or
+        kind == syntax.NODE_TRAIT or
+        kind == syntax.NODE_EXTEND or
+        kind == syntax.NODE_ENUM) {
         return true;
     }
     return kind == syntax.NODE_FUNCTION and node.child(node.count() - 1).kind == syntax.NODE_BLOCK;
@@ -299,6 +302,18 @@ export struct Formatter {
         if (kind == syntax.NODE_EXTEND) {
             return _extension(item);
         }
+        if (kind == syntax.NODE_ENUM) {
+            return _enum(item);
+        }
+        if (kind == syntax.NODE_ENUM_CASE) {
+            return _enum_case(item);
+        }
+        if (kind == syntax.NODE_MATCH_ARM) {
+            return _match_arm(item);
+        }
+        if (kind == syntax.NODE_PATTERN) {
+            return _pattern(item);
+        }
         if (kind == syntax.NODE_TYPE_ALIAS) {
             return _type_alias(item);
         }
@@ -314,13 +329,14 @@ export struct Formatter {
         if (kind == syntax.NODE_VARIABLE or kind == syntax.NODE_PARAMETER) {
             return _variable(item, 0, false);
         }
-        if (kind == syntax.NODE_BLOCK or kind == syntax.NODE_MEMBERS) {
+        if (kind == syntax.NODE_BLOCK or kind == syntax.NODE_MEMBERS or kind == syntax.NODE_MATCH_ARMS) {
             return _braced(item);
         }
         if (kind == syntax.NODE_IF or
             kind == syntax.NODE_WHILE or
             kind == syntax.NODE_FOR or
-            kind == syntax.NODE_WITH) {
+            kind == syntax.NODE_WITH or
+            kind == syntax.NODE_MATCH) {
             return _control(item);
         }
         if (kind == syntax.NODE_RETURN or
@@ -443,6 +459,78 @@ export struct Formatter {
             }
             result.add(_node(child));
             i += 1;
+        }
+        return result;
+    }
+
+    # `enum Name: T {`, then one case per line, then the methods.
+    _enum(item: syntax.Node): Doc {
+        var result = concat();
+        ulong i = _prefix(item, result);
+        result.add(_leaf(item.child(i)));
+        result.add(text(" "));
+        result.add(_leaf(item.child(i + 1)));
+        i += 2;
+        while (i < item.count()) {
+            var child = item.child(i);
+            if (child.kind == syntax.NODE_GENERIC_PARAMETERS) {
+                result.add(_generic_parameters(child));
+            } else if (child.is_token(":")) {
+                result.add(_leaf(child));
+            } else {
+                result.add(text(" "));
+                result.add(_node(child));
+            }
+            i += 1;
+        }
+        return result;
+    }
+
+    # `Name(payload) = value,`, with its attributes one per line above it.
+    _enum_case(item: syntax.Node): Doc {
+        var result = concat();
+        ulong i = _prefix(item, result);
+        while (i < item.count()) {
+            var child = item.child(i);
+            if (child.is_token("=")) {
+                result.add(text(" ")).add(_leaf(child)).add(text(" "));
+            } else if (child.kind == syntax.NODE_PARAMETERS) {
+                result.add(_delimited(child, false));
+            } else {
+                result.add(_node(child));
+            }
+            i += 1;
+        }
+        return result;
+    }
+
+    # `A, B => { ... }` or `else => { ... }`.
+    _match_arm(item: syntax.Node): Doc {
+        var result = concat();
+        ulong i = 0;
+        while (i < item.count()) {
+            var child = item.child(i);
+            if (child.is_token("=>")) {
+                result.add(text(" ")).add(_leaf(child)).add(text(" "));
+            } else {
+                if (i > 0 and item.child(i - 1).is_token(",")) {
+                    result.add(text(" "));
+                }
+                result.add(_node(child));
+            }
+            i += 1;
+        }
+        return result;
+    }
+
+    # `Enum.Case(x, y)`: tight, with a space after each binding's `,`.
+    _pattern(item: syntax.Node): Doc {
+        var result = concat();
+        for (var child in item.children) {
+            result.add(_leaf(child));
+            if (child.is_token(",")) {
+                result.add(text(" "));
+            }
         }
         return result;
     }

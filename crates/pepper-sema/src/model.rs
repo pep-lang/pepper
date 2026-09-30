@@ -352,6 +352,13 @@ pub enum Expression {
     /// once types are known: a null test for a struct or pointer value, no
     /// branch at all otherwise. Never reaches codegen.
     WithEntered(Box<Expression>),
+    /// One arm's test in a lowered `match`: `subject` (the hidden
+    /// `__match_N` local) is one of `patterns`. The builder lowers `match`
+    /// to an `if`/`else` chain of these; `enums::lower_matches` replaces
+    /// each with `==` tests once the subject's type is known, and checks
+    /// exhaustiveness across the arms that share `site`. Never reaches
+    /// codegen.
+    MatchArm(Box<MatchArmTest>),
     /// A struct reference converted to a trait-typed value (`Shape s =
     /// Square(2);`): the same object, seen through the vtable of `from`'s
     /// conformance to `to`. Inserted by `convert_to_traits` wherever a value
@@ -390,6 +397,78 @@ impl Expression {
             _ => Loc::NONE,
         }
     }
+}
+
+/// See [`Expression::MatchArm`].
+#[derive(Debug, Clone)]
+pub struct MatchArmTest {
+    pub subject: Expression,
+    pub patterns: Vec<CasePattern>,
+    /// The `match` this arm belongs to.
+    pub site: MatchSite,
+}
+
+/// The `match` statement an arm belongs to: every arm of one `match`
+/// carries the same one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchSite {
+    /// Program-wide number of the `match` (`__match_N`).
+    pub id: usize,
+    /// The `match` keyword.
+    pub keyword: Loc,
+    /// The `else` keyword, when the `match` has an `else` arm.
+    pub else_arm: Option<Loc>,
+}
+
+/// A pattern of a `match` arm: `Case`, `Enum.Case`, or `Case(x, _)`.
+#[derive(Debug, Clone)]
+pub struct CasePattern {
+    /// The enum named before the case, if any.
+    pub qualifier: Option<TypeName>,
+    pub case: String,
+    /// Location of the case name.
+    pub loc: Loc,
+    /// The names bound to the case's values; `None` without parentheses.
+    pub bindings: Option<Vec<(String, Loc)>>,
+}
+
+/// An `enum` declaration whose cases carry no values: an integer type.
+#[derive(Debug, Clone)]
+pub struct EnumDef {
+    pub name: String,
+    /// The integer type its values are stored as (`int` unless written).
+    pub representation: TypeName,
+    pub cases: Vec<EnumCaseDef>,
+    pub attributes: Vec<ast::Attribute>,
+    /// Location of the enum's name.
+    pub loc: Loc,
+}
+
+impl EnumDef {
+    /// The case named `name`.
+    pub fn case(&self, name: &str) -> Option<&EnumCaseDef> {
+        self.cases.iter().find(|c| c.name == name)
+    }
+
+    /// The value of a slot nothing was stored in yet: the case whose value
+    /// is 0, else the first case (0 for an enum with no cases).
+    pub fn default_value(&self) -> i64 {
+        if self.cases.iter().any(|c| c.value == 0) {
+            0
+        } else {
+            self.cases.first().map_or(0, |c| c.value)
+        }
+    }
+}
+
+/// One case of an [`EnumDef`].
+#[derive(Debug, Clone)]
+pub struct EnumCaseDef {
+    pub name: String,
+    pub value: i64,
+    pub attributes: Vec<ast::Attribute>,
+    /// Location of the case's name.
+    pub loc: Loc,
 }
 
 /// A closure literal: `(x: int) => x * 2`. Parameters and the return type
@@ -781,6 +860,10 @@ pub struct Module {
     /// Module-scope variables (`var x = ...` at file scope): LLVM globals,
     /// initialized by a constant initializer or an init function.
     pub globals: Vec<VariableDef>,
+    /// Enums whose cases carry no values (`enum Color { Red, Green }`):
+    /// integer types, which keep their own name through sema so types are
+    /// checked and `match` is checked for exhaustiveness (see `enums.rs`).
+    pub enums: Vec<EnumDef>,
     pub struct_specs: Vec<TypeName>,
     pub func_specs: Vec<TypeName>,
     /// Type aliases (`type Name = Target;`), expanded away by
@@ -834,6 +917,7 @@ impl Module {
     pub fn merge(&mut self, other: Module) {
         self.imports.extend(other.imports);
         self.structs.extend(other.structs);
+        self.enums.extend(other.enums);
         self.traits.extend(other.traits);
         self.extensions.extend(other.extensions);
         self.functions.extend(other.functions);

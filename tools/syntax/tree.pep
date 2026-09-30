@@ -113,6 +113,19 @@ export const NODE_CLOSURE = 44;
 export const NODE_CLOSURE_PARAMETERS = 45;
 ## `name [: TYPE]`
 export const NODE_CLOSURE_PARAMETER = 46;
+## `[attribute]... [export] enum Name [GENERIC_PARAMETERS] [: TYPE] MEMBERS`,
+## whose members are its `ENUM_CASE`s, then its methods.
+export const NODE_ENUM = 47;
+## `[attribute]... Name [PARAMETERS] [= expression] [,]`: one case of an enum.
+export const NODE_ENUM_CASE = 48;
+## `match expression MATCH_ARMS`
+export const NODE_MATCH = 49;
+## `{ MATCH_ARM... }`
+export const NODE_MATCH_ARMS = 50;
+## `PATTERN, ... => BLOCK`, or `else => BLOCK`.
+export const NODE_MATCH_ARM = 51;
+## `name[.name]... [( name, ... )]`: a case, and the names it binds.
+export const NODE_PATTERN = 52;
 
 ## A node of the syntax tree: a token leaf, or a construct with children.
 export struct Node {

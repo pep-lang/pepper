@@ -70,6 +70,8 @@ struct Slot<'s> {
 
 #[derive(Clone, Copy)]
 enum Kind {
+    /// An enum (`crate::enums`): an integer that converts to nothing else.
+    Enum,
     Numeric,
     Struct,
     /// A raw pointer (`__ptr<T>`, `T*`). Pointers convert among themselves
@@ -113,6 +115,9 @@ impl<'a> Checker<'a> {
         }
         if self.unbound.iter().any(|p| *p == ty.name) {
             return None;
+        }
+        if crate::enums::is_enum(&name) {
+            return Some(Kind::Enum);
         }
         if crate::arithmetic::is_numeric_type(&canonical(ty).to_string()) {
             return Some(Kind::Numeric);
@@ -172,6 +177,7 @@ impl<'a> Checker<'a> {
             return;
         };
         let mismatch = match (expected_kind, actual_kind) {
+            (Kind::Enum, Kind::Enum) => canonical(expected).name != canonical(&actual).name,
             (Kind::Numeric, Kind::Numeric) => false,
             // Different structs; type arguments are not compared, since
             // defaults (`Result<int>` is `Result<int, Error>`) and
@@ -444,11 +450,20 @@ impl<'a> Checker<'a> {
                     let slot = Slot { what: &what, mismatch: &mismatch, fallback: *loc };
                     self.void_used(lhs, current, &slot);
                     self.void_used(rhs, current, &slot);
+                    self.enum_operands(*op, lhs, rhs, *loc, current);
                 }
-                Expression::Unary { operand, loc, .. } => {
+                Expression::Unary { op, operand, loc } => {
                     let what = || "an operand".to_string();
                     let mismatch = |_: &str, _: &str| String::new();
                     self.void_used(operand, current, &Slot { what: &what, mismatch: &mismatch, fallback: *loc });
+                    if !matches!(op, UnaryOp::LogicalNot)
+                        && let Some(ty) = static_type::of(operand, &self.table, current).filter(|t| crate::enums::is_enum(&t.name))
+                    {
+                        let message = format!("invalid operand to unary expression ('{}'): an enum only compares with '==' and '!='", ty.display());
+                        if !self.errors.iter().any(|d| d.message == message && d.loc == Some(*loc)) {
+                            self.errors.push(Diagnostic::error(message).at(*loc));
+                        }
+                    }
                 }
                 Expression::Binary { op: BinaryOp::Assign, lhs, rhs, loc } => {
                     // A raw buffer slot (`Data[i] = v`) has no reliable
@@ -461,6 +476,38 @@ impl<'a> Checker<'a> {
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// An enum takes part only in `==` and `!=` with a value of the same
+    /// enum (and in `===`/`!==`, which compare raw values).
+    fn enum_operands(&mut self, op: BinaryOp, lhs: &Expression, rhs: &Expression, loc: Loc, current: Option<&TypeName>) {
+        if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+            return;
+        }
+        let lhs_ty = static_type::of(lhs, &self.table, current);
+        let rhs_ty = static_type::of(rhs, &self.table, current);
+        let is_enum = |t: &Option<TypeName>| t.as_ref().is_some_and(|t| crate::enums::is_enum(&t.name));
+        if !is_enum(&lhs_ty) && !is_enum(&rhs_ty) {
+            return;
+        }
+        let (Some(l), Some(r)) = (&lhs_ty, &rhs_ty) else {
+            return;
+        };
+        let comparison = matches!(op, BinaryOp::Equal | BinaryOp::NotEqual | BinaryOp::Identical | BinaryOp::NotIdentical);
+        let message = if !comparison {
+            format!(
+                "invalid operands to binary expression ('{}' and '{}'): an enum only compares with '==' and '!='",
+                l.display(),
+                r.display()
+            )
+        } else if canonical(l) != canonical(r) {
+            format!("cannot compare a value of type '{}' with a value of type '{}'", l.display(), r.display())
+        } else {
+            return;
+        };
+        if !self.errors.iter().any(|d| d.message == message && d.loc == Some(loc)) {
+            self.errors.push(Diagnostic::error(message).at(loc));
         }
     }
 

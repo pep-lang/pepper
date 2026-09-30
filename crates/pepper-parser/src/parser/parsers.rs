@@ -224,6 +224,7 @@ const RESERVED: &[&str] = &[
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
     "trait", "extend", "type", "export", "with",
+    "enum", "match",
 ];
 
 /// Operators that may appear as method names (overloadable operators), longest first.
@@ -1609,6 +1610,115 @@ fn with_statement(input: &mut &str) -> Result<With> {
     Ok(With { binding, scope, block: body, else_block, span: Span { start, end } })
 }
 
+/// `match (value) { Case, Case(x, _) => { ... } ... else => { ... } }`. As
+/// with `if` the parentheses are optional.
+fn match_statement(input: &mut &str) -> Result<Match> {
+    let start = pos(input);
+    if !keyword(input, "match") {
+        return Err(bt(input));
+    }
+    let keyword_span = Span { start, end: pos(input) };
+    ws(input)?;
+    let value = expression(input)?;
+    ws(input)?;
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
+    *input = &input[1..];
+    let mut arms = vec![];
+    let mut else_arm = None;
+    loop {
+        ws(input)?;
+        if input.is_empty() || input.starts_with('}') { break; }
+        if else_arm.is_some() {
+            // Nothing may follow the `else` arm.
+            expected_with_note(input, "'}'", Some((open, "to match this '{'")));
+            return Err(cut(input));
+        }
+        let arm_start = pos(input);
+        if keyword(&mut { *input }, "else") {
+            keyword(input, "else");
+            let else_span = Span { start: arm_start, end: pos(input) };
+            ws(input)?;
+            match_arrow(input)?;
+            let body = block(input, vec![])?;
+            else_arm = Some((else_span, body));
+            continue;
+        }
+        let mut patterns = vec![pattern(input)?];
+        loop {
+            ws(input)?;
+            if !input.starts_with(',') { break; }
+            *input = &input[1..];
+            ws(input)?;
+            patterns.push(pattern(input)?);
+        }
+        match_arrow(input)?;
+        let body = block(input, vec![])?;
+        let span = Span { start: arm_start, end: body.span.end };
+        arms.push(MatchArm { patterns, body, span });
+    }
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
+    *input = &input[1..];
+    let span = Span { start, end: pos(input) };
+    ws(input)?;
+    Ok(Match { value, arms, else_arm, keyword_span, span })
+}
+
+/// The `=>` between a match arm's patterns and its block, and the space after it.
+fn match_arrow(input: &mut &str) -> Result<()> {
+    ws(input)?;
+    if !input.starts_with("=>") { return Err(cut_expecting(input, "'=>'")); }
+    *input = &input[2..];
+    ws(input)?;
+    Ok(())
+}
+
+/// A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or `Case(x, _)`.
+fn pattern(input: &mut &str) -> Result<Pattern> {
+    let start = pos(input);
+    let mut segments = vec![];
+    loop {
+        let segment_start = pos(input);
+        let segment = identifier(input).map_err(|_| cut_expecting(input, "a case name"))?;
+        segments.push((segment, Span { start: segment_start, end: pos(input) }));
+        if input.starts_with('.') && input[1..].starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+            *input = &input[1..];
+            continue;
+        }
+        break;
+    }
+    let (case, case_span) = segments.pop().expect("one segment");
+    let qualifier = segments.first().map(|(_, first)| TypeName {
+        name: segments.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join("."),
+        generic_types: vec![],
+        span: Span { start: first.start, end: segments.last().map(|(_, s)| s.end).unwrap_or(first.end) },
+    });
+    let mut rest = *input;
+    ws(&mut rest)?;
+    let mut bindings = None;
+    if rest.starts_with('(') {
+        *input = &rest[1..];
+        let mut names = vec![];
+        loop {
+            ws(input)?;
+            if input.starts_with(')') { break; }
+            let binding_start = pos(input);
+            let name = identifier(input).map_err(|_| cut_expecting(input, "a name to bind"))?;
+            names.push((name, Span { start: binding_start, end: pos(input) }));
+            ws(input)?;
+            if input.starts_with(',') {
+                *input = &input[1..];
+                continue;
+            }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
+            break;
+        }
+        *input = &input[1..];
+        bindings = Some(names);
+    }
+    Ok(Pattern { qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
+}
+
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     let start = pos(input);
     if !input.starts_with("return") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -1673,6 +1783,9 @@ fn statement(input: &mut &str) -> Result<Statement> {
     if keyword(&mut { *input }, "with") {
         return Ok(Statement::With(with_statement(input)?));
     }
+    if keyword(&mut { *input }, "match") {
+        return Ok(Statement::Match(match_statement(input)?));
+    }
     if input.starts_with("return") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::Return(return_statement(input)?));
     }
@@ -1699,6 +1812,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
             && ![
                 "if", "while", "return", "break", "continue", "struct", "extern", "import", "true", "false",
                 "sizeof", "and", "or", "new", "construct", "destruct", "static", "trait", "extend", "with",
+                "enum", "match",
             ]
             .iter()
             .any(|kw| is_kw(kw)));
@@ -2667,7 +2781,142 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
+}
+
+/// `enum Name[<T, ...>] [: IntegerType] { Case, Case = value, Case(x: T), ... methods }`.
+///
+/// The cases come first, separated by commas (a trailing comma is allowed);
+/// the list ends at the first case not followed by a comma. Methods follow.
+/// A case is never followed by `:` or `{`, which is how `Name(x: T)` is told
+/// apart from a method `Name(x: T): R { ... }`.
+fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDecl> {
+    let start = pos(input);
+    let decl_start = attrs.first().map(|a| a.span.start).unwrap_or(start);
+    if !keyword(input, "enum") {
+        return Err(bt(input));
+    }
+    ws(input)?;
+    let name_span_start = pos(input);
+    let name = identifier(input).map_err(|_| cut_expecting(input, "an enum name"))?;
+    let name_span = Span { start: name_span_start, end: pos(input) };
+    ws(input)?;
+    let generic_params = if input.starts_with('<') { generic_params(input)? } else { vec![] };
+    ws(input)?;
+    let representation = if input.starts_with(':') {
+        *input = &input[1..];
+        ws(input)?;
+        let ty = type_name(input)?;
+        ws(input)?;
+        Some(ty)
+    } else {
+        None
+    };
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
+    *input = &input[1..];
+
+    let mut cases = vec![];
+    loop {
+        ws(input)?;
+        if input.starts_with('}') { break; }
+        let checkpoint = *input;
+        let case_attrs = attributes(input)?;
+        ws(input)?;
+        let case_start = case_attrs.first().map(|a| a.span.start).unwrap_or(pos(input));
+        let name_start = pos(input);
+        let is_static = keyword(&mut { *input }, "static");
+        let case_name = match identifier(input) {
+            Ok(n) if !is_static => n,
+            _ => {
+                *input = checkpoint;
+                break;
+            }
+        };
+        let case_name_span = Span { start: name_start, end: pos(input) };
+        let mut rest = *input;
+        ws(&mut rest)?;
+        let mut payload = None;
+        if rest.starts_with('(') {
+            let mut probe = rest;
+            let parameters = function_parameters(&mut probe);
+            let mut after = probe;
+            ws(&mut after)?;
+            if parameters.is_err() || after.starts_with(':') || after.starts_with('{') {
+                // A method: the cases are over.
+                *input = checkpoint;
+                break;
+            }
+            payload = Some(parameters?);
+            rest = probe;
+        } else if rest.starts_with(':') || rest.starts_with('{') || rest.starts_with('<') {
+            *input = checkpoint;
+            break;
+        }
+        *input = rest;
+        ws(input)?;
+        let mut value = None;
+        if input.starts_with('=') && !input.starts_with("==") {
+            *input = &input[1..];
+            ws(input)?;
+            value = Some(expression(input)?);
+            ws(input)?;
+        }
+        cases.push(EnumCase {
+            name: case_name,
+            name_span: case_name_span,
+            value,
+            payload,
+            attributes: case_attrs,
+            span: Span { start: case_start, end: pos(input) },
+        });
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        break;
+    }
+
+    let mut methods = vec![];
+    loop {
+        ws(input)?;
+        if input.is_empty() || input.starts_with('}') { break; }
+        if input.starts_with(';') {
+            *input = &input[1..];
+            continue;
+        }
+        let m_attrs = attributes(input)?;
+        ws(input)?;
+        let after_attrs = *input;
+        match struct_method(input, &m_attrs) {
+            Ok(m) => {
+                methods.push(m);
+                ws(input)?;
+            }
+            Err(_) => {
+                *input = after_attrs;
+                expected(input, "a method");
+                return Err(cut(input));
+            }
+        }
+    }
+    ws(input)?;
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
+    *input = &input[1..];
+
+    Ok(StructDecl {
+        name,
+        name_span,
+        generic_params,
+        fields: vec![],
+        methods,
+        constructor: None,
+        destructor: None,
+        span: Span { start: decl_start, end: pos(input) },
+        attributes: attrs,
+        is_exported: false,
+        enumeration: Some(EnumBody { representation, cases }),
+    })
 }
 
 fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TypeAliasDecl> {
@@ -2744,6 +2993,9 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
 
     if input.starts_with("struct") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Struct(struct_declaration(input, leading)?));
+    }
+    if keyword(&mut { *input }, "enum") {
+        return Ok(Declaration::Struct(enum_declaration(input, leading)?));
     }
     if input.starts_with("trait") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Trait(trait_declaration(input, leading)?));
@@ -3114,6 +3366,10 @@ fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PostParseError> {
             s.fields.iter().try_for_each(ptr_check_var)?;
             s.methods.iter().try_for_each(ptr_check_fn)?;
             s.constructor.as_ref().map_or(Ok(()), ptr_check_fn)?;
+            for case in s.enumeration.iter().flat_map(|e| &e.cases) {
+                ptr_check_attrs(&case.attributes)?;
+                case.payload.iter().flatten().try_for_each(ptr_check_var)?;
+            }
             s.destructor.as_ref().map_or(Ok(()), ptr_check_block)
         }
         Declaration::Trait(t) => {
@@ -3169,6 +3425,11 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
         }
         Statement::Return(r) => r.expr.as_ref().map_or(Ok(()), ptr_check_expr),
         Statement::LoopBreak(_) => Ok(()),
+        Statement::Match(m) => {
+            ptr_check_expr(&m.value)?;
+            m.arms.iter().try_for_each(|arm| ptr_check_block(&arm.body))?;
+            m.else_arm.as_ref().map_or(Ok(()), |(_, b)| ptr_check_block(b))
+        }
     }
 }
 
@@ -4907,5 +5168,56 @@ export const z = 3;",
     fn test_export_before_attributes_is_rejected() {
         assert!(crate::parser::parse_source("t.pep", "export [Target(OS(Linux))] f() { }").is_err());
         assert!(crate::parser::parse_source("t.pep", "[Target(OS(Linux))] export f() { }").is_ok());
+    }
+
+    // ── Enums and match ──
+
+    fn enum_of(m: &Module) -> (&StructDecl, &EnumBody) {
+        match &m.declarations[0] {
+            Declaration::Struct(s) => (s, s.enumeration.as_ref().expect("an enum")),
+            other => panic!("not an enum: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn enum_cases_are_a_comma_separated_list() {
+        let m = parse("export enum Kind: u8 { A, B = 5, [Target(OS(Linux))] C, }");
+        let (decl, body) = enum_of(&m);
+        assert_eq!(decl.name, "Kind");
+        assert!(decl.is_exported);
+        assert_eq!(body.representation.as_ref().map(|t| t.to_string()).as_deref(), Some("u8"));
+        let names: Vec<&str> = body.cases.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["A", "B", "C"]);
+        assert!(body.cases[1].value.is_some());
+        assert_eq!(body.cases[2].attributes.len(), 1);
+        // No trailing comma, and payloads.
+        let m = parse("enum Shape { Circle(radius: int), Square(side: int) }");
+        let (_, body) = enum_of(&m);
+        assert_eq!(body.cases[0].payload.as_ref().map(|p| p.len()), Some(1));
+    }
+
+    #[test]
+    fn methods_follow_the_cases() {
+        let m = parse("enum Color { Red, Green\n    name(): String { return \"\"; }\n}");
+        let (decl, body) = enum_of(&m);
+        assert_eq!(body.cases.len(), 2);
+        assert_eq!(decl.methods.len(), 1);
+        assert!(crate::parser::parse_source("t.pep", "enum Color { Red Green }").is_err());
+    }
+
+    #[test]
+    fn match_statement_arms_and_else() {
+        let m = parse("f(c: Color) { match (c) { Red, Color.Green => { } Blue => { } else => { } } }");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!() };
+        let Statement::Match(found) = &f.body.as_ref().unwrap().statements[0] else { panic!() };
+        assert_eq!(found.arms.len(), 2);
+        let patterns: Vec<String> = found.arms[0].patterns.iter().map(|p| p.to_string()).collect();
+        assert_eq!(patterns, ["Red", "Color.Green"]);
+        assert!(found.else_arm.is_some());
+        let shown = found.to_string();
+        assert!(shown.starts_with("match (c) {"), "{}", shown);
+        // `match` and `enum` are reserved.
+        assert!(crate::parser::parse_source("t.pep", "f() { var match = 1; }").is_err());
+        assert!(crate::parser::parse_source("t.pep", "f() { var enum = 1; }").is_err());
     }
 }

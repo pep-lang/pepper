@@ -327,6 +327,35 @@ pub struct StructDecl {
     pub attributes: Vec<Attribute>,
     /// `export` modifier: visible outside the declaring file.
     pub is_exported: bool,
+    /// `Some` when this was declared with `enum` rather than `struct`. An
+    /// enum shares the struct's name, generics, methods and visibility, so
+    /// linking, visibility and the language server treat it as one; the
+    /// builder lowers it differently (see `docs/src/language/enums.md`).
+    pub enumeration: Option<EnumBody>,
+}
+
+/// What an `enum` declaration adds to a [`StructDecl`]: its cases.
+#[derive(Debug, Clone)]
+pub struct EnumBody {
+    /// The integer type after `:` (`enum Kind: u8`); `None` for the default.
+    pub representation: Option<TypeName>,
+    /// The cases, in declaration order.
+    pub cases: Vec<EnumCase>,
+}
+
+/// One case of an `enum`: `Name`, `Name = value`, or `Name(field: Type, ...)`.
+#[derive(Debug, Clone)]
+pub struct EnumCase {
+    pub name: String,
+    pub name_span: Span,
+    /// The explicit value after `=`.
+    pub value: Option<Expression>,
+    /// The values the case carries; `None` when written without parentheses.
+    pub payload: Option<Vec<VariableDecl>>,
+    /// Attributes preceding the case (`[Deprecated(...)]`).
+    pub attributes: Vec<Attribute>,
+    /// The whole case, from its first attribute to its last token.
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -522,6 +551,40 @@ pub enum Statement {
     With(With),
     Return(ReturnStatement),
     LoopBreak(LoopBreak),
+    Match(Match),
+}
+
+/// `match (value) { pattern, ... => { ... } ... else => { ... } }`.
+#[derive(Debug, Clone)]
+pub struct Match {
+    pub value: Expression,
+    pub arms: Vec<MatchArm>,
+    /// The `else` arm: the span of the `else` keyword and its block.
+    pub else_arm: Option<(Span, Block)>,
+    /// Span of the `match` keyword.
+    pub keyword_span: Span,
+    pub span: Span,
+}
+
+/// One arm of a `match`: its patterns and the block they select.
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub patterns: Vec<Pattern>,
+    pub body: Block,
+    pub span: Span,
+}
+
+/// A case pattern: `Case`, `Enum.Case`, or `Case(binding, _, ...)`.
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    /// The enum named before the case (`Color` in `Color.Red`).
+    pub qualifier: Option<TypeName>,
+    pub case: String,
+    pub case_span: Span,
+    /// The names bound to the case's values; `None` without parentheses. A
+    /// binding named `_` skips its value.
+    pub bindings: Option<Vec<(String, Span)>>,
+    pub span: Span,
 }
 
 impl Statement {
@@ -536,6 +599,7 @@ impl Statement {
             Statement::With(w) => w.span,
             Statement::Return(r) => r.span,
             Statement::LoopBreak(l) => l.span,
+            Statement::Match(m) => m.span,
         }
     }
 }
@@ -870,11 +934,27 @@ impl Display for StructDecl {
         if self.is_exported {
             write!(f, "export ")?;
         }
-        write!(f, "struct {}", self.name)?;
+        let keyword = if self.enumeration.is_some() { "enum" } else { "struct" };
+        write!(f, "{} {}", keyword, self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
         }
+        if let Some(repr) = self.enumeration.as_ref().and_then(|e| e.representation.as_ref()) {
+            write!(f, ": {}", repr)?;
+        }
         write!(f, " {{")?;
+        for case in self.enumeration.iter().flat_map(|e| &e.cases) {
+            write!(f, "\n    ")?;
+            write_attributes(f, &case.attributes)?;
+            write!(f, "{}", case.name)?;
+            if let Some(payload) = &case.payload {
+                write!(f, "({})", join(payload, ", "))?;
+            }
+            if let Some(value) = &case.value {
+                write!(f, " = {}", value)?;
+            }
+            write!(f, ",")?;
+        }
         for field in &self.fields {
             write!(f, "\n    {}", field)?;
         }
@@ -893,7 +973,8 @@ impl Display for StructDecl {
         for method in &self.methods {
             write!(f, "\n    {}", method)?;
         }
-        let has_members = !self.fields.is_empty()
+        let has_members = self.enumeration.as_ref().is_some_and(|e| !e.cases.is_empty())
+            || !self.fields.is_empty()
             || self.constructor.is_some()
             || self.destructor.is_some()
             || !self.methods.is_empty();
@@ -1029,7 +1110,35 @@ impl Display for Statement {
             Statement::With(w) => write!(f, "{}", w),
             Statement::Return(r) => write!(f, "{};", r),
             Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
+            Statement::Match(m) => write!(f, "{}", m),
         }
+    }
+}
+
+impl Display for Match {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "match ({}) {{", self.value)?;
+        for arm in &self.arms {
+            write!(f, " {} => {}", join(&arm.patterns, ", "), arm.body)?;
+        }
+        if let Some((_, block)) = &self.else_arm {
+            write!(f, " else => {}", block)?;
+        }
+        write!(f, " }}")
+    }
+}
+
+impl Display for Pattern {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(q) = &self.qualifier {
+            write!(f, "{}.", q)?;
+        }
+        write!(f, "{}", self.case)?;
+        if let Some(bindings) = &self.bindings {
+            let names: Vec<&str> = bindings.iter().map(|(n, _)| n.as_str()).collect();
+            write!(f, "({})", names.join(", "))?;
+        }
+        Ok(())
     }
 }
 

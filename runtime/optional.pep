@@ -1,7 +1,7 @@
 # A value that may be absent, like Rust's `Option<T>` and Swift's
 # `Optional`. Pepper has no enums with payloads yet, so this is a struct with
 # a flag and a slot; once payload enums land it becomes
-# `enum Optional<T> { case None; case Some(value: T); }` with the same
+# `enum Optional<T> { None, Some(value: T) }` with the same
 # methods. The fields are private so that move changes no caller.
 
 import "internals";

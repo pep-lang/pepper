@@ -98,6 +98,20 @@ with (var session = Session("grace")) {
 [Scoped blocks with `with`](scopes.md) covers the protocol and the optional
 `else` block.
 
+## `match`
+
+`match` runs the arm for the case an [enum](enums.md) value holds, and the
+compiler checks that every case is handled:
+
+```pepper
+match (light) {
+    Red, Amber => { stop(); }
+    Green => { go(); }
+}
+```
+
+[Enums and `match`](enums.md#match) covers patterns and the `else` arm.
+
 ## `break` and `continue`
 
 `break` leaves the innermost loop immediately. `continue` skips the rest of the

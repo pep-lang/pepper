@@ -541,7 +541,7 @@ pub fn lift_closures(module: &mut Module) {
                 .target
                 .sub_types
                 .iter()
-                .filter(|t| t.sub_types.is_empty() && !types.contains(&t.name) && !type_name::INTEGRAL_TYPES.contains(t.name.as_str()))
+                .filter(|t| t.sub_types.is_empty() && !types.contains(&t.name) && !type_name::is_integral_name(&t.name))
                 .map(|t| GenericParam { name: t.name.clone(), default: None, is_argument: false })
                 .collect();
             let target = module.structs.iter().find(|s| s.ty.name == ext.target.name);

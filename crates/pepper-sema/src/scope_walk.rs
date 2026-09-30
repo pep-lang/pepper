@@ -207,6 +207,23 @@ macro_rules! scope_walker {
                     Declaration::Struct(s) => {
                         self.push_generics(&$($m)? s.generic_params);
                         self.scopes_mut().push(Scope::Members(s.name.clone()));
+                        if let Some(e) = &$($m)? s.enumeration {
+                            if let Some(r) = &$($m)? e.representation {
+                                self.visit_type_name(r);
+                            }
+                            for case in &$($m)? e.cases {
+                                self.enter_declaration(&case.attributes);
+                                if let Some(payload) = &$($m)? case.payload {
+                                    for p in payload {
+                                        self.visit_type_name(&$($m)? p.type_name);
+                                    }
+                                }
+                                if let Some(v) = &$($m)? case.value {
+                                    self.visit_expression(v);
+                                }
+                                self.exit_declaration();
+                            }
+                        }
                         for field in &$($m)? s.fields {
                             self.enter_declaration(&field.attributes);
                             self.visit_type_name(&$($m)? field.type_name);
@@ -370,6 +387,28 @@ macro_rules! scope_walker {
                         }
                     }
                     Statement::LoopBreak(_) => {}
+                    Statement::Match(m) => {
+                        self.visit_expression(&$($m)? m.value);
+                        for arm in &$($m)? m.arms {
+                            // A pattern's bindings are visible in its arm only.
+                            self.scopes_mut().push(Scope::Values(HashSet::new()));
+                            for p in &$($m)? arm.patterns {
+                                if let Some(q) = &$($m)? p.qualifier {
+                                    self.visit_type_name(q);
+                                }
+                                for (name, _) in p.bindings.iter().flatten() {
+                                    if name != "_" {
+                                        self.scopes_mut().bind_value(name, false);
+                                    }
+                                }
+                            }
+                            self.walk_block(&$($m)? arm.body);
+                            self.scopes_mut().pop();
+                        }
+                        if let Some((_, b)) = &$($m)? m.else_arm {
+                            self.walk_block(b);
+                        }
+                    }
                 }
             }
 

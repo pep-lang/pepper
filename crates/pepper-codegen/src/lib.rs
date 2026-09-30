@@ -191,6 +191,8 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
+        // Enum types are stored as their integer types (see `pepper_sema::enums`).
+        pepper_sema::enums::install(&module.enums);
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
@@ -2919,6 +2921,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let name = ty.to_string();
                 if let Some(ty) = self.types.get(&name) {
                     let any = match ty {
+                        // An enum's default is a case (`EnumDef::default_value`).
+                        BasicTypeEnum::IntType(it) if pepper_sema::enums::is_enum(&name) => {
+                            it.const_int(pepper_sema::enums::default_value(&name).unwrap_or(0) as u64, true).into()
+                        }
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                         BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
@@ -3309,6 +3315,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::WithEntered(_) => {
                 Err("internal error: unlowered 'with' condition".to_string())
             }
+            Expression::MatchArm(_) => Err("internal error: unlowered 'match' arm".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;

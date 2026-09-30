@@ -331,6 +331,10 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
                 if checker.described(doc.as_ref(), &s.name, s.name_span) {
                     checker.generics(doc.as_ref().unwrap(), &s.name, &s.generic_params, s.name_span);
                 }
+                for case in s.enumeration.iter().flat_map(|e| &e.cases) {
+                    let doc = doc_comment_before(source, case.span.start);
+                    checker.described(doc.as_ref(), &format!("{}.{}", s.name, case.name), case.name_span);
+                }
                 for field in s.fields.iter().filter(|f| is_public(&f.name)) {
                     checker.field(field, &format!("{}.{}", s.name, field.name));
                 }

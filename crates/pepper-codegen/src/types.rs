@@ -19,7 +19,8 @@ pub struct Types<'ctx> {
 
 /// Integral-type aliases (same set as sema `TypeName::IntegralTypes`).
 fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum<'ctx>> {
-    Some(match name {
+    // An enum is stored as its integer type.
+    Some(match &*pepper_sema::enums::stored_as(name) {
         "bool" => BasicTypeEnum::IntType(context.bool_type()),
         "i1" => BasicTypeEnum::IntType(context.bool_type()),
         "i8" | "char" => BasicTypeEnum::IntType(context.i8_type()),

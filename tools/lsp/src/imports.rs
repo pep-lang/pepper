@@ -208,6 +208,16 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
             .or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, offset))),
         ast::Statement::Return(r) => r.expr.as_ref().and_then(|e| in_expression_types(e, offset)),
         ast::Statement::LoopBreak(_) => None,
+        ast::Statement::Match(m) => in_expression_types(&m.value, offset)
+            .or_else(|| {
+                m.arms.iter().find_map(|arm| {
+                    arm.patterns
+                        .iter()
+                        .find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))
+                        .or_else(|| in_block(&arm.body, offset))
+                })
+            })
+            .or_else(|| m.else_arm.as_ref().and_then(|(_, b)| in_block(b, offset))),
     }
 }
 

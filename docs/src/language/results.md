@@ -75,8 +75,8 @@ build a new error from the old one:
 ```
 
 Pepper does not yet have a shorthand for propagation (such as Rust's `?`
-operator) or a `match` statement, so each fallible call is checked with `if`
-as shown above.
+operator), and [`match`](enums.md#match) does not work on a `Result` yet, so
+each fallible call is checked with `if` as shown above.
 
 ## Results from the io module
 

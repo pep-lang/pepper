@@ -413,6 +413,69 @@ fn definition_of_an_overloaded_call_is_the_chosen_member() {
     assert!(rest.starts_with("scale(x: int)"), "{}", rest);
 }
 
+const COLORS: &str = r#"## A traffic light color.
+enum Color {
+    ## Stop.
+    Red,
+    Amber,
+    Green,
+}
+
+score(c: Color): int {
+    match (c) {
+        Red => { return 1; }
+    }
+    return 0;
+}
+
+test(): int { return score(Color.Amber); }
+"#;
+
+#[test]
+fn hover_on_an_enum_case_shows_its_value_and_docs() {
+    let complete = COLORS.replace("Red => { return 1; }", "Red => { return 1; }\n        else => { return 2; }");
+    let (uri, text, program) = load("enum_hover", &complete, "main.pep");
+    let value = hover(&uri, &text, &program, at(&text, "Color.Amber", 0, 7));
+    assert!(value.contains("Color.Amber = 1"), "{}", value);
+    // While the program does not build, the case without its value.
+    let (uri, text, program) = load("enum_hover_broken", COLORS, "main.pep");
+    let value = hover(&uri, &text, &program, at(&text, "Color.Amber", 0, 7));
+    assert!(value.contains("Color.Amber"), "{}", value);
+    let enum_name = hover(&uri, &text, &program, at(&text, "Color.Amber", 0, 1));
+    assert!(enum_name.contains("A traffic light color."), "{}", enum_name);
+}
+
+#[test]
+fn completion_after_an_enum_name_lists_its_cases() {
+    let text = COLORS.replace("Color.Amber", "Color.");
+    let uri = Url::parse("file:///t.pep").unwrap();
+    let offset = at(&text, "Color.)", 0, 6);
+    assert!(parse_source(uri.as_str(), &text).is_err());
+    let ast = parse_after_dot(&uri, &text, offset).expect("parses with a placeholder");
+    let items = enum_cases_before(&ast, &text, offset).expect("cases");
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+    assert_eq!(labels, ["Red", "Amber", "Green"]);
+    assert_eq!(items[0].kind, Some(CompletionItemKind::ENUM_MEMBER));
+}
+
+#[test]
+fn a_match_missing_cases_offers_to_add_them() {
+    let (uri, text, program) = load("enum_missing_arms", COLORS, "main.pep");
+    let error = sema_model_of(&program).expect_err("missing cases");
+    let at_match = Range::new(Position::new(9, 6), Position::new(9, 6));
+    let Some(CodeActionOrCommand::CodeAction(action)) = missing_arms_fix(&uri, &text, &program, &error, at_match) else {
+        panic!("no fix for {:?}", error.message)
+    };
+    assert_eq!(action.title, "Add the missing cases of 'Color'");
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    assert_eq!(edits, &vec![TextEdit {
+        range: Range::new(Position::new(11, 0), Position::new(11, 0)),
+        new_text: "        Amber => {}\n        Green => {}\n".to_string(),
+    }]);
+    // Nothing away from the error.
+    assert!(missing_arms_fix(&uri, &text, &program, &error, Range::new(Position::new(0, 0), Position::new(0, 1))).is_none());
+}
+
 const OVERLOADED_METHODS: &str = r#"struct Meter {
     var n: int;
     ## Adds a whole number.

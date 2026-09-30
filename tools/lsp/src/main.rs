@@ -28,7 +28,7 @@ use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 const KEYWORDS: &[&str] = &[
     "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
     "and", "or", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
-    "extend", "export", "shared",
+    "extend", "export", "shared", "enum", "match",
 ];
 
 // ── Position conversion ───────────────────────────────────────────────────────
@@ -123,6 +123,9 @@ fn function_signature(f: &ast::FunctionDecl) -> String {
 
 fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
     let mut out = vec![];
+    for case in s.enumeration.iter().flat_map(|e| &e.cases) {
+        out.push(Symbol { name: case.name.clone(), name_span: case.name_span, ty: format!("{}.{}", s.name, case.name) });
+    }
     for field in &s.fields {
         out.push(Symbol {
             name: field.name.clone(),
@@ -184,7 +187,7 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
             ast::Declaration::Struct(s) => out.push(Symbol {
                 name: s.name.clone(),
                 name_span: s.name_span,
-                ty: format!("struct {}", type_string(&ast::TypeName {
+                ty: format!("{} {}", if s.enumeration.is_some() { "enum" } else { "struct" }, type_string(&ast::TypeName {
                     name: s.name.clone(),
                     generic_types: s.generic_params.iter().map(|p| ast::TypeName { name: p.name.clone(), generic_types: vec![], span: Span::none() }).collect(),
                     span: Span::none(),
@@ -279,6 +282,14 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                         && offset < e.span.end
                     {
                         collect_locals_upto(e, offset, out);
+                    }
+                }
+                ast::Statement::Match(m) => {
+                    let arms = m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b));
+                    for body in arms {
+                        if body.span.start <= offset && offset < body.span.end {
+                            collect_locals_upto(body, offset, out);
+                        }
                     }
                 }
                 _ => {}
@@ -433,6 +444,17 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                     return Some(found);
                 }
             }
+            ast::Statement::Match(m) => {
+                if let Some(found) = expr_at(&m.value, offset) {
+                    return Some(found);
+                }
+                let arms = m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b));
+                for body in arms {
+                    if let Some(found) = find_expr_in_block(body, offset) {
+                        return Some(found);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -440,6 +462,157 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
 }
 
 // ── Sema lookups (merged model; no spans needed) ──────────────────────────────
+
+/// The quick fix for `match on 'E' does not handle ...` in the document:
+/// an arm with an empty block for each case the `match` leaves out, before
+/// its closing brace.
+fn missing_arms_fix(uri: &Url, text: &str, program: &Program, error: &diag::Diagnostic, range: Range) -> Option<CodeActionOrCommand> {
+    let loc = error.loc?;
+    if loc.file != FileId(0) || !error.message.starts_with("match on '") || !error.message.contains("does not handle") {
+        return None;
+    }
+    let lsp = lsp_diagnostic(error, uri, &[(uri.as_str(), text)]);
+    if !(lsp.range.start <= range.end && range.start <= lsp.range.end) {
+        return None;
+    }
+    let enum_name = error.message["match on '".len()..].split('\'').next()?;
+    let ast = parse_source(uri.as_str(), text).ok()?;
+    let found = find_match(&ast, loc.span.start)?;
+    let cases = program.files.iter().find_map(|f| {
+        f.module.declarations.iter().find_map(|d| match d {
+            ast::Declaration::Struct(s) if s.name == enum_name || demangle_name(&s.name) == enum_name => s.enumeration.as_ref(),
+            _ => None,
+        })
+    })?;
+    let handled: Vec<&str> = found.arms.iter().flat_map(|a| &a.patterns).map(|p| p.case.as_str()).collect();
+    let missing: Vec<&str> = cases.cases.iter().map(|c| c.name.as_str()).filter(|c| !handled.contains(c)).collect();
+    if missing.is_empty() {
+        return None;
+    }
+    let line_start = |at: usize| text[..at].rfind('\n').map_or(0, |i| i + 1);
+    let indent: String = text[line_start(found.keyword_span.start)..].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+    let close = found.span.end - 1;
+    // Insert on the closing brace's own line when it has one.
+    let close_line = line_start(close);
+    let (at, prefix) = if text[close_line..close].trim().is_empty() { (close_line, "") } else { (close, "\n") };
+    let arms: String = missing.iter().map(|c| format!("{}    {} => {{}}\n", indent, c)).collect();
+    let replacement = if prefix.is_empty() { arms } else { format!("\n{}{}", arms, indent) };
+    let edit = TextEdit { range: span_to_range(text, Span { start: at, end: at }), new_text: replacement };
+    Some(CodeActionOrCommand::CodeAction(CodeAction {
+        title: format!("Add the missing case{} of '{}'", if missing.len() == 1 { "" } else { "s" }, enum_name),
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: Some(vec![lsp]),
+        edit: Some(WorkspaceEdit { changes: Some(HashMap::from([(uri.clone(), vec![edit])])), ..Default::default() }),
+        is_preferred: Some(true),
+        ..Default::default()
+    }))
+}
+
+/// The `match` statement whose keyword starts at `start`.
+fn find_match(module: &ast::Module, start: usize) -> Option<&ast::Match> {
+    fn in_block(b: &ast::Block, start: usize) -> Option<&ast::Match> {
+        b.statements.iter().find_map(|s| in_statement(s, start))
+    }
+    fn in_statement(s: &ast::Statement, start: usize) -> Option<&ast::Match> {
+        let span = s.span();
+        if start < span.start || start >= span.end {
+            return None;
+        }
+        match s {
+            ast::Statement::Match(m) if m.keyword_span.start == start => Some(m),
+            ast::Statement::Match(m) => m
+                .arms
+                .iter()
+                .map(|a| &a.body)
+                .chain(m.else_arm.as_ref().map(|(_, b)| b))
+                .find_map(|b| in_block(b, start)),
+            ast::Statement::Block(b) => in_block(b, start),
+            ast::Statement::Branch(b) => in_block(&b.if_block, start).or_else(|| b.else_block.as_ref().and_then(|e| in_block(e, start))),
+            ast::Statement::While(w) => in_block(&w.block, start),
+            ast::Statement::For(f) => in_block(&f.block, start),
+            ast::Statement::With(w) => in_block(&w.block, start).or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, start))),
+            _ => None,
+        }
+    }
+    module.declarations.iter().find_map(|d| {
+        let bodies: Vec<&ast::Block> = match d {
+            ast::Declaration::Function(f) => f.body.iter().collect(),
+            ast::Declaration::Struct(s) => s
+                .methods
+                .iter()
+                .filter_map(|m| m.body.as_ref())
+                .chain(s.constructor.as_ref().and_then(|c| c.body.as_ref()))
+                .chain(s.destructor.as_ref())
+                .collect(),
+            ast::Declaration::Extend(e) => e.methods.iter().filter_map(|m| m.body.as_ref()).collect(),
+            ast::Declaration::Trait(t) => t.methods.iter().filter_map(|m| m.body.as_ref()).collect(),
+            _ => vec![],
+        };
+        bodies.into_iter().find_map(|b| in_block(b, start))
+    })
+}
+
+/// What hover shows for `lhs.name` when `lhs` names an enum and `name` one
+/// of its cases: `Color.Red = 0`.
+fn enum_case_of(module: &SemaModule, lhs: &ast::Expression, name: &str) -> Option<String> {
+    let ast::Expression::SymbolRef { id, .. } = lhs else {
+        return None;
+    };
+    let e = module
+        .enums
+        .iter()
+        .find(|e| e.loc.file == FileId(0) && demangle_name(&e.name) == id)
+        .or_else(|| module.enums.iter().find(|e| e.name == *id))?;
+    let case = e.case(name)?;
+    Some(format!("{}.{} = {}", id, case.name, case.value))
+}
+
+/// The document parsed with a placeholder name after the `.` that ends the
+/// text before `offset`, since `Color.` alone does not parse while it is
+/// being typed.
+fn parse_after_dot(uri: &Url, text: &str, offset: usize) -> Option<ast::Module> {
+    if !text.get(..offset)?.ends_with('.') {
+        return None;
+    }
+    parse_source(uri.as_str(), &format!("{}_{}", &text[..offset], &text[offset..])).ok()
+}
+
+/// [`enum_case_of`] from the document alone, while the program does not
+/// build: `Color.Red`, without its value.
+fn enum_case_in(ast: &ast::Module, lhs: &ast::Expression, name: &str) -> Option<String> {
+    let ast::Expression::SymbolRef { id, .. } = lhs else {
+        return None;
+    };
+    let body = ast.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Struct(s) if s.name == *id => s.enumeration.as_ref(),
+        _ => None,
+    })?;
+    body.cases.iter().any(|c| c.name == name).then(|| format!("{}.{}", id, name))
+}
+
+/// The cases of the enum whose name ends the text before `offset` with a
+/// `.` (`Color.|`), as completion items.
+fn enum_cases_before(ast: &ast::Module, text: &str, offset: usize) -> Option<Vec<CompletionItem>> {
+    let before = text.get(..offset)?;
+    let before = before.strip_suffix('.')?;
+    let start = before.rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(0, |i| i + 1);
+    let name = &before[start..];
+    let body = ast.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Struct(s) if s.name == name => s.enumeration.as_ref(),
+        _ => None,
+    })?;
+    Some(
+        body.cases
+            .iter()
+            .map(|c| CompletionItem {
+                label: c.name.clone(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some(format!("{}.{}", name, c.name)),
+                ..Default::default()
+            })
+            .collect(),
+    )
+}
 
 /// The struct `name`, as the document spells it: the document's own (which
 /// linking may have given a mangled name), else the one named `name`.
@@ -525,7 +698,13 @@ fn member_doc_in(
             if owner.is_some_and(|o| o != spell(type_name)) {
                 continue;
             }
-            let field = fields.iter().find(|v| v.name == name).map(|v| v.span.start);
+            let case = match decl {
+                ast::Declaration::Struct(s) => {
+                    s.enumeration.iter().flat_map(|e| &e.cases).find(|c| c.name == name).map(|c| c.span.start)
+                }
+                _ => None,
+            };
+            let field = fields.iter().find(|v| v.name == name).map(|v| v.span.start).or(case);
             let method = methods
                 .iter()
                 .find(|m| m.name == name)
@@ -1040,6 +1219,7 @@ impl PepperLsp {
                         sema.and_then(|m| {
                             m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())
                                 .or_else(|| m.structs.iter().find(|s| s.name == *id).map(|s| format!("struct {}", s.ty.to_string())))
+                                .or_else(|| m.enums.iter().find(|e| e.name == *id).map(|e| format!("enum {}", demangle_name(&e.name))))
                                 .or_else(|| m.traits.iter().find(|t| t.name == *id).map(|_| "trait".to_string()))
                                 .or_else(|| m.externs.iter().find(|e| e.name == *id).map(|_| "extern function".to_string()))
                         })
@@ -1056,6 +1236,8 @@ impl PepperLsp {
                                 .and_then(|st| struct_member_type(st, name))
                         })
                         .unwrap_or_else(|| "unknown".to_string())
+                } else if let Some(case) = sema.and_then(|m| enum_case_of(m, lhs, name)).or_else(|| enum_case_in(&ast, lhs, name)) {
+                    case
                 } else {
                     sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
@@ -1170,6 +1352,16 @@ impl PepperLsp {
                 }
                 ast::Declaration::Struct(s) => {
                     let mut children = vec![];
+                    for case in s.enumeration.iter().flat_map(|e| &e.cases) {
+                        children.push(new_symbol(
+                            case.name.clone(),
+                            format!("{}.{}", s.name, case.name),
+                            SymbolKind::ENUM_MEMBER,
+                            span_to_range(&text, case.span),
+                            span_to_range(&text, case.name_span),
+                            None,
+                        ));
+                    }
                     for field in &s.fields {
                         children.push(new_symbol(
                             field.name.clone(),
@@ -1190,10 +1382,12 @@ impl PepperLsp {
                             None,
                         ));
                     }
+                    let (detail, kind) =
+                        if s.enumeration.is_some() { ("enum", SymbolKind::ENUM) } else { ("struct", SymbolKind::STRUCT) };
                     out.push(new_symbol(
                         s.name.clone(),
-                        "struct".to_string(),
-                        SymbolKind::STRUCT,
+                        detail.to_string(),
+                        kind,
                         span_to_range(&text, s.span),
                         span_to_range(&text, s.name_span),
                         if children.is_empty() { None } else { Some(children) },
@@ -1243,7 +1437,7 @@ impl PepperLsp {
             items.push(CompletionItem { label: kw.to_string(), kind: Some(CompletionItemKind::KEYWORD), ..Default::default() });
         }
         if let Some(text) = self.doc(uri)
-            && let Ok(ast) = parse_source(uri.as_str(), &text)
+            && let Ok(ast) = parse_source(uri.as_str(), &text).or_else(|e| parse_after_dot(uri, &text, offset).ok_or(e))
         {
             let scope = body_at(&ast, offset);
             let locals: Vec<Symbol> = scope.as_ref().map(|(b, _)| locals_at(b, offset)).unwrap_or_default();
@@ -1254,11 +1448,17 @@ impl PepperLsp {
                 .map(collect_struct_members)
                 .unwrap_or_default();
 
+            // After `Enum.`, the enum's cases alone.
+            if let Some(cases) = enum_cases_before(&ast, &text, offset) {
+                return cases;
+            }
             for s in locals.iter().chain(struct_members.iter()).chain(globals.iter()) {
                 items.push(CompletionItem {
                     label: s.name.clone(),
                     kind: Some(if s.ty.contains('(') {
                         CompletionItemKind::FUNCTION
+                    } else if s.ty.starts_with("enum") {
+                        CompletionItemKind::ENUM
                     } else if s.ty.starts_with("struct") {
                         CompletionItemKind::STRUCT
                     } else {
@@ -1382,7 +1582,12 @@ impl LanguageServer for PepperLsp {
         let Some(text) = self.doc(&uri) else { return Ok(None) };
         let program = self.program(&uri).ok();
         let warnings = document_warnings(&text, program.as_ref());
-        let actions = quick_fixes(&uri, &text, &warnings, params.range);
+        let mut actions = quick_fixes(&uri, &text, &warnings, params.range);
+        if let Some(program) = &program
+            && let Err(error) = sema_model_of(program)
+        {
+            actions.extend(missing_arms_fix(&uri, &text, program, &error, params.range));
+        }
         Ok((!actions.is_empty()).then_some(actions))
     }
 
