@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-84056950.js";
+            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -196,7 +196,7 @@ import [thrice as triple] from "util";
 import "helpers/text";               # a file in a subfolder
 
 main(): int {
-    assert(twice(base) == 20, "unqualified names from util.pep");
+    assert(twice(BASE) == 20, "unqualified names from util.pep");
     assert(u.thrice(2) == 6, "qualified by the alias");
     assert(triple(3) == 9, "renamed by the import list");
     assert(shout("hi") == "hi!", "from helpers/text.pep");
@@ -208,7 +208,7 @@ main(): int {
 }
 </code></pre>
 <p><code>util.pep</code> sits next to <code>main.pep</code>, and <code>text.pep</code> is in a <code>helpers</code> folder:</p>
-<pre><code class="language-pepper">export const base = 10;
+<pre><code class="language-pepper">export const BASE = 10;
 
 export twice(n: int): int {
     return n * 2;
@@ -229,7 +229,7 @@ export thrice(n: int): int {
 <tr><th>Form</th><th>What it makes available</th></tr>
 </thead>
 <tbody>
-<tr><td><code>import "util";</code></td><td>Every export of <code>util.pep</code>, unqualified: <code>twice(base)</code>.</td></tr>
+<tr><td><code>import "util";</code></td><td>Every export of <code>util.pep</code>, unqualified: <code>twice(BASE)</code>.</td></tr>
 <tr><td><code>import "util" as u;</code></td><td>Every export, qualified by the name you choose: <code>u.twice(1)</code>.</td></tr>
 <tr><td><code>import [thrice as triple, twice] from "util";</code></td><td>Only the listed exports, unqualified, each under its own name or the one after <code>as</code>.</td></tr>
 <tr><td><code>import geometry;</code></td><td>A module’s exports, qualified by the module’s name: <code>geometry.Point</code>.</td></tr>
@@ -482,7 +482,7 @@ their version.</p>
 <h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
 <ul>
 <li><strong>Qualified names work wherever a name does</strong>: in expressions
-(<code>g.rect_area(1, 2)</code>, or a module variable such as <code>u.base</code>), in types (<code>var p: g.Point</code>,
+(<code>g.rect_area(1, 2)</code>, or a module variable such as <code>u.BASE</code>), in types (<code>var p: g.Point</code>,
 <code>g.Box&lt;int&gt;[]</code>, a return type <code>g.Point</code>), and in generic constructions
 (<code>g.Box&lt;int&gt;()</code>). A generic construction is recognized only for a qualifier
 imported earlier in the file; elsewhere <code>a.b &lt; c, d &gt; (e)</code> is two

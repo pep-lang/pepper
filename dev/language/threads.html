@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-84056950.js";
+            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -418,7 +418,7 @@ as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a va
 value cannot be a module-scope variable; keep it in a local, or in a
 <code>ThreadLocal&lt;T&gt;</code>.</li>
 </ul>
-<pre><code class="language-pepper">const max_workers = 8;                  # a number
+<pre><code class="language-pepper">const MAX_WORKERS = 8;                  # a number
 const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread

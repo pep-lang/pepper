@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-84056950.js";
+            window.path_to_searchindex_js = "searchindex-9e61a713.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -1085,7 +1085,7 @@ the value.</p>
 # Module-level variables (globals) live for the whole program. Any thread
 # can reach them, so they are const and of a thread-safe type: a number, or
 # an Atomic for state that changes.
-const max_requests = 10;
+const MAX_REQUESTS = 10;
 const request_count = Atomic&lt;int&gt;(0);
 const total_bytes = Atomic&lt;long&gt;(0);
 
@@ -1114,18 +1114,18 @@ main(): int {
     assert(hits == 0, "numbers start at zero");
 
     # 'const' declares a name that should not be reassigned.
-    const limit = 3;
+    const LIMIT = 3;
 
     record(100);
     record(250);
     assert(request_count.load() == 2, "two requests recorded");
     assert(total_bytes.load() == 350, "350 bytes in total");
-    assert(request_count.load() &lt; max_requests, "globals are visible in every function");
+    assert(request_count.load() &lt; MAX_REQUESTS, "globals are visible in every function");
 
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 &amp;&amp; scale == 1.5, "floating point");
     assert(ready &amp;&amp; name == "Pepper", "bool and String");
-    assert(offset &gt; 4000000000 &amp;&amp; limit == 3, "long and const");
+    assert(offset &gt; 4000000000 &amp;&amp; LIMIT == 3, "long and const");
     return 0;
 }
 </code></pre>
@@ -1144,16 +1144,16 @@ arithmetic produces under C’s rules (see <a href="#arithmetic-follows-c">Arith
 <code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
-<pre><code class="language-pepper">const limit = 3;
-const ratio: double = 0.5;
+<pre><code class="language-pepper">const LIMIT = 3;
+const RATIO: double = 0.5;
 </code></pre>
 <p>Assigning to a <code>const</code>, with <code>=</code>, a compound assignment, <code>++</code> or <code>--</code>, is an
 error:</p>
-<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'limit'
-    5 |     limit = 4;
+<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'LIMIT'
+    5 |     LIMIT = 4;
       |     ^~~~~
-main.pep:1:7: note: 'limit' declared const here
-    1 | const limit = 3;
+main.pep:1:7: note: 'LIMIT' declared const here
+    1 | const LIMIT = 3;
       |       ^~~~~
 </code></pre>
 <h3 id="module-level-variables"><a class="header" href="#module-level-variables">Module-level variables</a></h3>
@@ -1167,7 +1167,7 @@ must therefore be declared <code>const</code> and have a thread-safe type, such 
 number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or a <code>[Shared]</code> struct (see
 <a href="#module-scope-variables">Module-scope variables</a>). A global that
 changes is an <code>Atomic&lt;T&gt;</code>:</p>
-<pre><code class="language-pepper">const max_retries = 3;
+<pre><code class="language-pepper">const MAX_RETRIES = 3;
 const requests = Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
 </code></pre>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
@@ -5866,7 +5866,7 @@ import [thrice as triple] from "util";
 import "helpers/text";               # a file in a subfolder
 
 main(): int {
-    assert(twice(base) == 20, "unqualified names from util.pep");
+    assert(twice(BASE) == 20, "unqualified names from util.pep");
     assert(u.thrice(2) == 6, "qualified by the alias");
     assert(triple(3) == 9, "renamed by the import list");
     assert(shout("hi") == "hi!", "from helpers/text.pep");
@@ -5878,7 +5878,7 @@ main(): int {
 }
 </code></pre>
 <p><code>util.pep</code> sits next to <code>main.pep</code>, and <code>text.pep</code> is in a <code>helpers</code> folder:</p>
-<pre><code class="language-pepper">export const base = 10;
+<pre><code class="language-pepper">export const BASE = 10;
 
 export twice(n: int): int {
     return n * 2;
@@ -5899,7 +5899,7 @@ export thrice(n: int): int {
 <tr><th>Form</th><th>What it makes available</th></tr>
 </thead>
 <tbody>
-<tr><td><code>import "util";</code></td><td>Every export of <code>util.pep</code>, unqualified: <code>twice(base)</code>.</td></tr>
+<tr><td><code>import "util";</code></td><td>Every export of <code>util.pep</code>, unqualified: <code>twice(BASE)</code>.</td></tr>
 <tr><td><code>import "util" as u;</code></td><td>Every export, qualified by the name you choose: <code>u.twice(1)</code>.</td></tr>
 <tr><td><code>import [thrice as triple, twice] from "util";</code></td><td>Only the listed exports, unqualified, each under its own name or the one after <code>as</code>.</td></tr>
 <tr><td><code>import geometry;</code></td><td>A module’s exports, qualified by the module’s name: <code>geometry.Point</code>.</td></tr>
@@ -6152,7 +6152,7 @@ their version.</p>
 <h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
 <ul>
 <li><strong>Qualified names work wherever a name does</strong>: in expressions
-(<code>g.rect_area(1, 2)</code>, or a module variable such as <code>u.base</code>), in types (<code>var p: g.Point</code>,
+(<code>g.rect_area(1, 2)</code>, or a module variable such as <code>u.BASE</code>), in types (<code>var p: g.Point</code>,
 <code>g.Box&lt;int&gt;[]</code>, a return type <code>g.Point</code>), and in generic constructions
 (<code>g.Box&lt;int&gt;()</code>). A generic construction is recognized only for a qualifier
 imported earlier in the file; elsewhere <code>a.b &lt; c, d &gt; (e)</code> is two
@@ -6583,7 +6583,7 @@ as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a va
 value cannot be a module-scope variable; keep it in a local, or in a
 <code>ThreadLocal&lt;T&gt;</code>.</li>
 </ul>
-<pre><code class="language-pepper">const max_workers = 8;                  # a number
+<pre><code class="language-pepper">const MAX_WORKERS = 8;                  # a number
 const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
@@ -8201,8 +8201,9 @@ contribute should too.</p>
 <tr><td>Generic parameters</td><td>one capital letter, or <code>PascalCase</code></td><td><code>T</code>, <code>K</code>, <code>V</code>, <code>TValue</code>, <code>TError</code></td></tr>
 <tr><td>Data members (fields)</td><td><code>snake_case</code></td><td><code>unit_name</code>, <code>is_file</code></td></tr>
 <tr><td>Methods and free functions</td><td><code>snake_case</code></td><td><code>append</code>, <code>remove_at</code>, <code>read_to_string</code></td></tr>
-<tr><td>Parameters and local variables, <code>const</code> included</td><td><code>snake_case</code></td><td><code>capacity</code>, <code>best_so_far</code></td></tr>
-<tr><td>Module-scope variables and constants</td><td><code>snake_case</code></td><td><code>max_requests</code>, <code>line_width</code></td></tr>
+<tr><td>Parameters and local variables</td><td><code>snake_case</code></td><td><code>capacity</code>, <code>best_so_far</code></td></tr>
+<tr><td>Constants (a <code>const</code> holding a fixed value)</td><td><code>SCREAMING_CASE</code></td><td><code>MAX_REQUESTS</code>, <code>LINE_WIDTH</code></td></tr>
+<tr><td>Other module-scope variables</td><td><code>snake_case</code></td><td><code>request_count</code></td></tr>
 <tr><td>Private data members and methods</td><td><code>_</code> then <code>snake_case</code></td><td><code>_readings</code>, <code>_is_empty</code></td></tr>
 </tbody>
 </table>
@@ -8284,9 +8285,13 @@ apart.</p>
 <h2 id="members-functions-and-variables"><a class="header" href="#members-functions-and-variables">Members, functions, and variables</a></h2>
 <p>Everything else a program names is <code>snake_case</code>: lowercase words joined by
 underscores. That covers a struct’s data members, its methods, free
-functions, parameters, local variables, and module-scope variables.
-A <code>const</code> is no exception: write <code>const line_width = 120;</code>, not
-<code>LINE_WIDTH</code>. Pepper has no <code>SCREAMING_CASE</code>.</p>
+functions, parameters, local variables, and module-scope variables.</p>
+<p>The exception is a constant: a <code>const</code>, at module scope or in a function,
+whose value is fixed, such as a number, string, or character. Its name is
+<code>SCREAMING_CASE</code>, uppercase words joined by underscores (<code>MAX_REQUESTS</code>,
+<code>LINE_WIDTH</code>). A module-scope <code>const</code> that holds an object, such as
+<code>const request_count = Atomic&lt;int&gt;(0);</code>, is a variable and stays
+<code>snake_case</code>.</p>
 <p>Spell words out. A name is read far more often than it is typed, so prefer
 <code>iterate</code>, <code>index</code>, and <code>directory</code> to <code>iter</code>, <code>idx</code>, and <code>dir</code>. Keep an
 abbreviation only when it is the usual name for the thing, such as <code>io</code> or
