@@ -461,15 +461,7 @@ export struct TcpStream {
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
         }
-        if (max == 0) {
-            return IoResult<ulong>.ok(0);
-        }
-        buffer.reserve(buffer._size + max);
-        var r = _io_sys_socket_receive(_handle, buffer._data + buffer._size, max);
-        if (r.is_ok()) {
-            buffer._size = buffer._size + r.value();
-        }
-        return r;
+        return _io_socket_read(_handle, buffer, max);
     }
 
     ## Reads until exactly `count` more bytes are appended to `buffer`.
@@ -482,24 +474,11 @@ export struct TcpStream {
     ##   which no predicate matches), or an error as for `read`. The bytes
     ##   read before an error stay in `buffer`.
     read_exact(buffer: u8[], count: ulong): IoResult<void> {
-        ulong done = 0;
-        while (done < count) {
-            var r = read(buffer, count - done);
-            if (r.is_err()) {
-                return IoResult<void>.err(r.error());
-            }
-            if (r.value() == 0) {
-                var out = Array<u8>();
-                _io_append_text(out, "connection closed after ");
-                _io_append_decimal(out, done);
-                _io_append_text(out, " of ");
-                _io_append_decimal(out, count);
-                _io_append_text(out, " bytes");
-                return IoResult<void>.err(IoError(_io_sys_code_unexpected_end(), _io_string_from_bytes(out)));
-            }
-            done = done + r.value();
+        var c = _check_open();
+        if (c.is_err()) {
+            return c;
         }
-        return _io_ok_void();
+        return _io_socket_read_exact(_handle, buffer, count);
     }
 
     ## Sends bytes from `data` with a single system call, waiting until the
@@ -663,9 +642,10 @@ export struct TcpStream {
     }
 }
 
-## A TCP connection on its way from one thread to another: made by
-## `TcpStream.into_transfer`, taken by `TcpStream.adopt`. Unlike a
-## `TcpStream`, it is thread-safe, so a `shared` function (a body for
+## A connection on its way from one thread to another: made by
+## `TcpStream.into_transfer` (or `UnixStream.into_transfer`), taken by
+## `TcpStream.adopt` (or `UnixStream.adopt`, for a Unix domain connection).
+## Unlike a stream, it is thread-safe, so a `shared` function (a body for
 ## `async.spawn` or `Thread.spawn`) can capture it and a `Channel` can carry
 ## it. If no one adopts it, the connection is closed when the last
 ## reference goes.
@@ -694,6 +674,43 @@ export struct SocketTransfer {
     _take(): SocketHandle {
         return _handle.exchange(-1) as SocketHandle;
     }
+}
+
+# Appends up to `max` bytes received on `h` to `buffer` (a stream socket's
+# `read`).
+export _io_socket_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
+    if (max == 0) {
+        return IoResult<ulong>.ok(0);
+    }
+    buffer.reserve(buffer._size + max);
+    var r = _io_sys_socket_receive(h, buffer._data + buffer._size, max);
+    if (r.is_ok()) {
+        buffer._size = buffer._size + r.value();
+    }
+    return r;
+}
+
+# Reads from `h` until `count` more bytes are appended to `buffer` (a stream
+# socket's `read_exact`).
+export _io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
+    ulong done = 0;
+    while (done < count) {
+        var r = _io_socket_read(h, buffer, count - done);
+        if (r.is_err()) {
+            return IoResult<void>.err(r.error());
+        }
+        if (r.value() == 0) {
+            var out = Array<u8>();
+            _io_append_text(out, "connection closed after ");
+            _io_append_decimal(out, done);
+            _io_append_text(out, " of ");
+            _io_append_decimal(out, count);
+            _io_append_text(out, " bytes");
+            return IoResult<void>.err(IoError(_io_sys_code_unexpected_end(), _io_string_from_bytes(out)));
+        }
+        done = done + r.value();
+    }
+    return _io_ok_void();
 }
 
 # Sends all `n` bytes at `p`, looping over partial sends.

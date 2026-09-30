@@ -12,6 +12,7 @@
 ## - [Directory](io-directory.md): listing, creating, and removing directories
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
+## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
 ## - [Errors and platform types](io-types.md): `IoError`, `IoResult`, and handle types
 ##
 ## @example
@@ -35,6 +36,7 @@ import "file";
 import "path";
 import "socket";
 import "types";
+import "unix";
 import "wait";
 
 export FileHandle;
@@ -63,6 +65,10 @@ export SharedTcpListener;
 export TcpStream;
 export SocketTransfer;
 export UdpSocket;
+
+export UnixListener;
+export SharedUnixListener;
+export UnixStream;
 
 # For the async module's task runtime only (see wait.pep); not public API.
 export _IoWaiter;

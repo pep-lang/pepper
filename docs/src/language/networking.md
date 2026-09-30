@@ -1,6 +1,6 @@
 # Networking
 
-The `io` module has TCP and UDP sockets, IP and socket addresses, and host
+The `io` module has TCP, UDP and Unix domain sockets, IP and socket addresses, and host
 name lookup. In a plain program every call blocks the calling thread until
 it completes, like `File`. To serve several connections at once, give each
 one its own [thread](threads.md), or its own [task](tasks.md#sockets): in a
@@ -76,6 +76,33 @@ at all, and in no guaranteed order:
   datagrams from anyone else are dropped.
 - `set_broadcast(true)` allows sending to a broadcast address.
 
+## Unix domain sockets
+
+A Unix domain socket connects processes on the same machine through a path
+in the file system instead of an IP address and port. `UnixListener` and
+`UnixStream` work like `TcpListener` and `TcpStream`:
+
+```pepper
+{{#include ../../examples/networking-unix.pep}}
+```
+
+- `UnixListener.bind(path)` creates a socket file at `path` and listens on
+  it. Binding fails with `is_address_in_use()` if a file is already there,
+  and closing the listener does not remove the file, so a server removes it
+  with `File.remove` before binding and when it is done.
+- `UnixStream.connect(path)` connects to it. It fails with `is_not_found()`
+  when there is no socket file, and with `is_connection_refused()` when the
+  file is there but nothing listens on it.
+- `accept()` returns just the stream: the client's end has no path.
+- Reading, writing, `shutdown_write()`, `into_transfer()` and `adopt` are
+  the same as on a `TcpStream`, and `SharedUnixListener` is the counterpart
+  of `SharedTcpListener`.
+- A path holds at most 107 bytes (103 on macOS); a longer or empty one
+  fails with `is_invalid_input()`.
+
+Only stream sockets are supported, since Windows (10 version 1803 and later)
+has no Unix datagram sockets.
+
 ## Errors
 
 Every operation returns an `IoResult`. Besides the file-system predicates,
@@ -88,7 +115,7 @@ Every operation returns an `IoResult`. Besides the file-system predicates,
 | `is_address_in_use()` | another socket already has the address and port |
 | `is_address_not_available()` | the IP address is not one of this machine's |
 | `is_timed_out()` | the peer never answered |
-| `is_not_found()` | `resolve` found no address for the name |
+| `is_not_found()` | `resolve` found no address for the name, or `UnixStream.connect` found no socket file |
 
 Writing to a closed connection never raises `SIGPIPE`, so it cannot kill
 the process. The write returns an error instead.
@@ -99,8 +126,8 @@ A socket closes when the last reference to it goes, like a `File`, and
 `close()` closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a [channel](threads.md#channels) to another
 thread. Use it on the thread that made it, or move it: `into_transfer()`
-turns a `TcpStream` into a thread-safe `SocketTransfer` that
-`TcpStream.adopt` takes on another thread, and a `SharedTcpListener` is a
+turns a `TcpStream` (or a `UnixStream`) into a thread-safe `SocketTransfer`
+that `TcpStream.adopt` (or `UnixStream.adopt`) takes on another thread, and a `SharedTcpListener` is a
 listener any thread can accept on (see
 [Tasks](tasks.md#accepting-on-every-worker)).
 
@@ -113,8 +140,9 @@ program take over the port.
 - Outside a task every call blocks its thread, with no timeout. In a task
   a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
   limits how long it may wait.
-- Unix domain sockets and TLS are not supported yet.
+- TLS is not supported yet, nor Unix datagram sockets.
 - IPv6 scope ids (`fe80::1%eth0`) are not supported.
 
-The reference pages for [addresses](../reference/io-address.md) and
-[sockets](../reference/io-socket.md) document every method.
+The reference pages for [addresses](../reference/io-address.md),
+[sockets](../reference/io-socket.md) and
+[Unix domain sockets](../reference/io-unix.md) document every method.

@@ -79,6 +79,7 @@
     - [async/once.pep](reference/async-once.md)
     - [async/select.pep](reference/async-select.md)
   - [copy.pep](reference/copy.md)
+    - [io/unix.pep](reference/io-unix.md)
 <!-- reference:end -->
 
 # Contributing

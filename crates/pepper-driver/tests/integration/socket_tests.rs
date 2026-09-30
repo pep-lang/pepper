@@ -408,8 +408,112 @@ main(): int {
 }
 "##;
 
+/// Unix domain sockets (`runtime/io/unix.pep`): a listener and a stream on
+/// one thread, the errors for a bad path, a missing socket and a closed
+/// listener, then an echo server on every task worker. SOCKET is replaced
+/// with a file name unique to this test process.
+const UNIX_PROGRAM: &str = r##"
+import async;
+import io;
+
+socket_path(): io.Path {
+    return io.Directory.temp().join("SOCKET");
+}
+
+main(): int {
+    var path = socket_path();
+    io.File.remove(path);
+    var listener = io.UnixListener.bind(path).value();
+    assert(listener.path().to_string() == path.to_string(), "the listener keeps its path");
+    var again = io.UnixListener.bind(path);
+    assert(again.is_err() && again.error().is_address_in_use(), "binding an existing path fails");
+
+    var client = io.UnixStream.connect(path).value();
+    var server = listener.accept().value();
+    assert(client.write_string("ping").is_ok(), "send the request");
+    client.shutdown_write();
+    var request = Array<u8>();
+    while (server.read(request, 4096).value() > 0) {
+    }
+    assert(request.count() == 4, "the whole request arrived");
+    assert(server.write_string("pong").is_ok(), "send the reply");
+    var reply = Array<u8>();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' && reply[3] == 'g', "the reply is pong");
+
+    var name = "";
+    var i = 0;
+    while (i < 200) {
+        name = name + "x";
+        i = i + 1;
+    }
+    var too_long = io.UnixStream.connect(io.Path(name));
+    assert(too_long.is_err() && too_long.error().is_invalid_input(), "a path that does not fit fails");
+    var empty = io.UnixListener.bind(io.Path(""));
+    assert(empty.is_err() && empty.error().is_invalid_input(), "an empty path fails");
+    var missing = io.UnixStream.connect(io.Directory.temp().join("SOCKET_missing"));
+    assert(missing.is_err() && missing.error().is_not_found(), "no socket file");
+    assert(listener.close().is_ok(), "close the listener");
+    var refused = io.UnixStream.connect(path);
+    assert(refused.is_err() && refused.error().is_connection_refused(), "nothing listens");
+    assert(io.File.remove(path).is_ok(), "the socket file stays until removed");
+
+    # An echo server accepting on every worker, and 16 client tasks.
+    async.run(() => {
+        var shared = io.SharedUnixListener.bind(socket_path()).value();
+        async.spawn_on_each_worker(() => {
+            while (true) {
+                var accepted = shared.accept();
+                if (accepted.is_err()) {
+                    return;
+                }
+                var stream = accepted.value();
+                var buffer = Array<u8>();
+                while (true) {
+                    # Cancelled when async.run ends.
+                    var r = stream.read(buffer, 4096);
+                    if (r.is_err() || r.value() == 0) {
+                        break;
+                    }
+                    stream.write_all(buffer);
+                    buffer.clear();
+                }
+            }
+        });
+        var tasks = Array<async.Task<bool>>();
+        var n = 0;
+        while (n < 16) {
+            tasks.append(async.spawn<bool>(() => {
+                var stream = io.UnixStream.connect(socket_path()).value();
+                var round = 0;
+                while (round < 100) {
+                    stream.write_string("0123456789");
+                    var got = Array<u8>();
+                    if (stream.read_exact(got, 10).is_err()) {
+                        return false;
+                    }
+                    round = round + 1;
+                }
+                return true;
+            }));
+            n = n + 1;
+        }
+        for (var task in tasks) {
+            assert(task.join().value(), "every client got its echoes");
+        }
+    });
+    io.File.remove(socket_path());
+    return 0;
+}
+"##;
+
+/// UNIX_PROGRAM with its socket file name made unique to this process.
+fn unix_program() -> String {
+    UNIX_PROGRAM.replace("SOCKET", &format!("pepper_unix_{}.sock", std::process::id()))
+}
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("address", ADDRESS_PROGRAM), ("tcp", TCP_PROGRAM), ("udp", UDP_PROGRAM), ("threaded", THREADED_PROGRAM)]
+    vec![("address", ADDRESS_PROGRAM), ("tcp", TCP_PROGRAM), ("udp", UDP_PROGRAM), ("threaded", THREADED_PROGRAM), ("unix", UNIX_PROGRAM)]
 }
 
 #[test]
@@ -430,6 +534,11 @@ fn udp_over_loopback() {
 #[test]
 fn tcp_between_threads() {
     assert_runs("socket_threaded", THREADED_PROGRAM);
+}
+
+#[test]
+fn unix_sockets() {
+    assert_runs("socket_unix", &unix_program());
 }
 
 /// Every platform's socket layer type-checks and produces valid IR that

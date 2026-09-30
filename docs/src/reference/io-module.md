@@ -16,6 +16,7 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 - [Directory](io-directory.md): listing, creating, and removing directories
 - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 - [Sockets](io-socket.md): `TcpListener`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
+- [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
 - [Errors and platform types](io-types.md): `IoError`, `IoResult`, and handle types
 
 **Example**

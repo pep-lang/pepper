@@ -530,9 +530,10 @@ Closes the connection now. Closing a closed stream does nothing.
 [Shared] struct SocketTransfer
 ```
 
-A TCP connection on its way from one thread to another: made by
-`TcpStream.into_transfer`, taken by `TcpStream.adopt`. Unlike a
-`TcpStream`, it is thread-safe, so a `shared` function (a body for
+A connection on its way from one thread to another: made by
+`TcpStream.into_transfer` (or `UnixStream.into_transfer`), taken by
+`TcpStream.adopt` (or `UnixStream.adopt`, for a Unix domain connection).
+Unlike a stream, it is thread-safe, so a `shared` function (a body for
 `async.spawn` or `Thread.spawn`) can capture it and a `Channel` can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.

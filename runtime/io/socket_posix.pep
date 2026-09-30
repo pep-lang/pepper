@@ -267,6 +267,25 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
     return 0;
 }
 
+# sockaddr_un: the header as for sockaddr_in (family AF_UNIX, 1), then the
+# path, NUL-terminated, at 2: at most 108 bytes on Linux, 104 on macOS.
+[Target(OS(Linux))]
+export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+    (buffer as __ptr<u16>)[0] = 1;
+}
+
+[Target(OS(Mac))]
+export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+    buffer[0] = length as u8;
+    buffer[1] = 1;
+}
+
+[Target(OS(Linux))]
+export _io_sys_unix_path_capacity(): ulong { return 108; }
+
+[Target(OS(Mac))]
+export _io_sys_unix_path_capacity(): ulong { return 104; }
+
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
 # A new non-blocking, close-on-exec socket (SOCK_STREAM 1 or SOCK_DGRAM 2)
@@ -283,6 +302,18 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
         kind = 1;
     }
     var fd = socket(family, kind | _io_sock_cloexec(), 0);
+    if (fd < 0) {
+        return IoResult<SocketHandle>.err(IoError.last());
+    }
+    _io_posix_socket_setup(fd);
+    return IoResult<SocketHandle>.ok(fd);
+}
+
+# A new non-blocking, close-on-exec Unix domain stream socket (AF_UNIX 1,
+# SOCK_STREAM 1) that never raises SIGPIPE.
+[Target(!OS(Windows))]
+export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
+    var fd = socket(1, 1 | _io_sock_cloexec(), 0);
     if (fd < 0) {
         return IoResult<SocketHandle>.err(IoError.last());
     }
@@ -339,9 +370,15 @@ export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<vo
 export _io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var result = _io_socket_check(bind(h, buffer, length as uint));
+    var result = _io_sys_socket_bind_raw(h, buffer, length);
     _pep_free(buffer);
     return result;
+}
+
+# Binds `h` to the `length`-byte sockaddr at `buffer`, of any family.
+[Target(!OS(Windows))]
+export _io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+    return _io_socket_check(bind(h, buffer, length as uint));
 }
 
 [Target(!OS(Windows))]
@@ -356,8 +393,15 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
 export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var rc = connect(h, buffer, length as uint);
+    var result = _io_sys_socket_connect_raw(h, buffer, length);
     _pep_free(buffer);
+    return result;
+}
+
+# Connects `h` to the `length`-byte sockaddr at `buffer`, of any family.
+[Target(!OS(Windows))]
+export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+    var rc = connect(h, buffer, length as uint);
     if (rc == 0) {
         return _io_ok_void();
     }

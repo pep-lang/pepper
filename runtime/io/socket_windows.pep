@@ -224,6 +224,16 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
     return 0;
 }
 
+# sockaddr_un: a 16-bit family (AF_UNIX, 1), then the path, NUL-terminated,
+# at 2: at most 108 bytes.
+[Target(OS(Windows))]
+export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+    (buffer as __ptr<u16>)[0] = 1;
+}
+
+[Target(OS(Windows))]
+export _io_sys_unix_path_capacity(): ulong { return 108; }
+
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
 # A new overlapped, non-inheritable, non-blocking socket (SOCK_STREAM 1 or
@@ -241,6 +251,19 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
         kind = 1;
     }
     var s = WSASocketW(family, kind, 0, __null, 0, 129);  # WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
+    if (!_io_sys_socket_valid(s)) {
+        return IoResult<SocketHandle>.err(_io_win_socket_error());
+    }
+    _io_win_set_non_blocking(s);
+    return IoResult<SocketHandle>.ok(s);
+}
+
+# A new overlapped, non-inheritable, non-blocking Unix domain stream socket
+# (AF_UNIX 1, SOCK_STREAM 1; Windows 10 1803 and later).
+[Target(OS(Windows))]
+export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
+    _io_win_socket_startup();
+    var s = WSASocketW(1, 1, 0, __null, 0, 129);  # WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
     if (!_io_sys_socket_valid(s)) {
         return IoResult<SocketHandle>.err(_io_win_socket_error());
     }
@@ -307,9 +330,15 @@ export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<vo
 export _io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var result = _io_win_socket_check(bind(h, buffer, length));
+    var result = _io_sys_socket_bind_raw(h, buffer, length);
     _pep_free(buffer);
     return result;
+}
+
+# Binds `h` to the `length`-byte sockaddr at `buffer`, of any family.
+[Target(OS(Windows))]
+export _io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+    return _io_win_socket_check(bind(h, buffer, length));
 }
 
 [Target(OS(Windows))]
@@ -323,8 +352,15 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
 export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var rc = connect(h, buffer, length);
+    var result = _io_sys_socket_connect_raw(h, buffer, length);
     _pep_free(buffer);
+    return result;
+}
+
+# Connects `h` to the `length`-byte sockaddr at `buffer`, of any family.
+[Target(OS(Windows))]
+export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+    var rc = connect(h, buffer, length);
     if (rc == 0) {
         return _io_ok_void();
     }
