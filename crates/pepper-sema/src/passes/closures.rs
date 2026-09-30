@@ -1113,6 +1113,11 @@ fn sites_in_expression(
             sites_in_expression(true_expr, expected, table, current, visit);
             sites_in_expression(false_expr, expected, table, current, visit);
         }
+        // A `match` expression's value is its body's.
+        Expression::WithSubject(with) => {
+            sites_in_expression(&with.subject, None, table, current, visit);
+            sites_in_expression(&with.body, expected, table, current, visit);
+        }
         _ => {
             // Other nodes pass no expected type down. `children_mut` needs
             // `&mut`, so walk a clone (closure sites are few and small).

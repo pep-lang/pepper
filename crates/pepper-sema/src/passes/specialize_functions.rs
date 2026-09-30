@@ -106,6 +106,7 @@ pub(crate) fn replace_expr_types(expr: &mut Expression, type_map: &[(String, Typ
             | Expression::IsPod(ty)
             | Expression::Default(ty)
             | Expression::StaticCase { ty, .. }
+            | Expression::Subject { ty, .. }
             | Expression::Allocate(ty)
             | Expression::Cast { ty, .. } => crate::type_name::replace_map(ty, type_map),
             Expression::RefCount(ty, _) | Expression::Weak(_, ty, _) => crate::type_name::replace_map(ty, type_map),

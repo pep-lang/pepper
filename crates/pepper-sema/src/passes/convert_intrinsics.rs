@@ -39,6 +39,7 @@ fn convert_expression(expr: &mut Expression) {
             Expression::IsPod(ty)
             | Expression::Default(ty)
             | Expression::StaticCase { ty, .. }
+            | Expression::Subject { ty, .. }
             | Expression::Allocate(ty)
             | Expression::RefCount(ty, _)
             | Expression::Address(ty, _)

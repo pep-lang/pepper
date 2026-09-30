@@ -397,6 +397,21 @@ with no extension, and `module_name()` is the output's stem.
     pattern the case and the binding's position), which
     `resolve_implicit_types` types from the payload field and checks
     (`enums::case_value_type`), and `lower_matches` replaces with the field.
+    A literal pattern (`1`, `"import"`) carries the test `subject ==
+    literal` in `CasePattern::literal`, so the passes type and resolve it
+    like any `==` (a `String`'s `==` included); its `case` is the literal as
+    written, for duplicate checks.
+  - `if (x is P(a))` and `while (x is P(a))` become the same `match`
+    statement with one arm (`is_branch`, `is_loop`; the loop is `while
+    (true)` whose `else` breaks), its `MatchSite` marked `partial` so it
+    need not handle every case; `a` is a local of the block.
+  - A `match` expression becomes `Expression::WithSubject` (evaluate the
+    subject once, then the body) around a `?:` chain of `MatchArm` tests
+    over `Expression::Subject` (the value, by the site's id). A name an arm
+    binds is replaced in the arm's value by its `CaseValue`
+    (`bind_in_expression`; a closure there may not use one). Without an
+    `else`, the chain ends in `Expression::NoMatch`. An `is` test anywhere
+    else is a `WithSubject` around a single test, and may not bind.
   - A character literal (`ast::Literal::Char`) becomes
     `Cast { IntLiteral(byte), byte }`, so it is typed `byte` where nothing
     else gives it a type and widens like any `byte` value.
@@ -560,7 +575,7 @@ several passes run more than once on purpose.
 | final | `tuples::lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
 | final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Sending]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `[ReturnsOwned]` (runtime files only, checked against the discovered runtime directory) makes a function's results fresh whatever its body shows; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Sending]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number. A syntactic prefilter skips functions that mention no trigger name. |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
-| final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it). It checks each `match` (`MatchSite`): the subject must be an enum, a pattern's qualifier must name it, each case is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case). An `else` after every case is a warning in `module.warnings`. `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
+| final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `module.warnings`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`check_arm_types`). `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -667,6 +682,13 @@ How the language lowers:
   `AtomicLoad` (acquire), `AtomicStore` (release, via `xchg`),
   `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), and `AtomicFetch`
   (`atomicrmw` acq_rel).
+- **`match` expressions and `is` tests**: `WithSubject` (`with_subject`)
+  evaluates the subject once, panics on a null reference enum, keeps the
+  value in `subjects` by id for `Subject` to read, then evaluates the body
+  (a `?:` chain). An owned subject is a deferred temporary, released at the
+  end of the full expression, so an arm may yield one of its fields. A `?:`
+  with one owned arm is owned: `codegen_ternary` acquires the other arm's
+  read (`copy_arm`), as C++ yields a prvalue copy there.
 - **Enum cases that carry nothing**: `StaticCase` (`static_case`) is the
   global `<Enum>.case<tag>`, the enum's struct with its counts at
   `STATIC_REFCOUNT` and 1, its `__tag` set and every other field zero. It

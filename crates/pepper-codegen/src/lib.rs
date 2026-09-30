@@ -110,6 +110,9 @@ pub struct CodeGenerator<'ctx> {
     /// access). `(value, sema type name)`, released in reverse order by
     /// `flush_deferred_temps`.
     deferred_temps: Vec<(BasicValueEnum<'ctx>, String)>,
+    /// The value each enclosing `WithSubject` (a `match` expression or `is`
+    /// test) examines, by its id.
+    subjects: HashMap<usize, BasicValueEnum<'ctx>>,
     /// Declared names of the externs (C functions) in the module.
     extern_names: std::collections::HashSet<String>,
     /// Declared parameter types of each extern, by name.
@@ -161,6 +164,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             frame: Frame::empty(),
             scopes: Vec::new(),
             deferred_temps: Vec::new(),
+            subjects: HashMap::new(),
             extern_names: std::collections::HashSet::new(),
             extern_params: std::collections::HashMap::new(),
             error_loc: None,
@@ -2579,6 +2583,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             // sema): report it so consumers (var defs, refcount helpers)
             // see the arm's type, not nothing.
             Expression::Ternary { true_expr, .. } => self.value_sema_type(true_expr),
+            Expression::Subject { ty, .. } => Some(ty.to_string()),
+            Expression::WithSubject(with) => self.value_sema_type(&with.body),
             // Atomic intrinsics: the load yields T, the store is void, the
             // cmpxchg reports success as bool.
             Expression::Weak(op, ty, _) => Some(op.result(ty).to_string()),
@@ -2628,6 +2634,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         match expr {
             Expression::SymbolRef { .. }
             | Expression::ThisRef
+            | Expression::Subject { .. }
             | Expression::MemberRef { .. }
             | Expression::Index { .. }
             | Expression::ArrayIndex { .. }
@@ -2668,15 +2675,16 @@ impl<'ctx> CodeGenerator<'ctx> {
             | Expression::FunctionCall { .. }
             | Expression::Invoke { .. }
             | Expression::MakeClosure { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
-            // A ternary of two owned rvalues is one owned rvalue: the arm's
-            // creation ref flows into the phi, so the consumer releases it
-            // once. Mixed lvalue/rvalue arms are not (C++ yields a copy of
-            // the lvalue there — no single temporary to destroy).
+            // A ternary with an owned rvalue arm is one owned rvalue: the
+            // arm's creation ref flows into the phi, and `codegen_ternary`
+            // copies (acquires) a read in the other arm, as C++ yields a
+            // prvalue copy of the lvalue there. The consumer releases it once.
             Expression::Ternary {
                 true_expr,
                 false_expr,
                 ..
-            } => self.is_owned_rvalue(true_expr) && self.is_owned_rvalue(false_expr),
+            } => self.is_owned_rvalue(true_expr) || self.is_owned_rvalue(false_expr),
+            Expression::WithSubject(with) => self.is_owned_rvalue(&with.body),
             // A converted call result is still that call's one reference.
             Expression::ToTrait { value, .. } => self.is_owned_rvalue(value),
             // An atomic load yields a freshly acquired reference (struct T):
@@ -3713,6 +3721,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MatchArm(_) => Err("internal error: unlowered 'match' arm".to_string()),
             Expression::CaseValue(_) => Err("internal error: unlowered 'match' binding".to_string()),
             Expression::StaticCase { ty, tag } => self.static_case(ty, *tag),
+            Expression::WithSubject(with) => self.with_subject(with),
+            Expression::Subject { id, .. } => {
+                self.subjects.get(id).copied().ok_or_else(|| "internal error: 'match' value read outside its 'match'".to_string())
+            }
+            Expression::NoMatch => Err("internal error: unlowered 'match' expression".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
@@ -4380,6 +4393,32 @@ impl<'ctx> CodeGenerator<'ctx> {
         let object = self.module.add_global(struct_type, None, &global_name);
         object.set_initializer(&struct_type.const_named_struct(&values));
         Ok(object.as_pointer_value().into())
+    }
+
+    /// A `match` expression or `is` test: evaluate the subject once, check a
+    /// reference enum is not null, then the body, which reads the subject
+    /// through `Expression::Subject`. An owned subject is a temporary of the
+    /// full expression: the body's value may be one of its fields.
+    fn with_subject(&mut self, with: &pepper_sema::model::WithSubject) -> Result<BasicValueEnum<'ctx>, String> {
+        let temp = self.owned_temp_type(&with.subject);
+        let value = self.codegen_expr(&with.subject)?;
+        if let Some(message) = &with.null_message
+            && self.functions.contains_key("_pep_assert")
+        {
+            let is_set = self.builder.build_is_not_null(value.into_pointer_value(), "subject_set").map_err(|e| e.to_string())?;
+            let msg = self.builder.build_global_string_ptr(message, "str").map_err(|e| e.to_string())?.as_pointer_value();
+            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+        }
+        let outer = self.subjects.insert(with.id, value);
+        let result = self.codegen_expr(&with.body);
+        match outer {
+            Some(outer) => self.subjects.insert(with.id, outer),
+            None => self.subjects.remove(&with.id),
+        };
+        if let Some(ty) = temp {
+            self.deferred_temps.push((value, ty));
+        }
+        result
     }
 
     /// The immortal global `{ STATIC_REFCOUNT, 1, thunk, null }` named
@@ -5469,6 +5508,19 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(phi.as_basic_value())
     }
 
+    /// Acquire a ternary arm that reads a reference, when the other arm is
+    /// an owned rvalue (see `is_owned_rvalue`).
+    fn copy_arm(&mut self, arm: &Expression, value: BasicValueEnum<'ctx>) -> Result<(), String> {
+        if self.is_owned_rvalue(arm) || matches!(arm, Expression::PointerLiteral) {
+            return Ok(());
+        }
+        let ty = self.value_sema_type(arm);
+        if self.is_struct_ref_name(&ty) {
+            self.acquire_ref(&ty.unwrap_or_default(), value)?;
+        }
+        Ok(())
+    }
+
     fn codegen_ternary(
         &mut self,
         condition: &Expression,
@@ -5490,8 +5542,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_conditional_branch(cond_bool, true_block, false_block)
             .map_err(|e| e.to_string())?;
 
+        // One owned arm makes the result owned: copy the other arm's read.
+        let owned = self.is_owned_rvalue(true_expr) || self.is_owned_rvalue(false_expr);
         self.builder.position_at_end(true_block);
         let true_val = self.codegen_expr_in_arm(true_expr)?;
+        if owned {
+            self.copy_arm(true_expr, true_val)?;
+        }
         // The arm's creation ref survives into the phi: a ternary of owned
         // rvalues is itself an owned rvalue (the consumer releases it once),
         // exactly as C++'s conditional operator yields one temporary.
@@ -5502,6 +5559,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         self.builder.position_at_end(false_block);
         let false_val = self.codegen_expr_in_arm(false_expr)?;
+        if owned {
+            self.copy_arm(false_expr, false_val)?;
+        }
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;

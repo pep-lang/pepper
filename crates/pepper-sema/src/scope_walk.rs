@@ -19,7 +19,7 @@
 //! destructors are always walked, since platform selection never drops them.
 
 use crate::passes::platform::keep;
-use pepper_parser::ast::{Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Span, Statement, TypeName};
+use pepper_parser::ast::{Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Pattern, Span, Statement, TypeName};
 use std::collections::HashSet;
 
 /// One level of names bound inside a declaration.
@@ -360,14 +360,21 @@ macro_rules! scope_walker {
                     Statement::Declaration(d) => self.walk_declaration(d),
                     Statement::Branch(b) => {
                         self.visit_expression(&$($m)? b.condition);
+                        // `if (x is P(a))` binds `a` in its block only.
+                        self.scopes_mut().push(Scope::Values(HashSet::new()));
+                        self.bind_is_test(&b.condition);
                         self.walk_block(&$($m)? b.if_block);
+                        self.scopes_mut().pop();
                         if let Some(e) = &$($m)? b.else_block {
                             self.walk_block(e);
                         }
                     }
                     Statement::While(w) => {
                         self.visit_expression(&$($m)? w.condition);
+                        self.scopes_mut().push(Scope::Values(HashSet::new()));
+                        self.bind_is_test(&w.condition);
                         self.walk_block(&$($m)? w.block);
+                        self.scopes_mut().pop();
                     }
                     Statement::For(f) => {
                         // The iterable is evaluated outside the loop
@@ -419,14 +426,7 @@ macro_rules! scope_walker {
                             // A pattern's bindings are visible in its arm only.
                             self.scopes_mut().push(Scope::Values(HashSet::new()));
                             for p in &$($m)? arm.patterns {
-                                if let Some(q) = &$($m)? p.qualifier {
-                                    self.visit_type_name(q);
-                                }
-                                for (name, _) in p.bindings.iter().flatten() {
-                                    if name != "_" {
-                                        self.scopes_mut().bind_value(name, false);
-                                    }
-                                }
+                                self.visit_pattern(p);
                             }
                             self.walk_block(&$($m)? arm.body);
                             self.scopes_mut().pop();
@@ -486,6 +486,51 @@ macro_rules! scope_walker {
                     Expression::Tuple { elements, .. } => {
                         for e in elements {
                             self.visit_expression(e);
+                        }
+                    }
+                    Expression::Match(m) => {
+                        self.visit_expression(&$($m)? m.value);
+                        for arm in &$($m)? m.arms {
+                            self.scopes_mut().push(Scope::Values(HashSet::new()));
+                            for p in &$($m)? arm.patterns {
+                                self.visit_pattern(p);
+                            }
+                            self.visit_expression(&$($m)? arm.value);
+                            self.scopes_mut().pop();
+                        }
+                        if let Some((_, v)) = &$($m)? m.else_arm {
+                            self.visit_expression(v);
+                        }
+                    }
+                    Expression::Is { value, pattern, .. } => {
+                        self.visit_expression(value);
+                        // Its bindings are bound by the `if` or `while` it
+                        // is the condition of (`bind_is_test`).
+                        if let Some(q) = &$($m)? pattern.qualifier {
+                            self.visit_type_name(q);
+                        }
+                    }
+                }
+            }
+
+            /// A pattern's qualifier, and its bindings into the innermost scope.
+            fn visit_pattern(&mut self, p: &$($m)? Pattern) {
+                if let Some(q) = &$($m)? p.qualifier {
+                    self.visit_type_name(q);
+                }
+                for (name, _) in p.bindings.iter().flatten() {
+                    if name != "_" {
+                        self.scopes_mut().bind_value(name, false);
+                    }
+                }
+            }
+
+            /// Bind the names of `condition` when it is an `is` test.
+            fn bind_is_test(&mut self, condition: &Expression) {
+                if let Expression::Is { pattern, .. } = condition {
+                    for (name, _) in pattern.bindings.iter().flatten() {
+                        if name != "_" {
+                            self.scopes_mut().bind_value(name, false);
                         }
                     }
                 }

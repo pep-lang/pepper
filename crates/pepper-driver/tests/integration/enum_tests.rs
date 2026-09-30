@@ -358,8 +358,10 @@ fn two_enums_do_not_mix() {
 
 #[test]
 fn match_needs_an_enum() {
-    assert!(error_of("test(): int { var x = 3; match (x) { A => {} } return 0; }")
-        .contains("cannot match on a value of 'i32': 'match' needs an enum"));
+    assert!(error_of("test(): int { var x = 3.5; match (x) { A => {} } return 0; }")
+        .contains("cannot match on a value of 'f64': 'match' needs an enum, an integer, 'char', 'bool' or 'String'"));
+    assert!(error_of("test(): int { var x = 3; match (x) { A => {} else => {} } return 0; }")
+        .contains("'A' is not a literal: a 'match' on 'i32' takes literal patterns"));
 }
 
 #[test]
@@ -814,4 +816,221 @@ test(): int {
 }
 "#;
     assert_eq!(run(src), 1);
+}
+
+// ── `match` expressions, `is`, and literal patterns (phase 4) ──
+
+#[test]
+fn a_match_expression_produces_the_arms_value() {
+    let src = format!(
+        "{}{}",
+        SHAPE,
+        r#"
+enum Color { Red, Green, Blue }
+
+score(c: Color): int {
+    var s = match (c) {
+        Red => 1,
+        Green, Blue => 10,
+    };
+    return s;
+}
+
+sides(s: Shape): int {
+    return match (s) {
+        Circle(_) => 0,
+        Rect(w, h) => w == h ? 1 : 4,
+        else => -100,
+    };
+}
+
+test(): int {
+    return score(Color.Red) + score(Color.Blue) * 10 + sides(Shape.Rect(2, 3)) * 1000 + sides(Shape.Empty);
+}
+"#
+    );
+    assert_eq!(run(&src), 101 + 4000 - 100);
+}
+
+#[test]
+fn a_match_expression_owns_its_value_and_nothing_leaks() {
+    let src = format!(
+        "{}{}",
+        DOC,
+        r#"
+text_of(d: Doc): String {
+    return match (d) {
+        Text(t) => t,
+        else => String("none"),
+    };
+}
+make(s: String): Doc { return Doc.Text(s); }
+test(): int {
+    var before = _pep_live_allocs();
+    var total = 0;
+    var i = 0;
+    while (i < 3) {
+        var a = text_of(Doc.Line);
+        var b = text_of(make("abc"));
+        var c = match (make("xy")) { Text(t) => t, else => String("") };
+        total += (a.length() as int) + (b.length() as int) * 10 + (c.length() as int) * 100;
+        i += 1;
+    }
+    if (_pep_live_allocs() != before) { return -1; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 3 * (4 + 30 + 200));
+}
+
+#[test]
+fn a_match_expression_must_handle_every_case() {
+    let err = error_of(&format!("{}{}", SHAPE, "test(): int { return match (Shape.Empty) { Empty => 0 }; }"));
+    assert!(err.contains("match on 'Shape' does not handle 'Circle' and 'Rect'"), "{err}");
+    let err = error_of(&format!(
+        "{}{}",
+        SHAPE,
+        "test(): int { return match (Shape.Empty) { Circle(r) => ((x: int): int => r + x)(1), else => 0 }; }"
+    ));
+    assert!(err.contains("a closure cannot use 'r', bound by an arm of a 'match' expression"), "{err}");
+    let err = error_of("enum Color { Red, Green }\ntest(): int { var x = match (Color.Red) { Red => 1, Green => \"x\" }; return 0; }");
+    assert!(err.contains("'match' arm has a value of type 'String', but the first arm's is 'i32'"), "{err}");
+}
+
+#[test]
+fn literal_patterns_match_integers_characters_booleans_and_strings() {
+    let src = r#"
+keyword(word: String): int {
+    match (word) {
+        "import" => { return 1; }
+        "export", "extern" => { return 2; }
+        else => { return 0; }
+    }
+    return -1;
+}
+
+digit(c: byte): int {
+    return match (c) {
+        '0' => 0,
+        '1' => 1,
+        else => -1,
+    };
+}
+
+sign(n: int): int {
+    return match (n) {
+        0 => 0,
+        -1, -2 => 1,
+        else => 2,
+    };
+}
+
+test(): int {
+    var total = keyword("import") + keyword("extern") * 10 + keyword("x") * 100;
+    total += (digit('1') + digit('x') * 10 + 10) * 1000;
+    total += sign(-2) * 100000 + sign(7) * 1000000;
+    var flag = false;
+    total += match (flag) { true => 0, false => 10000000 };
+    return total;
+}
+"#;
+    assert_eq!(run(src), 21 + 1000 + 100000 + 2000000 + 10000000);
+}
+
+#[test]
+fn literal_pattern_errors() {
+    let err = error_of("test(): int { return match (3) { 1 => 1 }; }");
+    assert!(err.contains("match on 'i32' needs an 'else' arm"), "{err}");
+    let err = error_of("test(): int { return match (3) { 1, 2 => 1, 1 => 2, else => 0 }; }");
+    assert!(err.contains("value '1' is already handled"), "{err}");
+    let err = error_of("enum Color { Red }\ntest(): int { return match (Color.Red) { 1 => 1, else => 0 }; }");
+    assert!(err.contains("cannot compare a value of type 'Color' with a value of type 'i32'"), "{err}");
+}
+
+#[test]
+fn is_tests_a_case_and_binds_in_its_block() {
+    let src = format!(
+        "{}{}",
+        SHAPE,
+        r#"
+enum List {
+    Empty,
+    Cons(head: int, tail: List),
+}
+
+test(): int {
+    var total = 0;
+    var s = Shape.Rect(2, 5);
+    if (s is Rect(w, h)) {
+        total += w * h;
+    } else {
+        total -= 1000;
+    }
+    if (s is Circle(r)) { total += r; } else if (s is Rect(_, h)) { total += h * 100; }
+    var list = List.Cons(1, List.Cons(2, List.Cons(3, List.Empty)));
+    var sum = 0;
+    while (list is Cons(head, tail)) {
+        sum += head;
+        list = tail;
+    }
+    total += sum * 1000;
+    var empty = s is Empty;
+    if (!empty && !(s is Circle)) { total += 10000; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 10 + 500 + 6000 + 10000);
+}
+
+#[test]
+fn is_bindings_are_scoped_to_the_block() {
+    let err = error_of(&format!("{}{}", SHAPE, "test(): int { var ok = Shape.Empty is Circle(r); return 0; }"));
+    assert!(err.contains("cannot bind 'r' here: 'is' binds names only as the whole condition of an 'if' or 'while'"), "{err}");
+}
+
+#[test]
+fn is_stays_usable_as_a_name() {
+    let src = r#"
+struct Token {
+    var text: String;
+    construct(text: String) { this.text = text; }
+    is(other: String): bool { return text == other; }
+}
+test(): int {
+    var t = Token("x");
+    var is = 2;
+    if (t.is("x")) { return is; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 2);
+}
+
+#[test]
+fn a_ternary_of_a_call_and_a_variable_copies_the_variable() {
+    let src = r#"
+struct Box {
+    var v: int;
+    construct(v: int) { this.v = v; }
+}
+make(v: int): Box { return Box(v); }
+test(): int {
+    var before = _pep_live_allocs();
+    var y = Box(1);
+    var total = 0;
+    var i = 0;
+    while (i < 2) {
+        var s = i == 0 ? make(10) : y;
+        total += s.v;
+        i += 1;
+    }
+    total += y.v * 100;
+    y = Box(0);
+    if (_pep_live_allocs() - before != 1) { return -1; }
+    return total;
+}
+"#;
+    assert_eq!(run(src), 111);
 }

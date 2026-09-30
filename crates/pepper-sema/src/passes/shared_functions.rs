@@ -105,6 +105,10 @@ impl Converter {
     /// `value` flows into a slot of type `expected`.
     fn convert(&mut self, value: &mut Expression, expected: &TypeName, current: Option<&TypeName>, site: Site) {
         let expected = parsed(expected);
+        if let Expression::WithSubject(with) = value {
+            self.convert(&mut with.body, &expected, current, site);
+            return;
+        }
         if expected.is_extern_function_type() {
             if let Expression::Ternary { true_expr, false_expr, .. } = value {
                 self.convert(true_expr, &expected, current, site);

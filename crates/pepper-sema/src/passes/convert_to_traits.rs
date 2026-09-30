@@ -96,6 +96,11 @@ impl Converter {
         current: Option<&TypeName>,
         fallback: Loc,
     ) {
+        // A `match` expression's value is its body's.
+        if let Expression::WithSubject(with) = value {
+            self.convert(&mut with.body, expected, current, fallback);
+            return;
+        }
         if is_c_string_type(expected) {
             unwrap_string_literal(value);
             return;
@@ -446,6 +451,16 @@ impl Converter {
                 self.expression(inner, current)
             }
             Expression::ToTrait { value, .. } => self.expression(value, current),
+            Expression::WithSubject(with) => {
+                self.expression(&mut with.subject, current);
+                self.expression(&mut with.body, current);
+            }
+            Expression::MatchArm(test) => {
+                self.expression(&mut test.subject, current);
+                for literal in test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()) {
+                    self.expression(literal, current);
+                }
+            }
             _ => {}
         }
         match expr {

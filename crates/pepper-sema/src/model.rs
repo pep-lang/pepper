@@ -388,6 +388,20 @@ pub enum Expression {
     /// so it is never freed and needs no allocation. The case's static
     /// method returns it.
     StaticCase { ty: TypeName, tag: i64 },
+    /// Evaluate `subject` once, then `body`, in which [`Expression::Subject`]
+    /// with the same `id` reads the value. A `match` expression is one
+    /// around an `?:` chain of [`Expression::MatchArm`] tests, an `is` test
+    /// one around a single test. An owned subject is released at the end of
+    /// the full expression, like any temporary.
+    WithSubject(Box<WithSubject>),
+    /// The value the enclosing [`Expression::WithSubject`] with this `id`
+    /// evaluated. `ty` is filled in by `resolve_implicit_types`.
+    Subject { id: usize, ty: TypeName, loc: Loc },
+    /// The value of a `match` expression with no `else` arm when no arm
+    /// matched: the last `?:` of its chain falls through to it.
+    /// `enums::lower_matches` drops it once it has checked that every case
+    /// is handled. Never reaches codegen.
+    NoMatch,
     /// A struct reference converted to a trait-typed value (`Shape s =
     /// Square(2);`): the same object, seen through the vtable of `from`'s
     /// conformance to `to`. Inserted by `convert_to_traits` wherever a value
@@ -448,6 +462,22 @@ pub struct MatchSite {
     pub keyword: Loc,
     /// The `else` keyword, when the `match` has an `else` arm.
     pub else_arm: Option<Loc>,
+    /// An `is` test rather than a `match`: its one arm need not handle every
+    /// case.
+    pub partial: bool,
+}
+
+/// See [`Expression::WithSubject`].
+#[derive(Debug, Clone)]
+pub struct WithSubject {
+    /// The `match`'s site id (see [`MatchSite`]).
+    pub id: usize,
+    pub subject: Expression,
+    pub body: Expression,
+    /// Set by `enums::lower_matches` for a reference enum subject: the
+    /// panic message when the subject is null.
+    pub null_message: Option<String>,
+    pub loc: Loc,
 }
 
 /// See [`Expression::CaseValue`].
@@ -489,6 +519,10 @@ pub struct CasePattern {
     pub loc: Loc,
     /// The names bound to the case's values; `None` without parentheses.
     pub bindings: Option<Vec<(String, Loc)>>,
+    /// For a literal pattern (`1`, `"import"`): the test `subject ==
+    /// literal`, built by the builder so the passes type and resolve it like
+    /// any `==`. `case` then holds the literal as written.
+    pub literal: Option<Expression>,
 }
 
 /// An `enum` declaration whose cases carry no values: an integer type. An

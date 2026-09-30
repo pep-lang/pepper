@@ -528,7 +528,7 @@ export struct Formatter {
     _pattern(item: syntax.Node): Doc {
         var result = concat();
         for (var child in item.children) {
-            result.add(_leaf(child));
+            result.add(_node(child));
             if (child.is_token(",")) {
                 result.add(text(" "));
             }
@@ -1049,6 +1049,12 @@ export struct Formatter {
         }
         if (kind == syntax.NODE_TYPE_LITERAL) {
             return _type_name(item.child(0));
+        }
+        if (kind == syntax.NODE_MATCH) {
+            return _control(item);
+        }
+        if (kind == syntax.NODE_PATTERN) {
+            return _pattern(item);
         }
         if (kind == syntax.NODE_CLOSURE) {
             var result = concat();

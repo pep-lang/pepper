@@ -262,6 +262,7 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             | Expression::IsPod(ty)
             | Expression::Default(ty)
             | Expression::StaticCase { ty, .. }
+            | Expression::Subject { ty, .. }
             | Expression::Allocate(ty)
             | Expression::Cast { ty, .. } => substitute(ty, type_map),
             Expression::RefCount(ty, _) | Expression::Weak(_, ty, _) => substitute(ty, type_map),

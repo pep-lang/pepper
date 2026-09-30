@@ -216,6 +216,37 @@ pub enum Expression {
     /// `labels` is empty, or names every element (`(line: 3, column: 7)`),
     /// each with the span of its label.
     Tuple { elements: Vec<Expression>, labels: Vec<(String, Span)>, span: Span },
+    /// `match (value) { pattern, ... => value, ... else => value }`: a
+    /// `match` that produces a value.
+    Match(Box<MatchExpression>),
+    /// `value is Pattern`: whether `value` matches the pattern.
+    Is {
+        value: Box<Expression>,
+        pattern: Box<Pattern>,
+        /// Span of the `is` keyword.
+        keyword_span: Span,
+        span: Span,
+    },
+}
+
+/// A `match` in expression position: each arm is `patterns => value`.
+#[derive(Debug, Clone)]
+pub struct MatchExpression {
+    pub value: Expression,
+    pub arms: Vec<MatchValueArm>,
+    /// The `else` arm: the span of the `else` keyword and its value.
+    pub else_arm: Option<(Span, Expression)>,
+    /// Span of the `match` keyword.
+    pub keyword_span: Span,
+    pub span: Span,
+}
+
+/// One arm of a `match` expression: its patterns and the value they select.
+#[derive(Debug, Clone)]
+pub struct MatchValueArm {
+    pub patterns: Vec<Pattern>,
+    pub value: Expression,
+    pub span: Span,
 }
 
 /// A closure literal. Parameters and the return type written without a type
@@ -245,9 +276,11 @@ impl Expression {
             | Expression::MemberAccess { span, .. }
             | Expression::Cast { span, .. }
             | Expression::FunctionCall { span, .. }
-            | Expression::Tuple { span, .. } => *span,
+            | Expression::Tuple { span, .. }
+            | Expression::Is { span, .. } => *span,
             Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
             Expression::Closure(c) => c.span,
+            Expression::Match(m) => m.span,
         }
     }
 }
@@ -654,9 +687,12 @@ pub struct MatchArm {
     pub span: Span,
 }
 
-/// A case pattern: `Case`, `Enum.Case`, or `Case(binding, _, ...)`.
+/// A case pattern: `Case`, `Enum.Case`, or `Case(binding, _, ...)`; or a
+/// literal pattern (`1`, `'a'`, `"import"`, `true`), whose `case` is empty.
 #[derive(Debug, Clone)]
 pub struct Pattern {
+    /// The literal of a literal pattern; `None` for a case pattern.
+    pub literal: Option<Expression>,
     /// The enum named before the case (`Color` in `Color.Red`).
     pub qualifier: Option<TypeName>,
     pub case: String,
@@ -899,6 +935,17 @@ impl Display for Expression {
                 write!(f, "({})", parts.join(", "))
             }
             Expression::Tuple { elements, .. } => write!(f, "({})", join(elements, ", ")),
+            Expression::Match(m) => {
+                write!(f, "match ({}) {{", m.value)?;
+                for arm in &m.arms {
+                    write!(f, " {} => {},", join(&arm.patterns, ", "), arm.value)?;
+                }
+                if let Some((_, value)) = &m.else_arm {
+                    write!(f, " else => {},", value)?;
+                }
+                write!(f, " }}")
+            }
+            Expression::Is { value, pattern, .. } => write!(f, "({} is {})", value, pattern),
         }
     }
 }
@@ -1224,6 +1271,9 @@ impl Display for Match {
 
 impl Display for Pattern {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(literal) = &self.literal {
+            return write!(f, "{}", literal);
+        }
         if let Some(q) = &self.qualifier {
             write!(f, "{}.", q)?;
         }

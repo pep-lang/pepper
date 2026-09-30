@@ -153,11 +153,40 @@ library or the network) to a case, since `as` only goes the other way.
   empty arm for each missing case. An `else` that can never run, because the
   other arms handle every case, is a warning.
 - Handling a case twice is an error.
-- `match` is a statement. `break`, `continue` and `return` inside an arm act
+- In a `match` statement, `break`, `continue` and `return` inside an arm act
   on the enclosing loop or function, as they would inside an `if`.
 
 The value is evaluated once, before any arm runs. A `match` on a null value
 of an enum whose cases carry values panics with `match on a null 'Name'`.
+
+## `match` expressions, `is`, and literal patterns
+
+```pepper
+{{#include ../../examples/enums-match-values.pep}}
+```
+
+- **A `match` that produces a value** can go wherever a value can: after
+  `var x =`, `return`, in an argument. Each arm is `patterns => value`, and
+  arms are separated by commas (one after the last is allowed). It follows
+  the rules above: a pattern binds names for its arm's value, and the arms
+  must handle every case unless there is an `else`. The value has the first
+  arm's type, and every other arm's value must convert to it. A closure in
+  an arm's value cannot use a name the arm binds; use a `match` statement
+  there.
+- **`value is Pattern`** is a `bool`: whether `value` holds that case
+  (`d is Line`, `!(d is Text)`). It takes any one pattern. When it is the
+  whole condition of an `if` or `while`, its bindings are declared in that
+  block only: `if (d is Text(t)) { ... }` reads `t` inside the braces, and
+  `while (list is Cons(head, tail)) { ... }` examines `list` again on every
+  iteration. Anywhere else, `is` cannot bind names. `is` is a keyword only
+  between a value and a pattern, so it stays usable as a name
+  (`token.is(text)`).
+- **Literal patterns**: a `match` on an integer, a character, a `bool` or a
+  `String` compares with literals (`1`, `-1`, `'a'`, `true`, `"import"`),
+  using `==`. Literals cannot list every value, so such a `match` needs an
+  `else` arm, except on a `bool` that handles both `true` and `false`.
+  Matching the same literal twice is an error. A match on an enum takes its
+  case names, not literals, and a match on `int` takes literals, not names.
 
 ## Current limits
 
@@ -167,10 +196,9 @@ of an enum whose cases carry values panics with `match on a null 'Name'`.
   enum cannot be generic yet. An enum cannot declare operators or indexers
   yet; `==` and `!=` are built in for enums whose cases carry nothing.
 - Patterns cannot be nested (`Some(Text(t))`), compare values
-  (`Text("")`), or have guards yet.
-- `match` works only on enums, and only as a statement: it does not produce
-  a value, and cannot match integers, characters or strings yet. There is no
-  `is` test yet.
+  (`Text("")`), match ranges (`1..9`), or have guards yet. A literal pattern
+  is a literal, not a named constant.
+- A `match` cannot examine floating-point values.
 - An enum whose cases carry nothing cannot be extended
   (`extend Color { ... }`); declare its methods inside it. So it cannot
   conform to a trait either, and a trait value is a reference to an object,

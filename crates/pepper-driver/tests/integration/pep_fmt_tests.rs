@@ -329,3 +329,11 @@ fn pep_fmt_rejects_bad_usage() {
     assert_eq!(code, 0);
     assert!(usage.starts_with("usage: pep-fmt [-w] [--check] [FILE | DIRECTORY]..."), "{usage}");
 }
+
+#[test]
+fn pep_fmt_formats_match_expressions_is_tests_and_literal_patterns() {
+    assert_formats(
+        "f(d:Doc):int {\n    var w=match(d){Text(t,u)=>t.length(),Line=>1,else=>0};\n    match (n) {\n        -1,2=>{ return 1; }\n        \"a\"=>{ return 2; }\n        else=>{ return 3; }\n    }\n    if (d is Text(a,_)) { return 1; }\n    return w;\n}\n",
+        "f(d: Doc): int {\n    var w = match (d) {\n        Text(t, u) => t.length(),\n        Line => 1,\n        else => 0\n    };\n    match (n) {\n        -1, 2 => { return 1; }\n        \"a\" => { return 2; }\n        else => { return 3; }\n    }\n    if (d is Text(a, _)) { return 1; }\n    return w;\n}\n",
+    );
+}

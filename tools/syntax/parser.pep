@@ -587,10 +587,28 @@ struct Parser {
         if (level == 1) {
             return _binary_level(2);
         }
+        if (level == 6) {
+            return _is_test();
+        }
         if (level < 9) {
             return _binary_level(level + 1);
         }
         return _prefix_increment();
+    }
+
+    # `value is Pattern`, between the relational and shift levels as in the
+    # compiler's `is_test`. `is` is a keyword only here, so it stays usable
+    # as a name.
+    _is_test(): Node {
+        var value = _binary_level(7);
+        if (_failed or !_at_word("is")) {
+            return value;
+        }
+        var node = Node(NODE_BINARY);
+        node.add(value);
+        _take(node);
+        node.add(_pattern());
+        return node;
     }
 
     # A left-associative binary level, the compiler's `binary_left`.
@@ -818,6 +836,9 @@ struct Parser {
 
     _primary(): Node {
         var token = _peek();
+        if (token.is_word("match")) {
+            return _match_expression();
+        }
         if (token.is_word("true")
             or token.is_word("false")
             or token.is_word("__null")
@@ -1216,10 +1237,74 @@ struct Parser {
         return node;
     }
 
+    # A `match` that produces a value: `match (x) { A, B => 1, else => 0 }`.
+    # Each arm is patterns, `=>`, a value, and a `,` (optional after the
+    # last).
+    _match_expression(): Node {
+        var node = Node(NODE_MATCH);
+        _take(node);
+        node.add(_expression());
+        if (_failed) {
+            return node;
+        }
+        var arms = Node(NODE_MATCH_ARMS);
+        node.add(arms);
+        _expect(arms, "{");
+        while (!_failed) {
+            if (_at("}") or _at_end()) {
+                break;
+            }
+            var arm = Node(NODE_MATCH_ARM);
+            arms.add(arm);
+            if (_at_word("else")) {
+                _take(arm);
+            } else {
+                arm.add(_pattern());
+                while (!_failed and _at(",")) {
+                    _take(arm);
+                    arm.add(_pattern());
+                }
+            }
+            if (_failed) {
+                return node;
+            }
+            _expect(arm, "=>");
+            if (_failed) {
+                return node;
+            }
+            arm.add(_expression());
+            if (_failed) {
+                return node;
+            }
+            if (_at(",")) {
+                _take(arm);
+            } else if (!_at("}")) {
+                _expect(arm, "}");
+                return node;
+            }
+        }
+        if (_failed) {
+            return node;
+        }
+        _expect(arms, "}");
+        return node;
+    }
+
     # A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or
-    # `Case(x, _)`.
+    # `Case(x, _)`; or a literal: a number (`-1` too), string, character,
+    # `true` or `false`.
     _pattern(): Node {
         var node = Node(NODE_PATTERN);
+        var token = _peek();
+        if (token.is_word("true")
+            or token.is_word("false")
+            or token.kind == TOKEN_NUMBER
+            or token.kind == TOKEN_STRING
+            or token.kind == TOKEN_CHARACTER
+            or (token.is("-") and _peek_at(1).kind == TOKEN_NUMBER and _adjacent(1))) {
+            node.add(_primary());
+            return node;
+        }
         _expect_name(node, "a case name");
         while (!_failed and _at(".") and _adjacent(0) and _peek_at(1).kind == TOKEN_IDENTIFIER and _adjacent(1)) {
             _take(node);

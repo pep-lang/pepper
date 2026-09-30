@@ -321,6 +321,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 loc: loc(*span),
             })
         }
+        ast::Expression::Match(m) => match_expression(m),
+        ast::Expression::Is { value, pattern, keyword_span, .. } => is_expression(value, pattern, *keyword_span),
         ast::Expression::Closure(c) => Ok(Expression::ClosureLiteral(Box::new(ClosureLiteral {
             parameters: c.parameters.iter().map(|p| variable_def(p, Kind::Param)).collect::<Result<Vec<_>, _>>()?,
             ty: type_name_from(&c.return_type),
@@ -400,15 +402,21 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         })),
         ast::Statement::Block(inner) => Ok(Statement::Block(block(inner)?)),
         ast::Statement::Declaration(decl) => Ok(Statement::Declaration(declaration(decl)?)),
-        ast::Statement::Branch(branch) => Ok(Statement::Branch(Branch {
-            condition: expression(&branch.condition)?,
-            if_block: block(&branch.if_block)?,
-            else_block: branch.else_block.as_ref().map(block).transpose()?,
-        })),
-        ast::Statement::While(wh) => Ok(Statement::While(While {
-            condition: expression(&wh.condition)?,
-            block: block(&wh.block)?,
-        })),
+        ast::Statement::Branch(branch) => match is_branch(branch)? {
+            Some(lowered) => Ok(lowered),
+            None => Ok(Statement::Branch(Branch {
+                condition: expression(&branch.condition)?,
+                if_block: block(&branch.if_block)?,
+                else_block: branch.else_block.as_ref().map(block).transpose()?,
+            })),
+        },
+        ast::Statement::While(wh) => match is_loop(wh)? {
+            Some(lowered) => Ok(lowered),
+            None => Ok(Statement::While(While {
+                condition: expression(&wh.condition)?,
+                block: block(&wh.block)?,
+            })),
+        },
         ast::Statement::For(f) => for_loop(f),
         ast::Statement::With(w) => with_block(w),
         ast::Statement::Match(m) => match_statement(m),
@@ -680,17 +688,37 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
 /// the subject's type is known. A `match` with no arms still gets one test,
 /// with no patterns, so its exhaustiveness is checked.
 fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
-    let n = MATCHES.with(|c| {
+    let arms: Vec<(&[ast::Pattern], &ast::Block)> = m.arms.iter().map(|a| (a.patterns.as_slice(), &a.body)).collect();
+    let else_arm = m.else_arm.as_ref().map(|(span, b)| (loc(*span), block(b))).map(|(l, b)| b.map(|b| (l, b))).transpose()?;
+    lower_match_statement(&m.value, m.keyword_span, &arms, else_arm, false)
+}
+
+/// The next program-wide `match` number (`__match_N`, [`MatchSite::id`]).
+fn next_match() -> usize {
+    MATCHES.with(|c| {
         let n = c.get();
         c.set(n + 1);
         n
-    });
+    })
+}
+
+/// The statement form of a `match` (see [`match_statement`]); `partial` for
+/// an `if` or `while` whose condition is an `is` test, whose one arm need not
+/// handle every case.
+fn lower_match_statement(
+    value: &ast::Expression,
+    keyword: ast::Span,
+    arms: &[(&[ast::Pattern], &ast::Block)],
+    else_arm: Option<(Loc, Block)>,
+    partial: bool,
+) -> Result<Statement, Diagnostic> {
+    let n = next_match();
     let subject = format!("__match_{}", n);
-    let at = loc(m.value.span());
+    let at = loc(value.span());
     let hidden = VariableDef {
         name: subject.clone(),
         ty: TypeName::auto(),
-        default: Some(expression(&m.value)?),
+        default: Some(expression(value)?),
         hidden: true,
         kind: Kind::Variable,
         attributes: vec![],
@@ -698,43 +726,36 @@ fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
         type_loc: Loc::NONE,
         is_const: false,
     };
-    let site = MatchSite {
-        id: n,
-        keyword: loc(m.keyword_span),
-        else_arm: m.else_arm.as_ref().map(|(span, _)| loc(*span)),
-    };
+    let site = MatchSite { id: n, keyword: loc(keyword), else_arm: else_arm.as_ref().map(|(l, _)| *l), partial };
+    let subject_ref = Expression::SymbolRef { id: subject.clone(), ty: TypeName::auto(), loc: at };
     let test = |patterns: Vec<CasePattern>| {
-        Expression::MatchArm(Box::new(MatchArmTest {
-            subject: Expression::SymbolRef { id: subject.clone(), ty: TypeName::auto(), loc: at },
-            patterns,
-            site: site.clone(),
-        }))
+        Expression::MatchArm(Box::new(MatchArmTest { subject: subject_ref.clone(), patterns, site: site.clone() }))
     };
-    let mut chain: Option<Block> = match &m.else_arm {
-        Some((_, b)) => Some(block(b)?),
-        None => None,
-    };
-    let mut arms: Vec<(Vec<CasePattern>, Block)> = vec![];
-    for arm in &m.arms {
-        let patterns = arm
-            .patterns
-            .iter()
-            .map(|p| CasePattern {
-                qualifier: p.qualifier.as_ref().map(type_name_from),
-                case: p.case.clone(),
-                loc: loc(p.case_span),
-                bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
-            })
-            .collect();
-        let mut body = block(&arm.body)?;
-        let bindings = match_bindings(arm, &subject, at)?;
-        body.items.splice(0..0, bindings);
-        arms.push((patterns, body));
+    let mut chain: Option<Block> = else_arm.map(|(_, b)| b);
+    let mut lowered: Vec<(Vec<CasePattern>, Block)> = vec![];
+    for (patterns, body) in arms {
+        let cases = patterns.iter().map(|p| case_pattern(p, &subject_ref)).collect::<Result<Vec<_>, _>>()?;
+        let mut body = block(body)?;
+        let locals = match_bindings(patterns, &subject_ref)?.into_iter().map(|(name, value, at)| {
+            Statement::Declaration(Declaration::Variable(VariableDef {
+                name,
+                ty: TypeName::auto(),
+                default: Some(value),
+                hidden: false,
+                kind: Kind::Variable,
+                attributes: vec![],
+                loc: at,
+                type_loc: Loc::NONE,
+                is_const: true,
+            }))
+        });
+        body.items.splice(0..0, locals);
+        lowered.push((cases, body));
     }
-    if arms.is_empty() {
-        arms.push((vec![], Block { name: String::new(), items: vec![], attributes: vec![] }));
+    if lowered.is_empty() {
+        lowered.push((vec![], Block { name: String::new(), items: vec![], attributes: vec![] }));
     }
-    for (patterns, body) in arms.into_iter().rev() {
+    for (patterns, body) in lowered.into_iter().rev() {
         let branch = Statement::Branch(Branch { condition: test(patterns), if_block: body, else_block: chain.take() });
         chain = Some(Block { name: String::new(), items: vec![branch], attributes: vec![] });
     }
@@ -743,14 +764,169 @@ fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
     Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
 }
 
-/// The locals an arm's patterns bind, each a `const` whose value is the
-/// matched case's value at the binding's position ([`CaseValue`]). Every
+/// `if (x is P(a)) { ... } else { ... }`: the `match` statement `match (x) {
+/// P(a) => { ... } else => { ... } }`, so `a` is a local of the block.
+fn is_branch(branch: &ast::Branch) -> Result<Option<Statement>, Diagnostic> {
+    let ast::Expression::Is { value, pattern, keyword_span, .. } = &branch.condition else {
+        return Ok(None);
+    };
+    let else_arm = branch.else_block.as_ref().map(block).transpose()?.map(|b| (Loc::NONE, b));
+    let arms = [(std::slice::from_ref(pattern.as_ref()), &branch.if_block)];
+    lower_match_statement(value, *keyword_span, &arms, else_arm, true).map(Some)
+}
+
+/// `while (x is P(a)) { body }`: `while (true) { match (x) { P(a) => { body }
+/// else => { break; } } }`, so `a` is a local of the body and `x` is
+/// examined again on every iteration.
+fn is_loop(wh: &ast::While) -> Result<Option<Statement>, Diagnostic> {
+    let ast::Expression::Is { value, pattern, keyword_span, .. } = &wh.condition else {
+        return Ok(None);
+    };
+    let stop = Block { name: String::new(), items: vec![Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Break })], attributes: vec![] };
+    let arms = [(std::slice::from_ref(pattern.as_ref()), &wh.block)];
+    let body = lower_match_statement(value, *keyword_span, &arms, Some((Loc::NONE, stop)), true)?;
+    Ok(Some(Statement::While(While {
+        condition: Expression::BoolLiteral(true),
+        block: Block { name: String::new(), items: vec![body], attributes: vec![] },
+    })))
+}
+
+/// `match (e) { A, B => x, C => y, else => z }` becomes
+///
+/// ```text
+/// WithSubject(N, e, MatchArm(Subject(N) is A, B) ? x : MatchArm(Subject(N) is C) ? y : z)
+/// ```
+///
+/// with each name a pattern binds replaced in its arm's value by the
+/// [`CaseValue`] it reads. Without an `else` the chain ends in `NoMatch`,
+/// which `enums::lower_matches` drops once every case is handled.
+fn match_expression(m: &ast::MatchExpression) -> Result<Expression, Diagnostic> {
+    let n = next_match();
+    let at = loc(m.value.span());
+    let site = MatchSite { id: n, keyword: loc(m.keyword_span), else_arm: m.else_arm.as_ref().map(|(s, _)| loc(*s)), partial: false };
+    let subject = Expression::Subject { id: n, ty: TypeName::auto(), loc: at };
+    let mut chain = match &m.else_arm {
+        Some((_, value)) => expression(value)?,
+        None => Expression::NoMatch,
+    };
+    let mut arms = vec![];
+    for arm in &m.arms {
+        let patterns = arm.patterns.iter().map(|p| case_pattern(p, &subject)).collect::<Result<Vec<_>, _>>()?;
+        let mut value = expression(&arm.value)?;
+        let bindings = match_bindings(&arm.patterns, &subject)?;
+        bind_in_expression(&mut value, &bindings)?;
+        arms.push((patterns, value));
+    }
+    if arms.is_empty() {
+        arms.push((vec![], Expression::NoMatch));
+    }
+    for (patterns, value) in arms.into_iter().rev() {
+        let test = Expression::MatchArm(Box::new(MatchArmTest { subject: subject.clone(), patterns, site: site.clone() }));
+        chain = Expression::Ternary { condition: Box::new(test), true_expr: Box::new(value), false_expr: Box::new(chain) };
+    }
+    Ok(Expression::WithSubject(Box::new(WithSubject { id: n, subject: expression(&m.value)?, body: chain, null_message: None, loc: at })))
+}
+
+/// `e is P` anywhere but the whole condition of an `if` or `while`: a
+/// single test over `e`, which may bind nothing.
+fn is_expression(value: &ast::Expression, pattern: &ast::Pattern, keyword: ast::Span) -> Result<Expression, Diagnostic> {
+    if let Some((name, span)) = pattern.bindings.iter().flatten().find(|(n, _)| n != "_") {
+        return Err(Diagnostic::error(format!(
+            "cannot bind '{}' here: 'is' binds names only as the whole condition of an 'if' or 'while'",
+            name
+        ))
+        .at(loc(*span)));
+    }
+    let n = next_match();
+    let at = loc(value.span());
+    let site = MatchSite { id: n, keyword: loc(keyword), else_arm: None, partial: true };
+    let subject = Expression::Subject { id: n, ty: TypeName::auto(), loc: at };
+    let test = MatchArmTest { subject: subject.clone(), patterns: vec![case_pattern(pattern, &subject)?], site };
+    Ok(Expression::WithSubject(Box::new(WithSubject {
+        id: n,
+        subject: expression(value)?,
+        body: Expression::MatchArm(Box::new(test)),
+        null_message: None,
+        loc: at,
+    })))
+}
+
+/// A pattern of an arm over `subject`. A literal pattern carries the test
+/// `subject == literal`, and its literal as written in `case`.
+fn case_pattern(p: &ast::Pattern, subject: &Expression) -> Result<CasePattern, Diagnostic> {
+    let literal = match &p.literal {
+        Some(l) => Some(Expression::Binary {
+            op: BinaryOp::Equal,
+            lhs: Box::new(subject.clone()),
+            rhs: Box::new(expression(l)?),
+            loc: loc(p.case_span),
+        }),
+        None => None,
+    };
+    Ok(CasePattern {
+        qualifier: p.qualifier.as_ref().map(type_name_from),
+        case: match &p.literal {
+            Some(l) => l.to_string(),
+            None => p.case.clone(),
+        },
+        loc: loc(p.case_span),
+        bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
+        literal,
+    })
+}
+
+/// Replace each name an arm binds with the value it reads, in a `match`
+/// expression's arm value. A closure there may not use one: it would outlive
+/// the value it reads.
+fn bind_in_expression(value: &mut Expression, bindings: &[(String, Expression, Loc)]) -> Result<(), Diagnostic> {
+    if bindings.is_empty() {
+        return Ok(());
+    }
+    let mut error = None;
+    fn visit(e: &mut Expression, bindings: &[(String, Expression, Loc)], error: &mut Option<Diagnostic>) {
+        if let Expression::SymbolRef { id, loc: at, .. } = e
+            && let Some((_, v, _)) = bindings.iter().find(|(n, _, _)| n == id)
+        {
+            let _ = at;
+            *e = v.clone();
+            return;
+        }
+        if let Expression::ClosureLiteral(c) = e {
+            let hidden: Vec<&str> = c.parameters.iter().map(|p| p.name.as_str()).collect();
+            crate::passes::walk_block(&mut c.body, &mut |inner| {
+                if let Expression::SymbolRef { id, loc: at, .. } = inner
+                    && !hidden.contains(&id.as_str())
+                    && error.is_none()
+                    && let Some((name, _, bound)) = bindings.iter().find(|(n, _, _)| n == id)
+                {
+                    *error = Some(
+                        Diagnostic::error(format!(
+                            "a closure cannot use '{}', bound by an arm of a 'match' expression; use a 'match' statement",
+                            name
+                        ))
+                        .at(*at)
+                        .with_note(format!("'{}' is bound here", name), Some(*bound)),
+                    );
+                }
+            });
+            return;
+        }
+        for child in crate::passes::children_mut(e) {
+            visit(child, bindings, error);
+        }
+    }
+    visit(value, bindings, &mut error);
+    error.map_or(Ok(()), Err)
+}
+
+/// The names an arm's patterns bind, each with the matched case's value at
+/// the binding's position ([`CaseValue`]) and the binding's location. Every
 /// pattern of an arm must bind the same names.
-fn match_bindings(arm: &ast::MatchArm, subject: &str, at: Loc) -> Result<Vec<Statement>, Diagnostic> {
+fn match_bindings(patterns: &[ast::Pattern], subject: &Expression) -> Result<Vec<(String, Expression, Loc)>, Diagnostic> {
     let bound = |p: &ast::Pattern| -> Vec<(String, ast::Span)> {
         p.bindings.iter().flatten().filter(|(n, _)| n != "_").cloned().collect()
     };
-    for p in &arm.patterns {
+    for p in patterns {
         let names = bound(p);
         for (i, (name, span)) in names.iter().enumerate() {
             if names[..i].iter().any(|(n, _)| n == name) {
@@ -759,7 +935,7 @@ fn match_bindings(arm: &ast::MatchArm, subject: &str, at: Loc) -> Result<Vec<Sta
         }
     }
     let mut names: Vec<(String, ast::Span)> = vec![];
-    for p in &arm.patterns {
+    for p in patterns {
         for (name, span) in bound(p) {
             if !names.iter().any(|(n, _)| *n == name) {
                 names.push((name, span));
@@ -769,10 +945,14 @@ fn match_bindings(arm: &ast::MatchArm, subject: &str, at: Loc) -> Result<Vec<Sta
     let mut out = vec![];
     for (name, span) in names {
         let mut choices = vec![];
-        for p in &arm.patterns {
+        for p in patterns {
             let all = p.bindings.as_deref().unwrap_or_default();
             let Some(index) = all.iter().position(|(n, _)| *n == name) else {
-                return Err(Diagnostic::error(format!("'{}' is not bound by '{}': every pattern of an arm binds the same names", name, p.case))
+                let shown = match &p.literal {
+                    Some(l) => l.to_string(),
+                    None => p.case.clone(),
+                };
+                return Err(Diagnostic::error(format!("'{}' is not bound by '{}': every pattern of an arm binds the same names", name, shown))
                     .at(loc(p.case_span))
                     .with_note(format!("'{}' is bound here", name), Some(loc(span))));
             };
@@ -784,23 +964,8 @@ fn match_bindings(arm: &ast::MatchArm, subject: &str, at: Loc) -> Result<Vec<Sta
                 loc: loc(all[index].1),
             });
         }
-        let value = CaseValue {
-            subject: Expression::SymbolRef { id: subject.to_string(), ty: TypeName::auto(), loc: at },
-            name: name.clone(),
-            choices,
-            loc: loc(span),
-        };
-        out.push(Statement::Declaration(Declaration::Variable(VariableDef {
-            name,
-            ty: TypeName::auto(),
-            default: Some(Expression::CaseValue(Box::new(value))),
-            hidden: false,
-            kind: Kind::Variable,
-            attributes: vec![],
-            loc: loc(span),
-            type_loc: Loc::NONE,
-            is_const: true,
-        })));
+        let value = CaseValue { subject: subject.clone(), name: name.clone(), choices, loc: loc(span) };
+        out.push((name, Expression::CaseValue(Box::new(value)), loc(span)));
     }
     Ok(out)
 }

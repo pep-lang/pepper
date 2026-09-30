@@ -733,8 +733,23 @@ impl<'p, 'a> Walk<'p, 'a> {
                     }
                 }
             }
+            Expression::WithSubject(with) => {
+                self.eval(&with.subject);
+                self.eval(&with.body)
+            }
+            // The value a `match` expression examines: seen like a field of
+            // an unknown owner.
+            Expression::Subject { .. } => {
+                if !self.has_region(expr) {
+                    return None;
+                }
+                let region = self.fresh();
+                self.regions[region].untracked = true;
+                Some(region)
+            }
             // An immortal payload-free case: no fields to reach.
             Expression::StaticCase { .. }
+            | Expression::NoMatch
             | Expression::BoolLiteral(_)
             | Expression::IntLiteral(_)
             | Expression::FloatLiteral(_)
@@ -870,6 +885,9 @@ impl<'p, 'a> Walk<'p, 'a> {
             Expression::Destructure { value, .. } => self.eval(value),
             Expression::MatchArm(test) => {
                 self.eval(&test.subject);
+                for literal in test.patterns.iter().filter_map(|p| p.literal.as_ref()) {
+                    self.eval(literal);
+                }
                 None
             }
             Expression::WithEntered(value) => {
@@ -1712,8 +1730,11 @@ fn children(expr: &Expression) -> Vec<&Expression> {
         | Expression::CountStep { .. }
         | Expression::FunctionPointer { .. }
         | Expression::StaticCase { .. }
+        | Expression::Subject { .. }
+        | Expression::NoMatch
         | Expression::ClosureLiteral(_) => vec![],
         Expression::CaseValue(case) => vec![&case.subject],
+        Expression::WithSubject(with) => vec![&with.subject, &with.body],
         Expression::MemberRef { lhs, .. } => vec![lhs],
         Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs, rhs],
         Expression::Unary { operand, .. } => vec![operand],
@@ -1725,7 +1746,11 @@ fn children(expr: &Expression) -> Vec<&Expression> {
         | Expression::AtomicLoad(_, arg)
         | Expression::ForIterator(arg)
         | Expression::WithEntered(arg) => vec![arg],
-        Expression::MatchArm(test) => vec![&test.subject],
+        Expression::MatchArm(test) => {
+            let mut children = vec![&test.subject];
+            children.extend(test.patterns.iter().filter_map(|p| p.literal.as_ref()));
+            children
+        }
         Expression::Destructure { value, .. } => vec![value],
         Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => vec![a, b],
         Expression::AtomicCmpXchg(_, a, b, c) => vec![a, b, c],

@@ -917,6 +917,9 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
         }
         return Ok(Expression::SizeOf(ty)); // span carried by ty
     }
+    if keyword(&mut { *input }, "match") {
+        return match_expression(input);
+    }
     // symbol reference, or a generic type literal such as `Array<int>` in `Array<int>()`
     let before = *input;
     let name = identifier(input).inspect_err(|_| expected(input, "expression"))?;
@@ -1342,7 +1345,7 @@ fn shift(input: &mut &str) -> Result<Expression> {
 }
 
 fn relational(input: &mut &str) -> Result<Expression> {
-    binary_left(input, shift, |s: &str| {
+    binary_left(input, is_test, |s: &str| {
         if s.starts_with("<=") { return Some("<="); }
         if s.starts_with(">=") { return Some(">="); }
         // `<<` is handled by `shift` above
@@ -1350,6 +1353,24 @@ fn relational(input: &mut &str) -> Result<Expression> {
         if s.starts_with('>') && !s[1..].starts_with('=') && !s[1..].starts_with('>') { return Some(">"); }
         None
     })
+}
+
+/// `value is Pattern`. `is` is a keyword only here, after a value and before
+/// a pattern, so it stays usable as a name (`token.is(text)`).
+fn is_test(input: &mut &str) -> Result<Expression> {
+    let value = shift(input)?;
+    let mut rest = *input;
+    ws(&mut rest)?;
+    let keyword_start = pos(&rest);
+    if !keyword(&mut rest, "is") {
+        return Ok(value);
+    }
+    let keyword_span = Span { start: keyword_start, end: pos(&rest) };
+    ws(&mut rest)?;
+    *input = rest;
+    let pattern = pattern(input)?;
+    let span = Span { start: value.span().start, end: pattern.span.end };
+    Ok(Expression::Is { value: Box::new(value), pattern: Box::new(pattern), keyword_span, span })
 }
 
 fn equality(input: &mut &str) -> Result<Expression> {
@@ -1871,6 +1892,65 @@ fn match_statement(input: &mut &str) -> Result<Match> {
     Ok(Match { value, arms, else_arm, keyword_span, span })
 }
 
+/// A `match` that produces a value: `match (value) { A, B => 1, C => 2, else
+/// => 0 }`. Arms are separated by commas; a comma after the last is allowed.
+fn match_expression(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    if !keyword(input, "match") {
+        return Err(bt(input));
+    }
+    let keyword_span = Span { start, end: pos(input) };
+    ws(input)?;
+    let value = expression(input)?;
+    ws(input)?;
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
+    *input = &input[1..];
+    let mut arms = vec![];
+    let mut else_arm = None;
+    loop {
+        ws(input)?;
+        if input.is_empty() || input.starts_with('}') { break; }
+        if else_arm.is_some() {
+            expected_with_note(input, "'}'", Some((open, "to match this '{'")));
+            return Err(cut(input));
+        }
+        let arm_start = pos(input);
+        if keyword(&mut { *input }, "else") {
+            keyword(input, "else");
+            let else_span = Span { start: arm_start, end: pos(input) };
+            match_arrow(input)?;
+            let value = expression(input).map_err(|_| cut_expecting(input, "expression"))?;
+            else_arm = Some((else_span, value));
+        } else {
+            let mut patterns = vec![pattern(input)?];
+            loop {
+                ws(input)?;
+                if !input.starts_with(',') { break; }
+                *input = &input[1..];
+                ws(input)?;
+                patterns.push(pattern(input)?);
+            }
+            match_arrow(input)?;
+            let value = expression(input).map_err(|_| cut_expecting(input, "expression"))?;
+            let span = Span { start: arm_start, end: value.span().end };
+            arms.push(MatchValueArm { patterns, value, span });
+        }
+        ws(input)?;
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if !input.starts_with('}') {
+            return Err(cut_expecting(input, "',' or '}'"));
+        }
+    }
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
+    *input = &input[1..];
+    let span = Span { start, end: pos(input) };
+    Ok(Expression::Match(Box::new(MatchExpression { value, arms, else_arm, keyword_span, span })))
+}
+
 /// The `=>` between a match arm's patterns and its block, and the space after it.
 fn match_arrow(input: &mut &str) -> Result<()> {
     ws(input)?;
@@ -1880,9 +1960,20 @@ fn match_arrow(input: &mut &str) -> Result<()> {
     Ok(())
 }
 
-/// A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or `Case(x, _)`.
+/// A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or `Case(x, _)`;
+/// or a literal pattern: a number (`-1` too), character, string, `true` or
+/// `false`.
 fn pattern(input: &mut &str) -> Result<Pattern> {
     let start = pos(input);
+    let literal_start = input.starts_with(|c: char| c.is_ascii_digit() || c == '\'' || c == '"' || c == '@')
+        || (input.starts_with('-') && input[1..].starts_with(|c: char| c.is_ascii_digit()))
+        || keyword(&mut { *input }, "true")
+        || keyword(&mut { *input }, "false");
+    if literal_start {
+        let literal = primary_expression(input)?;
+        let span = literal.span();
+        return Ok(Pattern { literal: Some(literal), qualifier: None, case: String::new(), case_span: span, bindings: None, span });
+    }
     let mut segments = vec![];
     loop {
         let segment_start = pos(input);
@@ -1924,7 +2015,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         *input = &input[1..];
         bindings = Some(names);
     }
-    Ok(Pattern { qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
+    Ok(Pattern { literal: None, qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
 }
 
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
@@ -3766,6 +3857,12 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
             ptr_check_block(&c.body)
         }
         Expression::Tuple { elements, .. } => elements.iter().try_for_each(ptr_check_expr),
+        Expression::Match(m) => {
+            ptr_check_expr(&m.value)?;
+            m.arms.iter().try_for_each(|arm| ptr_check_expr(&arm.value))?;
+            m.else_arm.as_ref().map_or(Ok(()), |(_, v)| ptr_check_expr(v))
+        }
+        Expression::Is { value, .. } => ptr_check_expr(value),
     }
 }
 

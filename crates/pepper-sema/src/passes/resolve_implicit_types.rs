@@ -265,6 +265,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
     match expr {
         Expression::Destructure { value, .. } => type_of_expr(value, scopes, current_struct),
         Expression::StaticCase { ty, .. } => ty.clone(),
+        Expression::Subject { ty, .. } => ty.clone(),
+        Expression::WithSubject(with) => type_of_expr(&with.body, scopes, current_struct),
         Expression::CaseValue(value) => {
             let subject = type_of_expr(&value.subject, scopes, current_struct);
             let field = |name: &str| scopes.field_type(&subject, name);
@@ -545,7 +547,16 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::Cast { ty, .. } => ty.clone(),
         // Both ternary arms have the same type (enforced by sema): report it
         // so `var x = c ? A() : B()` infers the arm's type.
-        Expression::Ternary { true_expr, .. } => type_of_expr(true_expr, scopes, current_struct),
+        // A `match` expression's chain: the first arm's type (its last `?:`
+        // may fall through to `NoMatch`, which has none).
+        Expression::Ternary { true_expr, false_expr, .. } => {
+            let ty = type_of_expr(true_expr, scopes, current_struct);
+            if ty.is_auto() && matches!(true_expr.as_ref(), Expression::NoMatch) {
+                type_of_expr(false_expr, scopes, current_struct)
+            } else {
+                ty
+            }
+        }
         _ => TypeName::auto(),
     }
 }
@@ -958,6 +969,32 @@ fn resolve_expression(
     current_struct: &Option<TypeName>,
     _var: Option<&mut VariableDef>,
 ) {
+    fill_subjects(expr, scopes, current_struct.as_ref());
+    resolve_each(expr, scopes, current_struct);
+    fill_subjects(expr, scopes, current_struct.as_ref());
+}
+
+/// Type each `Subject` of a `match` expression or `is` test as the value
+/// its `WithSubject` examines, once that is known.
+fn fill_subjects(expr: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        let Expression::WithSubject(with) = e else { return };
+        let ty = type_of_expr(&with.subject, scopes, current);
+        if ty.is_auto() || ty.is_empty() {
+            return;
+        }
+        let id = with.id;
+        crate::passes::walk_expression(&mut with.body, &mut |inner: &mut Expression| {
+            if let Expression::Subject { id: found, ty: slot, .. } = inner
+                && *found == id
+            {
+                *slot = ty.clone();
+            }
+        });
+    });
+}
+
+fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Option<TypeName>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
         resolve_overload(e, scopes, current);

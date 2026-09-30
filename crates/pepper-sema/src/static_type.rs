@@ -136,6 +136,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
         Expression::Destructure { value, .. } => of(value, table, current),
         Expression::StaticCase { ty, .. } => Some(ty.clone()),
+        Expression::Subject { ty, .. } if !ty.is_auto() => Some(ty.clone()),
+        Expression::WithSubject(with) => of(&with.body, table, current),
         Expression::MemberRef { lhs, name, .. }
             if of(lhs, table, current).is_some_and(|t| t.tuple_element(name).is_some()) =>
         {

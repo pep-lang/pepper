@@ -212,8 +212,17 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
                 if let Some(q) = &mut p.qualifier {
                     subst(q, aliases);
                 }
+                if let Some(literal) = &mut p.literal {
+                    subst_expr(literal, aliases, values);
+                }
             }
         }
+        Expression::WithSubject(with) => {
+            subst_expr(&mut with.subject, aliases, values);
+            subst_expr(&mut with.body, aliases, values);
+        }
+        Expression::Subject { ty, .. } => subst(ty, aliases),
+        Expression::NoMatch => {}
         Expression::MakeClosure { value, ty, .. } => {
             subst(ty, aliases);
             subst_expr(value, aliases, values);

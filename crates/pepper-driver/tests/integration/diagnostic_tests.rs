@@ -1928,10 +1928,10 @@ fn enum_to_integer_needs_as() {
 #[test]
 fn match_on_a_non_enum() {
     assert_eq!(
-        error_of("match_on_a_non_enum", "main(): int {\n    match (1) {\n    }\n    return 0;\n}\n"),
-        "main.pep:2:12: error: cannot match on a value of 'i32': 'match' needs an enum\n\
-         \x20   2 |     match (1) {\n\
-         \x20     |            ^"
+        error_of("match_on_a_non_enum", "main(): int {\n    match (1.5) {\n    }\n    return 0;\n}\n"),
+        "main.pep:2:12: error: cannot match on a value of 'f64': 'match' needs an enum, an integer, 'char', 'bool' or 'String'\n\
+         \x20   2 |     match (1.5) {\n\
+         \x20     |            ^~~"
     );
 }
 
@@ -2202,5 +2202,38 @@ fn tuple_literal_label_mismatch() {
         "main.pep:2:13: error: label 'column' does not match 'line', the label of element 0 of '(line: int, column: int)'\n\
          \x20   2 |     return (column: 7, line: 3);\n\
          \x20     |             ^~~~~~"
+    );
+}
+
+#[test]
+fn match_expression_and_is_errors_point_at_the_token() {
+    let shape = "enum Shape {\n    Circle(radius: int),\n    Empty,\n}\n";
+    assert_eq!(
+        error_of("is_binds_outside", &format!("{}main(): int {{\n    var ok = Shape.Empty is Circle(r);\n    return 0;\n}}\n", shape)),
+        "main.pep:6:36: error: cannot bind 'r' here: 'is' binds names only as the whole condition of an 'if' or 'while'\n\
+         \x20   6 |     var ok = Shape.Empty is Circle(r);\n\
+         \x20     |                                    ^"
+    );
+    assert_eq!(
+        error_of("is_binding_scope", &format!("{}main(): int {{\n    if (Shape.Empty is Circle(r)) {{ return r; }}\n    return r;\n}}\n", shape)),
+        "main.pep:7:12: error: use of undeclared identifier 'r'\n\
+         \x20   7 |     return r;\n\
+         \x20     |            ^"
+    );
+    assert_eq!(
+        error_of("match_needs_else", "main(): int {\n    return match (3) { 1 => 1 };\n}\n"),
+        "main.pep:2:12: error: match on 'i32' needs an 'else' arm\n\
+         \x20   2 |     return match (3) { 1 => 1 };\n\
+         \x20     |            ^~~~~\n\
+         note: literal patterns cannot handle every value"
+    );
+    assert_eq!(
+        error_of("match_duplicate_literal", "main(): int {\n    return match (3) { 1 => 1, 1 => 2, else => 0 };\n}\n"),
+        "main.pep:2:32: error: value '1' is already handled\n\
+         \x20   2 |     return match (3) { 1 => 1, 1 => 2, else => 0 };\n\
+         \x20     |                                ^\n\
+         main.pep:2:24: note: first handled here\n\
+         \x20   2 |     return match (3) { 1 => 1, 1 => 2, else => 0 };\n\
+         \x20     |                        ^"
     );
 }

@@ -252,6 +252,18 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
             .or_else(|| in_type_name(&c.return_type, offset))
             .or_else(|| in_block(&c.body, offset)),
         ast::Expression::Tuple { elements, .. } => elements.iter().find_map(|e| in_expression_types(e, offset)),
+        ast::Expression::Match(m) => in_expression_types(&m.value, offset)
+            .or_else(|| {
+                m.arms.iter().find_map(|arm| {
+                    arm.patterns
+                        .iter()
+                        .find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))
+                        .or_else(|| in_expression_types(&arm.value, offset))
+                })
+            })
+            .or_else(|| m.else_arm.as_ref().and_then(|(_, v)| in_expression_types(v, offset))),
+        ast::Expression::Is { value, pattern, .. } => in_expression_types(value, offset)
+            .or_else(|| pattern.qualifier.as_ref().and_then(|q| in_type_name(q, offset))),
         ast::Expression::Literal { .. } | ast::Expression::SymbolRef { .. } => None,
     }
 }

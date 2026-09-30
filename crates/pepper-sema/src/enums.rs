@@ -121,8 +121,19 @@ pub fn case_value_type(
             ))
             .at(first.loc));
         }
-        return Err(Diagnostic::error(format!("cannot match on a value of '{}': 'match' needs an enum", shown(subject)))
-            .at(value.subject.loc()));
+        if is_literal_type(subject) {
+            return Err(Diagnostic::error(format!(
+                "'{}' is not a literal: a 'match' on '{}' takes literal patterns",
+                first.case,
+                shown(subject)
+            ))
+            .at(first.case_loc));
+        }
+        return Err(Diagnostic::error(format!(
+            "cannot match on a value of '{}': 'match' needs an enum, an integer, 'char', 'bool' or 'String'",
+            shown(subject)
+        ))
+        .at(value.subject.loc()));
     };
     let mut found: Option<(TypeName, &CaseChoice)> = None;
     for choice in &value.choices {
@@ -266,8 +277,15 @@ fn case_value(e: &EnumDef, case: &EnumCaseDef, loc: Loc) -> Expression {
 
 /// Every function body, method body and initializer in the module.
 fn for_each_body(module: &mut Module, mut f: impl FnMut(&mut Block, bool)) {
+    for_each_body_in(module, |body, generic, _| f(body, generic));
+}
+
+/// [`for_each_body`], with the struct whose method each body is (its
+/// `this`), if any.
+fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Option<&TypeName>)) {
     for st in &mut module.structs {
         let generic_base = st.ty.is_generic() && st.name == st.ty.name;
+        let current = st.ty.clone();
         for method in st
             .method_members
             .iter_mut()
@@ -276,28 +294,29 @@ fn for_each_body(module: &mut Module, mut f: impl FnMut(&mut Block, bool)) {
             .chain([&mut st.destructor, &mut st.acquire, &mut st.release])
         {
             if let Some(body) = &mut method.body {
-                f(body, generic_base || method.is_generic_func);
+                f(body, generic_base || method.is_generic_func, Some(&current));
             }
         }
     }
     for extension in &mut module.extensions {
+        let current = extension.target.clone();
         for method in &mut extension.methods {
             if let Some(body) = &mut method.body {
-                f(body, true);
+                f(body, true, Some(&current));
             }
         }
     }
     for tr in &mut module.traits {
         for method in &mut tr.methods {
             if let Some(body) = &mut method.body {
-                f(body, true);
+                f(body, true, None);
             }
         }
     }
     for function in &mut module.functions {
         let generic = function.is_generic_func;
         if let Some(body) = &mut function.body {
-            f(body, generic);
+            f(body, generic, None);
         }
     }
 }
@@ -637,19 +656,25 @@ fn no_case(name: &str, e: &EnumDef, at: Loc) -> Diagnostic {
         .with_note(format!("'{}' declared here", e.name), Some(e.loc))
 }
 
-/// What one `match` handles: each case to the first pattern naming it.
+/// What one `match` handles: each case (or literal) to the first pattern
+/// naming it.
 #[derive(Default)]
 struct Coverage {
     site: Option<MatchSite>,
-    /// The enum matched (as shown) and its cases.
+    /// The enum matched (as shown) and its cases; for a literal match, the
+    /// type matched and no cases.
     matched: Option<(String, Vec<EnumCaseDef>)>,
+    /// The `match` is over a type with literal patterns (`int`, `String`).
+    literal: bool,
     handled: BTreeMap<String, Loc>,
 }
 
-/// The enum a `match` is over: a value enum, or a reference enum's cases.
+/// What a `match` is over: a value enum, a reference enum's cases, or a type
+/// matched by literals.
 enum Matched<'e> {
     Value(&'e EnumDef),
     Reference { ty: TypeName, cases: Vec<EnumCaseDef>, declared: Loc },
+    Literal(TypeName),
 }
 
 impl Matched<'_> {
@@ -657,13 +682,16 @@ impl Matched<'_> {
         if let Some(e) = enums.get(&ty.to_string()) {
             return Some(Matched::Value(e));
         }
+        if is_literal_type(ty) {
+            return Some(Matched::Literal(ty.clone()));
+        }
         reference_cases(ty).map(|(cases, declared)| Matched::Reference { ty: ty.clone(), cases, declared })
     }
 
     fn name(&self) -> String {
         match self {
             Matched::Value(e) => e.name.clone(),
-            Matched::Reference { ty, .. } => shown(ty),
+            Matched::Reference { ty, .. } | Matched::Literal(ty) => shown(ty),
         }
     }
 
@@ -671,32 +699,49 @@ impl Matched<'_> {
         match self {
             Matched::Value(e) => &e.cases,
             Matched::Reference { cases, .. } => cases,
+            Matched::Literal(_) => &[],
         }
     }
 }
 
-/// `subject.__tag`, the case of a reference enum's object.
-fn tag_of(subject: &str, ty: &TypeName, at: Loc) -> Expression {
-    Expression::MemberRef {
-        lhs: Box::new(Expression::SymbolRef { id: subject.to_string(), ty: ty.clone(), loc: at }),
-        name: TAG_FIELD.to_string(),
-        loc: at,
-    }
+/// A type `match` compares with literal patterns: an integer, `char`,
+/// `bool`, or `String`.
+fn is_literal_type(ty: &TypeName) -> bool {
+    ty.is_scalar()
+        && (ty.name == "String"
+            || (crate::type_name::INTEGRAL_TYPES.contains(ty.name.as_str())
+                && !ty.name.ends_with('*')
+                && !matches!(ty.name.as_str(), "void" | "__auto" | "f32" | "float" | "f64" | "double")))
 }
 
-fn tag_is(subject: &str, ty: &TypeName, case: &EnumCaseDef, at: Loc) -> Expression {
+/// The subject of a lowered `match` or `is` test, typed as `ty`: its hidden
+/// `__match_N` local, or the `Subject` of a `match` expression.
+fn typed(subject: &Expression, ty: &TypeName) -> Expression {
+    let mut subject = subject.clone();
+    if let Expression::SymbolRef { ty: slot, .. } | Expression::Subject { ty: slot, .. } = &mut subject {
+        *slot = ty.clone();
+    }
+    subject
+}
+
+/// `subject.__tag`, the case of a reference enum's object.
+fn tag_of(subject: &Expression, at: Loc) -> Expression {
+    Expression::MemberRef { lhs: Box::new(subject.clone()), name: TAG_FIELD.to_string(), loc: at }
+}
+
+fn tag_is(subject: &Expression, case: &EnumCaseDef, at: Loc) -> Expression {
     Expression::Binary {
         op: BinaryOp::Equal,
-        lhs: Box::new(tag_of(subject, ty, at)),
+        lhs: Box::new(tag_of(subject, at)),
         rhs: Box::new(Expression::IntLiteral(case.value)),
         loc: at,
     }
 }
 
 /// The payload field a pattern's binding reads: `subject.Text.text`.
-fn case_field(subject: &str, ty: &TypeName, case: &EnumCaseDef, index: usize, at: Loc) -> Expression {
+fn case_field(subject: &Expression, case: &EnumCaseDef, index: usize, at: Loc) -> Expression {
     Expression::MemberRef {
-        lhs: Box::new(Expression::SymbolRef { id: subject.to_string(), ty: ty.clone(), loc: at }),
+        lhs: Box::new(subject.clone()),
         name: payload_field(&case.name, &case.payload[index].0),
         loc: at,
     }
@@ -708,11 +753,13 @@ fn case_field(subject: &str, ty: &TypeName, case: &EnumCaseDef, index: usize, at
 /// specializations are lowered in their place.
 pub fn lower_matches(module: &mut Module) {
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
+    let table = crate::static_type::StructTable::build(module);
     let mut warnings: Vec<Diagnostic> = vec![];
-    for_each_body(module, |block, generic| {
+    for_each_body_in(module, |block, generic, current| {
         if generic {
             return;
         }
+        check_arm_types(block, &table, current);
         // Per body: a generic function's specializations each hold a copy
         // of its `match`es.
         let mut coverage: BTreeMap<usize, Coverage> = BTreeMap::new();
@@ -773,24 +820,12 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
     let Some(Expression::CaseValue(value)) = var.default.clone() else {
         return vec![];
     };
-    let Expression::SymbolRef { id: subject, .. } = &value.subject else {
+    let Some((subject, picks)) = case_picks(&value, subjects) else {
         return vec![];
     };
-    let Some(ty) = subjects.get(subject) else {
-        return vec![];
-    };
-    let Some((cases, _)) = reference_cases(ty) else {
-        return vec![];
-    };
-    let picks: Vec<(&EnumCaseDef, usize)> = value
-        .choices
-        .iter()
-        .filter_map(|c| cases.iter().find(|case| case.name == c.case).map(|case| (case, c.index)))
-        .filter(|(case, index)| *index < case.payload.len())
-        .collect();
     let at = value.loc;
-    if let [(case, index)] = picks[..] {
-        var.default = Some(case_field(subject, ty, case, index, at));
+    if let [(case, index)] = &picks[..] {
+        var.default = Some(case_field(&subject, case, *index, at));
         return vec![];
     }
     // `var x; if (tag == A) { x = subject.A.x; } else if ... else { x = subject.Z.x; }`
@@ -800,7 +835,7 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
         items: vec![Statement::Expression(Expression::Binary {
             op: BinaryOp::Assign,
             lhs: Box::new(Expression::SymbolRef { id: var.name.clone(), ty: var.ty.clone(), loc: at }),
-            rhs: Box::new(case_field(subject, ty, case, index, at)),
+            rhs: Box::new(case_field(&subject, case, index, at)),
             loc: at,
         })],
         attributes: vec![],
@@ -813,7 +848,7 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
             Block {
                 name: String::new(),
                 items: vec![Statement::Branch(Branch {
-                    condition: tag_is(subject, ty, case, at),
+                    condition: tag_is(&subject, case, at),
                     if_block: assign(case, *index),
                     else_block: chain.take(),
                 })],
@@ -822,6 +857,41 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
         });
     }
     chain.map(|b| b.items).unwrap_or_default()
+}
+
+/// The typed subject a binding reads, and each case it may read from with
+/// the binding's position there.
+fn case_picks(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option<(Expression, Vec<(EnumCaseDef, usize)>)> {
+    let ty = match &value.subject {
+        Expression::SymbolRef { id, .. } => subjects.get(id)?.clone(),
+        Expression::Subject { ty, .. } => ty.clone(),
+        _ => return None,
+    };
+    let (cases, _) = reference_cases(&ty)?;
+    let picks: Vec<(EnumCaseDef, usize)> = value
+        .choices
+        .iter()
+        .filter_map(|c| cases.iter().find(|case| case.name == c.case).map(|case| (case.clone(), c.index)))
+        .filter(|(case, index)| *index < case.payload.len())
+        .collect();
+    Some((typed(&value.subject, &ty), picks))
+}
+
+/// A binding inside a `match` expression's arm value: the payload field, or
+/// `?:` on the tag when alternatives bind it.
+fn lower_case_value(value: &CaseValue) -> Option<Expression> {
+    let (subject, picks) = case_picks(value, &HashMap::new())?;
+    let at = value.loc;
+    let (last, rest) = picks.split_last()?;
+    let mut chain = case_field(&subject, &last.0, last.1, at);
+    for (case, index) in rest.iter().rev() {
+        chain = Expression::Ternary {
+            condition: Box::new(tag_is(&subject, case, at)),
+            true_expr: Box::new(case_field(&subject, case, *index, at)),
+            false_expr: Box::new(chain),
+        };
+    }
+    Some(chain)
 }
 
 fn lower_statement(
@@ -869,20 +939,82 @@ fn lower_statement(
     }
 }
 
-/// Lower the `match` statements inside closure literals an expression holds
-/// (lifted closures are methods, reached through `for_each_body`; this
-/// covers any still inline).
+/// Lower the `match` expressions and `is` tests in an expression, and the
+/// `match` statements inside closure literals it holds (lifted closures are
+/// methods, reached through `for_each_body`; this covers any still inline).
 fn lower_expressions(
     expr: &mut Expression,
     enums: &HashMap<String, EnumDef>,
     subjects: &mut HashMap<String, TypeName>,
     coverage: &mut BTreeMap<usize, Coverage>,
 ) {
-    crate::passes::walk_expression(expr, &mut |e| {
-        if let Expression::ClosureLiteral(c) = e {
+    match expr {
+        Expression::ClosureLiteral(c) => {
             lower_block(&mut c.body, enums, &mut subjects.clone(), coverage);
+            return;
+        }
+        Expression::MatchArm(test) => {
+            let test = test.clone();
+            *expr = lower_arm(&test, enums, subjects, coverage).unwrap_or(Expression::BoolLiteral(false));
+            return;
+        }
+        Expression::CaseValue(value) => {
+            if let Some(lowered) = lower_case_value(value) {
+                *expr = lowered;
+            }
+            return;
+        }
+        Expression::WithSubject(with) => {
+            let ty = subject_type(&with.body, with.id);
+            if let Some(ty) = &ty
+                && is_reference_enum(ty)
+            {
+                with.null_message = Some(format!("match on a null '{}'", shown(ty)));
+            }
+            lower_expressions(&mut with.subject, enums, subjects, coverage);
+            lower_expressions(&mut with.body, enums, subjects, coverage);
+            drop_no_match(&mut with.body);
+            return;
+        }
+        _ => {}
+    }
+    for child in crate::passes::children_mut(expr) {
+        lower_expressions(child, enums, subjects, coverage);
+    }
+}
+
+/// A `match` expression without `else`, once its tests are lowered: the
+/// last arm's value stands on its own (`check_exhaustive` reports a case no
+/// arm handles), so `test ? value : NoMatch` becomes `value`.
+fn drop_no_match(chain: &mut Expression) {
+    let mut at = chain;
+    loop {
+        match at {
+            Expression::Ternary { true_expr, false_expr, .. } if matches!(false_expr.as_ref(), Expression::NoMatch) => {
+                let value = std::mem::replace(true_expr.as_mut(), Expression::NoMatch);
+                *at = value;
+                return;
+            }
+            Expression::Ternary { false_expr, .. } => at = false_expr,
+            _ => return,
+        }
+    }
+}
+
+/// The type `resolve_implicit_types` gave the `Subject`s of the
+/// `WithSubject` numbered `id`.
+fn subject_type(body: &Expression, id: usize) -> Option<TypeName> {
+    let mut found = None;
+    let mut body = body.clone();
+    crate::passes::walk_expression(&mut body, &mut |e| {
+        if let Expression::Subject { id: n, ty, .. } = e
+            && *n == id
+            && found.is_none()
+        {
+            found = Some(ty.clone());
         }
     });
+    found
 }
 
 /// The `==` tests one arm stands for, or `None` after reporting an error.
@@ -892,90 +1024,64 @@ fn lower_arm(
     subjects: &HashMap<String, TypeName>,
     coverage: &mut BTreeMap<usize, Coverage>,
 ) -> Option<Expression> {
-    let Expression::SymbolRef { id, loc: subject_loc, .. } = &test.subject else {
-        return None;
+    let (ty, subject_loc) = match &test.subject {
+        Expression::SymbolRef { id, loc, .. } => (subjects.get(id).cloned().unwrap_or_else(TypeName::auto), *loc),
+        Expression::Subject { ty, loc, .. } => (ty.clone(), *loc),
+        _ => return None,
     };
-    let ty = subjects.get(id).cloned().unwrap_or_else(TypeName::auto);
+    let subject = typed(&test.subject, &ty);
     let entry = coverage.entry(test.site.id).or_default();
     entry.site = Some(test.site.clone());
     let Some(matched) = Matched::of(&ty, enums) else {
         let shown = if ty.is_auto() { "an unknown type".to_string() } else { format!("'{}'", ty) };
         report(
-            Diagnostic::error(format!("cannot match on a value of {}: 'match' needs an enum", shown))
-                .at(*subject_loc),
+            Diagnostic::error(format!(
+                "cannot match on a value of {}: 'match' needs an enum, an integer, 'char', 'bool' or 'String'",
+                shown
+            ))
+            .at(subject_loc),
         );
         return None;
     };
     entry.matched = Some((matched.name(), matched.cases().to_vec()));
+    entry.literal = matches!(matched, Matched::Literal(_));
     let mut condition: Option<Expression> = None;
     for p in &test.patterns {
-        let qualifier_fits = |q: &TypeName| match &matched {
-            Matched::Value(e) => q.to_string() == e.name,
-            Matched::Reference { ty, .. } => q.name == ty.name,
-        };
-        if let Some(q) = &p.qualifier
-            && !qualifier_fits(q)
-        {
+        if let Some(first) = entry.handled.get(&p.case) {
+            let what = if p.literal.is_some() { "value" } else { "case" };
             report(
-                Diagnostic::error(format!("'{}' is not the type of the value matched, '{}'", q, matched.name()))
-                    .at(p.loc)
-                    .with_note("the value matched is here", Some(*subject_loc)),
-            );
-            return None;
-        }
-        let case = match &matched {
-            Matched::Value(e) => match e.case(&p.case) {
-                Some(case) => case,
-                None => {
-                    report(no_case(&p.case, e, p.loc));
-                    return None;
-                }
-            },
-            Matched::Reference { ty, cases, declared } => match find_case(cases, &p.case, ty, *declared, p.loc) {
-                Ok(case) => case,
-                Err(d) => {
-                    report(d);
-                    return None;
-                }
-            },
-        };
-        match (&matched, &p.bindings) {
-            (Matched::Value(e), Some(bindings)) => {
-                let at = bindings.first().map_or(p.loc, |(_, l)| *l);
-                report(
-                    Diagnostic::error(format!("case '{}' of '{}' carries no values to bind", case.name, e.name))
-                        .at(at)
-                        .with_note(format!("'{}' declared here", case.name), Some(case.loc)),
-                );
-                return None;
-            }
-            (Matched::Reference { .. }, Some(bindings)) => {
-                let extra = bindings.get(case.payload.len()).map(|(_, l)| *l);
-                if let Err(d) = check_binding_count(case, bindings.len(), extra, p.loc) {
-                    report(d);
-                    return None;
-                }
-            }
-            _ => {}
-        }
-        if let Some(first) = entry.handled.get(&case.name) {
-            report(
-                Diagnostic::error(format!("case '{}' is already handled", case.name))
+                Diagnostic::error(format!("{} '{}' is already handled", what, p.case))
                     .at(p.loc)
                     .with_note("first handled here", Some(*first)),
             );
             return None;
         }
-        entry.handled.insert(case.name.clone(), p.loc);
-        let equal = match &matched {
-            Matched::Value(e) => Expression::Binary {
-                op: BinaryOp::Equal,
-                lhs: Box::new(Expression::SymbolRef { id: id.clone(), ty: ty.clone(), loc: *subject_loc }),
-                rhs: Box::new(case_value(e, case, p.loc)),
-                loc: p.loc,
-            },
-            Matched::Reference { .. } => tag_is(id, &ty, case, p.loc),
+        let equal = match (&matched, &p.literal) {
+            (Matched::Literal(_), Some(literal)) => literal.clone(),
+            (Matched::Literal(ty), None) => {
+                report(
+                    Diagnostic::error(format!(
+                        "'{}' is not a literal: a 'match' on '{}' takes literal patterns",
+                        p.case,
+                        shown(ty)
+                    ))
+                    .at(p.loc),
+                );
+                return None;
+            }
+            (_, Some(_)) => {
+                report(
+                    Diagnostic::error(format!(
+                        "a literal cannot match a value of '{}': name its cases",
+                        matched.name()
+                    ))
+                    .at(p.loc),
+                );
+                return None;
+            }
+            (_, None) => enum_test(p, &matched, &subject, subject_loc)?,
         };
+        entry.handled.insert(p.case.clone(), p.loc);
         condition = Some(match condition {
             None => equal,
             Some(c) => Expression::Binary { op: BinaryOp::LogicalOr, lhs: Box::new(c), rhs: Box::new(equal), loc: p.loc },
@@ -984,12 +1090,95 @@ fn lower_arm(
     Some(condition.unwrap_or(Expression::BoolLiteral(false)))
 }
 
+/// The test of a case pattern over an enum, or `None` after reporting an
+/// error.
+fn enum_test(p: &CasePattern, matched: &Matched, subject: &Expression, subject_loc: Loc) -> Option<Expression> {
+    let qualifier_fits = |q: &TypeName| match matched {
+        Matched::Value(e) => q.to_string() == e.name,
+        Matched::Reference { ty, .. } => q.name == ty.name,
+        Matched::Literal(_) => false,
+    };
+    if let Some(q) = &p.qualifier
+        && !qualifier_fits(q)
+    {
+        report(
+            Diagnostic::error(format!("'{}' is not the type of the value matched, '{}'", q, matched.name()))
+                .at(p.loc)
+                .with_note("the value matched is here", Some(subject_loc)),
+        );
+        return None;
+    }
+    let case = match matched {
+        Matched::Value(e) => match e.case(&p.case) {
+            Some(case) => case,
+            None => {
+                report(no_case(&p.case, e, p.loc));
+                return None;
+            }
+        },
+        Matched::Reference { ty, cases, declared } => match find_case(cases, &p.case, ty, *declared, p.loc) {
+            Ok(case) => case,
+            Err(d) => {
+                report(d);
+                return None;
+            }
+        },
+        Matched::Literal(_) => return None,
+    };
+    match (matched, &p.bindings) {
+        (Matched::Value(e), Some(bindings)) => {
+            let at = bindings.first().map_or(p.loc, |(_, l)| *l);
+            report(
+                Diagnostic::error(format!("case '{}' of '{}' carries no values to bind", case.name, e.name))
+                    .at(at)
+                    .with_note(format!("'{}' declared here", case.name), Some(case.loc)),
+            );
+            return None;
+        }
+        (Matched::Reference { .. }, Some(bindings)) => {
+            let extra = bindings.get(case.payload.len()).map(|(_, l)| *l);
+            if let Err(d) = check_binding_count(case, bindings.len(), extra, p.loc) {
+                report(d);
+                return None;
+            }
+        }
+        _ => {}
+    }
+    Some(match matched {
+        Matched::Value(e) => Expression::Binary {
+            op: BinaryOp::Equal,
+            lhs: Box::new(subject.clone()),
+            rhs: Box::new(case_value(e, case, p.loc)),
+            loc: p.loc,
+        },
+        _ => tag_is(subject, case, p.loc),
+    })
+}
+
 /// Report a `match` that leaves cases unhandled; return the warning for an
-/// `else` that nothing reaches.
+/// `else` that nothing reaches. An `is` test handles what it names.
 fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
     let (Some(site), Some((name, cases))) = (&c.site, &c.matched) else {
         return None;
     };
+    if site.partial {
+        return None;
+    }
+    if c.literal {
+        let every_bool = name == "bool" && c.handled.contains_key("true") && c.handled.contains_key("false");
+        match site.else_arm {
+            Some(else_loc) if every_bool => {
+                return Some(Diagnostic::warning("'else' is unreachable: 'true' and 'false' are both handled").at(else_loc));
+            }
+            None if !every_bool => report(
+                Diagnostic::error(format!("match on '{}' needs an 'else' arm", name))
+                    .at(site.keyword)
+                    .with_note("literal patterns cannot handle every value", None),
+            ),
+            _ => {}
+        }
+        return None;
+    }
     let missing: Vec<&EnumCaseDef> = cases.iter().filter(|case| !c.handled.contains_key(&case.name)).collect();
     match site.else_arm {
         Some(else_loc) if missing.is_empty() && !cases.is_empty() => {
@@ -1017,4 +1206,51 @@ fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
         }
     }
     None
+}
+
+/// Report a `match` expression whose arms produce values of types that do
+/// not mix: it has the first arm's type. Numbers mix (they convert), and
+/// `__null` fits any reference.
+fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, current: Option<&TypeName>) {
+    crate::passes::walk_block(block, &mut |e| {
+        let Expression::WithSubject(with) = e else { return };
+        let mut arms: Vec<&Expression> = vec![];
+        let mut at = &with.body;
+        while let Expression::Ternary { condition, true_expr, false_expr } = at {
+            if !matches!(condition.as_ref(), Expression::MatchArm(_)) {
+                break;
+            }
+            arms.push(true_expr);
+            at = false_expr;
+        }
+        if arms.is_empty() {
+            return;
+        }
+        if !matches!(at, Expression::NoMatch) {
+            arms.push(at);
+        }
+        let first = arms[0];
+        let Some(expected) = crate::static_type::of(first, table, current) else { return };
+        for arm in &arms[1..] {
+            if matches!(arm, Expression::PointerLiteral) {
+                continue;
+            }
+            let Some(actual) = crate::static_type::of(arm, table, current) else { continue };
+            let primitive = |t: &TypeName| t.is_scalar() && crate::type_name::INTEGRAL_TYPES.contains(t.name.as_str());
+            if actual == expected || (primitive(&actual) && primitive(&expected)) {
+                continue;
+            }
+            let mut diagnostic = Diagnostic::error(format!(
+                "'match' arm has a value of type '{}', but the first arm's is '{}'",
+                shown(&actual),
+                shown(&expected)
+            ))
+            .at(arm.loc());
+            if !first.loc().is_none() {
+                diagnostic = diagnostic.with_note("the first arm's value is here", Some(first.loc()));
+            }
+            report(diagnostic);
+            return;
+        }
+    });
 }

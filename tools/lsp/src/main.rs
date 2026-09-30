@@ -28,7 +28,7 @@ use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 const KEYWORDS: &[&str] = &[
     "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
     "and", "or", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
-    "extend", "export", "shared", "enum", "match",
+    "extend", "export", "shared", "enum", "match", "is",
 ];
 
 // ── Position conversion ───────────────────────────────────────────────────────
@@ -238,6 +238,15 @@ fn push_pattern(bindings: &[ast::DestructureBinding], out: &mut Vec<Symbol>) {
     }
 }
 
+/// The names `if (x is P(a))` or `while (x is P(a))` binds in its block.
+fn push_is_bindings(condition: &ast::Expression, out: &mut Vec<Symbol>) {
+    if let ast::Expression::Is { pattern, .. } = condition {
+        for (name, span) in pattern.bindings.iter().flatten().filter(|(n, _)| n != "_") {
+            out.push(Symbol { name: name.clone(), name_span: *span, ty: String::new() });
+        }
+    }
+}
+
 fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>) {
     for stmt in &block.statements {
         let s = stmt.span();
@@ -258,6 +267,7 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                 ast::Statement::Block(b) => collect_locals_upto(b, offset, out),
                 ast::Statement::Branch(br) => {
                     if br.if_block.span.start <= offset && offset < br.if_block.span.end {
+                        push_is_bindings(&br.condition, out);
                         collect_locals_upto(&br.if_block, offset, out);
                     } else if let Some(e) = &br.else_block
                         && e.span.start <= offset
@@ -268,6 +278,7 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                 }
                 ast::Statement::While(w) => {
                     if w.block.span.start <= offset && offset < w.block.span.end {
+                        push_is_bindings(&w.condition, out);
                         collect_locals_upto(&w.block, offset, out);
                     }
                 }

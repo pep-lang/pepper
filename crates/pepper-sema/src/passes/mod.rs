@@ -270,8 +270,18 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
         Expression::Destructure { value, .. } => walk_expression(value, f),
-        Expression::MatchArm(test) => walk_expression(&mut test.subject, f),
+        Expression::MatchArm(test) => {
+            walk_expression(&mut test.subject, f);
+            for literal in test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()) {
+                walk_expression(literal, f);
+            }
+        }
         Expression::CaseValue(value) => walk_expression(&mut value.subject, f),
+        Expression::WithSubject(with) => {
+            walk_expression(&mut with.subject, f);
+            walk_expression(&mut with.body, f);
+        }
+        Expression::Subject { .. } | Expression::NoMatch => {}
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
@@ -300,6 +310,8 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::IsPod(_)
         | Expression::Default(_)
         | Expression::StaticCase { .. }
+        | Expression::Subject { .. }
+        | Expression::NoMatch
         | Expression::Allocate(_)
         | Expression::FunctionRef { .. }
         | Expression::MethodAddress(_)
@@ -321,8 +333,13 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::AtomicLoad(_, arg)
         | Expression::ForIterator(arg)
         | Expression::WithEntered(arg) => vec![arg.as_mut()],
-        Expression::MatchArm(test) => vec![&mut test.subject],
+        Expression::MatchArm(test) => {
+            let mut children = vec![&mut test.subject];
+            children.extend(test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()));
+            children
+        }
         Expression::CaseValue(value) => vec![&mut value.subject],
+        Expression::WithSubject(with) => vec![&mut with.subject, &mut with.body],
         Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => vec![ptr.as_mut(), val.as_mut()],
         Expression::AtomicCmpXchg(_, ptr, expected, desired) => vec![ptr.as_mut(), expected.as_mut(), desired.as_mut()],
         Expression::FunctionCall { args, .. } => args.iter_mut().collect(),
