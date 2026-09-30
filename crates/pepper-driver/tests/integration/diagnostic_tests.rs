@@ -52,13 +52,13 @@ fn parse_error() {
 }
 
 #[test]
-fn missing_semicolon_is_deprecated() {
+fn missing_semicolon() {
+    // Right after the statement, with the `;` to insert, not at the next line.
     let source = "main(): int {\n    var total = 1\n    return total;\n}\n";
-    let module = pepper_parser::parser::parse_source_diag(source).unwrap();
-    let warning = module.warnings[0].render_in("main.pep", source);
+    let error = pepper_parser::parser::parse_source_diag(source).unwrap_err();
     assert_eq!(
-        warning,
-        "main.pep:2:18: warning: omitting ';' is deprecated; end the statement with ';' [deprecated]\n\
+        error.render_in("main.pep", source),
+        "main.pep:2:18: error: expected ';'\n\
          \x20   2 |     var total = 1\n\
          \x20     |                  ^\n\
          \x20     |                  ;"

@@ -489,9 +489,9 @@ test(): int {
 #[test]
 fn double_type() {
     // C-style `(int)e` is NOT a cast (only `as` is spec'd). `(int)` parses as
-    // a TypeLiteral expression, so the source is syntactically valid but means
-    // three statements (`return int; (e - 6);`) — it does not cast. The
-    // working form is `e as int`.
+    // a TypeLiteral expression, so `return (int)` is a statement missing its
+    // `;` before `e`: an error rather than a cast. The working form is
+    // `e as int`.
     let src = r#"
 test(): int {
     double d = 1.5;
@@ -499,7 +499,8 @@ test(): int {
     return (int)e - 6;
 }
 "#;
-    assert!(pepper_parser::parser::parse_source("test.pep", src).is_ok());
+    let error = pepper_parser::parser::parse_source_diag(src).unwrap_err();
+    assert_eq!(error.message, "expected ';'");
 
     // Double arithmetic must stay in the float domain: `1.5 + 2.5` is f64 math
     // (4.0), not integer truncation (3) — guards result_type's float detection.

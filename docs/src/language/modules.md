@@ -35,7 +35,7 @@ An import comes in one of these forms:
 | `import geometry as g;` | A module's exports, qualified by `g`. |
 | `import [area, Point as Pt] from geometry;` | The listed exports of a module, unqualified. |
 
-The semicolon after an import is optional.
+An import ends with a semicolon.
 
 An import binds names only in the file that contains it. The exports of a file
 that this file did not import are not visible to it, even when another file of

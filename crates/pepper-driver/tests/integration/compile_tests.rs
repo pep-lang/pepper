@@ -31,37 +31,37 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 
 #[test]
 fn int_add() {
-    assert_eq!(compile_jit("test(): int { return 2 + 3 }"), 5);
+    assert_eq!(compile_jit("test(): int { return 2 + 3; }"), 5);
 }
 
 #[test]
 fn int_sub() {
-    assert_eq!(compile_jit("test(): int { return 2 - 4 }"), -2);
+    assert_eq!(compile_jit("test(): int { return 2 - 4; }"), -2);
 }
 
 #[test]
 fn int_mul() {
-    assert_eq!(compile_jit("test(): int { return 3 * 4 }"), 12);
+    assert_eq!(compile_jit("test(): int { return 3 * 4; }"), 12);
 }
 
 #[test]
 fn int_div() {
-    assert_eq!(compile_jit("test(): int { return 9 / 3 }"), 3);
+    assert_eq!(compile_jit("test(): int { return 9 / 3; }"), 3);
 }
 
 #[test]
 fn int_mod() {
-    assert_eq!(compile_jit("test(): int { return 9 % 4 }"), 1);
+    assert_eq!(compile_jit("test(): int { return 9 % 4; }"), 1);
 }
 
 #[test]
 fn int_pow() {
-    assert_eq!(compile_jit("test(): int { return 2 ** 5 }"), 32);
+    assert_eq!(compile_jit("test(): int { return 2 ** 5; }"), 32);
 }
 
 #[test]
 fn int_precedence() {
-    assert_eq!(compile_jit("test(): int { return 2 + 3 * 4 }"), 14);
+    assert_eq!(compile_jit("test(): int { return 2 + 3 * 4; }"), 14);
 }
 
 // ── FloatMath (unittests/FloatMath.cpp shapes) ──────────────────────────────
@@ -69,12 +69,12 @@ fn int_precedence() {
 #[test]
 fn float_add() {
     // 2.5 + 2.5 = 5.0 → coerce to int 5 for the i32 return.
-    assert_eq!(compile_jit("test(): int { return 2.5 + 2.5 }"), 5);
+    assert_eq!(compile_jit("test(): int { return 2.5 + 2.5; }"), 5);
 }
 
 #[test]
 fn float_mul() {
-    assert_eq!(compile_jit("test(): int { return 1.5 * 4.0 }"), 6);
+    assert_eq!(compile_jit("test(): int { return 1.5 * 4.0; }"), 6);
 }
 
 // ── Branches (unittests/Branches.cpp shapes) ────────────────────────────────
@@ -86,9 +86,9 @@ fn branch_then() {
             r#"
 test(): int {
     if (1 == 1) {
-        return 42
+        return 42;
     }
-    return 0
+    return 0;
 }
 "#
         ),
@@ -103,9 +103,9 @@ fn branch_else() {
             r#"
 test(): int {
     if (1 == 2) {
-        return 42
+        return 42;
     } else {
-        return 7
+        return 7;
     }
 }
 "#
@@ -122,10 +122,10 @@ fn function_call_args() {
         compile_jit(
             r#"
 add(a: int, b: int): int {
-    return a + b
+    return a + b;
 }
 test(): int {
-    return add(20, 22)
+    return add(20, 22);
 }
 "#
         ),
@@ -139,9 +139,9 @@ fn function_local() {
         compile_jit(
             r#"
 test(): int {
-    var x: int = 40
-    x += 2
-    return x
+    var x: int = 40;
+    x += 2;
+    return x;
 }
 "#
         ),
@@ -157,13 +157,13 @@ fn while_sum() {
         compile_jit(
             r#"
 test(): int {
-    var i: int = 0
-    var acc: int = 0
+    var i: int = 0;
+    var acc: int = 0;
     while (i < 6) {
-        acc += i
-        i += 1
+        acc += i;
+        i += 1;
     }
-    return acc
+    return acc;
 }
 "#
         ),
@@ -177,7 +177,7 @@ test(): int {
 fn full_pipeline_link_and_spawn() {
     let source = r#"
 main(): int {
-    return 0
+    return 0;
 }
 "#;
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");

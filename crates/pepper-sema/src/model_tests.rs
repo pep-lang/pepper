@@ -22,11 +22,11 @@ fn reserved_member_access_is_rejected() {
         "test.pep",
         r#"
 struct Test {
-    var x = 0
+    var x = 0;
 }
 test(): int {
-    var t = Test()
-    return t.__refcount
+    var t = Test();
+    return t.__refcount;
 }
 "#,
     )
@@ -41,11 +41,11 @@ test(): int {
 
 const BASIC_STRUCT: &str = r#"
 struct Test {
-    var x = 0
+    var x = 0;
 }
 test(): int {
-    var t = Test()
-    return t.x
+    var t = Test();
+    return t.x;
 }
 "#;
 
@@ -151,7 +151,7 @@ fn bracket_type_lowers_to_array() {
         "test(): int {
             int[] xs = Array<int>();
             int[][] ys = Array<Array<int>>();
-            return 0
+            return 0;
         }",
     );
     let body = module.functions[0].body.as_ref().expect("body");
@@ -176,7 +176,7 @@ fn widest_promotes() {
 
 #[test]
 fn negated_literal_folds() {
-    let module = compile("test(): int { return -5 }");
+    let module = compile("test(): int { return -5; }");
     let body = module.functions[0].body.as_ref().expect("body");
     let dumped = format!("{:?}", body);
     // ResolveLiterals folds `-5` into IntLiteral(-5); no Unary(Neg) remains.
@@ -186,7 +186,7 @@ fn negated_literal_folds() {
 
 #[test]
 fn as_cast_survives_to_model() {
-    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e\n}");
+    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e;\n}");
     let body = module.functions[0].body.as_ref().expect("body");
     // The declaration's default must be a Cast node (not folded away).
     let mut found = false;
@@ -206,7 +206,7 @@ fn as_cast_survives_to_model() {
 
 #[test]
 fn cast_inferred_var_takes_cast_type() {
-    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e\n}");
+    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e;\n}");
     let body = module.functions[0].body.as_ref().expect("body");
     for stmt in &body.items {
         if let crate::model::Statement::Declaration(crate::model::Declaration::Variable(v)) = stmt {
@@ -217,7 +217,7 @@ fn cast_inferred_var_takes_cast_type() {
 
 #[test]
 fn globals_land_in_module_globals() {
-    let module = compile("const counter = 7;\ntest(): int {\n    return counter\n}");
+    let module = compile("const counter = 7;\ntest(): int {\n    return counter;\n}");
     assert_eq!(module.globals.len(), 1);
     assert_eq!(module.globals[0].name, "counter");
     assert_eq!(module.globals[0].ty.to_string(), "i32");
@@ -230,8 +230,8 @@ fn type_alias_expands_in_model() {
 type I = int;
 type P = Result<int, Error>;
 f(): P {
-    var x: I = 0
-    return x
+    var x: I = 0;
+    return x;
 }
 "#,
     );
@@ -252,9 +252,9 @@ fn generic_type_alias_substitutes_params_and_defaults() {
     let module = compile(
         r#"
 type R<T, E=Error> = Result<T, E>;
-f(): R<u32> { return 0 }
-g(): R<i64, int> { return 0 }
-h(): R<u8> { return 0 }
+f(): R<u32> { return 0; }
+g(): R<i64, int> { return 0; }
+h(): R<u8> { return 0; }
 "#,
     );
     let ty_of = |name: &str| -> String {
@@ -294,7 +294,7 @@ fn type_alias_in_struct_fields_expands() {
     let module = compile(
         r#"
 type I = int;
-struct S { var x: I }
+struct S { var x: I; }
 "#,
     );
     let st = module.structs.iter().find(|s| s.name == "S").expect("struct S");
@@ -310,7 +310,7 @@ type Pair = Result<int, Error>;
 f(): int {
     var b = Pair.ok(7);
     var c = g<I>(5);
-    return 0
+    return 0;
 }
 "#,
     );

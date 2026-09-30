@@ -998,9 +998,14 @@ fn deprecation_warnings(program: &Program, sema: Option<&SemaModule>) -> Vec<dia
 }
 
 /// Every warning in `text`, the document `program` is rooted at (when it
-/// loaded): the parser's, then [`deprecation_warnings`].
+/// loaded): the parser's, then [`deprecation_warnings`]. When `text` does not
+/// parse, its parse error instead, if it carries a fix (a missing `;`).
 fn document_warnings(text: &str, program: Option<&Program>) -> Vec<diag::Diagnostic> {
-    let Ok(module) = pepper_parser::parser::parse_source_diag(text) else { return vec![] };
+    let module = match pepper_parser::parser::parse_source_diag(text) {
+        Ok(module) => module,
+        Err(error) if !error.fixes.is_empty() => return vec![error],
+        Err(_) => return vec![],
+    };
     let mut warnings = module.warnings;
     if let Some(program) = program {
         let sema = sema_model_of(program).ok();

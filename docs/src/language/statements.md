@@ -16,31 +16,26 @@ line.
 {{#include ../../examples/statements-semicolons.pep}}
 ```
 
-## Leaving out a `;` is deprecated
+## A missing `;` is an error
 
-Semicolons used to be optional. Code that leaves one out still compiles, with
-a warning at the place the `;` belongs and a fix that adds it. The language
-server offers it as a quick fix, and [`pep-fmt`](../tools/pep-fmt.md) adds
-them all:
+Leaving out a `;` is an error, reported right after the statement it should
+end, with a fix that adds it. The language server offers the fix as a quick
+fix:
 
 ```text
-main.pep:2:18: warning: omitting ';' is deprecated; end the statement with ';' [deprecated]
+main.pep:2:18: error: expected ';'
     2 |     var total = 1
       |                  ^
       |                  ;
 ```
 
-A later version makes a missing `;` an error.
-
-Without its `;`, a statement runs on for as long as the next line can
-continue it, since line breaks do not end anything. So
+Because line breaks do not end anything, a statement missing its `;` would
+otherwise run on into the next line whenever that line can continue it:
 
 ```pepper
 x = y
 -z
 ```
 
-is `x = y - z`, and a line that starts with `(` calls the expression on the
-line above. The one exception is a declaration: until a missing `;` becomes
-an error, a declaration without one ends at the end of its line, so
-`var x = 1` followed by `y = 2` stays two statements.
+reads as `x = y - z;` with its `;` missing, not as two statements. The error
+says where the `;` belongs when the parse cannot go on.

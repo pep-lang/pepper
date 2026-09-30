@@ -117,10 +117,6 @@ var average = 0.0;  # total / count
 them) are sorted: modules first (`import io;`), then files of this module
 (`import "util";`), each by name.
 
-**Semicolons** are added where a statement or declaration leaves its `;`
-out (see [Statements and semicolons](../language/statements.md)); none are
-removed.
-
 **Kept as written:** parentheses around
 conditions (`if x` and `if (x)` are both fine), fields declared either way
 (`int x;` or `var x: int;`), and the file's line endings (`\n` or `\r\n`).

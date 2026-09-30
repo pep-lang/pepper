@@ -111,14 +111,8 @@ operator_method_names(): HashSet<String> {
     return names;
 }
 
-## Returns whether a statement or declaration of `kind` ends with a `;`
-## rather than a block. A node of such a kind lacks its last `;` only when
-## the source omitted it, which is deprecated.
-##
-## @param kind one of the `NODE_` constants
-## @returns true for variables, type aliases, simple statements, imports,
-##     re-exports and `extern` functions
-export ends_in_semicolon(kind: int): bool {
+# Whether a node of `kind` ends in `;` (rather than in a block).
+ends_in_semicolon(kind: int): bool {
     return kind == NODE_VARIABLE
         or kind == NODE_DESTRUCTURE
         or kind == NODE_TYPE_ALIAS
@@ -141,6 +135,9 @@ struct Parser {
     bool _has_error;
     String _error_message = "";
     ulong _error_offset;
+    # Set by a missing `;`, which is reported over any error found further
+    # on, like the compiler's hard errors.
+    bool _missing_semicolon;
     # Whether a type is being read where an expression could also start, in
     # which case `a.b` is a qualified type only when `a` names an import.
     bool _probing;
@@ -203,7 +200,7 @@ struct Parser {
 
     _fail(message: String) {
         var offset = _peek().offset;
-        if (!_has_error or offset > _error_offset) {
+        if (!_missing_semicolon and (!_has_error or offset > _error_offset)) {
             _error_message = message;
             _error_offset = offset;
             _has_error = true;
@@ -234,12 +231,20 @@ struct Parser {
         }
     }
 
-    # Ends a simple statement or declaration: takes its `;` when there is
-    # one. The grammar lets a line break stand in for it.
+    # Ends a simple statement or declaration: takes its `;`, or fails with
+    # `expected ';'` right after its last token, as the compiler's
+    # `missing_semicolon` does.
     _finish_statement(node: Node) {
         if (_at(";")) {
             _take(node);
+            return;
         }
+        var last = _tokens[_position - 1];
+        _error_message = "expected ';'";
+        _error_offset = last.offset + last.text.size();
+        _has_error = true;
+        _missing_semicolon = true;
+        _failed = true;
     }
 
     # The operator at the input, joining the adjacent tokens that the lexer
@@ -1220,8 +1225,9 @@ struct Parser {
         return false;
     }
 
-    # The compiler's `decl_boundary`: what may follow a `Type name` statement.
-    # A line break counts only while a missing `;` is merely deprecated.
+    # The compiler's `decl_boundary` or `missing_decl_semicolon`: what may
+    # follow a `Type name` statement. After a line break it is one whose `;`
+    # is missing, which `_finish_statement` then reports.
     _declaration_boundary(): bool {
         return _at_end() or _at(";") or _at("}") or _peek().newlines_before > 0;
     }

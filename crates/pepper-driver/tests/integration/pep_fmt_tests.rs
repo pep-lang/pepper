@@ -156,15 +156,24 @@ fn pep_fmt_places_braces_attributes_and_declarations() {
 }
 
 #[test]
-fn pep_fmt_adds_semicolons_and_keeps_one_line_bodies_and_else_as_written() {
+fn pep_fmt_keeps_one_line_bodies_and_else_as_written() {
     assert_formats(
-        "main(): int {\n    for (var x in xs) { if x > 1 { continue } else if x < 0 { break; }\n    else { print(x) } }\n    return 0\n}\n",
+        "main(): int {\n    for (var x in xs) { if x > 1 { continue; } else if x < 0 { break; }\n    else { print(x); } }\n    return 0;\n}\n",
         "main(): int {\n    for (var x in xs) {\n        if x > 1 { continue; } else if x < 0 { break; } else {\n            print(x);\n        }\n    }\n    return 0;\n}\n",
     );
-    assert_formats(
-        "import io\ntype T = int\nstruct S {\n    int x\n}\nextern int puts(char* s)\nvar limit = 3  # most\n",
-        "import io;\ntype T = int;\n\nstruct S {\n    int x;\n}\n\nextern int puts(char* s);\nvar limit = 3;  # most\n",
-    );
+}
+
+#[test]
+fn pep_fmt_reports_a_missing_semicolon_after_the_statement() {
+    // As the compiler does: right after the last token, not at the next line.
+    let error = format("main(): int {\n    var total = 1\n    return total;\n}\n").unwrap_err();
+    assert_eq!(error, "<stdin>:2:18: error: expected ';'\n");
+    let error = format("import io\nvar x = 1;\n").unwrap_err();
+    assert_eq!(error, "<stdin>:1:10: error: expected ';'\n");
+    let error = format("struct S {\n    int x\n}\n").unwrap_err();
+    assert_eq!(error, "<stdin>:2:10: error: expected ';'\n");
+    let error = format("extern int puts(char* s)\n").unwrap_err();
+    assert_eq!(error, "<stdin>:1:25: error: expected ';'\n");
 }
 
 #[test]

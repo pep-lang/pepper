@@ -45,9 +45,9 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 
 const MATH_SOURCE: &str = r#"
 test(): int {
-    const x: int = 1
-    const y: int = 4
-    return x + y
+    const x: int = 1;
+    const y: int = 4;
+    return x + y;
 }
 "#;
 
@@ -58,34 +58,34 @@ fn simple_add() {
 
 #[test]
 fn int_literal_neg() {
-    assert_eq!(compile_jit("test(): int { return -5 }"), -5);
+    assert_eq!(compile_jit("test(): int { return -5; }"), -5);
 }
 
 #[test]
 fn int_arithmetic() {
-    assert_eq!(compile_jit("test(): int { return 2 + 3 * 4 }"), 14);
-    assert_eq!(compile_jit("test(): int { return 10 / 3 }"), 3);
-    assert_eq!(compile_jit("test(): int { return 10 % 3 }"), 1);
-    assert_eq!(compile_jit("test(): int { return 2 - 7 }"), -5);
+    assert_eq!(compile_jit("test(): int { return 2 + 3 * 4; }"), 14);
+    assert_eq!(compile_jit("test(): int { return 10 / 3; }"), 3);
+    assert_eq!(compile_jit("test(): int { return 10 % 3; }"), 1);
+    assert_eq!(compile_jit("test(): int { return 2 - 7; }"), -5);
 }
 
 #[test]
 fn shifts_and_bits() {
-    assert_eq!(compile_jit("test(): int { return 1 << 4 }"), 16);
-    assert_eq!(compile_jit("test(): int { return 256 >> 4 }"), 16);
-    assert_eq!(compile_jit("test(): int { return 6 & 3 }"), 2);
-    assert_eq!(compile_jit("test(): int { return 6 | 3 }"), 7);
-    assert_eq!(compile_jit("test(): int { return 6 ^ 3 }"), 5);
+    assert_eq!(compile_jit("test(): int { return 1 << 4; }"), 16);
+    assert_eq!(compile_jit("test(): int { return 256 >> 4; }"), 16);
+    assert_eq!(compile_jit("test(): int { return 6 & 3; }"), 2);
+    assert_eq!(compile_jit("test(): int { return 6 | 3; }"), 7);
+    assert_eq!(compile_jit("test(): int { return 6 ^ 3; }"), 5);
 }
 
 #[test]
 fn comparisons() {
-    assert_eq!(compile_jit("test(): int { return 1 == 1 }"), 1);
-    assert_eq!(compile_jit("test(): int { return 1 == 2 }"), 0);
-    assert_eq!(compile_jit("test(): int { return 1 != 2 }"), 1);
-    assert_eq!(compile_jit("test(): int { return 3 < 4 }"), 1);
-    assert_eq!(compile_jit("test(): int { return 4 < 3 }"), 0);
-    assert_eq!(compile_jit("test(): int { return 4 >= 4 }"), 1);
+    assert_eq!(compile_jit("test(): int { return 1 == 1; }"), 1);
+    assert_eq!(compile_jit("test(): int { return 1 == 2; }"), 0);
+    assert_eq!(compile_jit("test(): int { return 1 != 2; }"), 1);
+    assert_eq!(compile_jit("test(): int { return 3 < 4; }"), 1);
+    assert_eq!(compile_jit("test(): int { return 4 < 3; }"), 0);
+    assert_eq!(compile_jit("test(): int { return 4 >= 4; }"), 1);
 }
 
 #[test]
@@ -94,10 +94,10 @@ fn local_mutation() {
         compile_jit(
             r#"
 test(): int {
-    var x: int = 1
-    x += 2
-    x = x * 3
-    return x
+    var x: int = 1;
+    x += 2;
+    x = x * 3;
+    return x;
 }
 "#
         ),
@@ -111,11 +111,11 @@ fn branches() {
         compile_jit(
             r#"
 test(): int {
-    var x: int = 1
+    var x: int = 1;
     if (x == 1) {
-        return 42
+        return 42;
     }
-    return 0
+    return 0;
 }
 "#
         ),
@@ -125,11 +125,11 @@ test(): int {
         compile_jit(
             r#"
 test(): int {
-    var x: int = 2
+    var x: int = 2;
     if (x == 1) {
-        return 42
+        return 42;
     } else {
-        return 7
+        return 7;
     }
 }
 "#
@@ -144,13 +144,13 @@ fn while_loop() {
         compile_jit(
             r#"
 test(): int {
-    var i: int = 0
-    var acc: int = 0
+    var i: int = 0;
+    var acc: int = 0;
     while (i < 5) {
-        acc += i
-        i += 1
+        acc += i;
+        i += 1;
     }
-    return acc
+    return acc;
 }
 "#
         ),
@@ -164,10 +164,10 @@ fn function_call() {
         compile_jit(
             r#"
 add(a: int, b: int): int {
-    return a + b
+    return a + b;
 }
 test(): int {
-    return add(2, 3)
+    return add(2, 3);
 }
 "#
         ),
@@ -179,17 +179,17 @@ test(): int {
 fn pow() {
     // 2 ** 5 = 32; the C++ IntMath Pow test expects 384 (3 ** ? etc.) — check
     // the pow op is wired: 2**8 = 256.
-    assert_eq!(compile_jit("test(): int { return 2 ** 8 }"), 256);
+    assert_eq!(compile_jit("test(): int { return 2 ** 8; }"), 256);
 }
 
 #[test]
 fn ternary() {
     assert_eq!(
-        compile_jit("test(): int { return 1 == 1 ? 10 : 20 }"),
+        compile_jit("test(): int { return 1 == 1 ? 10 : 20; }"),
         10
     );
     assert_eq!(
-        compile_jit("test(): int { return 1 == 2 ? 10 : 20 }"),
+        compile_jit("test(): int { return 1 == 2 ? 10 : 20; }"),
         20
     );
 }
@@ -197,7 +197,7 @@ fn ternary() {
 #[test]
 fn float_math() {
     // Float ops through the i32 return: 2.0 + 3.0 = 5.0 → coerce to 5.
-    assert_eq!(compile_jit("test(): int { return 2.5 + 2.5 }"), 5);
+    assert_eq!(compile_jit("test(): int { return 2.5 + 2.5; }"), 5);
 }
 
 #[test]
@@ -207,11 +207,11 @@ fn struct_member() {
         compile_jit_with_runtime(
             r#"
 struct Test {
-    var x: int = 7
+    var x: int = 7;
 }
 test(): int {
-    var t = Test()
-    return t.x
+    var t = Test();
+    return t.x;
 }
 "#
         ),
@@ -225,12 +225,12 @@ fn struct_field_write() {
         compile_jit_with_runtime(
             r#"
 struct Test {
-    var x: int = 7
+    var x: int = 7;
 }
 test(): int {
-    var t = Test()
-    t.x = 21
-    return t.x
+    var t = Test();
+    t.x = 21;
+    return t.x;
 }
 "#
         ),
@@ -245,10 +245,10 @@ fn sizeof_struct() {
         compile_jit_with_runtime(
             r#"
 struct Test {
-    var x: int = 0
+    var x: int = 0;
 }
 test(): int {
-    return sizeof<Test>
+    return sizeof<Test>;
 }
 "#
         ),

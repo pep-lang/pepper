@@ -253,14 +253,16 @@ with no extension, and `module_name()` is the output's stem.
 - **Semicolons.** Simple statements and non-block declarations end with
   `;` (`docs/src/language/statements.md`); line breaks are whitespace
   everywhere (`ws`), so an expression runs on across lines for as long as a
-  token extends it. A missing `;` is deprecated: `semicolon` takes it, or
-  `missing_semicolon` warns at the end of the statement's span with a fix
-  inserting it. So that the warning lands after the statement rather than
-  after trailing whitespace, rules that look ahead for a continuing token
-  (postfix, binary, ternary, cast, type suffixes) do so on a copy of the
-  input and restore the position when nothing continues. The one place a
-  line break matters is `decl_boundary`: until a missing `;` is an error, a
-  declaration without one ends at the end of its line.
+  token extends it. `semicolon` takes the `;`, or `missing_semicolon` fails
+  the parse with `expected ';'` at the end of the statement's span, with a
+  fix inserting it (the language server's quick fix). So that the error
+  lands after the statement rather than after trailing whitespace, rules
+  that look ahead for a continuing token (postfix, binary, ternary, cast,
+  type suffixes) do so on a copy of the input and restore the position when
+  nothing continues. The one place a line break matters is
+  `missing_decl_semicolon`: a C-style declaration (`Box b = f()`) that
+  `decl_boundary` rejects is still reported as a declaration missing its
+  `;` when a line break follows it, rather than reparsed as an expression.
 - **Generic method calls.** In postfix position, `.name<types>(` is a call
   with type arguments only when `<` follows the name and `(` follows `>`
   with no whitespace; the method name becomes the string `"map<long>"`.
@@ -1076,15 +1078,16 @@ dogfooding of the language.
   `children`), since Pepper has no enums or sum types yet.
 - The parser mirrors `parsers.rs` decision for decision; like it, it
   treats line breaks as whitespace except at a declaration missing its `;`
-  (`_declaration_boundary`, using the next token's `newlines_before`).
+  (`_declaration_boundary`, using the next token's `newlines_before`), and
+  `_finish_statement` reports a missing `;` right after the statement, over
+  any error found further on, as `missing_semicolon` does.
   `>` is always its own token; the parser
   joins adjacent ones into `>>`, `>=` and `>>=` where the compiler's
   grammar would read those operators.
 - `tools/pep-fmt` turns the tree into a Wadler-style layout document
   (`doc.pep`: text, soft and hard lines, indentation, groups, and a
   `DOC_CHOICE` of layouts tried in order) and renders it at 120 columns;
-  `format.pep` holds the style (`_item` adds a `;` a statement or
-  declaration left out, using `syntax.ends_in_semicolon`); a long binary
+  `format.pep` holds the style; a long binary
   expression breaks before each operator, and `_member_chain` breaks a chain
   of three or more calls before each `.`. Trailing comments are emitted as line
   suffixes marked with byte 0x01, which `align_trailing_comments` aligns and

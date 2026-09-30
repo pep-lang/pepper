@@ -272,31 +272,30 @@ fn ws(input: &mut &str) -> Result<()> {
 
 /// Whether a line break comes before the next token (after spaces and a
 /// trailing comment). Line breaks mean nothing to the grammar; this only
-/// places the `;` a declaration left out (see [`decl_boundary`]).
+/// decides that a declaration without its `;` is one (see [`decl_boundary`]),
+/// so the error lands after it.
 fn at_line_break(input: &str) -> bool {
     let rest = input.trim_start_matches(|c: char| c.is_whitespace() && c != '\n');
     rest.starts_with('\n') || rest.starts_with('#')
 }
 
 /// Take the `;` that ends a statement or declaration whose text ends at byte
-/// `end`. A missing one is deprecated (see [`missing_semicolon`]).
+/// `end`, or fail with [`missing_semicolon`].
 fn semicolon(input: &mut &str, end: usize) -> Result<()> {
     let mut rest = *input;
     ws(&mut rest)?;
-    if rest.starts_with(';') {
-        *input = &rest[1..];
-    } else {
-        missing_semicolon(end);
+    if !rest.starts_with(';') {
+        return Err(missing_semicolon(end));
     }
+    *input = &rest[1..];
     Ok(())
 }
 
-/// Warn that the statement or declaration ending at byte `end` has no `;`,
-/// with a fix that adds it.
-fn missing_semicolon(end: usize) {
+/// Fail the parse: the statement or declaration ending at byte `end` has no
+/// `;`. The error sits right after it, with a fix that adds the `;`.
+fn missing_semicolon(end: usize) -> ErrMode<&'static str> {
     let loc = Loc::new(FileId::default(), Span { start: end, end });
-    let fix = Fix::replace("Insert ';'", loc, ";");
-    warn(Diagnostic::deprecated("omitting ';'", "end the statement with ';'", loc, fix));
+    fail_with(Diagnostic::error("expected ';'").at(loc).with_fix(Fix::replace("Insert ';'", loc, ";")))
 }
 
 /// Skip to the next token when it satisfies `test`; otherwise leave `input`
@@ -1966,15 +1965,18 @@ fn destructure_bindings(input: &mut &str) -> Result<Vec<DestructureBinding>> {
 
 /// After a `TypeName name` style declaration the next token must end the
 /// statement (`;`, `}`, or end of input); otherwise it was an expression all
-/// along. While a missing `;` is only deprecated, a line break also ends the
-/// declaration, the one place a line break means anything.
+/// along.
 fn decl_boundary(input: &mut &str) -> bool {
-    if at_line_break(input) {
-        return true;
-    }
     let mut rest = *input;
     let _ = ws(&mut rest);
     rest.is_empty() || rest.starts_with(';') || rest.starts_with('}')
+}
+
+/// Whether a declaration that [`decl_boundary`] rejected is one missing its
+/// `;`: a line break follows it. Its expression reading would fail further
+/// on, far from the missing `;`.
+fn missing_decl_semicolon(input: &str) -> bool {
+    at_line_break(input)
 }
 
 fn statement(input: &mut &str) -> Result<Statement> {
@@ -2045,6 +2047,9 @@ fn statement(input: &mut &str) -> Result<Statement> {
             // `type name` was really an expression such as `arr[idx] = 1`.
             if decl_boundary(input) {
                 return Ok(Statement::Declaration(Declaration::Variable(v)));
+            }
+            if missing_decl_semicolon(input) {
+                return Err(missing_semicolon(v.span.end));
             }
             expected(input, "';'");
         }
@@ -2349,7 +2354,6 @@ fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
         break;
     }
     *input = &input[1..];
-    ws(input)?;
     Ok((params, variadic))
 }
 
@@ -2984,6 +2988,9 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
         let f = variable_declaration(input, m_attrs)?;
         let end = f.span.end;
         if !decl_boundary(input) {
+            if missing_decl_semicolon(input) {
+                return Err(missing_semicolon(end));
+            }
             *input = after_attrs;
             return Err(bt(input));
         }
@@ -3241,6 +3248,9 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
             if decl_boundary(input) {
                 return Ok(Declaration::Variable(v));
             }
+            if missing_decl_semicolon(input) {
+                return Err(missing_semicolon(v.span.end));
+            }
         }
         *input = before;
         return Err(function_err);
@@ -3252,6 +3262,9 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
 
     let v = variable_declaration(input, vec![])?;
     if !decl_boundary(input) {
+        if missing_decl_semicolon(input) {
+            return Err(missing_semicolon(v.span.end));
+        }
         return Err(bt(input));
     }
     Ok(Declaration::Variable(v))
@@ -4240,7 +4253,7 @@ mod tests {
 
     #[test]
     fn test_var_declaration() {
-        let mut input = "var x: int = 42";
+        let mut input = "var x: int = 42;";
         let decl = variable_declaration(&mut input, vec![]).unwrap();
         assert_eq!(decl.name, "x");
         assert_eq!(decl.type_name.name, "int");
@@ -4293,7 +4306,7 @@ mod tests {
     #[test]
     fn test_import_forms() {
         let m = parse(
-            "import geometry\nimport \"shapes\";\nimport \"util\" as u;\n\
+            "import geometry;\nimport \"shapes\";\nimport \"util\" as u;\n\
              import [sqrt, pow as power] from math;\nimport [a] from \"file\";\nfoo() {}",
         );
         assert_eq!(m.imports.len(), 5);
@@ -4323,7 +4336,7 @@ mod tests {
 
     #[test]
     fn test_export_alias() {
-        let m = parse("export helper as help;\nexport m.sqrt as root\nexport Box;\nexport f(): int { return 0; }\nexport var x = 1;");
+        let m = parse("export helper as help;\nexport m.sqrt as root;\nexport Box;\nexport f(): int { return 0; }\nexport var x = 1;");
         assert_eq!(m.exports.len(), 3);
         assert_eq!((m.exports[0].symbol.as_str(), m.exports[0].exported_name()), ("helper", "help"));
         assert_eq!((m.exports[1].symbol.as_str(), m.exports[1].exported_name()), ("m.sqrt", "root"));
@@ -4632,7 +4645,7 @@ f() { var r = c.Result<int>.ok(1); }");
     fn test_for_prefixed_identifiers_are_not_loops() {
         let mut input = "format(x)";
         assert!(matches!(statement(&mut input).unwrap(), Statement::Expression(_)));
-        let mut input = "var forward = 1";
+        let mut input = "var forward = 1;";
         assert!(matches!(statement(&mut input).unwrap(), Statement::Declaration(_)));
     }
 
@@ -4699,29 +4712,32 @@ f() { var r = c.Result<int>.ok(1); }");
         assert_eq!(statements_of("x = 1; y = 2;").len(), 2);
         let statements = statements_of("return;");
         assert!(matches!(&statements[0], Statement::Return(ReturnStatement { expr: None, .. })));
-        // Leaving the `;` out still separates them, with a warning each.
-        let m = parse("f() {\n    x = 1 y = 2\n    var z = 3\n    z = 4\n}\n");
-        let Declaration::Function(f) = &m.declarations[0] else { panic!() };
-        assert_eq!(f.body.as_ref().unwrap().statements.len(), 4);
-        assert_eq!(m.warnings.len(), 4);
+    }
+
+    /// The offset of the `expected ';'` error parsing `src` reports, and the
+    /// fix it offers.
+    fn missing_semicolon_at(src: &str) -> usize {
+        let error = crate::parser::parse_source_diag(src).expect_err(src);
+        assert_eq!(error.message, "expected ';'", "{src:?}");
+        let loc = error.loc.expect("located");
+        assert_eq!(error.fixes[0].edits[0].replacement, ";");
+        assert_eq!(error.fixes[0].edits[0].loc, loc);
+        loc.span.start
     }
 
     #[test]
-    fn a_missing_semicolon_is_deprecated() {
-        let m = parse("import io\nvar x = 1  # one\nstruct S {\n    int y\n}\nf() {\n    x = 2\n    if x > 1 { return }\n}\n");
-        let at: Vec<usize> = m.warnings.iter().map(|w| w.loc.unwrap().span.start).collect();
-        // After `io`, `1`, `y`, `2` and `return`.
-        assert_eq!(at, vec![9, 19, 47, 65, 87]);
-        assert!(m.warnings.iter().all(|w| w.fixes[0].edits[0].replacement == ";"));
-        let m = parse("import io;\nvar x = 1;\nstruct S {\n    int y;\n}\nf() {\n    x = 2;\n    if x > 1 { return; }\n}\n");
+    fn a_missing_semicolon_is_an_error_right_after_the_statement() {
+        // After `io`, `1`, `y`, `2`, `return` and the `extern` declaration.
+        assert_eq!(missing_semicolon_at("import io\nvar x = 1;\n"), 9);
+        assert_eq!(missing_semicolon_at("var x = 1  # one\nvar y = 2;\n"), 9);
+        assert_eq!(missing_semicolon_at("struct S {\n    int y\n}\n"), 20);
+        assert_eq!(missing_semicolon_at("f() {\n    x = 2\n    y = 3;\n}\n"), 15);
+        assert_eq!(missing_semicolon_at("f() {\n    if (x) { return }\n}\n"), 25);
+        assert_eq!(missing_semicolon_at("extern int puts(char* s)\n"), 24);
+        // A C-style declaration without its `;` is still one.
+        assert_eq!(missing_semicolon_at("f() {\n    Box b = make()\n    b.go();\n}\n"), 24);
+        let m = parse("import io;\nvar x = 1;\nstruct S {\n    int y;\n}\nf() {\n    x = 2;\n    if (x > 1) { return; }\n}\n");
         assert!(m.warnings.is_empty(), "{:?}", m.warnings);
-    }
-
-    #[test]
-    fn a_declaration_missing_its_semicolon_ends_at_its_line() {
-        let m = parse("var x = 1  # note\nvar y = x\n");
-        assert_eq!(m.declarations.len(), 2);
-        assert_eq!(m.warnings.len(), 2);
     }
 
     // ── Struct features: constructors, destructors, static, indexers, operator overloads ──
@@ -4969,7 +4985,7 @@ f() { var r = c.Result<int>.ok(1); }");
 
     #[test]
     fn test_extern_pointer_params() {
-        let m = parse("extern int strncmp(char* a, char* b, uint n)");
+        let m = parse("extern int strncmp(char* a, char* b, uint n);");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert!(f.external);

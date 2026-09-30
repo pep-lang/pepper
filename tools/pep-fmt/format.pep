@@ -202,7 +202,7 @@ export struct Formatter {
                 }
             }
             result.add(_leading(item.first_token()));
-            result.add(_item(item));
+            result.add(_node(item));
             index += 1;
         }
         var end = module.child(module.count() - 1).leaf;
@@ -871,16 +871,6 @@ export struct Formatter {
     # ── Blocks and statements ────────────────────────────────────────────────
 
     # A block or member list: `{`, the items one per line, `}`.
-    # A statement, member or top-level declaration, with the `;` it ends
-    # with added when the source omitted it.
-    _item(item: syntax.Node): Doc {
-        var result = _node(item);
-        if (syntax.ends_in_semicolon(item.kind) and !item.child(item.count() - 1).is_token(";")) {
-            result = concat().add(result).add(text(";"));
-        }
-        return result;
-    }
-
     _braced(item: syntax.Node): Doc {
         var result = concat();
         ulong i = 0;
@@ -906,7 +896,7 @@ export struct Formatter {
             and close.leaf.newlines_before == 0
             and (items[0].kind == syntax.NODE_RETURN or items[0].kind == syntax.NODE_JUMP)) {
             # One trivial statement written on one line stays there.
-            var body = concat().add(_leaf(open)).add(indent(concat().add(line()).add(_item(items[0])))).add(line());
+            var body = concat().add(_leaf(open)).add(indent(concat().add(line()).add(_node(items[0])))).add(line());
             return result.add(group(body.add(_leaf(close))));
         }
         result.add(_leaf(open));
@@ -924,7 +914,7 @@ export struct Formatter {
                 body.add(hardline());
             }
             body.add(_leading(entry.first_token()));
-            body.add(_item(entry));
+            body.add(_node(entry));
             index += 1;
         }
         result.add(indent(body));

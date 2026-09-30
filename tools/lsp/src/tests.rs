@@ -289,6 +289,18 @@ fn deprecated_new_offers_a_quick_fix() {
     assert!(fixes(&text.replace("new(", "construct("), Range::new(Position::new(2, 5), Position::new(2, 5))).is_empty());
 }
 
+#[test]
+fn missing_semicolon_offers_a_quick_fix() {
+    let uri = Url::parse("file:///t.pep").unwrap();
+    let text = "main(): int {\n    var total = 1\n    return total;\n}\n";
+    let actions = quick_fixes(&uri, text, &document_warnings(text, None), Range::new(Position::new(1, 17), Position::new(1, 17)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Insert ';'");
+    assert_eq!(action.diagnostics.as_ref().unwrap()[0].severity, Some(DiagnosticSeverity::ERROR));
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    assert_eq!(edits, &vec![TextEdit { range: Range::new(Position::new(1, 17), Position::new(1, 17)), new_text: ";".to_string() }]);
+}
+
 const DEPRECATED: &str = r#"struct Counter {
     int value;
     [Deprecated("use 'copy' instead", "copy")]
