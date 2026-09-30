@@ -230,9 +230,10 @@ const RESERVED: &[&str] = &[
     "enum", "match",
 ];
 
-/// Operators that may appear as method names (overloadable operators), longest first.
+/// Operators that may appear as method names (overloadable operators), longest
+/// first: `!=` and `!!` (the truth test) must precede `!`.
 const OPERATORS: &[&str] = &[
-    "<<=", ">>=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=",
+    "<<=", ">>=", "==", "!=", "!!", "<=", ">=", "+=", "-=", "*=", "/=", "%=",
     "++", "--", "<<", ">>", "**", "&&", "||", "&=", "|=", "^=",
     "+", "-", "*", "/", "%", "<", ">", "&", "|", "^", "!", "~",
 ];
@@ -1183,8 +1184,8 @@ fn unary(input: &mut &str) -> Result<Expression> {
     if let Some(op) = op {
         let start = pos(input);
         *input = &input[op.len()..];
-        ws(input)?;
-        let operand = cast(input)?;
+        // The operand may itself be unary: `!!x` is `!(!x)`, `-~x` is `-(~x)`.
+        let operand = unary(input)?;
         return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     cast(input)
@@ -2644,8 +2645,18 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
     let mut first = match identifier(input) {
         Ok(n) => n,
         Err(e) => {
-            *input = before;
-            return Err(e);
+            // A Pepper-style operator method: `!!(): bool;`.
+            let mut after: &str = input;
+            match operator_name(&mut after) {
+                Ok(op) if { let mut probe = after; ws(&mut probe).is_ok() && probe.starts_with('(') } => {
+                    *input = after;
+                    op
+                }
+                _ => {
+                    *input = before;
+                    return Err(e);
+                }
+            }
         }
     };
     qualified_tail(input, &mut first);
@@ -4814,6 +4825,34 @@ f() { var r = c.Result<int>.ok(1); }");
         assert!(s.methods[4].is_indexer && s.methods[5].is_indexer);
         assert_eq!(s.methods[0].span.start, pepper.find("==(").unwrap());
         assert_eq!(m.to_string(), parse(c_style).to_string());
+    }
+
+    #[test]
+    fn unary_operator_methods() {
+        // `-()`, `~()`, `!()` and the truth test `!!()`, Pepper-style and
+        // C-style, beside a binary `-`: the same AST either way.
+        let pepper = "struct S {\n    int v;\n    -(): S { return this; }\n    -(o: S): S { return o; }\n    \
+                      ~(): S { return this; }\n    !(): bool { return false; }\n    !!(): bool { return true; }\n}\n";
+        let c_style = "struct S {\n    int v;\n    S -() { return this; }\n    S -(S o) { return o; }\n    \
+                       S ~() { return this; }\n    bool !() { return false; }\n    bool !!() { return true; }\n}\n";
+        let m = parse(pepper);
+        let Declaration::Struct(s) = &m.declarations[0] else { panic!("expected a struct") };
+        let names: Vec<&str> = s.methods.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["-", "-", "~", "!", "!!"]);
+        assert!(s.methods[0].parameters.is_empty() && s.methods[1].parameters.len() == 1);
+        assert_eq!(s.methods[4].name_span.start, pepper.find("!!(").unwrap());
+        assert_eq!(s.methods[4].name_span.end - s.methods[4].name_span.start, 2);
+        assert_eq!(m.to_string(), parse(c_style).to_string());
+        // A trait declares them the same way.
+        let t = parse("trait T {\n    !!(): bool;\n    -(): T;\n    bool !();\n}\n");
+        let Declaration::Trait(t) = &t.declarations[0] else { panic!("expected a trait") };
+        let names: Vec<&str> = t.methods.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["!!", "-", "!"]);
+        assert!(t.methods.iter().all(|f| f.body.is_none() && f.parameters.is_empty()));
+        // `!!x` in an expression is still two negations.
+        let Expression::Unary { op, operand, .. } = parse_expr("!!x") else { panic!("expected unary !") };
+        assert_eq!(op, "!");
+        assert!(matches!(*operand, Expression::Unary { ref op, .. } if op == "!"));
     }
 
     #[test]

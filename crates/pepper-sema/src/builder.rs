@@ -829,6 +829,29 @@ fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Functi
         ))
         .at(loc(declared.span)));
     }
+    // `!` and the truth test `!!` are conditions too.
+    if matches!(decl.name.as_str(), "!" | "!!")
+        && declared.name != crate::type_name::AUTO
+        && declared.name != "bool"
+    {
+        let kind = if decl.name == "!" { "logical" } else { "truth-test" };
+        return Err(Diagnostic::error(format!(
+            "{} operator '{}' must return 'bool', not '{}'",
+            kind,
+            decl.name,
+            type_name_from(declared)
+        ))
+        .at(loc(declared.span)));
+    }
+    // Unary-only operators take their operand as `this`.
+    if matches!(decl.name.as_str(), "!" | "!!" | "~") && !decl.is_static && !decl.parameters.is_empty() {
+        return Err(Diagnostic::error(format!(
+            "unary operator '{}' takes no parameters, have {}",
+            decl.name,
+            decl.parameters.len()
+        ))
+        .at(loc(decl.name_span)));
+    }
     Ok(FunctionDef {
         trait_default: None,
         name: decl.name.clone(),

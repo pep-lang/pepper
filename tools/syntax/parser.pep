@@ -78,6 +78,7 @@ operator_method_names(): HashSet<String> {
     names.insert(">>=");
     names.insert("==");
     names.insert("!=");
+    names.insert("!!");
     names.insert("<=");
     names.insert(">=");
     names.insert("+=");
@@ -241,12 +242,16 @@ struct Parser {
         }
     }
 
-    # The operator at the input, joining the adjacent `>` tokens that the
-    # lexer keeps apart into `>>`, `>=` and `>>=`.
+    # The operator at the input, joining the adjacent tokens that the lexer
+    # keeps apart: `>` into `>>`, `>=` and `>>=`, and `!` into the truth
+    # test `!!`. Expressions never ask for `!!`: `!!x` is two prefix `!`.
     _operator_text(): String {
         var token = _peek();
         if (token.kind != TOKEN_PUNCTUATION) {
             return "";
+        }
+        if (token.text == "!" and _peek_at(1).is("!") and _adjacent(1)) {
+            return "!!";
         }
         if (token.text != ">") {
             return token.text;
@@ -623,7 +628,8 @@ struct Parser {
         if (_at("+") or _at("-") or _at("~") or _at("!")) {
             var node = Node(NODE_PREFIX);
             _take(node);
-            node.add(_cast());
+            # The operand may itself be prefixed: `!!x` is `!(!x)`.
+            node.add(_unary());
             return node;
         }
         return _cast();

@@ -44,12 +44,15 @@ var count: int?;   # None
 | `Optional<T>.some(value)` | Creates a Some optional holding `value`. |
 | `Optional<T>.none()`, `Optional<T>()` | Create a None optional. |
 | `is_some()`, `is_none()` | Report which kind the optional is. |
+| `!!` (truth test) | An optional is a condition by itself: `if (found)` is `if (found.is_some())`, and `!found` is `found.is_none()`. |
 | `value()` | Returns the value; panics with `Optional.value on a None value` if the optional is None. |
 | `value_or(fallback)` | Returns the value, or `fallback` if the optional is None. Never panics. |
 
 Use `value()` when a None would be a bug in your program, since it stops the
-program. When a missing value is an expected outcome, test with `is_some()` or
-`is_none()` first, or supply a fallback with `value_or`.
+program. When a missing value is an expected outcome, test it first (`if
+(found)`, `is_some()` or `is_none()`), or supply a fallback with `value_or`.
+Testing the optional itself works because `Optional` declares the truth-test
+operator `!!` (see [Truth tests](structs.md#truth-tests-and-conditions)).
 
 `Optional<T>` works for every `T`, including types that have no null at all,
 such as `int` or `ulong`. For a struct type, a Some optional holds a
@@ -64,10 +67,11 @@ error.
 
 ## Current limits
 
-- An optional is checked with `is_some()` or `is_none()` and read with
-  `value()` or `value_or`; `match` does not work on it yet. `Optional` will
-  become an [enum](enums.md) with `None` and `Some(value)` cases once enum
-  cases can carry values; its methods stay the same.
+- An optional is checked as a condition (or with `is_some()` or
+  `is_none()`) and read with `value()` or `value_or`; `match` does not work
+  on it yet. `Optional` will become an [enum](enums.md) with `None` and
+  `Some(value)` cases once enum cases can carry values; its methods stay the
+  same.
 - The runtime's own APIs still use null references or default values for
   "missing" (a `HashMap` returns the default value for a missing key, for
   example).

@@ -200,6 +200,19 @@ main.pep:2:1: note: candidate function
       | ^
 ```
 
+**A struct used as a condition** without a truth-test operator. A struct is
+never tested for null implicitly: declare `!!(): bool` on it, or compare with
+`__null` (see [Truth tests and conditions](structs.md#truth-tests-and-conditions)):
+
+```text
+main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+main.pep:1:8: note: 'Node' declared here
+    1 | struct Node {
+      |        ^~~~
+```
+
 **A syntax error.** The parser says what it expected at the first place the
 code stopped making sense:
 

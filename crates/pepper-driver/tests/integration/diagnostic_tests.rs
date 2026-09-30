@@ -1555,6 +1555,34 @@ fn tuple_element_type_mismatch() {
 }
 
 #[test]
+fn struct_without_truth_test_as_condition() {
+    assert_eq!(
+        error_of(
+            "struct_condition",
+            "struct Node {\n    int value;\n}\nmain(): int {\n    var node = Node();\n    if (node) {\n        return 1;\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'\n\
+         \x20   6 |     if (node) {\n\
+         \x20     |         ^~~~\n\
+         main.pep:1:8: note: 'Node' declared here\n\
+         \x20   1 | struct Node {\n\
+         \x20     |        ^~~~"
+    );
+    assert_eq!(
+        error_of(
+            "struct_operand_of_not",
+            "struct Node {\n    int value;\n}\nmain(): int {\n    var node = Node();\n    return node.value > 0 && !node ? 1 : 0;\n}\n"
+        ),
+        "main.pep:6:31: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'\n\
+         \x20   6 |     return node.value > 0 && !node ? 1 : 0;\n\
+         \x20     |                               ^~~~\n\
+         main.pep:1:8: note: 'Node' declared here\n\
+         \x20   1 | struct Node {\n\
+         \x20     |        ^~~~"
+    );
+}
+
+#[test]
 fn match_missing_cases() {
     assert_eq!(
         error_of(
@@ -1571,6 +1599,22 @@ fn match_missing_cases() {
          main.pep:4:5: note: 'Blue' declared here\n\
          \x20   4 |     Blue,\n\
          \x20     |     ^~~~"
+    );
+}
+
+#[test]
+fn unary_operator_signatures() {
+    assert_eq!(
+        error_of("truth_test_return", "struct S {\n    !!(): int { return 1; }\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:11: error: truth-test operator '!!' must return 'bool', not 'int'\n\
+         \x20   2 |     !!(): int { return 1; }\n\
+         \x20     |           ^~~"
+    );
+    assert_eq!(
+        error_of("not_parameters", "struct S {\n    !(o: S): bool { return true; }\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:5: error: unary operator '!' takes no parameters, have 1\n\
+         \x20   2 |     !(o: S): bool { return true; }\n\
+         \x20     |     ^"
     );
 }
 

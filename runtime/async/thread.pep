@@ -176,7 +176,7 @@ export struct Thread {
     ##     print(me.name(), "\n");   # "main" on the main thread
     static Thread current() {
         var thread = _async_current.get();
-        if (thread) {
+        if (thread !== __null) {
             return thread;
         }
         var name = "";

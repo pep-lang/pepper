@@ -15,6 +15,9 @@ pub(crate) struct StructInfo {
     pub(crate) methods: HashSet<String>,
     /// Method name -> return type.
     pub(crate) returns: HashMap<String, TypeName>,
+    /// The unary operators declared: `-`, `~`, `!`, `!!` as instance methods
+    /// without parameters (see `passes::unary_operators`).
+    pub(crate) unary_operators: HashSet<String>,
 }
 
 pub(crate) struct StructTable {
@@ -45,6 +48,7 @@ impl StructTable {
                     .iter()
                     .map(|m| (m.name.clone(), m.ty.clone()))
                     .collect(),
+                unary_operators: crate::passes::unary_operators::declared(&st.method_members),
             };
             structs.insert(name.clone(), info.clone());
             // Also key the generic base (`Array<T>` -> `Array`) so pre-
@@ -68,6 +72,7 @@ impl StructTable {
                 .iter()
                 .map(|m| (m.name.clone(), m.ty.clone()))
                 .collect(),
+            unary_operators: crate::passes::unary_operators::declared(&t.methods),
         };
         for ty in crate::traits::used_trait_types(module) {
             if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
@@ -261,6 +266,10 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             }
         }
         Expression::Ternary { true_expr, .. } => of(true_expr, table, current),
+        Expression::Unary { op: crate::model::UnaryOp::LogicalNot, .. } => Some(TypeName::bool_()),
+        Expression::Unary { op: crate::model::UnaryOp::Neg | crate::model::UnaryOp::BitNot, operand, .. } => {
+            of(operand, table, current)
+        }
         // `x as T` has the cast target's type.
         Expression::Cast { ty, .. } => Some(ty.clone()),
         Expression::FunctionRef { ty, .. } => Some(ty.clone()),

@@ -164,11 +164,11 @@ export struct Copies {
     # The copy of struct `value`: null for null, the copy already made of
     # the same object, or a new one from its `_pep_copy` method.
     _copy_object<T>(value: T): T {
-        if (!value) {
+        if (value === __null) {
             return value;
         }
         var made = this._find<T>(value);
-        if (made) {
+        if (made !== __null) {
             return made;
         }
         made = value._pep_copy(this);
@@ -195,11 +195,11 @@ export struct Copies {
     # when the target is gone or was not copied.
     _weak<T>(original: __weak<T>): __weak<T> {
         var target = __weak_upgrade<T>(original);
-        if (!target) {
+        if (target === __null) {
             return __default<__weak<T>>();
         }
         var made = this._find<T>(target);
-        if (!made) {
+        if (made === __null) {
             return __default<__weak<T>>();
         }
         return __weak_from<T>(made);

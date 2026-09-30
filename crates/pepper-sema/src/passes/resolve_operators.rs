@@ -107,6 +107,8 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
     // extra statement after the decl, so it runs as a pre-pass over every
     // block (recursing into nested blocks) at statement level.
     expand_compound_index_assigns(body, table, current);
+    // `-x`, `~x`, `!x` and truth tests (`if (x)`) on structs become method calls.
+    crate::passes::unary_operators::dispatch(body, table, current);
     // Single traversal: walk_block visits every expression node once.
     crate::passes::walk_block(body, &mut |expr: &mut Expression| match expr {
         Expression::Binary { op, lhs, rhs, loc } if op.is_assignment() => {

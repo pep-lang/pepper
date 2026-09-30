@@ -18,7 +18,8 @@ import "internals";
 ## optional type that is not given a value starts as None.
 ##
 ## Build one with the static `some` or `none` functions, or `Optional<T>()`
-## for None, and test it with `is_some()` or `is_none()`.
+## for None, and test it with `is_some()` or `is_none()`, or as a condition
+## by itself (`if (found)`).
 ##
 ## @typeParam T the type of the value a Some optional holds
 ## @example
@@ -34,7 +35,7 @@ import "internals";
 ##         values.append(3);
 ##         values.append(4);
 ##         var found = find_even(values);
-##         if (found.is_none()) { return 1; }
+##         if (!found) { return 1; }
 ##         return found.value() - 4;   # 0
 ##     }
 export struct Optional<T> {
@@ -89,6 +90,21 @@ export struct Optional<T> {
     ## @returns true when the optional is None
     is_none(): bool {
         return !this._has_value;
+    }
+
+    ## Reports whether this optional holds a value: the truth test, so an
+    ## optional can stand as a condition by itself.
+    ##
+    ## `if (found)` means `if (found.is_some())`, `!found` means
+    ## `found.is_none()`, and the same holds in `while`, `&&`, `||` and
+    ## `?:`.
+    ##
+    ## @returns true when the optional is Some
+    ## @example
+    ##     var found = Optional<int>.some(7);
+    ##     if (found) { print(found.value()); }   # prints 7
+    !!(): bool {
+        return this._has_value;
     }
 
     ## Returns the value, panicking if this optional is None.

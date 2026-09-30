@@ -31,6 +31,8 @@ main(): int {
     people.append(Person("grace", 45));
     var adult = find_adult(people);
     assert(adult.is_some(), "grace is an adult");
+    # An optional is a condition by itself: `if (adult)` tests is_some().
+    if (!adult) { return 1; }
     assert(adult.value().name == "grace", "value() returns the Person");
 
     # Works for types that have no null, too.

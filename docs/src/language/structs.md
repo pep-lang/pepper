@@ -248,10 +248,63 @@ Keep these rules in mind:
 - Operators that start with `<` (`<`, `<=`, `<<`, `<<=`) can only be declared
   in the `name: Type` form, `<(other: V): bool`: in the C-style form the
   parser reads `bool <` as the start of generic arguments.
-- Unary operators (`-a`, `!a`, `~a`) cannot be overloaded yet.
 
 The result of an operator has the type its method returns, so with
 `-(other: V): int`, `var r = a - b;` is an `int`.
+
+### Unary operators
+
+A unary operator is a method with no parameters; its operand is `this`.
+
+| Operator | Declaration | `op x` calls |
+|---|---|---|
+| Negation | `-(): V` | `x.-()` |
+| Bitwise complement | `~(): V` | `x.~()` |
+| Logical not | `!(): bool` | `x.!()` |
+| Truth test | `!!(): bool` | `x.!!()` (see below) |
+
+The C-style form works here too: `V -()`, `bool !!()`. `!` and `!!` must
+return `bool` (`truth-test operator '!!' must return 'bool', not 'int'`), and
+`!`, `~` and `!!` take no parameters. `-a` on a number is unchanged. A struct
+may declare both a unary `-()` and a binary `-(other: V)`: they
+[overload](overloading.md) each other, told apart by their number of
+parameters.
+
+### Truth tests and conditions
+
+A condition asks a value "true or false?". For `bool` the answer is the value,
+for a number it is "not zero", and for a raw pointer (`__ptr<T>`) or a function
+value it is "not null". A struct answers through its truth-test operator,
+`!!(): bool`, like C++'s `operator bool`:
+
+```pepper
+{{#include ../../examples/structs-truth-test.pep}}
+```
+
+These are the boolean contexts. In each, a struct value `x` becomes `x.!!()`:
+
+- the condition of `if`, `else if` and `while`;
+- the condition of `condition ? a : b`;
+- each operand of `&&`, `||`, `and` and `or` (unless the struct declares `&&`
+  or `||` itself, which then takes the whole operation);
+- the operand of `!`: without its own `!` method, `!x` is `!(x.!!())`.
+
+`!!x` is the truth test itself: on a struct it calls `x.!!()`; on a `bool` or
+a number it is still two negations. [`Optional`](optionals.md) declares `!!`,
+so `if (found)` asks whether an optional holds a value.
+
+A struct that does not declare `!!` cannot be used as a condition at all:
+
+```text
+main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+```
+
+A struct value is a reference, but a condition never tests it for null. To ask
+whether a reference is set, compare it with `__null` (`node !== __null`), or
+better, use an [`Optional`](optionals.md) for a value that may be missing. A trait value is
+treated the same way: it is a condition only when its trait declares `!!`.
 
 ### Comparing structs
 

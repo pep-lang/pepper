@@ -22,7 +22,8 @@ every type, including those that have no null, such as `int`.
 optional type that is not given a value starts as None.
 
 Build one with the static `some` or `none` functions, or `Optional<T>()`
-for None, and test it with `is_some()` or `is_none()`.
+for None, and test it with `is_some()` or `is_none()`, or as a condition
+by itself (`if (found)`).
 
 **Type parameters**
 - `T` — the type of the value a Some optional holds
@@ -41,7 +42,7 @@ for None, and test it with `is_some()` or `is_none()`.
         values.append(3);
         values.append(4);
         var found = find_even(values);
-        if (found.is_none()) { return 1; }
+        if (!found) { return 1; }
         return found.value() - 4;   # 0
     }
 ```
@@ -124,6 +125,28 @@ Reports whether this optional holds no value.
 
 **Returns**
 - true when the optional is None
+
+#### operator !!
+
+```pepper
+!!(): bool
+```
+
+Reports whether this optional holds a value: the truth test, so an
+optional can stand as a condition by itself.
+
+`if (found)` means `if (found.is_some())`, `!found` means
+`found.is_none()`, and the same holds in `while`, `&&`, `||` and
+`?:`.
+
+**Returns**
+- true when the optional is Some
+
+**Example**
+```pepper
+    var found = Optional<int>.some(7);
+    if (found) { print(found.value()); }   # prints 7
+```
 
 #### value
 

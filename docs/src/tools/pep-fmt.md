@@ -95,8 +95,9 @@ parameter types after the names and the return type last,
 `add(a: int, b: int): int`. The C-style form, `int add(int a, int b)`, is
 kept for `extern` functions, which mirror C prototypes; `pep-fmt` rewrites
 it everywhere else, including operator methods (`bool ==(Point other)`
-becomes `==(other: Point): bool`), indexers (`T [](ulong index)` becomes
-`[](index: ulong): T`) and constructor parameters.
+becomes `==(other: Point): bool`, and `bool !!()` becomes `!!(): bool`),
+indexers (`T [](ulong index)` becomes `[](index: ulong): T`) and constructor
+parameters.
 
 **Blank lines.** At most one blank line in a row. Top-level structs,
 traits, extensions and functions with a body are separated by one blank

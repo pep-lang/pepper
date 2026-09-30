@@ -21,6 +21,17 @@ struct Money {
         return Money(cents + other.cents);
     }
 
+    # `-a` calls `a.-()`: a unary operator takes no parameters.
+    -(): Money {
+        return Money(0 - cents);
+    }
+
+    # `a - b` calls `a.-(b)`. The unary and binary `-` overload each other,
+    # told apart by their number of parameters.
+    -(other: Money): Money {
+        return Money(cents - other.cents);
+    }
+
     # `a += b` needs its own method; it is not rewritten to `a = a + b`.
     +=(other: Money): Money {
         cents += other.cents;
@@ -63,6 +74,10 @@ main(): int {
     assert(price.cents == 250, "+ left its operands alone");
 
     assert(price < total, "< compares cents");
+
+    var refund = -price;
+    assert(refund.cents == -250, "unary - calls -()");
+    assert((total - price).cents == 50, "binary - calls -(other)");
 
     total += Money(25);
     assert(total.cents == 325, "+= updated total in place");

@@ -309,6 +309,10 @@ conversions"), so code ported from C gives the same results:
 one does not decide the result, so `items.count() > 0 && items[0] == 1` never
 reads `items[0]` from an empty array.
 
+Unary operators nest: `-~x` is `-(~x)`, and `!!x` is `!(!x)`, which turns a
+number into a `bool`. A struct can define its own operators, the truth test
+`!!` included (see [Operators](structs.md#operators)).
+
 `**` raises an integer to an integer power, and is right-associative:
 `2 ** 3 ** 2` is `2 ** 9`. The exponent can be any integer expression. A negative
 exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base

@@ -15,7 +15,13 @@ around each block are required, even for a single statement.
 ```
 
 The condition is usually a `bool`, but a number also works: any value other
-than zero counts as true, as in C.
+than zero counts as true, as in C. A raw pointer (`__ptr<T>`) or a function
+value counts as true when it is not null. A struct counts only if it declares
+the truth-test operator `!!(): bool`, which the condition calls; any other
+struct is an error, so write `node !== __null` to ask whether a reference is
+set (see [Truth tests and conditions](structs.md#truth-tests-and-conditions)).
+The same holds for the condition of `while` and of `?:`, the operands of `&&`,
+`||`, `and` and `or`, and the operand of `!`.
 
 ### Chains of conditions
 
