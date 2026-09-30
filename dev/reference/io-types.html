@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8de87351.js";
+            window.path_to_searchindex_js = "../searchindex-267e834f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6f6f7138.js"></script>
+        <script src="../toc-0595f8ea.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,6 +199,21 @@ descriptors 0, 1 and 2. On Windows this is a <code>HANDLE</code> instead.</p>
 <ul>
 <li>code that must build for every target should not rely on this being an <code>int</code></li>
 </ul>
+<h2 id="sockethandle"><a class="header" href="#sockethandle">SocketHandle</a></h2>
+<pre><code class="language-pepper">[Target(!OS(Windows))] type SocketHandle = int
+</code></pre>
+<p>The raw operating-system handle of a socket: a POSIX file descriptor.</p>
+<p><code>TcpListener</code>, <code>TcpStream</code> and <code>UdpSocket</code> hold one. A valid descriptor
+is <code>&gt;= 0</code>; a closed socket holds <code>-1</code>. On Windows this is a <code>SOCKET</code>
+instead.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li>code that must build for every target should not rely on this being an <code>int</code></li>
+</ul>
 <h2 id="errorcode"><a class="header" href="#errorcode">ErrorCode</a></h2>
 <pre><code class="language-pepper">[Target(!OS(Windows))] type ErrorCode = int
 </code></pre>
@@ -239,6 +254,22 @@ POSIX this is an <code>int</code> file descriptor instead.</p>
 <p><strong>Note</strong></p>
 <ul>
 <li>code that must build for every target should not rely on this being a <code>__ptr&lt;void&gt;</code></li>
+</ul>
+<h2 id="sockethandle-1"><a class="header" href="#sockethandle-1">SocketHandle</a></h2>
+<pre><code class="language-pepper">[Target(OS(Windows))] type SocketHandle = ulong
+</code></pre>
+<p>The raw operating-system handle of a socket: a Winsock <code>SOCKET</code>, an
+unsigned pointer-sized integer.</p>
+<p><code>TcpListener</code>, <code>TcpStream</code> and <code>UdpSocket</code> hold one. A closed socket
+holds <code>INVALID_SOCKET</code> (all bits set). On POSIX this is an <code>int</code> file
+descriptor instead.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li>code that must build for every target should not rely on this being a <code>ulong</code></li>
 </ul>
 <h2 id="errorcode-1"><a class="header" href="#errorcode-1">ErrorCode</a></h2>
 <pre><code class="language-pepper">[Target(OS(Windows))] type ErrorCode = uint
@@ -349,9 +380,11 @@ between (including one that allocates) may overwrite the code.</p>
 <code>ERROR_PATH_NOT_FOUND</code> on Windows. An empty path fails with this kind
 on POSIX (with the message <code>"empty path"</code>), and in <code>File.open_with</code>
 on every platform.</p>
+<p><code>resolve</code> and <code>TcpStream.connect_host</code> fail with this kind too when a
+host name has no address.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when a path, or a directory on the way to it, is missing</li>
+<li>true when a path, or a directory on the way to it, is missing, or a host name has no address</li>
 </ul>
 <h4 id="is_permission_denied"><a class="header" href="#is_permission_denied">is_permission_denied</a></h4>
 <pre><code class="language-pepper">bool is_permission_denied()
@@ -432,6 +465,57 @@ themselves, so callers rarely see this.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the operation was interrupted</li>
+</ul>
+<h4 id="is_connection_refused"><a class="header" href="#is_connection_refused">is_connection_refused</a></h4>
+<pre><code class="language-pepper">is_connection_refused(): bool
+</code></pre>
+<p>Returns whether a connection attempt was refused: nothing listens on
+that port (the peer answered with a reset).</p>
+<p>Matches <code>ECONNREFUSED</code> on POSIX and <code>WSAECONNREFUSED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection was refused</li>
+</ul>
+<h4 id="is_connection_reset"><a class="header" href="#is_connection_reset">is_connection_reset</a></h4>
+<pre><code class="language-pepper">is_connection_reset(): bool
+</code></pre>
+<p>Returns whether an established connection was broken by the peer:
+reset, aborted, or (when writing) already closed.</p>
+<p>Matches <code>ECONNRESET</code>, <code>ECONNABORTED</code> or <code>EPIPE</code> on POSIX, and
+<code>WSAECONNRESET</code> or <code>WSAECONNABORTED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection was reset or closed by the peer</li>
+</ul>
+<h4 id="is_address_in_use"><a class="header" href="#is_address_in_use">is_address_in_use</a></h4>
+<pre><code class="language-pepper">is_address_in_use(): bool
+</code></pre>
+<p>Returns whether binding failed because another socket already uses
+the address and port.</p>
+<p>Matches <code>EADDRINUSE</code> on POSIX and <code>WSAEADDRINUSE</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address is in use</li>
+</ul>
+<h4 id="is_address_not_available"><a class="header" href="#is_address_not_available">is_address_not_available</a></h4>
+<pre><code class="language-pepper">is_address_not_available(): bool
+</code></pre>
+<p>Returns whether an address cannot be used here: binding to an IP
+address that is not one of this machine’s, or connecting to port 0.</p>
+<p>Matches <code>EADDRNOTAVAIL</code> on POSIX and <code>WSAEADDRNOTAVAIL</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address is not available</li>
+</ul>
+<h4 id="is_timed_out"><a class="header" href="#is_timed_out">is_timed_out</a></h4>
+<pre><code class="language-pepper">is_timed_out(): bool
+</code></pre>
+<p>Returns whether an operation gave up because the peer did not answer
+in time, such as a connection attempt to an unreachable host.</p>
+<p>Matches <code>ETIMEDOUT</code> on POSIX and <code>WSAETIMEDOUT</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the operation timed out</li>
 </ul>
 <h2 id="ioresult"><a class="header" href="#ioresult">IoResult</a></h2>
 <pre><code class="language-pepper">type IoResult&lt;T&gt; = Result&lt;T, IoError&gt;

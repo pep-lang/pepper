@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8de87351.js";
+            window.path_to_searchindex_js = "searchindex-267e834f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6f6f7138.js"></script>
+        <script src="toc-0595f8ea.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,7 +230,8 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>
 and <code>to_string</code> for integers), sortable arrays, hash
-maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
+maps and sets, atomics, threads, channels and mutexes, file-system access, and
+TCP and UDP sockets. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -7688,6 +7689,180 @@ barrier or semaphore. A Mutex is not re-entrant.</li>
 which panics.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
+<p>The <code>io</code> module has TCP and UDP sockets, IP and socket addresses, and host
+name lookup. Every call blocks the calling thread until it completes, like
+<code>File</code>. To serve several connections at once, give each one its own
+<a href="#threads-and-shared-data">thread</a>. An event loop that runs many connections on a few
+threads is planned (see <a href="#current-status-1">Current status</a>).</p>
+<h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
+<p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
+address and a port:</p>
+<pre><code class="language-pepper">import io;
+
+main(): int {
+    var home = io.IpAddress.v4(127, 0, 0, 1);
+    assert(home.is_loopback(), "127.0.0.1 is loopback");
+
+    # Text is read strictly and printed in one canonical form.
+    var six = io.IpAddress.parse("2001:DB8:0:0:0:0:0:1").value();
+    assert(six.to_string() == "2001:db8::1", "IPv6 prints compressed and lowercase");
+    assert(io.IpAddress.parse("256.1.1.1").error().is_invalid_input(), "256 is out of range");
+
+    var service = io.SocketAddress.parse("[::1]:8080").value();
+    assert(service.is_v6() &amp;&amp; service.port() == 8080, "IPv6 with a port");
+    assert(service.to_string() == "[::1]:8080", "brackets around IPv6");
+
+    # A host name goes to the system resolver; an IP address is used as is.
+    var local = io.resolve("localhost", 80).value();
+    assert(local.count() &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>IpAddress.v4(a, b, c, d)</code> and <code>IpAddress.v6(a, ..., h)</code> build an address
+from its bytes or its eight 16-bit groups. <code>loopback_v4()</code>,
+<code>loopback_v6()</code>, <code>unspecified_v4()</code> (<code>0.0.0.0</code>) and <code>unspecified_v6()</code>
+(<code>::</code>) are the well-known ones. <code>IpAddress()</code> is <code>0.0.0.0</code>.</li>
+<li><code>IpAddress.parse</code> reads dotted decimal IPv4 and the RFC 4291 text form of
+IPv6, and <code>to_string()</code> prints the RFC 5952 form: lowercase,
+zeros compressed, <code>::ffff:1.2.3.4</code> for an IPv4-mapped address. Parsing and
+printing are the same on every platform.</li>
+<li><code>SocketAddress(address, port)</code> or <code>SocketAddress.parse("1.2.3.4:80")</code>
+make a socket address. IPv6 takes brackets: <code>[::1]:80</code>.</li>
+<li><code>resolve(host, port)</code> looks a host name up with the system resolver (the
+hosts file and DNS) and returns every address it has, with <code>port</code> attached.
+An IP address is returned as is. A name with no address fails with
+<code>is_not_found()</code>.</li>
+</ul>
+<h2 id="tcp"><a class="header" href="#tcp">TCP</a></h2>
+<p>A <code>TcpListener</code> waits for connections. Each <code>TcpStream</code> is one connection:</p>
+<pre><code class="language-pepper">import io;
+
+# A server and a client on this machine, taking turns on one thread: the
+# system completes a connection before the server accepts it.
+main(): int {
+    # Port 0 asks the system for any free port.
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+    var address = listener.local_address().value();
+
+    var client = io.TcpStream.connect(address).value();
+    var (server, peer) = listener.accept().value();
+    assert(peer == client.local_address().value(), "accept reports who connected");
+
+    # The client sends a request and closes its sending side.
+    assert(client.write_string("ping").is_ok(), "send the request");
+    client.shutdown_write();
+
+    # The server reads until the client is done: read returns 0 at the end.
+    var request = Array&lt;u8&gt;();
+    while (server.read(request, 4096).value() &gt; 0) {
+    }
+    assert(request.count() == 4, "the whole request arrived");
+
+    # It answers, and the client reads exactly the bytes it expects.
+    server.write_string("pong");
+    var reply = Array&lt;u8&gt;();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>TcpListener.bind(address)</code> listens on a local address. Port 0 lets the
+system pick a free port, and <code>local_address()</code> says which one it picked.
+<code>accept()</code> waits for the next connection and returns the stream and the
+peer’s address as a <a href="#tuples-and-multiple-return-values">tuple</a>.</li>
+<li><code>TcpStream.connect(address)</code> connects to an address.
+<code>TcpStream.connect_host(host, port)</code> resolves a name and tries each of its
+addresses in turn.</li>
+<li><code>read(buffer, max)</code> waits until some data arrives, then appends up to <code>max</code>
+bytes of it to <code>buffer</code>, the same way <code>File.read</code> does. It returns 0 once
+the peer has closed its side. <code>read_exact(buffer, count)</code> loops until
+<code>count</code> bytes have arrived.</li>
+<li><code>write(data)</code> sends what the system will take in one call.
+<code>write_all(data)</code> and <code>write_string(text)</code> loop until everything is sent.</li>
+<li><code>shutdown_write()</code> tells the peer that nothing more is coming, while this
+side can still read.</li>
+<li><code>set_no_delay(true)</code> sends small writes immediately instead of combining
+them.</li>
+<li><code>local_address()</code> and <code>peer_address()</code> return the two ends of the
+connection.</li>
+</ul>
+<h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
+<p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
+at all, and in no guaranteed order:</p>
+<pre><code class="language-pepper">import io;
+
+main(): int {
+    var loopback = io.SocketAddress(io.IpAddress.loopback_v4(), 0);
+    var sender = io.UdpSocket.bind(loopback).value();
+    var receiver = io.UdpSocket.bind(loopback).value();
+
+    var datagram = Array&lt;u8&gt;();
+    datagram.append(1);
+    datagram.append(2);
+    datagram.append(3);
+    sender.send_to(datagram, receiver.local_address().value());
+
+    # One receive takes one whole datagram and says who sent it.
+    var buffer = Array&lt;u8&gt;();
+    var (count, from) = receiver.receive_from(buffer, 1500).value();
+    assert(count == 3 &amp;&amp; buffer[2] == 3, "the datagram arrived whole");
+    assert(from == sender.local_address().value(), "from the sender");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UdpSocket.bind(address)</code> opens a socket on a local address.</li>
+<li><code>send_to(data, address)</code> sends one datagram.
+<code>receive_from(buffer, max)</code> waits for one datagram, appends it to
+<code>buffer</code>, and returns the byte count and the sender. The part of a
+datagram beyond <code>max</code> bytes is lost.</li>
+<li>After <code>connect(address)</code>, <code>send</code> and <code>receive</code> use that peer, and
+datagrams from anyone else are dropped.</li>
+<li><code>set_broadcast(true)</code> allows sending to a broadcast address.</li>
+</ul>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
+<code>IoError</code> has these for networking:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Predicate</th><th>When</th></tr>
+</thead>
+<tbody>
+<tr><td><code>is_connection_refused()</code></td><td>nothing listens at the address</td></tr>
+<tr><td><code>is_connection_reset()</code></td><td>the peer reset or closed the connection (writing to a closed connection included)</td></tr>
+<tr><td><code>is_address_in_use()</code></td><td>another socket already has the address and port</td></tr>
+<tr><td><code>is_address_not_available()</code></td><td>the IP address is not one of this machine’s</td></tr>
+<tr><td><code>is_timed_out()</code></td><td>the peer never answered</td></tr>
+<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name</td></tr>
+</tbody>
+</table>
+</div>
+<p>Writing to a closed connection never raises <code>SIGPIPE</code>, so it cannot kill
+the process. The write returns an error instead.</p>
+<h2 id="closing"><a class="header" href="#closing">Closing</a></h2>
+<p>A socket closes when the last reference to it goes, like a <code>File</code>, and
+<code>close()</code> closes it earlier and reports any error. A socket cannot be
+copied, so it cannot go through a <a href="#channels">channel</a> to another
+thread. Use it on the thread that made it.</p>
+<p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
+away. On Windows it does not, because there that option would let another
+program take over the port.</p>
+<h2 id="current-status-1"><a class="header" href="#current-status-1">Current status</a></h2>
+<ul>
+<li>Every call blocks its thread. There are no timeouts, no non-blocking mode,
+and no way to wait on several sockets at once yet. The planned event loop
+(green threads over epoll, kqueue, IOCP and io_uring) will park the
+calling task instead of blocking the thread, with no change to this API.</li>
+<li>Unix domain sockets and TLS are not supported yet.</li>
+<li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
+</ul>
+<p>The reference pages for <a href="#network-addresses">addresses</a> and
+<a href="#sockets">sockets</a> document every method.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -12111,7 +12286,8 @@ the program when it runs.</p>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-io-module"><a class="header" href="#the-io-module">The io module</a></h1>
-<p>Files, directories, and paths, modeled on Rust’s <code>std::fs</code> and <code>std::path</code>.</p>
+<p>Files, directories, paths, and sockets, modeled on Rust’s <code>std::fs</code>,
+<code>std::path</code> and <code>std::net</code>.</p>
 <p>Unlike the rest of the standard library, <code>io</code> is a module: bring it in with
 <code>import io</code> (and write <code>io.File</code>, <code>io.Path</code>) or import names directly with
 <code>import [File, Path] from io</code>. Every fallible operation returns an
@@ -12121,6 +12297,8 @@ the program when it runs.</p>
 <li><a href="#path">Path</a>: building, splitting, and inspecting paths</li>
 <li><a href="#file">File</a>: opening, reading, and writing files, and whole-file helpers</li>
 <li><a href="#directory">Directory</a>: listing, creating, and removing directories</li>
+<li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
+<li><a href="#sockets">Sockets</a>: <code>TcpListener</code>, <code>TcpStream</code>, and <code>UdpSocket</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -12148,6 +12326,21 @@ descriptors 0, 1 and 2. On Windows this is a <code>HANDLE</code> instead.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>File</code></li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li>code that must build for every target should not rely on this being an <code>int</code></li>
+</ul>
+<h2 id="sockethandle"><a class="header" href="#sockethandle">SocketHandle</a></h2>
+<pre><code class="language-pepper">[Target(!OS(Windows))] type SocketHandle = int
+</code></pre>
+<p>The raw operating-system handle of a socket: a POSIX file descriptor.</p>
+<p><code>TcpListener</code>, <code>TcpStream</code> and <code>UdpSocket</code> hold one. A valid descriptor
+is <code>&gt;= 0</code>; a closed socket holds <code>-1</code>. On Windows this is a <code>SOCKET</code>
+instead.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
 </ul>
 <p><strong>Note</strong></p>
 <ul>
@@ -12193,6 +12386,22 @@ POSIX this is an <code>int</code> file descriptor instead.</p>
 <p><strong>Note</strong></p>
 <ul>
 <li>code that must build for every target should not rely on this being a <code>__ptr&lt;void&gt;</code></li>
+</ul>
+<h2 id="sockethandle-1"><a class="header" href="#sockethandle-1">SocketHandle</a></h2>
+<pre><code class="language-pepper">[Target(OS(Windows))] type SocketHandle = ulong
+</code></pre>
+<p>The raw operating-system handle of a socket: a Winsock <code>SOCKET</code>, an
+unsigned pointer-sized integer.</p>
+<p><code>TcpListener</code>, <code>TcpStream</code> and <code>UdpSocket</code> hold one. A closed socket
+holds <code>INVALID_SOCKET</code> (all bits set). On POSIX this is an <code>int</code> file
+descriptor instead.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li>code that must build for every target should not rely on this being a <code>ulong</code></li>
 </ul>
 <h2 id="errorcode-1"><a class="header" href="#errorcode-1">ErrorCode</a></h2>
 <pre><code class="language-pepper">[Target(OS(Windows))] type ErrorCode = uint
@@ -12303,9 +12512,11 @@ between (including one that allocates) may overwrite the code.</p>
 <code>ERROR_PATH_NOT_FOUND</code> on Windows. An empty path fails with this kind
 on POSIX (with the message <code>"empty path"</code>), and in <code>File.open_with</code>
 on every platform.</p>
+<p><code>resolve</code> and <code>TcpStream.connect_host</code> fail with this kind too when a
+host name has no address.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when a path, or a directory on the way to it, is missing</li>
+<li>true when a path, or a directory on the way to it, is missing, or a host name has no address</li>
 </ul>
 <h4 id="is_permission_denied"><a class="header" href="#is_permission_denied">is_permission_denied</a></h4>
 <pre><code class="language-pepper">bool is_permission_denied()
@@ -12386,6 +12597,57 @@ themselves, so callers rarely see this.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the operation was interrupted</li>
+</ul>
+<h4 id="is_connection_refused"><a class="header" href="#is_connection_refused">is_connection_refused</a></h4>
+<pre><code class="language-pepper">is_connection_refused(): bool
+</code></pre>
+<p>Returns whether a connection attempt was refused: nothing listens on
+that port (the peer answered with a reset).</p>
+<p>Matches <code>ECONNREFUSED</code> on POSIX and <code>WSAECONNREFUSED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection was refused</li>
+</ul>
+<h4 id="is_connection_reset"><a class="header" href="#is_connection_reset">is_connection_reset</a></h4>
+<pre><code class="language-pepper">is_connection_reset(): bool
+</code></pre>
+<p>Returns whether an established connection was broken by the peer:
+reset, aborted, or (when writing) already closed.</p>
+<p>Matches <code>ECONNRESET</code>, <code>ECONNABORTED</code> or <code>EPIPE</code> on POSIX, and
+<code>WSAECONNRESET</code> or <code>WSAECONNABORTED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection was reset or closed by the peer</li>
+</ul>
+<h4 id="is_address_in_use"><a class="header" href="#is_address_in_use">is_address_in_use</a></h4>
+<pre><code class="language-pepper">is_address_in_use(): bool
+</code></pre>
+<p>Returns whether binding failed because another socket already uses
+the address and port.</p>
+<p>Matches <code>EADDRINUSE</code> on POSIX and <code>WSAEADDRINUSE</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address is in use</li>
+</ul>
+<h4 id="is_address_not_available"><a class="header" href="#is_address_not_available">is_address_not_available</a></h4>
+<pre><code class="language-pepper">is_address_not_available(): bool
+</code></pre>
+<p>Returns whether an address cannot be used here: binding to an IP
+address that is not one of this machine’s, or connecting to port 0.</p>
+<p>Matches <code>EADDRNOTAVAIL</code> on POSIX and <code>WSAEADDRNOTAVAIL</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address is not available</li>
+</ul>
+<h4 id="is_timed_out"><a class="header" href="#is_timed_out">is_timed_out</a></h4>
+<pre><code class="language-pepper">is_timed_out(): bool
+</code></pre>
+<p>Returns whether an operation gave up because the peer did not answer
+in time, such as a connection attempt to an unreachable host.</p>
+<p>Matches <code>ETIMEDOUT</code> on POSIX and <code>WSAETIMEDOUT</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the operation timed out</li>
 </ul>
 <h2 id="ioresult"><a class="header" href="#ioresult">IoResult</a></h2>
 <pre><code class="language-pepper">type IoResult&lt;T&gt; = Result&lt;T, IoError&gt;
@@ -13934,6 +14196,818 @@ sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
         var n = list.value().count();
     }
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/address.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="network-addresses"><a class="header" href="#network-addresses">Network addresses</a></h1>
+<p>Network addresses: <code>IpAddress</code> (IPv4 or IPv6), <code>SocketAddress</code> (an IP
+address and a port), and <code>resolve</code>, which turns a host name into socket
+addresses.</p>
+<p>Source: <code>runtime/io/address.pep</code></p>
+<h2 id="ipaddress"><a class="header" href="#ipaddress">IpAddress</a></h2>
+<pre><code class="language-pepper">struct IpAddress
+</code></pre>
+<p>An IPv4 or IPv6 address.</p>
+<p>Make one with <code>IpAddress.v4</code>, <code>IpAddress.v6</code>, <code>IpAddress.parse</code>, or one
+of the well-known addresses (<code>loopback_v4()</code>, <code>unspecified_v6()</code>, …).
+<code>IpAddress()</code> is the IPv4 unspecified address <code>0.0.0.0</code>.</p>
+<p><code>to_string()</code> prints IPv4 in dotted decimal (<code>127.0.0.1</code>) and IPv6 in the
+RFC 5952 form (<code>::1</code>, <code>2001:db8::8a2e:370:7334</code>); an IPv4-mapped IPv6
+address prints as <code>::ffff:1.2.3.4</code>. An IPv4 address and the IPv6 address
+that maps it are different values.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>SocketAddress</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var a = io.IpAddress.parse("192.168.1.10").value();
+    var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
+    print(a.is_v4());         # true
+    print(b.to_string());     # 2001:db8::1
+</code></pre>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates the IPv4 unspecified address, <code>0.0.0.0</code>.</p>
+<h3 id="static-methods-8"><a class="header" href="#static-methods-8">Static methods</a></h3>
+<h4 id="v4"><a class="header" href="#v4">v4</a></h4>
+<pre><code class="language-pepper">static v4(a: u8, b: u8, c: u8, d: u8): IpAddress
+</code></pre>
+<p>Creates an IPv4 address from its four bytes, <code>a.b.c.d</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first byte</li>
+<li><code>b</code> — the second byte</li>
+<li><code>c</code> — the third byte</li>
+<li><code>d</code> — the fourth byte</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address <code>a.b.c.d</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var home = IpAddress.v4(127, 0, 0, 1);
+</code></pre>
+<h4 id="v6"><a class="header" href="#v6">v6</a></h4>
+<pre><code class="language-pepper">static v6(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16): IpAddress
+</code></pre>
+<p>Creates an IPv6 address from its eight 16-bit groups, <code>a:b:c:d:e:f:g:h</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first group</li>
+<li><code>b</code> — the second group</li>
+<li><code>c</code> — the third group</li>
+<li><code>d</code> — the fourth group</li>
+<li><code>e</code> — the fifth group</li>
+<li><code>f</code> — the sixth group</li>
+<li><code>g</code> — the seventh group</li>
+<li><code>h</code> — the eighth group</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
+</code></pre>
+<h4 id="loopback_v4"><a class="header" href="#loopback_v4">loopback_v4</a></h4>
+<pre><code class="language-pepper">static loopback_v4(): IpAddress
+</code></pre>
+<p>Returns the IPv4 loopback address, <code>127.0.0.1</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>127.0.0.1</code></li>
+</ul>
+<h4 id="loopback_v6"><a class="header" href="#loopback_v6">loopback_v6</a></h4>
+<pre><code class="language-pepper">static loopback_v6(): IpAddress
+</code></pre>
+<p>Returns the IPv6 loopback address, <code>::1</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>::1</code></li>
+</ul>
+<h4 id="unspecified_v4"><a class="header" href="#unspecified_v4">unspecified_v4</a></h4>
+<pre><code class="language-pepper">static unspecified_v4(): IpAddress
+</code></pre>
+<p>Returns the IPv4 unspecified address, <code>0.0.0.0</code>. Binding to it listens
+on every IPv4 interface.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>0.0.0.0</code></li>
+</ul>
+<h4 id="unspecified_v6"><a class="header" href="#unspecified_v6">unspecified_v6</a></h4>
+<pre><code class="language-pepper">static unspecified_v6(): IpAddress
+</code></pre>
+<p>Returns the IPv6 unspecified address, <code>::</code>. Binding to it listens on
+every IPv6 interface (and, where the system allows dual-stack sockets
+by default, such as Linux, on every IPv4 interface too).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>::</code></li>
+</ul>
+<h4 id="parse"><a class="header" href="#parse">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): IoResult&lt;IpAddress&gt;
+</code></pre>
+<p>Parses an IPv4 address in dotted decimal (<code>192.168.0.1</code>) or an IPv6
+address in the RFC 4291 text form (<code>::1</code>, <code>fe80::1:2</code>,
+<code>::ffff:10.0.0.1</code>).</p>
+<p>IPv4 needs exactly four decimal parts from 0 to 255 without leading
+zeros. IPv6 takes up to eight groups of one to four hex digits (either
+case), at most one <code>::</code>, and an optional IPv4 address as the last 32
+bits. Zone suffixes (<code>%eth0</code>), brackets and surrounding spaces are not
+accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the address to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address; an error with <code>is_invalid_input()</code> when <code>text</code> is not a valid IPv4 or IPv6 address</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var r = IpAddress.parse("10.0.0.300");
+    print(r.is_err());   # true: 300 is out of range
+</code></pre>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
+<pre><code class="language-pepper">is_v4(): bool
+</code></pre>
+<p>Returns whether this is an IPv4 address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for IPv4, false for IPv6</li>
+</ul>
+<h4 id="is_v6"><a class="header" href="#is_v6">is_v6</a></h4>
+<pre><code class="language-pepper">is_v6(): bool
+</code></pre>
+<p>Returns whether this is an IPv6 address (including an IPv4-mapped one,
+<code>::ffff:a.b.c.d</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for IPv6, false for IPv4</li>
+</ul>
+<h4 id="is_loopback"><a class="header" href="#is_loopback">is_loopback</a></h4>
+<pre><code class="language-pepper">is_loopback(): bool
+</code></pre>
+<p>Returns whether this is a loopback address: <code>127.0.0.0/8</code> for IPv4,
+<code>::1</code> for IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a loopback address</li>
+</ul>
+<h4 id="is_unspecified"><a class="header" href="#is_unspecified">is_unspecified</a></h4>
+<pre><code class="language-pepper">is_unspecified(): bool
+</code></pre>
+<p>Returns whether this is the unspecified address, <code>0.0.0.0</code> or <code>::</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for the unspecified address</li>
+</ul>
+<h4 id="to_bytes"><a class="header" href="#to_bytes">to_bytes</a></h4>
+<pre><code class="language-pepper">to_bytes(): u8[]
+</code></pre>
+<p>Returns the address’s bytes in network order: 4 for IPv4, 16 for
+IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the address bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
+</code></pre>
+<h4 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the address as text: dotted decimal for IPv4, the RFC 5952
+form for IPv6 (lowercase hex, leading zeros dropped, the longest run of
+two or more zero groups written <code>::</code>, <code>::ffff:a.b.c.d</code> for an
+IPv4-mapped address).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text form, which <code>IpAddress.parse</code> reads back</li>
+</ul>
+<h4 id="operator--13"><a class="header" href="#operator--13">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: IpAddress): bool
+</code></pre>
+<p>Returns whether two addresses are the same: same family and same
+bytes. An IPv4 address never equals an IPv6 one, not even the IPv6
+address that maps it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both are equal</li>
+</ul>
+<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: IpAddress): bool
+</code></pre>
+<p>Returns whether two addresses differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the family or any byte differs</li>
+</ul>
+<h2 id="socketaddress"><a class="header" href="#socketaddress">SocketAddress</a></h2>
+<pre><code class="language-pepper">struct SocketAddress
+</code></pre>
+<p>An IP address and a port: where a socket is bound, or where it connects
+or sends.</p>
+<p>Make one with <code>SocketAddress(address, port)</code> or <code>SocketAddress.parse</code>,
+or get a list from <code>resolve</code>. <code>SocketAddress()</code> is <code>0.0.0.0:0</code>. The text
+form is <code>address:port</code> for IPv4 and <code>[address]:port</code> for IPv6.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>IpAddress</code></li>
+<li><code>resolve</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
+    var local = io.SocketAddress.parse("[::1]:443").value();
+    print(local.port());   # 443
+</code></pre>
+<h3 id="constructors-2"><a class="header" href="#constructors-2">Constructors</a></h3>
+<h4 id="socketaddress-1"><a class="header" href="#socketaddress-1">SocketAddress()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates <code>0.0.0.0:0</code>, the IPv4 unspecified address with port 0.</p>
+<h4 id="socketaddress-2"><a class="header" href="#socketaddress-2">SocketAddress()</a></h4>
+<pre><code class="language-pepper">construct(address: IpAddress, port: u16)
+</code></pre>
+<p>Creates a socket address from an IP address and a port.</p>
+<p>Port 0 asks the system to choose a free port when binding; read the
+one it chose with the socket’s <code>local_address()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the IP address</li>
+<li><code>port</code> — the port</li>
+</ul>
+<h3 id="static-methods-1-1"><a class="header" href="#static-methods-1-1">Static methods</a></h3>
+<h4 id="parse-1"><a class="header" href="#parse-1">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Parses <code>a.b.c.d:port</code> (IPv4) or <code>[ipv6]:port</code> (IPv6), with the address
+syntax of <code>IpAddress.parse</code> and a decimal port from 0 to 65535.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the socket address to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the socket address; an error with <code>is_invalid_input()</code> when the text is malformed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var a = SocketAddress.parse("127.0.0.1:8080").value();
+    var b = SocketAddress.parse("[::1]:8080").value();
+</code></pre>
+<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
+<h4 id="address"><a class="header" href="#address">address</a></h4>
+<pre><code class="language-pepper">address(): IpAddress
+</code></pre>
+<p>Returns the IP address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the IP address part</li>
+</ul>
+<h4 id="port"><a class="header" href="#port">port</a></h4>
+<pre><code class="language-pepper">port(): u16
+</code></pre>
+<p>Returns the port.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the port, 0 to 65535</li>
+</ul>
+<h4 id="is_v4-1"><a class="header" href="#is_v4-1">is_v4</a></h4>
+<pre><code class="language-pepper">is_v4(): bool
+</code></pre>
+<p>Returns whether the IP address is IPv4.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an IPv4 socket address</li>
+</ul>
+<h4 id="is_v6-1"><a class="header" href="#is_v6-1">is_v6</a></h4>
+<pre><code class="language-pepper">is_v6(): bool
+</code></pre>
+<p>Returns whether the IP address is IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an IPv6 socket address</li>
+</ul>
+<h4 id="to_string-1-1"><a class="header" href="#to_string-1-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the text form: <code>a.b.c.d:port</code> for IPv4, <code>[ipv6]:port</code> for
+IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text form, which <code>SocketAddress.parse</code> reads back</li>
+</ul>
+<h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: SocketAddress): bool
+</code></pre>
+<p>Returns whether two socket addresses have equal IP addresses and the
+same port.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the socket address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both are equal</li>
+</ul>
+<h4 id="operator--3-3"><a class="header" href="#operator--3-3">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: SocketAddress): bool
+</code></pre>
+<p>Returns whether two socket addresses differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the socket address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address or the port differs</li>
+</ul>
+<h2 id="resolve"><a class="header" href="#resolve">resolve</a></h2>
+<pre><code class="language-pepper">resolve(host: String, port: u16): IoResult&lt;SocketAddress[]&gt;
+</code></pre>
+<p>Looks up the socket addresses of a host, with <code>port</code> attached to each.</p>
+<p>A <code>host</code> that is already an IP address (as <code>IpAddress.parse</code> reads it) is
+returned as is, without a lookup. Anything else goes to the system
+resolver (<code>getaddrinfo</code> on POSIX, <code>GetAddrInfoW</code> on Windows), which
+consults the hosts file and DNS and blocks until it answers. The addresses
+come in the resolver’s order of preference, IPv4 and IPv6 mixed, each at
+most once.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>host</code> — a host name such as <code>"example.com"</code> or <code>"localhost"</code>, or an IP address</li>
+<li><code>port</code> — the port to put in every result</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>at least one address; an error with <code>is_not_found()</code> when the name has no address, <code>is_invalid_input()</code> when <code>host</code> is empty, or another resolver error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var r = io.resolve("localhost", 8080);
+    if (r.is_ok()) {
+        for (var address in r.value()) {
+            print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
+        }
+    }
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/socket.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="sockets"><a class="header" href="#sockets">Sockets</a></h1>
+<p>TCP and UDP sockets: <code>TcpListener</code> accepts connections, <code>TcpStream</code> is
+one connection, <code>UdpSocket</code> sends and receives datagrams.</p>
+<p>Every call blocks the calling thread until it completes. Addresses are
+<code>SocketAddress</code> values; <code>resolve</code> turns a host name into them.</p>
+<p>Source: <code>runtime/io/socket.pep</code></p>
+<h2 id="tcplistener"><a class="header" href="#tcplistener">TcpListener</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpListener
+</code></pre>
+<p>A TCP socket that listens for connections.</p>
+<p><code>TcpListener.bind</code> opens one on a local address; each <code>accept()</code> waits for
+the next connection and returns it as a <code>TcpStream</code> together with the
+peer’s address. Binding to port 0 lets the system choose a free port;
+<code>local_address()</code> tells which.</p>
+<p>On POSIX the listener sets <code>SO_REUSEADDR</code>, so a server can restart while
+connections from its previous run linger in <code>TIME_WAIT</code>. An IPv6 listener
+keeps the system’s default for accepting IPv4 too (on Linux and macOS it
+does, on Windows it does not).</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed listener fails with an error no <code>IoError</code> predicate identifies
+(<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+    print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
+    while (true) {
+        var (stream, peer) = listener.accept().value();
+        stream.write_string("hello " + peer.to_string());
+    }
+</code></pre>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed listener: <code>is_open()</code> is false and every operation
+fails. Use <code>TcpListener.bind</code> to get an open one.</p>
+<h3 id="static-methods-9"><a class="header" href="#static-methods-9">Static methods</a></h3>
+<h4 id="bind"><a class="header" href="#bind">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;TcpListener&gt;
+</code></pre>
+<p>Opens a TCP socket bound to <code>address</code> and starts listening on it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to listen on: a specific interface (<code>127.0.0.1:8080</code>), every interface (<code>0.0.0.0:8080</code>, <code>[::]:8080</code>), or port 0 for any free port</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
+</ul>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the listener is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>TcpListener()</code> never bound</li>
+</ul>
+<h4 id="accept"><a class="header" href="#accept">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream and the peer’s address; an error when the listener is closed, or another platform error</li>
+</ul>
+<h4 id="local_address"><a class="header" href="#local_address">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the listener is bound to, with the port the
+system chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the listener is closed, or another platform error</li>
+</ul>
+<h4 id="close-1"><a class="header" href="#close-1">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the listener now. Closing a closed listener does nothing.
+Connections already accepted stay open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="tcpstream"><a class="header" href="#tcpstream">TcpStream</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpStream
+</code></pre>
+<p>A TCP connection: a reliable, ordered stream of bytes in both directions.</p>
+<p>Get one from <code>TcpStream.connect</code> (to an address), <code>TcpStream.connect_host</code>
+(to a host name) or <code>TcpListener.accept</code>. <code>read</code> appends what has arrived
+to a byte array and returns 0 once the peer has closed its side; <code>write</code>
+sends bytes.</p>
+<p>Each call is one system call and blocks until it can make progress: a
+<code>read</code> returns as soon as some bytes are there, not when <code>max</code> bytes are,
+and a <code>write</code> may send fewer bytes than given. <code>read_exact</code> and
+<code>write_all</code> loop until done. Sending never raises <code>SIGPIPE</code>; writing to a
+connection the peer has closed fails with <code>is_connection_reset()</code>.</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed stream fails with an error no <code>IoError</code> predicate identifies
+(<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var stream = io.TcpStream.connect_host("example.com", 80).value();
+    stream.write_string("HEAD / HTTP/1.0\r\n\r\n");
+    var reply = Array&lt;u8&gt;();
+    while (stream.read(reply, 4096).value() &gt; 0) {
+    }
+</code></pre>
+<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
+<h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed stream: <code>is_open()</code> is false and every operation
+fails. Use <code>TcpStream.connect</code> or <code>TcpListener.accept</code> to get an open
+one.</p>
+<h3 id="static-methods-1-2"><a class="header" href="#static-methods-1-2">Static methods</a></h3>
+<h4 id="connect"><a class="header" href="#connect">connect</a></h4>
+<pre><code class="language-pepper">static connect(address: SocketAddress): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Opens a connection to <code>address</code>, waiting until it is established.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the address to connect to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; an error with <code>is_connection_refused()</code> when nothing listens there, <code>is_timed_out()</code> when the peer does not answer, or another platform error</li>
+</ul>
+<h4 id="connect_host"><a class="header" href="#connect_host">connect_host</a></h4>
+<pre><code class="language-pepper">static connect_host(host: String, port: u16): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Resolves <code>host</code> with <code>resolve</code> and connects to the first of its
+addresses that accepts, trying them in order.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>host</code> — a host name or an IP address</li>
+<li><code>port</code> — the port to connect to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; the error from <code>resolve</code> when the name has no address, or the error from the last address tried</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var r = TcpStream.connect_host("localhost", 8080);
+    if (r.is_err() &amp;&amp; r.error().is_connection_refused()) {
+        print("nothing is listening on 8080");
+    }
+</code></pre>
+<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
+<h4 id="is_open-1-1"><a class="header" href="#is_open-1-1">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the stream is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>TcpStream()</code> never connected</li>
+</ul>
+<h4 id="read-2"><a class="header" href="#read-2">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until data arrives, then appends up to <code>max</code> bytes of it to
+<code>buffer</code> with a single system call, like <code>File.read</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 once the peer has closed its side of the connection; an error with <code>is_connection_reset()</code> when the connection was reset, an error when the stream is closed, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var buffer = Array&lt;u8&gt;();
+    var n = stream.read(buffer, 4096).value();   # buffer.count() == n
+</code></pre>
+<h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
+<pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Reads until exactly <code>count</code> more bytes are appended to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>count</code> — the number of bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>count</code> bytes are appended; an error when the peer closes the connection first (“connection closed after n of count bytes”, code <code>EIO</code> on POSIX, <code>ERROR_HANDLE_EOF</code> on Windows, which no predicate matches), or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
+</ul>
+<h4 id="write-2"><a class="header" href="#write-2">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends bytes from <code>data</code> with a single system call, waiting until the
+system can take at least some of them.</p>
+<p>The send may be partial: it can send fewer than <code>data.count()</code> bytes.
+Use <code>write_all</code> to send everything.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent, which may be less than <code>data.count()</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="write_all-2"><a class="header" href="#write_all-2">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
+<p>If an error occurs part of <code>data</code> may already have been sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="write_string-1"><a class="header" href="#write_string-1">write_string</a></h4>
+<pre><code class="language-pepper">write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does. No
+newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="shutdown_write"><a class="header" href="#shutdown_write">shutdown_write</a></h4>
+<pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the sending side of the connection: the peer’s reads return 0
+once it has read everything sent before. This side can still read.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="set_no_delay"><a class="header" href="#set_no_delay">set_no_delay</a></h4>
+<pre><code class="language-pepper">set_no_delay(enabled: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Turns Nagle’s algorithm off (<code>true</code>) or on (<code>false</code>) with
+<code>TCP_NODELAY</code>. With it off, small writes go out at once instead of
+being held back to combine with later ones: lower latency for
+request/response traffic, more packets.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>enabled</code> — true to send small writes immediately</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="local_address-1"><a class="header" href="#local_address-1">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns this side’s address of the connection.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="peer_address"><a class="header" href="#peer_address">peer_address</a></h4>
+<pre><code class="language-pepper">peer_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the peer’s address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peer’s address; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="close-1-1"><a class="header" href="#close-1-1">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the connection now. Closing a closed stream does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="udpsocket"><a class="header" href="#udpsocket">UdpSocket</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct UdpSocket
+</code></pre>
+<p>A UDP socket: sends and receives datagrams, each delivered whole or not at
+all, in no guaranteed order.</p>
+<p><code>UdpSocket.bind</code> opens one on a local address (port 0 for any free port).
+<code>send_to</code> and <code>receive_from</code> name the peer on each call; after <code>connect</code>,
+<code>send</code> and <code>receive</code> use the connected peer and ignore datagrams from
+anyone else.</p>
+<p>Each receive takes one datagram. A datagram longer than <code>max</code> is
+truncated to <code>max</code> bytes and the rest is lost, so size <code>max</code> for the
+largest datagram expected (at most 65507 bytes over IPv4).</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
+    var buffer = Array&lt;u8&gt;();
+    var (n, from) = socket.receive_from(buffer, 65507).value();
+    socket.send_to(buffer, from);   # echo it back
+</code></pre>
+<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
+<h4 id="udpsocket-1"><a class="header" href="#udpsocket-1">UdpSocket()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed socket: <code>is_open()</code> is false and every operation
+fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
+<h3 id="static-methods-2-1"><a class="header" href="#static-methods-2-1">Static methods</a></h3>
+<h4 id="bind-1"><a class="header" href="#bind-1">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;UdpSocket&gt;
+</code></pre>
+<p>Opens a UDP socket bound to <code>address</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to receive on; port 0 for any free port</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the bound socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, or another platform error</li>
+</ul>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h4 id="is_open-2"><a class="header" href="#is_open-2">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the socket is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>UdpSocket()</code> never bound</li>
+</ul>
+<h4 id="send_to"><a class="header" href="#send_to">send_to</a></h4>
+<pre><code class="language-pepper">send_to(data: u8[], address: SocketAddress): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to <code>address</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram’s bytes</li>
+<li><code>address</code> — where to send it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent (all of <code>data</code>); an error when the datagram is too large, when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="receive_from"><a class="header" href="#receive_from">receive_from</a></h4>
+<pre><code class="language-pepper">receive_from(buffer: u8[], max: ulong): IoResult&lt;(ulong, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next datagram and appends up to <code>max</code> of its bytes to
+<code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended and the sender’s address; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="connect-1"><a class="header" href="#connect-1">connect</a></h4>
+<pre><code class="language-pepper">connect(address: SocketAddress): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the socket’s default peer: <code>send</code> goes to <code>address</code>, and
+<code>receive</code> and <code>receive_from</code> only take datagrams from it. No packet is
+sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the peer</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="send"><a class="header" href="#send">send</a></h4>
+<pre><code class="language-pepper">send(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to the connected peer.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram’s bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent; an error when the socket is not connected or is closed, or another platform error</li>
+</ul>
+<h4 id="receive"><a class="header" href="#receive">receive</a></h4>
+<pre><code class="language-pepper">receive(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits for the next datagram from the connected peer and appends up to
+<code>max</code> of its bytes to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="set_broadcast"><a class="header" href="#set_broadcast">set_broadcast</a></h4>
+<pre><code class="language-pepper">set_broadcast(enabled: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Allows (<code>true</code>) or forbids (<code>false</code>) sending to a broadcast address
+such as <code>255.255.255.255</code> (<code>SO_BROADCAST</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>enabled</code> — true to allow broadcasts</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="local_address-2"><a class="header" href="#local_address-2">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the socket is bound to, with the port the system
+chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="peer_address-1"><a class="header" href="#peer_address-1">peer_address</a></h4>
+<pre><code class="language-pepper">peer_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the connected peer’s address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peer’s address; an error when the socket is not connected or is closed, or another platform error</li>
+</ul>
+<h4 id="close-2"><a class="header" href="#close-2">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the socket now. Closing a closed socket does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-async-module"><a class="header" href="#the-async-module">The async module</a></h1>
 <p>Threads and concurrency, modeled on Rust’s <code>std::thread</code> and C++
@@ -14043,7 +15117,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
 </code></pre>
@@ -14055,7 +15129,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <li><code>name</code> — the thread’s name; empty for an unnamed thread</li>
 <li><code>body</code> — the function the thread runs</li>
 </ul>
-<h3 id="static-methods-8"><a class="header" href="#static-methods-8">Static methods</a></h3>
+<h3 id="static-methods-10"><a class="header" href="#static-methods-10">Static methods</a></h3>
 <h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
 <pre><code class="language-pepper">static Thread spawn(ThreadBody body, String name = "")
 </code></pre>
@@ -14105,7 +15179,7 @@ cannot be joined.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
@@ -14199,7 +15273,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -14208,7 +15282,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
 <pre><code class="language-pepper">T get()
 </code></pre>
@@ -14280,7 +15354,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-thread value</li>
 </ul>
-<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
+<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
 <h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(ThreadLocal&lt;T&gt; local)
 </code></pre>
@@ -14290,7 +15364,7 @@ as <code>local.enter()</code>.</p>
 <ul>
 <li><code>local</code> — the thread-local variable</li>
 </ul>
-<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
+<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
 <h4 id="enter-1-1"><a class="header" href="#enter-1-1">enter</a></h4>
 <pre><code class="language-pepper">T enter()
 </code></pre>
@@ -14404,7 +15478,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
 </code></pre>
@@ -14421,8 +15495,8 @@ threads.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
-<h4 id="send"><a class="header" href="#send">send</a></h4>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">bool send(T value)
 </code></pre>
 <p>Queues a copy of <code>value</code>, first waiting while a bounded channel is
@@ -14456,7 +15530,7 @@ waiting. The copy is made even when it is not queued.</p>
 <ul>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
-<h4 id="receive"><a class="header" href="#receive">receive</a></h4>
+<h4 id="receive-1"><a class="header" href="#receive-1">receive</a></h4>
 <pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive()
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
@@ -14490,7 +15564,7 @@ waiting. The copy is made even when it is not queued.</p>
 <ul>
 <li>the value, or an error if the time ran out or once the channel is closed and empty</li>
 </ul>
-<h4 id="close-1"><a class="header" href="#close-1">close</a></h4>
+<h4 id="close-3"><a class="header" href="#close-3">close</a></h4>
 <pre><code class="language-pepper">void close()
 </code></pre>
 <p>Closes the channel and wakes every waiting sender and receiver.</p>
@@ -14552,7 +15626,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
 <pre><code class="language-pepper">T Current
 </code></pre>
 <p>The value the last successful <code>next()</code> received.</p>
-<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
+<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(Channel&lt;T&gt; source)
 </code></pre>
@@ -14562,7 +15636,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
+<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
 <h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
@@ -14634,7 +15708,7 @@ program, so a Mutex is never left “poisoned”.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Sending] T value)
 </code></pre>
@@ -14653,7 +15727,7 @@ it (<code>copy</code>), so the argument’s own references never reach the Mutex
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
@@ -14765,7 +15839,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; source, bool wait = true)
 </code></pre>
@@ -14780,7 +15854,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
+<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
 <h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
 <pre><code class="language-pepper">T enter()
 </code></pre>
@@ -14840,7 +15914,7 @@ usually while it still holds the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
+<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; mutex)
 </code></pre>
@@ -14854,7 +15928,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">void wait()
 </code></pre>
@@ -14930,7 +16004,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -14939,7 +16013,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">void call(ThreadBody body)
 </code></pre>
@@ -15001,7 +16075,7 @@ compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(shared () =&gt; T initializer)
 </code></pre>
@@ -15015,7 +16089,7 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
 <h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
 <pre><code class="language-pepper">T get()
 </code></pre>
@@ -15120,7 +16194,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">T copy(Copies copies)
 </code></pre>
@@ -15144,12 +16218,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>

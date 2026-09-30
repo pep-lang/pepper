@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8de87351.js";
+            window.path_to_searchindex_js = "../searchindex-267e834f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6f6f7138.js"></script>
+        <script src="../toc-0595f8ea.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,8 @@
                     <main>
                         <!-- Generated from runtime/io/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-io-module"><a class="header" href="#the-io-module">The io module</a></h1>
-<p>Files, directories, and paths, modeled on Rust’s <code>std::fs</code> and <code>std::path</code>.</p>
+<p>Files, directories, paths, and sockets, modeled on Rust’s <code>std::fs</code>,
+<code>std::path</code> and <code>std::net</code>.</p>
 <p>Unlike the rest of the standard library, <code>io</code> is a module: bring it in with
 <code>import io</code> (and write <code>io.File</code>, <code>io.Path</code>) or import names directly with
 <code>import [File, Path] from io</code>. Every fallible operation returns an
@@ -193,6 +194,8 @@
 <li><a href="io-path.html">Path</a>: building, splitting, and inspecting paths</li>
 <li><a href="io-file.html">File</a>: opening, reading, and writing files, and whole-file helpers</li>
 <li><a href="io-directory.html">Directory</a>: listing, creating, and removing directories</li>
+<li><a href="io-address.html">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
+<li><a href="io-socket.html">Sockets</a>: <code>TcpListener</code>, <code>TcpStream</code>, and <code>UdpSocket</code></li>
 <li><a href="io-types.html">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
