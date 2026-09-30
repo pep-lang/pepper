@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6270c235.js";
+            window.path_to_searchindex_js = "../searchindex-634300b2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -273,6 +273,10 @@ indexers.</li>
 They can use <code>this</code> and name the struct’s fields directly, and they are
 called the same way.</li>
 <li>A type can have any number of extensions.</li>
+<li>An extension in another file is usable only where that file (or its
+module) is imported, and only if it is exported; the standard library’s
+extensions are usable everywhere. See
+<a href="visibility.html#members-of-structs-and-extensions">Visibility</a>.</li>
 </ul>
 <h3 id="extending-generic-structs"><a class="header" href="#extending-generic-structs">Extending generic structs</a></h3>
 <p><code>extend Box&lt;T&gt;</code>, using the struct’s own type parameter name, adds the methods

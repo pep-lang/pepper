@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6270c235.js";
+            window.path_to_searchindex_js = "searchindex-634300b2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -3449,6 +3449,10 @@ indexers.</li>
 They can use <code>this</code> and name the struct’s fields directly, and they are
 called the same way.</li>
 <li>A type can have any number of extensions.</li>
+<li>An extension in another file is usable only where that file (or its
+module) is imported, and only if it is exported; the standard library’s
+extensions are usable everywhere. See
+<a href="#members-of-structs-and-extensions">Visibility</a>.</li>
 </ul>
 <h3 id="extending-generic-structs"><a class="header" href="#extending-generic-structs">Extending generic structs</a></h3>
 <p><code>extend Box&lt;T&gt;</code>, using the struct’s own type parameter name, adds the methods
@@ -4521,12 +4525,76 @@ lib.pep:42:5: note: declared here
    42 |     norm(): int {
       |     ^~~~
 </code></pre>
-<p>Likewise, a trait that a private extension implements is only available
-through that extension in its own file. Extending a struct does not make a
-private struct visible to other files.</p>
+<p>An exported extension’s methods are usable where its file is <strong>imported</strong>,
+not everywhere: a file sees the extensions it declares itself, the exported
+extensions of the files it imports, the exported extensions of every file of
+a module it imports (<code>import geo</code> reaches <code>geo/ext.pep</code>’s), and those of the
+runtime, which every file sees. Here <code>measure.pep</code> adds <code>manhattan()</code> to
+<code>Point</code>, and <code>main.pep</code> imports it to call it:</p>
+<pre><code class="language-pepper">import "point";
+
+# An exported extension: files that import measure.pep can call these.
+export extend Point {
+    manhattan(): int {
+        return abs(x) + abs(y);
+    }
+}
+
+# Private to this file.
+abs(v: int): int {
+    if (v &lt; 0) { return -v; }
+    return v;
+}
+</code></pre>
+<pre><code class="language-pepper">import "point";
+import "measure";                      # brings Point's manhattan() into scope
+
+main(): int {
+    var p = Point();
+    p.x = 3;
+    p.y = -4;
+    assert(p.manhattan() == 7, "an extension from an imported file");
+    return 0;
+}
+</code></pre>
+<p>Without <code>import "measure";</code>, the call is an error. If no file of the program
+imports <code>measure.pep</code>, the method does not exist at all (<code>no member named 'manhattan' in 'Point'</code>); if another file does, the error says which import
+is missing:</p>
+<pre><code class="language-text">main.pep:8:14: error: 'manhattan' is declared in an extension in measure.pep, which this file does not import; add an import for it
+    8 |     assert(p.manhattan() == 7, "an extension from an imported file");
+      |              ^~~~~~~~~
+measure.pep:5:5: note: declared here
+    5 |     manhattan(): int {
+      |     ^~~~~~~~~
+</code></pre>
+<p>Two kinds of call are checked where they take effect rather than here:</p>
+<ul>
+<li>A method of a trait you can see (<code>s.area()</code> where <code>area</code> is a method of a
+trait <code>Shape</code> you declare, import, or get from the standard library): the
+call may go through a value of that trait, which works whatever file
+declares the conformance. A file can return a <code>Shape</code> whose struct and
+conformance stay private, and callers still call <code>area</code> on it.</li>
+<li>A call on a receiver whose type is not known in this file: <code>this.m()</code> in a
+trait’s default method, or <code>x.m()</code> (or <code>x.f().m()</code>) where <code>x</code> is a
+parameter typed by a type parameter, the function’s or its struct’s
+(<code>measure&lt;X&gt;(x: X)</code>). Such a call resolves where the generic is used, with
+that file’s imports.</li>
+</ul>
+<p>When the extension is in a file of another module, the error names the
+module to import instead (<code>import its module 'geo'</code>), since a file of another
+module is reached only through its module.</p>
+<p>Inside a struct’s methods (and a trait’s default methods), a bare call to a
+name that an extension you cannot see adds as a method is an error too,
+rather than a call to the top-level function of that name: the compiler
+would otherwise bind it to the method.
+Rename one of them, or import the extension’s file if the method is what you
+meant. That import may point back at a file that imports this one (a struct’s
+file importing the file that extends it); such cycles are allowed.</p>
+<p>Extending a struct does not make a private struct visible to other files.</p>
 <p>Visibility is checked before types are known, so members are matched by name:
-a call <code>x.m()</code> in another file is accepted if any struct body or extension
-visible to that file (its own, or exported) declares a member named <code>m</code>.</p>
+a call <code>x.m()</code> is accepted if any struct body visible to the file (its own,
+or exported) or any extension visible to it, as above, declares a member
+named <code>m</code>.</p>
 <h2 id="where-export-goes"><a class="header" href="#where-export-goes">Where <code>export</code> goes</a></h2>
 <p><code>export</code> goes directly before the declaration’s keyword or name, <strong>after</strong> any
 attributes:</p>
