@@ -22,7 +22,7 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
 
-fn source_dir(name: &str) -> PathBuf {
+pub(crate) fn source_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pepper_io_{}_{}", name, std::process::id()))
 }
 
@@ -38,7 +38,7 @@ fn write_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
 }
 
 /// Compile + link `source` into a native binary; return its path.
-fn build(name: &str, source: &str) -> Result<PathBuf, String> {
+pub(crate) fn build(name: &str, source: &str) -> Result<PathBuf, String> {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     let (src, dir) = write_source(name, source);
@@ -65,7 +65,7 @@ fn run(name: &str, source: &str) -> (i32, String, String) {
     (output.status.code().unwrap_or(-1), stdout, stderr)
 }
 
-fn assert_runs(name: &str, source: &str) -> String {
+pub(crate) fn assert_runs(name: &str, source: &str) -> String {
     let (code, stdout, stderr) = run(name, source);
     // A failed assert prints its message (the second argument of the
     // assert) as the last line of stdout, then aborts.
@@ -678,7 +678,7 @@ fn all_programs() -> Vec<(&'static str, String)> {
     ]
 }
 
-const SIMULATED_HOSTS: [(&str, &str); 6] = [
+pub(crate) const SIMULATED_HOSTS: [(&str, &str); 6] = [
     ("windows", "x86_64"),
     ("windows", "aarch64"),
     ("macos", "x86_64"),
@@ -691,7 +691,7 @@ const SIMULATED_HOSTS: [(&str, &str); 6] = [
 /// platform filter, sema and LLVM codegen that host runs — and hand the
 /// generated module to `then`. The result can be neither linked nor run as
 /// a native program here.
-fn with_codegen_as<R>(
+pub(crate) fn with_codegen_as<R>(
     os: &str,
     arch: &str,
     name: &str,

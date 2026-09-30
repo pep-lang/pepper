@@ -245,8 +245,13 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             if let Some(ty) = table.functions.get(function) {
                 return Some(ty.clone());
             }
-            // Constructor-style call `Name<...>(...)` resolves to Name<...>.
-            let ty = crate::passes::gather_generics::parse_type_string(function);
+            // Constructor-style call `Name<...>(...)` resolves to Name<...>;
+            // one of several overloaded constructors (`Name$2`) too.
+            let name = match function.rsplit_once('$') {
+                Some((base, index)) if !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()) => base,
+                _ => function.as_str(),
+            };
+            let ty = crate::passes::gather_generics::parse_type_string(name);
             table.lookup(&ty).map(|_| ty)
         }
         Expression::Binary { op, lhs, rhs, .. } => {

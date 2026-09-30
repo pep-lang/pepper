@@ -592,10 +592,19 @@ thread_local! {
 
 /// Restart hidden-local numbering (see `crate::reset_program_counters`).
 pub(crate) fn reset_counters() {
-    FOR_LOOPS.with(|c| c.set(0));
-    WITH_BLOCKS.with(|c| c.set(0));
-    TUPLES.with(|c| c.set(0));
-    MATCHES.with(|c| c.set(0));
+    set_counters([0; 4]);
+}
+
+/// The hidden-local counters, in the order `set_counters` takes them.
+fn counters() -> [usize; 4] {
+    [FOR_LOOPS.with(|c| c.get()), WITH_BLOCKS.with(|c| c.get()), TUPLES.with(|c| c.get()), MATCHES.with(|c| c.get())]
+}
+
+fn set_counters([for_loops, with_blocks, tuples, matches]: [usize; 4]) {
+    FOR_LOOPS.with(|c| c.set(for_loops));
+    WITH_BLOCKS.with(|c| c.set(with_blocks));
+    TUPLES.with(|c| c.set(tuples));
+    MATCHES.with(|c| c.set(matches));
 }
 
 /// Lower `for (var x in source) body` to
@@ -1692,7 +1701,12 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     reset_counters();
     let previous = FILE.with(|f| f.replace(file));
     let previous_error = LABEL_ERROR.with(|e| e.take());
+    // Hidden locals are numbered per file, so a file's code (and its build
+    // cache unit's bitcode) does not depend on the files built before it.
+    let previous_counters = counters();
+    set_counters([0; 4]);
     let built = build_module(module);
+    set_counters(previous_counters);
     let label_error = LABEL_ERROR.with(|e| e.replace(previous_error));
     FILE.with(|f| f.set(previous));
     match label_error {

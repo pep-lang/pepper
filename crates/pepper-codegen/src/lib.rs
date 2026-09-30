@@ -136,6 +136,12 @@ pub struct CodeGenerator<'ctx> {
     /// [`partition`]).
     pub unit: Option<partition::UnitFilter>,
 }
+/// Stands in, under the JIT, for a C function the process cannot resolve.
+extern "C" fn unresolved_c_function() {
+    eprintln!("the program called a C function this process could not resolve");
+    std::process::abort();
+}
+
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
         let module = context.create_module(module_name);
@@ -612,12 +618,26 @@ impl<'ctx> CodeGenerator<'ctx> {
             let name = f.get_name().to_string_lossy();
             if let Some(addr) = map_global(name.as_ref()) {
                 ee.add_global_mapping(&f, addr);
+            } else if !Self::resolves_in_process(name.as_ref()) {
+                // MCJIT crashes while finalizing a module that declares a
+                // function the process cannot resolve, even one nothing
+                // calls: on Windows, the runtime's ws2_32 socket functions
+                // when the host never loaded ws2_32.
+                ee.add_global_mapping(&f, unresolved_c_function as *const () as usize);
             }
         }
         // Static ctors (llvm.global_ctors, e.g. __pep_global_init) do NOT run
         // at engine creation — MCJIT only runs them on explicit request.
         ee.run_static_constructors();
         Ok(ee)
+    }
+
+    /// Whether the JIT's own symbol search finds `name` in this process.
+    fn resolves_in_process(name: &str) -> bool {
+        let Ok(name) = std::ffi::CString::new(name) else {
+            return false;
+        };
+        unsafe { !inkwell::llvm_sys::support::LLVMSearchForAddressOfSymbol(name.as_ptr()).is_null() }
     }
 
     /// Compile a module and hand back the execution engine (static ctors run).

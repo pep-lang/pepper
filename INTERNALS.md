@@ -593,10 +593,14 @@ thread-local that keeps only the **first** diagnostic of a run. Other
 per-run state is thread-local too: `apply_extensions::reset_applied` runs at
 the start of each `transform_pass`, and `platform::SIMULATED_HOST` is set
 only inside `with_simulated_host`. The counters that number synthesized
-names (the builder's `FOR_LOOPS`, `WITH_BLOCKS` and `TUPLES`, closure structs'
-`CLOSURES`, `resolve_operators`' `INDEX_TEMPORARIES`) restart at the start
-of every `load_program` (`pepper_sema::reset_program_counters`). This lets
-tests compile concurrently on separate threads.
+names (the builder's `FOR_LOOPS`, `WITH_BLOCKS`, `TUPLES` and `MATCHES`,
+closure structs' `CLOSURES`, `resolve_operators`' `INDEX_TEMPORARIES`)
+restart at the start of every `load_program`
+(`pepper_sema::reset_program_counters`). This lets tests compile
+concurrently on separate threads. The builder's counters also restart for
+each file (`build_file`), so the hidden locals of one file, and the bitcode
+of its build cache unit, do not depend on which files the program built
+before it.
 
 **Output is deterministic**: the same program compiles to the same IR and
 object bytes on any thread, after any other programs, in any process. So
@@ -735,7 +739,10 @@ How the language lowers:
 - **JIT** (tests only): `jit_engine`, `jit_engine_mapped` (maps declared but
   undefined symbols to host addresses), `jit_call_i32`, and `jit_execute`.
   MCJIT does not run `llvm.global_ctors` by itself, so the engine calls
-  `run_static_constructors`.
+  `run_static_constructors`. A declared function that neither the mapping
+  nor the process resolves (ws2_32 on a Windows test host) is mapped to a
+  stub that aborts if called, because MCJIT crashes finalizing a module
+  with an unresolved symbol even when nothing calls it.
 - **Target** (`target.rs`): `initialize_host` and `host_machine` register
   only the host's backend (x86 or aarch64, chosen by
   `cfg(target_arch)` in `Cargo.toml`). Four call sites share this one
@@ -1018,7 +1025,7 @@ diagnostics"). The mechanics:
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. `[Shared]`, so its `T` must be thread-safe. |
 | `copy.pep` | `copy<T>`, the `Copyable<T>` trait and `Copies` (original-to-copy addresses, deferred weak fixes). `Copies.copy<T>` is the `__copy<T>` intrinsic that `passes/copies.rs` lowers. `String`, `Array`, `HashMap` and `HashSet` implement `Copyable` with a `copy(Copies)` method; `io.File` is `[NotCopyable]`. |
 | `process.pep` | `arguments()` and `exit(code)`. The C `main` the compiler emits takes no `argc`/`argv`, so `arguments()` asks the platform: `/proc/self/cmdline` on Linux, `_NSGetArgc`/`_NSGetArgv` on macOS, `__p___argc`/`__p___argv` on Windows. `exit` flushes the C streams and calls `_Exit`, since the exported name takes C `exit`'s. |
-| `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
+| `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, `directory.pep`, `address.pep` (`IpAddress`, `SocketAddress`, `resolve`; parsing and formatting in pure Pepper) and `socket.pep` (`TcpListener`, `TcpStream`, `UdpSocket`, and the shared sockaddr encoding) implement it. `sys_posix.pep`/`sys_windows.pep` hold the file-system platform layer and `socket_posix.pep`/`socket_windows.pep` the socket layer (BSD sockets and `getaddrinfo`; Winsock through `ws2_32`, started once with `WSAStartup`, sockets created overlapped for the planned IOCP driver). |
 | `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`, and the `[Isolated]` `ThreadLocalGuard<T>` that `enter()` returns for `with` access), `cpus.pep` (`logical_cpus`, `physical_cpus`), the synchronization types in `mutex.pep` (`Mutex<T>`, `MutexGuard<T>`, `Condition<T>`), `once.pep` (`Once`, `Lazy<T>`) and `channel.pep` (`Channel<T>`, `ChannelIterator<T>`), and the platform layer in `sys_posix.pep` (pthreads and pthread mutexes and condition variables, `clock_gettime`, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `SRWLOCK` and `CONDITION_VARIABLE`, `GetTickCount64`, `GetLogicalProcessorInformationEx`). The synchronization types are `[Shared]`: platform locks live in fixed heap blocks (`const __ptr<void>`), and state that changes lives in raw heap slots read and written only under the lock. `Lazy` stores its value behind a `const __ptr<T>` field, so `check_shared_types` accepts only a thread-safe `T`. `Mutex` accepts any struct `T` (its slot is a `__ptr<void>`): its `MutexGuard<T>` is `[Isolated]`, so `check_confinement` keeps the locked value apart from the rest of the program, and its constructor and `replace` take `[Sending]` values and store `copy(value)`, made before locking and dropped under the lock. `Channel` accepts any `T`: its buffer is a `__ptr<__ptr<void>>`, and `send` copies each value with `copy` before locking. A Mutex records its holder's OS thread id (`_async_sys_os_thread`) to panic on a re-lock and to check `Condition.wait`'s caller. |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
 

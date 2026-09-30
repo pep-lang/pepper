@@ -159,3 +159,28 @@ main(): int {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("before") && stdout.contains("the assert message"), "stdout: {stdout:?}");
 }
+
+/// Under the JIT, a declared C function the test process cannot resolve
+/// (here, one no library defines) must not crash the engine as long as
+/// nothing calls it. On Windows the runtime's ws2_32 socket functions are
+/// exactly that whenever a JIT test imports `io`.
+#[test]
+fn the_jit_tolerates_an_unresolvable_c_function_nothing_calls() {
+    let source = r#"
+[Link("pepper_no_such_library")]
+extern int pepper_no_such_function();
+
+unused(): int {
+    return pepper_no_such_function();
+}
+
+test(): int {
+    return 7;
+}
+"#;
+    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = pepper_codegen::CodeGenerator::new(&ctx, "test");
+    let ee = generator.jit_engine(&mut module).expect("jit");
+    assert_eq!(pepper_codegen::CodeGenerator::jit_call_i32(&ee, "test"), Ok(7));
+}

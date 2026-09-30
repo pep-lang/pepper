@@ -22,6 +22,24 @@ descriptors 0, 1 and 2. On Windows this is a `HANDLE` instead.
 **Note**
 - code that must build for every target should not rely on this being an `int`
 
+## SocketHandle
+
+```pepper
+[Target(!OS(Windows))] type SocketHandle = int
+```
+
+The raw operating-system handle of a socket: a POSIX file descriptor.
+
+`TcpListener`, `TcpStream` and `UdpSocket` hold one. A valid descriptor
+is `>= 0`; a closed socket holds `-1`. On Windows this is a `SOCKET`
+instead.
+
+**See also**
+- `TcpStream`
+
+**Note**
+- code that must build for every target should not rely on this being an `int`
+
 ## ErrorCode
 
 ```pepper
@@ -72,6 +90,25 @@ POSIX this is an `int` file descriptor instead.
 
 **Note**
 - code that must build for every target should not rely on this being a `__ptr<void>`
+
+## SocketHandle
+
+```pepper
+[Target(OS(Windows))] type SocketHandle = ulong
+```
+
+The raw operating-system handle of a socket: a Winsock `SOCKET`, an
+unsigned pointer-sized integer.
+
+`TcpListener`, `TcpStream` and `UdpSocket` hold one. A closed socket
+holds `INVALID_SOCKET` (all bits set). On POSIX this is an `int` file
+descriptor instead.
+
+**See also**
+- `TcpStream`
+
+**Note**
+- code that must build for every target should not rely on this being a `ulong`
 
 ## ErrorCode
 
@@ -224,8 +261,11 @@ Matches `ENOENT` on POSIX, and `ERROR_FILE_NOT_FOUND` or
 on POSIX (with the message `"empty path"`), and in `File.open_with`
 on every platform.
 
+`resolve` and `TcpStream.connect_host` fail with this kind too when a
+host name has no address.
+
 **Returns**
-- true when a path, or a directory on the way to it, is missing
+- true when a path, or a directory on the way to it, is missing, or a host name has no address
 
 #### is_permission_denied
 
@@ -334,6 +374,77 @@ themselves, so callers rarely see this.
 
 **Returns**
 - true when the operation was interrupted
+
+#### is_connection_refused
+
+```pepper
+is_connection_refused(): bool
+```
+
+Returns whether a connection attempt was refused: nothing listens on
+that port (the peer answered with a reset).
+
+Matches `ECONNREFUSED` on POSIX and `WSAECONNREFUSED` on Windows.
+
+**Returns**
+- true when the connection was refused
+
+#### is_connection_reset
+
+```pepper
+is_connection_reset(): bool
+```
+
+Returns whether an established connection was broken by the peer:
+reset, aborted, or (when writing) already closed.
+
+Matches `ECONNRESET`, `ECONNABORTED` or `EPIPE` on POSIX, and
+`WSAECONNRESET` or `WSAECONNABORTED` on Windows.
+
+**Returns**
+- true when the connection was reset or closed by the peer
+
+#### is_address_in_use
+
+```pepper
+is_address_in_use(): bool
+```
+
+Returns whether binding failed because another socket already uses
+the address and port.
+
+Matches `EADDRINUSE` on POSIX and `WSAEADDRINUSE` on Windows.
+
+**Returns**
+- true when the address is in use
+
+#### is_address_not_available
+
+```pepper
+is_address_not_available(): bool
+```
+
+Returns whether an address cannot be used here: binding to an IP
+address that is not one of this machine's, or connecting to port 0.
+
+Matches `EADDRNOTAVAIL` on POSIX and `WSAEADDRNOTAVAIL` on Windows.
+
+**Returns**
+- true when the address is not available
+
+#### is_timed_out
+
+```pepper
+is_timed_out(): bool
+```
+
+Returns whether an operation gave up because the peer did not answer
+in time, such as a connection attempt to an unreachable host.
+
+Matches `ETIMEDOUT` on POSIX and `WSAETIMEDOUT` on Windows.
+
+**Returns**
+- true when the operation timed out
 
 ## IoResult
 

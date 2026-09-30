@@ -2,7 +2,8 @@
 
 # The io module
 
-Files, directories, and paths, modeled on Rust's `std::fs` and `std::path`.
+Files, directories, paths, and sockets, modeled on Rust's `std::fs`,
+`std::path` and `std::net`.
 
 Unlike the rest of the standard library, `io` is a module: bring it in with
 `import io` (and write `io.File`, `io.Path`) or import names directly with
@@ -13,6 +14,8 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 - [Path](io-path.md): building, splitting, and inspecting paths
 - [File](io-file.md): opening, reading, and writing files, and whole-file helpers
 - [Directory](io-directory.md): listing, creating, and removing directories
+- [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
+- [Sockets](io-socket.md): `TcpListener`, `TcpStream`, and `UdpSocket`
 - [Errors and platform types](io-types.md): `IoError`, `IoResult`, and handle types
 
 **Example**

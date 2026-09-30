@@ -526,6 +526,35 @@ test(): int {
     assert_eq!(value(source), 7712);
 }
 
+/// A call on an overloaded constructor's temporary has the method's type:
+/// `==` compares Strings by value and `print` prints the text (both went
+/// by the type of `Name$1(...)`, which was unknown).
+#[test]
+fn a_method_on_an_overloaded_constructor_temporary_is_typed() {
+    let source = r#"
+struct Label {
+    int n;
+    construct() { n = 1; }
+    construct(v: int) { n = v; }
+    text(): String { return "label"; }
+}
+struct Holder<T> {
+    T value;
+    construct(v: T) { value = v; }
+    construct(a: T, b: T) { value = b; }
+    text(): String { return "holder"; }
+}
+test(): int {
+    var r = 0;
+    if (Label().text() == "label") { r = r + 1; }
+    if (Label(5).text() == "label") { r = r + 10; }
+    if (Holder<int>(1, 2).text() == "holder") { r = r + 100; }
+    return r;
+}
+"#;
+    assert_eq!(value(source), 111);
+}
+
 #[test]
 fn an_overloaded_constructor_is_a_function_value_by_type() {
     let source = r#"

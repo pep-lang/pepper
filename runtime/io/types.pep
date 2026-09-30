@@ -5,6 +5,8 @@
 
 import "sys_posix";
 import "sys_windows";
+import "socket_posix";
+import "socket_windows";
 
 # POSIX
 
@@ -18,6 +20,18 @@ import "sys_windows";
 ## an `int`
 ## @see File
 [Target(!OS(Windows))] export type FileHandle = int;
+
+## The raw operating-system handle of a socket: a POSIX file descriptor.
+##
+## `TcpListener`, `TcpStream` and `UdpSocket` hold one. A valid descriptor
+## is `>= 0`; a closed socket holds `-1`. On Windows this is a `SOCKET`
+## instead.
+##
+## @note code that must build for every target should not rely on this being
+## an `int`
+## @see TcpStream
+[Target(!OS(Windows))]
+export type SocketHandle = int;
 
 ## The raw platform error code carried by `IoError.code`: a POSIX `errno`
 ## value such as `ENOENT` (2). On Windows this is a `DWORD` from
@@ -52,6 +66,19 @@ import "sys_windows";
 ## a `__ptr<void>`
 ## @see File
 [Target(OS(Windows))] export type FileHandle = __ptr<void>;
+
+## The raw operating-system handle of a socket: a Winsock `SOCKET`, an
+## unsigned pointer-sized integer.
+##
+## `TcpListener`, `TcpStream` and `UdpSocket` hold one. A closed socket
+## holds `INVALID_SOCKET` (all bits set). On POSIX this is an `int` file
+## descriptor instead.
+##
+## @note code that must build for every target should not rely on this being
+## a `ulong`
+## @see TcpStream
+[Target(OS(Windows))]
+export type SocketHandle = ulong;
 
 ## The raw platform error code carried by `IoError.code`: a Windows
 ## `DWORD` error code from `GetLastError()`, such as `ERROR_FILE_NOT_FOUND`
@@ -148,7 +175,11 @@ export struct IoError {
     ## on POSIX (with the message `"empty path"`), and in `File.open_with`
     ## on every platform.
     ##
-    ## @returns true when a path, or a directory on the way to it, is missing
+    ## `resolve` and `TcpStream.connect_host` fail with this kind too when a
+    ## host name has no address.
+    ##
+    ## @returns true when a path, or a directory on the way to it, is missing,
+    ##   or a host name has no address
     bool is_not_found() { return _io_sys_is_not_found(code); }
 
     ## Returns whether the operation was refused for lack of permission.
@@ -216,6 +247,47 @@ export struct IoError {
     ##
     ## @returns true when the operation was interrupted
     bool is_interrupted() { return _io_sys_is_interrupted(code); }
+
+    ## Returns whether a connection attempt was refused: nothing listens on
+    ## that port (the peer answered with a reset).
+    ##
+    ## Matches `ECONNREFUSED` on POSIX and `WSAECONNREFUSED` on Windows.
+    ##
+    ## @returns true when the connection was refused
+    is_connection_refused(): bool { return _io_sys_is_connection_refused(code); }
+
+    ## Returns whether an established connection was broken by the peer:
+    ## reset, aborted, or (when writing) already closed.
+    ##
+    ## Matches `ECONNRESET`, `ECONNABORTED` or `EPIPE` on POSIX, and
+    ## `WSAECONNRESET` or `WSAECONNABORTED` on Windows.
+    ##
+    ## @returns true when the connection was reset or closed by the peer
+    is_connection_reset(): bool { return _io_sys_is_connection_reset(code); }
+
+    ## Returns whether binding failed because another socket already uses
+    ## the address and port.
+    ##
+    ## Matches `EADDRINUSE` on POSIX and `WSAEADDRINUSE` on Windows.
+    ##
+    ## @returns true when the address is in use
+    is_address_in_use(): bool { return _io_sys_is_address_in_use(code); }
+
+    ## Returns whether an address cannot be used here: binding to an IP
+    ## address that is not one of this machine's, or connecting to port 0.
+    ##
+    ## Matches `EADDRNOTAVAIL` on POSIX and `WSAEADDRNOTAVAIL` on Windows.
+    ##
+    ## @returns true when the address is not available
+    is_address_not_available(): bool { return _io_sys_is_address_not_available(code); }
+
+    ## Returns whether an operation gave up because the peer did not answer
+    ## in time, such as a connection attempt to an unreachable host.
+    ##
+    ## Matches `ETIMEDOUT` on POSIX and `WSAETIMEDOUT` on Windows.
+    ##
+    ## @returns true when the operation timed out
+    is_timed_out(): bool { return _io_sys_is_timed_out(code); }
 }
 
 ## The result of an io operation: a value on success, an `IoError` on
