@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fed2b4f5.js";
+            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -312,7 +312,19 @@ null for a struct) until that thread calls <code>set</code>.</li>
 <li>When a thread exits, its value is released.</li>
 </ul>
 <p>A <code>ThreadLocal</code> is usually a module-scope variable. Its <code>T</code> does not need to
-be thread-safe, because each value stays on the thread that stored it. The
+be thread-safe, because each value stays on the thread that stored it. For a
+<code>T</code> that is not thread-safe, such as a <code>String</code>, the value is reached like a
+Mutex’s (see <a href="#what-a-lock-body-may-do">What a lock body may do</a>):</p>
+<ul>
+<li><code>with (var value = local.enter()) { ... }</code> binds this thread’s value; the
+<code>else</code> block runs when the thread has none;</li>
+<li><code>get()</code> is a compile error;</li>
+<li><code>set(value)</code> takes a new value: a constructor call, a string literal, or
+<code>copy(x)</code>.</li>
+</ul>
+<p>Otherwise a function called while a Mutex is locked could keep part of the
+locked value in a thread-local, and a later <code>get()</code> would hand it out after
+the lock was released. The
 <a href="../reference/async-thread_local.html">ThreadLocal reference</a> has the details.</p>
 <h2 id="what-threads-can-share"><a class="header" href="#what-threads-can-share">What threads can share</a></h2>
 <p>Every struct value is a counted reference (see
@@ -673,10 +685,19 @@ thread holds it.</li>
 <li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
 “poisoned”.</li>
 </ul>
-<p><code>T</code> must be thread-safe for now (see <a href="#limitations">Limitations</a>). A Mutex is for keeping several
-changes together, such as two <code>Atomic</code> fields of a <code>[Shared]</code> struct that
-must move as a unit, or state behind a raw pointer. For one number,
-<code>Atomic&lt;T&gt;</code> is simpler.</p>
+<p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
+<code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.
+<code>Mutex&lt;int&gt;</code> is an error (use <code>Atomic&lt;int&gt;</code>). A Mutex of values that are not
+thread-safe is kept apart from the rest of the program by the compiler; see
+<a href="#what-a-lock-body-may-do">What a lock body may do</a>.</p>
+<ul>
+<li><code>Mutex&lt;T&gt;(value)</code> and <code>replace(value)</code> take a <strong>new</strong> value: a constructor
+call, a string literal, a call that returns a fresh value, or <code>copy(x)</code>,
+never a variable something else still references. The Mutex stores a copy
+of it.</li>
+<li><code>replace(value)</code> swaps the whole value under the lock and returns the old
+one, which the caller then owns outright.</li>
+</ul>
 <p>A <code>Condition&lt;T&gt;</code> lets a thread that holds a Mutex sleep until another thread
 changes the value. Get one with <code>mutex.condition()</code>:</p>
 <pre><code class="language-pepper">import async;
@@ -752,6 +773,140 @@ what it waits for.</li>
 </ul>
 <p>The <a href="../reference/async-mutex.html">Mutex reference</a> documents <code>Mutex</code>,
 <code>MutexGuard</code> and <code>Condition</code>.</p>
+<h2 id="what-a-lock-body-may-do"><a class="header" href="#what-a-lock-body-may-do">What a lock body may do</a></h2>
+<p>A value that is not thread-safe counts its references plainly, so no thread
+may hold a reference into a Mutex’s value while the Mutex is unlocked. The
+compiler checks each <code>with</code> block over a lock so that none can:</p>
+<pre><code class="language-pepper">import async;
+
+# A Mutex of values that are not thread-safe: a list of Strings that
+# several threads add to.
+const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+
+add_names(prefix: String) {
+    var i = 0;
+    while (i &lt; 3) {
+        with (var list = names.lock()) {
+            list.append("worker");            # a new String: fine
+            list.append(prefix + "!");        # `+` returns a new String: fine
+            list.append(copy(prefix));        # a copy of an outside value: fine
+            var n = list.count();             # a number leaves freely
+            if (list.contains(prefix)) {      # comparing keeps nothing
+                n = n + 1;
+            }
+        }
+        i = i + 1;
+    }
+}
+
+# Part of the locked value leaves the block only as a copy.
+first_name(): String {
+    with (var list = names.lock()) {
+        if (list.count() &gt; 0) {
+            return list[0].copy();
+        }
+    }
+    return "";
+}
+
+main(): int {
+    var a = async.Thread.spawn(() =&gt; { add_names("a"); });
+    var b = async.Thread.spawn(() =&gt; { add_names("b"); });
+    a.join();
+    b.join();
+
+    var first = first_name();
+    first.append(" (mine)");   # changing the copy leaves the list alone
+    with (var list = names.lock()) {
+        assert(list.count() == 18, "every name was added");
+        assert(list[0] == "worker", "the locked String is unchanged");
+    }
+
+    # replace swaps in a new value and hands back the old one, which the
+    # caller then owns outright.
+    var old = names.replace(Array&lt;String&gt;());
+    assert(old.count() == 18, "the old list");
+
+    # A thread's own value that is not thread-safe is reached through `with`.
+    var scratch = async.ThreadLocal&lt;String&gt;();
+    scratch.set("draft");
+    with (var text = scratch.enter()) {
+        text.append(" 2");
+    }
+    with (var text = scratch.enter()) {
+        assert(text == "draft 2", "this thread's value");
+    }
+    return 0;
+}
+</code></pre>
+<p>Inside the block, every value that is not thread-safe is either <strong>part of
+the locked value</strong> (the binding, its fields and elements, and what calls on
+them return), from <strong>outside</strong> (a parameter, <code>this</code>, or a variable declared
+before the block), or <strong>new</strong>. A new value may join either side; the other
+two must never meet:</p>
+<ul>
+<li>
+<p><strong>Moving in.</strong> A call, constructor or assignment that would link an
+outside value with the locked one is an error. Pass a new value instead:
+<code>copy(line)</code>, a literal, or the result of a call that returns a fresh
+value.</p>
+<pre><code class="language-text">main.pep:8:21: error: 'line' cannot move into the value locked by 'names'
+    8 |         list.append(line);
+      |                     ^~~~
+main.pep:7:28: note: locked here
+    7 |     with (var list = names.lock()) {
+      |                            ^~~~
+note: 'String' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy(line)'
+</code></pre>
+</li>
+<li>
+<p><strong>Moving out.</strong> Storing part of the locked value outside the block, or
+returning it from the block, is an error; take a copy
+(<code>copy(list[0])</code>, or <code>list[0].copy()</code>, which returns a fresh value).</p>
+<pre><code class="language-text">main.pep:8:17: error: 'list[0]' is part of the value locked by 'names' and cannot outlive the lock
+    8 |         first = list[0];
+      |                 ^~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Closures.</strong> A closure written in the block cannot capture part of the
+locked value, since a function value could carry it out.</p>
+</li>
+<li>
+<p><strong>Two locks.</strong> Values locked by two nested blocks stay apart as well.</p>
+</li>
+<li>
+<p><strong>Numbers pass freely</strong>, as do every thread-safe value and every new one.</p>
+</li>
+</ul>
+<p>Which calls link which values comes from what the called function does: the
+compiler works out, for every function, whether it keeps an argument (as
+<code>append</code> keeps its element) and whether its result shares anything with its
+arguments. A result that shares nothing, such as that of <code>+</code>, <code>substr</code>,
+<code>copy()</code> or a constructor, is <strong>fresh</strong>, and may cross in either direction.
+The language server shows “Returns a fresh value” when hovering over such a
+function. A call through a function value, a value an <code>extern</code> function
+hands back, and a value read through raw memory that a <code>[Shared]</code> struct
+holds are never fresh: something else may reference them. The runtime marks
+the few functions that hand out such a value that nothing else references
+<code>[ReturnsOwned]</code>, a promise the compiler cannot check and allows only in the
+runtime: a channel’s <code>receive()</code> (the copy <code>send</code> made) and a Mutex’s
+<code>replace()</code>.</p>
+<p>A function that returns a <a href="tuples.html">tuple</a> has one such fact per element:
+after <code>var (fresh, same) = split(line);</code>, <code>fresh</code> may move into a locked value
+while <code>same</code>, which <code>split</code> returned from its argument, may not.</p>
+<p>The guard a <code>lock()</code> returns can only be the scope of a <code>with</code> header: storing
+it in a variable or field is an error, so no lock outlives its block.</p>
+<p>Two attributes carry these rules, and code outside the runtime may use them
+too:</p>
+<ul>
+<li><code>[Isolated]</code> on a struct makes it a guard: it can only be the scope of a
+<code>with</code> header, and the block is checked as above. <code>MutexGuard&lt;T&gt;</code> and
+<code>ThreadLocalGuard&lt;T&gt;</code> are <code>[Isolated]</code>.</li>
+<li><code>[Sending]</code> on a parameter (<code>construct([Sending] T value)</code>) requires a new
+value for it at every call: a constructor call, a literal, a fresh result,
+<code>copy(x)</code>, or any thread-safe value.</li>
+</ul>
 <h2 id="once-and-lazy"><a class="header" href="#once-and-lazy">Once and Lazy</a></h2>
 <p><code>Once</code> runs a function exactly once, however many threads ask, and <code>Lazy&lt;T&gt;</code>
 builds a value the first time a thread asks for it:</p>
@@ -817,9 +972,13 @@ must be thread-safe, since every thread gets the same value.</li>
 <p>The <a href="../reference/async-once.html">Once reference</a> has the details.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ul>
-<li><code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for now, so a
-<code>String</code> or an <code>Array</code> crosses threads only through a <code>Channel</code>, which
-copies it.</li>
+<li><code>Lazy&lt;T&gt;</code> holds only thread-safe values.</li>
+<li>A value received from a channel moves into a locked value directly
+(<code>list.append(jobs.receive().value())</code>), but not through a variable
+declared outside the block: such a variable is an outside value, whatever
+it holds, so it needs <code>copy</code>.</li>
+<li><code>Mutex&lt;T&gt;(value)</code> and <code>replace(value)</code> copy the new value; passing it
+without a copy needs a later compiler change.</li>
 <li><code>copy</code> cannot copy a trait value yet, so a <code>Channel</code> of a trait type, or of
 an <code>Array</code> of one, is an error.</li>
 <li>There is no reader-writer lock, no <code>select</code> over several channels, and no

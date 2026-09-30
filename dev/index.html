@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fed2b4f5.js";
+            window.path_to_searchindex_js = "searchindex-58a7d0ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -249,10 +249,11 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 trait members can be <a href="language/overloading.html">overloaded</a>.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
-closure captures included. A channel copies what it is sent with <code>copy</code>,
-so a <code>String</code> or an <code>Array</code> crosses threads that way; mutexes and <code>Lazy</code>
-hold thread-safe values only, and a trait value cannot be copied yet (see
-<a href="language/threads.html#limitations">threads</a>).</li>
+closure captures included. A channel copies what it is sent, and a
+<code>Mutex</code> holds any struct, with the compiler keeping each locked value apart
+from the rest of the program (see
+<a href="language/threads.html#what-a-lock-body-may-do">threads</a>). A trait value
+cannot be copied yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="language/memory.html#weak-references">weak reference</a> on one side.</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fed2b4f5.js";
+            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -191,9 +191,15 @@ variable.</p>
 </code></pre>
 <p>A variable with a separate value on every thread, like C++
 <code>thread_local</code> or Rust’s <code>thread_local!</code>.</p>
-<p>Each thread that calls <code>set</code> stores its own value, and <code>get</code> returns the
+<p>Each thread that calls <code>set</code> stores its own value. When a thread exits, its
+value is released.</p>
+<p>For a thread-safe <code>T</code> (a number, a <code>[Shared]</code> struct), <code>get</code> returns the
 calling thread’s value (the default of <code>T</code>, zero or null, until that thread
-sets one). When a thread exits, its value is released.</p>
+sets one). For any other <code>T</code>, such as a <code>String</code>, the value is reached
+through a <code>with</code> block, <code>with (var value = local.enter()) { ... }</code>, and
+<code>get</code> is a compile error; <code>set</code> then takes a new value (a constructor call,
+a string literal, <code>copy(x)</code>). Inside the block the value is kept apart
+from the rest of the program, as for a <code>Mutex</code>.</p>
 <p>A <code>ThreadLocal</code> is <code>[Shared]</code>, so one object can be used from every
 thread; it is usually a module-scope variable. <code>T</code> does not have to be
 thread-safe, because each value stays on the thread that stored it.</p>
@@ -234,21 +240,48 @@ so destroy one only after the threads that used it have exited.</p>
 <pre><code class="language-pepper">T get()
 </code></pre>
 <p>Returns the calling thread’s value.</p>
-<p>For a struct <code>T</code> the caller gets its own reference.</p>
+<p>For a struct <code>T</code> the caller gets its own reference. Only for a
+thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var value = local.enter())</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
 <h4 id="set"><a class="header" href="#set">set</a></h4>
-<pre><code class="language-pepper">void set(T value)
+<pre><code class="language-pepper">void set([Sending] T value)
 </code></pre>
 <p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
 struct <code>T</code>, releasing) the one it held. Other threads’ values are not
 affected.</p>
+<p>For a <code>T</code> that is not thread-safe, <code>value</code> must be a new value (a
+constructor call, a string literal, <code>copy(x)</code>), which the compiler
+checks.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the new value for this thread</li>
 </ul>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">ThreadLocalGuard&lt;T&gt; enter()
+</code></pre>
+<p>Returns the guard that a <code>with</code> block enters to reach the calling
+thread’s value: <code>with (var value = local.enter()) { ... }</code>. The body
+runs with the value bound; the <code>else</code> block runs when this thread has
+no value (for a struct <code>T</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns this thread’s value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    const names = async.ThreadLocal&lt;Array&lt;String&gt;&gt;();
+
+    remember(String name) {
+        if (!names.is_set()) {
+            names.set(Array&lt;String&gt;());
+        }
+        with (var list = names.enter()) {
+            list.append(name.copy());
+        }
+    }
+</code></pre>
 <h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
 <pre><code class="language-pepper">bool is_set()
 </code></pre>
@@ -263,6 +296,40 @@ or last called <code>clear()</code>.</p>
 </code></pre>
 <p>Removes the calling thread’s value, releasing it for a struct <code>T</code>.
 <code>get()</code> returns the default of <code>T</code> afterwards.</p>
+<h2 id="threadlocalguard"><a class="header" href="#threadlocalguard">ThreadLocalGuard</a></h2>
+<pre><code class="language-pepper">[Isolated] struct ThreadLocalGuard&lt;T&gt;
+</code></pre>
+<p>The access to a thread’s <code>ThreadLocal&lt;T&gt;</code> value that a <code>with</code> block holds:
+<code>enter()</code> returns the value. Get one from <code>ThreadLocal.enter()</code>.</p>
+<p>A guard is <code>[Isolated]</code>: it can only be the scope of a <code>with</code> header, and
+the compiler checks the block with the confinement rule (see <code>Mutex</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-thread value</li>
+</ul>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
+<pre><code class="language-pepper">construct(ThreadLocal&lt;T&gt; local)
+</code></pre>
+<p>Creates the guard for the calling thread’s value of <code>local</code>; the same
+as <code>local.enter()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>local</code> — the thread-local variable</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="enter-1"><a class="header" href="#enter-1">enter</a></h4>
+<pre><code class="language-pepper">T enter()
+</code></pre>
+<p>Returns the calling thread’s value, for the <code>with</code> header to bind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this thread’s value, or the default of <code>T</code> (null for a struct) when it has none</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">void exit()
+</code></pre>
+<p>Does nothing: the value stays with the thread.</p>
 
                     </main>
 

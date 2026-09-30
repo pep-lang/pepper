@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fed2b4f5.js";
+            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -287,7 +287,7 @@ waiting. The copy is made even when it is not queued.</p>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
 <h4 id="receive"><a class="header" href="#receive">receive</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; receive()
+<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive()
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
 <p><strong>Returns</strong></p>
@@ -301,7 +301,7 @@ waiting. The copy is made even when it is not queued.</p>
     }
 </code></pre>
 <h4 id="try_receive"><a class="header" href="#try_receive">try_receive</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; try_receive()
+<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; try_receive()
 </code></pre>
 <p>Takes the next value if one is waiting, without waiting.</p>
 <p><strong>Returns</strong></p>
@@ -309,7 +309,7 @@ waiting. The copy is made even when it is not queued.</p>
 <li>the value, or an error if none is waiting (see <code>is_closed()</code> to tell an empty channel from a closed one)</li>
 </ul>
 <h4 id="receive_for"><a class="header" href="#receive_for">receive_for</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; receive_for(ulong milliseconds)
+<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive_for(ulong milliseconds)
 </code></pre>
 <p>Like <code>receive()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
 <p><strong>Parameters</strong></p>

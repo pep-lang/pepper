@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fed2b4f5.js";
+            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -197,18 +197,21 @@ lets a thread holding a Mutex sleep until another thread changes its value.</p>
 the lock, binds the value, and unlocks when the block ends by any path
 (falling off the end, <code>return</code>, <code>break</code>, <code>continue</code>). Everything a thread
 did while holding the lock is visible to the next thread that takes it.</p>
-<p><code>T</code> must be thread-safe (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-type); <code>Mutex&lt;String&gt;</code> is a compile error. Use a Mutex to keep several
-updates together: a <code>[Shared]</code> struct whose <code>Atomic</code> fields must change as
-a unit, or state behind a raw pointer. For a single number, <code>Atomic&lt;T&gt;</code> is
-simpler and faster.</p>
+<p><code>T</code> is a struct type, such as <code>Array&lt;String&gt;</code> or a struct of your own. Inside
+the <code>with</code> block the compiler keeps the locked value and the rest of the
+program apart: a value that is not thread-safe (a <code>String</code>, an <code>Array</code>)
+cannot move from one to the other, and no part of the locked value can be
+returned from the block or stored outside it. Pass <code>copy(x)</code> to move a
+value either way; new values (a constructor call, a string literal, a call
+the compiler infers returns a fresh value) and thread-safe values such as
+numbers pass freely. <code>Mutex&lt;int&gt;</code> is a compile error: use <code>Atomic&lt;int&gt;</code>.</p>
 <p>A Mutex is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads. It is not re-entrant: locking it again on the thread that holds
 it panics instead of deadlocking. A panic while it is held ends the
 program, so a Mutex is never left “poisoned”.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the protected value’s type, which must be thread-safe</li>
+<li><code>T</code> — the protected value’s type, a struct type</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
@@ -235,19 +238,23 @@ program, so a Mutex is never left “poisoned”.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
-<pre><code class="language-pepper">construct(T value)
+<pre><code class="language-pepper">construct([Sending] T value)
 </code></pre>
 <p>Creates an unlocked Mutex that owns <code>value</code>.</p>
-<p>For a struct <code>T</code> the Mutex acquires a reference to <code>value</code>, and
-releases it when the Mutex is destroyed.</p>
+<p><code>value</code> must be a new value, such as a constructor call or <code>copy(x)</code>:
+nothing outside the Mutex may reference it. The Mutex stores a copy of
+it (<code>copy</code>), so the argument’s own references never reach the Mutex.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>value</code> — the value to protect</li>
+<li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the operating system cannot create a mutex</li>
 </ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+</code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
@@ -289,6 +296,28 @@ calling thread already holding the lock counts as busy.</p>
         print("busy; try later\n");
     }
 </code></pre>
+<h4 id="replace"><a class="header" href="#replace">replace</a></h4>
+<pre><code class="language-pepper">[ReturnsOwned] T replace([Sending] T value)
+</code></pre>
+<p>Replaces the whole value and returns the one the Mutex held, which the
+caller then owns outright: nothing else references it any more.</p>
+<p>Waits for the lock like <code>lock()</code>. <code>value</code> must be a new value, as for
+the constructor; the Mutex stores a copy of it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value; a new value, which the compiler checks</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value the Mutex held</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread already holds the lock</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var done = pending.replace(Array&lt;Job&gt;());   # take every job at once
+</code></pre>
 <h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
 <pre><code class="language-pepper">bool is_held()
 </code></pre>
@@ -312,7 +341,7 @@ waits or notifies must use the same Condition.</p>
     const not_empty = queue.condition();
 </code></pre>
 <h2 id="mutexguard"><a class="header" href="#mutexguard">MutexGuard</a></h2>
-<pre><code class="language-pepper">struct MutexGuard&lt;T&gt;
+<pre><code class="language-pepper">[Isolated] struct MutexGuard&lt;T&gt;
 </code></pre>
 <p>The lock on a <code>Mutex&lt;T&gt;</code> that a <code>with</code> block holds: <code>enter()</code> returns the
 Mutex’s value, and destroying the guard unlocks.</p>
@@ -320,6 +349,9 @@ Mutex’s value, and destroying the guard unlocks.</p>
 block releases the guard on every path out, so the lock cannot be left
 held by mistake. A guard belongs to the thread that locked it; do not pass
 it to another thread.</p>
+<p>A guard is <code>[Isolated]</code>: it can only be the scope of a <code>with</code> header, so
+the lock cannot be kept past the block, and the compiler checks the block
+with the confinement rule (see <code>Mutex</code>).</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the protected value’s type</li>
