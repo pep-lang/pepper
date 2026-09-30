@@ -4,6 +4,7 @@
 
 pub mod address;
 pub mod ops;
+pub mod partition;
 pub mod types;
 pub mod target;
 
@@ -106,6 +107,20 @@ pub struct CodeGenerator<'ctx> {
     /// keyed by the error's text: errors are plain strings inside codegen,
     /// and `generate` attaches this location when it returns one.
     error_loc: Option<(String, Loc)>,
+    /// The file (index into the module's sources) that owns each emitted
+    /// function or global: a declaration of that file, which only its own
+    /// unit defines when the program is split into objects (see
+    /// [`partition`]). Instantiations, synthesized helpers and anything else
+    /// without an owner may be defined by every unit that uses them.
+    pub owners: HashMap<String, u32>,
+    /// Each file's namespace (see `pepper_parser::namespace`), indexed like
+    /// the module's sources: names the file's global initializer
+    /// (`__pep_init@<namespace>`), so it is the same in every program. Files
+    /// past its end use `file<N>`.
+    pub file_namespaces: Vec<String>,
+    /// Generate one compilation unit instead of the whole program (see
+    /// [`partition`]).
+    pub unit: Option<partition::UnitFilter>,
 }
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
@@ -135,6 +150,18 @@ impl<'ctx> CodeGenerator<'ctx> {
             extern_names: std::collections::HashSet::new(),
             extern_params: std::collections::HashMap::new(),
             error_loc: None,
+            owners: HashMap::new(),
+            file_namespaces: Vec::new(),
+            unit: None,
+        }
+    }
+
+    /// Record that the file of `loc` owns the symbol `name` (see
+    /// [`CodeGenerator::owners`]). Instantiations (a name with type
+    /// arguments) and synthesized code without a location have no owner.
+    fn own(&mut self, name: &str, loc: Loc) {
+        if !loc.is_none() && !name.contains('<') {
+            self.owners.insert(name.to_string(), loc.file.0);
         }
     }
 
@@ -152,7 +179,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Instantiate + codegen in the exact C++ phase order
     /// (LLVMCodeGenerator.cpp:264-308).
-    pub fn generate(&mut self, module: &mut SemaModule) -> Result<(), Diagnostic> {
+    pub fn generate(&mut self, module: &SemaModule) -> Result<(), Diagnostic> {
         self.error_loc = None;
         self.generate_module(module).map_err(|error| {
             let loc = match self.error_loc.take() {
@@ -163,13 +190,28 @@ impl<'ctx> CodeGenerator<'ctx> {
         })
     }
 
-    fn generate_module(&mut self, module: &mut SemaModule) -> Result<(), String> {
+    fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
         // declared later in the module (`HashMap<Point, int>` before
         // `Array<Point>`), and field lookup must not fall back to the base.
-        for idx in 0..module.structs.len() {
+        // A unit declares everything in name order, not load order, so its
+        // module (and cache key) does not depend on the program around it.
+        let by_name = |names: Vec<&str>, sort: bool| -> Vec<usize> {
+            let mut order: Vec<usize> = (0..names.len()).collect();
+            if sort {
+                order.sort_by(|&a, &b| names[a].cmp(names[b]));
+            }
+            order
+        };
+        let sort = self.unit.is_some();
+        let structs = by_name(module.structs.iter().map(|s| s.name.as_str()).collect(), sort);
+        let externs = by_name(module.externs.iter().map(|e| e.name.as_str()).collect(), sort);
+        let functions = by_name(module.functions.iter().map(|f| f.name.as_str()).collect(), sort);
+        let trait_names: Vec<String> = module.trait_types.iter().map(|t| t.ty.to_string()).collect();
+        let traits = by_name(trait_names.iter().map(|t| t.as_str()).collect(), sort);
+        for &idx in &structs {
             let st = &module.structs[idx];
             if st.ty.is_generic() && st.name == st.ty.name {
                 continue;
@@ -177,33 +219,34 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.types.ensure_opaque(&st.name);
         }
         // Trait types are values of their own layout; a field may hold one.
-        for t in &module.trait_types {
-            self.types.register_trait(&t.ty.to_string());
+        for &idx in &traits {
+            self.types.register_trait(&module.trait_types[idx].ty.to_string());
         }
-        for idx in 0..module.structs.len() {
+        for &idx in &structs {
             self.instantiate_struct(&module.structs[idx])?;
         }
         // ABI sizes are only correct once every body is set (a field may
         // name a struct declared later, e.g. `Holder { Array<int> items; }`),
         // so measure after the whole registration pass.
+        let machine = crate::target::host_machine()?;
+        let target_data = machine.get_target_data();
         for desc in self.structs.values_mut() {
-            let machine = crate::target::host_machine()?;
-            desc.size = machine.get_target_data().get_abi_size(&desc.llvm_type);
+            desc.size = target_data.get_abi_size(&desc.llvm_type);
         }
-        for idx in 0..module.structs.len() {
+        for &idx in &structs {
             self.instantiate_methods(&module.structs[idx])?;
         }
-        for idx in 0..module.structs.len() {
+        for &idx in &structs {
             self.instantiate_ctor(&module.structs[idx])?;
         }
-        for idx in 0..module.externs.len() {
+        for &idx in &externs {
             self.instantiate_extern(&module.externs[idx])?;
         }
-        for idx in 0..module.functions.len() {
+        for &idx in &functions {
             self.instantiate_function(&module.functions[idx])?;
         }
-        for t in &module.trait_types {
-            self.instantiate_trait(t)?;
+        for &idx in &traits {
+            self.instantiate_trait(&module.trait_types[idx])?;
         }
 
         // File-scope globals: LLVM globals + (if any initializer needs it) a
@@ -212,17 +255,85 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.emit_globals(module)?;
 
         // Codegen pass: structs → functions.
-        for idx in 0..module.structs.len() {
-            let st = module.structs[idx].clone();
-            self.codegen_struct(&st)?;
-        }
-        for idx in 0..module.functions.len() {
-            let function = module.functions[idx].clone();
-            self.codegen_function(&function)?;
+        if self.unit.is_some() {
+            self.codegen_unit(module)?;
+        } else {
+            for idx in 0..module.structs.len() {
+                let st = module.structs[idx].clone();
+                self.codegen_struct(&st)?;
+            }
+            for idx in 0..module.functions.len() {
+                let function = module.functions[idx].clone();
+                self.codegen_function(&function)?;
+            }
         }
         self.module
             .verify()
             .map_err(|e| format!("Module verification failed: {}", e.to_string()))
+    }
+
+    /// The codegen pass for one unit: the bodies the unit owns, then every
+    /// shared body (an instantiation, or code without an owner) that
+    /// something already emitted calls, until nothing new is called.
+    fn codegen_unit(&mut self, module: &SemaModule) -> Result<(), String> {
+        // Every callable, keyed like `functions`, with its struct's location
+        // for errors.
+        let mut callables: Vec<(FunctionDef, Loc)> = vec![];
+        for st in &module.structs {
+            if st.ty.is_generic() && st.name == st.ty.name {
+                continue;
+            }
+            callables.push((self.patched_ctor(st), st.loc));
+            for method in &st.method_members {
+                let mut m = method.clone();
+                m.name = format!("{}.{}", st.name, method.name);
+                callables.push((m, st.loc));
+            }
+        }
+        callables.extend(module.functions.iter().map(|f| (f.clone(), f.loc)));
+        let mut shared = vec![];
+        for (function, loc) in callables {
+            match self.owners.get(&function.name) {
+                Some(&file) if self.owns(file) => {
+                    let result = self.codegen_function(&function);
+                    self.locate(&result, loc);
+                    result?;
+                }
+                Some(_) => {}
+                None => shared.push((function, loc)),
+            }
+        }
+        loop {
+            let mut emitted = false;
+            let mut rest = vec![];
+            for (function, loc) in shared {
+                let called = self
+                    .functions
+                    .get(&function.name)
+                    .is_some_and(|f| f.count_basic_blocks() == 0 && unsafe { !inkwell::llvm_sys::core::LLVMGetFirstUse(f.as_value_ref()).is_null() });
+                if called {
+                    let result = self.codegen_function(&function);
+                    self.locate(&result, loc);
+                    result?;
+                    emitted = true;
+                } else {
+                    rest.push((function, loc));
+                }
+            }
+            shared = rest;
+            if !emitted {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Whether this generator emits the declarations of `file`: always for
+    /// the whole program, only its own files for a unit.
+    fn owns(&self, file: u32) -> bool {
+        match &self.unit {
+            None => true,
+            Some(filter) => filter.unit.is_some() && filter.unit_of_file.get(file as usize).copied() == filter.unit,
+        }
     }
 
     /// File-scope globals (port of the C++ reference's global handling, which
@@ -232,7 +343,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// runs before `main` (the JIT calls run_static_constructors; the linked
     /// binary's .init_array does it at process start).
     fn emit_globals(&mut self, module: &SemaModule) -> Result<(), String> {
-        let mut non_const: Vec<(String, Expression)> = vec![];
+        let mut non_const: Vec<(String, Expression, u32)> = vec![];
         for var in &module.globals {
             let ty_string = var.ty.to_string();
             let llvm_ty: BasicTypeEnum<'ctx> = if self.is_reference_name(&ty_string) {
@@ -245,7 +356,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| format!("unknown global type {}", ty_string))?
             };
             let global = self.module.add_global(llvm_ty, None, &var.name);
-            set_private_linkage(global, &var.name);
+            if self.unit.is_none() {
+                set_private_linkage(global, &var.name);
+            }
+            self.own(&var.name, var.loc);
             // Every global is defined at link time: zero/null base initializer;
             // const arms below override it. Non-const defaults are stored by
             // the ctor-registered init fn before `main` runs.
@@ -307,59 +421,54 @@ impl<'ctx> CodeGenerator<'ctx> {
                             &BasicValueEnum::PointerValue(data_global.as_pointer_value()),
                         );
                     }
-                    _ => non_const.push((var.name.clone(), default.clone())),
+                    _ => non_const.push((var.name.clone(), default.clone(), var.loc.file.0)),
                 }
             }
             self.global_addrs.insert(
                 var.name.clone(),
                 Address::with_llvm_ty(&var.name, &ty_string, llvm_ty, global.as_pointer_value()),
             );
+            // Another unit's global is only declared here.
+            if self.owners.get(&var.name).is_some_and(|&file| !self.owns(file)) {
+                unsafe { inkwell::llvm_sys::core::LLVMSetInitializer(global.as_value_ref(), std::ptr::null_mut()) };
+            }
         }
 
-        // Non-constant initializers: `g = <expr>;` in a ctor-registered fn.
+        // Non-constant initializers: `g = <expr>;` in one function per file,
+        // `__pep_init@<namespace>`, owned by that file; `__pep_global_init`,
+        // registered in `llvm.global_ctors`, calls them in initialization
+        // order (`module.globals` is sorted by it, so a file's globals are
+        // consecutive).
         if !non_const.is_empty() {
-            let init_fn = self.module.add_function(
-                "__pep_global_init",
-                self.context.void_type().fn_type(&[], false),
-                None,
-            );
+            let void_fn = self.context.void_type().fn_type(&[], false);
+            let mut file_inits: Vec<FunctionValue<'ctx>> = vec![];
+            let mut start = 0;
+            while start < non_const.len() {
+                let file = non_const[start].2;
+                let end = (start..non_const.len()).find(|&i| non_const[i].2 != file).unwrap_or(non_const.len());
+                let namespace = self.file_namespaces.get(file as usize).cloned().unwrap_or_else(|| format!("file{}", file));
+                let name = format!("__pep_init{}{}", pepper_sema::namespace::SEPARATOR, namespace);
+                let init_fn = self.module.add_function(&name, void_fn, None);
+                self.owners.insert(name, file);
+                if self.owns(file) {
+                    let entry = self.context.append_basic_block(init_fn, "entry");
+                    self.builder.position_at_end(entry);
+                    self.deferred_temps.clear();
+                    self.emit_global_stores(&non_const[start..end])?;
+                    self.builder.build_return(None).map_err(|e| e.to_string())?;
+                }
+                file_inits.push(init_fn);
+                start = end;
+            }
+            // Only the program (or the program's own unit) runs them.
+            if self.unit.as_ref().is_some_and(|filter| filter.unit.is_some()) {
+                return Ok(());
+            }
+            let init_fn = self.module.add_function("__pep_global_init", void_fn, None);
             let entry = self.context.append_basic_block(init_fn, "entry");
             self.builder.position_at_end(entry);
-            self.deferred_temps.clear();
-            for (name, expr) in &non_const {
-                let value = self.codegen_expr(expr)?;
-                // A struct-ref global initialized from an lvalue read acquires
-                // exactly like `codegen_var_def` does: the global becomes the
-                // value's owner. (No process-exit release — globals live for
-                // the program's lifetime.)
-                let ty_string = self.global_addrs.get(name).unwrap().ty.to_string();
-                if self.is_reference_name(&ty_string) && self.is_lvalue_read(expr) {
-                    self.acquire_ref(&ty_string, value)?;
-                }
-                // Match the global's width (mirrors codegen_var_def).
-                let addr = self.global_addrs.get(name).unwrap();
-                let value = match (&value, addr.llvm_ty) {
-                    (BasicValueEnum::IntValue(v), Some(BasicTypeEnum::IntType(it)))
-                        if v.get_type() != it =>
-                    {
-                        self.builder
-                            .build_int_cast(*v, it, &format!("{}w", name))
-                            .map_err(|e| e.to_string())?
-                            .into()
-                    }
-                    (BasicValueEnum::FloatValue(v), Some(BasicTypeEnum::FloatType(ft)))
-                        if v.get_type() != ft =>
-                    {
-                        self.builder
-                            .build_float_cast(*v, ft, &format!("{}w", name))
-                            .map_err(|e| e.to_string())?
-                            .into()
-                    }
-                    _ => value,
-                };
-                addr.store(&self.builder, value)
-                    .ok_or_else(|| format!("global store failed: {}", name))?;
-                self.flush_deferred_temps()?;
+            for file_init in file_inits {
+                self.builder.build_call(file_init, &[], "").map_err(|e| e.to_string())?;
             }
             self.builder.build_return(None).map_err(|e| e.to_string())?;
 
@@ -396,6 +505,47 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         Ok(())
     }
+    /// Store each non-constant initializer `(global, expression, file)` into
+    /// its global, at the builder's position.
+    fn emit_global_stores(&mut self, non_const: &[(String, Expression, u32)]) -> Result<(), String> {
+        for (name, expr, _) in non_const {
+            let value = self.codegen_expr(expr)?;
+            // A struct-ref global initialized from an lvalue read acquires
+            // exactly like `codegen_var_def` does: the global becomes the
+            // value's owner. (No process-exit release — globals live for
+            // the program's lifetime.)
+            let ty_string = self.global_addrs.get(name).unwrap().ty.to_string();
+            if self.is_reference_name(&ty_string) && self.is_lvalue_read(expr) {
+                self.acquire_ref(&ty_string, value)?;
+            }
+            // Match the global's width (mirrors codegen_var_def).
+            let addr = self.global_addrs.get(name).unwrap();
+            let value = match (&value, addr.llvm_ty) {
+                (BasicValueEnum::IntValue(v), Some(BasicTypeEnum::IntType(it)))
+                    if v.get_type() != it =>
+                {
+                    self.builder
+                        .build_int_cast(*v, it, &format!("{}w", name))
+                        .map_err(|e| e.to_string())?
+                        .into()
+                }
+                (BasicValueEnum::FloatValue(v), Some(BasicTypeEnum::FloatType(ft)))
+                    if v.get_type() != ft =>
+                {
+                    self.builder
+                        .build_float_cast(*v, ft, &format!("{}w", name))
+                        .map_err(|e| e.to_string())?
+                        .into()
+                }
+                _ => value,
+            };
+            addr.store(&self.builder, value)
+                .ok_or_else(|| format!("global store failed: {}", name))?;
+            self.flush_deferred_temps()?;
+        }
+        Ok(())
+    }
+
     /// Compile a module, register host addresses for the declared (not
     /// defined) functions `map_global` names, then hand back the execution
     /// engine with static ctors run. Mapping must use the module's own
@@ -578,7 +728,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 llvm_fn_type(return_type, &param_types, false)
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
-            set_private_linkage(fn_value.as_global_value(), &mangled);
+            if self.unit.is_none() {
+                set_private_linkage(fn_value.as_global_value(), &mangled);
+            }
+            self.own(&mangled, if method.loc.is_none() { st.loc } else { method.loc });
             self.functions.insert(mangled.clone(), fn_value);
             self.param_defaults.insert(
                 mangled.clone(),
@@ -707,7 +860,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             llvm_fn_type(return_type, &param_types, false)
         };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
-        set_private_linkage(fn_value.as_global_value(), &function.name);
+        if self.unit.is_none() {
+            set_private_linkage(fn_value.as_global_value(), &function.name);
+        }
+        self.own(&function.name, function.loc);
         self.functions.insert(function.name.clone(), fn_value);
         self.fn_returns.insert(function.name.clone(), function.ty.to_string());
         self.param_defaults.insert(
@@ -5091,7 +5247,9 @@ fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
 /// A file's private declaration (its name mangled by module linking, see
 /// `pepper_parser::namespace`) is local to the object: no other object can
 /// name it, and ELF linkers would read the `@` of a global symbol as a
-/// symbol version.
+/// symbol version. Not for a unit ([`CodeGenerator::unit`]), where another
+/// unit's instantiation may call it: [`partition::finish`] makes it hidden
+/// and respells it instead.
 fn set_private_linkage(value: inkwell::values::GlobalValue<'_>, name: &str) {
     if name.contains(pepper_sema::namespace::SEPARATOR) {
         value.set_linkage(inkwell::module::Linkage::Internal);

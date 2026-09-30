@@ -16,6 +16,7 @@ mod array_tests;
 mod async_tests;
 mod atomic_tests;
 mod audit_fixes_tests;
+mod build_cache_tests;
 mod c_callback_tests;
 mod character_literal_tests;
 mod closure_tests;

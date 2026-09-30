@@ -71,10 +71,17 @@ said, which names the missing symbol:
 
 ```text
 error: Link failed: clang exited with exit status: 1
-/usr/bin/ld: .pep/build/main.o: in function `main':
+/usr/bin/ld: .pep/build/main.units/main.o: in function `main':
 main:(.text+0x25ba): undefined reference to `no_such_function'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ```
+
+The object the linker names is the one for the file that made the call, in
+`.pep/build/<name>.units/`. Symbols of your own functions appear as the
+compiler spells them for the linker: a name that is not just letters, digits,
+`_` and `.` is written `_P` followed by the name with other characters as
+`_` and two hex digits, so `Array<int>.count` appears as
+`_PArray_3cint_3e.count`. `extern` functions keep their C names.
 
 To fix it, check the spelling of the extern against the C function (or use
 [`[LinkName]`](c-interop.md#binding-to-a-different-symbol-name) when the names
@@ -91,6 +98,9 @@ succeeds.
 
 With no `-o`, the executable is named after the first source file, without an
 extension, in the directory where you run the compiler. Windows will not run a
-file without `.exe`, so pass `-o main.exe` there. The object file and other
+file without `.exe`, so pass `-o main.exe` there. The object files and other
 intermediate files go in `.pep/build/` under the current directory, or in the
-directory you pass to `--build`.
+directory you pass to `--build`: one object per file of the program in
+`<name>.units/`, and `<name>.o`, which runs the program's global
+initializers. Unchanged objects come from the build cache in `.pep/cache/`
+(`--no-cache` skips it).

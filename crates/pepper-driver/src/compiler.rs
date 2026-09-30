@@ -91,6 +91,12 @@ pub fn compile(
     options: &Options,
     _module_name: &str,
 ) -> Result<Compiled, String> {
+    compile_program(options).map(|(module, _)| module)
+}
+
+/// [`compile`], also returning the loaded program, whose files and units
+/// ([`Program::units`]) the object pipeline splits the module by.
+pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String> {
     let entry_source = options
         .source_files
         .first()
@@ -107,7 +113,7 @@ pub fn compile(
     crate::report_warnings(&module.render_warnings());
     result?;
     timer.stage("sema passes");
-    Ok(module)
+    Ok((module, program))
 }
 
 /// Platform selection, struct bodies and the transform passes (the last of

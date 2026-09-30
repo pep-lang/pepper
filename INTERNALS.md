@@ -77,14 +77,17 @@ compiler::compile → compile_sources                               (driver/src/
                                   __acquire/__release bodies
     passes::transform_pass        ~30 ordered steps (section 3)
   ▼
-CodeGenerator::generate                                           (codegen/src/lib.rs)
-  instantiate structs → sizes → methods → ctors → externs → functions
-  emit_globals → codegen structs/functions → module.verify()
-  ├─ --emit-llvm ─→ <build>/<name>.ll
+  ├─ --emit-llvm ─→ CodeGenerator::generate (whole program) → <build>/<name>.ll
   ▼
-target::host_machine().write_to_file → <build>/<name>.o           (build = .pep/build)
+driver::objects: Program::units, then per unit, on parallel threads   (driver/src/lib.rs)
+  CodeGenerator::generate with a UnitFilter                     (codegen/src/lib.rs)
+    instantiate structs → sizes → methods → ctors → externs → functions
+    emit_globals → codegen_unit (own bodies, then called instantiations)
+  partition::finish               linkage, globaldce, symbol_name spelling
+  cache::Cache::object            .pep/cache hit, or emit + store (locked)
+  → <build>/<name>.units/<unit>.o, plus the program module → <build>/<name>.o
 link_libraries (from [Link]) + -l + runtime/*.a
-linker::link → clang -o <out> <obj> -L… -l… (+ kernel32 user32 shell32 on Windows)
+linker::link → clang -o <out> <objs> -L… -l… (+ kernel32 user32 shell32 on Windows)
 ```
 
 The CLI produces an executable and never runs it. Tests usually stop after
@@ -95,9 +98,10 @@ The CLI produces an executable and never runs it. Tests usually stop after
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-o`, `--build`, `--emit-llvm`, `--emit-ast`, and
-`--no-runtime`, and `-T time` (or `--Tall`), which prints each stage's
+`--no-runtime`, `--no-cache`, `--cache <dir>` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
-and build, sema passes, codegen, object emission, link). `-g`, `-v`, and the
+and build, sema passes, codegen and emission, link), and `-T cache`, which
+prints whether each unit's object was a cache hit. `-g`, `-v`, and the
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `output_path()` defaults to `<cwd>/<entry stem>`
 with no extension, and `module_name()` is the output's stem.
@@ -647,7 +651,9 @@ value is a struct reference with its concrete type erased, like a
 
 ### 4.1 Object emission, linking, running (`driver/src/lib.rs`, `linker.rs`)
 
-`run` writes `<build>/<module>.o` with the host `TargetMachine`. It collects
+`run` emits one object per compilation unit through `objects` (see
+[4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), plus the
+program object `<build>/<module>.o`, with the host `TargetMachine`. It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as
 `-L<dir> -l<name>`), then `link_libraries(&module)`, which gathers the
 `[Link("name")]` attributes of externs that survived platform filtering,
@@ -657,6 +663,55 @@ LLVM the compiler was built against, and falling back to `clang` on PATH.
 `default_system_libraries` adds `kernel32 user32 shell32` on Windows. Link
 warnings are forwarded. Failures include both stdout and stderr, because
 MSVC's link.exe writes unresolved symbols to stdout.
+
+### 4.3 Build cache (`driver/src/cache.rs`, `codegen/src/partition.rs`)
+
+Phase 1 of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
+sema still runs over the whole program, but codegen and object emission run
+per **compilation unit**, and an unchanged unit's object comes from
+`.pep/cache`.
+
+- **Units** (`Program::units`, `sema/src/program.rs`): the runtime's
+  top-level files (prelude files outside any module) are the unit
+  `prelude`; every other file is in the unit of its import cycle (a
+  strongly connected component of the import graph), named after its first
+  file's namespace (`io/file`, `docs/examples/hello`). Names depend only on
+  paths.
+- **Owners.** While instantiating, `CodeGenerator::own` records the file of
+  every symbol a declaration defines (`owners`): methods, constructors,
+  functions, globals, and each file's global initializer
+  `__pep_init@<namespace>`. Instantiations (a name with `<`) and code with no
+  location have no owner.
+- **Per-unit codegen.** With `CodeGenerator::unit` set (`UnitFilter`),
+  `generate` declares everything in name order (so a unit's module does not
+  depend on load order), defines only globals and initializers of the unit's
+  files, and `codegen_unit` emits the unit's owned bodies, then every
+  unowned body something already emitted calls, until nothing new is
+  called. The program module (`unit: None`) defines only
+  `__pep_global_init` and `llvm.global_ctors`, which call each file's
+  initializer in initialization order. Each unit gets its own LLVM
+  `Context` (struct type names are per context), so `objects` compiles
+  units on one thread per CPU.
+- **`partition::finish`**: owned symbols become external (hidden, except
+  `main`); unowned definitions become `linkonce_odr` in a comdat (no comdat
+  on Mach-O), except private helpers other than function objects and
+  thunks; `globaldce` drops unused ones; private string constants are
+  renumbered; and `symbol_name` respells every Pepper symbol that is not
+  plain (`Array<int>.count` → `_PArray_3cint_3e.count`, `helper@io/file` →
+  `_Phelper_40io_2ffile`). Externs keep their C names. The whole-program
+  path (JIT tests, `--emit-llvm`) is unchanged: it keeps readable names and
+  gives private names internal linkage.
+- **Cache** (`cache::Cache`): `<cache>/v1/<target triple>/<unit>.o`,
+  `<unit>.json` (`{"key": …}`, a BLAKE3 hash of the compiler's identity and
+  the unit's bitcode) and `<unit>.lock`. `object` takes an exclusive OS lock
+  (`File::lock`) on the unit, checks the record, on a miss writes the object
+  and then the record through temporary files and renames, and hard-links
+  (or copies) the object into `<build>/<module>.units/` before unlocking, so
+  a later writer cannot change what is linked. The OS releases the lock on
+  exit or crash. The cache directory is `--cache`, else
+  `$PEPPER_CACHE_DIR`, else `<cwd>/.pep/cache`; `--no-cache` skips it.
+- **Not yet** (phases 2 and 3): interfaces (`.pepi`), skipping sema for
+  unchanged units, and early cutoff.
 
 ---
 
@@ -902,6 +957,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
+| Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits examples as unit objects through a scratch cache: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, and concurrent builds share one cache. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 

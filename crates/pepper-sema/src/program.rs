@@ -38,6 +38,17 @@ pub enum Mode {
     Lenient,
 }
 
+/// A compilation unit: files compiled into one object (see
+/// [`Program::units`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unit {
+    /// The unit's name, also its path in the build cache (`io/file`,
+    /// `prelude`, `main`).
+    pub name: String,
+    /// Its files, as indices into [`Program::files`].
+    pub files: Vec<usize>,
+}
+
 /// A loaded, linked program. `files[0]` is the root.
 pub struct Program {
     pub files: Vec<ProgramFile>,
@@ -131,6 +142,96 @@ impl Program {
             visit(file, &self.files, &mut visited, &mut order);
         }
         order
+    }
+
+    /// The program's compilation units (see the build cache design,
+    /// INTERNALS.md §4.3), sorted by name: the runtime's top-level files
+    /// (prelude files outside any module) form the unit `prelude`; every
+    /// other file is in the unit of its import cycle, a strongly connected
+    /// component of the import graph, named after its first file's
+    /// namespace in path order. A unit's name depends only on its files'
+    /// paths, so it is the same in every program.
+    pub fn units(&self) -> Vec<Unit> {
+        let n = self.files.len();
+        let in_prelude = |i: usize| self.files[i].prelude && self.files[i].module_root.is_none();
+        // Tarjan's algorithm over the files outside the prelude unit.
+        struct Tarjan {
+            edges: Vec<Vec<usize>>,
+            index: Vec<Option<usize>>,
+            low: Vec<usize>,
+            on_stack: Vec<bool>,
+            stack: Vec<usize>,
+            next: usize,
+            components: Vec<Vec<usize>>,
+        }
+        impl Tarjan {
+            fn visit(&mut self, v: usize) {
+                self.index[v] = Some(self.next);
+                self.low[v] = self.next;
+                self.next += 1;
+                self.stack.push(v);
+                self.on_stack[v] = true;
+                for w in self.edges[v].clone() {
+                    match self.index[w] {
+                        None => {
+                            self.visit(w);
+                            self.low[v] = self.low[v].min(self.low[w]);
+                        }
+                        Some(index) if self.on_stack[w] => self.low[v] = self.low[v].min(index),
+                        Some(_) => {}
+                    }
+                }
+                if Some(self.low[v]) == self.index[v] {
+                    let mut component = vec![];
+                    while let Some(w) = self.stack.pop() {
+                        self.on_stack[w] = false;
+                        component.push(w);
+                        if w == v {
+                            break;
+                        }
+                    }
+                    self.components.push(component);
+                }
+            }
+        }
+        let edges = (0..n)
+            .map(|i| self.files[i].imports.iter().flatten().copied().filter(|&t| !in_prelude(t) && !in_prelude(i)).collect())
+            .collect();
+        let mut tarjan = Tarjan {
+            edges,
+            index: vec![None; n],
+            low: vec![0; n],
+            on_stack: vec![false; n],
+            stack: vec![],
+            next: 0,
+            components: vec![],
+        };
+        let prelude: Vec<usize> = (0..n).filter(|&i| in_prelude(i)).collect();
+        for i in (0..n).filter(|&i| !in_prelude(i)) {
+            if tarjan.index[i].is_none() {
+                tarjan.visit(i);
+            }
+        }
+        let mut units: Vec<Unit> = vec![];
+        if !prelude.is_empty() {
+            units.push(Unit { name: "prelude".to_string(), files: prelude });
+        }
+        for mut files in tarjan.components {
+            files.sort_by(|&a, &b| self.files[a].namespace.cmp(&self.files[b].namespace));
+            units.push(Unit { name: self.files[files[0]].namespace.clone(), files });
+        }
+        units.sort_by(|a, b| a.name.cmp(&b.name));
+        // A user file named like the prelude keeps its own unit.
+        let mut taken = std::collections::HashSet::new();
+        for unit in &mut units {
+            let base = unit.name.clone();
+            let mut k = 1;
+            while !taken.insert(unit.name.clone()) {
+                k += 1;
+                unit.name = format!("{}#{}", base, k);
+            }
+        }
+        units
     }
 
     /// Which files' extensions each file sees (see [`crate::model::ExtensionScopes`]).

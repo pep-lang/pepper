@@ -50,7 +50,8 @@ pub struct Options {
     pub emit_ast: bool,
 
     /// Enable a trace channel. `time` prints how long each compile stage
-    /// took; the others (codegen|ast|parser|ir|debuginfo|link) are accepted
+    /// took; `cache` prints whether each unit's object came from the build
+    /// cache; the others (codegen|ast|parser|ir|debuginfo|link) are accepted
     /// and ignored.
     #[arg(short = 'T', value_name = "CHAN")]
     pub trace: Vec<String>,
@@ -58,6 +59,15 @@ pub struct Options {
     /// Enable all trace channels.
     #[arg(long = "Tall")]
     pub trace_all: bool,
+
+    /// Compile every unit without reading or writing the build cache.
+    #[arg(long = "no-cache")]
+    pub no_cache: bool,
+
+    /// Build cache directory (default: `$PEPPER_CACHE_DIR`, else
+    /// `$CWD/.pep/cache`).
+    #[arg(long = "cache", value_name = "DIR")]
+    pub cache_dir: Option<PathBuf>,
 
     /// Use the MSVC linker (not ported; errors on non-Windows).
     #[arg(long = "MSVC")]
@@ -71,6 +81,21 @@ impl Options {
         self.build_dir
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".pep").join("build"))
+    }
+
+    /// The build cache directory, or `None` with `--no-cache`: `--cache`,
+    /// else `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`.
+    pub fn effective_cache_dir(&self) -> Option<PathBuf> {
+        if self.no_cache {
+            return None;
+        }
+        if let Some(dir) = &self.cache_dir {
+            return Some(dir.clone());
+        }
+        if let Some(dir) = std::env::var_os("PEPPER_CACHE_DIR").filter(|d| !d.is_empty()) {
+            return Some(PathBuf::from(dir));
+        }
+        Some(std::env::current_dir().unwrap_or_default().join(".pep").join("cache"))
     }
 
     /// Whether trace channel `channel` (`-T channel`, or `--Tall`) is on.

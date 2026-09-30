@@ -1,6 +1,7 @@
 //! Pepper driver: options, import resolution, runtime discovery, compile
 //! pipeline, linking, and JIT execution.
 
+pub mod cache;
 pub mod compiler;
 pub mod linker;
 pub mod options;
@@ -71,37 +72,39 @@ pub fn run(options: Options) -> Result<i32, String> {
         return Err("the MSVC linker path is not ported".to_string());
     }
 
-    let mut sema_module = compiler::compile(&options, &module_name)?;
+    let (sema_module, program) = compiler::compile_program(&options)?;
     let mut timer = StageTimer::new(options.tracing("time"));
     let link_libraries = link_libraries(&sema_module);
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, &module_name);
-    generator.generate(&mut sema_module).map_err(|d| sema_module.sources.render(&d))?;
-    timer.stage("codegen");
-
+    let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
     let build_dir = options.effective_build_dir();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
 
-    // --emit-llvm: write IR.
+    // --emit-llvm: write the whole program's IR as one module.
     if options.emit_llvm {
+        let ctx = inkwell::context::Context::create();
+        let mut generator = CodeGenerator::new(&ctx, &module_name);
+        generator.file_namespaces = namespaces;
+        generator.generate(&sema_module).map_err(|d| sema_module.sources.render(&d))?;
+        timer.stage("codegen");
         let ir_path = build_dir.join(format!("{}.ll", module_name));
         std::fs::write(&ir_path, generator.module.to_string())
             .map_err(|e| format!("cannot write {}: {}", ir_path.display(), e))?;
         return Ok(0);
     }
 
-    // Full pipeline: emit obj and link.
+    // Full pipeline: one object per unit (from the build cache when the
+    // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
-    let obj_path = build_dir.join(format!("{}.o", module_name));
-    let machine = default_target_machine()?;
-    machine
-        .write_to_file(
-            &generator.module,
-            inkwell::targets::FileType::Object,
-            &obj_path,
-        )
-        .map_err(|e| format!("obj emission failed: {}", e))?;
-    timer.stage("object emission");
+    let built = objects(&options, &sema_module, &program, &build_dir, &module_name)?;
+    if options.tracing("cache") {
+        for object in &built {
+            if let Some(hit) = object.hit {
+                eprintln!("cache: {} {}", object.unit, if hit { "hit" } else { "miss" });
+            }
+        }
+    }
+    let objects: Vec<PathBuf> = built.into_iter().map(|o| o.path).collect();
+    timer.stage("codegen and emission");
 
     // Discover runtime libs for linking.
     let (_sources, runtime_libs, _dirs) = runtime::discover();
@@ -120,10 +123,128 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
     libraries.extend(link_libraries);
 
-    linker::link(&[obj_path], &out_path, &libraries, &library_dirs)?;
+    linker::link(&objects, &out_path, &libraries, &library_dirs)?;
     timer.stage("link");
 
     Ok(0)
+}
+
+/// An object [`objects`] built.
+#[derive(Debug, Clone)]
+pub struct UnitObject {
+    /// The unit's name (see `Program::units`), or `__program` for the
+    /// program module.
+    pub unit: String,
+    /// Where the object is, in the build directory.
+    pub path: PathBuf,
+    /// Whether it came from the build cache; `None` when it was not looked
+    /// up (the program module, or `--no-cache`).
+    pub hit: Option<bool>,
+}
+
+/// Emit `program` (whose merged, checked module is `module`) as one object
+/// per compilation unit, each on its own thread and through the build cache
+/// unless `--no-cache`, plus the program object (`<build>/<name>.o`) that
+/// runs every file's global initializer. Unit objects go in
+/// `<build>/<name>.units/`. The objects to link, units first.
+pub fn objects(
+    options: &Options,
+    module: &pepper_sema::model::Module,
+    program: &pepper_sema::program::Program,
+    build_dir: &std::path::Path,
+    name: &str,
+) -> Result<Vec<UnitObject>, String> {
+    let units = program.units();
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root)).transpose()?;
+    let build_units = build_dir.join(format!("{}.units", name));
+    let mut jobs: Vec<UnitJob> = units
+        .iter()
+        .enumerate()
+        .map(|(i, u)| UnitJob { unit: Some(i), name: u.name.clone(), object: build_units.join(format!("{}.o", u.name)) })
+        .collect();
+    jobs.push(UnitJob { unit: None, name: "__program".to_string(), object: build_dir.join(format!("{}.o", name)) });
+    let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
+    let setup = UnitSetup { module, namespaces: &namespaces, unit_of_file: unit_files(&units, program.files.len()), cache: cache.as_ref() };
+    // Register the backend once, before the threads use it.
+    default_target_machine()?;
+    let hits = parallel(&jobs, |job| compile_unit(&setup, job))?;
+    Ok(jobs.into_iter().zip(hits).map(|(job, hit)| UnitObject { unit: job.name, path: job.object, hit }).collect())
+}
+
+/// One object to build: a unit (`unit: Some(index into units)`) or the
+/// program module (`None`), written to `object`.
+struct UnitJob {
+    unit: Option<usize>,
+    name: String,
+    object: PathBuf,
+}
+
+/// What every [`compile_unit`] shares.
+struct UnitSetup<'a> {
+    module: &'a pepper_sema::model::Module,
+    namespaces: &'a [String],
+    unit_of_file: Vec<usize>,
+    cache: Option<&'a cache::Cache>,
+}
+
+/// Each file's index in `units`.
+fn unit_files(units: &[pepper_sema::program::Unit], files: usize) -> Vec<usize> {
+    let mut unit_of_file = vec![0; files];
+    for (index, unit) in units.iter().enumerate() {
+        for &file in &unit.files {
+            unit_of_file[file] = index;
+        }
+    }
+    unit_of_file
+}
+
+/// Generate one unit's module and put its object at `job.object`, through
+/// the cache when there is one (the program module never is). Each unit
+/// gets its own LLVM context, so units compile on separate threads (and
+/// LLVM names struct types per context: a second `String` in one context
+/// would become `String.0`). Returns whether the object was a cache hit.
+fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<bool>, String> {
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, &job.name);
+    generator.file_namespaces = setup.namespaces.to_vec();
+    generator.unit = Some(pepper_codegen::partition::UnitFilter { unit_of_file: setup.unit_of_file.clone(), unit: job.unit });
+    generator.generate(setup.module).map_err(|d| setup.module.sources.render(&d))?;
+    pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
+    match (setup.cache, job.unit) {
+        (Some(cache), Some(_)) => cache.object(&job.name, &generator.module, &job.object).map(Some),
+        _ => cache::emit(&generator.module, &job.object).map(|_| None),
+    }
+}
+
+/// `f` over `items` on up to one thread per CPU, results in item order; the
+/// first error in item order wins.
+fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Result<R, String> + Sync) -> Result<Vec<R>, String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, items.len().max(1));
+    let next = AtomicUsize::new(0);
+    let mut results: Vec<(usize, Result<R, String>)> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..threads)
+            .map(|_| {
+                std::thread::Builder::new()
+                    // As much stack as the main thread: codegen recurses over
+                    // the program.
+                    .stack_size(8 << 20)
+                    .spawn_scoped(scope, || {
+                        let mut done = vec![];
+                        loop {
+                            let i = next.fetch_add(1, Ordering::Relaxed);
+                            let Some(item) = items.get(i) else { break };
+                            done.push((i, f(item)));
+                        }
+                        done
+                    })
+                    .expect("spawn a codegen thread")
+            })
+            .collect();
+        workers.into_iter().flat_map(|w| w.join().expect("a codegen thread panicked")).collect()
+    });
+    results.sort_by_key(|(i, _)| *i);
+    results.into_iter().map(|(_, r)| r).collect()
 }
 
 /// Libraries named by `[Link("name")]` on surviving externs, deduplicated in
@@ -170,6 +291,6 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
 /// Delegated to `pepper_codegen::target` so the backend registration lives in
 /// one place; registering only x86 here is what left the CLI unable to compile
 /// anything on Apple silicon while the suite stayed green.
-fn default_target_machine() -> Result<inkwell::targets::TargetMachine, String> {
+pub(crate) fn default_target_machine() -> Result<inkwell::targets::TargetMachine, String> {
     pepper_codegen::target::host_machine()
 }
