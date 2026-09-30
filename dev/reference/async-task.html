@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4e00c1b3.js";
+            window.path_to_searchindex_js = "../searchindex-724e5204.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -241,7 +241,8 @@ finished. The task itself carries on.</p>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
-stack per task, and the system’s best I/O backend.</p>
+stack per task, the system’s best I/O backend, and up to 64 threads
+for <code>run_blocking</code>.</p>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
@@ -254,6 +255,25 @@ from <code>spawn</code> run on whichever worker is free. The default is
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>count</code> — the number of workers</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>these options</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is 0</li>
+</ul>
+<h4 id="blocking_threads"><a class="header" href="#blocking_threads">blocking_threads</a></h4>
+<pre><code class="language-pepper">blocking_threads(count: ulong): RuntimeOptions
+</code></pre>
+<p>Sets how many threads <code>run_blocking</code> may start. The runtime starts
+them one at a time, when a blocking call finds none idle, and keeps
+them until <code>run_with</code> returns. Once there are <code>count</code>, further calls
+wait for one of them to be free. The default is 64.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the most threads for blocking calls</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -467,6 +487,100 @@ cancelling work as for <code>spawn_local</code>.</p>
             var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
             var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
             print(low.join().value() + high.join().value());   # 499999500000
+        });
+        return 0;
+    }
+</code></pre>
+<h2 id="spawn_on_each_worker"><a class="header" href="#spawn_on_each_worker">spawn_on_each_worker</a></h2>
+<pre><code class="language-pepper">spawn_on_each_worker(body: shared () =&gt; void): Array&lt;Task&lt;void&gt;&gt;
+</code></pre>
+<p>Starts one task on every worker, each running <code>body</code>, and returns them in
+worker order. Use it to give each worker its own copy of a loop, such as
+a server’s accept loop on an <code>io.SharedTcpListener</code>, so that every worker
+takes part. Each task runs on its own worker, the calling task’s worker
+included; they are otherwise like tasks from <code>spawn</code>, and <code>body</code> must be
+a <code>shared</code> function.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the code each worker runs</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one task per worker, the first on the first worker</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>run</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+            var loops = async.spawn_on_each_worker(() =&gt; {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    var (stream, peer) = accepted.value();
+                    async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                        stream.write_string("hello");
+                    });
+                }
+            });
+            for (var loop in loops) {
+                loop.join();
+            }
+        });
+        return 0;
+    }
+</code></pre>
+<h2 id="run_blocking"><a class="header" href="#run_blocking">run_blocking</a></h2>
+<pre><code class="language-pepper">run_blocking&lt;T&gt;(body: shared () =&gt; T): T
+</code></pre>
+<p>Runs <code>body</code> on a separate thread and returns what it returns, parking
+the calling task meanwhile so the worker keeps running other tasks. Use it
+for work that would otherwise hold the worker up: a call that blocks in
+the operating system (reading a file, resolving a host name, a C library
+that waits) or a long computation.</p>
+<p>The runtime keeps a pool of threads for these calls, started as needed up
+to <code>RuntimeOptions.blocking_threads</code>. <code>body</code> runs on one of them, so it
+must be a <code>shared</code> function and <code>T</code> must be thread-safe, as for <code>spawn</code>.
+On a pool thread, sockets block the thread, and <code>sleep</code> and the other task
+functions behave as outside <code>run</code>.</p>
+<p><code>body</code> always runs to the end: cancelling the calling task, or a <code>timeout</code>
+around the call expiring, takes effect once <code>run_blocking</code> has returned.
+Outside a task, <code>run_blocking</code> just calls <code>body</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the blocking code</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>what <code>body</code> returns</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    main(): int {
+        async.run(() =&gt; {
+            var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                async.sleep(10);
+                print("the worker kept running");
+            });
+            var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+                async.Thread.sleep(50);   # blocks a pool thread, not the worker
+                return 42;
+            });
+            print(answer);
+            ticker.join();
         });
         return 0;
     }

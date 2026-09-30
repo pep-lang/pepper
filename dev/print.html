@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4e00c1b3.js";
+            window.path_to_searchindex_js = "searchindex-724e5204.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e51e852e.js"></script>
@@ -8122,6 +8122,46 @@ starts with <code>spawn_local</code> share values with it safely. An idle worker
 the next task that no worker has started yet. A task that computes without
 waiting still holds up the other tasks on its own worker (not the other
 workers), so a long computation should call <code>yield_now()</code> now and then.</p>
+<p><code>async.spawn_on_each_worker(body)</code> starts one task per worker, each on its
+own worker, and returns them in worker order. It is how a server runs an
+accept loop on every worker (see <a href="#sockets">Sockets</a>).</p>
+<h2 id="blocking-calls"><a class="header" href="#blocking-calls">Blocking calls</a></h2>
+<p>Some work would hold a worker up: a call that blocks in the operating system
+(reading a file, a C library that waits) or a long computation.
+<code>async.run_blocking&lt;T&gt;(body)</code> runs <code>body</code> on a separate thread and parks
+the calling task until it returns, so the worker keeps running its other
+tasks meanwhile:</p>
+<pre><code class="language-pepper">import async;
+
+const ticks = Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # Keeps running on the one worker while the blocking call waits.
+        var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (ticks.load() &lt; 3) {
+                async.sleep(5);
+                ticks.fetch_add(1);
+            }
+        });
+        var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+            async.Thread.sleep(50);   # blocks a pool thread, not the worker
+            return 42;
+        });
+        assert(answer == 42, "the blocking call's result");
+        assert(ticks.load() &gt; 0, "the worker ran the ticker meanwhile");
+        ticker.join();
+    });
+    return 0;
+}
+</code></pre>
+<p>The runtime keeps a pool of threads for these calls. It starts one when a
+call finds none idle, up to <code>RuntimeOptions().blocking_threads(count)</code> (64
+by default); past that, calls wait for a free one. As for <code>spawn</code>, <code>body</code>
+must be a <code>shared</code> function and <code>T</code> must be thread-safe. <code>body</code> always runs
+to the end: cancelling the task, or a <code>timeout</code> around the call, takes
+effect once the call has returned. Outside a task, <code>run_blocking</code> just
+calls <code>body</code>.</p>
 <h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
 <p><code>async.sleep(milliseconds)</code> puts a task to sleep and runs the others
 meanwhile, so many tasks can wait at the same time on one thread:</p>
@@ -8218,6 +8258,88 @@ main(): int {
 <p>Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with <code>spawn_local</code> can share
 it, and each spawned task makes its own.</p>
+<h3 id="accepting-on-every-worker"><a class="header" href="#accepting-on-every-worker">Accepting on every worker</a></h3>
+<p>An <code>io.SharedTcpListener</code> is a listening socket that any thread can accept
+on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
+connection goes to one of the waiting workers, and the stream it returns
+belongs to that worker:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+const served = Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+
+        # One accept loop per worker; each connection goes to one of them.
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                served.fetch_add(1);
+                async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                    stream.write_string("hello").value();
+                });
+            }
+        });
+
+        var i = 0;
+        while (i &lt; 8) {
+            var client = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (client.read(reply, 64).value() &gt; 0) {
+            }
+            assert(reply.count() == 5, "greeted");
+            i = i + 1;
+        }
+    });
+    assert(served.load() == 8, "every connection was accepted once");
+    return 0;
+}
+</code></pre>
+<p>The listener has no <code>close()</code>, since other workers may be waiting on it.
+It closes when the last reference goes: here, once <code>run</code> has cancelled the
+loops.</p>
+<h3 id="moving-a-stream-to-another-worker"><a class="header" href="#moving-a-stream-to-another-worker">Moving a stream to another worker</a></h3>
+<p><code>stream.into_transfer()</code> moves a connection out of a <code>TcpStream</code> into an
+<code>io.SocketTransfer</code>, a thread-safe token that a <code>shared</code> function can
+capture or a <code>Channel</code> can carry, and <code>io.TcpStream.adopt(transfer)</code> takes
+it out again on the receiving worker. The old stream is closed afterwards,
+only the first <code>adopt</code> gets the connection, and a token no one adopts
+closes the connection when it goes:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(2), () =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+        var client = async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+            var stream = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 64).value() &gt; 0) {
+            }
+            return reply.count();
+        });
+
+        var (stream, peer) = listener.accept().value();
+        # A stream is not thread-safe; its transfer token is.
+        var transfer = stream.into_transfer();
+        var handler = async.spawn&lt;void&gt;(() =&gt; {
+            var mine = io.TcpStream.adopt(transfer).value();
+            mine.write_string("from any worker").value();
+        });
+        handler.join();
+        assert(client.join().value() == 15, "the moved stream answered");
+    });
+    return 0;
+}
+</code></pre>
 <p>When no task is ready to run, a worker blocks until a socket is ready, the
 next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
 every few dozen tasks, so a busy task cannot starve the network.</p>
@@ -8329,13 +8451,11 @@ program as a thread would. Stacks are reused for later tasks.</p>
 through a queue of messages each (a spawned task finished, or was
 cancelled) and a <em>doorbell</em> that ends a worker’s wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
-completion with IOCP, and a pipe (a loopback UDP socket on Windows) with
-<code>poll()</code>.</p>
+completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
+a second socket sends to) with <code>poll()</code>. <code>run_blocking</code>’s pool threads are
+plain threads that report back through the same messages.</p>
 <h2 id="current-status-1"><a class="header" href="#current-status-1">Current status</a></h2>
 <ul>
-<li><code>run_blocking</code>, which runs work that would block the thread on a pool of
-threads while the task waits, is planned, as are listeners that accept on
-every worker and handing a socket to another worker.</li>
 <li>Files block the thread on every platform. io_uring on Linux, and
 asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
@@ -8503,7 +8623,11 @@ the process. The write returns an error instead.</p>
 <p>A socket closes when the last reference to it goes, like a <code>File</code>, and
 <code>close()</code> closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a <a href="#channels">channel</a> to another
-thread. Use it on the thread that made it.</p>
+thread. Use it on the thread that made it, or move it: <code>into_transfer()</code>
+turns a <code>TcpStream</code> into a thread-safe <code>SocketTransfer</code> that
+<code>TcpStream.adopt</code> takes on another thread, and a <code>SharedTcpListener</code> is a
+listener any thread can accept on (see
+<a href="#accepting-on-every-worker">Tasks</a>).</p>
 <p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
 away. On Windows it does not, because there that option would let another
 program take over the port.</p>
@@ -13090,7 +13214,7 @@ the program when it runs.</p>
 <li><a href="#file">File</a>: opening, reading, and writing files, and whole-file helpers</li>
 <li><a href="#directory">Directory</a>: listing, creating, and removing directories</li>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
-<li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>TcpStream</code>, and <code>UdpSocket</code></li>
+<li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -15458,6 +15582,87 @@ Connections already accepted stay open.</p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
 </ul>
+<h2 id="sharedtcplistener"><a class="header" href="#sharedtcplistener">SharedTcpListener</a></h2>
+<pre><code class="language-pepper">[Shared] struct SharedTcpListener
+</code></pre>
+<p>A TCP listening socket that any thread can accept connections on: the
+thread-safe counterpart of <code>TcpListener</code>, for servers that accept on every
+worker of <code>async.run</code> at once (see <code>async.spawn_on_each_worker</code>). Each
+connection goes to one of the threads waiting in <code>accept</code>, and the stream
+it returns belongs to that thread.</p>
+<p>A <code>shared</code> function may capture it. There is no <code>close()</code>, since another
+thread may be waiting on it: the socket closes when the last reference
+goes, which, for accept loops in tasks, is once <code>async.run</code> has cancelled
+them (<code>accept</code> then fails and the loop returns).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+            async.spawn_on_each_worker(() =&gt; {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    var (stream, peer) = accepted.value();
+                    stream.write_string("hello");
+                }
+            });
+        });
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
+<h4 id="sharedtcplistener-1"><a class="header" href="#sharedtcplistener-1">SharedTcpListener()</a></h4>
+<pre><code class="language-pepper">construct(handle: SocketHandle)
+</code></pre>
+<p>Wraps a listening socket. Use <code>SharedTcpListener.bind</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the listening socket, or an invalid handle for none</li>
+</ul>
+<h3 id="static-methods-1-2"><a class="header" href="#static-methods-1-2">Static methods</a></h3>
+<h4 id="bind-1"><a class="header" href="#bind-1">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;SharedTcpListener&gt;
+</code></pre>
+<p>Opens a TCP socket bound to <code>address</code> and starts listening on it, as
+<code>TcpListener.bind</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to listen on (port 0 for any free port)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
+</ul>
+<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
+<h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it, as
+<code>TcpListener.accept</code> does. Several threads may wait at once; each
+connection wakes one of them (or, on some systems, several, and the
+rest keep waiting).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream, owned by the calling thread, and the peer’s address; an error when the waiting task is cancelled, or another platform error</li>
+</ul>
+<h4 id="local_address-1"><a class="header" href="#local_address-1">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the listener is bound to, with the port the
+system chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address, or a platform error</li>
+</ul>
 <h2 id="tcpstream"><a class="header" href="#tcpstream">TcpStream</a></h2>
 <pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpStream
 </code></pre>
@@ -15488,14 +15693,14 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
+<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed stream: <code>is_open()</code> is false and every operation
 fails. Use <code>TcpStream.connect</code> or <code>TcpListener.accept</code> to get an open
 one.</p>
-<h3 id="static-methods-1-2"><a class="header" href="#static-methods-1-2">Static methods</a></h3>
+<h3 id="static-methods-2-1"><a class="header" href="#static-methods-2-1">Static methods</a></h3>
 <h4 id="connect"><a class="header" href="#connect">connect</a></h4>
 <pre><code class="language-pepper">static connect(address: SocketAddress): IoResult&lt;TcpStream&gt;
 </code></pre>
@@ -15528,7 +15733,21 @@ addresses that accepts, trying them in order.</p>
         print("nothing is listening on 8080");
     }
 </code></pre>
-<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
+<h4 id="adopt"><a class="header" href="#adopt">adopt</a></h4>
+<pre><code class="language-pepper">static adopt(transfer: SocketTransfer): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Takes the connection out of <code>transfer</code> (see <code>into_transfer</code>) into a
+new stream on the calling thread. Only the first <code>adopt</code> of a token
+gets the connection.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transfer</code> — the token from <code>into_transfer</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
+</ul>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
 <h4 id="is_open-1-1"><a class="header" href="#is_open-1-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -15633,7 +15852,7 @@ request/response traffic, more packets.</p>
 <ul>
 <li>an Ok result on success; an error when the stream is closed, or another platform error</li>
 </ul>
-<h4 id="local_address-1"><a class="header" href="#local_address-1">local_address</a></h4>
+<h4 id="local_address-2"><a class="header" href="#local_address-2">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
 </code></pre>
 <p>Returns this side’s address of the connection.</p>
@@ -15649,6 +15868,33 @@ request/response traffic, more packets.</p>
 <ul>
 <li>the peer’s address; an error when the stream is closed, or another platform error</li>
 </ul>
+<h4 id="into_transfer"><a class="header" href="#into_transfer">into_transfer</a></h4>
+<pre><code class="language-pepper">into_transfer(): SocketTransfer
+</code></pre>
+<p>Moves the connection out of this stream, into a token another thread
+can take it from with <code>TcpStream.adopt</code>. The stream is closed
+afterwards (<code>is_open()</code> is false), and a task waiting on it on this
+worker wakes with an error.</p>
+<p>Inside <code>async.run</code> a socket belongs to the worker that uses it; this
+is how a task hands a connection to a task on another worker, such as
+one started with <code>async.spawn</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the token; for a closed stream, one that <code>adopt</code> fails on</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    serve(listener: io.TcpListener) {
+        var (stream, peer) = listener.accept().value();
+        var transfer = stream.into_transfer();
+        async.spawn&lt;void&gt;(() =&gt; {
+            var mine = io.TcpStream.adopt(transfer).value();
+            mine.write_string("hello from another worker");
+        });
+    }
+</code></pre>
 <h4 id="close-1-1"><a class="header" href="#close-1-1">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
 </code></pre>
@@ -15656,6 +15902,24 @@ request/response traffic, more packets.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="sockettransfer"><a class="header" href="#sockettransfer">SocketTransfer</a></h2>
+<pre><code class="language-pepper">[Shared] struct SocketTransfer
+</code></pre>
+<p>A TCP connection on its way from one thread to another: made by
+<code>TcpStream.into_transfer</code>, taken by <code>TcpStream.adopt</code>. Unlike a
+<code>TcpStream</code>, it is thread-safe, so a <code>shared</code> function (a body for
+<code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
+it. If no one adopts it, the connection is closed when the last
+reference goes.</p>
+<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h4 id="sockettransfer-1"><a class="header" href="#sockettransfer-1">SocketTransfer()</a></h4>
+<pre><code class="language-pepper">construct(handle: SocketHandle)
+</code></pre>
+<p>Wraps a socket handle. <code>TcpStream.into_transfer</code> makes these; use it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the socket, or an invalid handle for an empty token</li>
 </ul>
 <h2 id="udpsocket"><a class="header" href="#udpsocket">UdpSocket</a></h2>
 <pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct UdpSocket
@@ -15679,14 +15943,14 @@ largest datagram expected (at most 65507 bytes over IPv4).</p>
     var (n, from) = socket.receive_from(buffer, 65507).value();
     socket.send_to(buffer, from);   # echo it back
 </code></pre>
-<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
+<h3 id="constructor-4-1"><a class="header" href="#constructor-4-1">Constructor</a></h3>
 <h4 id="udpsocket-1"><a class="header" href="#udpsocket-1">UdpSocket()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed socket: <code>is_open()</code> is false and every operation
 fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
-<h3 id="static-methods-2-1"><a class="header" href="#static-methods-2-1">Static methods</a></h3>
-<h4 id="bind-1"><a class="header" href="#bind-1">bind</a></h4>
+<h3 id="static-methods-3-1"><a class="header" href="#static-methods-3-1">Static methods</a></h3>
+<h4 id="bind-2"><a class="header" href="#bind-2">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;UdpSocket&gt;
 </code></pre>
 <p>Opens a UDP socket bound to <code>address</code>.</p>
@@ -15698,7 +15962,7 @@ fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
 <ul>
 <li>the bound socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, or another platform error</li>
 </ul>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
 <h4 id="is_open-2"><a class="header" href="#is_open-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -15787,7 +16051,7 @@ such as <code>255.255.255.255</code> (<code>SO_BROADCAST</code>).</p>
 <ul>
 <li>an Ok result on success; an error when the socket is closed, or another platform error</li>
 </ul>
-<h4 id="local_address-2"><a class="header" href="#local_address-2">local_address</a></h4>
+<h4 id="local_address-3"><a class="header" href="#local_address-3">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
 </code></pre>
 <p>Returns the address the socket is bound to, with the port the system
@@ -15827,7 +16091,7 @@ threads.</p>
 <li><a href="#asyncchannelpep">Channel</a>: <code>Channel&lt;T&gt;</code>, a queue that carries values between threads, and its <code>ChannelIterator&lt;T&gt;</code></li>
 <li><a href="#asyncmutexpep">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="#asynconcepep">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
-<li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>spawn</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on a few worker threads and parking on sockets</li>
+<li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>spawn</code>, <code>spawn_on_each_worker</code>, <code>run_blocking</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on a few worker threads and parking on sockets</li>
 <li><a href="#io-backends">I/O backends</a>: <code>Backend</code>, how a runtime waits for sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
@@ -16293,7 +16557,8 @@ finished. The task itself carries on.</p>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
-stack per task, and the system’s best I/O backend.</p>
+stack per task, the system’s best I/O backend, and up to 64 threads
+for <code>run_blocking</code>.</p>
 <h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
@@ -16306,6 +16571,25 @@ from <code>spawn</code> run on whichever worker is free. The default is
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>count</code> — the number of workers</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>these options</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is 0</li>
+</ul>
+<h4 id="blocking_threads"><a class="header" href="#blocking_threads">blocking_threads</a></h4>
+<pre><code class="language-pepper">blocking_threads(count: ulong): RuntimeOptions
+</code></pre>
+<p>Sets how many threads <code>run_blocking</code> may start. The runtime starts
+them one at a time, when a blocking call finds none idle, and keeps
+them until <code>run_with</code> returns. Once there are <code>count</code>, further calls
+wait for one of them to be free. The default is 64.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the most threads for blocking calls</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -16523,6 +16807,100 @@ cancelling work as for <code>spawn_local</code>.</p>
         return 0;
     }
 </code></pre>
+<h2 id="spawn_on_each_worker"><a class="header" href="#spawn_on_each_worker">spawn_on_each_worker</a></h2>
+<pre><code class="language-pepper">spawn_on_each_worker(body: shared () =&gt; void): Array&lt;Task&lt;void&gt;&gt;
+</code></pre>
+<p>Starts one task on every worker, each running <code>body</code>, and returns them in
+worker order. Use it to give each worker its own copy of a loop, such as
+a server’s accept loop on an <code>io.SharedTcpListener</code>, so that every worker
+takes part. Each task runs on its own worker, the calling task’s worker
+included; they are otherwise like tasks from <code>spawn</code>, and <code>body</code> must be
+a <code>shared</code> function.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the code each worker runs</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one task per worker, the first on the first worker</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>run</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+            var loops = async.spawn_on_each_worker(() =&gt; {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    var (stream, peer) = accepted.value();
+                    async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                        stream.write_string("hello");
+                    });
+                }
+            });
+            for (var loop in loops) {
+                loop.join();
+            }
+        });
+        return 0;
+    }
+</code></pre>
+<h2 id="run_blocking"><a class="header" href="#run_blocking">run_blocking</a></h2>
+<pre><code class="language-pepper">run_blocking&lt;T&gt;(body: shared () =&gt; T): T
+</code></pre>
+<p>Runs <code>body</code> on a separate thread and returns what it returns, parking
+the calling task meanwhile so the worker keeps running other tasks. Use it
+for work that would otherwise hold the worker up: a call that blocks in
+the operating system (reading a file, resolving a host name, a C library
+that waits) or a long computation.</p>
+<p>The runtime keeps a pool of threads for these calls, started as needed up
+to <code>RuntimeOptions.blocking_threads</code>. <code>body</code> runs on one of them, so it
+must be a <code>shared</code> function and <code>T</code> must be thread-safe, as for <code>spawn</code>.
+On a pool thread, sockets block the thread, and <code>sleep</code> and the other task
+functions behave as outside <code>run</code>.</p>
+<p><code>body</code> always runs to the end: cancelling the calling task, or a <code>timeout</code>
+around the call expiring, takes effect once <code>run_blocking</code> has returned.
+Outside a task, <code>run_blocking</code> just calls <code>body</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the blocking code</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>what <code>body</code> returns</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    main(): int {
+        async.run(() =&gt; {
+            var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                async.sleep(10);
+                print("the worker kept running");
+            });
+            var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+                async.Thread.sleep(50);   # blocks a pool thread, not the worker
+                return 42;
+            });
+            print(answer);
+            ticker.join();
+        });
+        return 0;
+    }
+</code></pre>
 <h2 id="yield_now"><a class="header" href="#yield_now">yield_now</a></h2>
 <pre><code class="language-pepper">yield_now()
 </code></pre>
@@ -16556,7 +16934,7 @@ so a long computation can stop early. False outside a task.</p>
 <code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
 and <code>sleep</code> returns early. Code that does not wait is never interrupted.
 Timeouts nest: an inner one cannot extend an outer one.</p>
-<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
 <h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
 <pre><code class="language-pepper">construct(milliseconds: ulong)
 </code></pre>
@@ -16565,7 +16943,7 @@ Timeouts nest: an inner one cannot extend an outer one.</p>
 <ul>
 <li><code>milliseconds</code> — how long from now the limit passes</li>
 </ul>
-<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
+<h3 id="methods-3-4"><a class="header" href="#methods-3-4">Methods</a></h3>
 <h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
 <pre><code class="language-pepper">enter(): Deadline
 </code></pre>

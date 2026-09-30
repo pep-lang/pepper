@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4e00c1b3.js";
+            window.path_to_searchindex_js = "../searchindex-724e5204.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -339,7 +339,11 @@ the process. The write returns an error instead.</p>
 <p>A socket closes when the last reference to it goes, like a <code>File</code>, and
 <code>close()</code> closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a <a href="threads.html#channels">channel</a> to another
-thread. Use it on the thread that made it.</p>
+thread. Use it on the thread that made it, or move it: <code>into_transfer()</code>
+turns a <code>TcpStream</code> into a thread-safe <code>SocketTransfer</code> that
+<code>TcpStream.adopt</code> takes on another thread, and a <code>SharedTcpListener</code> is a
+listener any thread can accept on (see
+<a href="tasks.html#accepting-on-every-worker">Tasks</a>).</p>
 <p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
 away. On Windows it does not, because there that option would let another
 program take over the port.</p>

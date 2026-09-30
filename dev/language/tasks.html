@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4e00c1b3.js";
+            window.path_to_searchindex_js = "../searchindex-724e5204.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -270,6 +270,46 @@ starts with <code>spawn_local</code> share values with it safely. An idle worker
 the next task that no worker has started yet. A task that computes without
 waiting still holds up the other tasks on its own worker (not the other
 workers), so a long computation should call <code>yield_now()</code> now and then.</p>
+<p><code>async.spawn_on_each_worker(body)</code> starts one task per worker, each on its
+own worker, and returns them in worker order. It is how a server runs an
+accept loop on every worker (see <a href="#sockets">Sockets</a>).</p>
+<h2 id="blocking-calls"><a class="header" href="#blocking-calls">Blocking calls</a></h2>
+<p>Some work would hold a worker up: a call that blocks in the operating system
+(reading a file, a C library that waits) or a long computation.
+<code>async.run_blocking&lt;T&gt;(body)</code> runs <code>body</code> on a separate thread and parks
+the calling task until it returns, so the worker keeps running its other
+tasks meanwhile:</p>
+<pre><code class="language-pepper">import async;
+
+const ticks = Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # Keeps running on the one worker while the blocking call waits.
+        var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (ticks.load() &lt; 3) {
+                async.sleep(5);
+                ticks.fetch_add(1);
+            }
+        });
+        var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+            async.Thread.sleep(50);   # blocks a pool thread, not the worker
+            return 42;
+        });
+        assert(answer == 42, "the blocking call's result");
+        assert(ticks.load() &gt; 0, "the worker ran the ticker meanwhile");
+        ticker.join();
+    });
+    return 0;
+}
+</code></pre>
+<p>The runtime keeps a pool of threads for these calls. It starts one when a
+call finds none idle, up to <code>RuntimeOptions().blocking_threads(count)</code> (64
+by default); past that, calls wait for a free one. As for <code>spawn</code>, <code>body</code>
+must be a <code>shared</code> function and <code>T</code> must be thread-safe. <code>body</code> always runs
+to the end: cancelling the task, or a <code>timeout</code> around the call, takes
+effect once the call has returned. Outside a task, <code>run_blocking</code> just
+calls <code>body</code>.</p>
 <h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
 <p><code>async.sleep(milliseconds)</code> puts a task to sleep and runs the others
 meanwhile, so many tasks can wait at the same time on one thread:</p>
@@ -366,6 +406,88 @@ main(): int {
 <p>Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with <code>spawn_local</code> can share
 it, and each spawned task makes its own.</p>
+<h3 id="accepting-on-every-worker"><a class="header" href="#accepting-on-every-worker">Accepting on every worker</a></h3>
+<p>An <code>io.SharedTcpListener</code> is a listening socket that any thread can accept
+on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
+connection goes to one of the waiting workers, and the stream it returns
+belongs to that worker:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+const served = Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+
+        # One accept loop per worker; each connection goes to one of them.
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                served.fetch_add(1);
+                async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                    stream.write_string("hello").value();
+                });
+            }
+        });
+
+        var i = 0;
+        while (i &lt; 8) {
+            var client = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (client.read(reply, 64).value() &gt; 0) {
+            }
+            assert(reply.count() == 5, "greeted");
+            i = i + 1;
+        }
+    });
+    assert(served.load() == 8, "every connection was accepted once");
+    return 0;
+}
+</code></pre>
+<p>The listener has no <code>close()</code>, since other workers may be waiting on it.
+It closes when the last reference goes: here, once <code>run</code> has cancelled the
+loops.</p>
+<h3 id="moving-a-stream-to-another-worker"><a class="header" href="#moving-a-stream-to-another-worker">Moving a stream to another worker</a></h3>
+<p><code>stream.into_transfer()</code> moves a connection out of a <code>TcpStream</code> into an
+<code>io.SocketTransfer</code>, a thread-safe token that a <code>shared</code> function can
+capture or a <code>Channel</code> can carry, and <code>io.TcpStream.adopt(transfer)</code> takes
+it out again on the receiving worker. The old stream is closed afterwards,
+only the first <code>adopt</code> gets the connection, and a token no one adopts
+closes the connection when it goes:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(2), () =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+        var client = async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+            var stream = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 64).value() &gt; 0) {
+            }
+            return reply.count();
+        });
+
+        var (stream, peer) = listener.accept().value();
+        # A stream is not thread-safe; its transfer token is.
+        var transfer = stream.into_transfer();
+        var handler = async.spawn&lt;void&gt;(() =&gt; {
+            var mine = io.TcpStream.adopt(transfer).value();
+            mine.write_string("from any worker").value();
+        });
+        handler.join();
+        assert(client.join().value() == 15, "the moved stream answered");
+    });
+    return 0;
+}
+</code></pre>
 <p>When no task is ready to run, a worker blocks until a socket is ready, the
 next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
 every few dozen tasks, so a busy task cannot starve the network.</p>
@@ -477,13 +599,11 @@ program as a thread would. Stacks are reused for later tasks.</p>
 through a queue of messages each (a spawned task finished, or was
 cancelled) and a <em>doorbell</em> that ends a worker’s wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
-completion with IOCP, and a pipe (a loopback UDP socket on Windows) with
-<code>poll()</code>.</p>
+completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
+a second socket sends to) with <code>poll()</code>. <code>run_blocking</code>’s pool threads are
+plain threads that report back through the same messages.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li><code>run_blocking</code>, which runs work that would block the thread on a pool of
-threads while the task waits, is planned, as are listeners that accept on
-every worker and handing a socket to another worker.</li>
 <li>Files block the thread on every platform. io_uring on Linux, and
 asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
