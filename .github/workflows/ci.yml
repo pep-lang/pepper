@@ -21,18 +21,20 @@
 #
 # Draft PRs get only the Linux jobs, as a quick check; `test` and `test-macos`
 # are skipped until the PR is marked ready for review, which starts a full run.
+#
+# Pushes to main do not run CI: main must be up to date before a PR merges, so
+# the merged commit is the one the PR already tested. Run it by hand
+# (workflow_dispatch) when main needs a fresh result.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     # The defaults plus ready_for_review, so leaving draft runs the full suite.
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 # A newer commit on a PR makes its older runs irrelevant, so cancel them.
-# Runs on main queue instead: each merged commit gets a complete result.
+# Manual runs queue instead, so each one finishes with a result.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
