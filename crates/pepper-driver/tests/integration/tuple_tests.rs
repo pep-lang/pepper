@@ -526,3 +526,100 @@ test(): int {
 "#;
     assert_eq!(run(src), 0);
 }
+
+#[test]
+fn tuple_patterns_in_match() {
+    let src = r#"
+enum Shape {
+    Circle,
+    Square,
+    Line,
+}
+
+enum Doc {
+    Text(text: String),
+    Pair(left: int, right: int),
+    Empty,
+}
+
+describe(a: Shape, b: Shape): int {
+    match ((a, b)) {
+        (Circle, Circle) => {
+            return 1;
+        }
+        (Circle, other) => {
+            return 10 + other.name().length();
+        }
+        (_, Line) => {
+            return 3;
+        }
+        (x, _) => {
+            return 20 + x.name().length();
+        }
+    }
+}
+
+classify(n: int, flag: bool): String {
+    return match ((n, flag)) {
+        (0, true) => "zero on",
+        (0, false) => "zero off",
+        (k, true) => "on",
+        else => "other",
+    };
+}
+
+docs(a: Doc, n: int): int {
+    match ((a, n)) {
+        (Text(t), 0) => {
+            return t.length();
+        }
+        (Pair(l, r), k) => {
+            return l + r + k;
+        }
+        (Text(t), k) => {
+            return k;
+        }
+        (Empty, _) => {
+            return -1;
+        }
+    }
+}
+
+nested(p: (int, (bool, String))): int {
+    match (p) {
+        (1, (true, s)) => {
+            return s.length();
+        }
+        (_, (flag, "x")) => {
+            return 7;
+        }
+        else => {
+            return 0;
+        }
+    }
+}
+
+test(): int {
+    if (describe(Shape.Circle, Shape.Circle) != 1) { return 1; }
+    if (describe(Shape.Circle, Shape.Line) != 14) { return 2; }
+    if (describe(Shape.Square, Shape.Line) != 3) { return 3; }
+    if (describe(Shape.Square, Shape.Circle) != 26) { return 4; }
+    if (classify(0, false) != "zero off" || classify(5, true) != "on" || classify(5, false) != "other") { return 5; }
+    if (docs(Doc.Text("abc"), 0) != 3 || docs(Doc.Pair(1, 2), 3) != 6 || docs(Doc.Text("a"), 9) != 9 || docs(Doc.Empty(), 1) != -1) { return 6; }
+    if (nested((1, (true, "ab"))) != 2 || nested((2, (false, "x"))) != 7 || nested((2, (false, "y"))) != 0) { return 7; }
+    var pair = (3, Shape.Line);
+    if (pair is (3, Line)) {
+    } else {
+        return 8;
+    }
+    if (pair is (n, Square)) { return 9; }
+    if (pair is (k, Line)) {
+        if (k != 3) { return 10; }
+    } else {
+        return 11;
+    }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}

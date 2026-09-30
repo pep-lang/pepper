@@ -393,6 +393,14 @@ fn pep_fmt_rejects_bad_usage() {
 }
 
 #[test]
+fn pep_fmt_formats_tuple_patterns() {
+    assert_formats(
+        "f(a:Shape,n:int):int {\n    match ((a,n)) {\n        (Circle,0),(Line,_)=>{ return 1; }\n        (Text(t,_),( x,\"y\" ))=>{ return 2; }\n        else=>{ return 3; }\n    }\n    if ((a,n) is (Circle,k)) { return k; }\n    return 0;\n}\n",
+        "f(a: Shape, n: int): int {\n    match ((a, n)) {\n        (Circle, 0), (Line, _) => { return 1; }\n        (Text(t, _), (x, \"y\")) => { return 2; }\n        else => { return 3; }\n    }\n    if ((a, n) is (Circle, k)) { return k; }\n    return 0;\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_formats_match_expressions_is_tests_and_literal_patterns() {
     assert_formats(
         "f(d:Doc):int {\n    var w=match(d){Text(t,u)=>t.length(),Line=>1,else=>0};\n    match (n) {\n        -1,2=>{ return 1; }\n        \"a\"=>{ return 2; }\n        else=>{ return 3; }\n    }\n    if (d is Text(a,_)) { return 1; }\n    return w;\n}\n",

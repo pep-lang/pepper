@@ -195,9 +195,11 @@ of an enum whose cases carry values panics with `match on a null 'Name'`.
 - An enum whose cases carry nothing cannot be generic. The methods of any
   enum cannot be generic yet. An enum cannot declare operators or indexers
   yet; `==` and `!=` are built in for enums whose cases carry nothing.
-- Patterns cannot be nested (`Some(Text(t))`), compare values
-  (`Text("")`), match ranges (`1..9`), or have guards yet. A literal pattern
-  is a literal, not a named constant.
+- A case's values bind names only: a pattern cannot nest inside a case
+  (`Some(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
+  inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).
+  Patterns cannot match ranges (`1..9`) or have guards yet. A literal
+  pattern is a literal, not a named constant.
 - A `match` cannot examine floating-point values.
 - An enum whose cases carry nothing cannot be extended
   (`extend Color { ... }`); declare its methods inside it. So it cannot

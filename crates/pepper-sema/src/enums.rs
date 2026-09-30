@@ -109,6 +109,10 @@ pub fn is_reference_enum(ty: &TypeName) -> bool {
 }
 
 fn shown(ty: &TypeName) -> String {
+    if ty.is_tuple() {
+        let elements: Vec<String> = ty.tuple_elements().iter().map(shown).collect();
+        return format!("({})", elements.join(", "));
+    }
     pepper_parser::namespace::demangle_name(&ty.to_string()).to_string()
 }
 
@@ -713,6 +717,15 @@ struct Coverage {
     /// The `match` is over a type with literal patterns (`int`, `String`).
     literal: bool,
     handled: BTreeMap<String, Loc>,
+    /// For a `match` over a tuple: its type, the case names of each enum
+    /// (and `bool`) inside it, and every pattern so far.
+    tuple: Option<TupleCoverage>,
+}
+
+struct TupleCoverage {
+    ty: TypeName,
+    domains: Domains,
+    rows: Vec<Space>,
 }
 
 /// What a `match` is over: a value enum, a reference enum's cases, or a type
@@ -908,11 +921,7 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
 /// The typed subject a binding reads, and each case it may read from with
 /// the binding's position there.
 fn case_picks(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option<(Expression, Vec<(EnumCaseDef, usize)>)> {
-    let ty = match &value.subject {
-        Expression::SymbolRef { id, .. } => subjects.get(id)?.clone(),
-        Expression::Subject { ty, .. } => ty.clone(),
-        _ => return None,
-    };
+    let (subject, ty) = typed_path(&value.subject, subjects)?;
     let (cases, _) = reference_cases(&ty)?;
     let picks: Vec<(EnumCaseDef, usize)> = value
         .choices
@@ -920,7 +929,26 @@ fn case_picks(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option
         .filter_map(|c| cases.iter().find(|case| case.name == c.case).map(|case| (case.clone(), c.index)))
         .filter(|(case, index)| *index < case.payload.len())
         .collect();
-    Some((typed(&value.subject, &ty), picks))
+    Some((subject, picks))
+}
+
+/// A `match`'s subject, or an element of it (`__match_N.0.1`), with the
+/// subject typed, and the type of what it reads.
+fn typed_path(path: &Expression, subjects: &HashMap<String, TypeName>) -> Option<(Expression, TypeName)> {
+    match path {
+        Expression::SymbolRef { id, .. } => {
+            let ty = subjects.get(id)?.clone();
+            Some((typed(path, &ty), ty))
+        }
+        Expression::Subject { ty, .. } => Some((path.clone(), ty.clone())),
+        Expression::MemberRef { lhs, name, loc } => {
+            let index: usize = name.parse().ok()?;
+            let (lhs, ty) = typed_path(lhs, subjects)?;
+            let element = ty.is_tuple().then(|| ty.tuple_elements().get(index).cloned()).flatten()?;
+            Some((Expression::MemberRef { lhs: Box::new(lhs), name: name.clone(), loc: *loc }, element))
+        }
+        _ => None,
+    }
 }
 
 /// A binding inside a `match` expression's arm value: the payload field, or
@@ -961,9 +989,15 @@ fn lower_statement(
         Statement::Branch(branch) => {
             if let Expression::MatchArm(test) = &branch.condition {
                 let test = test.clone();
-                if let Some(condition) = lower_arm(&test, enums, subjects, coverage) {
+                let mut cases = vec![];
+                if let Some(condition) = lower_arm(&test, enums, subjects, coverage, &mut cases) {
                     branch.condition = condition;
                 }
+                // A bare element name that is a case binds nothing: drop the
+                // local the builder declared for it.
+                branch.if_block.items.retain(|item| {
+                    !matches!(item, Statement::Declaration(Declaration::Variable(v)) if cases.contains(&v.name))
+                });
             } else {
                 lower_expressions(&mut branch.condition, enums, subjects, coverage);
             }
@@ -1001,7 +1035,7 @@ fn lower_expressions(
         }
         Expression::MatchArm(test) => {
             let test = test.clone();
-            *expr = lower_arm(&test, enums, subjects, coverage).unwrap_or(Expression::BoolLiteral(false));
+            *expr = lower_arm(&test, enums, subjects, coverage, &mut vec![]).unwrap_or(Expression::BoolLiteral(false));
             return;
         }
         Expression::CaseValue(value) => {
@@ -1064,11 +1098,15 @@ fn subject_type(body: &Expression, id: usize) -> Option<TypeName> {
 }
 
 /// The `==` tests one arm stands for, or `None` after reporting an error.
+///
+/// `cases` receives each declared bare element name that turned out to be a
+/// case, whose local the caller drops.
 fn lower_arm(
     test: &MatchArmTest,
     enums: &HashMap<String, EnumDef>,
     subjects: &HashMap<String, TypeName>,
     coverage: &mut BTreeMap<usize, Coverage>,
+    cases: &mut Vec<String>,
 ) -> Option<Expression> {
     let (ty, subject_loc) = match &test.subject {
         Expression::SymbolRef { id, loc, .. } => (subjects.get(id).cloned().unwrap_or_else(TypeName::auto), *loc),
@@ -1078,6 +1116,14 @@ fn lower_arm(
     let subject = typed(&test.subject, &ty);
     let entry = coverage.entry(test.site.id).or_default();
     entry.site = Some(test.site.clone());
+    if ty.is_tuple() {
+        return lower_tuple_arm(test, &subject, &ty, subject_loc, enums, entry, cases);
+    }
+    if let Some(p) = test.patterns.iter().find(|p| p.elements.is_some()) {
+        let shown = if ty.is_auto() { "a value of an unknown type".to_string() } else { format!("a value of '{}'", shown(&ty)) };
+        report(Diagnostic::error(format!("a tuple pattern cannot match {}", shown)).at(p.loc).with_note("the value matched is here", Some(subject_loc)));
+        return None;
+    }
     let Some(matched) = Matched::of(&ty, enums) else {
         let shown = if ty.is_auto() { "an unknown type".to_string() } else { format!("'{}'", ty) };
         report(
@@ -1210,6 +1256,22 @@ fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
     if site.partial {
         return None;
     }
+    if let Some(tuple) = &c.tuple {
+        let rows: Vec<Vec<Space>> = tuple.rows.iter().map(|r| vec![r.clone()]).collect();
+        let missing = useful(&rows, &[Space::Any], std::slice::from_ref(&tuple.ty), &tuple.domains);
+        match (site.else_arm, missing) {
+            (Some(else_loc), None) => {
+                return Some(Diagnostic::warning(format!("'else' is unreachable: every value of '{}' is handled", name)).at(else_loc));
+            }
+            (None, Some(witness)) => report(
+                Diagnostic::error(format!("match on '{}' does not handle '{}'", name, witness[0]))
+                    .at(site.keyword)
+                    .with_note("handle it with another arm, or add an 'else' arm", None),
+            ),
+            _ => {}
+        }
+        return None;
+    }
     if c.literal {
         let every_bool = name == "bool" && c.handled.contains_key("true") && c.handled.contains_key("false");
         match site.else_arm {
@@ -1299,4 +1361,324 @@ fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, c
             return;
         }
     });
+}
+
+// ── Tuple patterns ───────────────────────────────────────────────────────────
+//
+// A tuple pattern `(Circle, 0, r)` tests each element on its own path from
+// the subject (`__match_N.0 == Shape.Circle && __match_N.1 == 0`); a bare
+// name there binds its element unless the element's enum has a case of that
+// name. Which values an arm's patterns cover is a `Space`, and a `match`
+// over a tuple is exhaustive when no value escapes every arm (`useful`, the
+// usefulness check of Maranget's "Warnings for pattern matching").
+
+/// The values a pattern covers, for exhaustiveness.
+#[derive(Debug, Clone, PartialEq)]
+enum Space {
+    /// Every value: `_` or a name that binds.
+    Any,
+    /// One case, or one literal (as written).
+    Case(String),
+    /// A tuple of the element spaces.
+    Tuple(Vec<Space>),
+}
+
+impl std::fmt::Display for Space {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Space::Any => write!(f, "_"),
+            Space::Case(c) => write!(f, "{}", c),
+            Space::Tuple(elements) => {
+                let shown: Vec<String> = elements.iter().map(|e| e.to_string()).collect();
+                write!(f, "({})", shown.join(", "))
+            }
+        }
+    }
+}
+
+/// Every case of each enum (and of `bool`) in a tuple type, by type as
+/// written; a type missing here has too many values to list.
+type Domains = HashMap<String, Vec<String>>;
+
+fn collect_domains(ty: &TypeName, enums: &HashMap<String, EnumDef>, out: &mut Domains) {
+    if ty.is_tuple() {
+        for element in ty.tuple_elements() {
+            collect_domains(element, enums, out);
+        }
+        return;
+    }
+    let cases: Option<Vec<String>> = match Matched::of(ty, enums) {
+        Some(Matched::Literal(t)) if t.name == "bool" => Some(vec!["true".to_string(), "false".to_string()]),
+        Some(Matched::Literal(_)) | None => None,
+        Some(m) => Some(m.cases().iter().map(|c| c.name.clone()).collect()),
+    };
+    if let Some(cases) = cases {
+        out.insert(ty.to_string(), cases);
+    }
+}
+
+/// A value no row covers that `v` does, as a witness, or `None` when the
+/// rows cover everything `v` does. `tys` are the columns' types.
+fn useful(rows: &[Vec<Space>], v: &[Space], tys: &[TypeName], domains: &Domains) -> Option<Vec<Space>> {
+    let Some((head, rest)) = v.split_first() else {
+        return rows.is_empty().then(Vec::new);
+    };
+    let ty = &tys[0];
+    if ty.is_tuple() {
+        let elements = ty.tuple_elements();
+        let expand = |s: &Space| match s {
+            Space::Tuple(es) if es.len() == elements.len() => es.clone(),
+            _ => vec![Space::Any; elements.len()],
+        };
+        let rows: Vec<Vec<Space>> = rows
+            .iter()
+            .map(|r| {
+                let mut e = expand(&r[0]);
+                e.extend(r[1..].iter().cloned());
+                e
+            })
+            .collect();
+        let mut v = expand(head);
+        v.extend(rest.iter().cloned());
+        let mut tys2 = elements.to_vec();
+        tys2.extend(tys[1..].iter().cloned());
+        let witness = useful(&rows, &v, &tys2, domains)?;
+        let (inner, tail) = witness.split_at(elements.len());
+        let mut out = vec![Space::Tuple(inner.to_vec())];
+        out.extend(tail.iter().cloned());
+        return Some(out);
+    }
+    let specialize = |case: &str| -> Vec<Vec<Space>> {
+        rows.iter()
+            .filter(|r| matches!(&r[0], Space::Any) || matches!(&r[0], Space::Case(c) if c == case))
+            .map(|r| r[1..].to_vec())
+            .collect()
+    };
+    let with_head = |head: Space, tail: Vec<Space>| {
+        let mut out = vec![head];
+        out.extend(tail);
+        out
+    };
+    match head {
+        Space::Case(case) => useful(&specialize(case), rest, &tys[1..], domains).map(|w| with_head(head.clone(), w)),
+        Space::Any => {
+            let used: Vec<&String> = rows
+                .iter()
+                .filter_map(|r| match &r[0] {
+                    Space::Case(c) => Some(c),
+                    _ => None,
+                })
+                .collect();
+            let domain = domains.get(&ty.to_string());
+            if let Some(all) = domain
+                && !all.is_empty()
+                && all.iter().all(|c| used.contains(&c))
+            {
+                return all.iter().find_map(|case| {
+                    useful(&specialize(case), rest, &tys[1..], domains).map(|w| with_head(Space::Case(case.clone()), w))
+                });
+            }
+            let defaults: Vec<Vec<Space>> =
+                rows.iter().filter(|r| matches!(&r[0], Space::Any)).map(|r| r[1..].to_vec()).collect();
+            let witness = useful(&defaults, rest, &tys[1..], domains)?;
+            let missing = domain.and_then(|all| all.iter().find(|c| !used.contains(c)));
+            Some(with_head(missing.map_or(Space::Any, |c| Space::Case(c.clone())), witness))
+        }
+        Space::Tuple(_) => None,
+    }
+}
+
+/// Lower an arm of a `match` over a tuple (see [`lower_arm`]).
+fn lower_tuple_arm(
+    test: &MatchArmTest,
+    subject: &Expression,
+    ty: &TypeName,
+    subject_loc: Loc,
+    enums: &HashMap<String, EnumDef>,
+    entry: &mut Coverage,
+    cases: &mut Vec<String>,
+) -> Option<Expression> {
+    entry.matched = Some((shown(ty), vec![]));
+    let coverage = entry.tuple.get_or_insert_with(|| {
+        let mut domains = Domains::new();
+        collect_domains(ty, enums, &mut domains);
+        TupleCoverage { ty: ty.clone(), domains, rows: vec![] }
+    });
+    // Each bare element name, by location: whether it named a case.
+    let mut names: Vec<(Loc, bool)> = vec![];
+    let mut condition: Option<Expression> = None;
+    for p in &test.patterns {
+        if p.elements.is_none() {
+            report(
+                Diagnostic::error(format!(
+                    "'{}' cannot match a value of '{}': match a tuple with a tuple pattern, such as '(a, _)'",
+                    p.case,
+                    shown(ty)
+                ))
+                .at(p.loc)
+                .with_note("the value matched is here", Some(subject_loc)),
+            );
+            return None;
+        }
+        let tested = element_test(p, subject, ty, subject_loc, enums, &mut names)?;
+        let space = space_of(p, ty, enums);
+        if !test.site.partial
+            && useful(
+                &coverage.rows.iter().map(|r| vec![r.clone()]).collect::<Vec<_>>(),
+                std::slice::from_ref(&space),
+                std::slice::from_ref(ty),
+                &coverage.domains,
+            )
+            .is_none()
+        {
+            report(
+                Diagnostic::error(format!("pattern '{}' is already handled", p.case))
+                    .at(p.loc)
+                    .with_note("the patterns before it match every value it does", None),
+            );
+            return None;
+        }
+        coverage.rows.push(space);
+        let tested = tested.unwrap_or(Expression::BoolLiteral(true));
+        condition = Some(match condition {
+            None => tested,
+            Some(c) => Expression::Binary { op: BinaryOp::LogicalOr, lhs: Box::new(c), rhs: Box::new(tested), loc: p.loc },
+        });
+    }
+    for name in &test.element_names {
+        let Some((_, is_case)) = names.iter().find(|(at, _)| *at == name.loc) else { continue };
+        if !is_case {
+            if test.site.no_bindings {
+                report(
+                    Diagnostic::error(format!(
+                        "cannot bind '{}' here: 'is' binds names only as the whole condition of an 'if' or 'while'",
+                        name.name
+                    ))
+                    .at(name.loc),
+                );
+                return None;
+            }
+            if !name.declared {
+                report(
+                    Diagnostic::error(format!(
+                        "'{}' binds an element here, but not once at the same element in every pattern of the arm",
+                        name.name
+                    ))
+                    .at(name.loc)
+                    .with_note("bind it once in each pattern, at the same element, or use '_'", None),
+                );
+                return None;
+            }
+        }
+    }
+    // A declared name must be a case everywhere or a binding everywhere.
+    for name in test.element_names.iter().filter(|n| n.declared) {
+        let resolved: Vec<bool> = test
+            .element_names
+            .iter()
+            .filter(|n| n.name == name.name)
+            .filter_map(|n| names.iter().find(|(at, _)| *at == n.loc).map(|(_, c)| *c))
+            .collect();
+        if resolved.iter().all(|c| *c) {
+            if !cases.contains(&name.name) {
+                cases.push(name.name.clone());
+            }
+        } else if resolved.iter().any(|c| *c) {
+            report(
+                Diagnostic::error(format!(
+                    "'{}' names a case in one pattern of the arm and binds an element in another: rename the binding",
+                    name.name
+                ))
+                .at(name.loc),
+            );
+            return None;
+        }
+    }
+    Some(condition.unwrap_or(Expression::BoolLiteral(false)))
+}
+
+/// The test of pattern `p` over `subject` of type `ty`: `None` inside when
+/// it matches every value, `None` outside after reporting an error.
+fn element_test(
+    p: &CasePattern,
+    subject: &Expression,
+    ty: &TypeName,
+    subject_loc: Loc,
+    enums: &HashMap<String, EnumDef>,
+    names: &mut Vec<(Loc, bool)>,
+) -> Option<Option<Expression>> {
+    if let Some(elements) = &p.elements {
+        if !ty.is_tuple() {
+            report(Diagnostic::error(format!("a tuple pattern cannot match a value of '{}'", shown(ty))).at(p.loc));
+            return None;
+        }
+        let types = ty.tuple_elements();
+        if types.len() != elements.len() {
+            report(Diagnostic::error(format!(
+                "pattern '{}' has {} elements, but '{}' has {}",
+                p.case,
+                elements.len(),
+                shown(ty),
+                types.len()
+            ))
+            .at(p.loc));
+            return None;
+        }
+        let mut condition: Option<Expression> = None;
+        for (i, (e, element_ty)) in elements.iter().zip(types).enumerate() {
+            let path = Expression::MemberRef { lhs: Box::new(subject.clone()), name: i.to_string(), loc: e.loc };
+            if let Some(tested) = element_test(e, &path, element_ty, subject_loc, enums, names)? {
+                condition = Some(match condition {
+                    None => tested,
+                    Some(c) => Expression::Binary { op: BinaryOp::LogicalAnd, lhs: Box::new(c), rhs: Box::new(tested), loc: e.loc },
+                });
+            }
+        }
+        return Some(condition);
+    }
+    let matched = Matched::of(ty, enums);
+    if let Some(literal) = &p.literal {
+        if !matches!(matched, Some(Matched::Literal(_))) {
+            report(Diagnostic::error(format!("a literal cannot match a value of '{}'", shown(ty))).at(p.loc));
+            return None;
+        }
+        return Some(Some(literal.clone()));
+    }
+    let names_case = |m: &Matched| m.cases().iter().any(|c| c.name == p.case);
+    if p.qualifier.is_none() && p.bindings.is_none() {
+        if p.case == "_" {
+            return Some(None);
+        }
+        let is_case = matched.as_ref().is_some_and(|m| !matches!(m, Matched::Literal(_)) && names_case(m));
+        names.push((p.loc, is_case));
+        if !is_case {
+            return Some(None);
+        }
+    }
+    match &matched {
+        Some(m) if !matches!(m, Matched::Literal(_)) => enum_test(p, m, subject, subject_loc).map(Some),
+        _ => {
+            report(Diagnostic::error(format!("'{}' cannot match a value of '{}': it is not an enum", p.case, shown(ty))).at(p.loc));
+            None
+        }
+    }
+}
+
+/// The values pattern `p` over a value of `ty` covers.
+fn space_of(p: &CasePattern, ty: &TypeName, enums: &HashMap<String, EnumDef>) -> Space {
+    if let Some(elements) = &p.elements {
+        let types = ty.tuple_elements();
+        return Space::Tuple(elements.iter().zip(types).map(|(e, t)| space_of(e, t, enums)).collect());
+    }
+    if p.literal.is_some() {
+        return Space::Case(p.case.clone());
+    }
+    if p.qualifier.is_none() && p.bindings.is_none() {
+        let is_case = Matched::of(ty, enums)
+            .is_some_and(|m| !matches!(m, Matched::Literal(_)) && m.cases().iter().any(|c| c.name == p.case));
+        if !is_case {
+            return Space::Any;
+        }
+    }
+    Space::Case(p.case.clone())
 }

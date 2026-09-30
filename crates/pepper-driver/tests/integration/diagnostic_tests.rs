@@ -2584,3 +2584,113 @@ fn undeclared_argument_of_generic_call() {
          \x20     |          ^~~~"
     );
 }
+
+#[test]
+fn tuple_match_missing_value() {
+    assert_eq!(
+        error_of("tuple_match_missing_value", "enum Shape { Circle, Square, Line }\nf(s: Shape, n: int): int {\n    match ((s, n)) {\n        (Circle, _) => { return 1; }\n        (Square, 0) => { return 2; }\n    }\n    return 0;\n}\n"),
+        "main.pep:3:5: error: match on '(Shape, int)' does not handle '(Line, _)'\n\
+         \x20   3 |     match ((s, n)) {\n\
+         \x20     |     ^~~~~\n\
+         note: handle it with another arm, or add an 'else' arm"
+    );
+}
+
+#[test]
+fn tuple_match_missing_bool() {
+    assert_eq!(
+        error_of("tuple_match_missing_bool", "enum Shape { Circle, Square, Line }\nf(a: bool, b: bool): int {\n    match ((a, b)) {\n        (true, _) => { return 1; }\n        (false, true) => { return 2; }\n    }\n    return 0;\n}\n"),
+        "main.pep:3:5: error: match on '(bool, bool)' does not handle '(false, false)'\n\
+         \x20   3 |     match ((a, b)) {\n\
+         \x20     |     ^~~~~\n\
+         note: handle it with another arm, or add an 'else' arm"
+    );
+}
+
+#[test]
+fn tuple_pattern_already_handled() {
+    assert_eq!(
+        error_of("tuple_pattern_already_handled", "enum Shape { Circle, Square, Line }\nf(s: Shape, n: int): int {\n    match ((s, n)) {\n        (_, k) => { return k; }\n        (Circle, _) => { return 1; }\n    }\n    return 0;\n}\n"),
+        "main.pep:5:9: error: pattern '(Circle, _)' is already handled\n\
+         \x20   5 |         (Circle, _) => { return 1; }\n\
+         \x20     |         ^~~~~~~~~~~\n\
+         note: the patterns before it match every value it does"
+    );
+}
+
+#[test]
+fn case_pattern_on_tuple() {
+    assert_eq!(
+        error_of("case_pattern_on_tuple", "enum Shape { Circle, Square, Line }\nf(a: int, b: int): int {\n    match ((a, b)) {\n        Circle => { return 1; }\n        else => { return 0; }\n    }\n}\n"),
+        "main.pep:4:9: error: 'Circle' cannot match a value of '(int, int)': match a tuple with a tuple pattern, such as '(a, _)'\n\
+         \x20   4 |         Circle => { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         main.pep:3:12: note: the value matched is here\n\
+         \x20   3 |     match ((a, b)) {\n\
+         \x20     |            ^~~~~~"
+    );
+}
+
+#[test]
+fn tuple_pattern_on_enum() {
+    assert_eq!(
+        error_of("tuple_pattern_on_enum", "enum Shape { Circle, Square, Line }\nf(s: Shape): int {\n    match (s) {\n        (Circle, _) => { return 1; }\n        else => { return 0; }\n    }\n}\n"),
+        "main.pep:4:9: error: a tuple pattern cannot match a value of 'Shape'\n\
+         \x20   4 |         (Circle, _) => { return 1; }\n\
+         \x20     |         ^~~~~~~~~~~\n\
+         main.pep:3:12: note: the value matched is here\n\
+         \x20   3 |     match (s) {\n\
+         \x20     |            ^"
+    );
+}
+
+#[test]
+fn tuple_pattern_case_on_int() {
+    assert_eq!(
+        error_of("tuple_pattern_case_on_int", "enum Shape { Circle, Square, Line }\nf(a: int, b: int): int {\n    match ((a, b)) {\n        (Shape.Circle, _) => { return 1; }\n        else => { return 0; }\n    }\n}\n"),
+        "main.pep:4:16: error: 'Circle' cannot match a value of 'int': it is not an enum\n\
+         \x20   4 |         (Shape.Circle, _) => { return 1; }\n\
+         \x20     |                ^~~~~~"
+    );
+}
+
+#[test]
+fn tuple_pattern_binds_at_different_elements() {
+    assert_eq!(
+        error_of("tuple_pattern_binds_at_different_elements", "enum Shape { Circle, Square, Line }\nf(a: int, b: int): int {\n    match ((a, b)) {\n        (x, 1), (1, x) => { return x; }\n        else => { return 0; }\n    }\n}\n"),
+        "main.pep:4:10: error: 'x' binds an element here, but not once at the same element in every pattern of the arm\n\
+         \x20   4 |         (x, 1), (1, x) => { return x; }\n\
+         \x20     |          ^\n\
+         note: bind it once in each pattern, at the same element, or use '_'"
+    );
+}
+
+#[test]
+fn tuple_is_test_cannot_bind() {
+    assert_eq!(
+        error_of("tuple_is_test_cannot_bind", "enum Shape { Circle, Square, Line }\nf(a: int, s: Shape): int {\n    var hit = (a, s) is (n, Line);\n    return 0;\n}\n"),
+        "main.pep:3:26: error: cannot bind 'n' here: 'is' binds names only as the whole condition of an 'if' or 'while'\n\
+         \x20   3 |     var hit = (a, s) is (n, Line);\n\
+         \x20     |                          ^"
+    );
+}
+
+#[test]
+fn tuple_pattern_needs_two_elements() {
+    assert_eq!(
+        error_of("tuple_pattern_needs_two_elements", "enum Shape { Circle, Square, Line }\nf(a: int, b: int): int {\n    match ((a, b)) {\n        (x) => { return x; }\n    }\n    return 0;\n}\n"),
+        "main.pep:4:11: error: expected ','\n\
+         \x20   4 |         (x) => { return x; }\n\
+         \x20     |           ^"
+    );
+}
+
+#[test]
+fn tuple_match_unreachable_else_warns() {
+    assert_eq!(
+        warnings_of("test(): int {\n    int n = 1;\n    match ((n, true)) {\n        (_, _) => {}\n        else => {}\n    }\n    return 0;\n}\n"),
+        "main.pep:5:9: warning: 'else' is unreachable: every value of '(int, bool)' is handled\n\
+         \x20   5 |         else => {}\n\
+         \x20     |         ^~~~"
+    );
+}

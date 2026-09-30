@@ -528,7 +528,7 @@ impl Converter {
             }
             Expression::MatchArm(test) => {
                 self.expression(&mut test.subject, current);
-                for literal in test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()) {
+                for literal in test.patterns.iter_mut().flat_map(|p| p.literals_mut()) {
                     self.expression(literal, current);
                 }
             }

@@ -241,8 +241,8 @@ fn push_pattern(bindings: &[ast::DestructureBinding], out: &mut Vec<Symbol>) {
 /// The names `if (x is P(a))` or `while (x is P(a))` binds in its block.
 fn push_is_bindings(condition: &ast::Expression, out: &mut Vec<Symbol>) {
     if let ast::Expression::Is { pattern, .. } = condition {
-        for (name, span) in pattern.bindings.iter().flatten().filter(|(n, _)| n != "_") {
-            out.push(Symbol { name: name.clone(), name_span: *span, ty: String::new() });
+        for (name, span) in pattern.bound_names() {
+            out.push(Symbol { name, name_span: span, ty: String::new() });
         }
     }
 }

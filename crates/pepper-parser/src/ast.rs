@@ -695,12 +695,19 @@ pub struct MatchArm {
     pub span: Span,
 }
 
-/// A case pattern: `Case`, `Enum.Case`, or `Case(binding, _, ...)`; or a
-/// literal pattern (`1`, `'a'`, `"import"`, `true`), whose `case` is empty.
+/// A case pattern: `Case`, `Enum.Case`, or `Case(binding, _, ...)`; a
+/// literal pattern (`1`, `'a'`, `"import"`, `true`), whose `case` is empty;
+/// or a tuple pattern (`(Circle, _)`, `(0, y)`), whose `case` is empty.
+///
+/// Inside a tuple pattern, a bare name (`y`) is a case when the element is an
+/// enum with a case of that name, and otherwise binds the element; `_`
+/// matches anything.
 #[derive(Debug, Clone)]
 pub struct Pattern {
     /// The literal of a literal pattern; `None` for a case pattern.
     pub literal: Option<Expression>,
+    /// The element patterns of a tuple pattern; `None` otherwise.
+    pub elements: Option<Vec<Pattern>>,
     /// The enum named before the case (`Color` in `Color.Red`).
     pub qualifier: Option<TypeName>,
     pub case: String,
@@ -709,6 +716,45 @@ pub struct Pattern {
     /// binding named `_` skips its value.
     pub bindings: Option<Vec<(String, Span)>>,
     pub span: Span,
+}
+
+impl Pattern {
+    /// Whether this is a bare name inside a tuple pattern (`y` in `(0, y)`),
+    /// which binds the element unless the element is an enum with a case of
+    /// that name.
+    pub fn is_bare_name(&self) -> bool {
+        self.literal.is_none() && self.elements.is_none() && self.qualifier.is_none() && self.bindings.is_none()
+    }
+
+    /// This pattern and every pattern nested in it, outermost first.
+    pub fn all(&self) -> Vec<&Pattern> {
+        let mut out = vec![self];
+        for e in self.elements.iter().flatten() {
+            out.extend(e.all());
+        }
+        out
+    }
+
+    /// The names the pattern may bind, `_` left out: a case's bindings, and
+    /// inside a tuple pattern each bare name.
+    pub fn bound_names(&self) -> Vec<(String, Span)> {
+        let mut out = vec![];
+        self.collect_names(false, &mut out);
+        out
+    }
+
+    fn collect_names(&self, in_tuple: bool, out: &mut Vec<(String, Span)>) {
+        if let Some(elements) = &self.elements {
+            for e in elements {
+                e.collect_names(true, out);
+            }
+            return;
+        }
+        if in_tuple && self.is_bare_name() && self.case != "_" {
+            out.push((self.case.clone(), self.case_span));
+        }
+        out.extend(self.bindings.iter().flatten().filter(|(n, _)| n != "_").cloned());
+    }
 }
 
 impl Statement {
@@ -1287,6 +1333,10 @@ impl Display for Pattern {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(literal) = &self.literal {
             return write!(f, "{}", literal);
+        }
+        if let Some(elements) = &self.elements {
+            let shown: Vec<String> = elements.iter().map(|e| e.to_string()).collect();
+            return write!(f, "({})", shown.join(", "));
         }
         if let Some(q) = &self.qualifier {
             write!(f, "{}.", q)?;

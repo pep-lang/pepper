@@ -210,10 +210,10 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         Expression::MatchArm(test) => {
             subst_expr(&mut test.subject, aliases, values);
             for p in &mut test.patterns {
-                if let Some(q) = &mut p.qualifier {
+                for q in p.qualifiers_mut() {
                     subst(q, aliases);
                 }
-                if let Some(literal) = &mut p.literal {
+                for literal in p.literals_mut() {
                     subst_expr(literal, aliases, values);
                 }
             }

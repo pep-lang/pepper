@@ -1334,10 +1334,32 @@ struct Parser {
     }
 
     # A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or
-    # `Case(x, _)`; or a literal: a number (`-1` too), string, character,
-    # `true` or `false`.
+    # `Case(x, _)`; a literal: a number (`-1` too), string, character,
+    # `true` or `false`; or a tuple pattern of two or more, `(Case, x, 0)`.
     _pattern(): Node {
         var node = Node(NodeKind.Pattern);
+        if (_at("(")) {
+            _take(node);
+            int elements = 0;
+            while (true) {
+                node.add(_pattern());
+                if (_failed) {
+                    return node;
+                }
+                elements += 1;
+                if (_at(",")) {
+                    _take(node);
+                    continue;
+                }
+                break;
+            }
+            if (elements < 2) {
+                _fail("expected ','");
+                return node;
+            }
+            _expect(node, ")");
+            return node;
+        }
         var token = _peek();
         if (token.is_word("true")
             or token.is_word("false")

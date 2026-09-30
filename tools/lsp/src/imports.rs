@@ -220,6 +220,7 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
                 m.arms.iter().find_map(|arm| {
                     arm.patterns
                         .iter()
+                        .flat_map(|p| p.all())
                         .find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))
                         .or_else(|| in_block(&arm.body, offset))
                 })
@@ -262,13 +263,14 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
                 m.arms.iter().find_map(|arm| {
                     arm.patterns
                         .iter()
+                        .flat_map(|p| p.all())
                         .find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))
                         .or_else(|| in_expression_types(&arm.value, offset))
                 })
             })
             .or_else(|| m.else_arm.as_ref().and_then(|(_, v)| in_expression_types(v, offset))),
         ast::Expression::Is { value, pattern, .. } => in_expression_types(value, offset)
-            .or_else(|| pattern.qualifier.as_ref().and_then(|q| in_type_name(q, offset))),
+            .or_else(|| pattern.all().into_iter().find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))),
         ast::Expression::Literal { .. } | ast::Expression::SymbolRef { .. } => None,
     }
 }

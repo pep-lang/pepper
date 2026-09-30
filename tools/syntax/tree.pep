@@ -144,7 +144,8 @@ export enum NodeKind {
     MatchArms,
     ## `PATTERN, ... => BLOCK`, or `else => BLOCK`.
     MatchArm,
-    ## `name[.name]... [( name, ... )]`: a case, and the names it binds.
+    ## `name[.name]... [( name, ... )]`: a case, and the names it binds; a
+    ## literal; or `( PATTERN, PATTERN, ... )`, a tuple pattern.
     Pattern,
 }
 

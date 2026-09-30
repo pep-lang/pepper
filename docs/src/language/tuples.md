@@ -110,8 +110,30 @@ yields `(key, value)` tuples:
 - `copy(t)` (see [Copying a value](memory.md#copying-a-value-with-copy)) copies each element: a struct
   element as `copy` would copy it on its own, anything thread-safe as is.
 
-## Current limitations
+## Matching tuples
 
-These come in later phases:
+A [`match`](enums.md#match) over a tuple tests all of its elements at once.
+A tuple pattern lists a pattern for each element: `(Rock, Scissors)`,
+`(Number(v), 1)`, `(4, column)`. Write the tuple in the `match` itself with
+double parentheses, `match ((a, b))`, or match a tuple value, `match (at)`.
 
-- `match` cannot match tuple patterns.
+```pepper
+{{#include ../../examples/tuples-match.pep}}
+```
+
+- Each element takes a case of its enum (`Rock`, `Word(text)`), a literal
+  (`1`, `"x"`, `true`), another tuple pattern, `_` for any value, or a name.
+- A name binds its element, unless the element is an enum with a case of
+  that name, which it then matches. So in `(Circle, other)` over two shapes,
+  `Circle` is a case and `other` holds the second shape.
+- An arm's patterns bind the same names, each at the same element: `(x, 0),
+  (0, x)` is an error, since `x` would mean a different element depending
+  on which pattern matched.
+- The arms must handle every value unless there is an `else`. A missing
+  value is named with an example: ``match on '(Shape, int)' does not handle
+  '(Line, _)'``. Only enum cases and `true`/`false` can be listed in full;
+  other literals need a pattern with `_` or a name at that element.
+- A pattern that the arms before it already cover is an error, and an
+  `else` after arms that cover everything is a warning.
+- `value is (4, column)` tests one tuple pattern, and binds its names as
+  the whole condition of an `if` or `while`, as for enums.

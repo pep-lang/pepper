@@ -282,7 +282,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         Expression::Destructure { value, .. } | Expression::Move { value, .. } => walk_expression(value, f),
         Expression::MatchArm(test) => {
             walk_expression(&mut test.subject, f);
-            for literal in test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()) {
+            for literal in test.patterns.iter_mut().flat_map(|p| p.literals_mut()) {
                 walk_expression(literal, f);
             }
         }
@@ -345,7 +345,7 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::WithEntered(arg) => vec![arg.as_mut()],
         Expression::MatchArm(test) => {
             let mut children = vec![&mut test.subject];
-            children.extend(test.patterns.iter_mut().filter_map(|p| p.literal.as_mut()));
+            children.extend(test.patterns.iter_mut().flat_map(|p| p.literals_mut()));
             children
         }
         Expression::CaseValue(value) => vec![&mut value.subject],
@@ -412,7 +412,7 @@ pub fn children(expr: &Expression) -> Vec<&Expression> {
         | Expression::WithEntered(arg) => vec![arg],
         Expression::MatchArm(test) => {
             let mut children = vec![&test.subject];
-            children.extend(test.patterns.iter().filter_map(|p| p.literal.as_ref()));
+            children.extend(test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()));
             children
         }
         Expression::Destructure { value, .. } | Expression::Move { value, .. } => vec![value],

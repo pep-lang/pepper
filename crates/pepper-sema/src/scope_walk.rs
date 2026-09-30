@@ -512,21 +512,27 @@ macro_rules! scope_walker {
                         self.visit_expression(value);
                         // Its bindings are bound by the `if` or `while` it
                         // is the condition of (`bind_is_test`).
-                        if let Some(q) = &$($m)? pattern.qualifier {
-                            self.visit_type_name(q);
-                        }
+                        self.visit_pattern_types(pattern);
                     }
                 }
             }
 
             /// A pattern's qualifier, and its bindings into the innermost scope.
             fn visit_pattern(&mut self, p: &$($m)? Pattern) {
+                self.visit_pattern_types(p);
+                for (name, _) in p.bound_names() {
+                    self.scopes_mut().bind_value(&name, false);
+                }
+            }
+
+            /// The enums named before cases in `p` and its nested patterns.
+            fn visit_pattern_types(&mut self, p: &$($m)? Pattern) {
                 if let Some(q) = &$($m)? p.qualifier {
                     self.visit_type_name(q);
                 }
-                for (name, _) in p.bindings.iter().flatten() {
-                    if name != "_" {
-                        self.scopes_mut().bind_value(name, false);
+                if let Some(elements) = &$($m)? p.elements {
+                    for e in elements {
+                        self.visit_pattern_types(e);
                     }
                 }
             }
@@ -534,10 +540,8 @@ macro_rules! scope_walker {
             /// Bind the names of `condition` when it is an `is` test.
             fn bind_is_test(&mut self, condition: &Expression) {
                 if let Expression::Is { pattern, .. } = condition {
-                    for (name, _) in pattern.bindings.iter().flatten() {
-                        if name != "_" {
-                            self.scopes_mut().bind_value(name, false);
-                        }
+                    for (name, _) in pattern.bound_names() {
+                        self.scopes_mut().bind_value(&name, false);
                     }
                 }
             }

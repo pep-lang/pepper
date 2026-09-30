@@ -992,7 +992,7 @@ impl<'p, 'a> Walk<'p, 'a> {
             Expression::Move { value, .. } => self.eval_move(value),
             Expression::MatchArm(test) => {
                 self.eval(&test.subject);
-                for literal in test.patterns.iter().filter_map(|p| p.literal.as_ref()) {
+                for literal in test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()) {
                     self.eval(literal);
                 }
                 None

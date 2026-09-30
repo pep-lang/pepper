@@ -2139,10 +2139,37 @@ fn match_arrow(input: &mut &str) -> Result<()> {
 }
 
 /// A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or `Case(x, _)`;
-/// or a literal pattern: a number (`-1` too), character, string, `true` or
-/// `false`.
+/// a literal pattern: a number (`-1` too), character, string, `true` or
+/// `false`; or a tuple pattern of two or more patterns, `(Case, x, 0)`.
 fn pattern(input: &mut &str) -> Result<Pattern> {
     let start = pos(input);
+    if input.starts_with('(') {
+        *input = &input[1..];
+        let mut elements = vec![];
+        loop {
+            ws(input)?;
+            elements.push(pattern(input)?);
+            ws(input)?;
+            if input.starts_with(',') {
+                *input = &input[1..];
+                continue;
+            }
+            if elements.len() < 2 { return Err(cut_expecting(input, "','")); }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "',' or ')'")); }
+            *input = &input[1..];
+            break;
+        }
+        let span = Span { start, end: pos(input) };
+        return Ok(Pattern {
+            literal: None,
+            elements: Some(elements),
+            qualifier: None,
+            case: String::new(),
+            case_span: span,
+            bindings: None,
+            span,
+        });
+    }
     let literal_start = input.starts_with(|c: char| c.is_ascii_digit() || c == '\'' || c == '"' || c == '@')
         || (input.starts_with('-') && input[1..].starts_with(|c: char| c.is_ascii_digit()))
         || keyword(&mut { *input }, "true")
@@ -2150,7 +2177,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
     if literal_start {
         let literal = primary_expression(input)?;
         let span = literal.span();
-        return Ok(Pattern { literal: Some(literal), qualifier: None, case: String::new(), case_span: span, bindings: None, span });
+        return Ok(Pattern { literal: Some(literal), elements: None, qualifier: None, case: String::new(), case_span: span, bindings: None, span });
     }
     let mut segments = vec![];
     loop {
@@ -2193,7 +2220,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         *input = &input[1..];
         bindings = Some(names);
     }
-    Ok(Pattern { literal: None, qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
+    Ok(Pattern { literal: None, elements: None, qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
 }
 
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
