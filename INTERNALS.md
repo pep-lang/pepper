@@ -1132,6 +1132,10 @@ there.
     --locked`, and `pepper-docgen -- check`.
   - `llvm-matrix` and `llvm-versions` run on self-hosted **`pepper-linux`**
     and test against every LLVM major that apt offers.
+  - `changes` runs first and diffs the PR against its base. When only prose
+    changed (`*.md` other than `docs/src/SUMMARY.md` and
+    `docs/src/reference/`, or `.agents/`/`.claude/`), every other job is
+    skipped, and a skipped `test` counts as passing.
 - **`platform-test.yml`**: runs on dispatch only, for any script on
   Linux/macOS/Windows (`gh workflow run platform-test.yml -f platforms=…
   -f script=…`). It has a failure/cancel diagnostics step. Read AGENTS.md's

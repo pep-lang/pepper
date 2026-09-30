@@ -21,6 +21,7 @@
 #
 # Draft PRs get only the Linux jobs, as a quick check; `test` and `test-macos`
 # are skipped until the PR is marked ready for review, which starts a full run.
+# A PR that changes only prose skips every job (see `changes`).
 #
 # Pushes to main do not run CI: main must be up to date before a PR merges, so
 # the merged commit is the one the PR already tested. Run it by hand
@@ -57,9 +58,49 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # Whether the PR touches anything the build or the tests read. A PR that
+  # changes only prose (Markdown outside docs/src/SUMMARY.md and the generated
+  # docs/src/reference/, which `pepper-docgen check` reads, or agent skills
+  # under .agents/ and .claude/) skips every job below. A job skipped by its
+  # `if` reports success, so the required `test` check still passes.
+  # docs/examples/ is code: docs_examples_tests compiles and runs it.
+  changes:
+    runs-on: pepper-linux
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      # A pull_request run checks out the merge commit, whose first parent is
+      # the base; depth 2 is enough to diff the two.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code=false
+          while IFS= read -r path; do
+            case "$path" in
+              docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
+              .agents/*|.claude/*|*.md) ;;
+              *) code=true ;;
+            esac
+            echo "$path"
+          done < <(git diff --name-only HEAD^1 HEAD)
+          echo "code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   test:
     runs-on: pepper-windows
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
     # seconds. 45 leaves room for a slow download without hanging forever.
     timeout-minutes: 45
@@ -137,7 +178,8 @@ jobs:
   # the Windows job above is the merge gate.
   test-macos:
     runs-on: pepper-macos
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     timeout-minutes: 30
 
     steps:
@@ -166,6 +208,8 @@ jobs:
   # 24.04 currently serves 18, 19 and 20 from its own repositories, and picks up
   # later ones for free as they are published.
   llvm-matrix:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: pepper-linux
     timeout-minutes: 10
     outputs:
