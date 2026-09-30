@@ -5,7 +5,7 @@ import [thrice as triple] from "util";
 import "helpers/text";               # a file in a subfolder
 
 main(): int {
-    assert(twice(base) == 20, "unqualified names from util.pep");
+    assert(twice(BASE) == 20, "unqualified names from util.pep");
     assert(u.thrice(2) == 6, "qualified by the alias");
     assert(triple(3) == 9, "renamed by the import list");
     assert(shout("hi") == "hi!", "from helpers/text.pep");

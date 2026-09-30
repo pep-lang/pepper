@@ -4,30 +4,30 @@
 ## the line breaks that keep lines within a width.
 
 ## Text printed as is. It must not contain a line break.
-export const doc_text = 0;
+export const DOC_TEXT = 0;
 ## Its parts, one after another.
-export const doc_concat = 1;
+export const DOC_CONCAT = 1;
 ## A space, or a line break when its group breaks.
-export const doc_line = 2;
+export const DOC_LINE = 2;
 ## Nothing, or a line break when its group breaks.
-export const doc_softline = 3;
+export const DOC_SOFTLINE = 3;
 ## Always a line break; every group around it breaks.
-export const doc_hardline = 4;
+export const DOC_HARDLINE = 4;
 ## Its parts, with lines that break inside them indented one level more.
-export const doc_indent = 5;
+export const DOC_INDENT = 5;
 ## Its parts, laid out on one line when they fit, else with every line of the
 ## group broken.
-export const doc_group = 6;
+export const DOC_GROUP = 6;
 ## Text deferred to the end of the current line: a trailing comment.
-export const doc_line_suffix = 7;
+export const DOC_LINE_SUFFIX = 7;
 ## Nothing, but it breaks every group around it, like a line break would.
-export const doc_break_parent = 8;
+export const DOC_BREAK_PARENT = 8;
 ## Alternative layouts of the same content: the first whose every line fits
 ## is printed flat; if none fits, the last is printed with its groups broken.
-export const doc_choice = 9;
+export const DOC_CHOICE = 9;
 
 ## The number of spaces in one indentation level.
-export const indent_width = 4;
+export const INDENT_WIDTH = 4;
 
 ## Returns the byte that marks where a trailing comment starts in `render`'s
 ## output, so that `align_trailing_comments` can line them up. It never
@@ -39,17 +39,17 @@ export comment_mark(): String {
     return "\x01";
 }
 
-const mode_flat = 0;
-const mode_break = 1;
+const MODE_FLAT = 0;
+const MODE_BREAK = 1;
 
 ## A node of a layout description.
 export struct Doc {
     ## What the node is: one of the `DOC_` constants.
     int kind;
-    ## The text of a `doc_text` or `doc_line_suffix`.
+    ## The text of a `DOC_TEXT` or `DOC_LINE_SUFFIX`.
     String text = "";
-    ## The children of a `doc_concat`, `doc_indent`, `doc_group` or the
-    ## options of a `doc_choice`.
+    ## The children of a `DOC_CONCAT`, `DOC_INDENT`, `DOC_GROUP` or the
+    ## options of a `DOC_CHOICE`.
     Doc[] parts = Array<Doc>();
     # Whether a hard line break is inside: 0 not computed yet, 1 yes, 2 no.
     int hard_state;
@@ -57,7 +57,7 @@ export struct Doc {
     ## Creates a document node.
     ##
     ## @param this.kind one of the `DOC_` constants
-    ## @param this.text the text of a `doc_text` or `doc_line_suffix`
+    ## @param this.text the text of a `DOC_TEXT` or `DOC_LINE_SUFFIX`
     construct(this.kind = 1, this.text = "") {}
 
     ## Appends `part` to this node's parts.
@@ -76,9 +76,9 @@ export struct Doc {
     is_hard(): bool {
         if (hard_state == 0) {
             hard_state = 2;
-            if (kind == doc_hardline or kind == doc_break_parent) {
+            if (kind == DOC_HARDLINE or kind == DOC_BREAK_PARENT) {
                 hard_state = 1;
-            } else if (kind == doc_choice) {
+            } else if (kind == DOC_CHOICE) {
                 if (parts.count() > 0 and parts[0].is_hard()) {
                     hard_state = 1;
                 }
@@ -98,60 +98,60 @@ export struct Doc {
 ## Returns a text document.
 ##
 ## @param value the text, with no line break in it
-## @returns a `doc_text`
+## @returns a `DOC_TEXT`
 export text(value: String): Doc {
-    return Doc(doc_text, value);
+    return Doc(DOC_TEXT, value);
 }
 
 ## Returns an empty sequence to `add` parts to.
 ##
-## @returns a `doc_concat` with no parts
+## @returns a `DOC_CONCAT` with no parts
 export concat(): Doc {
-    return Doc(doc_concat);
+    return Doc(DOC_CONCAT);
 }
 
 ## Returns a space that becomes a line break when its group breaks.
 ##
-## @returns a `doc_line`
+## @returns a `DOC_LINE`
 export line(): Doc {
-    return Doc(doc_line);
+    return Doc(DOC_LINE);
 }
 
 ## Returns nothing that becomes a line break when its group breaks.
 ##
-## @returns a `doc_softline`
+## @returns a `DOC_SOFTLINE`
 export softline(): Doc {
-    return Doc(doc_softline);
+    return Doc(DOC_SOFTLINE);
 }
 
 ## Returns a line break that always breaks.
 ##
-## @returns a `doc_hardline`
+## @returns a `DOC_HARDLINE`
 export hardline(): Doc {
-    return Doc(doc_hardline);
+    return Doc(DOC_HARDLINE);
 }
 
 ## Returns `content` indented one level where its lines break.
 ##
 ## @param content the document to indent
-## @returns a `doc_indent` holding `content`
+## @returns a `DOC_INDENT` holding `content`
 export indent(content: Doc): Doc {
-    return Doc(doc_indent).add(content);
+    return Doc(DOC_INDENT).add(content);
 }
 
 ## Returns `content` as a group that breaks as a whole.
 ##
 ## @param content the document to group
-## @returns a `doc_group` holding `content`
+## @returns a `DOC_GROUP` holding `content`
 export group(content: Doc): Doc {
-    return Doc(doc_group).add(content);
+    return Doc(DOC_GROUP).add(content);
 }
 
 ## Returns an empty choice to `add` layouts to, best first.
 ##
-## @returns a `doc_choice` with no options
+## @returns a `DOC_CHOICE` with no options
 export choice(): Doc {
-    return Doc(doc_choice);
+    return Doc(DOC_CHOICE);
 }
 
 ## Returns a trailing comment, printed at the end of the current line.
@@ -159,7 +159,7 @@ export choice(): Doc {
 ## @param comment the comment text, starting with `#`
 ## @returns the comment as a line suffix that also breaks its groups
 export trailing_comment(comment: String): Doc {
-    return concat().add(Doc(doc_line_suffix, comment_mark() + comment)).add(Doc(doc_break_parent));
+    return concat().add(Doc(DOC_LINE_SUFFIX, comment_mark() + comment)).add(Doc(DOC_BREAK_PARENT));
 }
 
 # A document to print, with the indentation and mode it is printed in.
@@ -186,7 +186,7 @@ spaces(count: int): String {
 # frames are printed last to first) up to the next line break.
 fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
     var stack = Array<Frame>();
-    stack.append(Frame(indent, mode_flat, item));
+    stack.append(Frame(indent, MODE_FLAT, item));
     ulong rest_index = rest.count();
     int current = column;
     while (true) {
@@ -208,16 +208,16 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
         bool in_rest = frame.mode >= 10;
         int mode = frame.mode % 10;
         int kind = doc.kind;
-        if (kind == doc_text) {
+        if (kind == DOC_TEXT) {
             current += doc.text.length() as int;
-        } else if (kind == doc_concat or kind == doc_indent or kind == doc_group) {
+        } else if (kind == DOC_CONCAT or kind == DOC_INDENT or kind == DOC_GROUP) {
             int nested = frame.indent;
-            if (kind == doc_indent) {
-                nested += indent_width;
+            if (kind == DOC_INDENT) {
+                nested += INDENT_WIDTH;
             }
             int nested_mode = frame.mode;
-            if (kind == doc_group and doc.is_hard()) {
-                nested_mode = mode_break;
+            if (kind == DOC_GROUP and doc.is_hard()) {
+                nested_mode = MODE_BREAK;
                 if (in_rest) {
                     nested_mode += 10;
                 }
@@ -227,20 +227,20 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
                 i -= 1;
                 stack.append(Frame(nested, nested_mode, doc.parts[i]));
             }
-        } else if (kind == doc_choice) {
+        } else if (kind == DOC_CHOICE) {
             if (doc.parts.count() > 0) {
                 stack.append(Frame(frame.indent, frame.mode, doc.parts[0]));
             }
-        } else if (kind == doc_line or kind == doc_softline) {
-            if (mode == mode_break) {
+        } else if (kind == DOC_LINE or kind == DOC_SOFTLINE) {
+            if (mode == MODE_BREAK) {
                 if (in_rest) {
                     return true;
                 }
                 current = frame.indent;
-            } else if (kind == doc_line) {
+            } else if (kind == DOC_LINE) {
                 current += 1;
             }
-        } else if (kind == doc_hardline) {
+        } else if (kind == DOC_HARDLINE) {
             if (in_rest) {
                 return true;
             }
@@ -263,56 +263,56 @@ export render(document: Doc, width: int): String {
     var suffix = "";
     int column = 0;
     var stack = Array<Frame>();
-    stack.append(Frame(0, mode_break, document));
+    stack.append(Frame(0, MODE_BREAK, document));
     while (!stack.empty()) {
         var frame = stack.pop();
         var doc = frame.item;
         int kind = doc.kind;
-        if (kind == doc_text) {
+        if (kind == DOC_TEXT) {
             current += doc.text;
             column += doc.text.length() as int;
-        } else if (kind == doc_concat or kind == doc_indent) {
+        } else if (kind == DOC_CONCAT or kind == DOC_INDENT) {
             int nested = frame.indent;
-            if (kind == doc_indent) {
-                nested += indent_width;
+            if (kind == DOC_INDENT) {
+                nested += INDENT_WIDTH;
             }
             ulong i = doc.parts.count();
             while (i > 0) {
                 i -= 1;
                 stack.append(Frame(nested, frame.mode, doc.parts[i]));
             }
-        } else if (kind == doc_group) {
-            int mode = mode_flat;
+        } else if (kind == DOC_GROUP) {
+            int mode = MODE_FLAT;
             if (doc.is_hard()) {
-                mode = mode_break;
-            } else if (frame.mode == mode_break and !fits(doc, frame.indent, column, width, stack)) {
-                mode = mode_break;
+                mode = MODE_BREAK;
+            } else if (frame.mode == MODE_BREAK and !fits(doc, frame.indent, column, width, stack)) {
+                mode = MODE_BREAK;
             }
             ulong i = doc.parts.count();
             while (i > 0) {
                 i -= 1;
                 stack.append(Frame(frame.indent, mode, doc.parts[i]));
             }
-        } else if (kind == doc_choice) {
+        } else if (kind == DOC_CHOICE) {
             ulong count = doc.parts.count();
             ulong chosen = count - 1;
-            int mode = mode_break;
+            int mode = MODE_BREAK;
             ulong i = 0;
             while (i + 1 < count) {
                 if (fits(doc.parts[i], frame.indent, column, width, stack)) {
                     chosen = i;
-                    mode = mode_flat;
+                    mode = MODE_FLAT;
                     break;
                 }
                 i += 1;
             }
             stack.append(Frame(frame.indent, mode, doc.parts[chosen]));
-        } else if (kind == doc_line and frame.mode == mode_flat) {
+        } else if (kind == DOC_LINE and frame.mode == MODE_FLAT) {
             current += " ";
             column += 1;
-        } else if (kind == doc_softline and frame.mode == mode_flat) {
+        } else if (kind == DOC_SOFTLINE and frame.mode == MODE_FLAT) {
             # Nothing.
-        } else if (kind == doc_line or kind == doc_softline or kind == doc_hardline) {
+        } else if (kind == DOC_LINE or kind == DOC_SOFTLINE or kind == DOC_HARDLINE) {
             if (!suffix.empty()) {
                 current += suffix;
                 suffix = "";
@@ -320,7 +320,7 @@ export render(document: Doc, width: int): String {
             lines.append(current);
             current = spaces(frame.indent);
             column = frame.indent;
-        } else if (kind == doc_line_suffix) {
+        } else if (kind == DOC_LINE_SUFFIX) {
             suffix += doc.text;
         }
     }

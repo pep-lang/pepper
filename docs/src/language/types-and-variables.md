@@ -201,19 +201,19 @@ arithmetic produces under C's rules (see [Arithmetic follows C](#arithmetic-foll
 `const` declares a name that you do not intend to change:
 
 ```pepper
-const limit = 3;
-const ratio: double = 0.5;
+const LIMIT = 3;
+const RATIO: double = 0.5;
 ```
 
 Assigning to a `const`, with `=`, a compound assignment, `++` or `--`, is an
 error:
 
 ```text
-main.pep:5:5: error: cannot assign to const variable 'limit'
-    5 |     limit = 4;
+main.pep:5:5: error: cannot assign to const variable 'LIMIT'
+    5 |     LIMIT = 4;
       |     ^~~~~
-main.pep:1:7: note: 'limit' declared const here
-    1 | const limit = 3;
+main.pep:1:7: note: 'LIMIT' declared const here
+    1 | const LIMIT = 3;
       |       ^~~~~
 ```
 
@@ -232,7 +232,7 @@ number, an `Atomic<T>`, a `ThreadLocal<T>`, or a `[Shared]` struct (see
 changes is an `Atomic<T>`:
 
 ```pepper
-const max_retries = 3;
+const MAX_RETRIES = 3;
 const requests = Atomic<long>(0);   # changed with requests.fetch_add(1)
 ```
 

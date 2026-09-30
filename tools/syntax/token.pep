@@ -2,19 +2,19 @@
 ## breaks around them kept, so a tool that prints tokens back loses nothing.
 
 ## The end of the file. Its leading comments are the file's last comments.
-export const token_end = 0;
+export const TOKEN_END = 0;
 ## A name or a keyword (`struct`, `if`, `x`, `String`).
-export const token_identifier = 1;
+export const TOKEN_IDENTIFIER = 1;
 ## An integer or floating-point literal (`42`, `0xFF`, `1.5e3`).
-export const token_number = 2;
+export const TOKEN_NUMBER = 2;
 ## A string literal, quotes and escapes included (`"a\n"`).
-export const token_string = 3;
+export const TOKEN_STRING = 3;
 ## An operator or punctuation mark (`+`, `==`, `{`, `=>`). `>` is always
 ## its own token, so `Array<Array<int>>` closes two generic lists; the
 ## parser joins adjacent `>` tokens into `>>`, `>=` and `>>=`.
-export const token_punctuation = 4;
+export const TOKEN_PUNCTUATION = 4;
 ## A character literal, quotes and escapes included (`'a'`, `'\n'`).
-export const token_character = 5;
+export const TOKEN_CHARACTER = 5;
 
 ## A `#` comment, from the `#` to the end of its line.
 export struct Comment {
@@ -70,7 +70,7 @@ export struct Token {
     ## @param text the punctuation to compare with, such as `"{"`
     ## @returns true when the token is punctuation spelled `text`
     is(text: String): bool {
-        return kind == token_punctuation and this.text == text;
+        return kind == TOKEN_PUNCTUATION and this.text == text;
     }
 
     ## Returns whether this token is the identifier or keyword `word`.
@@ -78,7 +78,7 @@ export struct Token {
     ## @param word the word to compare with, such as `"struct"`
     ## @returns true when the token is an identifier spelled `word`
     is_word(word: String): bool {
-        return kind == token_identifier and text == word;
+        return kind == TOKEN_IDENTIFIER and text == word;
     }
 
     ## Returns whether any comment is attached to this token.

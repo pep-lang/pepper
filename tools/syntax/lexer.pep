@@ -46,7 +46,7 @@ is_hex_digit(c: int): bool {
 }
 
 # The punctuation the lexer recognizes, longest first so the first match is
-# the longest. `>` never starts a longer token (see token_punctuation).
+# the longest. `>` never starts a longer token (see TOKEN_PUNCTUATION).
 punctuation_table(): String[] {
     var table = Array<String>();
     table.append("===");
@@ -124,7 +124,7 @@ slice(data: __ptr<char>, start: ulong, end: ulong): String {
     return String(data + start, end - start);
 }
 
-## Splits `source` into tokens. The last token is always a `token_end`
+## Splits `source` into tokens. The last token is always a `TOKEN_END`
 ## that holds the comments after the last real token.
 ##
 ## @param source the text of a Pepper source file
@@ -175,14 +175,14 @@ export lex(source: String): Result<Token[], SyntaxError> {
         }
 
         ulong start = i;
-        int kind = token_punctuation;
+        int kind = TOKEN_PUNCTUATION;
         if (is_identifier_start(c)) {
-            kind = token_identifier;
+            kind = TOKEN_IDENTIFIER;
             while (i < size and is_identifier_part(data[i])) {
                 i += 1;
             }
         } else if (is_digit(c)) {
-            kind = token_number;
+            kind = TOKEN_NUMBER;
             if (c == '0' and i + 1 < size and data[i + 1] == 'x') {
                 i += 2;
                 while (i < size and is_hex_digit(data[i])) {
@@ -215,9 +215,9 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 }
             }
         } else if (c == '"' or c == '\'') {
-            kind = token_string;
+            kind = TOKEN_STRING;
             if (c == '\'') {
-                kind = token_character;
+                kind = TOKEN_CHARACTER;
             }
             i += 1;
             bool closed = false;
@@ -267,7 +267,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
         newlines_since_comment = 0;
         space = false;
     }
-    var end = Token(token_end, "", size);
+    var end = Token(TOKEN_END, "", size);
     end.newlines_before = newlines;
     end.newlines_after_comments = newlines_since_comment;
     end.space_before = space;

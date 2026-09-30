@@ -118,15 +118,15 @@ operator_method_names(): HashSet<String> {
 ## @returns true for variables, type aliases, simple statements, imports,
 ##     re-exports and `extern` functions
 export ends_in_semicolon(kind: int): bool {
-    return kind == node_variable
-        or kind == node_destructure
-        or kind == node_type_alias
-        or kind == node_expression_statement
-        or kind == node_return
-        or kind == node_jump
-        or kind == node_import
-        or kind == node_export_alias
-        or kind == node_extern_function;
+    return kind == NODE_VARIABLE
+        or kind == NODE_DESTRUCTURE
+        or kind == NODE_TYPE_ALIAS
+        or kind == NODE_EXPRESSION_STATEMENT
+        or kind == NODE_RETURN
+        or kind == NODE_JUMP
+        or kind == NODE_IMPORT
+        or kind == NODE_EXPORT_ALIAS
+        or kind == NODE_EXTERN_FUNCTION;
 }
 
 # Recursive descent over the token list. Every parse method returns a node;
@@ -166,7 +166,7 @@ struct Parser {
 
     _advance(): Token {
         var token = _tokens[_position];
-        if (token.kind != token_end) {
+        if (token.kind != TOKEN_END) {
             _position += 1;
         }
         return token;
@@ -186,13 +186,13 @@ struct Parser {
     }
 
     _at_end(): bool {
-        return _peek().kind == token_end;
+        return _peek().kind == TOKEN_END;
     }
 
     # Whether the next token is a name: an identifier that is not reserved.
     _at_name(): bool {
         var token = _peek();
-        return token.kind == token_identifier and !_reserved.contains(token.text);
+        return token.kind == TOKEN_IDENTIFIER and !_reserved.contains(token.text);
     }
 
     # Whether the token at `offset` follows the one before it with no space.
@@ -245,7 +245,7 @@ struct Parser {
     # lexer keeps apart into `>>`, `>=` and `>>=`.
     _operator_text(): String {
         var token = _peek();
-        if (token.kind != token_punctuation) {
+        if (token.kind != TOKEN_PUNCTUATION) {
             return "";
         }
         if (token.text != ">") {
@@ -271,7 +271,7 @@ struct Parser {
             _take(node);
             return;
         }
-        var merged = Token(token_punctuation, text, first.offset);
+        var merged = Token(TOKEN_PUNCTUATION, text, first.offset);
         merged.newlines_before = first.newlines_before;
         merged.newlines_after_comments = first.newlines_after_comments;
         merged.space_before = first.space_before;
@@ -292,7 +292,7 @@ struct Parser {
     # The compiler's `type_name`: a function type, or a named type with
     # array and pointer suffixes.
     _type_name(): Node {
-        var node = Node(node_type);
+        var node = Node(NODE_TYPE);
         if (_at("(")) {
             _function_type(node);
             return node;
@@ -305,7 +305,7 @@ struct Parser {
                 return node;
             }
             _restore(position);
-            node = Node(node_type);
+            node = Node(NODE_TYPE);
         }
         _type_base(node);
         if (_failed) {
@@ -351,11 +351,11 @@ struct Parser {
         if (next.is(">") or next.is(",")) {
             return true;
         }
-        if (next.kind != token_identifier or _reserved.contains(next.text)) {
+        if (next.kind != TOKEN_IDENTIFIER or _reserved.contains(next.text)) {
             return false;
         }
         var after = _peek_at(2);
-        return after.kind == token_end
+        return after.kind == TOKEN_END
             or after.newlines_before > 0
             or !next.trailing_comment.empty()
             or after.is(";")
@@ -432,7 +432,7 @@ struct Parser {
         while (_at(".")
             and _adjacent(0)
             and _adjacent(1)
-            and _peek_at(1).kind == token_identifier
+            and _peek_at(1).kind == TOKEN_IDENTIFIER
             and !_reserved.contains(_peek_at(1).text)) {
             _take(node);
             _take(node);
@@ -440,7 +440,7 @@ struct Parser {
     }
 
     _type_arguments(): Node {
-        var node = Node(node_type_arguments);
+        var node = Node(NODE_TYPE_ARGUMENTS);
         _take(node);
         while (true) {
             node.add(_type_name());
@@ -493,7 +493,7 @@ struct Parser {
             or op == "^="
             or op == "|="
             or op == "=") {
-            var node = Node(node_binary);
+            var node = Node(NODE_BINARY);
             node.add(lhs);
             _take_operator(node, op);
             node.add(_assignment());
@@ -510,7 +510,7 @@ struct Parser {
         if (!_at("?")) {
             return condition;
         }
-        var node = Node(node_ternary);
+        var node = Node(NODE_TERNARY);
         node.add(condition);
         _take(node);
         node.add(_expression());
@@ -591,7 +591,7 @@ struct Parser {
             if (op.empty()) {
                 break;
             }
-            var node = Node(node_binary);
+            var node = Node(NODE_BINARY);
             node.add(lhs);
             _take_operator(node, op);
             node.add(_binary_operand(level));
@@ -610,7 +610,7 @@ struct Parser {
     # Prefix `++` and `--`.
     _prefix_increment(): Node {
         if (_at("++") or _at("--")) {
-            var node = Node(node_prefix);
+            var node = Node(NODE_PREFIX);
             _take(node);
             node.add(_unary());
             return node;
@@ -621,7 +621,7 @@ struct Parser {
     # Prefix `+`, `-`, `~` and `!`.
     _unary(): Node {
         if (_at("+") or _at("-") or _at("~") or _at("!")) {
-            var node = Node(node_prefix);
+            var node = Node(NODE_PREFIX);
             _take(node);
             node.add(_cast());
             return node;
@@ -635,7 +635,7 @@ struct Parser {
             return operand;
         }
         if (_at_word("as")) {
-            var node = Node(node_cast);
+            var node = Node(NODE_CAST);
             node.add(operand);
             _take(node);
             node.add(_type_name());
@@ -651,7 +651,7 @@ struct Parser {
             return base;
         }
         if (_at("**")) {
-            var node = Node(node_binary);
+            var node = Node(NODE_BINARY);
             node.add(base);
             _take(node);
             node.add(_power());
@@ -664,11 +664,11 @@ struct Parser {
         var operand = _atom();
         while (!_failed) {
             if (_at(".")) {
-                var node = Node(node_member);
+                var node = Node(NODE_MEMBER);
                 node.add(operand);
                 _take(node);
                 # A tuple element, `t.0`.
-                if (_peek().kind == token_number) {
+                if (_peek().kind == TOKEN_NUMBER) {
                     _take(node);
                     operand = node;
                     continue;
@@ -692,7 +692,7 @@ struct Parser {
                 continue;
             }
             if (_at("[")) {
-                var node = Node(node_index);
+                var node = Node(NODE_INDEX);
                 node.add(operand);
                 _take(node);
                 node.add(_expression());
@@ -704,14 +704,14 @@ struct Parser {
                 continue;
             }
             if (_at("(")) {
-                var node = Node(node_call);
+                var node = Node(NODE_CALL);
                 node.add(operand);
                 node.add(_arguments());
                 operand = node;
                 continue;
             }
             if (_at("++") or _at("--")) {
-                var node = Node(node_postfix);
+                var node = Node(NODE_POSTFIX);
                 node.add(operand);
                 _take(node);
                 operand = node;
@@ -723,7 +723,7 @@ struct Parser {
     }
 
     _arguments(): Node {
-        var node = Node(node_arguments);
+        var node = Node(NODE_ARGUMENTS);
         _take(node);
         if (!_at(")")) {
             while (true) {
@@ -750,7 +750,7 @@ struct Parser {
                 return closure;
             }
             _restore(position);
-            var node = Node(node_parenthesized);
+            var node = Node(NODE_PARENTHESIZED);
             _take(node);
             node.add(_expression());
             if (_failed) {
@@ -758,7 +758,7 @@ struct Parser {
             }
             # `(a, b)`: a comma makes it a tuple literal.
             if (_at(",")) {
-                node.kind = node_tuple;
+                node.kind = NODE_TUPLE;
                 while (_at(",")) {
                     _take(node);
                     node.add(_expression());
@@ -778,20 +778,20 @@ struct Parser {
         if (token.is_word("true")
             or token.is_word("false")
             or token.is_word("__null")
-            or token.kind == token_number
-            or token.kind == token_string
-            or token.kind == token_character) {
+            or token.kind == TOKEN_NUMBER
+            or token.kind == TOKEN_STRING
+            or token.kind == TOKEN_CHARACTER) {
             return Node.of_token(_advance());
         }
         # A `-` written directly before a number is part of the literal.
-        if (token.is("-") and _peek_at(1).kind == token_number and _adjacent(1)) {
-            var node = Node(node_prefix);
+        if (token.is("-") and _peek_at(1).kind == TOKEN_NUMBER and _adjacent(1)) {
+            var node = Node(NODE_PREFIX);
             _take(node);
             _take(node);
             return node;
         }
         if (token.is_word("sizeof")) {
-            var node = Node(node_sizeof);
+            var node = Node(NODE_SIZEOF);
             _take(node);
             _expect(node, "<");
             if (_failed) {
@@ -813,14 +813,14 @@ struct Parser {
         }
         if (!_at_name()) {
             _fail("expected expression");
-            return Node(node_token);
+            return Node(NODE_TOKEN);
         }
         ulong position = _position;
         # `m.Box<int>()`: a generic type of an imported module.
         if (_qualifiers.contains(token.text) and _peek_at(1).is(".") and _adjacent(1)) {
             var probe = _probe_type();
             if (!_failed and _qualified_generic(probe) and (_at("(") or _at("."))) {
-                var literal = Node(node_type_literal);
+                var literal = Node(NODE_TYPE_LITERAL);
                 literal.add(probe);
                 return literal;
             }
@@ -832,7 +832,7 @@ struct Parser {
             _restore(position);
             var probe = _probe_type();
             if (!_failed) {
-                var literal = Node(node_type_literal);
+                var literal = Node(NODE_TYPE_LITERAL);
                 literal.add(probe);
                 return literal;
             }
@@ -849,7 +849,7 @@ struct Parser {
             if (child.is_token(".")) {
                 qualified = true;
             }
-            if (child.kind == node_type_arguments) {
+            if (child.kind == NODE_TYPE_ARGUMENTS) {
                 generic = true;
             }
         }
@@ -857,8 +857,8 @@ struct Parser {
     }
 
     _closure_literal(): Node {
-        var node = Node(node_closure);
-        var parameters = Node(node_closure_parameters);
+        var node = Node(NODE_CLOSURE);
+        var parameters = Node(NODE_CLOSURE_PARAMETERS);
         _take(parameters);
         while (true) {
             if (_at(")")) {
@@ -869,7 +869,7 @@ struct Parser {
                 _fail("expected parameter name");
                 return node;
             }
-            var parameter = Node(node_closure_parameter);
+            var parameter = Node(NODE_CLOSURE_PARAMETER);
             _take(parameter);
             if (_at(":")) {
                 _take(parameter);
@@ -917,7 +917,7 @@ struct Parser {
         var list = Array<Node>();
         # `[]` starts a Pepper-style indexer (`[](index: ulong): T`).
         while (_at("[") and !_peek_at(1).is("]")) {
-            var node = Node(node_attribute);
+            var node = Node(NODE_ATTRIBUTE);
             _take(node);
             node.add(_expression());
             if (_failed) {
@@ -933,7 +933,7 @@ struct Parser {
     }
 
     _block(prefix: Node[]): Node {
-        var node = Node(node_block);
+        var node = Node(NODE_BLOCK);
         for (var item in prefix) {
             node.add(item);
         }
@@ -946,7 +946,7 @@ struct Parser {
                 break;
             }
             if (_at(";")) {
-                var empty = Node(node_empty);
+                var empty = Node(NODE_EMPTY);
                 _take(empty);
                 node.add(empty);
                 continue;
@@ -968,7 +968,7 @@ struct Parser {
         if (_at("[")) {
             var list = _attributes();
             if (_failed) {
-                return Node(node_block);
+                return Node(NODE_BLOCK);
             }
             return _block(list);
         }
@@ -979,7 +979,7 @@ struct Parser {
             return _if_statement();
         }
         if (_at_word("while")) {
-            var node = Node(node_while);
+            var node = Node(NODE_WHILE);
             _take(node);
             node.add(_expression());
             if (_failed) {
@@ -998,7 +998,7 @@ struct Parser {
             return _match_statement();
         }
         if (_at_word("return")) {
-            var node = Node(node_return);
+            var node = Node(NODE_RETURN);
             _take(node);
             if (!_at(";") and !_at("}")) {
                 node.add(_expression());
@@ -1006,7 +1006,7 @@ struct Parser {
             return node;
         }
         if (_at_word("break") or _at_word("continue")) {
-            var node = Node(node_jump);
+            var node = Node(NODE_JUMP);
             _take(node);
             return node;
         }
@@ -1017,7 +1017,7 @@ struct Parser {
         bool declaration = token.is_word("var")
             or token.is_word("const")
             or (token.is_word("extern") and _peek_at(1).is("("))
-            or (token.kind == token_identifier and !_statement_keywords.contains(token.text));
+            or (token.kind == TOKEN_IDENTIFIER and !_statement_keywords.contains(token.text));
         if (declaration) {
             ulong position = _position;
             var variable = _variable_declaration(Array<Node>());
@@ -1026,13 +1026,13 @@ struct Parser {
             }
             _restore(position);
         }
-        var node = Node(node_expression_statement);
+        var node = Node(NODE_EXPRESSION_STATEMENT);
         node.add(_expression());
         return node;
     }
 
     _if_statement(): Node {
-        var node = Node(node_if);
+        var node = Node(NODE_IF);
         _take(node);
         node.add(_expression());
         if (_failed) {
@@ -1054,7 +1054,7 @@ struct Parser {
     }
 
     _for_statement(): Node {
-        var node = Node(node_for);
+        var node = Node(NODE_FOR);
         _take(node);
         bool parenthesized = _at("(");
         if (parenthesized) {
@@ -1062,7 +1062,7 @@ struct Parser {
         }
         if (_at_word("var") and _peek_at(1).is("(")) {
             # `for (var (k, v) in pairs)`: a pattern.
-            var pattern = Node(node_destructure);
+            var pattern = Node(NODE_DESTRUCTURE);
             _take(pattern);
             pattern.add(_binding_pattern());
             node.add(pattern);
@@ -1092,7 +1092,7 @@ struct Parser {
     }
 
     _with_statement(): Node {
-        var node = Node(node_with);
+        var node = Node(NODE_WITH);
         _take(node);
         bool parenthesized = _at("(");
         if (parenthesized) {
@@ -1133,20 +1133,20 @@ struct Parser {
     }
 
     _match_statement(): Node {
-        var node = Node(node_match);
+        var node = Node(NODE_MATCH);
         _take(node);
         node.add(_expression());
         if (_failed) {
             return node;
         }
-        var arms = Node(node_match_arms);
+        var arms = Node(NODE_MATCH_ARMS);
         node.add(arms);
         _expect(arms, "{");
         while (!_failed) {
             if (_at("}") or _at_end()) {
                 break;
             }
-            var arm = Node(node_match_arm);
+            var arm = Node(NODE_MATCH_ARM);
             arms.add(arm);
             if (_at_word("else")) {
                 _take(arm);
@@ -1176,9 +1176,9 @@ struct Parser {
     # A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or
     # `Case(x, _)`.
     _pattern(): Node {
-        var node = Node(node_pattern);
+        var node = Node(NODE_PATTERN);
         _expect_name(node, "a case name");
-        while (!_failed and _at(".") and _adjacent(0) and _peek_at(1).kind == token_identifier and _adjacent(1)) {
+        while (!_failed and _at(".") and _adjacent(0) and _peek_at(1).kind == TOKEN_IDENTIFIER and _adjacent(1)) {
             _take(node);
             _take(node);
         }
@@ -1222,7 +1222,7 @@ struct Parser {
 
     # `(var | const) PATTERN = value`.
     _destructure(): Node {
-        var node = Node(node_destructure);
+        var node = Node(NODE_DESTRUCTURE);
         _take(node);
         node.add(_binding_pattern());
         if (_failed) {
@@ -1239,7 +1239,7 @@ struct Parser {
     # `( binding, ... )` of a destructuring, where a binding is
     # `name [: Type]` or a nested pattern.
     _binding_pattern(): Node {
-        var bindings = Node(node_closure_parameters);
+        var bindings = Node(NODE_CLOSURE_PARAMETERS);
         _take(bindings);
         while (true) {
             if (_at("(")) {
@@ -1252,7 +1252,7 @@ struct Parser {
                     _fail("expected variable name");
                     return bindings;
                 }
-                var binding = Node(node_closure_parameter);
+                var binding = Node(NODE_CLOSURE_PARAMETER);
                 _take(binding);
                 if (_at(":")) {
                     _take(binding);
@@ -1275,7 +1275,7 @@ struct Parser {
 
     # `var name`, `const name` or `Type name`, then `[: Type] [= value]`.
     _variable_declaration(prefix: Node[]): Node {
-        var node = Node(node_variable);
+        var node = Node(NODE_VARIABLE);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1316,14 +1316,14 @@ struct Parser {
     # ── Declarations ─────────────────────────────────────────────────────────
 
     _generic_parameters(): Node {
-        var node = Node(node_generic_parameters);
+        var node = Node(NODE_GENERIC_PARAMETERS);
         _take(node);
         while (true) {
             if (_at(">")) {
                 _take(node);
                 return node;
             }
-            var parameter = Node(node_generic_parameter);
+            var parameter = Node(NODE_GENERIC_PARAMETER);
             _expect_name(parameter, "generic parameter name");
             if (_failed) {
                 return node;
@@ -1348,7 +1348,7 @@ struct Parser {
 
     # `( parameter, ... )` of a function, method or constructor.
     _parameters(): Node {
-        var node = Node(node_parameters);
+        var node = Node(NODE_PARAMETERS);
         _expect(node, "(");
         if (_failed) {
             return node;
@@ -1373,7 +1373,7 @@ struct Parser {
     }
 
     _parameter(): Node {
-        var node = Node(node_parameter);
+        var node = Node(NODE_PARAMETER);
         if (_at_word("this")) {
             _take(node);
             _expect(node, ".");
@@ -1393,7 +1393,7 @@ struct Parser {
         }
         if (_at_word("var") or _at_word("const")) {
             var variable = _variable_declaration(Array<Node>());
-            variable.kind = node_parameter;
+            variable.kind = NODE_PARAMETER;
             return variable;
         }
         # `name: Type`
@@ -1407,7 +1407,7 @@ struct Parser {
                 return node;
             }
             _restore(position);
-            node = Node(node_parameter);
+            node = Node(NODE_PARAMETER);
         }
         # `Type name`
         node.add(_type_name());
@@ -1431,7 +1431,7 @@ struct Parser {
 
     # C parameters of an `extern` function: `Type name`, or a final `...`.
     _extern_parameters(): Node {
-        var node = Node(node_parameters);
+        var node = Node(NODE_PARAMETERS);
         _expect(node, "(");
         if (_failed) {
             return node;
@@ -1441,7 +1441,7 @@ struct Parser {
                 _take(node);
                 return node;
             }
-            var parameter = Node(node_parameter);
+            var parameter = Node(NODE_PARAMETER);
             if (_at("...")) {
                 _take(parameter);
                 node.add(parameter);
@@ -1468,7 +1468,7 @@ struct Parser {
     }
 
     _extern_function(prefix: Node[]): Node {
-        var node = Node(node_extern_function);
+        var node = Node(NODE_EXTERN_FUNCTION);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1501,7 +1501,7 @@ struct Parser {
     # A top-level function: `name[<T>](params)[: Type] { }` or
     # `Type name(params)[: Type] { }`.
     _function(prefix: Node[]): Node {
-        var node = Node(node_function);
+        var node = Node(NODE_FUNCTION);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1509,7 +1509,7 @@ struct Parser {
             _fail("expected declaration");
             return node;
         }
-        var first = Node(node_type);
+        var first = Node(NODE_TYPE);
         var name = _advance();
         first.add_token(name);
         _qualified_tail(first, name.text);
@@ -1576,7 +1576,7 @@ struct Parser {
 
     # A method of a struct, extension or trait (`bodyless` for a trait).
     _method(prefix: Node[], bodyless: bool): Node {
-        var node = Node(node_function);
+        var node = Node(NODE_FUNCTION);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1618,7 +1618,7 @@ struct Parser {
         }
 
         # Indexer: `T [](params) { }`
-        var index_type = Node(node_type);
+        var index_type = Node(NODE_TYPE);
         _type_base(index_type);
         if (!_failed) {
             if (_at("[") and _peek_at(1).is("]") and _peek_at(2).is("(")) {
@@ -1666,7 +1666,7 @@ struct Parser {
         # `Type name(params) { }`, where the name may be an operator.
         _restore(position);
         node.children.truncate(children);
-        var return_type = Node(node_type);
+        var return_type = Node(NODE_TYPE);
         _type_base(return_type);
         if (_failed) {
             return node;
@@ -1695,9 +1695,9 @@ struct Parser {
         return node;
     }
 
-    # `{ member... }` of a struct (`kind` node_struct), trait or extension.
+    # `{ member... }` of a struct (`kind` NODE_STRUCT), trait or extension.
     _members(kind: int): Node {
-        var node = Node(node_members);
+        var node = Node(NODE_MEMBERS);
         _expect(node, "{");
         if (_failed) {
             return node;
@@ -1707,7 +1707,7 @@ struct Parser {
                 break;
             }
             if (_at(";")) {
-                var empty = Node(node_empty);
+                var empty = Node(NODE_EMPTY);
                 _take(empty);
                 node.add(empty);
                 continue;
@@ -1716,15 +1716,15 @@ struct Parser {
             if (_failed) {
                 return node;
             }
-            if (kind != node_struct) {
-                node.add(_method(attributes, kind == node_trait));
+            if (kind != NODE_STRUCT) {
+                node.add(_method(attributes, kind == NODE_TRAIT));
                 if (_failed) {
                     return node;
                 }
                 continue;
             }
             if (_at_word("construct") or _at_word("new")) {
-                var constructor = Node(node_constructor);
+                var constructor = Node(NODE_CONSTRUCTOR);
                 for (var item in attributes) {
                     constructor.add(item);
                 }
@@ -1741,7 +1741,7 @@ struct Parser {
                 continue;
             }
             if (_at_word("destruct")) {
-                var destructor = Node(node_destructor);
+                var destructor = Node(NODE_DESTRUCTOR);
                 for (var item in attributes) {
                     destructor.add(item);
                 }
@@ -1808,7 +1808,7 @@ struct Parser {
     # without a `,`, or at a name that starts a method, as in the compiler's
     # `enum_declaration`.
     _enum(prefix: Node[]): Node {
-        var node = Node(node_enum);
+        var node = Node(NODE_ENUM);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1830,7 +1830,7 @@ struct Parser {
                 return node;
             }
         }
-        var members = Node(node_members);
+        var members = Node(NODE_MEMBERS);
         node.add(members);
         _expect(members, "{");
         if (_failed) {
@@ -1842,7 +1842,7 @@ struct Parser {
             }
             ulong position = _position;
             ulong children = members.count();
-            var item = Node(node_enum_case);
+            var item = Node(NODE_ENUM_CASE);
             for (var attribute in _attributes()) {
                 item.add(attribute);
             }
@@ -1885,7 +1885,7 @@ struct Parser {
                 break;
             }
             if (_at(";")) {
-                var empty = Node(node_empty);
+                var empty = Node(NODE_EMPTY);
                 _take(empty);
                 members.add(empty);
                 continue;
@@ -1904,7 +1904,7 @@ struct Parser {
     }
 
     _extension(prefix: Node[]): Node {
-        var node = Node(node_extend);
+        var node = Node(NODE_EXTEND);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1927,12 +1927,12 @@ struct Parser {
                 break;
             }
         }
-        node.add(_members(node_extend));
+        node.add(_members(NODE_EXTEND));
         return node;
     }
 
     _type_alias(prefix: Node[]): Node {
-        var node = Node(node_type_alias);
+        var node = Node(NODE_TYPE_ALIAS);
         for (var item in prefix) {
             node.add(item);
         }
@@ -1958,20 +1958,20 @@ struct Parser {
     _declaration(): Node {
         var prefix = _attributes();
         if (_failed) {
-            return Node(node_function);
+            return Node(NODE_FUNCTION);
         }
         if (_at_word("export")) {
             prefix.append(Node.of_token(_advance()));
             if (_at("[")) {
                 _fail("'export' goes after the attributes");
-                return Node(node_function);
+                return Node(NODE_FUNCTION);
             }
         }
         if (_at_word("struct")) {
-            return _aggregate(prefix, node_struct);
+            return _aggregate(prefix, NODE_STRUCT);
         }
         if (_at_word("trait")) {
-            return _aggregate(prefix, node_trait);
+            return _aggregate(prefix, NODE_TRAIT);
         }
         if (_at_word("enum")) {
             return _enum(prefix);
@@ -2004,7 +2004,7 @@ struct Parser {
     # `import ...`, or `export * from ...` / `export [...] from ...`, which
     # has the same shape but requires `*` or a list and takes no alias.
     _import_declaration(prefix: Node[]): Node {
-        var node = Node(node_import);
+        var node = Node(NODE_IMPORT);
         for (var item in prefix) {
             node.add(item);
         }
@@ -2020,13 +2020,13 @@ struct Parser {
         }
         bool list = _at("[");
         if (list) {
-            var symbols = Node(node_import_list);
+            var symbols = Node(NODE_IMPORT_LIST);
             _take(symbols);
             while (true) {
                 if (_at("]") and symbols.count() == 1) {
                     break;
                 }
-                var symbol = Node(node_import_symbol);
+                var symbol = Node(NODE_IMPORT_SYMBOL);
                 _expect_name(symbol, "name");
                 if (_failed) {
                     return node;
@@ -2057,7 +2057,7 @@ struct Parser {
             _take(node);
         }
         var name = _peek();
-        if (name.kind == token_string) {
+        if (name.kind == TOKEN_STRING) {
             _take(node);
         } else {
             _expect_name(node, "module name");
@@ -2076,7 +2076,7 @@ struct Parser {
             _qualifiers.insert(alias.text);
         } else {
             _restore(position);
-            if (!list and !reexport and name.kind != token_string) {
+            if (!list and !reexport and name.kind != TOKEN_STRING) {
                 _qualifiers.insert(name.text);
             }
         }
@@ -2091,7 +2091,7 @@ struct Parser {
     # `export name[.name] [as alias];`, a re-export. Fails (so the caller
     # reads a declaration instead) unless an `as` or `;` follows the name.
     _export_alias(prefix: Node[]): Node {
-        var node = Node(node_export_alias);
+        var node = Node(NODE_EXPORT_ALIAS);
         for (var item in prefix) {
             node.add(item);
         }
@@ -2118,13 +2118,13 @@ struct Parser {
     }
 
     module(): Node {
-        var node = Node(node_module);
+        var node = Node(NODE_MODULE);
         while (true) {
             if (_at_end()) {
                 break;
             }
             if (_at(";")) {
-                var empty = Node(node_empty);
+                var empty = Node(NODE_EMPTY);
                 _take(empty);
                 node.add(empty);
                 continue;
@@ -2158,7 +2158,7 @@ struct Parser {
             if (_failed) {
                 return node;
             }
-            if (declaration.kind == node_variable or declaration.kind == node_type_alias) {
+            if (declaration.kind == NODE_VARIABLE or declaration.kind == NODE_TYPE_ALIAS) {
                 _finish_statement(declaration);
             }
             node.add(declaration);
@@ -2169,7 +2169,7 @@ struct Parser {
 }
 
 ## Parses Pepper source text into a syntax tree whose root is a
-## `node_module`.
+## `NODE_MODULE`.
 ##
 ## @param source the text of a Pepper source file
 ## @returns the tree, or the syntax error furthest into the source

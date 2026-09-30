@@ -11,8 +11,9 @@ contribute should too.
 | Generic parameters | one capital letter, or `PascalCase` | `T`, `K`, `V`, `TValue`, `TError` |
 | Data members (fields) | `snake_case` | `unit_name`, `is_file` |
 | Methods and free functions | `snake_case` | `append`, `remove_at`, `read_to_string` |
-| Parameters and local variables, `const` included | `snake_case` | `capacity`, `best_so_far` |
-| Module-scope variables and constants | `snake_case` | `max_requests`, `line_width` |
+| Parameters and local variables | `snake_case` | `capacity`, `best_so_far` |
+| Constants (a `const` holding a fixed value) | `SCREAMING_CASE` | `MAX_REQUESTS`, `LINE_WIDTH` |
+| Other module-scope variables | `snake_case` | `request_count` |
 | Private data members and methods | `_` then `snake_case` | `_readings`, `_is_empty` |
 
 ```pepper
@@ -38,8 +39,13 @@ apart.
 Everything else a program names is `snake_case`: lowercase words joined by
 underscores. That covers a struct's data members, its methods, free
 functions, parameters, local variables, and module-scope variables.
-A `const` is no exception: write `const line_width = 120;`, not
-`LINE_WIDTH`. Pepper has no `SCREAMING_CASE`.
+
+The exception is a constant: a `const`, at module scope or in a function,
+whose value is fixed, such as a number, string, or character. Its name is
+`SCREAMING_CASE`, uppercase words joined by underscores (`MAX_REQUESTS`,
+`LINE_WIDTH`). A module-scope `const` that holds an object, such as
+`const request_count = Atomic<int>(0);`, is a variable and stays
+`snake_case`.
 
 Spell words out. A name is read far more often than it is typed, so prefer
 `iterate`, `index`, and `directory` to `iter`, `idx`, and `dir`. Keep an

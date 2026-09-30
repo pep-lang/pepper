@@ -1031,7 +1031,7 @@ dogfooding of the language.
   grammar would read those operators.
 - `tools/pep-fmt` turns the tree into a Wadler-style layout document
   (`doc.pep`: text, soft and hard lines, indentation, groups, and a
-  `doc_choice` of layouts tried in order) and renders it at 120 columns;
+  `DOC_CHOICE` of layouts tried in order) and renders it at 120 columns;
   `format.pep` holds the style (`_item` adds a `;` a statement or
   declaration left out, using `syntax.ends_in_semicolon`); a long binary
   expression breaks before each operator, and `_member_chain` breaks a chain

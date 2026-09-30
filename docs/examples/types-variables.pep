@@ -3,7 +3,7 @@
 # Module-level variables (globals) live for the whole program. Any thread
 # can reach them, so they are const and of a thread-safe type: a number, or
 # an Atomic for state that changes.
-const max_requests = 10;
+const MAX_REQUESTS = 10;
 const request_count = Atomic<int>(0);
 const total_bytes = Atomic<long>(0);
 
@@ -32,17 +32,17 @@ main(): int {
     assert(hits == 0, "numbers start at zero");
 
     # 'const' declares a name that should not be reassigned.
-    const limit = 3;
+    const LIMIT = 3;
 
     record(100);
     record(250);
     assert(request_count.load() == 2, "two requests recorded");
     assert(total_bytes.load() == 350, "350 bytes in total");
-    assert(request_count.load() < max_requests, "globals are visible in every function");
+    assert(request_count.load() < MAX_REQUESTS, "globals are visible in every function");
 
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 && scale == 1.5, "floating point");
     assert(ready && name == "Pepper", "bool and String");
-    assert(offset > 4000000000 && limit == 3, "long and const");
+    assert(offset > 4000000000 && LIMIT == 3, "long and const");
     return 0;
 }

@@ -28,7 +28,7 @@ An import comes in one of these forms:
 
 | Form | What it makes available |
 |---|---|
-| `import "util";` | Every export of `util.pep`, unqualified: `twice(base)`. |
+| `import "util";` | Every export of `util.pep`, unqualified: `twice(BASE)`. |
 | `import "util" as u;` | Every export, qualified by the name you choose: `u.twice(1)`. |
 | `import [thrice as triple, twice] from "util";` | Only the listed exports, unqualified, each under its own name or the one after `as`. |
 | `import geometry;` | A module's exports, qualified by the module's name: `geometry.Point`. |
@@ -256,7 +256,7 @@ their version.
 ## How imported names behave
 
 - **Qualified names work wherever a name does**: in expressions
-  (`g.rect_area(1, 2)`, or a module variable such as `u.base`), in types (`var p: g.Point`,
+  (`g.rect_area(1, 2)`, or a module variable such as `u.BASE`), in types (`var p: g.Point`,
   `g.Box<int>[]`, a return type `g.Point`), and in generic constructions
   (`g.Box<int>()`). A generic construction is recognized only for a qualifier
   imported earlier in the file; elsewhere `a.b < c, d > (e)` is two

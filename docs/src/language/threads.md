@@ -167,7 +167,7 @@ the same two rules as a field of a `[Shared]` struct:
   `ThreadLocal<T>`.
 
 ```pepper
-const max_workers = 8;                  # a number
+const MAX_WORKERS = 8;                  # a number
 const jobs_done = Atomic<long>(0);      # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal<String>();  # a String per thread
