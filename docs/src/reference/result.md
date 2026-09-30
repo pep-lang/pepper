@@ -47,21 +47,24 @@ wherever an `Error` is expected, as in `Result<int>.err("bad input")`.
 ## Result
 
 ```pepper
-struct Result<TValue, TError=Error>
+enum Result<TValue, TError=Error>
 ```
 
 The outcome of an operation that can fail: either Ok, holding a `TValue`,
 or Err, holding a `TError`, like Rust's `Result<T, E>`.
 
-Build one with the static `ok` or `err` functions and test it with
-`is_ok()` or `is_err()`, then read the outcome with `value()` or
-`error()`, each of which panics on the wrong kind of result. `TError`
-defaults to `Error`, so `Result<int>` is `Result<int, Error>`.
+An enum with the cases `Ok(value)` and `Err(error)`. Build one with a
+case (`Result<int>.Ok(42)`) or the static `ok` or `err` functions, and
+read it with `match` or `is` (`if (r is Err(e)) { ... }`), or with
+`is_ok()`, `is_err()`, `value()` and `error()`; `value()` and `error()`
+panic on the wrong kind of result. `TError` defaults to `Error`, so
+`Result<int>` is `Result<int, Error>`.
 
 `Result<void>` is the result of an operation that returns nothing on
 success, like Rust's `Result<(), E>`. A `void` type argument erases what
-it types: that instance holds no value, `ok()` takes no argument,
-and `value()` returns nothing, so it only checks that the result is Ok.
+it types: that instance's `Ok` carries nothing (`Result<void>.Ok`, and
+the pattern `Ok`), `ok()` takes no argument, and `value()` returns
+nothing, so it only checks that the result is Ok.
 
 **Type parameters**
 - `TValue` — the type of the value an Ok result carries; `void` when there is none
@@ -74,37 +77,44 @@ and `value()` returns nothing, so it only checks that the result is Ok.
         if (a.value() != 42) { return 1; }
         var b = Result<int>.err(Error("boom"));
         if (!b.is_err()) { return 2; }
+        var n = match (b) { Ok(v) => v, Err(e) => e.message.length() };   # 4
         return b.ok_or(0);   # 0
     }
 ```
 
-### Constructor
+### Cases
 
-#### Result()
+#### Ok
 
 ```pepper
-construct()
+Ok(value: TValue)
 ```
 
-Creates an Err result whose error and value both hold their type's
-default (zero for a POD type, null for a struct type).
+The operation succeeded with `value`.
 
-Prefer `ok` or `err`, which set the live field.
+**Parameters**
+- `value` — the success value
 
-**Example**
+#### Err
+
 ```pepper
-    var e = Result<int>();   # e.is_ok() == false
+Err(error: TError)
 ```
+
+The operation failed with `error`.
+
+**Parameters**
+- `error` — the failure value
 
 ### Static methods
 
 #### ok
 
 ```pepper
-static Result<TValue, TError> ok(TValue v)
+static ok(v: TValue): Result<TValue, TError>
 ```
 
-Returns an Ok result holding `v`.
+Returns an Ok result holding `v`; the same as `Result.Ok(v)`.
 
 For a struct `TValue` the result acquires a reference to `v`.
 
@@ -125,10 +135,10 @@ For `Result<void>`, `ok()` takes no argument.
 #### err
 
 ```pepper
-static Result<TValue, TError> err(TError e)
+static err(e: TError): Result<TValue, TError>
 ```
 
-Returns an Err result holding `e`.
+Returns an Err result holding `e`; the same as `Result.Err(e)`.
 
 For a struct `TError` the result acquires a reference to `e`.
 
@@ -148,7 +158,7 @@ For a struct `TError` the result acquires a reference to `e`.
 #### is_ok
 
 ```pepper
-bool is_ok()
+is_ok(): bool
 ```
 
 Reports whether this result is Ok.
@@ -159,7 +169,7 @@ Reports whether this result is Ok.
 #### is_err
 
 ```pepper
-bool is_err()
+is_err(): bool
 ```
 
 Reports whether this result is Err.
@@ -170,7 +180,7 @@ Reports whether this result is Err.
 #### value
 
 ```pepper
-TValue value()
+value(): TValue
 ```
 
 Returns the success value, panicking if this result is Err.
@@ -195,7 +205,7 @@ result is Ok.
 #### error
 
 ```pepper
-TError error()
+error(): TError
 ```
 
 Returns the failure value, panicking if this result is Ok.
@@ -217,7 +227,7 @@ keeps its reference too.
 #### ok_or
 
 ```pepper
-TValue ok_or(TValue fallback)
+ok_or(fallback: TValue): TValue
 ```
 
 Returns the success value, or `fallback` if this result is Err.

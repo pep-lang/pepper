@@ -202,12 +202,12 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
     while (done < n) {
         var r = _io_sys_write(h, p + done, n - done);
         if (r.is_err()) {
-            return IoResult<void>.err(r._error);
+            return IoResult<void>.err(r.error());
         }
-        if (r._value == 0) {
+        if (r.value() == 0) {
             return IoResult<void>.err(IoError(_io_sys_code_write_zero(), "failed to write the whole buffer"));
         }
-        done = done + r._value;
+        done = done + r.value();
     }
     return _io_ok_void();
 }
@@ -348,10 +348,10 @@ export struct File {
         }
         var h = _io_sys_open(path, options);
         if (h.is_err()) {
-            return IoResult<File>.err(h._error);
+            return IoResult<File>.err(h.error());
         }
         var f = File();
-        f._handle = h._value;
+        f._handle = h.value();
         f.path = path;
         return IoResult<File>.ok(f);
     }
@@ -472,7 +472,7 @@ export struct File {
     IoResult<ulong> read(u8[] buf, ulong max) {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c._error);
+            return IoResult<ulong>.err(c.error());
         }
         if (max == 0) {
             return IoResult<ulong>.ok(0);
@@ -480,7 +480,7 @@ export struct File {
         buf.reserve(buf._size + max);
         var r = _io_sys_read(_handle, buf._data + buf._size, max);
         if (r.is_ok()) {
-            buf._size = buf._size + r._value;
+            buf._size = buf._size + r.value();
         }
         return r;
     }
@@ -497,9 +497,9 @@ export struct File {
         while (true) {
             var r = read(buf, _io_chunk_size());
             if (r.is_err()) {
-                return IoResult<u8[]>.err(r._error);
+                return IoResult<u8[]>.err(r.error());
             }
-            if (r._value == 0) {
+            if (r.value() == 0) {
                 break;
             }
         }
@@ -519,9 +519,9 @@ export struct File {
     IoResult<String> read_string() {
         var r = read_all();
         if (r.is_err()) {
-            return IoResult<String>.err(r._error);
+            return IoResult<String>.err(r.error());
         }
-        var bytes = r._value;
+        var bytes = r.value();
         var p = bytes._data as __ptr<char>;
         if (!_io_utf8_valid(p, bytes._size)) {
             return IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "stream did not contain valid UTF-8"));
@@ -544,7 +544,7 @@ export struct File {
     IoResult<ulong> write(u8[] data) {
         var c = _check_writable();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c._error);
+            return IoResult<ulong>.err(c.error());
         }
         return _io_sys_write(_handle, data._data, data._size);
     }
@@ -655,7 +655,7 @@ export struct File {
     IoResult<Offset> seek(Offset offset, int whence) {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<Offset>.err(c._error);
+            return IoResult<Offset>.err(c.error());
         }
         return _io_sys_seek(_handle, offset, whence);
     }
@@ -714,7 +714,7 @@ export struct File {
     IoResult<Metadata> metadata() {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<Metadata>.err(c._error);
+            return IoResult<Metadata>.err(c.error());
         }
         return _io_sys_fstat(_handle);
     }
@@ -764,9 +764,9 @@ export struct File {
     static IoResult<u8[]> read_bytes(Path path) {
         var f = File.open(path);
         if (f.is_err()) {
-            return IoResult<u8[]>.err(f._error);
+            return IoResult<u8[]>.err(f.error());
         }
-        return f._value.read_all();
+        return f.value().read_all();
     }
 
     ## Reads the whole file at `path` as UTF-8 text (Rust's
@@ -785,9 +785,9 @@ export struct File {
     static IoResult<String> read_to_string(Path path) {
         var f = File.open(path);
         if (f.is_err()) {
-            return IoResult<String>.err(f._error);
+            return IoResult<String>.err(f.error());
         }
-        return f._value.read_string();
+        return f.value().read_string();
     }
 
     ## Writes `data` as the whole contents of the file at `path`, creating
@@ -808,9 +808,9 @@ export struct File {
     static IoResult<void> write_bytes(Path path, u8[] data) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<void>.err(f._error);
+            return IoResult<void>.err(f.error());
         }
-        var file = f._value;
+        var file = f.value();
         var w = file.write_all(data);
         if (w.is_err()) {
             return w;
@@ -840,9 +840,9 @@ export struct File {
     static IoResult<void> write_text(Path path, String s) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<void>.err(f._error);
+            return IoResult<void>.err(f.error());
         }
-        var file = f._value;
+        var file = f.value();
         var w = file.write_all(s);
         if (w.is_err()) {
             return w;
@@ -869,39 +869,39 @@ export struct File {
     static IoResult<ulong> copy(Path from, Path to) {
         var src = File.open(from);
         if (src.is_err()) {
-            return IoResult<ulong>.err(src._error);
+            return IoResult<ulong>.err(src.error());
         }
         var from_real = from.canonicalize();
         var to_real = to.canonicalize();
-        if (from_real.is_ok() && to_real.is_ok() && from_real._value._value == to_real._value._value) {
+        if (from_real.is_ok() && to_real.is_ok() && from_real.value()._value == to_real.value()._value) {
             return IoResult<ulong>.err(IoError(_io_sys_code_invalid_input(), "source and destination are the same file"));
         }
         var dst = File.create(to);
         if (dst.is_err()) {
-            return IoResult<ulong>.err(dst._error);
+            return IoResult<ulong>.err(dst.error());
         }
-        var input = src._value;
-        var output = dst._value;
+        var input = src.value();
+        var output = dst.value();
         var buf = Array<u8>();
         ulong total = 0;
         while (true) {
             buf.clear();
             var r = input.read(buf, _io_chunk_size());
             if (r.is_err()) {
-                return IoResult<ulong>.err(r._error);
+                return IoResult<ulong>.err(r.error());
             }
-            if (r._value == 0) {
+            if (r.value() == 0) {
                 break;
             }
             var w = output.write_all(buf);
             if (w.is_err()) {
-                return IoResult<ulong>.err(w._error);
+                return IoResult<ulong>.err(w.error());
             }
-            total = total + r._value;
+            total = total + r.value();
         }
         var c = output.close();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c._error);
+            return IoResult<ulong>.err(c.error());
         }
         return IoResult<ulong>.ok(total);
     }

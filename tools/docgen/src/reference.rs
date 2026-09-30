@@ -249,6 +249,15 @@ fn page_body(module: &Module, source: &str) -> String {
             Declaration::Struct(s) if is_public(&s.name) => {
                 let end = source[s.name_span.end..].find('{').map_or(s.span.end, |i| s.name_span.end + i);
                 entry(&mut out, 2, &s.name, &signature(source, start, end), doc);
+                let cases = s.enumeration.iter().flat_map(|e| &e.cases).collect::<Vec<_>>();
+                if !cases.is_empty() {
+                    out.push_str("\n### Cases\n");
+                    for case in cases {
+                        let start = first_attribute(&case.attributes, case.span.start);
+                        let doc = doc_comment_before(source, start);
+                        entry(&mut out, 4, &case.name, &signature(source, start, case.span.end), doc);
+                    }
+                }
                 members(&mut out, source, &s.name, &s.fields, &s.constructors, &s.methods);
             }
             Declaration::Trait(t) if is_public(&t.name) => {

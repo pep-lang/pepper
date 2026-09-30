@@ -2691,6 +2691,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             // Converting keeps the reference it converts: a read stays a read.
             Expression::ToTrait { value, .. } => self.is_lvalue_read(value),
+            // A ternary that owns nothing yields a read of one arm (or null),
+            // as `c ? a : b` on two lvalues is an lvalue in C++: the consumer
+            // copies it. A `match` expression is its body.
+            Expression::Ternary { true_expr, false_expr, .. } => {
+                !self.is_owned_rvalue(expr) && (self.is_lvalue_read(true_expr) || self.is_lvalue_read(false_expr))
+            }
+            Expression::WithSubject(with) => self.is_lvalue_read(&with.body),
             Expression::MethodCall { this, method, .. } if method == "__index_get" => {
                 let receiver_is_ptr = self
                     .value_sema_type(this)

@@ -190,8 +190,8 @@ of an enum whose cases carry values panics with `match on a null 'Name'`.
 
 ## Current limits
 
-- [`Optional`](optionals.md) and [`Result`](results.md) are not enums yet,
-  so they cannot be matched.
+- [`Optional`](optionals.md) is not an enum yet, so it cannot be matched.
+  [`Result`](results.md) is one (`Ok(value)`, `Err(error)`).
 - An enum whose cases carry nothing cannot be generic. The methods of any
   enum cannot be generic yet. An enum cannot declare operators or indexers
   yet; `==` and `!=` are built in for enums whose cases carry nothing.

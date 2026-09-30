@@ -134,10 +134,12 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
 /// along with the statements that only move them. Removed are an
 /// assignment to a removed field of `this` (the constructor's zero
 /// initialization, `this.Value = v`), an assignment whose value is a
-/// removed parameter (`r.Value = v`), and the value of a `return` that
+/// removed parameter (`r.Value = v`), the value of a `return` that
 /// returns either one (`return this.Value;` in a method whose return type
-/// became `void`). Any other use is left in place, so it is reported as
-/// the missing member or symbol it now is.
+/// became `void`), and a call argument that is one. An enum case's value
+/// of type `void` goes with its field (see [`erase_void_values`]). Any
+/// other use is left in place, so it is reported as the missing member or
+/// symbol it now is.
 fn erase_void(st: &mut StructDef) {
     let is_void = |ty: &TypeName| ty.name == crate::type_name::VOID && ty.sub_types.is_empty();
     let fields: Vec<String> = st
@@ -154,8 +156,24 @@ fn erase_void(st: &mut StructDef) {
         return;
     }
     st.field_members.retain(|f| !is_void(&f.ty));
+    // An enum case's value of type `void` goes with its field
+    // (`Ok(value: TValue)` in `Result<void>` is `Ok`).
+    let mut void_values: Vec<(String, Vec<usize>)> = vec![];
+    for case in st.enum_cases.iter_mut().flatten() {
+        let erased: Vec<usize> = (0..case.payload.len())
+            .filter(|&i| fields.contains(&payload_field(&case.name, &case.payload[i].0)))
+            .collect();
+        if !erased.is_empty() {
+            let mut index = 0;
+            case.payload.retain(|_| {
+                index += 1;
+                !erased.contains(&(index - 1))
+            });
+            void_values.push((case.name.clone(), erased));
+        }
+    }
     let erase_function = |f: &mut FunctionDef| {
-        let params: Vec<String> = f
+        let mut params: Vec<String> = f
             .parameters
             .iter()
             .filter(|p| is_void(&p.ty))
@@ -164,6 +182,8 @@ fn erase_void(st: &mut StructDef) {
         f.parameters.retain(|p| !is_void(&p.ty));
         let returns_void = is_void(&f.ty);
         if let Some(body) = &mut f.body {
+            erase_void_values(body, &void_values, &mut params);
+            erase_void_arguments(body, &params);
             erase_void_block(body, &fields, &params, returns_void);
         }
     };
@@ -173,6 +193,80 @@ fn erase_void(st: &mut StructDef) {
     for constructor in &mut st.constructors {
         erase_function(constructor);
     }
+}
+
+/// Erase the `void` values of enum cases from a body: a binding of one (a
+/// local holding a `CaseValue`) is removed and its name added to `erased`,
+/// and patterns and the other bindings no longer count it.
+fn erase_void_values(block: &mut Block, void_values: &[(String, Vec<usize>)], erased: &mut Vec<String>) {
+    if void_values.is_empty() {
+        return;
+    }
+    let erased_of = |case: &str| void_values.iter().find(|(c, _)| c == case).map(|(_, e)| e.as_slice());
+    block.items.retain(|stmt| {
+        let Statement::Declaration(Declaration::Variable(var)) = stmt else {
+            return true;
+        };
+        let Some(Expression::CaseValue(value)) = &var.default else {
+            return true;
+        };
+        if value.choices.iter().any(|c| erased_of(&c.case).is_some_and(|e| e.contains(&c.index))) {
+            erased.push(var.name.clone());
+            return false;
+        }
+        true
+    });
+    for stmt in &mut block.items {
+        match stmt {
+            Statement::Block(inner) => erase_void_values(inner, void_values, erased),
+            Statement::Branch(branch) => {
+                erase_void_values(&mut branch.if_block, void_values, erased);
+                if let Some(else_block) = &mut branch.else_block {
+                    erase_void_values(else_block, void_values, erased);
+                }
+            }
+            Statement::While(wh) => erase_void_values(&mut wh.block, void_values, erased),
+            _ => {}
+        }
+    }
+    let kept = |erased: &[usize], len: usize| (0..len).filter(|i| !erased.contains(i)).collect::<Vec<_>>();
+    super::walk_block(block, &mut |e| match e {
+        Expression::MatchArm(arm) => {
+            for pattern in &mut arm.patterns {
+                let (Some(erased), Some(bindings)) = (erased_of(&pattern.case), &mut pattern.bindings) else {
+                    continue;
+                };
+                let keep = kept(erased, bindings.len());
+                *bindings = keep.iter().filter_map(|&i| bindings.get(i).cloned()).collect();
+            }
+        }
+        Expression::CaseValue(value) => {
+            for choice in &mut value.choices {
+                if let Some(erased) = erased_of(&choice.case) {
+                    choice.index -= erased.iter().filter(|&&i| i < choice.index).count();
+                    let keep = kept(erased, choice.bindings.len());
+                    choice.bindings = keep.iter().filter_map(|&i| choice.bindings.get(i).copied()).collect();
+                }
+            }
+        }
+        _ => {}
+    });
+}
+
+/// Drop the arguments that are erased values (a removed parameter or
+/// binding, or the default of `void`) from every call in a body: the
+/// parameters they fill were erased too.
+fn erase_void_arguments(block: &mut Block, erased: &[String]) {
+    let is_erased = |e: &Expression| match e {
+        Expression::SymbolRef { id, .. } => erased.contains(id),
+        Expression::Default(ty) => ty.name == crate::type_name::VOID && ty.sub_types.is_empty(),
+        _ => false,
+    };
+    super::walk_block(block, &mut |e| {
+        if let Expression::FunctionCall { args, .. } | Expression::MethodCall { args, .. } = e {
+            args.retain(|a| !is_erased(a));
+        }
+    });
 }
 
 fn erase_void_block(block: &mut Block, fields: &[String], params: &[String], returns_void: bool) {

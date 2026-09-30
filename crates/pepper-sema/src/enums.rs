@@ -32,9 +32,21 @@ thread_local! {
     /// (enum name, method name) → whether the method is static, for this
     /// run. Filled by [`resolve_enum_cases`].
     static METHODS: RefCell<HashMap<(String, String), bool>> = RefCell::new(HashMap::new());
-    /// Reference enum name (without type arguments) → its cases and the
-    /// location of its name, for this run. Filled by [`resolve_enum_cases`].
-    static REFERENCE_ENUMS: RefCell<HashMap<String, (Vec<EnumCaseDef>, Loc)>> = RefCell::new(HashMap::new());
+    /// Reference enum name (without type arguments) → its declaration, for
+    /// this run. Filled by [`resolve_enum_cases`].
+    static REFERENCE_ENUMS: RefCell<HashMap<String, ReferenceEnum>> = RefCell::new(HashMap::new());
+}
+
+/// What [`reference_cases`] knows of a reference enum.
+#[derive(Clone)]
+struct ReferenceEnum {
+    cases: Vec<EnumCaseDef>,
+    /// Location of the enum's name.
+    loc: Loc,
+    /// The enum's type parameters.
+    generic_params: Vec<GenericParam>,
+    /// Each case's values' declared types, in `cases` order.
+    payload_types: Vec<Vec<TypeName>>,
 }
 
 /// Make the reference enums among `structs` the ones [`reference_cases`]
@@ -45,7 +57,18 @@ pub fn install_reference_enums(structs: &[StructDef]) {
         r.clear();
         for st in structs {
             if let Some(cases) = &st.enum_cases {
-                r.entry(st.ty.name.clone()).or_insert_with(|| (cases.clone(), st.loc));
+                r.entry(st.ty.name.clone()).or_insert_with(|| {
+                    let field = |case: &EnumCaseDef, name: &str| {
+                        let field = payload_field(&case.name, name);
+                        st.field_members.iter().find(|f| f.name == field).map_or_else(TypeName::auto, |f| f.ty.clone())
+                    };
+                    ReferenceEnum {
+                        cases: cases.clone(),
+                        loc: st.loc,
+                        generic_params: st.generic_params.clone(),
+                        payload_types: cases.iter().map(|c| c.payload.iter().map(|(n, _)| field(c, n)).collect()).collect(),
+                    }
+                });
             }
         }
     });
@@ -53,8 +76,31 @@ pub fn install_reference_enums(structs: &[StructDef]) {
 
 /// The cases of reference enum `ty` (any specialization of it) and the
 /// location of its name, or `None` when `ty` is not a reference enum.
+///
+/// A value whose type is a type parameter that `ty` sets to `void`
+/// (`Ok(value: TValue)` in `Result<void>`) is erased, as a `void` field is
+/// (`specialize_structs::erase_void`), so that case carries one value fewer.
 pub fn reference_cases(ty: &TypeName) -> Option<(Vec<EnumCaseDef>, Loc)> {
-    REFERENCE_ENUMS.with(|r| r.borrow().get(&ty.name).cloned())
+    let found = REFERENCE_ENUMS.with(|r| r.borrow().get(&ty.name).cloned())?;
+    let mut cases = found.cases;
+    for (case, types) in cases.iter_mut().zip(&found.payload_types) {
+        let mut types = types.iter();
+        case.payload.retain(|_| !types.next().is_some_and(|t| is_erased_parameter(t, &found.generic_params, ty)));
+    }
+    Some((cases, found.loc))
+}
+
+/// `declared` is a type parameter among `params` that `ty`'s arguments (or
+/// the parameter's default) set to `void`.
+fn is_erased_parameter(declared: &TypeName, params: &[GenericParam], ty: &TypeName) -> bool {
+    if !declared.sub_types.is_empty() || ty.sub_types.is_empty() {
+        return false;
+    }
+    let Some(index) = params.iter().position(|p| p.name == declared.name) else {
+        return false;
+    };
+    let argument = ty.sub_types.get(index).or(params[index].default.as_ref());
+    argument.is_some_and(|a| a.name == crate::type_name::VOID && a.sub_types.is_empty())
 }
 
 /// `ty` is a reference enum.

@@ -2353,6 +2353,24 @@ fn tuple_literal_label_mismatch() {
 }
 
 #[test]
+fn result_values_are_made_by_its_cases() {
+    assert_eq!(
+        error_of("result_constructed", "main(): int {\n    var r = Result<int>();\n    return 0;\n}\n"),
+        "main.pep:2:13: error: cannot construct enum 'Result<int>' directly: its values are made by its cases\n\
+         \x20   2 |     var r = Result<int>();\n\
+         \x20     |             ^~~~~~~~~~~\n\
+         note: use a case, such as 'Result<int>.Ok'"
+    );
+    assert_eq!(
+        error_of("void_ok_binds", "main(): int {\n    match (Result<void>.Ok) { Ok(v) => {} Err(e) => {} }\n    return 0;\n}\n")
+            .lines()
+            .next()
+            .unwrap(),
+        "main.pep:2:34: error: too many bindings for case 'Ok': expected 0, have 1"
+    );
+}
+
+#[test]
 fn main_with_a_parameter_that_is_not_string_array() {
     assert_eq!(
         error_of("main_params_type", "main(args: int[]): int {\n    return 0;\n}\n"),

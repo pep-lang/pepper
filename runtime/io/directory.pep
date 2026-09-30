@@ -106,9 +106,9 @@ export struct Directory {
     static IoResult<Directory> open(Path path) {
         var m = _io_sys_stat(path, true);
         if (m.is_err()) {
-            return IoResult<Directory>.err(m._error);
+            return IoResult<Directory>.err(m.error());
         }
-        if (!m._value.is_directory) {
+        if (!m.value().is_directory) {
             return IoResult<Directory>.err(IoError(_io_sys_code_not_a_directory(), "not a directory"));
         }
         var d = Directory();
@@ -229,16 +229,16 @@ export struct Directory {
     static IoResult<void> remove_all(Path path) {
         var m = _io_sys_stat(path, false);
         if (m.is_err()) {
-            return IoResult<void>.err(m._error);
+            return IoResult<void>.err(m.error());
         }
-        if (m._value.is_symlink || !m._value.is_directory) {
-            return _io_sys_remove_link(path, m._value.is_directory);
+        if (m.value().is_symlink || !m.value().is_directory) {
+            return _io_sys_remove_link(path, m.value().is_directory);
         }
         var list = _io_sys_list(path);
         if (list.is_err()) {
-            return IoResult<void>.err(list._error);
+            return IoResult<void>.err(list.error());
         }
-        var entries = list._value;
+        var entries = list.value();
         ulong i = 0;
         while (i < entries.count()) {
             var entry = entries[i];

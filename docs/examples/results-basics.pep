@@ -11,7 +11,6 @@ main(): int {
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
     assert(good.value() == 2, "value() returns the value");
-    assert(good.value() == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
     assert(bad.is_err(), "x does not parse");
@@ -25,9 +24,13 @@ main(): int {
     Result<int, Error> spelled_out = good;
     assert(spelled_out.value() == 2, "the same type");
 
-    # A default-constructed Result is an Err with a default error.
-    var empty = Result<int>();
-    assert(empty.is_err(), "Result() is an Err");
+    # Result is an enum: its cases build values too, and match reads them.
+    var parsed = Result<int>.Ok(7);
+    var doubled = match (parsed) { Ok(n) => n * 2, Err(e) => 0 };
+    assert(doubled == 14, "match binds the value");
+    if (bad is Err(e)) {
+        assert(e.message.length() > 0, "is binds the error");
+    }
 
     # An operation with no value to return uses void.
     var done = Result<void>.ok();

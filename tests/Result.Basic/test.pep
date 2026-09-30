@@ -20,9 +20,9 @@ main(): int {
     if (!c.is_ok() || d.is_ok()) { return 8; }
     if (d.error().message.length() != 1) { return 9; }
 
-    # default ctor is an Err.
-    var e = Result<int>();
-    if (e.is_ok()) { return 10; }
+    # The cases build results too, and a match reads them.
+    var e = Result<int>.Err(Error("e"));
+    if (match (e) { Ok(v) => true, Err(x) => false }) { return 10; }
 
     # void: the value type of a result with nothing to return.
     var n = Result<void>.ok();

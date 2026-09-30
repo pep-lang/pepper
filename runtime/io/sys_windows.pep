@@ -233,7 +233,7 @@ import "directory";
             # (opened with BACKUP_SEMANTICS); report it as POSIX's EISDIR does.
             var m = _io_sys_fstat(h);
             if (m.is_ok()) {
-                if (m._value.is_directory) {
+                if (m.value().is_directory) {
                     code = 336;          # DIRECTORY_NOT_SUPPORTED: is_is_a_directory
                 }
             }
@@ -343,10 +343,10 @@ import "directory";
 [Target(OS(Windows))] export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
     var h = _io_win_open_query(path, follow);
     if (h.is_err()) {
-        return IoResult<Metadata>.err(h._error);
+        return IoResult<Metadata>.err(h.error());
     }
-    var m = _io_sys_fstat(h._value);
-    CloseHandle(h._value);
+    var m = _io_sys_fstat(h.value());
+    CloseHandle(h.value());
     return m;
 }
 
@@ -374,7 +374,7 @@ import "directory";
         if (e.code == 2) {
             var m = _io_sys_stat(path, true);
             if (m.is_ok()) {
-                if (m._value.is_directory) {
+                if (m.value().is_directory) {
                     return IoResult<DirEntry[]>.ok(out);
                 }
             }
@@ -498,18 +498,18 @@ import "directory";
 [Target(OS(Windows))] export _io_sys_realpath(path: Path): IoResult<Path> {
     var h = _io_win_open_query(path, true);
     if (h.is_err()) {
-        return IoResult<Path>.err(h._error);
+        return IoResult<Path>.err(h.error());
     }
-    var need = GetFinalPathNameByHandleW(h._value, __null, 0, 0);
+    var need = GetFinalPathNameByHandleW(h.value(), __null, 0, 0);
     if (need == 0) {
         var e = IoError.last();
-        CloseHandle(h._value);
+        CloseHandle(h.value());
         return IoResult<Path>.err(e);
     }
     var buf = _pep_malloc((need as ulong) * 2 + 2) as __ptr<u16>;
-    var n = GetFinalPathNameByHandleW(h._value, buf, need, 0);
+    var n = GetFinalPathNameByHandleW(h.value(), buf, need, 0);
     var code = GetLastError();
-    CloseHandle(h._value);
+    CloseHandle(h.value());
     if (n == 0) {
         _pep_free(buf);
         return IoResult<Path>.err(IoError(code, _io_sys_error_message(code)));

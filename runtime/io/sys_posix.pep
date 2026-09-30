@@ -391,9 +391,9 @@ import "directory";
             # DT_UNKNOWN: the file system did not say; ask lstat.
             var m = _io_sys_stat(entry.path, false);
             if (m.is_ok()) {
-                entry.is_file = m._value.is_file;
-                entry.is_directory = m._value.is_directory;
-                entry.is_symlink = m._value.is_symlink;
+                entry.is_file = m.value().is_file;
+                entry.is_directory = m.value().is_directory;
+                entry.is_symlink = m.value().is_symlink;
             }
         } else {
             entry.is_directory = kind == 4;       # DT_DIR

@@ -673,6 +673,30 @@ test(): int {{
 }
 
 #[test]
+fn census_ternary_of_variables_copies() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var a = Tally();
+    var b = Tally();
+    var c = 1;
+    {{
+        var x = c ? a : b;
+        if (__refcount<Tally>(a) != 2) {{ return -1; }}
+    }}
+    if (__refcount<Tally>(a) != 1) {{ return -2; }}
+    if (a.alive != 1) {{ return -3; }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0, "a ternary of two variables is a read: the new slot copies it");
+    assert_eq!(delta, 0);
+}
+
+#[test]
 fn census_break_inner_loop() {
     let (code, delta) = compile_jit_census(
         &format!(

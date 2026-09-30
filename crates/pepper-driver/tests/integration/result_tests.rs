@@ -155,14 +155,55 @@ test(): int {
 }
 
 #[test]
-fn default_ctor_is_err() {
+fn match_on_result() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+parse(text: String): Result<int> {
+    if (text == "42") { return Result<int>.Ok(42); }
+    return Result<int>.Err(Error("not a number"));
+}
+
 test(): int {
-    var r = Result<int>();
-    if (r.is_ok()) { return -1; }
-    if (!r.is_err()) { return -2; }
+    var n = match (parse("42")) { Ok(v) => v, Err(e) => -1 };
+    if (n != 42) { return -1; }
+    match (parse("x")) {
+        Ok(v) => { return -2; }
+        Err(e) => { if (e.message != "not a number") { return -3; } }
+    }
+    if (!(parse("42") is Ok)) { return -4; }
+    if (parse("x") is Err(e)) {
+        if (e.message.length() != 12) { return -5; }
+    } else {
+        return -6;
+    }
+    var text = match (Result<String>.ok("s")) { Ok(s) => s, Err(e) => e.message };
+    if (text != "s") { return -7; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn void_result_ok_carries_nothing() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+check(n: int): Result<void> {
+    if (n < 0) { return Result<void>.Err(Error("negative")); }
+    return Result<void>.Ok;
+}
+
+test(): int {
+    match (check(1)) {
+        Ok => {}
+        Err(e) => { return -1; }
+    }
+    check(1).value();
+    if (check(-1) is Ok) { return -2; }
+    if (check(-1).error().message != "negative") { return -3; }
     return 0;
 }"#
         ),

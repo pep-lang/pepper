@@ -13,9 +13,11 @@ member.
 
 ## Creating and checking results
 
-`Result<TValue, TError>` works like Rust's `Result<T, E>`. You build one with
-the static functions `ok` and `err`, and ask which it is with `is_ok()` and
-`is_err()`:
+`Result<TValue, TError>` works like Rust's `Result<T, E>`. It is an
+[enum](enums.md) with two cases, `Ok(value: TValue)` and `Err(error: TError)`.
+You build one with a case or with the static functions `ok` and `err`, and
+read it with [`match`](enums.md#match), [`is`](enums.md#match-expressions-is-and-literal-patterns),
+or its methods:
 
 ```pepper
 {{#include ../../examples/results-basics.pep}}
@@ -25,8 +27,8 @@ The pieces:
 
 | Member | What it does |
 |---|---|
-| `Result<T>.ok(value)` | Creates an Ok result holding `value`. |
-| `Result<T>.err(error)` | Creates an Err result holding `error`. |
+| `Result<T>.Ok(value)`, `Result<T>.ok(value)` | Creates an Ok result holding `value`. |
+| `Result<T>.Err(error)`, `Result<T>.err(error)` | Creates an Err result holding `error`. |
 | `is_ok()`, `is_err()` | Report which kind the result is. |
 | `value()` | Returns the value; panics with `Result.value on an Err value` if the result is an Err. |
 | `error()` | Returns the error; panics with `Result.error on an Ok value` if the result is Ok. |
@@ -38,29 +40,39 @@ does generate a separate specialization for each spelling). `Error` is a struct
 with one field, `String message`: `Error("boom").message` is `"boom"`.
 
 Use `value()` when an Err would be a bug in your program, since it stops the
-program. When an Err is an expected outcome, test with `is_ok()` or `is_err()`,
-or supply a fallback with `ok_or`.
+program. When an Err is an expected outcome, `match` on the result, test it
+with `is` (`if (r is Err(e)) { ... }`) or `is_ok()`, or supply a fallback with
+`ok_or`.
 
 ### Check before you read
 
-Pepper has no union types, so a `Result` stores both a value and an error in
-private fields, and only one of them is meaningful. `value()` and `error()`
-check which one you asked for and panic on the wrong one, so call `value()`
-only after checking `is_ok()`, and `error()` only after checking `is_err()`.
+A `Result` holds either its value or its error, never both. A `match` or an
+`is` test reads the one it holds, so it cannot pick the wrong one. `value()`
+and `error()` panic on the wrong one, so call `value()` only after checking
+`is_ok()`, and `error()` only after checking `is_err()`.
+
+A slot of type `Result` that is never given a value holds null, as for any
+enum whose cases carry values: `Result<int>()` is an error, since only the
+cases make values.
 
 ### Results with no value
 
 An operation that has nothing to return on success, such as deleting a file,
 uses `void` as its value type, like `Result<(), E>` in Rust. A `void` type
-argument erases what it types, so `Result<void>` holds no value, `ok()`
-takes no argument, and `value()` returns nothing: calling it only checks that
-the result is Ok. Using that call as a value, as in `var x = done.value();`, is
-a compile error, as it is for any function that returns `void`.
+argument erases what it types, so in `Result<void>` the case `Ok` carries
+nothing, `ok()` takes no argument, and `value()` returns nothing: calling it
+only checks that the result is Ok. Using that call as a value, as in
+`var x = done.value();`, is a compile error, as it is for any function that
+returns `void`.
 
 ```pepper
-var done = Result<void>.ok();
+var done = Result<void>.Ok;   # or Result<void>.ok()
 var failed = Result<void>.err(Error("disk full"));
 done.value();   # panics if `done` is an Err
+match (failed) {
+    Ok => {}
+    Err(e) => { print(e.message); }
+}
 ```
 
 ## Custom error types and propagation
@@ -75,8 +87,8 @@ build a new error from the old one:
 ```
 
 Pepper does not yet have a shorthand for propagation (such as Rust's `?`
-operator), and [`match`](enums.md#match) does not work on a `Result` yet, so
-each fallible call is checked with `if` as shown above.
+operator), so each fallible call is checked with `if`, `is` or `match` as
+shown above.
 
 ## Results from the io module
 

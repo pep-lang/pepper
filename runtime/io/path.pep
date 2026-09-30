@@ -550,7 +550,7 @@ export struct Path {
         if (r.is_err()) {
             return false;
         }
-        return r._value.is_file;
+        return r.value().is_file;
     }
 
     ## Returns whether the path names a directory, following symlinks.
@@ -562,7 +562,7 @@ export struct Path {
         if (r.is_err()) {
             return false;
         }
-        return r._value.is_directory;
+        return r.value().is_directory;
     }
 
     ## Deprecated: use `is_directory` instead. Returns whether the path
