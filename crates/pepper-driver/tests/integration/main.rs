@@ -42,6 +42,7 @@ mod multidim_index_tests;
 mod overload_tests;
 mod nested_array_tests;
 mod nested_hash_tests;
+mod optional_tests;
 mod param_default_tests;
 mod pep_fmt_tests;
 mod platform_tests;

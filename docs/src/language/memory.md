@@ -36,7 +36,8 @@ A struct-typed variable or field that has not been given a value, such as
 `var next: Account;`, is *null*: it refers to no object. Reading a field or
 calling a method through a null reference crashes the program. Use `===` or
 `!==` to check whether two references name the same object, or whether one is
-null (`next === __null`).
+null (`next === __null`). For a value that may be absent, prefer
+[`Optional<T>`](optionals.md), whose type says so.
 
 ## When objects are destroyed
 

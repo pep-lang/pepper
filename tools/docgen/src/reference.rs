@@ -23,6 +23,7 @@ const PAGES: &[(&str, &str)] = &[
     ("scoped.pep", "Scoped"),
     ("weak.pep", "Weak"),
     ("result.pep", "Result"),
+    ("optional.pep", "Optional"),
     ("atomic.pep", "Atomic"),
     ("io/module.pep", "The io module"),
     ("io/types.pep", "Errors and platform types"),
