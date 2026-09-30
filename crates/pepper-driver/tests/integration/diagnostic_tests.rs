@@ -1803,6 +1803,34 @@ fn extension_and_trait_overload_diagnostics() {
 }
 
 #[test]
+fn enum_method_errors_point_at_the_method() {
+    let source = |body: &str| {
+        format!(
+            "enum Light {{\n    Red,\n    wait(extra: int): int {{ return extra; }}\n    static first(): Light {{ return Light.Red; }}\n}}\nmain(): int {{\n    {}\n    return 0;\n}}\n",
+            body
+        )
+    };
+    assert_eq!(
+        error_of("enum_method_not_static", &source("Light.wait(1);")),
+        "main.pep:7:11: error: 'wait' is not static: call it on a value of 'Light', such as 'Light.Red.wait()'\n\
+         \x20   7 |     Light.wait(1);\n\
+         \x20     |           ^~~~"
+    );
+    assert_eq!(
+        error_of("enum_method_too_many_arguments", &source("Light.Red.wait(1, 2);")),
+        "main.pep:7:15: error: too many arguments to 'wait': expected 1, have 2\n\
+         \x20   7 |     Light.Red.wait(1, 2);\n\
+         \x20     |               ^~~~"
+    );
+    assert_eq!(
+        error_of("enum_method_missing", &source("Light.Red.nope();")),
+        "main.pep:7:15: error: no member named 'nope' in 'Light'\n\
+         \x20   7 |     Light.Red.nope();\n\
+         \x20     |               ^~~~"
+    );
+}
+
+#[test]
 fn tuple_labels_all_or_none() {
     assert_eq!(
         error_of("tuple_labels_all_or_none", "f(): (line: int, int) {\n    return (1, 2);\n}\n"),
@@ -1812,6 +1840,21 @@ fn tuple_labels_all_or_none() {
          main.pep:1:13: note: element labeled 'line' here\n\
          \x20   1 | f(): (line: int, int) {\n\
          \x20     |             ^~~"
+    );
+}
+
+#[test]
+fn deprecated_enum_method_warns() {
+    let source = "enum Light {\n    Red,\n    go(): bool { return true; }\n    [Deprecated(\"use 'go' instead\", \"go\")]\n    may_go(): bool { return true; }\n}\ntest(): int {\n    var l = Light.Red;\n    l.may_go();\n    return 0;\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:9:7: warning: 'may_go' is deprecated: use 'go' instead [deprecated]\n\
+         \x20   9 |     l.may_go();\n\
+         \x20     |       ^~~~~~\n\
+         \x20     |       go\n\
+         main.pep:5:5: note: 'may_go' declared here\n\
+         \x20   5 |     may_go(): bool { return true; }\n\
+         \x20     |     ^~~~~~"
     );
 }
 

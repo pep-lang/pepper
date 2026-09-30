@@ -328,6 +328,17 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             if this_type.is_empty() || this_type.is_auto() {
                 return TypeName::auto();
             }
+            // A method of an enum is the function `E::m` (see `enums`).
+            if crate::enums::method_is_static(&this_type.to_string(), method) == Some(false) {
+                let mut all = vec![(**this).clone()];
+                all.extend(args.iter().cloned());
+                let call = Expression::FunctionCall {
+                    function: crate::enums::method_name(&this_type.to_string(), method),
+                    args: all,
+                    loc: *loc,
+                };
+                return type_of_expr(&call, scopes, current_struct);
+            }
             if scopes.overloads.is_method_set(&this_type, method) {
                 return select_method_overload(&this_type, method, args, *loc, scopes, current_struct)
                     .map(|c| c.ret)
@@ -943,6 +954,22 @@ fn resolve_expression(
         if let Expression::FunctionCall { function, args, .. } = e {
             if let Some((callee, _)) = scopes.value_callee(function, current) {
                 *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
+                return;
+            }
+        }
+        // `c.name()` on an enum value calls the function `Color::name(c)`.
+        if let Expression::MethodCall { this, method, args, loc } = e {
+            let this_type = type_of_expr(this, scopes, current);
+            if crate::enums::is_enum(&this_type.to_string()) {
+                let this = std::mem::replace(this.as_mut(), Expression::ThisRef);
+                match crate::enums::call_on_value(&this_type.to_string(), method, this.clone(), std::mem::take(args), *loc) {
+                    Some(call) => *e = call,
+                    None => {
+                        if let Expression::MethodCall { this: slot, .. } = e {
+                            **slot = this;
+                        }
+                    }
+                }
                 return;
             }
         }

@@ -487,7 +487,7 @@ fn completion_after_an_enum_name_lists_its_cases() {
     let ast = parse_after_dot(&uri, &text, offset).expect("parses with a placeholder");
     let items = enum_cases_before(&ast, &text, offset).expect("cases");
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert_eq!(labels, ["Red", "Amber", "Green"]);
+    assert_eq!(labels, ["Red", "Amber", "Green", "from_value"]);
     assert_eq!(items[0].kind, Some(CompletionItemKind::ENUM_MEMBER));
 }
 

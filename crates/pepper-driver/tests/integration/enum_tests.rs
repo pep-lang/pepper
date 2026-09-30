@@ -199,6 +199,31 @@ test(): int {
 }
 
 #[test]
+fn a_wide_enum_field_of_a_generic_struct_starts_at_its_default() {
+    // The constructor's zero of `T _value` converts as the enum's long, not
+    // as an int.
+    let src = r#"
+enum Wide: long {
+    Big = 5000000000,
+    Bigger = 6000000000,
+}
+struct Holder<T> {
+    T _value;
+    construct() { }
+    get(): T { return this._value; }
+}
+test(): int {
+    var h = Holder<Wide>();
+    var total = 0;
+    if (h.get() == Wide.Big) { total += 1; }
+    if (Wide.from_value(6000000000).value() == Wide.Bigger) { total += 10; }
+    return total;
+}
+"#;
+    assert_eq!(run(src), 11);
+}
+
+#[test]
 fn match_on_a_call_result_and_inside_a_closure() {
     let src = format!(
         "{}{}",
@@ -355,4 +380,158 @@ test(): int {
 }
 "#;
     assert_eq!(run(src), 1111);
+}
+
+// ── Methods (phase 2) ──
+
+const LIGHT: &str = r#"
+enum Light: u8 {
+    Red,
+    Amber = 5,
+    Green,
+
+    ## Whether traffic may go.
+    may_go(): bool {
+        return this == Light.Green;
+    }
+
+    next(): Light {
+        match (this) {
+            Red => { return Light.Green; }
+            Amber => { return Light.Red; }
+            Green => { return Light.Amber; }
+        }
+        return this;
+    }
+
+    # A bare call of another method acts on `this`.
+    after_two(): Light {
+        return next().next();
+    }
+
+    wait(extra: int): int {
+        if (may_go()) { return 0; }
+        return 30 + extra;
+    }
+
+    static first(): Light {
+        return Light.Red;
+    }
+}
+"#;
+
+#[test]
+fn methods_take_the_value_as_this() {
+    let src = format!(
+        "{}{}",
+        LIGHT,
+        r#"
+test(): int {
+    var light = Light.first();
+    var total = 0;
+    if (!light.may_go()) { total += 1; }
+    if (light.next().may_go()) { total += 10; }
+    if (light.after_two() == Light.Amber) { total += 100; }
+    total += Light.Amber.wait(2) * 1000;
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 1 + 10 + 100 + 32 * 1000);
+}
+
+#[test]
+fn name_spells_the_case() {
+    let src = format!(
+        "{}{}",
+        LIGHT,
+        r#"
+test(): int {
+    var total = 0;
+    if (Light.Red.name() == "Red") { total += 1; }
+    var l = Light.Green;
+    if (l.name() == "Green") { total += 10; }
+    if (l.next().name() == "Amber") { total += 100; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 111);
+}
+
+#[test]
+fn from_value_finds_the_case_or_fails() {
+    let src = format!(
+        "{}{}",
+        LIGHT,
+        r#"
+test(): int {
+    var total = 0;
+    var found = Light.from_value(6);
+    if (found.is_ok() and found.value() == Light.Green) { total += 1; }
+    var missing = Light.from_value(3);
+    if (!missing.is_ok()) { total += 10; }
+    if (missing.error().message == "no case of 'Light' has this value") { total += 100; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 111);
+}
+
+#[test]
+fn enums_key_hash_maps_and_fill_atomics() {
+    let src = format!(
+        "{}{}",
+        COLOR,
+        r#"
+test(): int {
+    var counts = HashMap<Color, int>();
+    counts[Color.Red] = 1;
+    counts[Color.Blue] = 3;
+    var seen = HashSet<Color>();
+    seen.insert(Color.Green);
+    var a = Atomic<Color>(Color.Red);
+    a.store(Color.Blue);
+    var total = counts[Color.Blue];
+    if (seen.contains(Color.Green) and !seen.contains(Color.Red)) { total += 10; }
+    if (a.load() == Color.Blue) { total += 100; }
+    if (a.compare_exchange(Color.Blue, Color.Green) and a.load() == Color.Green) { total += 1000; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 1113);
+}
+
+#[test]
+fn a_method_is_called_through_a_type_parameter() {
+    let src = format!(
+        "{}{}",
+        LIGHT,
+        r#"
+describe<T>(value: T): String {
+    return value.name();
+}
+test(): int {
+    if (describe<Light>(Light.Amber) == "Amber") { return 1; }
+    return 0;
+}
+"#
+    );
+    assert_eq!(run(&src), 1);
+}
+
+#[test]
+fn method_errors() {
+    let with = |body: &str| error_of(&format!("{}test(): int {{ {} return 0; }}", LIGHT, body));
+    assert!(with("Light.Red.nope();").contains("no member named 'nope' in 'Light'"));
+    assert!(with("Light.nope();").contains("no member named 'nope' in 'Light'"));
+    assert!(with("Light.may_go();").contains("'may_go' is not static: call it on a value of 'Light', such as 'Light.Red.may_go()'"));
+    assert!(with("Light.Red.first();").contains("'first' is a static method of 'Light': call it as 'Light.first(...)'"));
+    let declared = |member: &str| error_of(&format!("enum E {{ A\n    {}\n}}\ntest(): int {{ return 0; }}", member));
+    assert!(declared("name(): String { return \"\"; }").contains("'name' is built into every enum and cannot be redeclared"));
+    assert!(error_of(&format!("{}extend Light {{ extra(): int {{ return 1; }} }}\ntest(): int {{ return 0; }}", LIGHT))
+        .contains("cannot extend enum 'Light': declare its methods inside the enum"));
+    assert!(declared("pick<T>(x: T): T { return x; }").contains("methods of an enum cannot be generic yet ('pick')"));
 }

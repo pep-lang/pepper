@@ -604,6 +604,16 @@ fn enum_case_in(ast: &ast::Module, lhs: &ast::Expression, name: &str) -> Option<
     body.cases.iter().any(|c| c.name == name).then(|| format!("{}.{}", id, name))
 }
 
+/// The signature of an enum method named `name` (`name(): String`), as its
+/// caller writes it: without the value it is called on.
+fn enum_method_signature(module: &SemaModule, name: &str) -> Option<String> {
+    let f = module.functions.iter().find(|f| pepper_sema::enums::method_of(&f.name).is_some_and(|(_, m)| m == name))?;
+    let parameters: Vec<String> =
+        f.parameters.iter().filter(|p| p.name != "this").map(|p| format!("{}: {}", p.name, p.ty)).collect();
+    let is_static = f.parameters.first().is_none_or(|p| p.name != "this");
+    Some(format!("{}{}({}): {}", if is_static { "static " } else { "" }, name, parameters.join(", "), f.ty))
+}
+
 /// The cases of the enum whose name ends the text before `offset` with a
 /// `.` (`Color.|`), as completion items.
 fn enum_cases_before(ast: &ast::Module, text: &str, offset: usize) -> Option<Vec<CompletionItem>> {
@@ -615,17 +625,29 @@ fn enum_cases_before(ast: &ast::Module, text: &str, offset: usize) -> Option<Vec
         ast::Declaration::Struct(s) if s.name == name => s.enumeration.as_ref(),
         _ => None,
     })?;
-    Some(
-        body.cases
-            .iter()
-            .map(|c| CompletionItem {
-                label: c.name.clone(),
-                kind: Some(CompletionItemKind::ENUM_MEMBER),
-                detail: Some(format!("{}.{}", name, c.name)),
-                ..Default::default()
-            })
-            .collect(),
-    )
+    let methods = ast.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Struct(s) if s.name == name => Some(&s.methods),
+        _ => None,
+    })?;
+    let cases = body.cases.iter().map(|c| CompletionItem {
+        label: c.name.clone(),
+        kind: Some(CompletionItemKind::ENUM_MEMBER),
+        detail: Some(format!("{}.{}", name, c.name)),
+        ..Default::default()
+    });
+    // Its static methods, `from_value` included.
+    let statics = methods
+        .iter()
+        .filter(|m| m.is_static)
+        .map(|m| (m.name.clone(), m.to_string()))
+        .chain([("from_value".to_string(), format!("static from_value(value): Result<{}>", name))])
+        .map(|(label, detail)| CompletionItem {
+            label,
+            kind: Some(CompletionItemKind::METHOD),
+            detail: Some(detail),
+            ..Default::default()
+        });
+    Some(cases.chain(statics).collect())
 }
 
 /// The struct `name`, as the document spells it: the document's own (which
@@ -1284,6 +1306,7 @@ impl PepperLsp {
                 ast::Expression::MemberAccess { lhs, name, .. } => {
                     let rendered = sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
+                        .or_else(|| sema.and_then(|m| enum_method_signature(m, name)))
                         .unwrap_or_else(|| "unknown".to_string());
                     Some(Hover { contents: md(with_doc(format!(".`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
                 }

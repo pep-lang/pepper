@@ -1056,10 +1056,6 @@ fn enum_def(decl: &ast::StructDecl) -> Result<EnumDef, Diagnostic> {
         ))
         .at(loc(p.name_span)));
     }
-    if let Some(m) = decl.methods.first() {
-        return Err(Diagnostic::error(format!("methods on enums are not supported yet ('{}')", decl.name))
-            .at(loc(m.name_span)));
-    }
     let representation = match &body.representation {
         Some(t) => {
             let ty = type_name_from(t);
@@ -1130,6 +1126,29 @@ fn enum_def(decl: &ast::StructDecl) -> Result<EnumDef, Diagnostic> {
         attributes: decl.attributes.clone(),
         loc: loc(decl.name_span),
     })
+}
+
+/// A method of an enum, as the free function `E::m` (see
+/// `enums::method_name`): an instance method takes the value as its first
+/// parameter, `this`, by value.
+fn enum_method(decl: &ast::StructDecl, m: &ast::FunctionDecl) -> Result<FunctionDef, Diagnostic> {
+    let at = loc(m.name_span);
+    if let Some(p) = m.generic_params.first() {
+        return Err(Diagnostic::error(format!("methods of an enum cannot be generic yet ('{}')", m.name))
+            .at(loc(p.name_span)));
+    }
+    if m.is_indexer || !m.name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+        return Err(Diagnostic::error(format!("enum '{}' cannot declare operators or indexers yet", decl.name)).at(at));
+    }
+    if crate::enums::BUILT_IN_METHODS.contains(&m.name.as_str()) {
+        return Err(Diagnostic::error(format!("'{}' is built into every enum and cannot be redeclared", m.name)).at(at));
+    }
+    let mut f = function_def(m, None)?;
+    f.name = crate::enums::method_name(&decl.name, &m.name);
+    if !m.is_static {
+        f.parameters.insert(0, crate::enums::this_parameter(&decl.name));
+    }
+    Ok(f)
 }
 
 /// The smallest and largest value of an integer type.
@@ -1237,7 +1256,12 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
                     out.functions.push(function_def(f, None)?);
                 }
             }
-            ast::Declaration::Struct(s) if s.enumeration.is_some() => out.enums.push(enum_def(s)?),
+            ast::Declaration::Struct(s) if s.enumeration.is_some() => {
+                out.enums.push(enum_def(s)?);
+                for m in &s.methods {
+                    out.functions.push(enum_method(s, m)?);
+                }
+            }
             ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
             ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
             ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),

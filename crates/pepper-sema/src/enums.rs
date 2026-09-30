@@ -29,6 +29,73 @@ thread_local! {
     /// Enum name → its representation's integer type name and its default
     /// value, for this run.
     static REPRESENTATIONS: RefCell<HashMap<String, (String, i64)>> = RefCell::new(HashMap::new());
+    /// (enum name, method name) → whether the method is static, for this
+    /// run. Filled by [`resolve_enum_cases`].
+    static METHODS: RefCell<HashMap<(String, String), bool>> = RefCell::new(HashMap::new());
+}
+
+/// The methods every enum has without declaring them.
+pub const BUILT_IN_METHODS: [&str; 2] = ["name", "from_value"];
+
+/// The free function a method `method` of enum `enum_name` becomes:
+/// `Color::name`. An instance method takes the value as its first
+/// parameter, `this` ([`this_parameter`]).
+pub fn method_name(enum_name: &str, method: &str) -> String {
+    format!("{}::{}", enum_name, method)
+}
+
+/// The enum and method a function named by [`method_name`] belongs to.
+pub fn method_of(function: &str) -> Option<(&str, &str)> {
+    let (enum_name, method) = function.split_once("::")?;
+    is_enum(enum_name).then_some((enum_name, method))
+}
+
+/// The `this` parameter of an instance method of enum `enum_name`: the
+/// value, passed by value like any integer.
+pub fn this_parameter(enum_name: &str) -> VariableDef {
+    VariableDef {
+        name: "this".to_string(),
+        ty: TypeName::new(enum_name),
+        default: None,
+        hidden: false,
+        kind: Kind::Param,
+        attributes: vec![],
+        loc: Loc::NONE,
+        type_loc: Loc::NONE,
+        is_const: true,
+    }
+}
+
+/// Whether enum `enum_name` has a method `method`, and if so whether it is
+/// static.
+pub fn method_is_static(enum_name: &str, method: &str) -> Option<bool> {
+    METHODS.with(|m| m.borrow().get(&(enum_name.to_string(), method.to_string())).copied())
+}
+
+/// A call of method `method` on a value of enum `enum_name`, as a call of
+/// its function: `c.name()` is `Color::name(c)`. Reports a method the enum
+/// lacks, or a static one called on a value, at `loc`, and returns `None`
+/// then.
+pub fn call_on_value(enum_name: &str, method: &str, this: Expression, args: Vec<Expression>, loc: Loc) -> Option<Expression> {
+    match method_is_static(enum_name, method) {
+        Some(false) => {
+            let mut all = vec![this];
+            all.extend(args);
+            Some(Expression::FunctionCall { function: method_name(enum_name, method), args: all, loc })
+        }
+        Some(true) => {
+            report(Diagnostic::error(format!(
+                "'{}' is a static method of '{}': call it as '{}.{}(...)'",
+                method, enum_name, enum_name, method
+            ))
+            .at(loc));
+            None
+        }
+        None => {
+            report(Diagnostic::error(format!("no member named '{}' in '{}'", method, enum_name)).at(loc));
+            None
+        }
+    }
 }
 
 /// Make `enums` the enums [`representation`] knows, replacing any earlier
@@ -127,8 +194,54 @@ pub fn resolve_enum_cases(module: &mut Module) {
     if module.enums.is_empty() {
         return;
     }
+    for ext in &module.extensions {
+        if is_enum(&ext.target.name) {
+            report(
+                Diagnostic::error(format!(
+                    "cannot extend enum '{}': declare its methods inside the enum",
+                    pepper_parser::namespace::demangle_name(&ext.target.name)
+                ))
+                .at(ext.loc),
+            );
+        }
+    }
+    add_built_in_methods(module);
+    install_methods(module);
+    method_bodies(module);
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
     let mut resolve = |expr: &mut Expression| {
+        // `Color.from_value(1)`: a static method called on the enum.
+        if let Expression::MethodCall { this, method, args, loc } = expr
+            && let Expression::SymbolRef { id, .. } = this.as_ref()
+            && let Some(e) = enums.get(id)
+        {
+            match method_is_static(&e.name, method) {
+                Some(true) => {
+                    *expr = Expression::FunctionCall {
+                        function: method_name(&e.name, method),
+                        args: std::mem::take(args),
+                        loc: *loc,
+                    }
+                }
+                Some(false) => report(
+                    Diagnostic::error(format!(
+                        "'{}' is not static: call it on a value of '{}', such as '{}.{}.{}()'",
+                        method,
+                        e.name,
+                        e.name,
+                        e.cases.first().map_or("Case", |c| c.name.as_str()),
+                        method
+                    ))
+                    .at(*loc),
+                ),
+                None => report(
+                    Diagnostic::error(format!("no member named '{}' in '{}'", method, e.name))
+                        .at(*loc)
+                        .with_note(format!("'{}' declared here", e.name), Some(e.loc)),
+                ),
+            }
+            return;
+        }
         // Every located `as E` here is one the user wrote: the cases below
         // are not resolved yet, and synthesized defaults have no location.
         if let Expression::Cast { ty, loc, .. } = expr
@@ -190,6 +303,127 @@ pub fn resolve_enum_cases(module: &mut Module) {
             global.default = default_expression(&global.ty);
         }
         crate::passes::walk_global(global, &mut resolve);
+    }
+}
+
+/// Add each enum's built-in methods (`BUILT_IN_METHODS`), from the cases
+/// that survived platform selection:
+///
+/// - `name(): String`, the case's name as written (`""` for a value that
+///   names no case, which only `as`-free code cannot make);
+/// - `static from_value(value: R): Result<E>`, the case whose value is
+///   `value`, or an error when none has it.
+fn add_built_in_methods(module: &mut Module) {
+    let mut added = vec![];
+    for e in &module.enums {
+        let ty = TypeName::new(&e.name);
+        let this = || Expression::SymbolRef { id: "this".to_string(), ty: ty.clone(), loc: Loc::NONE };
+        let returns = |value: Expression| Statement::Return(ReturnStatement { expr: Some(value), loc: Loc::NONE });
+        let text = |value: &str| Expression::StringLiteral { value: value.to_string(), is_raw: false, loc: Loc::NONE };
+        let when = |condition: Expression, then: Statement| {
+            Statement::Branch(Branch {
+                condition,
+                if_block: Block { name: String::new(), items: vec![then], attributes: vec![] },
+                else_block: None,
+            })
+        };
+        let equal = |lhs: Expression, rhs: Expression| Expression::Binary {
+            op: BinaryOp::Equal,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+            loc: Loc::NONE,
+        };
+        let function = |name: &str, ty: TypeName, parameters: Vec<VariableDef>, items: Vec<Statement>, is_static: bool| FunctionDef {
+            trait_default: None,
+            name: method_name(&e.name, name),
+            ty,
+            generic_params: vec![],
+            parameters,
+            body: Some(Block { name: String::new(), items, attributes: vec![] }),
+            parent: None,
+            is_static,
+            is_indexer: false,
+            is_generic_func: false,
+            attributes: vec![],
+            loc: e.loc,
+            owner: Loc::NONE,
+        };
+
+        let mut items: Vec<Statement> =
+            e.cases.iter().map(|c| when(equal(this(), case_value(e, c, Loc::NONE)), returns(text(&c.name)))).collect();
+        items.push(returns(text("")));
+        added.push(function("name", TypeName::new("String"), vec![this_parameter(&e.name)], items, false));
+
+        let result = format!("Result<{}>", e.name);
+        let make = |method: &str, arg: Expression| Expression::MethodCall {
+            this: Box::new(Expression::FunctionCall { function: result.clone(), args: vec![], loc: Loc::NONE }),
+            method: method.to_string(),
+            args: vec![arg],
+            loc: Loc::NONE,
+        };
+        let value = || Expression::SymbolRef { id: "value".to_string(), ty: e.representation.clone(), loc: Loc::NONE };
+        let mut items: Vec<Statement> = e
+            .cases
+            .iter()
+            .map(|c| {
+                let literal = Expression::Cast {
+                    expr: Box::new(Expression::IntLiteral(c.value)),
+                    ty: e.representation.clone(),
+                    loc: Loc::NONE,
+                };
+                when(equal(value(), literal), returns(make("ok", case_value(e, c, Loc::NONE))))
+            })
+            .collect();
+        let message = format!("no case of '{}' has this value", pepper_parser::namespace::demangle_name(&e.name));
+        items.push(returns(make("err", text(&message))));
+        let mut parameter = this_parameter(&e.name);
+        parameter.name = "value".to_string();
+        parameter.ty = e.representation.clone();
+        added.push(function("from_value", TypeName::new(&result), vec![parameter], items, true));
+    }
+    module.functions.extend(added);
+}
+
+/// Record every enum method (the functions named `E::m`) for
+/// [`method_is_static`].
+pub fn install_methods(module: &Module) {
+    METHODS.with(|m| {
+        let mut m = m.borrow_mut();
+        m.clear();
+        for f in &module.functions {
+            if let Some((enum_name, method)) = method_of(&f.name) {
+                let is_static = !f.parameters.first().is_some_and(|p| p.name == "this" && p.ty.name == enum_name);
+                m.insert((enum_name.to_string(), method.to_string()), is_static);
+            }
+        }
+    });
+}
+
+/// Inside an enum's methods, `this` is the value parameter, and a bare call
+/// of another method of the enum (`name()`) calls it on `this`.
+fn method_bodies(module: &mut Module) {
+    for f in &mut module.functions {
+        let Some((enum_name, _)) = method_of(&f.name) else { continue };
+        let enum_name = enum_name.to_string();
+        let has_this = f.parameters.first().is_some_and(|p| p.name == "this");
+        let locals: Vec<String> = f.parameters.iter().map(|p| p.name.clone()).collect();
+        let Some(body) = &mut f.body else { continue };
+        crate::passes::walk_block(body, &mut |e: &mut Expression| match e {
+            Expression::ThisRef => {
+                *e = Expression::SymbolRef { id: "this".to_string(), ty: TypeName::new(&enum_name), loc: Loc::NONE }
+            }
+            Expression::FunctionCall { function, args, .. } if !locals.contains(function) => {
+                match method_is_static(&enum_name, function) {
+                    Some(true) => *function = method_name(&enum_name, function),
+                    Some(false) if has_this => {
+                        *function = method_name(&enum_name, function);
+                        args.insert(0, Expression::SymbolRef { id: "this".to_string(), ty: TypeName::new(&enum_name), loc: Loc::NONE });
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        });
     }
 }
 

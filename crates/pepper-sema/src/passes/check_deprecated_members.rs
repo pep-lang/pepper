@@ -50,6 +50,13 @@ pub fn check_deprecated_members(module: &mut Module) {
             add(&t.name, &m.name, &m.attributes, m.loc);
         }
     }
+    // An enum's methods are the functions `E::m`, which calls reach by that
+    // name once `c.m()` is resolved.
+    for f in &module.functions {
+        if let Some((_, method)) = crate::enums::method_of(&f.name) {
+            add(&f.name, method, &f.attributes, f.loc);
+        }
+    }
     // An overloaded constructor (`Point$2`, `Box<int>$2`) is deprecated on
     // its own; its calls are only known once overloads are resolved. A
     // single constructor is checked on the AST with the struct.
@@ -117,7 +124,13 @@ impl Checker<'_> {
         match expr {
             Expression::MethodCall { this, method, loc, .. } => self.member(this, method, *loc, current),
             Expression::MemberRef { lhs, name, loc } => self.member(lhs, name, *loc, current),
-            Expression::FunctionCall { function, loc, .. } => self.constructor(function, *loc),
+            Expression::FunctionCall { function, loc, .. } => {
+                self.constructor(function, *loc);
+                if let Some((_, method)) = crate::enums::method_of(function) {
+                    let owner = Expression::SymbolRef { id: function.clone(), ty: TypeName::auto(), loc: Loc::NONE };
+                    self.member(&owner, method, *loc, current);
+                }
+            }
             _ => {}
         }
     }

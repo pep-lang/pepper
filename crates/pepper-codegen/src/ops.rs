@@ -19,6 +19,9 @@ pub fn coerce<'ctx>(
     if from == to {
         return value;
     }
+    // An enum converts as the integer type it is stored as (`Wide: long`
+    // is an i64), never as the `int` an unknown name would default to.
+    let (from, to) = (&*pepper_sema::enums::stored_as(from), &*pepper_sema::enums::stored_as(to));
     let from_f = is_float_type(from);
     let to_f = is_float_type(to);
     match (from_f, to_f) {

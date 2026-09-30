@@ -51,11 +51,41 @@ arrays and module-scope constants, and passed to and returned from functions.
   and `Color c = 0` are errors, and so is comparing a `Color` with a `Size`.
 - `value as int` (or any integer type) gives a case's integer value. The
   reverse, `1 as Color`, is an error, since the integer may not name a case;
-  name the case instead.
+  name the case, or use [`from_value`](#built-in-methods).
 - A slot of an enum type that is not given a value (a field, or a local
   declared without one) holds the case whose value is 0, or the first case
   when no case is 0.
 - `sizeof<Name>()` is the size of the representation.
+- An enum works wherever an integer does: as a `HashMap` key or `HashSet`
+  element, in an `Atomic<Name>`, and in an `extern` function's signature,
+  where C sees the representation (an `int` unless the enum names another).
+
+## Methods
+
+An enum can declare methods after its cases. Inside a method, `this` is the
+value the method was called on, and a bare call of another method of the
+enum (`next()`) calls it on `this`. A `static` method is called on the enum
+itself (`Light.first()`).
+
+```pepper
+{{#include ../../examples/enums-methods.pep}}
+```
+
+`this` is passed by value, like an `int`: a method cannot change the value it
+was called on. Return a new case instead, as `next()` does.
+
+### Built-in methods
+
+Every enum has two methods without declaring them, and cannot declare
+methods of the same names:
+
+| Method | What it does |
+|---|---|
+| `value.name()` | Returns the case's name as written (`"Red"`), a `String`. |
+| `Name.from_value(n)` | Returns a `Result<Name>`: Ok with the case whose value is `n`, or an Err when no case has it. `n` has the enum's representation type. |
+
+`from_value` is the checked way back from an integer (from a file, a C
+library or the network) to a case, since `as` only goes the other way.
 
 ## `match`
 
@@ -84,8 +114,10 @@ The value is evaluated once, before any arm runs.
 - Cases cannot carry values yet (`Circle(radius: float)`); that is the next
   step, and it is what lets [`Optional`](optionals.md) and
   [`Result`](results.md) become enums.
-- Enums cannot have methods, and cannot be generic, yet.
+- Enums cannot be generic yet, and neither can their methods. An enum
+  cannot declare operators or indexers yet; `==` and `!=` are built in.
 - `match` works only on enums, and only as a statement: it does not produce
   a value, and cannot match integers, characters or strings yet.
-- There is no way to get a case's name as a string, or to turn an integer
-  back into a case, yet.
+- An enum cannot be extended (`extend Color { ... }`); declare its methods
+  inside it. So it cannot conform to a trait either, and a trait value is a
+  reference to an object, which an enum value is not.

@@ -202,6 +202,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
         // Enum types are stored as their integer types (see `pepper_sema::enums`).
         pepper_sema::enums::install(&module.enums);
+        pepper_sema::enums::install_methods(module);
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
@@ -4635,7 +4636,17 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         // Parameters from the last one without a default on are optional.
         let required = defaults.iter().rposition(Option::is_none).map_or(0, |i| i + 1);
+        // An enum method's value is its first argument (`c.m(x)` is
+        // `E::m(c, x)`), which the caller did not write as one.
+        let (target, this) = match pepper_sema::enums::method_of(target) {
+            Some((enum_name, method)) => {
+                let this = pepper_sema::enums::method_is_static(enum_name, method) == Some(false);
+                (method, usize::from(this))
+            }
+            None => (target, 0),
+        };
         let expected = |bound: &str, n: usize| {
+            let n = n - this;
             if required == defaults.len() { n.to_string() } else { format!("{} {}", bound, n) }
         };
         if provided > defaults.len() {
@@ -4643,7 +4654,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "too many arguments to '{}': expected {}, have {}",
                 target,
                 expected("at most", defaults.len()),
-                provided
+                provided - this
             ));
         }
         if provided < required {
@@ -4651,7 +4662,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "too few arguments to '{}': expected {}, have {}",
                 target,
                 expected("at least", required),
-                provided
+                provided - this
             ));
         }
         Ok(defaults[provided..].iter().map(|d| d.clone().expect("trailing parameters have defaults")).collect())
