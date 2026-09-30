@@ -4,6 +4,8 @@
 
 pub mod address;
 pub mod context;
+#[cfg(windows)]
+mod jit_memory;
 pub mod ops;
 pub mod partition;
 pub mod types;
@@ -613,10 +615,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         map_global: impl Fn(&str) -> Option<usize>,
     ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
         self.generate(module).map_err(|d| module.sources.render(&d))?;
-        let ee = self
-            .module
-            .create_jit_execution_engine(OptimizationLevel::None)
-            .map_err(|e| format!("JIT failed: {}", e.to_string()))?;
+        let ee = self.create_jit_engine()?;
         for f in self.module.get_functions() {
             if f.count_basic_blocks() != 0 {
                 continue;
@@ -636,6 +635,23 @@ impl<'ctx> CodeGenerator<'ctx> {
         // at engine creation — MCJIT only runs them on explicit request.
         ee.run_static_constructors();
         Ok(ee)
+    }
+
+    /// An MCJIT engine for the module. On Windows its sections share one
+    /// reserved region (see `jit_memory`), with the options
+    /// `create_jit_execution_engine` uses.
+    fn create_jit_engine(&self) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
+        #[cfg(windows)]
+        let ee = self.module.create_mcjit_execution_engine_with_memory_manager(
+            jit_memory::JitMemory::new()?,
+            OptimizationLevel::None,
+            inkwell::targets::CodeModel::JITDefault,
+            false,
+            false,
+        );
+        #[cfg(not(windows))]
+        let ee = self.module.create_jit_execution_engine(OptimizationLevel::None);
+        ee.map_err(|e| format!("JIT failed: {}", e.to_string()))
     }
 
     /// Whether the JIT's own symbol search finds `name` in this process.

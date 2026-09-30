@@ -29,7 +29,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
-| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
+| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`, `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pepper-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
@@ -846,6 +846,13 @@ How the language lowers:
   nor the process resolves (ws2_32 on a Windows test host) is mapped to a
   stub that aborts if called, because MCJIT crashes finalizing a module
   with an unresolved symbol even when nothing calls it.
+  On Windows the engine allocates through `jit_memory::JitMemory`: one
+  reserved region with the code first, then read-only data, then
+  read-write data. MCJIT resolves `.pdata`'s `IMAGE_REL_AMD64_ADDR32NB`
+  relocations as 32-bit offsets from the lowest section, and aborts the
+  process ("requires an ordered section layout") when LLVM's default
+  manager scatters the sections more than 4 GB apart, as it did under
+  parallel test load.
 - **Target** (`target.rs`): `initialize_host` and `host_machine` register
   only the host's backend (x86 or aarch64, chosen by
   `cfg(target_arch)` in `Cargo.toml`). Four call sites share this one
