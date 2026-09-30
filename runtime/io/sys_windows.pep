@@ -164,7 +164,7 @@ import "directory";
 # CreateFileW sharing everything (FILE_SHARE_READ | WRITE | DELETE) with
 # FILE_FLAG_BACKUP_SEMANTICS, so directories open too.
 [Target(OS(Windows))] export _io_win_create(path: Path, access: ulong, disposition: uint, extra_flags: ulong): IoResult<FileHandle> {
-    var w = _io_win_wide(path.Value);
+    var w = _io_win_wide(path._value);
     var flags = 33554560 | extra_flags;   # BACKUP_SEMANTICS | ATTRIBUTE_NORMAL
     var h = CreateFileW(w, access as uint, 7, __null, disposition, flags as uint, __null);
     var code = GetLastError();
@@ -179,28 +179,28 @@ import "directory";
 
 [Target(OS(Windows))] export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
     ulong access = 0;
-    if (options.Read) {
+    if (options._read) {
         access = access | 2147483648;    # GENERIC_READ
     }
-    if (options.Append) {
+    if (options._append) {
         # FILE_GENERIC_WRITE without FILE_WRITE_DATA: writes only append.
         access = access | 1179924;
     } else {
-        if (options.Write) {
+        if (options._write) {
             access = access | 1073741824;   # GENERIC_WRITE
         }
     }
     uint disposition = 3;                # OPEN_EXISTING
-    if (options.Truncate) {
+    if (options._truncate) {
         disposition = 5;                 # TRUNCATE_EXISTING
     }
-    if (options.Create) {
+    if (options._create) {
         disposition = 4;                 # OPEN_ALWAYS
-        if (options.Truncate) {
+        if (options._truncate) {
             disposition = 2;             # CREATE_ALWAYS
         }
     }
-    if (options.CreateNew) {
+    if (options._create_new) {
         disposition = 1;                 # CREATE_NEW
     }
     return _io_win_create(path, access, disposition, 0);
@@ -233,7 +233,7 @@ import "directory";
             # (opened with BACKUP_SEMANTICS); report it as POSIX's EISDIR does.
             var m = _io_sys_fstat(h);
             if (m.is_ok()) {
-                if (m.Value.IsDir) {
+                if (m._value.is_directory) {
                     code = 336;          # DIRECTORY_NOT_SUPPORTED: is_is_a_directory
                 }
             }
@@ -305,15 +305,15 @@ import "directory";
 [Target(OS(Windows))] export _io_win_metadata(buf: __ptr<void>, attrs_offset: ulong, created: ulong, accessed: ulong, written: ulong, size_high: ulong, size_low: ulong): Metadata {
     var m = Metadata();
     var attrs = _io_win_u32(buf, attrs_offset);
-    m.IsDir = (attrs & 16) != 0;          # FILE_ATTRIBUTE_DIRECTORY
-    m.IsSymlink = (attrs & 1024) != 0;    # FILE_ATTRIBUTE_REPARSE_POINT
-    m.IsFile = !m.IsDir && !m.IsSymlink;
-    m.ReadOnly = (attrs & 1) != 0;        # FILE_ATTRIBUTE_READONLY
-    m.Permissions = attrs as uint;
-    m.Size = (_io_win_u32(buf, size_high) << 32) | _io_win_u32(buf, size_low);
-    m.Created = _io_win_time(buf, created);
-    m.Accessed = _io_win_time(buf, accessed);
-    m.Modified = _io_win_time(buf, written);
+    m.is_directory = (attrs & 16) != 0;          # FILE_ATTRIBUTE_DIRECTORY
+    m.is_symlink = (attrs & 1024) != 0;    # FILE_ATTRIBUTE_REPARSE_POINT
+    m.is_file = !m.is_directory && !m.is_symlink;
+    m.read_only = (attrs & 1) != 0;        # FILE_ATTRIBUTE_READONLY
+    m.permissions = attrs as uint;
+    m.size = (_io_win_u32(buf, size_high) << 32) | _io_win_u32(buf, size_low);
+    m.created = _io_win_time(buf, created);
+    m.accessed = _io_win_time(buf, accessed);
+    m.modified = _io_win_time(buf, written);
     return m;
 }
 
@@ -343,10 +343,10 @@ import "directory";
 [Target(OS(Windows))] export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
     var h = _io_win_open_query(path, follow);
     if (h.is_err()) {
-        return IoResult<Metadata>.err(h.Error);
+        return IoResult<Metadata>.err(h._error);
     }
-    var m = _io_sys_fstat(h.Value);
-    CloseHandle(h.Value);
+    var m = _io_sys_fstat(h._value);
+    CloseHandle(h._value);
     return m;
 }
 
@@ -357,10 +357,10 @@ import "directory";
 
 [Target(OS(Windows))] export _io_sys_list(path: Path): IoResult<DirEntry[]> {
     # An empty path would search `*`, the current directory; POSIX fails.
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<DirEntry[]>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
-    var w = _io_win_wide(path.join(Path("*")).Value);
+    var w = _io_win_wide(path.join(Path("*"))._value);
     var data = _pep_malloc(592);
     var h = FindFirstFileW(w, data);
     _pep_free(w);
@@ -371,10 +371,10 @@ import "directory";
         # FILE_NOT_FOUND means nothing matched `*`: an empty directory with
         # no `.` or `..` entries, as a drive root is. A missing directory
         # says PATH_NOT_FOUND, but confirm it is a directory regardless.
-        if (e.Code == 2) {
+        if (e.code == 2) {
             var m = _io_sys_stat(path, true);
             if (m.is_ok()) {
-                if (m.Value.IsDir) {
+                if (m._value.is_directory) {
                     return IoResult<DirEntry[]>.ok(out);
                 }
             }
@@ -387,11 +387,11 @@ import "directory";
         if (!_io_is_dot(name) && !_io_is_dotdot(name)) {
             var m = _io_win_metadata(data, 0, 4, 12, 20, 28, 32);
             var entry = DirEntry();
-            entry.Name = name;
-            entry.Path = path.join(Path(name));
-            entry.IsFile = m.IsFile;
-            entry.IsDir = m.IsDir;
-            entry.IsSymlink = m.IsSymlink;
+            entry.name = name;
+            entry.path = path.join(Path(name));
+            entry.is_file = m.is_file;
+            entry.is_directory = m.is_directory;
+            entry.is_symlink = m.is_symlink;
             out.append(entry);
         }
         if (FindNextFileW(h, data) == 0) {
@@ -410,7 +410,7 @@ import "directory";
 }
 
 [Target(OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<void> {
-    var w = _io_win_wide(path.Value);
+    var w = _io_win_wide(path._value);
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
     _pep_free(w);
@@ -421,7 +421,7 @@ import "directory";
 }
 
 [Target(OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<void> {
-    var w = _io_win_wide(path.Value);
+    var w = _io_win_wide(path._value);
     var ok = RemoveDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
@@ -432,7 +432,7 @@ import "directory";
 }
 
 [Target(OS(Windows))] export _io_sys_unlink(path: Path): IoResult<void> {
-    var w = _io_win_wide(path.Value);
+    var w = _io_win_wide(path._value);
     var ok = DeleteFileW(w);
     var code = GetLastError();
     _pep_free(w);
@@ -453,8 +453,8 @@ import "directory";
 
 # MOVEFILE_REPLACE_EXISTING, as POSIX rename replaces.
 [Target(OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<void> {
-    var wf = _io_win_wide(from.Value);
-    var wt = _io_win_wide(to.Value);
+    var wf = _io_win_wide(from._value);
+    var wt = _io_win_wide(to._value);
     var ok = MoveFileExW(wf, wt, 1);
     var code = GetLastError();
     _pep_free(wf);
@@ -483,7 +483,7 @@ import "directory";
 }
 
 [Target(OS(Windows))] export _io_sys_chdir(path: Path): IoResult<void> {
-    var w = _io_win_wide(path.Value);
+    var w = _io_win_wide(path._value);
     var ok = SetCurrentDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
@@ -498,18 +498,18 @@ import "directory";
 [Target(OS(Windows))] export _io_sys_realpath(path: Path): IoResult<Path> {
     var h = _io_win_open_query(path, true);
     if (h.is_err()) {
-        return IoResult<Path>.err(h.Error);
+        return IoResult<Path>.err(h._error);
     }
-    var need = GetFinalPathNameByHandleW(h.Value, __null, 0, 0);
+    var need = GetFinalPathNameByHandleW(h._value, __null, 0, 0);
     if (need == 0) {
         var e = IoError.last();
-        CloseHandle(h.Value);
+        CloseHandle(h._value);
         return IoResult<Path>.err(e);
     }
     var buf = _pep_malloc((need as ulong) * 2 + 2) as __ptr<u16>;
-    var n = GetFinalPathNameByHandleW(h.Value, buf, need, 0);
+    var n = GetFinalPathNameByHandleW(h._value, buf, need, 0);
     var code = GetLastError();
-    CloseHandle(h.Value);
+    CloseHandle(h._value);
     if (n == 0) {
         _pep_free(buf);
         return IoResult<Path>.err(IoError(code, _io_sys_error_message(code)));

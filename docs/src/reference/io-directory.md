@@ -13,9 +13,9 @@ struct DirEntry
 One entry of a directory listing, as `Directory.entries()` returns it.
 
 The kind flags come from the listing itself and describe the entry
-without following symlinks. On POSIX a symlink has `IsSymlink` set and
-`IsFile` and `IsDir` clear; on Windows a symlink or junction to a
-directory has both `IsDir` and `IsSymlink` set. Entries that are none of
+without following symlinks. On POSIX a symlink has `is_symlink` set and
+`is_file` and `is_directory` clear; on Windows a symlink or junction to a
+directory has both `is_directory` and `is_symlink` set. Entries that are none of
 these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 `metadata()` for the details of what the entry points to.
 
@@ -23,10 +23,10 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 ```pepper
     import io;
 
-    var list = io.Directory.open(io.Path("src")).Value.entries().Value;
+    var list = io.Directory.open(io.Path("src")).value().entries().value();
     ulong i = 0;
     while (i < list.count()) {
-        if (list[i].IsFile) {
+        if (list[i].is_file) {
             print(list[i].Name);
         }
         i = i + 1;
@@ -35,44 +35,44 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 
 ### Fields
 
-#### Path
+#### path
 
 ```pepper
-Path Path
+Path path
 ```
 
 The entry's full path: the listed directory's path joined with
-`Name` (relative when the directory's path was relative).
+`name` (relative when the directory's path was relative).
 
-#### Name
+#### name
 
 ```pepper
-String Name
+String name
 ```
 
 The entry's own file name, without any directory part.
 
-#### IsFile
+#### is_file
 
 ```pepper
-bool IsFile
+bool is_file
 ```
 
 Whether the entry is a regular file (never true for a symlink).
 
-#### IsDir
+#### is_directory
 
 ```pepper
-bool IsDir
+bool is_directory
 ```
 
 Whether the entry is a directory. On POSIX never true for a symlink;
 on Windows also true for a symlink or junction to a directory.
 
-#### IsSymlink
+#### is_symlink
 
 ```pepper
-bool IsSymlink
+bool is_symlink
 ```
 
 Whether the entry is a symlink (on Windows, any reparse point,
@@ -86,7 +86,7 @@ junctions included), which is not followed.
 construct()
 ```
 
-Creates an empty entry: empty `Path` and `Name`, all kind flags
+Creates an empty entry: empty `path` and `name`, all kind flags
 false. Entries are normally obtained from `Directory.entries()`.
 
 ### Methods
@@ -98,7 +98,7 @@ IoResult<Metadata> metadata()
 ```
 
 Returns the metadata of the entry, following symlinks, exactly like
-`Path.metadata()` on the entry's `Path`. The file system is queried
+`Path.metadata()` on the entry's `path`. The file system is queried
 again now, so the result reflects any change since the listing was
 read.
 
@@ -128,18 +128,18 @@ afresh.
 
     var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
-        var d = io.Directory.open(dir).Value;
-        var count = d.entries().Value.count();
+        var d = io.Directory.open(dir).value();
+        var count = d.entries().value().count();
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 ```
 
 ### Fields
 
-#### Path
+#### path
 
 ```pepper
-Path Path
+Path path
 ```
 
 The directory's path, as given to `open`.
@@ -152,7 +152,7 @@ The directory's path, as given to `open`.
 construct()
 ```
 
-Creates a `Directory` with an empty `Path`, which names no directory.
+Creates a `Directory` with an empty `path`, which names no directory.
 Use `Directory.open` to get one for an existing directory.
 
 ### Static methods
@@ -178,7 +178,7 @@ can still be renamed or removed afterwards.
     import io;
 
     var d = io.Directory.open(io.Path("src"));
-    if (d.is_err() && d.Error.is_not_a_directory()) {
+    if (d.is_err() && d.error().is_not_a_directory()) {
         print("src is a file");
     }
 ```
@@ -275,8 +275,8 @@ Windows a read-only file inside the tree is such a failure
 
     var tree = io.Directory.temp().join("my-scratch");
     var r = io.Directory.remove_all(tree);
-    if (r.is_err() && !r.Error.is_not_found()) {
-        print(r.Error.Message);
+    if (r.is_err() && !r.error().is_not_found()) {
+        print(r.error().message);
     }
 ```
 
@@ -354,14 +354,14 @@ sorted). Uses `opendir`/`readdir` on POSIX and
 `FindFirstFileW`/`FindNextFileW` on Windows.
 
 **Returns**
-- the entries, possibly none; an error when the directory cannot be read: `is_not_found()` when it no longer exists (or, on POSIX, `Path` is empty), `is_permission_denied()`, or on POSIX `is_not_a_directory()` when `Path` now names a file
+- the entries, possibly none; an error when the directory cannot be read: `is_not_found()` when it no longer exists (or, on POSIX, `path` is empty), `is_permission_denied()`, or on POSIX `is_not_a_directory()` when `path` now names a file
 
 **Example**
 ```pepper
     import io;
 
-    var list = io.Directory.open(io.Path(".")).Value.entries();
+    var list = io.Directory.open(io.Path(".")).value().entries();
     if (list.is_ok()) {
-        var n = list.Value.count();
+        var n = list.value().count();
     }
 ```

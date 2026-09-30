@@ -9,45 +9,45 @@ import "sys_windows";
 ## One entry of a directory listing, as `Directory.entries()` returns it.
 ##
 ## The kind flags come from the listing itself and describe the entry
-## without following symlinks. On POSIX a symlink has `IsSymlink` set and
-## `IsFile` and `IsDir` clear; on Windows a symlink or junction to a
-## directory has both `IsDir` and `IsSymlink` set. Entries that are none of
+## without following symlinks. On POSIX a symlink has `is_symlink` set and
+## `is_file` and `is_directory` clear; on Windows a symlink or junction to a
+## directory has both `is_directory` and `is_symlink` set. Entries that are none of
 ## these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 ## `metadata()` for the details of what the entry points to.
 ##
 ## @example
 ##     import io;
 ##
-##     var list = io.Directory.open(io.Path("src")).Value.entries().Value;
+##     var list = io.Directory.open(io.Path("src")).value().entries().value();
 ##     ulong i = 0;
 ##     while (i < list.count()) {
-##         if (list[i].IsFile) {
+##         if (list[i].is_file) {
 ##             print(list[i].Name);
 ##         }
 ##         i = i + 1;
 ##     }
 export struct DirEntry {
     ## The entry's full path: the listed directory's path joined with
-    ## `Name` (relative when the directory's path was relative).
-    Path Path;
+    ## `name` (relative when the directory's path was relative).
+    Path path;
     ## The entry's own file name, without any directory part.
-    String Name;
+    String name;
     ## Whether the entry is a regular file (never true for a symlink).
-    bool IsFile;
+    bool is_file;
     ## Whether the entry is a directory. On POSIX never true for a symlink;
     ## on Windows also true for a symlink or junction to a directory.
-    bool IsDir;
+    bool is_directory;
     ## Whether the entry is a symlink (on Windows, any reparse point,
     ## junctions included), which is not followed.
-    bool IsSymlink;
+    bool is_symlink;
 
-    ## Creates an empty entry: empty `Path` and `Name`, all kind flags
+    ## Creates an empty entry: empty `path` and `name`, all kind flags
     ## false. Entries are normally obtained from `Directory.entries()`.
     construct() {
     }
 
     ## Returns the metadata of the entry, following symlinks, exactly like
-    ## `Path.metadata()` on the entry's `Path`. The file system is queried
+    ## `Path.metadata()` on the entry's `path`. The file system is queried
     ## again now, so the result reflects any change since the listing was
     ## read.
     ##
@@ -56,7 +56,7 @@ export struct DirEntry {
     ## was removed since the listing or is a dangling symlink
     ## @see Path.metadata
     IoResult<Metadata> metadata() {
-        return _io_sys_stat(Path, true);
+        return _io_sys_stat(path, true);
     }
 }
 
@@ -73,15 +73,15 @@ export struct DirEntry {
 ##
 ##     var dir = io.Directory.temp().join("scratch").join("logs");
 ##     if (io.Directory.create_all(dir).is_ok()) {
-##         var d = io.Directory.open(dir).Value;
-##         var count = d.entries().Value.count();
+##         var d = io.Directory.open(dir).value();
+##         var count = d.entries().value().count();
 ##         io.Directory.remove_all(io.Directory.temp().join("scratch"));
 ##     }
 export struct Directory {
     ## The directory's path, as given to `open`.
-    Path Path;
+    Path path;
 
-    ## Creates a `Directory` with an empty `Path`, which names no directory.
+    ## Creates a `Directory` with an empty `path`, which names no directory.
     ## Use `Directory.open` to get one for an existing directory.
     construct() {
     }
@@ -100,19 +100,19 @@ export struct Directory {
     ##     import io;
     ##
     ##     var d = io.Directory.open(io.Path("src"));
-    ##     if (d.is_err() && d.Error.is_not_a_directory()) {
+    ##     if (d.is_err() && d.error().is_not_a_directory()) {
     ##         print("src is a file");
     ##     }
     static IoResult<Directory> open(Path path) {
         var m = _io_sys_stat(path, true);
         if (m.is_err()) {
-            return IoResult<Directory>.err(m.Error);
+            return IoResult<Directory>.err(m._error);
         }
-        if (!m.Value.IsDir) {
+        if (!m._value.is_directory) {
             return IoResult<Directory>.err(IoError(_io_sys_code_not_a_directory(), "not a directory"));
         }
         var d = Directory();
-        d.Path = path;
+        d.path = path;
         return IoResult<Directory>.ok(d);
     }
 
@@ -123,17 +123,17 @@ export struct Directory {
     ##
     ## @returns the entries, possibly none; an error when the directory
     ## cannot be read: `is_not_found()` when it no longer exists (or, on
-    ## POSIX, `Path` is empty), `is_permission_denied()`, or on POSIX
-    ## `is_not_a_directory()` when `Path` now names a file
+    ## POSIX, `path` is empty), `is_permission_denied()`, or on POSIX
+    ## `is_not_a_directory()` when `path` now names a file
     ## @example
     ##     import io;
     ##
-    ##     var list = io.Directory.open(io.Path(".")).Value.entries();
+    ##     var list = io.Directory.open(io.Path(".")).value().entries();
     ##     if (list.is_ok()) {
-    ##         var n = list.Value.count();
+    ##         var n = list.value().count();
     ##     }
     IoResult<DirEntry[]> entries() {
-        return _io_sys_list(Path);
+        return _io_sys_list(path);
     }
 
     ## Creates one directory (`mkdir` on POSIX, with mode 0777 less the
@@ -166,14 +166,14 @@ export struct Directory {
     ##
     ##     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
     static IoResult<void> create_all(Path path) {
-        if (path.Value.size() == 0) {
+        if (path._value.size() == 0) {
             return _io_ok_void();
         }
-        if (path.is_dir()) {
+        if (path.is_directory()) {
             return _io_ok_void();
         }
         var parent = path.parent();
-        if (parent.Value.size() > 0) {
+        if (parent._value.size() > 0) {
             var p = Directory.create_all(parent);
             if (p.is_err()) {
                 return p;
@@ -183,7 +183,7 @@ export struct Directory {
         # Lost a race with another creator, or `path` ends in "." / "..":
         # fine as long as a directory is there now.
         if (r.is_err()) {
-            if (path.is_dir()) {
+            if (path.is_directory()) {
                 return _io_ok_void();
             }
         }
@@ -222,34 +222,34 @@ export struct Directory {
     ##
     ##     var tree = io.Directory.temp().join("my-scratch");
     ##     var r = io.Directory.remove_all(tree);
-    ##     if (r.is_err() && !r.Error.is_not_found()) {
-    ##         print(r.Error.Message);
+    ##     if (r.is_err() && !r.error().is_not_found()) {
+    ##         print(r.error().message);
     ##     }
     ## @see remove
     static IoResult<void> remove_all(Path path) {
         var m = _io_sys_stat(path, false);
         if (m.is_err()) {
-            return IoResult<void>.err(m.Error);
+            return IoResult<void>.err(m._error);
         }
-        if (m.Value.IsSymlink || !m.Value.IsDir) {
-            return _io_sys_remove_link(path, m.Value.IsDir);
+        if (m._value.is_symlink || !m._value.is_directory) {
+            return _io_sys_remove_link(path, m._value.is_directory);
         }
         var list = _io_sys_list(path);
         if (list.is_err()) {
-            return IoResult<void>.err(list.Error);
+            return IoResult<void>.err(list._error);
         }
-        var entries = list.Value;
+        var entries = list._value;
         ulong i = 0;
         while (i < entries.count()) {
             var entry = entries[i];
             i = i + 1;
-            if (entry.IsDir && !entry.IsSymlink) {
-                var r = Directory.remove_all(entry.Path);
+            if (entry.is_directory && !entry.is_symlink) {
+                var r = Directory.remove_all(entry.path);
                 if (r.is_err()) {
                     return r;
                 }
             } else {
-                var r = _io_sys_remove_link(entry.Path, entry.IsDir);
+                var r = _io_sys_remove_link(entry.path, entry.is_directory);
                 if (r.is_err()) {
                     return r;
                 }

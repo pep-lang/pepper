@@ -5,10 +5,10 @@ import "counter";
 count_file(path: Path): Result<WordCounter> {
     var text = File.read_to_string(path);
     if text.is_err() {
-        return Result<WordCounter>.err(Error(text.Error.Message));
+        return Result<WordCounter>.err(Error(text.error().message));
     }
     var counter = WordCounter();
-    counter.add_text(text.Value);
+    counter.add_text(text.value());
     return Result<WordCounter>.ok(counter);
 }
 
@@ -33,7 +33,7 @@ main(): int {
 
     var missing = count_file(dir.join("missing.txt"));
     assert(missing.is_err(), "a missing file is an error, not a crash");
-    print(missing.Error.Message);
+    print(missing.error().message);
 
     Directory.remove_all(dir);
     return 0;

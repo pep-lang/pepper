@@ -93,8 +93,8 @@ what went wrong.
 
 - `Result<int>` holds either an `int` or an `Error`. Build one with
   `Result<int>.ok(value)` or `Result<int>.err(Error("message"))`.
-- `is_ok()` and `is_err()` tell you which one you have. `Value` and `Error`
-  are its fields; `Error.Message` is the error's text.
+- `is_ok()` and `is_err()` tell you which one you have. `value()` and
+  `error()` return what it holds; `error().message` is the error's text.
 - `value()` returns the value, and stops the program if there is none. Use it
   only when an error would be a bug. `ok_or(fallback)` returns the value, or
   `fallback` if there is none.

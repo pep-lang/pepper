@@ -621,10 +621,10 @@ fn result_void_has_no_value() {
          \x20     |                          ^~"
     );
     assert_eq!(
-        error_of("result_void_value_field", "main(): int {\n    var r = Result<void>.ok();\n    return r.Value;\n}\n"),
-        "main.pep:3:14: error: no member named 'Value' in 'Result<void, Error>'\n\
-         \x20   3 |     return r.Value;\n\
-         \x20     |              ^~~~~"
+        error_of("result_void_value_field", "main(): int {\n    var r = Result<void>.ok();\n    return r._value;\n}\n"),
+        "main.pep:3:14: error: no member named '_value' in 'Result<void, Error>'\n\
+         \x20   3 |     return r._value;\n\
+         \x20     |              ^~~~~~"
     );
 }
 

@@ -46,58 +46,8 @@ sharing read, write and delete access with other openers.
     if (r.is_err()) {
         return 1;
     }
-    var f = r.Value;
+    var f = r.value();
 ```
-
-### Fields
-
-#### Read
-
-```pepper
-bool Read
-```
-
-Whether the file is opened for reading. Off by default.
-
-#### Write
-
-```pepper
-bool Write
-```
-
-Whether the file is opened for writing at the current position. Off by default.
-
-#### Append
-
-```pepper
-bool Append
-```
-
-Whether the file is opened for writing at its end only; implies write access. Off by default.
-
-#### Truncate
-
-```pepper
-bool Truncate
-```
-
-Whether an existing file is emptied to 0 bytes when opened; needs write or append. Off by default.
-
-#### Create
-
-```pepper
-bool Create
-```
-
-Whether a missing file is created (an existing one is opened as it is); needs write or append. Off by default.
-
-#### CreateNew
-
-```pepper
-bool CreateNew
-```
-
-Whether the file must be newly created: opening fails if it exists (`O_EXCL` on POSIX, `CREATE_NEW` on Windows); needs write or append. Off by default.
 
 ### Constructor
 
@@ -247,42 +197,42 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 **Example**
 ```pepper
     var m = Path("notes.txt").metadata();
-    if (m.is_ok() && m.Value.IsFile) {
-        var bytes = m.Value.Size;
+    if (m.is_ok() && m.value().is_file) {
+        var bytes = m.value().size;
     }
 ```
 
 ### Fields
 
-#### Size
+#### size
 
 ```pepper
-ulong Size
+ulong size
 ```
 
 The file's length in bytes.
 
-#### IsFile
+#### is_file
 
 ```pepper
-bool IsFile
+bool is_file
 ```
 
 Whether this is a regular file. On Windows, anything that is neither
 a directory nor a reparse point (symlink) counts as a file.
 
-#### IsDir
+#### is_directory
 
 ```pepper
-bool IsDir
+bool is_directory
 ```
 
 Whether this is a directory.
 
-#### IsSymlink
+#### is_symlink
 
 ```pepper
-bool IsSymlink
+bool is_symlink
 ```
 
 Whether this is a symbolic link itself. Only metadata that does not
@@ -290,45 +240,45 @@ follow links (`Path.symlink_metadata()`) can report one. On Windows
 this is any reparse point (`FILE_ATTRIBUTE_REPARSE_POINT`), which
 includes junctions.
 
-#### ReadOnly
+#### read_only
 
 ```pepper
-bool ReadOnly
+bool read_only
 ```
 
 Whether the file is read-only: on POSIX, no write permission bit
 (0222) is set for anyone; on Windows, `FILE_ATTRIBUTE_READONLY` is set.
 
-#### Modified
+#### modified
 
 ```pepper
-long Modified
+long modified
 ```
 
 The time of the last modification of the contents, in nanoseconds since the Unix epoch.
 
-#### Accessed
+#### accessed
 
 ```pepper
-long Accessed
+long accessed
 ```
 
 The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with `noatime` or `relatime` update it rarely or never).
 
-#### Created
+#### created
 
 ```pepper
-long Created
+long created
 ```
 
 The creation (birth) time, in nanoseconds since the Unix epoch; 0
 where unavailable, such as on Linux file systems that do not record
 one.
 
-#### Permissions
+#### permissions
 
 ```pepper
-Mode Permissions
+Mode permissions
 ```
 
 The raw permission bits: on POSIX the `mode_t` permission bits
@@ -387,33 +337,15 @@ kinds apart portably.
 
 ### Fields
 
-#### Handle
+#### path
 
 ```pepper
-FileHandle Handle
-```
-
-The platform handle: a file descriptor on POSIX (-1 when closed), a
-`HANDLE` on Windows (null when closed).
-
-#### Path
-
-```pepper
-Path Path
+Path path
 ```
 
 The path the File was opened with; `<stdin>`, `<stdout>` or
 `<stderr>` for a standard stream, and empty for a `File()` never
 opened.
-
-#### Owned
-
-```pepper
-bool Owned
-```
-
-Whether the File owns its handle and closes it. False for the
-standard streams (stdin, stdout, stderr), which a File never closes.
 
 ### Constructor
 
@@ -449,10 +381,10 @@ A directory can be opened this way too, but reading it fails with
 **Example**
 ```pepper
     var r = File.open(Path("config.txt"));
-    if (r.is_err() && r.Error.is_not_found()) {
+    if (r.is_err() && r.error().is_not_found()) {
         return 0;
     }
-    var text = r.Value.read_string();
+    var text = r.value().read_string();
 ```
 
 #### create
@@ -503,7 +435,7 @@ still writes at the end).
 ```pepper
     var opts = OpenOptions().write(true).create_new(true);
     var r = File.open_with(Path("lock"), opts);
-    if (r.is_err() && r.Error.is_already_exists()) {
+    if (r.is_err() && r.error().is_already_exists()) {
         return 1;
     }
 ```
@@ -526,10 +458,10 @@ redirection may get a null handle, and the File is then not open.
 
 **Parameters**
 - `which` — the stream: 0 for standard input, 1 for standard output, 2 for standard error
-- `name` — the display name stored in the File's `Path`, such as `<stdout>`
+- `name` — the display name stored in the File's `path`, such as `<stdout>`
 
 **Returns**
-- a File on that stream, with `Owned` false
+- a File on that stream, that does not close the stream when released
 
 #### stdin
 
@@ -596,7 +528,7 @@ Reads the whole file at `path` into a byte array (Rust's
 ```pepper
     var r = File.read_bytes(Path("image.png"));
     if (r.is_ok()) {
-        var n = r.Value.count();
+        var n = r.value().count();
     }
 ```
 
@@ -621,7 +553,7 @@ Reads the whole file at `path` as UTF-8 text (Rust's
     if (r.is_err()) {
         return 1;
     }
-    var text = r.Value;
+    var text = r.value();
 ```
 
 #### write_bytes
@@ -750,7 +682,7 @@ target. Directories are not removed: use `Directory.remove` or
 **Example**
 ```pepper
     var r = File.remove(Path("old.txt"));
-    if (r.is_err() && !r.Error.is_not_found()) {
+    if (r.is_err() && !r.error().is_not_found()) {
         return 1;
     }
 ```
@@ -810,7 +742,7 @@ failure `buf` keeps its previous contents.
     var buf = Array<u8>();
     while (true) {
         var r = f.read(buf, 4096);
-        if (r.is_err() || r.Value == 0) {
+        if (r.is_err() || r.value() == 0) {
             break;
         }
     }
@@ -981,10 +913,10 @@ and has platform-defined results on Windows.
 **Returns**
 - the new position, in bytes from the start of the file; an error when the File is closed, `whence` is not 0, 1 or 2, the resulting position would be negative (on POSIX, with `is_invalid_input()`), or the stream cannot seek
 
-#### set_len
+#### set_length
 
 ```pepper
-IoResult<void> set_len(ulong size)
+IoResult<void> set_length(ulong size)
 ```
 
 Truncates or extends the file to exactly `size` bytes; bytes added
@@ -997,6 +929,21 @@ The File must have been opened for writing.
 
 **Returns**
 - an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size
+
+#### set_len
+
+```pepper
+[Deprecated("use 'set_length' instead", "set_length")] IoResult<void> set_len(ulong size)
+```
+
+Deprecated: use `set_length` instead. Truncates or extends the file to
+exactly `size` bytes.
+
+**Parameters**
+- `size` — the new length, in bytes
+
+**Returns**
+- the same as `set_length(size)`
 
 #### sync
 
@@ -1029,7 +976,7 @@ permission bits and timestamps.
 
 **Example**
 ```pepper
-    var size = f.metadata().Value.Size;
+    var size = f.metadata().value().size;
 ```
 
 #### close

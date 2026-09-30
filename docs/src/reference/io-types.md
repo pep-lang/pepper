@@ -28,7 +28,7 @@ descriptors 0, 1 and 2. On Windows this is a `HANDLE` instead.
 [Target(!OS(Windows))] type ErrorCode = int
 ```
 
-The raw platform error code carried by `IoError.Code`: a POSIX `errno`
+The raw platform error code carried by `IoError.code`: a POSIX `errno`
 value such as `ENOENT` (2). On Windows this is a `DWORD` from
 `GetLastError()` instead.
 
@@ -79,7 +79,7 @@ POSIX this is an `int` file descriptor instead.
 [Target(OS(Windows))] type ErrorCode = uint
 ```
 
-The raw platform error code carried by `IoError.Code`: a Windows
+The raw platform error code carried by `IoError.code`: a Windows
 `DWORD` error code from `GetLastError()`, such as `ERROR_FILE_NOT_FOUND`
 (2). On POSIX this is an `errno` value instead.
 
@@ -127,7 +127,7 @@ message.
 There are no enums, so the kind of error is a set of predicates over the
 code (`is_not_found()`, `is_permission_denied()`, ...), each of which
 knows the matching codes on the current platform. Test with those rather
-than comparing `Code` against numbers. Failures that Pepper detects
+than comparing `code` against numbers. Failures that Pepper detects
 itself (invalid UTF-8, an empty path, a short write, a closed `File`)
 use the platform's own code for the kind they are (`EINVAL` /
 `ERROR_INVALID_PARAMETER` for invalid input, `ENOENT` /
@@ -144,32 +144,32 @@ for them too. A short write uses `EIO` / `ERROR_WRITE_FAULT` and a closed
 
     var r = io.File.open(io.Path("settings.txt"));
     if (r.is_err()) {
-        if (r.Error.is_not_found()) {
+        if (r.error().is_not_found()) {
             print("no settings file");
         } else {
-            print(r.Error.Message);
+            print(r.error().message);
         }
     }
 ```
 
 ### Fields
 
-#### Code
+#### code
 
 ```pepper
-ErrorCode Code
+ErrorCode code
 ```
 
 The raw platform error code: an `errno` value on POSIX, a
 `GetLastError()` code on Windows; 0 means no error.
 
-#### Message
+#### message
 
 ```pepper
-String Message
+String message
 ```
 
-A human-readable description: the platform's text for `Code`
+A human-readable description: the platform's text for `code`
 (`strerror` on POSIX, `FormatMessageW` on Windows, without its
 trailing period and line break), or Pepper's own text such as
 `"empty path"` for errors it detects itself.
@@ -341,8 +341,8 @@ themselves, so callers rarely see this.
 type IoResult<T> = Result<T, IoError>
 ```
 
-The result of an io operation: `Value` on success, an `IoError` on
-failure. Check `is_ok()` / `is_err()` before reading `Value` or `Error`;
+The result of an io operation: a value on success, an `IoError` on
+failure. Check `is_ok()` / `is_err()` before calling `value()` or `error()`;
 operations that produce nothing return `IoResult<void>`.
 
 **Type parameters**
@@ -357,8 +357,8 @@ operations that produce nothing return `IoResult<void>`.
 
     var cwd = io.Directory.current();
     if (cwd.is_ok()) {
-        print(cwd.Value.to_string());
+        print(cwd.value().to_string());
     } else {
-        print(cwd.Error.Message);
+        print(cwd.error().message);
     }
 ```

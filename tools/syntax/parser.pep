@@ -2075,7 +2075,7 @@ struct Parser {
 export parse(source: String): Result<Node, SyntaxError> {
     var tokens = lex(source);
     if (tokens.is_err()) {
-        return Result<Node, SyntaxError>.err(tokens.Error);
+        return Result<Node, SyntaxError>.err(tokens.error());
     }
     var parser = Parser(tokens.value());
     var root = parser.module();

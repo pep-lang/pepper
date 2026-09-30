@@ -21,8 +21,8 @@ const NODE: &str = r#"
 const destroyed = Atomic<int>(0);
 
 struct Node {
-    int Value = 0;
-    construct(this.Value = 0) {}
+    int value = 0;
+    construct(this.value = 0) {}
     destruct { destroyed.fetch_add(1); }
 }
 "#;
@@ -42,7 +42,7 @@ test(): int {
         __weak<Node> w = __weak_from<Node>(n);
         if (__weak_expired<Node>(w)) { return -1; }
         var strong = __weak_upgrade<Node>(w);
-        if (strong.Value != 7) { return -2; }
+        if (strong.value != 7) { return -2; }
         if (__refcount<Node>(n) != 2) { return -3; }
         strong = __null;
         n = __null;
@@ -101,12 +101,12 @@ struct Child {
     int parent_value() {
         var p = __weak_upgrade<Parent>(Parent);
         if (p == __null) { return -1; }
-        return p.Value;
+        return p.value;
     }
 }
 
 struct Parent {
-    int Value = 42;
+    int value = 42;
     Child Child;
     construct() {}
     destruct { freed.fetch_add(10); }
@@ -247,9 +247,9 @@ fn weak_struct_in_a_with_block() {
 const freed = Atomic<int>(0);
 
 struct Parent {
-    String Name;
+    String name;
     Child Kid;
-    construct(String name) { Name = name; }
+    construct(String name) { this.name = name; }
     destruct { freed.fetch_add(1); }
 }
 
@@ -259,7 +259,7 @@ struct Child {
     destruct { freed.fetch_add(1); }
     int owner_length() {
         with (var parent = Owner) {
-            return parent.Name.length() as int;
+            return parent.name.length() as int;
         } else {
             return -1;
         }

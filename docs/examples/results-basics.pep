@@ -11,11 +11,11 @@ main(): int {
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
     assert(good.value() == 2, "value() returns the value");
-    assert(good.Value == 2, "the Value field holds it too");
+    assert(good.value() == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
     assert(bad.is_err(), "x does not parse");
-    assert(bad.Error.Message == "not a digit: x", "the error explains why");
+    assert(bad.error().message == "not a digit: x", "the error explains why");
 
     # ok_or returns the value, or the fallback for an Err. It never panics.
     assert(good.ok_or(-1) == 2, "Ok gives its value");

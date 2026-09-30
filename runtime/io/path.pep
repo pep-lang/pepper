@@ -164,7 +164,7 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 export struct Path {
     ## The path's text, exactly as given or built: UTF-8, not normalized,
     ## possibly empty.
-    String Value;
+    String _value;
 
     ## Creates a path holding `value` as is: no validation, normalization or
     ## separator conversion.
@@ -182,7 +182,7 @@ export struct Path {
     ##     var q: io.Path = "docs";   # converted implicitly
     [Implicit]
     construct(String value = "") {
-        this.Value = value;
+        this._value = value;
     }
 
     ## Returns the separator this platform inserts when it builds a path.
@@ -193,20 +193,20 @@ export struct Path {
         return _io_path_separator();
     }
 
-    ## Returns the path's text, the same String as `Value`.
+    ## Returns the path's text, the same String the Path holds, not a copy.
     ##
     ## @returns the path as a String
     String to_string() {
-        return Value;
+        return _value;
     }
 
     ## Returns whether the path has no text at all. The empty path means "no
     ## path": it is what `parent()` returns for a root or a bare name, and
     ## file-system operations on it fail.
     ##
-    ## @returns true when `Value` is `""`
+    ## @returns true when the path's text is `""`
     bool is_empty() {
-        return Value.size() == 0;
+        return _value.size() == 0;
     }
 
     ## Returns whether the path is absolute, meaning it does not depend on
@@ -220,8 +220,8 @@ export struct Path {
     ##
     ## @returns true when the path is absolute
     bool is_absolute() {
-        var p = Value.c_str() as __ptr<u8>;
-        var n = Value.size();
+        var p = _value.c_str() as __ptr<u8>;
+        var n = _value.size();
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         return _io_path_absolute(p, prefix, has_root);
@@ -254,18 +254,18 @@ export struct Path {
     ##     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
     ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
     Path join(Path other) {
-        if (other.Value.size() == 0) {
-            return Path(Value.clone());
+        if (other._value.size() == 0) {
+            return Path(_value.clone());
         }
-        if (Value.size() == 0 || other.is_absolute() || other.has_root_or_prefix()) {
-            return Path(other.Value.clone());
+        if (_value.size() == 0 || other.is_absolute() || other.has_root_or_prefix()) {
+            return Path(other._value.clone());
         }
-        var p = Value.c_str() as __ptr<u8>;
-        var s = Value.clone();
-        if (!_io_path_is_sep(_io_byte(p, Value.size(), Value.size() - 1))) {
+        var p = _value.c_str() as __ptr<u8>;
+        var s = _value.clone();
+        if (!_io_path_is_sep(_io_byte(p, _value.size(), _value.size() - 1))) {
             s.append(_io_path_separator());
         }
-        s.append(other.Value);
+        s.append(other._value);
         return Path(s);
     }
 
@@ -292,8 +292,8 @@ export struct Path {
     ##
     ## @returns true when the path has a root separator or a prefix
     bool has_root_or_prefix() {
-        var p = Value.c_str() as __ptr<u8>;
-        var n = Value.size();
+        var p = _value.c_str() as __ptr<u8>;
+        var n = _value.size();
         if (_io_path_prefix_len(p, n) > 0) {
             return true;
         }
@@ -317,19 +317,19 @@ export struct Path {
     ##     var root = io.Path("/a").parent();        # "/"
     ##     var none = io.Path("/").parent();         # "" (empty)
     Path parent() {
-        var root = _io_path_root_end(Value);
-        var e = _io_path_trimmed_end(Value);
+        var root = _io_path_root_end(_value);
+        var e = _io_path_trimmed_end(_value);
         if (e <= root) {
             return Path();
         }
-        var start = _io_path_name_start(Value, e);
+        var start = _io_path_name_start(_value, e);
         if (start <= root) {
-            return Path(_io_slice(Value, 0, root));
+            return Path(_io_slice(_value, 0, root));
         }
-        var p = Value.c_str() as __ptr<u8>;
+        var p = _value.c_str() as __ptr<u8>;
         var j = start;
-        while (j > root && _io_path_is_sep(_io_byte(p, Value.size(), j - 1))) { j = j - 1; }
-        return Path(_io_slice(Value, 0, j));
+        while (j > root && _io_path_is_sep(_io_byte(p, _value.size(), j - 1))) { j = j - 1; }
+        return Path(_io_slice(_value, 0, j));
     }
 
     ## Returns the last component of the path, ignoring trailing separators
@@ -343,12 +343,12 @@ export struct Path {
     ##     var name = io.Path("/a/b/c.txt").file_name();   # "c.txt"
     ##     var none = io.Path("a/..").file_name();         # ""
     String file_name() {
-        var root = _io_path_root_end(Value);
-        var e = _io_path_trimmed_end(Value);
+        var root = _io_path_root_end(_value);
+        var e = _io_path_trimmed_end(_value);
         if (e <= root) {
             return String();
         }
-        var name = _io_slice(Value, _io_path_name_start(Value, e), e);
+        var name = _io_slice(_value, _io_path_name_start(_value, e), e);
         if (_io_is_dot(name) || _io_is_dotdot(name)) {
             return String();
         }
@@ -360,7 +360,7 @@ export struct Path {
     ## dot (`.bashrc`) starts the name, not an extension.
     ##
     ## @param name a file name (one component, as `file_name()` returns)
-    ## @returns the index of the extension's dot, or `name.Size` when the
+    ## @returns the index of the extension's dot, or `name.size` when the
     ## name has no extension (including the empty name)
     static ulong dot_index(String name) {
         var p = name.c_str() as __ptr<u8>;
@@ -417,11 +417,11 @@ export struct Path {
     Path with_extension(String ext) {
         var name = file_name();
         if (name.size() == 0) {
-            return Path(Value.clone());
+            return Path(_value.clone());
         }
-        var e = _io_path_trimmed_end(Value);
-        var start = _io_path_name_start(Value, e);
-        var s = _io_slice(Value, 0, start);
+        var e = _io_path_trimmed_end(_value);
+        var start = _io_path_name_start(_value, e);
+        var s = _io_slice(_value, 0, start);
         s.append(_io_slice(name, 0, Path.dot_index(name)));
         if (ext.size() > 0) {
             s.append(".");
@@ -446,17 +446,17 @@ export struct Path {
     ##     var d = io.Path("./a/b").components();            # [".", "a", "b"]
     Array<String> components() {
         var out = Array<String>();
-        var p = Value.c_str() as __ptr<u8>;
-        var n = Value.size();
+        var p = _value.c_str() as __ptr<u8>;
+        var n = _value.size();
         var prefix = _io_path_prefix_len(p, n);
         if (prefix > 0) {
-            out.append(_io_slice(Value, 0, prefix));
+            out.append(_io_slice(_value, 0, prefix));
         }
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         if (has_root) {
-            out.append(_io_slice(Value, prefix, prefix + 1));
+            out.append(_io_slice(_value, prefix, prefix + 1));
         }
-        var parts = _io_path_parts(Value, prefix == 0 && !has_root);
+        var parts = _io_path_parts(_value, prefix == 0 && !has_root);
         out.append_all(parts);
         return out;
     }
@@ -481,14 +481,14 @@ export struct Path {
     ##     var q = io.Path("a/..").normalize();         # "."
     ## @see canonicalize
     Path normalize() {
-        if (Value.size() == 0) {
+        if (_value.size() == 0) {
             return Path();
         }
-        var p = Value.c_str() as __ptr<u8>;
-        var n = Value.size();
+        var p = _value.c_str() as __ptr<u8>;
+        var n = _value.size();
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
-        var parts = _io_path_parts(Value, false);
+        var parts = _io_path_parts(_value, false);
         var kept = Array<String>();
         ulong k = 0;
         while (k < parts.count()) {
@@ -511,7 +511,7 @@ export struct Path {
             }
         }
         var sep = _io_path_separator();
-        var s = _io_slice(Value, 0, prefix);
+        var s = _io_slice(_value, 0, prefix);
         if (has_root) {
             s.append(sep);
         }
@@ -550,23 +550,32 @@ export struct Path {
         if (r.is_err()) {
             return false;
         }
-        return r.Value.IsFile;
+        return r._value.is_file;
     }
 
     ## Returns whether the path names a directory, following symlinks.
     ##
     ## @returns true for a directory or a symlink to one; false for anything
     ## else, and on any error (including a missing path)
-    bool is_dir() {
+    bool is_directory() {
         var r = _io_sys_stat(this, true);
         if (r.is_err()) {
             return false;
         }
-        return r.Value.IsDir;
+        return r._value.is_directory;
+    }
+
+    ## Deprecated: use `is_directory` instead. Returns whether the path
+    ## names a directory, following symlinks.
+    ##
+    ## @returns the same as `is_directory()`
+    [Deprecated("use 'is_directory' instead", "is_directory")]
+    bool is_dir() {
+        return is_directory();
     }
 
     ## Returns the metadata of the file or directory at this path, following
-    ## symlinks: the result describes the target (so on POSIX `IsSymlink` is
+    ## symlinks: the result describes the target (so on POSIX `is_symlink` is
     ## always false). `stat` / `statx` on POSIX; on Windows the path is
     ## opened for attributes only.
     ##
@@ -581,7 +590,7 @@ export struct Path {
     ##
     ##     var m = io.Path("data.bin").metadata();
     ##     if (m.is_ok()) {
-    ##         var size = m.Value.Size;
+    ##         var size = m.value().size;
     ##     }
     ## @see symlink_metadata
     IoResult<Metadata> metadata() {
@@ -589,11 +598,11 @@ export struct Path {
     }
 
     ## Returns the metadata of the path itself without following a symlink
-    ## at the end of it, so for a symlink `IsSymlink` is true and the rest
+    ## at the end of it, so for a symlink `is_symlink` is true and the rest
     ## describes the link rather than its target. `lstat` / `statx` with
     ## `AT_SYMLINK_NOFOLLOW` on POSIX; on Windows the path is opened with
     ## `FILE_FLAG_OPEN_REPARSE_POINT`, and any reparse point (junctions
-    ## included) reports `IsSymlink`, together with `IsDir` for a directory
+    ## included) reports `is_symlink`, together with `is_directory` for a directory
     ## link. For anything that is not a symlink it equals `metadata()`.
     ##
     ## @returns the `Metadata` of the path itself; an error as for
@@ -620,7 +629,7 @@ export struct Path {
     ##
     ##     var real = io.Path("a/../b.txt").canonicalize();
     ##     if (real.is_ok()) {
-    ##         print(real.Value.to_string());
+    ##         print(real.value().to_string());
     ##     }
     ## @see normalize
     IoResult<Path> canonicalize() {
@@ -634,17 +643,17 @@ export struct Path {
     ## results to ignore spelling differences.
     ##
     ## @param rhs the path to compare with
-    ## @returns true when both `Value`s are equal
+    ## @returns true when both paths' texts are equal
     bool ==(Path rhs) {
-        return Value == rhs.Value;
+        return _value == rhs._value;
     }
 
     ## Returns whether two paths differ in their text: the opposite of `==`,
     ## with the same byte-by-byte comparison.
     ##
     ## @param rhs the path to compare with
-    ## @returns true when the `Value`s differ
+    ## @returns true when the paths' texts differ
     bool !=(Path rhs) {
-        return !(Value == rhs.Value);
+        return !(_value == rhs._value);
     }
 }

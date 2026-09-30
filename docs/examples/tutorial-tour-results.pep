@@ -21,8 +21,8 @@ main(): int {
 
     var bad = parse_number("12x");
     assert(bad.is_err(), "x is not a digit");
-    assert(bad.Error.Message == "'x' is not a digit", "the error explains why");
-    print(bad.Error.Message);
+    assert(bad.error().message == "'x' is not a digit", "the error explains why");
+    print(bad.error().message);
 
     assert(parse_number("").ok_or(-1) == -1, "ok_or supplies a fallback");
     return 0;

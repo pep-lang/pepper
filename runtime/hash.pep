@@ -40,7 +40,7 @@ export hash<T>(T value): u64 {
 ## equally wherever they are stored. Keeps equal `String` keys of a
 ## `HashMap` or `HashSet` in one bucket.
 ##
-## Hashes the `Size` bytes of `Data` (not the NUL terminator) in O(Size). An
+## Hashes the `size()` bytes of the String (not the NUL terminator) in O(size). An
 ## empty String hashes to the FNV-1a offset basis.
 ##
 ## @param value the String to hash; it must not be a null reference
@@ -93,7 +93,7 @@ export hash<String>(String value): u64 {
 ##     assert(ages.count() == 1, "one entry left");
 export struct HashMap<K, V> {
     ## The key of each slot; only slots whose `state` is 2 hold a live key,
-    ## the rest hold the default of `K`. Internal: its `Size` equals
+    ## the rest hold the default of `K`. Internal: its count equals
     ## `capacity` rather than the entry count, and `grow` replaces it.
     Array<K> keys;
     ## The value of each slot, parallel to `keys`; only occupied slots hold a
@@ -431,7 +431,7 @@ export struct HashMap<K, V> {
 ##     assert(seen.count() == 2, "two members");
 export struct HashSet<K> {
     ## The element of each slot; only slots whose `state` is 2 hold a live
-    ## member, the rest hold the default of `K`. Internal: its `Size` equals
+    ## member, the rest hold the default of `K`. Internal: its count equals
     ## `capacity` rather than the member count, and `grow` replaces it.
     Array<K> keys;
     ## The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed

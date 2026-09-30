@@ -19,7 +19,7 @@ import "sys_windows";
 ## @see File
 [Target(!OS(Windows))] export type FileHandle = int;
 
-## The raw platform error code carried by `IoError.Code`: a POSIX `errno`
+## The raw platform error code carried by `IoError.code`: a POSIX `errno`
 ## value such as `ENOENT` (2). On Windows this is a `DWORD` from
 ## `GetLastError()` instead.
 ##
@@ -53,7 +53,7 @@ import "sys_windows";
 ## @see File
 [Target(OS(Windows))] export type FileHandle = __ptr<void>;
 
-## The raw platform error code carried by `IoError.Code`: a Windows
+## The raw platform error code carried by `IoError.code`: a Windows
 ## `DWORD` error code from `GetLastError()`, such as `ERROR_FILE_NOT_FOUND`
 ## (2). On POSIX this is an `errno` value instead.
 ##
@@ -84,7 +84,7 @@ export type Offset = long;
 ## There are no enums, so the kind of error is a set of predicates over the
 ## code (`is_not_found()`, `is_permission_denied()`, ...), each of which
 ## knows the matching codes on the current platform. Test with those rather
-## than comparing `Code` against numbers. Failures that Pepper detects
+## than comparing `code` against numbers. Failures that Pepper detects
 ## itself (invalid UTF-8, an empty path, a short write, a closed `File`)
 ## use the platform's own code for the kind they are (`EINVAL` /
 ## `ERROR_INVALID_PARAMETER` for invalid input, `ENOENT` /
@@ -97,22 +97,22 @@ export type Offset = long;
 ##
 ##     var r = io.File.open(io.Path("settings.txt"));
 ##     if (r.is_err()) {
-##         if (r.Error.is_not_found()) {
+##         if (r.error().is_not_found()) {
 ##             print("no settings file");
 ##         } else {
-##             print(r.Error.Message);
+##             print(r.error().message);
 ##         }
 ##     }
 ## @see IoResult
 export struct IoError {
     ## The raw platform error code: an `errno` value on POSIX, a
     ## `GetLastError()` code on Windows; 0 means no error.
-    ErrorCode Code;
-    ## A human-readable description: the platform's text for `Code`
+    ErrorCode code;
+    ## A human-readable description: the platform's text for `code`
     ## (`strerror` on POSIX, `FormatMessageW` on Windows, without its
     ## trailing period and line break), or Pepper's own text such as
     ## `"empty path"` for errors it detects itself.
-    String Message;
+    String message;
 
     ## Creates an error from a platform code and a message.
     ##
@@ -123,8 +123,8 @@ export struct IoError {
     ## `GetLastError()` on Windows)
     ## @param message the human-readable description
     construct(ErrorCode code = 0, String message = "") {
-        this.Code = code;
-        this.Message = message;
+        this.code = code;
+        this.message = message;
     }
 
     ## Captures the calling thread's last platform error now: `errno` on
@@ -149,7 +149,7 @@ export struct IoError {
     ## on every platform.
     ##
     ## @returns true when a path, or a directory on the way to it, is missing
-    bool is_not_found() { return _io_sys_is_not_found(Code); }
+    bool is_not_found() { return _io_sys_is_not_found(code); }
 
     ## Returns whether the operation was refused for lack of permission.
     ##
@@ -158,7 +158,7 @@ export struct IoError {
     ## read-only file).
     ##
     ## @returns true when access was denied
-    bool is_permission_denied() { return _io_sys_is_permission_denied(Code); }
+    bool is_permission_denied() { return _io_sys_is_permission_denied(code); }
 
     ## Returns whether the operation failed because its target already
     ## exists, such as `Directory.create` on an existing path or opening with
@@ -168,7 +168,7 @@ export struct IoError {
     ## `ERROR_ALREADY_EXISTS` on Windows.
     ##
     ## @returns true when the target already exists
-    bool is_already_exists() { return _io_sys_is_already_exists(Code); }
+    bool is_already_exists() { return _io_sys_is_already_exists(code); }
 
     ## Returns whether a path that had to name a directory names something
     ## else, such as `Directory.open` or `Directory.remove` on a file (or,
@@ -178,7 +178,7 @@ export struct IoError {
     ## name is invalid") on Windows.
     ##
     ## @returns true when a directory was expected
-    bool is_not_a_directory() { return _io_sys_is_not_a_directory(Code); }
+    bool is_not_a_directory() { return _io_sys_is_not_a_directory(code); }
 
     ## Returns whether an operation that needs a file was given a directory,
     ## such as reading from a directory opened as a `File`.
@@ -187,7 +187,7 @@ export struct IoError {
     ## Windows (which `File` reads report for a directory handle).
     ##
     ## @returns true when a directory was given where a file was expected
-    bool is_is_a_directory() { return _io_sys_is_is_a_directory(Code); }
+    bool is_is_a_directory() { return _io_sys_is_is_a_directory(code); }
 
     ## Returns whether a directory could not be removed because it still has
     ## entries (`Directory.remove` on a non-empty directory).
@@ -196,7 +196,7 @@ export struct IoError {
     ## `ERROR_DIR_NOT_EMPTY` on Windows.
     ##
     ## @returns true when the directory is not empty
-    bool is_directory_not_empty() { return _io_sys_is_directory_not_empty(Code); }
+    bool is_directory_not_empty() { return _io_sys_is_directory_not_empty(code); }
 
     ## Returns whether an argument was invalid: bad options (such as opening
     ## with no access mode), data that is not valid UTF-8 where text was
@@ -206,7 +206,7 @@ export struct IoError {
     ## `ERROR_INVALID_NAME` on Windows.
     ##
     ## @returns true when the input was invalid
-    bool is_invalid_input() { return _io_sys_is_invalid_input(Code); }
+    bool is_invalid_input() { return _io_sys_is_invalid_input(code); }
 
     ## Returns whether the operation was interrupted before it finished.
     ##
@@ -215,11 +215,11 @@ export struct IoError {
     ## themselves, so callers rarely see this.
     ##
     ## @returns true when the operation was interrupted
-    bool is_interrupted() { return _io_sys_is_interrupted(Code); }
+    bool is_interrupted() { return _io_sys_is_interrupted(code); }
 }
 
-## The result of an io operation: `Value` on success, an `IoError` on
-## failure. Check `is_ok()` / `is_err()` before reading `Value` or `Error`;
+## The result of an io operation: a value on success, an `IoError` on
+## failure. Check `is_ok()` / `is_err()` before calling `value()` or `error()`;
 ## operations that produce nothing return `IoResult<void>`.
 ##
 ## @typeParam T the value an operation produces on success
@@ -228,9 +228,9 @@ export struct IoError {
 ##
 ##     var cwd = io.Directory.current();
 ##     if (cwd.is_ok()) {
-##         print(cwd.Value.to_string());
+##         print(cwd.value().to_string());
 ##     } else {
-##         print(cwd.Error.Message);
+##         print(cwd.error().message);
 ##     }
 ## @see IoError
 export type IoResult<T> = Result<T, IoError>;

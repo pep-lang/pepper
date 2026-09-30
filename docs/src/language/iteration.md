@@ -25,7 +25,7 @@ The example shows each part of the loop:
 - **The loop variable is a copy**, like any `var`. Assigning a new value to it
   does not change the collection. For a struct element, though, the copy is
   another reference to the same object (see
-  [Memory and reference counting](memory.md)), so `item.Value = ...` does
+  [Memory and reference counting](memory.md)), so `item.value = ...` does
   change the element.
 - **A temporary source stays alive.** The loop holds a reference to what it
   iterates, so `for (var item in make_items())` is safe.

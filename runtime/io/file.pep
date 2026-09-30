@@ -39,20 +39,20 @@ import "sys_windows";
 ##     if (r.is_err()) {
 ##         return 1;
 ##     }
-##     var f = r.Value;
+##     var f = r.value();
 export struct OpenOptions {
     ## Whether the file is opened for reading. Off by default.
-    bool Read;
+    bool _read;
     ## Whether the file is opened for writing at the current position. Off by default.
-    bool Write;
+    bool _write;
     ## Whether the file is opened for writing at its end only; implies write access. Off by default.
-    bool Append;
+    bool _append;
     ## Whether an existing file is emptied to 0 bytes when opened; needs write or append. Off by default.
-    bool Truncate;
+    bool _truncate;
     ## Whether a missing file is created (an existing one is opened as it is); needs write or append. Off by default.
-    bool Create;
+    bool _create;
     ## Whether the file must be newly created: opening fails if it exists (`O_EXCL` on POSIX, `CREATE_NEW` on Windows); needs write or append. Off by default.
-    bool CreateNew;
+    bool _create_new;
 
     ## Creates an `OpenOptions` with every option off. Set at least one of
     ## `read`, `write` or `append` before opening.
@@ -64,7 +64,7 @@ export struct OpenOptions {
     ## @param v true to request read access
     ## @returns this `OpenOptions`, for chaining
     OpenOptions read(bool v) {
-        Read = v;
+        _read = v;
         return this;
     }
 
@@ -74,7 +74,7 @@ export struct OpenOptions {
     ## @param v true to request write access
     ## @returns this `OpenOptions`, for chaining
     OpenOptions write(bool v) {
-        Write = v;
+        _write = v;
         return this;
     }
 
@@ -86,7 +86,7 @@ export struct OpenOptions {
     ## @param v true to open in append mode
     ## @returns this `OpenOptions`, for chaining
     OpenOptions append(bool v) {
-        Append = v;
+        _append = v;
         return this;
     }
 
@@ -96,7 +96,7 @@ export struct OpenOptions {
     ## @param v true to truncate an existing file
     ## @returns this `OpenOptions`, for chaining
     OpenOptions truncate(bool v) {
-        Truncate = v;
+        _truncate = v;
         return this;
     }
 
@@ -106,7 +106,7 @@ export struct OpenOptions {
     ## @param v true to create the file when it is missing
     ## @returns this `OpenOptions`, for chaining
     OpenOptions create(bool v) {
-        Create = v;
+        _create = v;
         return this;
     }
 
@@ -117,7 +117,7 @@ export struct OpenOptions {
     ## @param v true to require that the file does not exist yet
     ## @returns this `OpenOptions`, for chaining
     OpenOptions create_new(bool v) {
-        CreateNew = v;
+        _create_new = v;
         return this;
     }
 
@@ -151,37 +151,37 @@ export struct OpenOptions {
 ##
 ## @example
 ##     var m = Path("notes.txt").metadata();
-##     if (m.is_ok() && m.Value.IsFile) {
-##         var bytes = m.Value.Size;
+##     if (m.is_ok() && m.value().is_file) {
+##         var bytes = m.value().size;
 ##     }
 export struct Metadata {
     ## The file's length in bytes.
-    ulong Size;
+    ulong size;
     ## Whether this is a regular file. On Windows, anything that is neither
     ## a directory nor a reparse point (symlink) counts as a file.
-    bool IsFile;
+    bool is_file;
     ## Whether this is a directory.
-    bool IsDir;
+    bool is_directory;
     ## Whether this is a symbolic link itself. Only metadata that does not
     ## follow links (`Path.symlink_metadata()`) can report one. On Windows
     ## this is any reparse point (`FILE_ATTRIBUTE_REPARSE_POINT`), which
     ## includes junctions.
-    bool IsSymlink;
+    bool is_symlink;
     ## Whether the file is read-only: on POSIX, no write permission bit
     ## (0222) is set for anyone; on Windows, `FILE_ATTRIBUTE_READONLY` is set.
-    bool ReadOnly;
+    bool read_only;
     ## The time of the last modification of the contents, in nanoseconds since the Unix epoch.
-    long Modified;
+    long modified;
     ## The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with `noatime` or `relatime` update it rarely or never).
-    long Accessed;
+    long accessed;
     ## The creation (birth) time, in nanoseconds since the Unix epoch; 0
     ## where unavailable, such as on Linux file systems that do not record
     ## one.
-    long Created;
+    long created;
     ## The raw permission bits: on POSIX the `mode_t` permission bits
     ## (`mode & 07777`, for example 256 for owner read); on Windows the
     ## `FILE_ATTRIBUTE_*` bits.
-    Mode Permissions;
+    Mode permissions;
 
     ## Creates a `Metadata` with every field zero or false. Metadata is
     ## normally obtained from a query such as `File.metadata()`.
@@ -200,12 +200,12 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
     while (done < n) {
         var r = _io_sys_write(h, p + done, n - done);
         if (r.is_err()) {
-            return IoResult<void>.err(r.Error);
+            return IoResult<void>.err(r._error);
         }
-        if (r.Value == 0) {
+        if (r._value == 0) {
             return IoResult<void>.err(IoError(_io_sys_code_write_zero(), "failed to write the whole buffer"));
         }
-        done = done + r.Value;
+        done = done + r._value;
     }
     return _io_ok_void();
 }
@@ -243,29 +243,29 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
 export struct File {
     ## The platform handle: a file descriptor on POSIX (-1 when closed), a
     ## `HANDLE` on Windows (null when closed).
-    FileHandle Handle;
+    FileHandle _handle;
     ## The path the File was opened with; `<stdin>`, `<stdout>` or
     ## `<stderr>` for a standard stream, and empty for a `File()` never
     ## opened.
-    Path Path;
+    Path path;
     ## Whether the File owns its handle and closes it. False for the
     ## standard streams (stdin, stdout, stderr), which a File never closes.
-    bool Owned;
+    bool _owned;
 
     ## Creates a closed File that owns nothing yet: `is_open()` is false and
     ## every I/O method fails. Use `File.open`, `File.create` or
     ## `File.open_with` to get an open one.
     construct() {
-        Handle = _io_sys_invalid_handle();
-        Owned = true;
+        _handle = _io_sys_invalid_handle();
+        _owned = true;
     }
 
     ## Closes the handle if it is still open and owned when the last
     ## reference goes. Errors from closing are ignored; call `close()` to
     ## see them.
     destruct {
-        if (Owned && _io_sys_handle_valid(Handle)) {
-            _io_sys_close(Handle);
+        if (_owned && _io_sys_handle_valid(_handle)) {
+            _io_sys_close(_handle);
         }
     }
 
@@ -280,10 +280,10 @@ export struct File {
     ##   refused, or another platform error
     ## @example
     ##     var r = File.open(Path("config.txt"));
-    ##     if (r.is_err() && r.Error.is_not_found()) {
+    ##     if (r.is_err() && r.error().is_not_found()) {
     ##         return 0;
     ##     }
-    ##     var text = r.Value.read_string();
+    ##     var text = r.value().read_string();
     static IoResult<File> open(Path path) {
         return File.open_with(path, OpenOptions().read(true));
     }
@@ -326,29 +326,29 @@ export struct File {
     ## @example
     ##     var opts = OpenOptions().write(true).create_new(true);
     ##     var r = File.open_with(Path("lock"), opts);
-    ##     if (r.is_err() && r.Error.is_already_exists()) {
+    ##     if (r.is_err() && r.error().is_already_exists()) {
     ##         return 1;
     ##     }
     static IoResult<File> open_with(Path path, OpenOptions options) {
         # As Rust: some access is required, and creating or truncating needs
         # write access.
-        var writes = options.Write || options.Append;
-        if (!options.Read && !writes) {
+        var writes = options._write || options._append;
+        if (!options._read && !writes) {
             return IoResult<File>.err(IoError(_io_sys_code_invalid_input(), "no access mode: set read, write or append"));
         }
-        if ((options.Create || options.CreateNew || options.Truncate) && !writes) {
+        if ((options._create || options._create_new || options._truncate) && !writes) {
             return IoResult<File>.err(IoError(_io_sys_code_invalid_input(), "create and truncate need write or append"));
         }
-        if (path.Value.size() == 0) {
+        if (path._value.size() == 0) {
             return IoResult<File>.err(IoError(_io_sys_code_not_found(), "empty path"));
         }
         var h = _io_sys_open(path, options);
         if (h.is_err()) {
-            return IoResult<File>.err(h.Error);
+            return IoResult<File>.err(h._error);
         }
         var f = File();
-        f.Handle = h.Value;
-        f.Path = path;
+        f._handle = h._value;
+        f.path = path;
         return IoResult<File>.ok(f);
     }
 
@@ -364,14 +364,14 @@ export struct File {
     ##
     ## @param which the stream: 0 for standard input, 1 for standard
     ##   output, 2 for standard error
-    ## @param name the display name stored in the File's `Path`, such as
+    ## @param name the display name stored in the File's `path`, such as
     ##   `<stdout>`
-    ## @returns a File on that stream, with `Owned` false
+    ## @returns a File on that stream, that does not close the stream when released
     static File std_file(int which, String name) {
         var f = File();
-        f.Handle = _io_sys_std_handle(which);
-        f.Path = Path(name);
-        f.Owned = false;
+        f._handle = _io_sys_std_handle(which);
+        f.path = Path(name);
+        f._owned = false;
         return f;
     }
 
@@ -412,7 +412,7 @@ export struct File {
     ##
     ## @returns true while the File is open
     bool is_open() {
-        return _io_sys_handle_valid(Handle);
+        return _io_sys_handle_valid(_handle);
     }
 
     ## Checks that the File is open, for use before an operation.
@@ -421,7 +421,7 @@ export struct File {
     ##   "file is closed" otherwise (code `EBADF` on POSIX,
     ##   `ERROR_INVALID_HANDLE` on Windows; no `IoError` predicate holds)
     IoResult<void> check_open() {
-        if (!_io_sys_handle_valid(Handle)) {
+        if (!_io_sys_handle_valid(_handle)) {
             return IoResult<void>.err(IoError(_io_sys_code_bad_handle(), "file is closed"));
         }
         return _io_ok_void();
@@ -447,22 +447,22 @@ export struct File {
     ##     var buf = Array<u8>();
     ##     while (true) {
     ##         var r = f.read(buf, 4096);
-    ##         if (r.is_err() || r.Value == 0) {
+    ##         if (r.is_err() || r.value() == 0) {
     ##             break;
     ##         }
     ##     }
     IoResult<ulong> read(u8[] buf, ulong max) {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c.Error);
+            return IoResult<ulong>.err(c._error);
         }
         if (max == 0) {
             return IoResult<ulong>.ok(0);
         }
         buf.reserve(buf._size + max);
-        var r = _io_sys_read(Handle, buf._data + buf._size, max);
+        var r = _io_sys_read(_handle, buf._data + buf._size, max);
         if (r.is_ok()) {
-            buf._size = buf._size + r.Value;
+            buf._size = buf._size + r._value;
         }
         return r;
     }
@@ -479,9 +479,9 @@ export struct File {
         while (true) {
             var r = read(buf, _io_chunk_size());
             if (r.is_err()) {
-                return IoResult<u8[]>.err(r.Error);
+                return IoResult<u8[]>.err(r._error);
             }
-            if (r.Value == 0) {
+            if (r._value == 0) {
                 break;
             }
         }
@@ -501,9 +501,9 @@ export struct File {
     IoResult<String> read_string() {
         var r = read_all();
         if (r.is_err()) {
-            return IoResult<String>.err(r.Error);
+            return IoResult<String>.err(r._error);
         }
-        var bytes = r.Value;
+        var bytes = r._value;
         var p = bytes._data as __ptr<char>;
         if (!_io_utf8_valid(p, bytes._size)) {
             return IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "stream did not contain valid UTF-8"));
@@ -526,9 +526,9 @@ export struct File {
     IoResult<ulong> write(u8[] data) {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c.Error);
+            return IoResult<ulong>.err(c._error);
         }
-        return _io_sys_write(Handle, data._data, data._size);
+        return _io_sys_write(_handle, data._data, data._size);
     }
 
     ## Writes all of `data`, repeating the write until every byte is
@@ -546,7 +546,7 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(Handle, data._data, data._size);
+        return _io_write_all_raw(_handle, data._data, data._size);
     }
 
     ## Writes all of the UTF-8 bytes of `s`, as `write_all` does. No newline
@@ -565,7 +565,7 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(Handle, s.c_str() as __ptr<u8>, s.size());
+        return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size());
     }
 
     # No SeekFrom enum: one method per origin. Each returns the new offset
@@ -625,9 +625,9 @@ export struct File {
     IoResult<Offset> seek(Offset offset, int whence) {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<Offset>.err(c.Error);
+            return IoResult<Offset>.err(c._error);
         }
-        return _io_sys_seek(Handle, offset, whence);
+        return _io_sys_seek(_handle, offset, whence);
     }
 
     ## Truncates or extends the file to exactly `size` bytes; bytes added
@@ -638,12 +638,22 @@ export struct File {
     ## @param size the new length, in bytes
     ## @returns an Ok result on success; an error when the File is closed, was not
     ##   opened for writing, or the system refuses the size
-    IoResult<void> set_len(ulong size) {
+    IoResult<void> set_length(ulong size) {
         var c = check_open();
         if (c.is_err()) {
             return c;
         }
-        return _io_sys_truncate(Handle, size);
+        return _io_sys_truncate(_handle, size);
+    }
+
+    ## Deprecated: use `set_length` instead. Truncates or extends the file to
+    ## exactly `size` bytes.
+    ##
+    ## @param size the new length, in bytes
+    ## @returns the same as `set_length(size)`
+    [Deprecated("use 'set_length' instead", "set_length")]
+    IoResult<void> set_len(ulong size) {
+        return set_length(size);
     }
 
     ## Flushes the file's contents and metadata to the storage device,
@@ -660,7 +670,7 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_sys_sync(Handle);
+        return _io_sys_sync(_handle);
     }
 
     ## Queries the metadata of the open file itself (the target, when it
@@ -670,13 +680,13 @@ export struct File {
     ## @returns the file's `Metadata`; an error when the File is closed, or
     ##   another platform error
     ## @example
-    ##     var size = f.metadata().Value.Size;
+    ##     var size = f.metadata().value().size;
     IoResult<Metadata> metadata() {
         var c = check_open();
         if (c.is_err()) {
-            return IoResult<Metadata>.err(c.Error);
+            return IoResult<Metadata>.err(c._error);
         }
-        return _io_sys_fstat(Handle);
+        return _io_sys_fstat(_handle);
     }
 
     ## Closes the File now, to observe the error the system reports (for
@@ -697,12 +707,12 @@ export struct File {
     ##         return 1;
     ##     }
     IoResult<void> close() {
-        if (!_io_sys_handle_valid(Handle)) {
+        if (!_io_sys_handle_valid(_handle)) {
             return _io_ok_void();
         }
-        var h = Handle;
-        Handle = _io_sys_invalid_handle();
-        if (!Owned) {
+        var h = _handle;
+        _handle = _io_sys_invalid_handle();
+        if (!_owned) {
             return _io_ok_void();
         }
         return _io_sys_close(h);
@@ -719,14 +729,14 @@ export struct File {
     ## @example
     ##     var r = File.read_bytes(Path("image.png"));
     ##     if (r.is_ok()) {
-    ##         var n = r.Value.count();
+    ##         var n = r.value().count();
     ##     }
     static IoResult<u8[]> read_bytes(Path path) {
         var f = File.open(path);
         if (f.is_err()) {
-            return IoResult<u8[]>.err(f.Error);
+            return IoResult<u8[]>.err(f._error);
         }
-        return f.Value.read_all();
+        return f._value.read_all();
     }
 
     ## Reads the whole file at `path` as UTF-8 text (Rust's
@@ -741,13 +751,13 @@ export struct File {
     ##     if (r.is_err()) {
     ##         return 1;
     ##     }
-    ##     var text = r.Value;
+    ##     var text = r.value();
     static IoResult<String> read_to_string(Path path) {
         var f = File.open(path);
         if (f.is_err()) {
-            return IoResult<String>.err(f.Error);
+            return IoResult<String>.err(f._error);
         }
-        return f.Value.read_string();
+        return f._value.read_string();
     }
 
     ## Writes `data` as the whole contents of the file at `path`, creating
@@ -768,9 +778,9 @@ export struct File {
     static IoResult<void> write_bytes(Path path, u8[] data) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<void>.err(f.Error);
+            return IoResult<void>.err(f._error);
         }
-        var file = f.Value;
+        var file = f._value;
         var w = file.write_all(data);
         if (w.is_err()) {
             return w;
@@ -801,9 +811,9 @@ export struct File {
     static IoResult<void> write_text(Path path, String s) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<void>.err(f.Error);
+            return IoResult<void>.err(f._error);
         }
-        var file = f.Value;
+        var file = f._value;
         var w = file.write_string(s);
         if (w.is_err()) {
             return w;
@@ -830,39 +840,39 @@ export struct File {
     static IoResult<ulong> copy(Path from, Path to) {
         var src = File.open(from);
         if (src.is_err()) {
-            return IoResult<ulong>.err(src.Error);
+            return IoResult<ulong>.err(src._error);
         }
         var from_real = from.canonicalize();
         var to_real = to.canonicalize();
-        if (from_real.is_ok() && to_real.is_ok() && from_real.Value.Value == to_real.Value.Value) {
+        if (from_real.is_ok() && to_real.is_ok() && from_real._value._value == to_real._value._value) {
             return IoResult<ulong>.err(IoError(_io_sys_code_invalid_input(), "source and destination are the same file"));
         }
         var dst = File.create(to);
         if (dst.is_err()) {
-            return IoResult<ulong>.err(dst.Error);
+            return IoResult<ulong>.err(dst._error);
         }
-        var input = src.Value;
-        var output = dst.Value;
+        var input = src._value;
+        var output = dst._value;
         var buf = Array<u8>();
         ulong total = 0;
         while (true) {
             buf.clear();
             var r = input.read(buf, _io_chunk_size());
             if (r.is_err()) {
-                return IoResult<ulong>.err(r.Error);
+                return IoResult<ulong>.err(r._error);
             }
-            if (r.Value == 0) {
+            if (r._value == 0) {
                 break;
             }
             var w = output.write_all(buf);
             if (w.is_err()) {
-                return IoResult<ulong>.err(w.Error);
+                return IoResult<ulong>.err(w._error);
             }
-            total = total + r.Value;
+            total = total + r._value;
         }
         var c = output.close();
         if (c.is_err()) {
-            return IoResult<ulong>.err(c.Error);
+            return IoResult<ulong>.err(c._error);
         }
         return IoResult<ulong>.ok(total);
     }
@@ -900,7 +910,7 @@ export struct File {
     ##   Windows also for a read-only file); or another platform error
     ## @example
     ##     var r = File.remove(Path("old.txt"));
-    ##     if (r.is_err() && !r.Error.is_not_found()) {
+    ##     if (r.is_err() && !r.error().is_not_found()) {
     ##         return 1;
     ##     }
     static IoResult<void> remove(Path path) {

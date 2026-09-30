@@ -15,15 +15,15 @@ The default error type of `Result`: a human-readable message.
 **Example**
 ```pepper
     var r = Result<int>.err(Error("boom"));
-    var n = r.Error.Message.length();   # 4
+    var n = r.error().message.length();   # 4
 ```
 
 ### Fields
 
-#### Message
+#### message
 
 ```pepper
-String Message
+String message
 ```
 
 The description of what went wrong; empty when none was given.
@@ -54,15 +54,13 @@ The outcome of an operation that can fail: either Ok, holding a `TValue`,
 or Err, holding a `TError`, like Rust's `Result<T, E>`.
 
 Build one with the static `ok` or `err` functions and test it with
-`is_ok()` or `is_err()`. Pepper has no unions, so both the `Value` and
-the `Error` fields always exist; only the one matching `IsOk` is
-meaningful, and the other keeps its default (zero for a POD type, null for
-a struct type, so do not read through it). `TError` defaults to `Error`,
-so `Result<int>` is `Result<int, Error>`.
+`is_ok()` or `is_err()`, then read the outcome with `value()` or
+`error()`, each of which panics on the wrong kind of result. `TError`
+defaults to `Error`, so `Result<int>` is `Result<int, Error>`.
 
 `Result<void>` is the result of an operation that returns nothing on
 success, like Rust's `Result<(), E>`. A `void` type argument erases what
-it types: that instance has no `Value` field, `ok()` takes no argument,
+it types: that instance holds no value, `ok()` takes no argument,
 and `value()` returns nothing, so it only checks that the result is Ok.
 
 **Type parameters**
@@ -80,32 +78,6 @@ and `value()` returns nothing, so it only checks that the result is Ok.
     }
 ```
 
-### Fields
-
-#### IsOk
-
-```pepper
-bool IsOk
-```
-
-Whether this result is Ok (`Value` is live) rather than Err (`Error` is live).
-
-#### Value
-
-```pepper
-TValue Value
-```
-
-The success value; meaningful only when `IsOk` is true, otherwise the default of `TValue`.
-
-#### Error
-
-```pepper
-TError Error
-```
-
-The failure value; meaningful only when `IsOk` is false, otherwise the default of `TError`.
-
 ### Constructor
 
 #### Result()
@@ -114,8 +86,8 @@ The failure value; meaningful only when `IsOk` is false, otherwise the default o
 construct()
 ```
 
-Creates an Err result whose `Error` and `Value` both hold their
-type's default (zero for a POD type, null for a struct type).
+Creates an Err result whose error and value both hold their type's
+default (zero for a POD type, null for a struct type).
 
 Prefer `ok` or `err`, which set the live field.
 
@@ -142,7 +114,7 @@ For `Result<void>`, `ok()` takes no argument.
 - `v` — the success value
 
 **Returns**
-- an Ok result whose `Value` is `v`
+- an Ok result whose `value()` is `v`
 
 **Example**
 ```pepper
@@ -164,7 +136,7 @@ For a struct `TError` the result acquires a reference to `e`.
 - `e` — the failure value
 
 **Returns**
-- an Err result whose `Error` is `e`
+- an Err result whose `error()` is `e`
 
 **Example**
 ```pepper
@@ -182,7 +154,7 @@ bool is_ok()
 Reports whether this result is Ok.
 
 **Returns**
-- true when `Value` holds the outcome
+- true when the result holds a value
 
 #### is_err
 
@@ -193,7 +165,7 @@ bool is_err()
 Reports whether this result is Err.
 
 **Returns**
-- true when `Error` holds the outcome
+- true when the result holds an error
 
 #### value
 
@@ -210,14 +182,36 @@ For `Result<void>` it returns nothing: calling it only checks that the
 result is Ok.
 
 **Returns**
-- the `Value` of an Ok result
+- the value of an Ok result
 
 **Panics**
-- if `this.IsOk` does not hold, that is, the result is Err ("Result.value on an Err value")
+- if the result is Err ("Result.value on an Err value")
 
 **Example**
 ```pepper
     var n = Result<int>.ok(42).value();   # 42
+```
+
+#### error
+
+```pepper
+TError error()
+```
+
+Returns the failure value, panicking if this result is Ok.
+
+For a struct `TError` the caller gets its own reference; the result
+keeps its reference too.
+
+**Returns**
+- the error of an Err result
+
+**Panics**
+- if the result is Ok ("Result.error on an Ok value")
+
+**Example**
+```pepper
+    var e = Result<int>.err(Error("boom")).error();   # e.message == "boom"
 ```
 
 #### ok_or
@@ -235,7 +229,7 @@ is used.
 - `fallback` — the value to return when the result is Err
 
 **Returns**
-- `Value` when the result is Ok, otherwise `fallback`
+- the value when the result is Ok, otherwise `fallback`
 
 **Example**
 ```pepper

@@ -1082,7 +1082,7 @@ export align_trailing_comments(printed: String, newline: String): String {
 export format_source(source: String): Result<String, syntax.SyntaxError> {
     var tree = syntax.parse(source);
     if (tree.is_err()) {
-        return Result<String, syntax.SyntaxError>.err(tree.Error);
+        return Result<String, syntax.SyntaxError>.err(tree.error());
     }
     if (source.empty()) {
         return Result<String, syntax.SyntaxError>.ok("");

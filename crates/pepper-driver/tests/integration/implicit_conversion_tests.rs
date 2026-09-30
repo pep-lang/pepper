@@ -261,9 +261,9 @@ test(): int {
     var p = io.Path("usr").join("lib");
     if (p != io.Path("usr").join(io.Path("lib"))) { return 1; }
     var q: io.Path = "docs";
-    if (q.Value != "docs") { return 2; }
+    if (q.to_string() != "docs") { return 2; }
     var r = fails();
-    if (r.Error.Message != "bad input") { return 4; }
+    if (r.error().message != "bad input") { return 4; }
     return 0;
 }
 "#,

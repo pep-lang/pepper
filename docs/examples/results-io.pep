@@ -4,12 +4,12 @@ import [File, Directory, Path, IoResult, IoError] from io;
 read_setting(Path path): String {
     var text = File.read_to_string(path);
     if (text.is_err()) {
-        if (text.Error.is_not_found()) {
+        if (text.error().is_not_found()) {
             return "default";
         }
-        return "error: " + text.Error.Message;
+        return "error: " + text.error().message;
     }
-    return text.Value;
+    return text.value();
 }
 
 main(): int {

@@ -1,6 +1,6 @@
 struct Item {
-    int Value;
-    construct(this.Value = 0) {}
+    int value;
+    construct(this.value = 0) {}
 }
 
 make_items(): Array<Item> {
@@ -50,16 +50,16 @@ main(): int {
     # but rebinding the loop variable does not touch the array.
     var items = make_items();
     for (var item in items) {
-        item.Value = item.Value * 10;
+        item.value = item.value * 10;
         item = Item(99);
     }
-    assert(items[0].Value == 200, "first element was updated");
-    assert(items[1].Value == 220, "second element was updated");
+    assert(items[0].value == 200, "first element was updated");
+    assert(items[1].value == 220, "second element was updated");
 
     # Iterating a temporary keeps it alive for the whole loop.
     var sum = 0;
     for (var item in make_items()) {
-        sum = sum + item.Value;
+        sum = sum + item.value;
     }
     assert(sum == 42, "temporary array stays alive");
 

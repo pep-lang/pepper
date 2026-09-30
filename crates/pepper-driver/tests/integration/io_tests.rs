@@ -87,7 +87,7 @@ fn scratch_name(test: &str) -> String {
 const PATH_PROGRAM: &str = r##"
 import io;
 
-s(p: io.Path): String { return p.Value; }
+s(p: io.Path): String { return p.to_string(); }
 
 # The expected text of a path the implementation builds: `/` written here is
 # the platform separator, `\` on Windows. (String literals have no escapes.)
@@ -110,22 +110,22 @@ main(): int {
     # join / join_str: an absolute right-hand side replaces; separators are
     # not doubled; empty sides are neutral. Joining inserts the platform
     # separator; the rest is the input's text as written.
-    assert(io.Path("a").join(io.Path("b")).Value == w("a/b"), "join");
-    assert(io.Path("a/").join(io.Path("b")).Value == "a/b", "join after separator");
-    assert(io.Path("a").join(io.Path("/abs")).Value == "/abs", "join absolute");
-    assert(io.Path("").join(io.Path("b")).Value == "b", "join onto empty");
-    assert(io.Path("a").join(io.Path("")).Value == "a", "join empty");
-    assert(io.Path("usr").join("lib").join("x.so").Value == w("usr/lib/x.so"), "join a String");
-    assert(io.Path("usr").join_str("lib").Value == w("usr/lib"), "deprecated join_str");
+    assert(io.Path("a").join(io.Path("b")).to_string() == w("a/b"), "join");
+    assert(io.Path("a/").join(io.Path("b")).to_string() == "a/b", "join after separator");
+    assert(io.Path("a").join(io.Path("/abs")).to_string() == "/abs", "join absolute");
+    assert(io.Path("").join(io.Path("b")).to_string() == "b", "join onto empty");
+    assert(io.Path("a").join(io.Path("")).to_string() == "a", "join empty");
+    assert(io.Path("usr").join("lib").join("x.so").to_string() == w("usr/lib/x.so"), "join a String");
+    assert(io.Path("usr").join_str("lib").to_string() == w("usr/lib"), "deprecated join_str");
 
     # parent
-    assert(io.Path("/a/b/c.txt").parent().Value == "/a/b", "parent");
-    assert(io.Path("/a").parent().Value == "/", "parent of top-level");
-    assert(io.Path("/").parent().Value == "", "parent of root");
-    assert(io.Path("a").parent().Value == "", "parent of bare name");
-    assert(io.Path("a/b/").parent().Value == "a", "parent ignores trailing separator");
-    assert(io.Path("a//b").parent().Value == "a", "parent collapses separators");
-    assert(io.Path("").parent().Value == "", "parent of empty");
+    assert(io.Path("/a/b/c.txt").parent().to_string() == "/a/b", "parent");
+    assert(io.Path("/a").parent().to_string() == "/", "parent of top-level");
+    assert(io.Path("/").parent().to_string() == "", "parent of root");
+    assert(io.Path("a").parent().to_string() == "", "parent of bare name");
+    assert(io.Path("a/b/").parent().to_string() == "a", "parent ignores trailing separator");
+    assert(io.Path("a//b").parent().to_string() == "a", "parent collapses separators");
+    assert(io.Path("").parent().to_string() == "", "parent of empty");
 
     # file_name / file_stem / extension
     assert(io.Path("/a/b/c.txt").file_name() == "c.txt", "file_name");
@@ -143,11 +143,11 @@ main(): int {
     assert(io.Path("noext").file_stem() == "noext", "no extension stem");
 
     # with_extension
-    assert(io.Path("a/b.txt").with_extension("md").Value == "a/b.md", "replace extension");
-    assert(io.Path("a/b").with_extension("rs").Value == "a/b.rs", "add extension");
-    assert(io.Path("a/b.txt").with_extension("").Value == "a/b", "remove extension");
-    assert(io.Path(".bashrc").with_extension("x").Value == ".bashrc.x", "dotfile extension");
-    assert(io.Path("/").with_extension("x").Value == "/", "no file name: unchanged");
+    assert(io.Path("a/b.txt").with_extension("md").to_string() == "a/b.md", "replace extension");
+    assert(io.Path("a/b").with_extension("rs").to_string() == "a/b.rs", "add extension");
+    assert(io.Path("a/b.txt").with_extension("").to_string() == "a/b", "remove extension");
+    assert(io.Path(".bashrc").with_extension("x").to_string() == ".bashrc.x", "dotfile extension");
+    assert(io.Path("/").with_extension("x").to_string() == "/", "no file name: unchanged");
 
     # components
     var c = io.Path("/usr//lib/./x/").components();
@@ -160,13 +160,13 @@ main(): int {
     assert(io.Path("").components().count() == 0, "no components");
 
     # normalize: rebuilt with the platform separator.
-    assert(io.Path("a/./b/../c").normalize().Value == w("a/c"), "normalize");
-    assert(io.Path("/../x").normalize().Value == w("/x"), ".. stops at the root");
-    assert(io.Path("../a/..").normalize().Value == "..", "leading .. kept");
-    assert(io.Path("a/..").normalize().Value == ".", "cleans to .");
-    assert(io.Path("a//b/").normalize().Value == w("a/b"), "separators collapse");
-    assert(io.Path("./").normalize().Value == ".", "./");
-    assert(io.Path("").normalize().Value == "", "empty stays empty");
+    assert(io.Path("a/./b/../c").normalize().to_string() == w("a/c"), "normalize");
+    assert(io.Path("/../x").normalize().to_string() == w("/x"), ".. stops at the root");
+    assert(io.Path("../a/..").normalize().to_string() == "..", "leading .. kept");
+    assert(io.Path("a/..").normalize().to_string() == ".", "cleans to .");
+    assert(io.Path("a//b/").normalize().to_string() == w("a/b"), "separators collapse");
+    assert(io.Path("./").normalize().to_string() == ".", "./");
+    assert(io.Path("").normalize().to_string() == "", "empty stays empty");
 
     # relative / empty / equality
     assert(!io.Path("x").is_absolute() && io.Path("x").is_relative(), "relative");
@@ -181,7 +181,7 @@ main(): int {
     [Target(!OS(Windows))] {
         # POSIX: a root makes a path absolute; `\` is an ordinary byte.
         assert(io.Path("/x").is_absolute(), "absolute");
-        assert(io.Path("//a//b/").normalize().Value == "/a/b", "leading separators collapse");
+        assert(io.Path("//a//b/").normalize().to_string() == "/a/b", "leading separators collapse");
         assert(io.Path("a\\b").file_name() == "a\\b", "backslash is not a separator");
     }
     [Target(OS(Windows))] {
@@ -191,15 +191,15 @@ main(): int {
         assert(!io.Path("C:x").is_absolute(), "a drive without a root is relative");
         assert(io.Path("C:/x").is_absolute() && io.Path(w("C:/x")).is_absolute(), "drive and root");
         assert(io.Path(w("//server/share/x")).is_absolute(), "UNC");
-        assert(io.Path(w("a/b/c.txt")).parent().Value == w("a/b"), "parent with backslashes");
+        assert(io.Path(w("a/b/c.txt")).parent().to_string() == w("a/b"), "parent with backslashes");
         assert(io.Path(w("a/b/c.txt")).file_name() == "c.txt", "file_name with backslashes");
-        assert(io.Path("C:/a//./b/").normalize().Value == w("C:/a/b"), "normalize keeps the drive");
-        assert(io.Path("C:/x").parent().Value == "C:/", "parent of a top-level name keeps the root");
-        assert(io.Path("C:/").parent().Value == "", "parent of a drive root");
+        assert(io.Path("C:/a//./b/").normalize().to_string() == w("C:/a/b"), "normalize keeps the drive");
+        assert(io.Path("C:/x").parent().to_string() == "C:/", "parent of a top-level name keeps the root");
+        assert(io.Path("C:/").parent().to_string() == "", "parent of a drive root");
         var wc = io.Path(w("C:/a/b")).components();
         assert(wc.count() == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
-        assert(io.Path("a").join("C:/x").Value == "C:/x", "join a drive path replaces");
-        assert(io.Path(w("C:/a")).join("b").Value == w("C:/a/b"), "join under a drive");
+        assert(io.Path("a").join("C:/x").to_string() == "C:/x", "join a drive path replaces");
+        assert(io.Path(w("C:/a")).join("b").to_string() == w("C:/a/b"), "join under a drive");
     }
     return 0;
 }
@@ -237,7 +237,7 @@ bytes_of(s: String): u8[] {
 has_entry(list: DirEntry[], name: String): bool {
     ulong i = 0;
     while (i < list.count()) {
-        if (list[i].Name == name) {
+        if (list[i].name == name) {
             return true;
         }
         i = i + 1;
@@ -248,7 +248,7 @@ has_entry(list: DirEntry[], name: String): bool {
 entry(list: DirEntry[], name: String): DirEntry {
     ulong i = 0;
     while (i < list.count()) {
-        if (list[i].Name == name) {
+        if (list[i].name == name) {
             return list[i];
         }
         i = i + 1;
@@ -268,14 +268,14 @@ files_and_text(base: Path) {
     assert(File.write_bytes(bin, data).is_ok(), "write_bytes");
     var back = File.read_bytes(bin);
     assert(back.is_ok(), "read_bytes");
-    assert(back.Value.count() == 256, "read_bytes size");
-    assert(back.Value == data, "read_bytes content");
+    assert(back.value().count() == 256, "read_bytes size");
+    assert(back.value() == data, "read_bytes content");
 
     # Text round trip, including non-ASCII.
     var t = base.join("text.txt");
     assert(File.write_text(t, "hello, wörld").is_ok(), "write_text");
     assert(text(t) == "hello, wörld", "read_to_string");
-    assert(t.metadata().Value.Size == 13, "text size in bytes");
+    assert(t.metadata().value().size == 13, "text size in bytes");
 
     # Invalid UTF-8 is an invalid-input error.
     var bad = Array<u8>();
@@ -285,47 +285,47 @@ files_and_text(base: Path) {
     assert(File.write_bytes(badf, bad).is_ok(), "write invalid utf-8");
     var r = File.read_to_string(badf);
     assert(r.is_err(), "invalid utf-8 rejected");
-    assert(r.Error.is_invalid_input(), "invalid utf-8 rejected");
+    assert(r.error().is_invalid_input(), "invalid utf-8 rejected");
 
     # Append.
     var a = OpenOptions().append(true).open(t);
     assert(a.is_ok(), "open for append");
-    assert(a.Value.write_string(" again").is_ok(), "append write");
-    assert(a.Value.close().is_ok(), "close appended");
+    assert(a.value().write_string(" again").is_ok(), "append write");
+    assert(a.value().close().is_ok(), "close appended");
     assert(text(t) == "hello, wörld again", "appended");
 
     # create_new fails on an existing file, succeeds on a new one.
     var cn = OpenOptions().write(true).create_new(true).open(t);
     assert(cn.is_err(), "create_new on existing");
-    assert(cn.Error.is_already_exists(), "create_new on existing");
-    assert(cn.Error.Message.size() > 0, "error message");
+    assert(cn.error().is_already_exists(), "create_new on existing");
+    assert(cn.error().message.size() > 0, "error message");
     var fresh = base.join("fresh.txt");
     var cn2 = OpenOptions().write(true).create_new(true).open(fresh);
     assert(cn2.is_ok(), "create_new on missing");
-    assert(cn2.Value.write_all(bytes_of("new")).is_ok(), "write_all");
-    assert(cn2.Value.close().is_ok(), "close new");
+    assert(cn2.value().write_all(bytes_of("new")).is_ok(), "write_all");
+    assert(cn2.value().close().is_ok(), "close new");
     assert(text(fresh) == "new", "create_new content");
 
     # Open without create fails on a missing file.
     var missing = base.join("missing.txt");
     var m = File.open(missing);
     assert(m.is_err(), "open missing: not found");
-    assert(m.Error.is_not_found(), "open missing: not found");
+    assert(m.error().is_not_found(), "open missing: not found");
     assert(!missing.exists(), "missing does not exist");
     var nw = OpenOptions().write(true).open(missing);
-    assert(nw.Error.is_not_found(), "write without create: not found");
+    assert(nw.error().is_not_found(), "write without create: not found");
     var nodir = File.create(base.join("no/such/dir.txt"));
-    assert(nodir.Error.is_not_found(), "create under missing directory");
+    assert(nodir.error().is_not_found(), "create under missing directory");
 
     # Option validation.
-    assert(OpenOptions().open(t).Error.is_invalid_input(), "no access mode");
-    assert(OpenOptions().read(true).create(true).open(t).Error.is_invalid_input(), "create needs write");
+    assert(OpenOptions().open(t).error().is_invalid_input(), "no access mode");
+    assert(OpenOptions().read(true).create(true).open(t).error().is_invalid_input(), "create needs write");
 
     # Truncate.
     var tr = OpenOptions().write(true).truncate(true).open(t);
     assert(tr.is_ok(), "open truncate");
-    assert(tr.Value.metadata().Value.Size == 0, "truncated size");
-    tr.Value.close();
+    assert(tr.value().metadata().value().size == 0, "truncated size");
+    tr.value().close();
     assert(text(t) == "", "truncated content");
 }
 
@@ -334,41 +334,41 @@ seeking(base: Path) {
     assert(File.write_text(p, "0123456789").is_ok(), "write seek file");
     var o = OpenOptions().read(true).write(true).open(p);
     assert(o.is_ok(), "open read+write");
-    var f = o.Value;
+    var f = o.value();
     assert(f.is_open(), "is_open");
-    assert(f.seek_end(0).Value == 10, "seek_end");
-    assert(f.seek_start(3).Value == 3, "seek_start");
+    assert(f.seek_end(0).value() == 10, "seek_end");
+    assert(f.seek_start(3).value() == 3, "seek_start");
     var buf = Array<u8>();
-    assert(f.read(buf, 2).Value == 2, "read 2");
+    assert(f.read(buf, 2).value() == 2, "read 2");
     assert(buf.count() == 2 && buf[0] == 51 && buf[1] == 52, "read at 3");
-    assert(f.seek_current(2).Value == 7, "seek_current");
-    assert(f.read(buf, 10).Value == 3, "read to end");
+    assert(f.seek_current(2).value() == 7, "seek_current");
+    assert(f.read(buf, 10).value() == 3, "read to end");
     assert(buf.count() == 5 && buf[2] == 55 && buf[4] == 57, "read appends");
-    assert(f.read(buf, 10).Value == 0, "EOF");
-    assert(f.seek_current(-4).Value == 6, "seek back");
+    assert(f.read(buf, 10).value() == 0, "EOF");
+    assert(f.seek_current(-4).value() == 6, "seek back");
     var before_start = f.seek_current(-100);
     assert(before_start.is_err(), "seek before the start");
-    assert(before_start.Error.is_invalid_input(), "seek before the start is invalid input");
+    assert(before_start.error().is_invalid_input(), "seek before the start is invalid input");
     assert(f.seek_start(0).is_ok(), "rewind");
     assert(f.write_string("AB").is_ok(), "overwrite");
     assert(f.sync().is_ok(), "sync");
     assert(text(p) == "AB23456789", "overwritten");
 
     # set_len shrinks and zero-extends, keeping the position.
-    assert(f.set_len(4).is_ok(), "set_len shrink");
-    assert(f.metadata().Value.Size == 4, "shrunk");
-    assert(f.set_len(8).is_ok(), "set_len grow");
-    assert(f.seek_current(0).Value == 2, "position kept");
-    var all = File.read_bytes(p).Value;
+    assert(f.set_length(4).is_ok(), "set_length shrink");
+    assert(f.metadata().value().size == 4, "shrunk");
+    assert(f.set_length(8).is_ok(), "set_length grow");
+    assert(f.seek_current(0).value() == 2, "position kept");
+    var all = File.read_bytes(p).value();
     assert(all.count() == 8 && all[3] == 51 && all[4] == 0 && all[7] == 0, "zero-extended");
 
     # Metadata of an open file.
-    var md = f.metadata().Value;
-    assert(md.IsFile && !md.IsDir && !md.IsSymlink, "file kind");
-    assert(md.Modified > 0 && md.Accessed > 0, "timestamps");
-    assert(!md.ReadOnly, "writable");
+    var md = f.metadata().value();
+    assert(md.is_file && !md.is_directory && !md.is_symlink, "file kind");
+    assert(md.modified > 0 && md.accessed > 0, "timestamps");
+    assert(!md.read_only, "writable");
     [Target(!OS(Windows))] {
-        assert((md.Permissions & 256) != 0, "owner can read");   # POSIX mode bits
+        assert((md.permissions & 256) != 0, "owner can read");   # POSIX mode bits
     }
 
     # Close is explicit and idempotent; a closed File refuses I/O.
@@ -381,17 +381,17 @@ seeking(base: Path) {
     # A file opened only to append can still be synced.
     var ap = OpenOptions().append(true).open(p);
     assert(ap.is_ok(), "open to append");
-    assert(ap.Value.write_string("Z").is_ok(), "append");
-    assert(ap.Value.sync().is_ok(), "sync in append mode");
-    assert(ap.Value.close().is_ok(), "close append");
-    assert(File.read_bytes(p).Value.count() == 9, "appended");
+    assert(ap.value().write_string("Z").is_ok(), "append");
+    assert(ap.value().sync().is_ok(), "sync in append mode");
+    assert(ap.value().close().is_ok(), "close append");
+    assert(File.read_bytes(p).value().count() == 9, "appended");
 
     # A directory opens read-only but cannot be read.
     var dr = File.open(base);
     assert(dr.is_ok(), "open directory");
-    var rd = dr.Value.read_all();
+    var rd = dr.value().read_all();
     assert(rd.is_err(), "read directory");
-    assert(rd.Error.is_is_a_directory(), "read directory");
+    assert(rd.error().is_is_a_directory(), "read directory");
 }
 
 directories(base: Path) {
@@ -401,9 +401,9 @@ directories(base: Path) {
     assert(Directory.create_all(nested).is_ok(), "create_all again");
     var again = Directory.create(nested);
     assert(again.is_err(), "create existing");
-    assert(again.Error.is_already_exists(), "create existing");
+    assert(again.error().is_already_exists(), "create existing");
     var nop = Directory.create(base.join("p/q"));
-    assert(nop.Error.is_not_found(), "create without parent");
+    assert(nop.error().is_not_found(), "create without parent");
 
     var d = base.join("list");
     assert(Directory.create(d).is_ok(), "create");
@@ -414,46 +414,46 @@ directories(base: Path) {
     # Listing an empty path fails as on POSIX, rather than listing the
     # current directory.
     var blank = Directory();
-    blank.Path = Path("");
-    assert(blank.entries().Error.is_not_found(), "list an empty path");
+    blank.path = Path("");
+    assert(blank.entries().error().is_not_found(), "list an empty path");
     var empty_dir = base.join("empty");
     assert(Directory.create(empty_dir).is_ok(), "create empty");
-    assert(Directory.open(empty_dir).Value.entries().Value.count() == 0, "list an empty directory");
+    assert(Directory.open(empty_dir).value().entries().value().count() == 0, "list an empty directory");
     assert(Directory.remove(empty_dir).is_ok(), "remove empty");
 
     var opened = Directory.open(d);
     assert(opened.is_ok(), "Directory.open");
-    var entries = opened.Value.entries();
+    var entries = opened.value().entries();
     assert(entries.is_ok(), "entries");
-    var list = entries.Value;
+    var list = entries.value();
     assert(list.count() == 3, "three entries");
     assert(has_entry(list, "a.txt") && has_entry(list, "b.txt") && has_entry(list, "sub"), "entry names");
     var sub = entry(list, "sub");
-    assert(sub.IsDir && !sub.IsFile, "sub is a directory");
+    assert(sub.is_directory && !sub.is_file, "sub is a directory");
     var b = entry(list, "b.txt");
-    assert(b.IsFile && !b.IsDir && !b.IsSymlink, "b is a file");
-    assert(b.Path == d.join("b.txt"), "entry path");
-    assert(b.metadata().Value.Size == 2, "entry metadata");
+    assert(b.is_file && !b.is_directory && !b.is_symlink, "b is a file");
+    assert(b.path == d.join("b.txt"), "entry path");
+    assert(b.metadata().value().size == 2, "entry metadata");
 
     var nd = Directory.open(d.join("a.txt"));
     assert(nd.is_err(), "open a file as a directory");
-    assert(nd.Error.is_not_a_directory(), "open a file as a directory");
-    assert(Directory.open(d.join("nope")).Error.is_not_found(), "open missing directory");
+    assert(nd.error().is_not_a_directory(), "open a file as a directory");
+    assert(Directory.open(d.join("nope")).error().is_not_found(), "open missing directory");
 
     var ne = Directory.remove(d);
     assert(ne.is_err(), "remove non-empty");
-    assert(ne.Error.is_directory_not_empty(), "remove non-empty");
+    assert(ne.error().is_directory_not_empty(), "remove non-empty");
     assert(Directory.remove(d.join("sub")).is_ok(), "remove empty");
     assert(!d.join("sub").exists(), "removed");
 
     # copy / rename / remove
     var a = d.join("a.txt");
     var c = d.join("c.txt");
-    assert(File.copy(d.join("b.txt"), c).Value == 2, "copy count");
+    assert(File.copy(d.join("b.txt"), c).value() == 2, "copy count");
     assert(text(c) == "bb", "copied content");
     # Copying a file onto itself fails instead of truncating it first.
-    assert(File.copy(c, c).Error.is_invalid_input(), "copy onto itself");
-    assert(File.copy(c, d.join(".").join("c.txt")).Error.is_invalid_input(), "copy onto itself, other spelling");
+    assert(File.copy(c, c).error().is_invalid_input(), "copy onto itself");
+    assert(File.copy(c, d.join(".").join("c.txt")).error().is_invalid_input(), "copy onto itself, other spelling");
     assert(text(c) == "bb", "self-copy kept content");
     var moved = d.join("moved.txt");
     assert(File.rename(c, moved).is_ok(), "rename");
@@ -464,21 +464,21 @@ directories(base: Path) {
     assert(!moved.exists(), "removed file");
     var gone = File.remove(moved);
     assert(gone.is_err(), "remove missing");
-    assert(gone.Error.is_not_found(), "remove missing");
-    assert(File.copy(moved, c).Error.is_not_found(), "copy missing");
+    assert(gone.error().is_not_found(), "remove missing");
+    assert(File.copy(moved, c).error().is_not_found(), "copy missing");
 
     # current directory and canonicalize
     var cwd = Directory.current();
     assert(cwd.is_ok(), "current");
-    assert(cwd.Value.is_absolute(), "current");
+    assert(cwd.value().is_absolute(), "current");
     assert(Directory.set_current(d).is_ok(), "set_current");
-    var here = Directory.current().Value.canonicalize().Value;
-    assert(here == d.canonicalize().Value, "now in d");
+    var here = Directory.current().value().canonicalize().value();
+    assert(here == d.canonicalize().value(), "now in d");
     assert(Path("b.txt").is_file(), "relative to the new current directory");
-    assert(Directory.set_current(cwd.Value).is_ok(), "restore current");
+    assert(Directory.set_current(cwd.value()).is_ok(), "restore current");
     var dotted = d.join("..").join("list").join("b.txt");
-    assert(dotted.canonicalize().Value == d.join("b.txt").canonicalize().Value, "canonicalize");
-    assert(d.join("none").canonicalize().Error.is_not_found(), "canonicalize missing");
+    assert(dotted.canonicalize().value() == d.join("b.txt").canonicalize().value(), "canonicalize");
+    assert(d.join("none").canonicalize().error().is_not_found(), "canonicalize missing");
 
     # remove_all removes a tree.
     var tree = base.join("tree");
@@ -491,18 +491,18 @@ directories(base: Path) {
     assert(File.write_text(keep.join("k.txt"), "k").is_ok(), "k.txt");
     [Target(!OS(Windows))] {
         var link = tree.join("link");
-        assert(symlink(keep.Value.c_str(), link.Value.c_str()) == 0, "symlink");
+        assert(symlink(keep.to_string().c_str(), link.to_string().c_str()) == 0, "symlink");
         var lm = link.symlink_metadata();
         assert(lm.is_ok(), "symlink_metadata");
-        assert(lm.Value.IsSymlink, "symlink_metadata");
-        assert(link.metadata().Value.IsDir, "metadata follows the link");
-        var tl = Directory.open(tree).Value.entries().Value;
-        assert(entry(tl, "link").IsSymlink, "entry is a symlink");
+        assert(lm.value().is_symlink, "symlink_metadata");
+        assert(link.metadata().value().is_directory, "metadata follows the link");
+        var tl = Directory.open(tree).value().entries().value();
+        assert(entry(tl, "link").is_symlink, "entry is a symlink");
     }
     assert(Directory.remove_all(tree).is_ok(), "remove_all");
     assert(!tree.exists(), "tree removed");
     assert(keep.join("k.txt").is_file(), "link target kept");
-    assert(Directory.remove_all(base.join("absent")).Error.is_not_found(), "remove_all missing");
+    assert(Directory.remove_all(base.join("absent")).error().is_not_found(), "remove_all missing");
 }
 
 run_all(scratch: String): int {
@@ -553,15 +553,15 @@ churn(p: Path) {
         var first = -1;
         {
             var f = File.open(p).value();
-            first = f.Handle;
+            first = f._handle;
         }
         var again = File.open(p).value();
-        assert(again.Handle == first, "descriptor not closed by the destructor");
+        assert(again._handle == first, "descriptor not closed by the destructor");
     }
     [Target(OS(Windows))] {
         # A dropped File's HANDLE is no longer valid. (The temporary File
         # is released at the end of the declaration.)
-        var h = File.open(p).value().Handle;
+        var h = File.open(p).value()._handle;
         var flags = _pep_malloc(4);
         assert(GetHandleInformation(h, flags) == 0, "handle not closed by the destructor");
         _pep_free(flags);
@@ -603,7 +603,7 @@ main(): int {
 "##;
 
 const IMPORT_NAMES_PROGRAM: &str =
-    "import [Path as P] from io;\nmain(): int { return P(\"ab\").Value.size() as int - 2; }";
+    "import [Path as P] from io;\nmain(): int { return P(\"ab\").to_string().size() as int - 2; }";
 
 #[test]
 fn stdout_is_a_file() {
@@ -621,7 +621,7 @@ fn file_closes_on_last_release() {
 fn io_is_a_module_not_prelude() {
     std::env::set_current_dir(repo_root()).unwrap();
     // Without an import, io is not loaded at all: Path is unknown.
-    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.Value.size() as int; }")
+    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.to_string().size() as int; }")
         .expect_err("Path visible without importing io");
     assert!(err.contains("Path"), "unexpected error: {err}");
     let _ = std::fs::remove_dir_all(source_dir("no_import"));

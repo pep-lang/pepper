@@ -55,7 +55,7 @@ Returns a 64-bit FNV-1a hash of a String's bytes, so equal strings hash
 equally wherever they are stored. Keeps equal `String` keys of a
 `HashMap` or `HashSet` in one bucket.
 
-Hashes the `Size` bytes of `Data` (not the NUL terminator) in O(Size). An
+Hashes the `size()` bytes of the String (not the NUL terminator) in O(size). An
 empty String hashes to the FNV-1a offset basis.
 
 **Parameters**
@@ -119,7 +119,7 @@ Array<K> keys
 ```
 
 The key of each slot; only slots whose `state` is 2 hold a live key,
-the rest hold the default of `K`. Internal: its `Size` equals
+the rest hold the default of `K`. Internal: its count equals
 `capacity` rather than the entry count, and `grow` replaces it.
 
 #### values
@@ -442,7 +442,7 @@ Array<K> keys
 ```
 
 The element of each slot; only slots whose `state` is 2 hold a live
-member, the rest hold the default of `K`. Internal: its `Size` equals
+member, the rest hold the default of `K`. Internal: its count equals
 `capacity` rather than the member count, and `grow` replaces it.
 
 #### state

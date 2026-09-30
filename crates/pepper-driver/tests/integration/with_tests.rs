@@ -105,8 +105,8 @@ test(): int {
 fn with_null_enter_runs_else() {
     let src = r#"
 struct Node {
-    int Value = 0;
-    construct(this.Value = 0) {}
+    int value = 0;
+    construct(this.value = 0) {}
 }
 
 struct Maybe {
@@ -119,7 +119,7 @@ struct Maybe {
 test(): int {
     var ran = 0;
     with (var n = Maybe(Node(5))) {
-        ran = n.Value;
+        ran = n.value;
     } else {
         return -1;
     }
@@ -255,8 +255,8 @@ test(): int {
 fn with_generic_scope_in_a_method() {
     let src = r#"
 struct Node {
-    int Value = 0;
-    construct(this.Value = 0) {}
+    int value = 0;
+    construct(this.value = 0) {}
 }
 
 struct Holder<T> {
@@ -271,7 +271,7 @@ struct Tree {
     construct(Node parent) { Parent = Holder<Node>(parent); }
     int parent_value() {
         with (var p = Parent) {
-            return p.Value;
+            return p.value;
         } else {
             return -1;
         }

@@ -16,13 +16,13 @@ import "format";
 main(): int {
     var input = File.stdin().read_string();
     if (input.is_err()) {
-        File.stderr().write_string("pep-fmt: error: cannot read standard input: " + input.Error.Message + "\n");
+        File.stderr().write_string("pep-fmt: error: cannot read standard input: " + input.error().message + "\n");
         return 1;
     }
     var source = input.value();
     var formatted = format_source(source);
     if (formatted.is_err()) {
-        var error = formatted.Error;
+        var error = formatted.error();
         var line = syntax.line_of(source, error.offset);
         var column = syntax.column_of(source, error.offset);
         File.stderr().write_string(

@@ -46,7 +46,7 @@ test(): int {
     var r = Result<int>.err(Error("boom"));
     if (r.is_ok()) { return -1; }
     if (!r.is_err()) { return -2; }
-    if (r.Error.Message.length() != 4) { return -3; }
+    if (r.error().message.length() != 4) { return -3; }
     return 0;
 }"#
         ),
@@ -86,7 +86,7 @@ test(): int {
     var a = Result<int>.ok(1);
     var b = Result<int>.err(Error("e"));
     if (!a.is_ok() || b.is_ok()) { return -1; }
-    if (b.Error.Message.length() != 1) { return -2; }
+    if (b.error().message.length() != 1) { return -2; }
     return 0;
 }"#
         ),
@@ -119,13 +119,13 @@ fn custom_terror() {
         compile_jit_with_runtime(
             r#"
 struct Code {
-    int Value;
-    construct(int v) { this.Value = v; }
+    int value;
+    construct(int v) { this.value = v; }
 }
 test(): int {
     var r = Result<int, Code>.err(Code(500));
     if (r.is_ok()) { return -1; }
-    if (r.Error.Value != 500) { return -2; }
+    if (r.error().value != 500) { return -2; }
     var ok = Result<int, Code>.ok(3);
     if (!ok.is_ok() || ok.value() != 3) { return -3; }
     return 0;
@@ -224,7 +224,7 @@ test(): int {
         ok.value();
         var err = check(false);
         if (!err.is_err()) { return -2; }
-        if (err.Error.Message.length() != 3) { return -3; }
+        if (err.error().message.length() != 3) { return -3; }
     }
     var after = _pep_live_allocs();
     if (after != before) { return -4; }

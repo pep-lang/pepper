@@ -40,17 +40,6 @@ dots are ASCII, so splitting at them never cuts a character in two.
     }
 ```
 
-### Fields
-
-#### Value
-
-```pepper
-String Value
-```
-
-The path's text, exactly as given or built: UTF-8, not normalized,
-possibly empty.
-
 ### Constructor
 
 #### Path()
@@ -105,7 +94,7 @@ dot (`.bashrc`) starts the name, not an extension.
 - `name` — a file name (one component, as `file_name()` returns)
 
 **Returns**
-- the index of the extension's dot, or `name.Size` when the name has no extension (including the empty name)
+- the index of the extension's dot, or `name.size` when the name has no extension (including the empty name)
 
 ### Methods
 
@@ -115,7 +104,7 @@ dot (`.bashrc`) starts the name, not an extension.
 String to_string()
 ```
 
-Returns the path's text, the same String as `Value`.
+Returns the path's text, the same String the Path holds, not a copy.
 
 **Returns**
 - the path as a String
@@ -131,7 +120,7 @@ path": it is what `parent()` returns for a root or a bare name, and
 file-system operations on it fail.
 
 **Returns**
-- true when `Value` is `""`
+- true when the path's text is `""`
 
 #### is_absolute
 
@@ -413,16 +402,28 @@ Returns whether the path names a regular file, following symlinks.
 **Returns**
 - true for a regular file or a symlink to one; false for anything else, and on any error (including a missing path)
 
-#### is_dir
+#### is_directory
 
 ```pepper
-bool is_dir()
+bool is_directory()
 ```
 
 Returns whether the path names a directory, following symlinks.
 
 **Returns**
 - true for a directory or a symlink to one; false for anything else, and on any error (including a missing path)
+
+#### is_dir
+
+```pepper
+[Deprecated("use 'is_directory' instead", "is_directory")] bool is_dir()
+```
+
+Deprecated: use `is_directory` instead. Returns whether the path
+names a directory, following symlinks.
+
+**Returns**
+- the same as `is_directory()`
 
 #### metadata
 
@@ -431,7 +432,7 @@ IoResult<Metadata> metadata()
 ```
 
 Returns the metadata of the file or directory at this path, following
-symlinks: the result describes the target (so on POSIX `IsSymlink` is
+symlinks: the result describes the target (so on POSIX `is_symlink` is
 always false). `stat` / `statx` on POSIX; on Windows the path is
 opened for attributes only.
 
@@ -447,7 +448,7 @@ opened for attributes only.
 
     var m = io.Path("data.bin").metadata();
     if (m.is_ok()) {
-        var size = m.Value.Size;
+        var size = m.value().size;
     }
 ```
 
@@ -458,11 +459,11 @@ IoResult<Metadata> symlink_metadata()
 ```
 
 Returns the metadata of the path itself without following a symlink
-at the end of it, so for a symlink `IsSymlink` is true and the rest
+at the end of it, so for a symlink `is_symlink` is true and the rest
 describes the link rather than its target. `lstat` / `statx` with
 `AT_SYMLINK_NOFOLLOW` on POSIX; on Windows the path is opened with
 `FILE_FLAG_OPEN_REPARSE_POINT`, and any reparse point (junctions
-included) reports `IsSymlink`, together with `IsDir` for a directory
+included) reports `is_symlink`, together with `is_directory` for a directory
 link. For anything that is not a symlink it equals `metadata()`.
 
 **Returns**
@@ -497,7 +498,7 @@ removed (`\\?\UNC\server\share` becomes `\\server\share`).
 
     var real = io.Path("a/../b.txt").canonicalize();
     if (real.is_ok()) {
-        print(real.Value.to_string());
+        print(real.value().to_string());
     }
 ```
 
@@ -517,7 +518,7 @@ results to ignore spelling differences.
 - `rhs` — the path to compare with
 
 **Returns**
-- true when both `Value`s are equal
+- true when both paths' texts are equal
 
 #### operator !=
 
@@ -532,4 +533,4 @@ with the same byte-by-byte comparison.
 - `rhs` — the path to compare with
 
 **Returns**
-- true when the `Value`s differ
+- true when the paths' texts differ

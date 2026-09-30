@@ -140,24 +140,24 @@ import "directory";
 # ── File operations ──────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))] export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<FileHandle>.err(_io_posix_empty_path());
     }
-    var writes = options.Write || options.Append;
+    var writes = options._write || options._append;
     var flags = 0;   # O_RDONLY
     if (writes) {
         flags = _io_o_wronly();
-        if (options.Read) {
+        if (options._read) {
             flags = _io_o_rdwr();
         }
     }
-    if (options.Append) { flags = flags | _io_o_append(); }
-    if (options.Truncate) { flags = flags | _io_o_trunc(); }
-    if (options.Create) { flags = flags | _io_o_creat(); }
-    if (options.CreateNew) { flags = flags | _io_o_creat() | _io_o_excl(); }
+    if (options._append) { flags = flags | _io_o_append(); }
+    if (options._truncate) { flags = flags | _io_o_trunc(); }
+    if (options._create) { flags = flags | _io_o_creat(); }
+    if (options._create_new) { flags = flags | _io_o_creat() | _io_o_excl(); }
     flags = flags | _io_o_cloexec();
     while (true) {
-        var fd = open(path.Value.c_str(), flags, 438);   # 0666, less the umask
+        var fd = open(path._value.c_str(), flags, 438);   # 0666, less the umask
         if (fd >= 0) {
             return IoResult<FileHandle>.ok(fd);
         }
@@ -305,26 +305,26 @@ import "directory";
     var m = Metadata();
     var mode = _io_read_u16(buf, _io_stat_mode_offset());
     var kind = mode & 61440;           # S_IFMT 0170000
-    m.IsFile = kind == 32768;          # S_IFREG 0100000
-    m.IsDir = kind == 16384;           # S_IFDIR 0040000
-    m.IsSymlink = kind == 40960;       # S_IFLNK 0120000
-    m.Permissions = mode & 4095;       # 07777
-    m.ReadOnly = (mode & 146) == 0;    # no 0222 write bit
-    m.Size = _io_read_i64(buf, _io_stat_size_offset()) as ulong;
-    m.Accessed = _io_stat_time(buf, _io_stat_atime_offset());
-    m.Modified = _io_stat_time(buf, _io_stat_mtime_offset());
+    m.is_file = kind == 32768;          # S_IFREG 0100000
+    m.is_directory = kind == 16384;           # S_IFDIR 0040000
+    m.is_symlink = kind == 40960;       # S_IFLNK 0120000
+    m.permissions = mode & 4095;       # 07777
+    m.read_only = (mode & 146) == 0;    # no 0222 write bit
+    m.size = _io_read_i64(buf, _io_stat_size_offset()) as ulong;
+    m.accessed = _io_stat_time(buf, _io_stat_atime_offset());
+    m.modified = _io_stat_time(buf, _io_stat_mtime_offset());
     if (_io_stat_has_btime(buf)) {
-        m.Created = _io_stat_time(buf, _io_stat_btime_offset());
+        m.created = _io_stat_time(buf, _io_stat_btime_offset());
     }
     return m;
 }
 
 [Target(!OS(Windows))] export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<Metadata>.err(_io_posix_empty_path());
     }
     var buf = _pep_malloc(_io_stat_buf_size());
-    var rc = _io_stat_path(path.Value.c_str(), follow, buf);
+    var rc = _io_stat_path(path._value.c_str(), follow, buf);
     if (rc != 0) {
         var e = IoError.last();
         _pep_free(buf);
@@ -358,10 +358,10 @@ import "directory";
 [Target(OS(Mac))] export _io_dirent_name_offset(): ulong { return 21; }
 
 [Target(!OS(Windows))] export _io_sys_list(path: Path): IoResult<DirEntry[]> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<DirEntry[]>.err(_io_posix_empty_path());
     }
-    var dir = opendir(path.Value.c_str());
+    var dir = opendir(path._value.c_str());
     if (dir == __null) {
         return IoResult<DirEntry[]>.err(IoError.last());
     }
@@ -384,21 +384,21 @@ import "directory";
             continue;
         }
         var entry = DirEntry();
-        entry.Name = name;
-        entry.Path = path.join(Path(name));
+        entry.name = name;
+        entry.path = path.join(Path(name));
         var kind = ent[_io_dirent_type_offset()];
         if (kind == 0) {
             # DT_UNKNOWN: the file system did not say; ask lstat.
-            var m = _io_sys_stat(entry.Path, false);
+            var m = _io_sys_stat(entry.path, false);
             if (m.is_ok()) {
-                entry.IsFile = m.Value.IsFile;
-                entry.IsDir = m.Value.IsDir;
-                entry.IsSymlink = m.Value.IsSymlink;
+                entry.is_file = m._value.is_file;
+                entry.is_directory = m._value.is_directory;
+                entry.is_symlink = m._value.is_symlink;
             }
         } else {
-            entry.IsDir = kind == 4;       # DT_DIR
-            entry.IsFile = kind == 8;      # DT_REG
-            entry.IsSymlink = kind == 10;  # DT_LNK
+            entry.is_directory = kind == 4;       # DT_DIR
+            entry.is_file = kind == 8;      # DT_REG
+            entry.is_symlink = kind == 10;  # DT_LNK
         }
         out.append(entry);
     }
@@ -407,24 +407,24 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<void> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(mkdir(path.Value.c_str(), 511));   # 0777, less the umask
+    return _io_posix_check(mkdir(path._value.c_str(), 511));   # 0777, less the umask
 }
 
 [Target(!OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<void> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(rmdir(path.Value.c_str()));
+    return _io_posix_check(rmdir(path._value.c_str()));
 }
 
 [Target(!OS(Windows))] export _io_sys_unlink(path: Path): IoResult<void> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(unlink(path.Value.c_str()));
+    return _io_posix_check(unlink(path._value.c_str()));
 }
 
 # Remove a non-directory or a symlink (to anything); `unlink` handles both.
@@ -433,10 +433,10 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<void> {
-    if (from.Value.size() == 0 || to.Value.size() == 0) {
+    if (from._value.size() == 0 || to._value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(rename(from.Value.c_str(), to.Value.c_str()));
+    return _io_posix_check(rename(from._value.c_str(), to._value.c_str()));
 }
 
 [Target(!OS(Windows))] export _io_sys_getcwd(): IoResult<Path> {
@@ -451,7 +451,7 @@ import "directory";
         }
         var e = IoError.last();
         _pep_free(buf);
-        if (e.Code != 34) {   # ERANGE: retry with a bigger buffer
+        if (e.code != 34) {   # ERANGE: retry with a bigger buffer
             return IoResult<Path>.err(e);
         }
         size = size * 2;
@@ -460,18 +460,18 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_chdir(path: Path): IoResult<void> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(chdir(path.Value.c_str()));
+    return _io_posix_check(chdir(path._value.c_str()));
 }
 
 [Target(!OS(Windows))] export _io_sys_realpath(path: Path): IoResult<Path> {
-    if (path.Value.size() == 0) {
+    if (path._value.size() == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
     var buf = _pep_malloc(4096);   # PATH_MAX (Linux 4096, macOS 1024)
-    var r = realpath(path.Value.c_str(), buf);
+    var r = realpath(path._value.c_str(), buf);
     if (r == __null) {
         var e = IoError.last();
         _pep_free(buf);

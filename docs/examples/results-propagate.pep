@@ -39,23 +39,23 @@ parse_number(String s): Result<int, ParseError> {
 add_numbers(String a, String b): Result<int, ParseError> {
     var x = parse_number(a);
     if (x.is_err()) {
-        return Result<int, ParseError>.err(x.Error);
+        return Result<int, ParseError>.err(x.error());
     }
     var y = parse_number(b);
     if (y.is_err()) {
-        return Result<int, ParseError>.err(y.Error);
+        return Result<int, ParseError>.err(y.error());
     }
-    return Result<int, ParseError>.ok(x.Value + y.Value);
+    return Result<int, ParseError>.ok(x.value() + y.value());
 }
 
 # Convert an error into another type on the way out.
 check_total(String a, String b, int limit): Result<void> {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
-        var e = sum.Error;
+        var e = sum.error();
         return Result<void>.err(Error("bad number '" + e.Input + "'"));
     }
-    if (sum.Value > limit) {
+    if (sum.value() > limit) {
         return Result<void>.err(Error("total is over the limit"));
     }
     return Result<void>.ok();
@@ -67,13 +67,13 @@ main(): int {
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
-    assert(bad.Error.Input == "4x2", "the error names the input");
-    assert(bad.Error.Position == 1, "and where it went wrong");
+    assert(bad.error().Input == "4x2", "the error names the input");
+    assert(bad.error().Position == 1, "and where it went wrong");
 
     assert(check_total("1", "2", 10).is_ok(), "3 is within the limit");
     var over = check_total("10", "20", 10);
-    assert(over.Error.Message == "total is over the limit", "30 is not");
+    assert(over.error().message == "total is over the limit", "30 is not");
     var wrong = check_total("1", "", 10);
-    assert(wrong.Error.Message == "bad number ''", "an empty number is an error");
+    assert(wrong.error().message == "bad number ''", "an empty number is an error");
     return 0;
 }
