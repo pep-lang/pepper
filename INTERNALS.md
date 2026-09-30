@@ -844,8 +844,9 @@ a *shadow copy* of the binary because Windows locks a running exe, polls
 the binary and restarts on change, and registers `pepper.restartServer`.
 The server comes from `pepper.lspPath` or from the bundled
 `server/<platform-arch>/` (`serverPath.js`). Syntax highlighting is
-`syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for six
-targets and publishes it as a `vsix-v*` release on `main`.
+`syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for four
+targets (x64 Windows and Linux, x64 and arm64 macOS) and publishes it as
+a `vsix-v*` release; it runs only for a `vX.Y.Z` tag or a manual dispatch.
 `scripts/install-vscode-extension.ps1 [-Watch]` builds `pepper-lsp` in
 release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `code --install-extension` from the current branch.
@@ -1039,6 +1040,10 @@ compiles the code but cannot run it. Run it for real with the
 
 ## 11. CI
 
+Every job in every workflow runs on a self-hosted runner, never a
+GitHub-hosted one: **`pepper-windows`** and **`pepper-linux`** (x64), and
+**`pepper-macos`** (arm64). A new job picks one of those labels.
+
 - **`ci.yml`** (push to `main`, PRs):
   - `test` is the required check. It runs on the self-hosted
     **`pepper-windows`** runner: provision LLVM (`ci-provision-llvm.sh`,
@@ -1050,8 +1055,11 @@ compiles the code but cannot run it. Run it for real with the
   Linux/macOS/Windows (`gh workflow run platform-test.yml -f platforms=…
   -f script=…`). It has a failure/cancel diagnostics step. Read AGENTS.md's
   CI section before writing a script for it.
-- **`vsix.yml`**: builds the extension and server for six targets and
-  publishes the release on `main`.
+- **`vsix.yml`**: builds the extension and server for win32-x64,
+  linux-x64, darwin-x64 and darwin-arm64. It runs only on a `vX.Y.Z` tag
+  push or a manual dispatch, and publishes the release from a tag or from
+  `main`. There is no arm64 Windows or Linux runner, so those platforms get
+  no bundled server.
 - **`docs.yml`**: builds the mdBook site to `gh-pages` (`dev/` on `main`,
   `X.Y.Z/` on tags).
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped

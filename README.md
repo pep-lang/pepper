@@ -272,7 +272,8 @@ book's [Formatting with pep-fmt](docs/src/tools/pep-fmt.md) chapter.
 ## VS Code extension from any branch
 
 The released extension comes from the `vsix-v*` GitHub release, which the VSIX
-workflow updates only on `main`. To run the extension and language server from
+workflow updates only for a release tag (`vX.Y.Z`) or a manual run on `main`
+(`gh workflow run vsix.yml`). To run the extension and language server from
 whatever branch is checked out, before it merges:
 
 ```powershell

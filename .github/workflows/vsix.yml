@@ -13,30 +13,22 @@
 # replace the asset on the existing release, and a version bump opens a new
 # one. `pepper.lspPath` remains as a dev override for using your own build.
 #
-# Only a run on main publishes; a dispatch on any other branch uploads the
-# vsix as a run artifact instead, so a branch can be tested without replacing
-# the released extension.
+# It runs only for a release (pushing a vX.Y.Z tag, the same tags that
+# publish the docs) or when dispatched by hand (`gh workflow run vsix.yml`).
+# A release tag or a dispatch on main publishes; a dispatch on any other
+# branch uploads the vsix as a run artifact instead, so a branch can be
+# tested without replacing the released extension.
 #
-# The x64 Windows and Linux legs and both macOS legs run on self-hosted
-# runners and must pass. The two arm64 Windows and Linux legs run on
-# GitHub-hosted runners, which GitHub can refuse to start (a billing or spending-limit block fails them in seconds, before
-# any step). Those legs are allowed to fail: the package job bundles every
-# server that was built and names the missing platforms in a warning. On a
-# platform without a bundled server the extension still highlights and tells
-# the user how to point `pepper.lspPath` at their own build.
+# Every leg runs on a self-hosted runner and must pass. There is no arm64
+# Windows or Linux runner, so the vsix bundles no server for win32-arm64 or
+# linux-arm64; on those platforms (and any other without a bundled server) the
+# extension still highlights and tells the user how to point `pepper.lspPath`
+# at their own build.
 name: VSIX
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "crates/pepper-parser/**"
-      - "crates/pepper-sema/**"
-      - "crates/pepper-files/**"
-      - "Cargo.lock"
-      - "tools/lsp/**"
-      - "tools/vscode-pepper/**"
-      - ".github/workflows/vsix.yml"
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 concurrency:
@@ -61,16 +53,11 @@ jobs:
         # without extra setup, and Rosetta runs the x64 binary for the smoke
         # test. `rust-target` empty means the host target.
         include:
-          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", hosted: false, rust-target: "" }
-          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe", hosted: true, rust-target: "" }
-          - { target: linux-x64, runs-on: pepper-linux, exe: "", hosted: false, rust-target: "" }
-          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "", hosted: true, rust-target: "" }
-          - { target: darwin-x64, runs-on: pepper-macos, exe: "", hosted: false, rust-target: x86_64-apple-darwin }
-          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", hosted: false, rust-target: "" }
+          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", rust-target: "" }
+          - { target: linux-x64, runs-on: pepper-linux, exe: "", rust-target: "" }
+          - { target: darwin-x64, runs-on: pepper-macos, exe: "", rust-target: x86_64-apple-darwin }
+          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", rust-target: "" }
     runs-on: ${{ matrix.runs-on }}
-    # A GitHub-hosted leg that fails (or never starts) does not block the
-    # package job; see the header.
-    continue-on-error: ${{ matrix.hosted }}
     # No LLVM download, so the budget is dominated by cargo.
     timeout-minutes: 20
 
@@ -149,9 +136,6 @@ jobs:
     permissions:
       contents: write
     needs: build
-    # Run even when a hosted build leg failed; the bundle step decides whether
-    # what was built is enough (the self-hosted targets are required).
-    if: ${{ !cancelled() }}
     # npm ci + vsce packaging; no compilation here.
     timeout-minutes: 15
 
@@ -172,29 +156,20 @@ jobs:
           path: servers
 
       # The extension resolves the bundled server at
-      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js). The
-      # self-hosted targets are required; a missing hosted target is a warning.
+      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js). Every
+      # target is required.
       - name: Bundle servers into extension
         shell: bash
         run: |
           set -euo pipefail
-          missing=()
-          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+          for target in win32-x64 linux-x64 darwin-x64 darwin-arm64; do
             if [ ! -d "servers/pepper-lsp-$target" ]; then
-              case "$target" in
-                win32-x64|linux-x64|darwin-x64|darwin-arm64)
-                  echo "::error::no pepper-lsp server was built for $target"
-                  exit 1 ;;
-              esac
-              missing+=("$target")
-              continue
+              echo "::error::no pepper-lsp server was built for $target"
+              exit 1
             fi
             mkdir -p "tools/vscode-pepper/server/$target"
             cp "servers/pepper-lsp-$target/"* "tools/vscode-pepper/server/$target/"
           done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::warning::vsix has no bundled server for: ${missing[*]} (their GitHub-hosted build legs failed)"
-          fi
           # Artifact download does not preserve file permissions (files arrive
           # 644), and vsce zips with the on-disk mode, so restore the exec bit
           # or the POSIX binaries would be installed non-executable.
@@ -210,9 +185,10 @@ jobs:
         working-directory: tools/vscode-pepper
         run: npx --yes @vscode/vsce@3 package --out pepper-language.vsix
 
-      # A branch dispatch keeps the vsix as a run artifact; only main publishes.
+      # A branch dispatch keeps the vsix as a run artifact; main and release
+      # tags publish.
       - name: Upload vsix (branch dispatch)
-        if: github.ref != 'refs/heads/main'
+        if: ${{ !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
         uses: actions/upload-artifact@v4
         with:
           name: pepper-language-vsix
@@ -224,7 +200,7 @@ jobs:
       # release, a version bump opens a new one. The tag is read from the
       # file that owns it, never re-derived.
       - name: Publish to GitHub release
-        if: github.ref == 'refs/heads/main'
+        if: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -236,9 +212,9 @@ jobs:
             printf '%s\n' \
               "VSCode extension for the Pepper language, built by the VSIX workflow." \
               "" \
-              "Bundles a pepper-lsp server for win32-x64, win32-arm64," \
-              "linux-x64, linux-arm64, darwin-x64 and darwin-arm64; nothing" \
-              "else is needed to install it." \
+              "Bundles a pepper-lsp server for win32-x64, linux-x64," \
+              "darwin-x64 and darwin-arm64; nothing else is needed to" \
+              "install it on those platforms." \
               > "$RUNNER_TEMP/notes.md"
             # A concurrent run (a superseded one cancel-in-progress has not
             # stopped yet, or a dispatch on another branch) may create the
