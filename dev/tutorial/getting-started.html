@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1e39abf2.js";
+            window.path_to_searchindex_js = "../searchindex-b4cf70b4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -274,7 +274,10 @@ ln -s /path/to/pepper/runtime .pep/runtime
 <pre><code class="language-text">error: cannot find the Pepper runtime: no runtime directory near /home/me/project or the compiler; set PEPPER_RUNTIME to its path
 </code></pre>
 <p>The compiler also writes intermediate files to <code>.pep/build/</code> under the
-directory you run it from.</p>
+directory you run it from, and keeps a build cache in <code>.pep/cache/</code>: each file
+of the program (and the standard library) is compiled to its own object, and
+an object whose code did not change is reused on the next build. Deleting
+<code>.pep/cache/</code> is always safe.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
@@ -312,6 +315,9 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
 <tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
 <tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
+<tr><td><code>-T cache</code></td><td>Print which objects came from the build cache.</td></tr>
+<tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
+<tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
 <tr><td><code>--help</code></td><td>List every option.</td></tr>
 </tbody>
 </table>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1e39abf2.js";
+            window.path_to_searchindex_js = "../searchindex-b4cf70b4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -259,10 +259,16 @@ own: a system library, or one in a directory the linker searches by default.</p>
 compilation succeeds and the link fails. The compiler prints what the linker
 said, which names the missing symbol:</p>
 <pre><code class="language-text">error: Link failed: clang exited with exit status: 1
-/usr/bin/ld: .pep/build/main.o: in function `main':
+/usr/bin/ld: .pep/build/main.units/main.o: in function `main':
 main:(.text+0x25ba): undefined reference to `no_such_function'
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 </code></pre>
+<p>The object the linker names is the one for the file that made the call, in
+<code>.pep/build/&lt;name&gt;.units/</code>. Symbols of your own functions appear as the
+compiler spells them for the linker: a name that is not just letters, digits,
+<code>_</code> and <code>.</code> is written <code>_P</code> followed by the name with other characters as
+<code>_</code> and two hex digits, so <code>Array&lt;int&gt;.count</code> appears as
+<code>_PArray_3cint_3e.count</code>. <code>extern</code> functions keep their C names.</p>
 <p>To fix it, check the spelling of the extern against the C function (or use
 <a href="c-interop.html#binding-to-a-different-symbol-name"><code>[LinkName]</code></a> when the names
 differ), then add the library that defines it with <code>[Link]</code> or <code>-l</code>.</p>
@@ -274,9 +280,12 @@ succeeds.</p>
 <h2 id="output-files"><a class="header" href="#output-files">Output files</a></h2>
 <p>With no <code>-o</code>, the executable is named after the first source file, without an
 extension, in the directory where you run the compiler. Windows will not run a
-file without <code>.exe</code>, so pass <code>-o main.exe</code> there. The object file and other
+file without <code>.exe</code>, so pass <code>-o main.exe</code> there. The object files and other
 intermediate files go in <code>.pep/build/</code> under the current directory, or in the
-directory you pass to <code>--build</code>.</p>
+directory you pass to <code>--build</code>: one object per file of the program in
+<code>&lt;name&gt;.units/</code>, and <code>&lt;name&gt;.o</code>, which runs the program’s global
+initializers. Unchanged objects come from the build cache in <code>.pep/cache/</code>
+(<code>--no-cache</code> skips it).</p>
 
                     </main>
 
