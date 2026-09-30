@@ -128,9 +128,8 @@ fn find_use_site(module: &Module, spec: &str) -> Option<(Loc, Option<String>)> {
         None
     }
     fn in_expression(expr: &Expression, spec: &str) -> Option<Loc> {
-        let mut expr = expr.clone();
         let mut found = None;
-        crate::passes::walk_expression(&mut expr, &mut |e: &mut Expression| {
+        crate::passes::visit_expression(expr, &mut |e: &Expression| {
             if found.is_none()
                 && let Expression::FunctionCall { function, loc, .. } = e
                 && function == spec

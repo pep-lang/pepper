@@ -1127,7 +1127,7 @@ impl Module {
     /// A call still naming an overloaded struct's set has none yet.
     pub fn constructor_of(&self, function: &str) -> Option<(&StructDef, &FunctionDef)> {
         let ty = crate::passes::overloads::set_name(function);
-        let st = self.structs.iter().find(|s| s.name == ty || s.ty.to_string() == ty)?;
+        let st = self.structs.iter().find(|s| s.name == ty || s.ty.is_spelled(ty))?;
         let single = || (st.constructors.len() == 1).then(|| &st.constructors[0]);
         let ctor = st.constructor_named(function).or_else(single)?;
         Some((st, ctor))

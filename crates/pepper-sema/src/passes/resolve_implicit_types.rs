@@ -173,26 +173,27 @@ impl<'t> Scopes<'t> {
     }
 
     fn find_symbol(&self, name: &str) -> Option<TypeName> {
+        self.symbol(name).cloned()
+    }
+
+    fn symbol(&self, name: &str) -> Option<&TypeName> {
         for scope in self.symbols[1..].iter().rev() {
             if let Some((_, ty)) = scope.iter().find(|(sym, _)| sym == name) {
-                return Some(ty.clone());
+                return Some(ty);
             }
         }
         if let Some(ty) = self.tables.globals.get(name) {
-            return Some(ty.clone());
+            return Some(ty);
         }
-        self.symbols[0].iter().find(|(sym, _)| sym == name).map(|(_, ty)| ty.clone())
+        self.symbols[0].iter().find(|(sym, _)| sym == name).map(|(_, ty)| ty)
     }
 
     fn find_param(&self, name: &str) -> Option<TypeName> {
-        for scope in self.params.iter().rev() {
-            for param in scope {
-                if param.name == name {
-                    return Some(param.ty.clone());
-                }
-            }
-        }
-        None
+        self.param(name).cloned()
+    }
+
+    fn param(&self, name: &str) -> Option<&TypeName> {
+        self.params.iter().rev().flatten().find(|param| param.name == name).map(|param| &param.ty)
     }
 
     /// The field tables of struct type `key`, in order.
@@ -242,7 +243,7 @@ impl<'t> Scopes<'t> {
     /// value position refers to it: no local, parameter, or field (of the
     /// enclosing struct) shadows it.
     fn function_value(&self, name: &str, current_struct: Option<&TypeName>) -> Option<TypeName> {
-        if self.find_param(name).is_some() || self.find_symbol(name).is_some() {
+        if self.param(name).is_some() || self.symbol(name).is_some() {
             return None;
         }
         if let Some(st) = current_struct {
@@ -258,9 +259,8 @@ impl<'t> Scopes<'t> {
     /// parameter or global of function type, or (in a method) a field of
     /// function type that no method of the same name shadows.
     fn value_callee(&self, name: &str, current_struct: Option<&TypeName>) -> Option<(Expression, TypeName)> {
-        let local = self.find_param(name).or_else(|| self.find_symbol(name));
-        if let Some(ty) = local {
-            return ty.is_callable().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty));
+        if let Some(ty) = self.param(name).or_else(|| self.symbol(name)) {
+            return ty.is_callable().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty.clone()));
         }
         let st = current_struct?;
         let ty = self.field_type(st, name).filter(|t| t.is_callable())?;
@@ -877,7 +877,7 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
 /// or member of the enclosing struct by that name shadows it: its base name
 /// and written type arguments.
 fn overload_call<'f>(function: &'f str, scopes: &Scopes, current: Option<&TypeName>) -> Option<(&'f str, Option<Vec<TypeName>>)> {
-    if scopes.overloads.is_empty() {
+    if scopes.overloads.is_empty() || !scopes.overloads.is_set(scopes.overloads.call_set_name(function)) {
         return None;
     }
     let (base, explicit) = scopes.overloads.call_set(function);

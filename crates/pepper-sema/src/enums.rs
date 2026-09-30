@@ -1085,8 +1085,7 @@ fn drop_no_match(chain: &mut Expression) {
 /// `WithSubject` numbered `id`.
 fn subject_type(body: &Expression, id: usize) -> Option<TypeName> {
     let mut found = None;
-    let mut body = body.clone();
-    crate::passes::walk_expression(&mut body, &mut |e| {
+    crate::passes::visit_expression(body, &mut |e| {
         if let Expression::Subject { id: n, ty, .. } = e
             && *n == id
             && found.is_none()

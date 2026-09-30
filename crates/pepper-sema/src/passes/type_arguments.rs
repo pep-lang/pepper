@@ -133,8 +133,7 @@ pub fn check_type_arguments(module: &Module) {
     };
     let visit = |function: &FunctionDef| {
         if let Some(body) = &function.body {
-            let mut body = body.clone();
-            crate::passes::walk_block(&mut body, &mut |e| report(e));
+            crate::passes::visit_block(body, &mut |e| report(e));
         }
     };
     for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {

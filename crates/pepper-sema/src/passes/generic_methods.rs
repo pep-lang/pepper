@@ -20,40 +20,38 @@ pub fn has_generic_methods(module: &Module) -> bool {
 /// Add the method specializations that calls name (see the module docs).
 /// Returns whether any was added.
 pub fn specialize_methods(module: &mut Module) -> bool {
-    let statics = crate::static_type::StructTable::build(module);
+    // Built on the first call naming a generic method: most runs find none.
+    let statics = std::cell::OnceCell::new();
     let mut wanted: Vec<(TypeName, String)> = vec![];
     {
-        let mut visit = |expr: &mut Expression, current: Option<&TypeName>| {
-            crate::passes::walk_expression(expr, &mut |e| {
-                if let Expression::MethodCall { this, method, .. } = e {
-                    if method.contains('<') {
-                        if let Some(owner) = crate::static_type::of(this, &statics, current) {
-                            if !owner.contains_auto() {
-                                wanted.push((owner, method.clone()));
-                            }
+        let mut visit = |e: &Expression, current: Option<&TypeName>| {
+            if let Expression::MethodCall { this, method, .. } = e {
+                if method.contains('<') {
+                    let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
+                    if let Some(owner) = crate::static_type::of(this, statics, current) {
+                        if !owner.contains_auto() {
+                            wanted.push((owner, method.clone()));
                         }
                     }
                 }
-            });
+            }
         };
         for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {
             let current = Some(&st.ty);
             for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]) {
                 if let Some(body) = &method.body {
-                    let mut body = body.clone();
-                    crate::passes::walk_block(&mut body, &mut |e| visit(e, current));
+                    crate::passes::visit_block(body, &mut |e| visit(e, current));
                 }
             }
         }
         for function in module.functions.iter().filter(|f| !f.is_generic_func) {
             if let Some(body) = &function.body {
-                let mut body = body.clone();
-                crate::passes::walk_block(&mut body, &mut |e| visit(e, None));
+                crate::passes::visit_block(body, &mut |e| visit(e, None));
             }
         }
         for var in &module.globals {
             if let Some(default) = &var.default {
-                visit(&mut default.clone(), None);
+                crate::passes::visit_expression(default, &mut |e| visit(e, None));
             }
         }
     }
@@ -62,7 +60,7 @@ pub fn specialize_methods(module: &mut Module) -> bool {
     for (owner, method) in wanted {
         let key = owner.to_string();
         let key = key.trim_end_matches('*');
-        let Some(st) = module.structs.iter_mut().find(|s| s.ty.to_string() == key) else { continue };
+        let Some(st) = module.structs.iter_mut().find(|s| s.ty.is_spelled(key)) else { continue };
         if st.method_members.iter().any(|m| m.name == method) {
             continue;
         }

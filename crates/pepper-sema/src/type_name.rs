@@ -336,6 +336,29 @@ impl TypeName {
         out
     }
 
+    /// Whether `text` is this type's spelling ([`TypeName::to_string`]),
+    /// without building the string.
+    pub fn is_spelled(&self, text: &str) -> bool {
+        self.spelled_prefix_of(text) == Some("")
+    }
+
+    /// What is left of `text` after this type's spelling, if it starts
+    /// with it (mirrors [`TypeName::write_to`]).
+    fn spelled_prefix_of<'t>(&self, text: &'t str) -> Option<&'t str> {
+        let mut rest = text.strip_prefix(self.name.as_str())?;
+        if self.is_generic() {
+            rest = rest.strip_prefix('<')?;
+            for (i, sub) in self.sub_types.iter().enumerate() {
+                if i > 0 {
+                    rest = rest.strip_prefix(", ")?;
+                }
+                rest = sub.spelled_prefix_of(rest)?;
+            }
+            rest = rest.strip_prefix('>')?;
+        }
+        Some(rest)
+    }
+
     fn write_to(&self, out: &mut String) {
         out.push_str(&self.name);
         if self.is_generic() {

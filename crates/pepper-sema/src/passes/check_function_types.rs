@@ -456,15 +456,14 @@ impl<'a> Checker<'a> {
     }
 
     fn expression(&mut self, expr: &Expression, current: Option<&TypeName>) {
-        let mut copy = expr.clone();
-        let mut nodes: Vec<Expression> = vec![];
-        crate::passes::walk_expression(&mut copy, &mut |e: &mut Expression| {
+        let mut nodes: Vec<&Expression> = vec![];
+        crate::passes::visit_expression(expr, &mut |e: &Expression| {
             if matches!(e, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. } | Expression::Binary { .. } | Expression::Unary { .. }) {
-                nodes.push(e.clone());
+                nodes.push(e);
             }
         });
         for node in nodes {
-            match &node {
+            match node {
                 Expression::FunctionCall { function, args, loc } => {
                     if let Some((label, params)) = self.parameters_of_call(function) {
                         // An extern's other parameters are C types, which codegen checks with

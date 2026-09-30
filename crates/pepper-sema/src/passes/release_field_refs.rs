@@ -7,13 +7,12 @@ use crate::symbols::SymbolTable;
 
 pub fn release_field_refs(module: &mut Module) {
     let symbols = SymbolTable::build(module);
+    let struct_type_strings: std::collections::HashSet<String> = module
+        .structs
+        .iter()
+        .flat_map(|st| [st.name.clone(), st.ty.to_string()])
+        .collect();
     for st_idx in 0..module.structs.len() {
-        let struct_type_strings: Vec<String> = module
-            .structs
-            .iter()
-            .flat_map(|st| [st.name.clone(), st.ty.to_string()])
-            .collect();
-
         let st = &mut module.structs[st_idx];
         let field_names: Vec<String> = st
             .field_members

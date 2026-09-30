@@ -394,6 +394,12 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
         // An overloaded constructor keeps its ordinal (`Box<T>$2`).
         if let Expression::FunctionCall { function, .. } = e {
             let set = crate::passes::overloads::set_name(function);
+            // A plain name changes only when it is a parameter (`T(x)`), or
+            // one behind a pointer's star (see `TypeName::replace`).
+            let plain = !set.contains('<') && !type_map.iter().any(|(p, _)| set == p || set.strip_suffix('*') == Some(p.as_str()));
+            if plain {
+                return;
+            }
             let ordinal = function[set.len()..].to_string();
             let mut parsed = crate::passes::gather_generics::parse_type_string(set);
             substitute(&mut parsed, type_map);
@@ -427,7 +433,7 @@ pub fn specialize_structs(module: &mut Module) {
         if module
             .structs
             .iter()
-            .any(|st| st.name == spec.to_string() || st.ty == spec)
+            .any(|st| spec.is_spelled(&st.name) || st.ty == spec)
         {
             continue;
         }

@@ -1523,10 +1523,9 @@ fn roots(module: &Module) -> Vec<String> {
     let mut out = vec![];
     for (_, key, function) in bodies(module) {
         let Some(body) = &function.body else { continue };
-        let mut body = body.clone();
         let mut found = false;
         let mut closures: Vec<String> = vec![];
-        crate::passes::walk_block(&mut body, &mut |e: &mut Expression| match e {
+        crate::passes::visit_block(body, &mut |e: &Expression| match e {
             Expression::SymbolRef { id, .. } if id.starts_with("__with_scope_") => found = true,
             Expression::Move { .. } => found = true,
             Expression::FunctionCall { function, args, .. } | Expression::MethodCall { method: function, args, .. } => {

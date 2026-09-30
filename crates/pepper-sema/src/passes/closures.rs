@@ -661,9 +661,18 @@ pub fn sync_closures(module: &mut Module) -> bool {
         return false;
     }
     let mut learned: HashMap<String, Learned> = HashMap::new();
-    // `apply_learned` only fills what is still `auto`: once every closure
-    // is typed, there is nothing to learn (and the table is costly).
-    if module.structs.iter().any(|s| is_closure_struct(&s.name) && has_unknown_types(s)) {
+    // `apply_learned` only fills what is still `auto`, so only the functions
+    // creating a closure with an unknown type have anything to teach: once
+    // every closure is typed there is nothing to learn (and the table is
+    // costly). A closure is named by its type or, in a generic base, its
+    // name.
+    let unknown: HashSet<String> = module
+        .structs
+        .iter()
+        .filter(|s| is_closure_struct(&s.name) && has_unknown_types(s))
+        .flat_map(|s| [s.ty.to_string(), s.name.clone()])
+        .collect();
+    if !unknown.is_empty() {
         let table = Table::build(module);
         let mut visit = |expr: &Expression, expected: Option<&TypeName>, current: Option<&TypeName>| {
             let Expression::MakeClosure { value, closure, .. } = expr else { return };
@@ -689,7 +698,7 @@ pub fn sync_closures(module: &mut Module) -> bool {
                 }
             }
         };
-        for_each_closure_site(module, &table, &mut visit);
+        for_each_closure_site(module, &table, &unknown, &mut visit);
     }
 
     let mut changed = false;
@@ -897,6 +906,11 @@ impl Table {
                 st.method_members.iter().map(|m| (m.name.clone(), m.parameters.iter().map(|p| p.ty.clone()).collect())).collect(),
             );
         }
+        // A generic base's fields, in its own terms (`T`): what a closure
+        // created in one of its methods captures from `this`.
+        for st in module.structs.iter().filter(|s| !s.generic_params.is_empty()) {
+            fields.insert(st.ty.to_string(), st.field_members.iter().map(|f| (f.name.clone(), f.ty.clone())).collect());
+        }
         let globals = module.globals.iter().map(|g| (g.name.clone(), g.ty.clone())).collect();
         let generics = module
             .functions
@@ -958,49 +972,59 @@ impl Table {
 }
 
 /// Call `visit(creation, expected type, current struct)` for every
-/// `MakeClosure`, with the type of the slot it flows into when known.
-fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
-    sites_in_module(module, table, Sites::Closures, &mut |_, expr, expected, current| visit(expr, expected, current));
+/// `MakeClosure` in a function that creates one of `closures`, with the type
+/// of the slot it flows into when known.
+fn for_each_closure_site(
+    module: &Module,
+    table: &Table,
+    closures: &HashSet<String>,
+    visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>),
+) {
+    sites_in_module(module, table, Sites::Closures(closures), &mut |_, expr, expected, current| visit(expr, expected, current));
 }
 
 /// Which functions [`sites_in_module`] walks.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Sites {
+#[derive(Clone, Copy)]
+enum Sites<'c> {
     /// Every function, extensions' own copies of their methods included.
     All,
     /// Every function but the extensions' own copies.
     Applied,
-    /// Only functions (and initializers) that create a closure, extension
-    /// copies included: the expected types a creation sees come from its
-    /// own function.
-    Closures,
+    /// Only functions (and initializers) that create one of these closures,
+    /// extension copies included: the expected types a creation sees come
+    /// from its own function.
+    Closures(&'c HashSet<String>),
 }
 
-/// Whether `expr` creates a closure.
-fn creates_closure(expr: &Expression) -> bool {
-    matches!(expr, Expression::MakeClosure { .. }) || crate::passes::children(expr).into_iter().any(creates_closure)
+/// Whether `expr` creates one of `closures`.
+fn creates_closure(expr: &Expression, closures: &HashSet<String>) -> bool {
+    matches!(expr, Expression::MakeClosure { closure, .. } if closures.contains(closure))
+        || crate::passes::children(expr).into_iter().any(|e| creates_closure(e, closures))
 }
 
-/// Whether `block` creates a closure.
-fn block_creates_closure(block: &Block) -> bool {
+/// Whether `block` creates one of `closures`.
+fn block_creates_closure(block: &Block, closures: &HashSet<String>) -> bool {
+    let expr = |e: &Expression| creates_closure(e, closures);
     block.items.iter().any(|stmt| match stmt {
-        Statement::Expression(e) => creates_closure(e),
-        Statement::Block(b) => block_creates_closure(b),
-        Statement::Declaration(Declaration::Variable(var)) => var.default.as_ref().is_some_and(creates_closure),
+        Statement::Expression(e) => expr(e),
+        Statement::Block(b) => block_creates_closure(b, closures),
+        Statement::Declaration(Declaration::Variable(var)) => var.default.as_ref().is_some_and(expr),
         Statement::Declaration(_) | Statement::LoopBreak(_) => false,
         Statement::Branch(branch) => {
-            creates_closure(&branch.condition)
-                || block_creates_closure(&branch.if_block)
-                || branch.else_block.as_ref().is_some_and(block_creates_closure)
+            expr(&branch.condition)
+                || block_creates_closure(&branch.if_block, closures)
+                || branch.else_block.as_ref().is_some_and(|b| block_creates_closure(b, closures))
         }
-        Statement::While(wh) => creates_closure(&wh.condition) || block_creates_closure(&wh.block),
-        Statement::Return(r) => r.expr.as_ref().is_some_and(creates_closure),
+        Statement::While(wh) => expr(&wh.condition) || block_creates_closure(&wh.block, closures),
+        Statement::Return(r) => r.expr.as_ref().is_some_and(expr),
     })
 }
 
-/// Whether `function`'s body or a parameter default creates a closure.
-fn function_creates_closure(function: &FunctionDef) -> bool {
-    function.parameters.iter().any(|p| p.default.as_ref().is_some_and(creates_closure)) || function.body.as_ref().is_some_and(block_creates_closure)
+/// Whether `function`'s body or a parameter default creates one of
+/// `closures`.
+fn function_creates_closure(function: &FunctionDef, closures: &HashSet<String>) -> bool {
+    function.parameters.iter().any(|p| p.default.as_ref().is_some_and(|e| creates_closure(e, closures)))
+        || function.body.as_ref().is_some_and(|b| block_creates_closure(b, closures))
 }
 
 /// Call `visit(expression, expected type, current struct)` for every
@@ -1028,8 +1052,14 @@ fn sites_in_module(
     sites: Sites,
     visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
-    let walk_expression = |e: &Expression| sites != Sites::Closures || creates_closure(e);
-    let walk_function = |f: &FunctionDef| sites != Sites::Closures || function_creates_closure(f);
+    let walk_expression = |e: &Expression| match sites {
+        Sites::Closures(closures) => creates_closure(e, closures),
+        _ => true,
+    };
+    let walk_function = |f: &FunctionDef| match sites {
+        Sites::Closures(closures) => function_creates_closure(f, closures),
+        _ => true,
+    };
     for st in &module.structs {
         let current = Some(&st.ty);
         let owner = Some(st.name.as_str());
@@ -1047,7 +1077,7 @@ fn sites_in_module(
         let owner = Some(function.name.as_str());
         sites_in_function(function, table, None, &mut |expr, expected, current| visit(owner, expr, expected, current));
     }
-    for ext in module.extensions.iter().filter(|_| sites != Sites::Applied) {
+    for ext in module.extensions.iter().filter(|_| !matches!(sites, Sites::Applied)) {
         for method in ext.methods.iter().filter(|f| walk_function(f)) {
             let owner = Some(ext.target.name.as_str());
             sites_in_function(method, table, Some(&ext.target), &mut |expr, expected, current| visit(owner, expr, expected, current));

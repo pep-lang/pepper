@@ -659,22 +659,32 @@ several passes run more than once on purpose.
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `walk_expression`, `walk_function`, `walk_global`, and
-`replace_expression`; `children` and `children_mut` list a node's direct
-sub-expressions, for a walk that decides per node whether to descend (a
-read-only walk uses `children`, never a clone of the node). **When you add a
-model `Expression` variant, add it to `walk_expression`, `children` and
-`children_mut`.**
+`replace_expression`; `visit_block`, `visit_statement`, `visit_expression`
+and `visit_function` are the same walks for a pass that only reads (never
+clone a body or an expression to walk it with `walk_*`); `children` and
+`children_mut` iterate a node's direct sub-expressions without allocating,
+for a walk that decides per node whether to descend. **When you add a model
+`Expression` variant, add it to `walk_expression`, `visit_expression`,
+`children` and `children_mut`.**
 
 `resolve_implicit_types` runs eight times and loops inside each run, so its
 helpers skip work that cannot change anything: `sync_closures` learns
 nothing once no closure struct has an `auto` capture, `__call` parameter or
-return type, and otherwise walks only the functions that create a closure (a
-creation's expected type comes from its own function); `bind_function_values`
-types expressions only when some name could still bind to an overload;
-`infer_type_arguments` and `resolve_method_overload` check that a name is a
-generic function, a generic method or a method overload set before typing
-the receiver or the arguments; and `traits::used_trait_types` prints and
-parses only types whose names mention a trait.
+return type, and otherwise walks only the functions that create such a
+closure (a creation's expected type comes from its own function); its table
+holds generic bases' fields too, so a closure created in a generic closure's
+method can type what it captures from `this`, and learning stops once it
+has; `bind_function_values` types expressions only when some name could
+still bind to an overload; `infer_type_arguments` and
+`resolve_method_overload` check that a name is a generic function, a generic
+method or a method overload set before typing the receiver or the
+arguments, and `overload_call` checks that a call names a set
+(`Overloads::call_set_name`) before parsing its type arguments; and
+`traits::used_trait_types` prints and parses only types that spell a
+trait's name as a whole word (`ArrayIterator` does not mention
+`Iterator`). `specialize_methods` builds its `StructTable` only once a call
+names a generic method. Compare a type to a spelling with
+`TypeName::is_spelled`, not `to_string() ==`, in a loop.
 
 `struct_body::apply`'s `resolve_type_aliases` reports a recursive alias
 at the alias's name (`type alias 'A' refers to itself`, with a note at each
@@ -1382,7 +1392,8 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    `imports.rs::in_statement`.
 4. Lower it in `crates/pepper-sema/src/builder.rs`. Prefer desugaring into
    existing model nodes, as `for_loop` does. If you do add a model node, add
-   it in `model.rs`, `passes/mod.rs::walk_expression`, the passes that must
+   it in `model.rs`, `passes/mod.rs` (`walk_expression`, `visit_expression`,
+   `children`, `children_mut`), the passes that must
    understand it, and `codegen_expr_unlocated` / `value_sema_type` in
    codegen.
 5. Add tests: parser unit tests (including the error message), a driver

@@ -31,12 +31,12 @@ pub fn resolve_type_aliases(module: &mut Module) {
     // Value-symbol names visible at module scope. A name bound to a value
     // (global, function) must not be rewritten as an alias use in call
     // positions even if an alias shares the spelling.
-    let mut global_values: HashSet<String> = HashSet::new();
+    let mut global_values = Values::default();
     for var in &module.globals {
-        global_values.insert(var.name.clone());
+        global_values.names.insert(var.name.clone());
     }
     for function in &module.functions {
-        global_values.insert(function.name.clone());
+        global_values.names.insert(function.name.clone());
     }
 
     for var in &mut module.globals {
@@ -46,7 +46,7 @@ pub fn resolve_type_aliases(module: &mut Module) {
         }
     }
     for function in &mut module.functions {
-        subst_function(function, &aliases, global_values.clone());
+        subst_function(function, &aliases, &global_values);
     }
     for st in &mut module.structs {
         for param in &mut st.generic_params {
@@ -56,9 +56,9 @@ pub fn resolve_type_aliases(module: &mut Module) {
         }
         // Method bodies see the struct's fields as value symbols; field
         // default expressions see globals and the fields themselves.
-        let mut struct_values = global_values.clone();
+        let mut struct_values = global_values.scope();
         for field in &st.field_members {
-            struct_values.insert(field.name.clone());
+            struct_values.names.insert(field.name.clone());
         }
         for field in &mut st.field_members {
             subst(&mut field.ty, &aliases);
@@ -67,18 +67,18 @@ pub fn resolve_type_aliases(module: &mut Module) {
             }
         }
         for method in &mut st.method_members {
-            subst_function(method, &aliases, struct_values.clone());
+            subst_function(method, &aliases, &struct_values);
         }
         for constructor in &mut st.constructors {
-            subst_function(constructor, &aliases, struct_values.clone());
+            subst_function(constructor, &aliases, &struct_values);
         }
-        subst_function(&mut st.destructor, &aliases, struct_values.clone());
-        subst_function(&mut st.acquire, &aliases, struct_values.clone());
-        subst_function(&mut st.release, &aliases, struct_values.clone());
+        subst_function(&mut st.destructor, &aliases, &struct_values);
+        subst_function(&mut st.acquire, &aliases, &struct_values);
+        subst_function(&mut st.release, &aliases, &struct_values);
     }
     for trait_def in &mut module.traits {
         for method in &mut trait_def.methods {
-            subst_function(method, &aliases, global_values.clone());
+            subst_function(method, &aliases, &global_values);
         }
     }
     for ext in &mut module.extensions {
@@ -87,7 +87,7 @@ pub fn resolve_type_aliases(module: &mut Module) {
             subst(trait_name, &aliases);
         }
         for method in &mut ext.methods {
-            subst_function(method, &aliases, global_values.clone());
+            subst_function(method, &aliases, &global_values);
         }
     }
     for extern_function in &mut module.externs {
@@ -107,7 +107,27 @@ pub fn resolve_type_aliases(module: &mut Module) {
     module.type_aliases.clear();
 }
 
-fn subst_function(function: &mut FunctionDef, aliases: &HashMap<String, &TypeAliasDef>, mut values: HashSet<String>) {
+/// The value-symbol names visible in a scope: its own, then its enclosing
+/// scopes' (globals, then a struct's fields, then a function's locals).
+#[derive(Default)]
+struct Values<'p> {
+    parent: Option<&'p Values<'p>>,
+    names: HashSet<String>,
+}
+
+impl<'p> Values<'p> {
+    /// A scope nested in this one.
+    fn scope(&'p self) -> Values<'p> {
+        Values { parent: Some(self), names: HashSet::new() }
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.names.contains(name) || self.parent.is_some_and(|p| p.contains(name))
+    }
+}
+
+fn subst_function(function: &mut FunctionDef, aliases: &HashMap<String, &TypeAliasDef>, enclosing: &Values) {
+    let mut values = enclosing.scope();
     for param in &mut function.generic_params {
         if let Some(default) = &mut param.default {
             subst(default, aliases);
@@ -116,10 +136,10 @@ fn subst_function(function: &mut FunctionDef, aliases: &HashMap<String, &TypeAli
     subst(&mut function.ty, aliases);
     for parameter in &mut function.parameters {
         subst(&mut parameter.ty, aliases);
-        values.insert(parameter.name.clone());
+        values.names.insert(parameter.name.clone());
     }
     if let Some(body) = &mut function.body {
-        collect_value_names(body, &mut values);
+        collect_value_names(body, &mut values.names);
         for stmt in &mut body.items {
             subst_stmt(stmt, aliases, &values);
         }
@@ -148,7 +168,7 @@ fn collect_value_names(block: &Block, out: &mut HashSet<String>) {
     }
 }
 
-fn subst_stmt(stmt: &mut Statement, aliases: &HashMap<String, &TypeAliasDef>, values: &HashSet<String>) {
+fn subst_stmt(stmt: &mut Statement, aliases: &HashMap<String, &TypeAliasDef>, values: &Values) {
     match stmt {
         Statement::Expression(expr) => subst_expr(expr, aliases, values),
         Statement::Block(block) => {
@@ -192,7 +212,7 @@ fn subst_stmt(stmt: &mut Statement, aliases: &HashMap<String, &TypeAliasDef>, va
 /// Every expression variant that carries a type name. `values` holds the
 /// names of value symbols visible in the current scope; call-position
 /// rewrites below must not touch a name bound to a value.
-fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, values: &HashSet<String>) {
+fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, values: &Values) {
     match expr {
         Expression::SymbolRef { ty, .. } => subst(ty, aliases),
         Expression::ThisRef

@@ -234,7 +234,7 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
             // Apply to every struct matching the resolved name (concrete or
             // specialized instance).
             for st in &mut module.structs {
-                if st.name == target_name || st.ty.to_string() == target_name {
+                if st.name == target_name || st.ty.is_spelled(&target_name) {
                     apply_to_struct(st, ext, &module.traits);
                     // An extension's methods join the struct's overload sets.
                     let Some(sets) = crate::passes::overloads::group_methods(&mut st.method_members, &st.name) else { return };

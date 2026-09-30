@@ -305,9 +305,186 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
     }
 }
 
+/// [`walk_block`] for walks that only read: apply `f` to every expression in
+/// a block, in the same order.
+pub fn visit_block<'e>(block: &'e Block, f: &mut impl FnMut(&'e Expression)) {
+    for stmt in &block.items {
+        visit_statement(stmt, f);
+    }
+}
+
+pub fn visit_statement<'e>(stmt: &'e Statement, f: &mut impl FnMut(&'e Expression)) {
+    match stmt {
+        Statement::Expression(expr) => visit_expression(expr, f),
+        Statement::Block(inner) => visit_block(inner, f),
+        Statement::Declaration(Declaration::Variable(var)) => {
+            if let Some(default) = &var.default {
+                visit_expression(default, f);
+            }
+        }
+        Statement::Declaration(_) => {}
+        Statement::Branch(branch) => {
+            visit_expression(&branch.condition, f);
+            visit_block(&branch.if_block, f);
+            if let Some(else_block) = &branch.else_block {
+                visit_block(else_block, f);
+            }
+        }
+        Statement::While(wh) => {
+            visit_expression(&wh.condition, f);
+            visit_block(&wh.block, f);
+        }
+        Statement::Return(ret) => {
+            if let Some(expr) = &ret.expr {
+                visit_expression(expr, f);
+            }
+        }
+        Statement::LoopBreak(_) => {}
+    }
+}
+
+pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Expression)) {
+    f(expr);
+    match expr {
+        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } => {}
+        Expression::MemberRef { lhs, .. } => visit_expression(lhs, f),
+        Expression::BoolLiteral(_)
+        | Expression::IntLiteral(_)
+        | Expression::FloatLiteral(_)
+        | Expression::StringLiteral { .. }
+        | Expression::PointerLiteral => {}
+        Expression::Binary { lhs, rhs, .. } => {
+            visit_expression(lhs, f);
+            visit_expression(rhs, f);
+        }
+        Expression::Unary { operand, .. } => visit_expression(operand, f),
+        Expression::Cast { expr, .. } => visit_expression(expr, f),
+        Expression::Ternary {
+            condition,
+            true_expr,
+            false_expr,
+        } => {
+            visit_expression(condition, f);
+            visit_expression(true_expr, f);
+            visit_expression(false_expr, f);
+        }
+        Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => {
+            visit_expression(lhs, f);
+            visit_expression(rhs, f);
+        }
+        Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) | Expression::Allocate(_) => {}
+        Expression::CountStep { .. } | Expression::FunctionPointer { .. } => {}
+        Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => visit_expression(arg, f),
+        Expression::AtomicLoad(_, arg) => visit_expression(arg, f),
+        Expression::AtomicStore(_, ptr, val) => {
+            visit_expression(ptr, f);
+            visit_expression(val, f);
+        }
+        Expression::AtomicCmpXchg(_, ptr, expected, desired) => {
+            visit_expression(ptr, f);
+            visit_expression(expected, f);
+            visit_expression(desired, f);
+        }
+        Expression::AtomicFetch(_, _, ptr, val) => {
+            visit_expression(ptr, f);
+            visit_expression(val, f);
+        }
+        Expression::FunctionCall { args, .. } => {
+            for arg in args {
+                visit_expression(arg, f);
+            }
+        }
+        Expression::MethodCall { this, args, .. } => {
+            visit_expression(this, f);
+            for arg in args {
+                visit_expression(arg, f);
+            }
+        }
+        Expression::FunctionRef { .. } => {}
+        Expression::Invoke { callee, args } => {
+            visit_expression(callee, f);
+            for arg in args {
+                visit_expression(arg, f);
+            }
+        }
+        Expression::ForIterator(source) | Expression::WithEntered(source) => visit_expression(source, f),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => visit_expression(value, f),
+        Expression::MatchArm(test) => {
+            visit_expression(&test.subject, f);
+            for literal in test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()) {
+                visit_expression(literal, f);
+            }
+        }
+        Expression::CaseValue(value) => visit_expression(&value.subject, f),
+        Expression::WithSubject(with) => {
+            visit_expression(&with.subject, f);
+            visit_expression(&with.body, f);
+        }
+        Expression::Subject { .. } | Expression::NoMatch => {}
+        Expression::ClosureLiteral(closure) => visit_block(&closure.body, f),
+        Expression::MakeClosure { value, .. } => visit_expression(value, f),
+        Expression::ToTrait { value, .. } => visit_expression(value, f),
+        Expression::MethodAddress(_) => {}
+        Expression::CallPointer { pointer, args } => {
+            visit_expression(pointer, f);
+            for arg in args {
+                visit_expression(arg, f);
+            }
+        }
+    }
+}
+
+/// The direct sub-expressions of an expression, in order, without
+/// allocating: at most three fixed children, or one followed by a list
+/// (a call's arguments).
+pub enum Children<'a, R, I> {
+    Fixed([Option<R>; 3], usize),
+    Chain(Option<R>, I),
+    /// A `match` arm's subject and its patterns' literals.
+    Boxed(Box<dyn Iterator<Item = R> + 'a>),
+}
+
+impl<'a, R, I: Iterator<Item = R>> Children<'a, R, I> {
+    fn none() -> Self {
+        Children::Fixed([None, None, None], 0)
+    }
+
+    fn one(a: R) -> Self {
+        Children::Fixed([Some(a), None, None], 0)
+    }
+
+    fn two(a: R, b: R) -> Self {
+        Children::Fixed([Some(a), Some(b), None], 0)
+    }
+
+    fn three(a: R, b: R, c: R) -> Self {
+        Children::Fixed([Some(a), Some(b), Some(c)], 0)
+    }
+}
+
+impl<'a, R, I: Iterator<Item = R>> Iterator for Children<'a, R, I> {
+    type Item = R;
+
+    fn next(&mut self) -> Option<R> {
+        match self {
+            Children::Fixed(items, next) => {
+                while *next < items.len() {
+                    *next += 1;
+                    if let Some(item) = items[*next - 1].take() {
+                        return Some(item);
+                    }
+                }
+                None
+            }
+            Children::Chain(first, rest) => first.take().or_else(|| rest.next()),
+            Children::Boxed(items) => items.next(),
+        }
+    }
+}
+
 /// The direct sub-expressions of `expr`, for walks that need to decide per
 /// node whether to descend (a closure literal's body is a block, not listed).
-pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
+pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std::slice::IterMut<'_, Expression>> {
     match expr {
         Expression::SymbolRef { .. }
         | Expression::ThisRef
@@ -327,56 +504,42 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::MethodAddress(_)
         | Expression::CountStep { .. }
         | Expression::FunctionPointer { .. }
-        | Expression::ClosureLiteral(_) => vec![],
-        Expression::MemberRef { lhs, .. } => vec![lhs.as_mut()],
+        | Expression::ClosureLiteral(_) => Children::none(),
+        Expression::MemberRef { lhs, .. } => Children::one(lhs.as_mut()),
         Expression::Binary { lhs, rhs, .. }
         | Expression::Index { lhs, rhs, .. }
-        | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs.as_mut(), rhs.as_mut()],
-        Expression::Unary { operand, .. } => vec![operand.as_mut()],
-        Expression::Cast { expr, .. } => vec![expr.as_mut()],
+        | Expression::ArrayIndex { lhs, rhs, .. } => Children::two(lhs.as_mut(), rhs.as_mut()),
+        Expression::Unary { operand, .. } => Children::one(operand.as_mut()),
+        Expression::Cast { expr, .. } => Children::one(expr.as_mut()),
         Expression::Ternary { condition, true_expr, false_expr } => {
-            vec![condition.as_mut(), true_expr.as_mut(), false_expr.as_mut()]
+            Children::three(condition.as_mut(), true_expr.as_mut(), false_expr.as_mut())
         }
         Expression::RefCount(_, arg)
         | Expression::Address(_, arg)
         | Expression::Weak(_, _, arg)
         | Expression::AtomicLoad(_, arg)
         | Expression::ForIterator(arg)
-        | Expression::WithEntered(arg) => vec![arg.as_mut()],
-        Expression::MatchArm(test) => {
-            let mut children = vec![&mut test.subject];
-            children.extend(test.patterns.iter_mut().flat_map(|p| p.literals_mut()));
-            children
-        }
-        Expression::CaseValue(value) => vec![&mut value.subject],
-        Expression::WithSubject(with) => vec![&mut with.subject, &mut with.body],
-        Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => vec![ptr.as_mut(), val.as_mut()],
-        Expression::AtomicCmpXchg(_, ptr, expected, desired) => vec![ptr.as_mut(), expected.as_mut(), desired.as_mut()],
-        Expression::FunctionCall { args, .. } => args.iter_mut().collect(),
-        Expression::MethodCall { this, args, .. } => {
-            let mut children = vec![this.as_mut()];
-            children.extend(args.iter_mut());
-            children
-        }
-        Expression::Invoke { callee, args } => {
-            let mut children = vec![callee.as_mut()];
-            children.extend(args.iter_mut());
-            children
-        }
-        Expression::CallPointer { pointer, args } => {
-            let mut children = vec![pointer.as_mut()];
-            children.extend(args.iter_mut());
-            children
-        }
+        | Expression::WithEntered(arg) => Children::one(arg.as_mut()),
+        Expression::MatchArm(test) => Children::Boxed(Box::new(
+            std::iter::once(&mut test.subject).chain(test.patterns.iter_mut().flat_map(|p| p.literals_mut())),
+        )),
+        Expression::CaseValue(value) => Children::one(&mut value.subject),
+        Expression::WithSubject(with) => Children::two(&mut with.subject, &mut with.body),
+        Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => Children::two(ptr.as_mut(), val.as_mut()),
+        Expression::AtomicCmpXchg(_, ptr, expected, desired) => Children::three(ptr.as_mut(), expected.as_mut(), desired.as_mut()),
+        Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter_mut()),
+        Expression::MethodCall { this, args, .. } => Children::Chain(Some(this.as_mut()), args.iter_mut()),
+        Expression::Invoke { callee, args } => Children::Chain(Some(callee.as_mut()), args.iter_mut()),
+        Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer.as_mut()), args.iter_mut()),
         Expression::MakeClosure { value, .. }
         | Expression::ToTrait { value, .. }
         | Expression::Destructure { value, .. }
-        | Expression::Move { value, .. } => vec![value.as_mut()],
+        | Expression::Move { value, .. } => Children::one(value.as_mut()),
     }
 }
 
 /// The direct sub-expressions of `expr` ([`children_mut`] without `&mut`).
-pub fn children(expr: &Expression) -> Vec<&Expression> {
+pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter<'_, Expression>> {
     match expr {
         Expression::SymbolRef { .. }
         | Expression::ThisRef
@@ -396,33 +559,31 @@ pub fn children(expr: &Expression) -> Vec<&Expression> {
         | Expression::StaticCase { .. }
         | Expression::Subject { .. }
         | Expression::NoMatch
-        | Expression::ClosureLiteral(_) => vec![],
-        Expression::CaseValue(case) => vec![&case.subject],
-        Expression::WithSubject(with) => vec![&with.subject, &with.body],
-        Expression::MemberRef { lhs, .. } => vec![lhs],
-        Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs, rhs],
-        Expression::Unary { operand, .. } => vec![operand],
-        Expression::Cast { expr, .. } => vec![expr],
-        Expression::Ternary { condition, true_expr, false_expr } => vec![condition, true_expr, false_expr],
+        | Expression::ClosureLiteral(_) => Children::none(),
+        Expression::CaseValue(case) => Children::one(&case.subject),
+        Expression::WithSubject(with) => Children::two(&with.subject, &with.body),
+        Expression::MemberRef { lhs, .. } => Children::one(lhs),
+        Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => Children::two(lhs, rhs),
+        Expression::Unary { operand, .. } => Children::one(operand),
+        Expression::Cast { expr, .. } => Children::one(expr),
+        Expression::Ternary { condition, true_expr, false_expr } => Children::three(condition, true_expr, false_expr),
         Expression::RefCount(_, arg)
         | Expression::Address(_, arg)
         | Expression::Weak(_, _, arg)
         | Expression::AtomicLoad(_, arg)
         | Expression::ForIterator(arg)
-        | Expression::WithEntered(arg) => vec![arg],
+        | Expression::WithEntered(arg) => Children::one(arg),
         Expression::MatchArm(test) => {
-            let mut children = vec![&test.subject];
-            children.extend(test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()));
-            children
+            Children::Boxed(Box::new(std::iter::once(&test.subject).chain(test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()))))
         }
-        Expression::Destructure { value, .. } | Expression::Move { value, .. } => vec![value],
-        Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => vec![a, b],
-        Expression::AtomicCmpXchg(_, a, b, c) => vec![a, b, c],
-        Expression::FunctionCall { args, .. } => args.iter().collect(),
-        Expression::MethodCall { this, args, .. } => std::iter::once(this.as_ref()).chain(args.iter()).collect(),
-        Expression::Invoke { callee, args } => std::iter::once(callee.as_ref()).chain(args.iter()).collect(),
-        Expression::CallPointer { pointer, args } => std::iter::once(pointer.as_ref()).chain(args.iter()).collect(),
-        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => vec![value],
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => Children::one(value),
+        Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => Children::two(a, b),
+        Expression::AtomicCmpXchg(_, a, b, c) => Children::three(a, b, c),
+        Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter()),
+        Expression::MethodCall { this, args, .. } => Children::Chain(Some(this), args.iter()),
+        Expression::Invoke { callee, args } => Children::Chain(Some(callee), args.iter()),
+        Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer), args.iter()),
+        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => Children::one(value),
     }
 }
 
@@ -430,6 +591,13 @@ pub fn children(expr: &Expression) -> Vec<&Expression> {
 pub fn walk_function(function: &mut FunctionDef, f: &mut impl FnMut(&mut Expression)) {
     if let Some(body) = &mut function.body {
         walk_block(body, f);
+    }
+}
+
+/// [`walk_function`] for walks that only read.
+pub fn visit_function<'e>(function: &'e FunctionDef, f: &mut impl FnMut(&'e Expression)) {
+    if let Some(body) = &function.body {
+        visit_block(body, f);
     }
 }
 

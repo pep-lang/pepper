@@ -188,8 +188,7 @@ fn has_copy_method(st: &StructDef) -> bool {
 /// `function`, with its location.
 fn copy_calls(function: &FunctionDef) -> Vec<(TypeName, Loc)> {
     let mut found = vec![];
-    let mut function = function.clone();
-    crate::passes::walk_function(&mut function, &mut |e: &mut Expression| match e {
+    crate::passes::visit_function(function, &mut |e: &Expression| match e {
         Expression::FunctionCall { function: name, loc, .. } | Expression::MethodCall { method: name, loc, .. }
             if name.starts_with("copy<") =>
         {
@@ -647,8 +646,7 @@ fn request_site(module: &Module, ty: &TypeName) -> Option<Loc> {
     let spec = format!("copy<{}>", ty);
     let mut found: Vec<Loc> = vec![];
     let mut look = |function: &FunctionDef| {
-        let mut function = function.clone();
-        crate::passes::walk_function(&mut function, &mut |e: &mut Expression| match e {
+        crate::passes::visit_function(function, &mut |e: &Expression| match e {
             Expression::FunctionCall { function, loc, .. } | Expression::MethodCall { method: function, loc, .. }
                 if *function == spec && !loc.is_none() =>
             {

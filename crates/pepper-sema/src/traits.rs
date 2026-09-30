@@ -89,8 +89,9 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
     if traits.is_empty() {
         return found;
     }
+    let names = TraitNames::of(traits);
     let mut add = |ty: &TypeName| {
-        if mentions_trait(traits, ty) {
+        if names.mentioned_in(ty) {
             collect(traits, ty, &mut found);
         }
     };
@@ -118,11 +119,56 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
     found
 }
 
-/// Whether any name in `ty` contains a trait's name: a cheap filter before
-/// [`collect`] prints and re-parses the type (a pointer's stars and a
-/// generic argument can be spelled inside a name, `Array<Shape>*`).
-fn mentions_trait(traits: &[TraitDef], ty: &TypeName) -> bool {
-    traits.iter().any(|t| ty.name.contains(t.name.as_str())) || ty.sub_types.iter().any(|sub| mentions_trait(traits, sub))
+/// The traits' names, for [`TraitNames::mentioned_in`].
+struct TraitNames<'t> {
+    /// Names that are one identifier (`Iterator`): matched as whole words.
+    words: Vec<&'t str>,
+    /// Any other name: matched anywhere.
+    others: Vec<&'t str>,
+    /// The length of the shortest name: no shorter spelling mentions one.
+    shortest: usize,
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// The words of `text`, as bytes: its runs of [`is_word_char`] characters
+/// (ASCII, so any other byte ends a word).
+fn words(text: &str) -> impl Iterator<Item = &[u8]> {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    (0..=bytes.len()).filter_map(move |i| {
+        if i < bytes.len() && is_word_char(bytes[i] as char) {
+            return None;
+        }
+        let word = &bytes[start..i];
+        start = i + 1;
+        (!word.is_empty()).then_some(word)
+    })
+}
+
+impl<'t> TraitNames<'t> {
+    fn of(traits: &'t [TraitDef]) -> Self {
+        let (words, others) = traits.iter().map(|t| t.name.as_str()).partition(|name| name.chars().all(is_word_char));
+        let shortest = traits.iter().map(|t| t.name.len()).min().unwrap_or(0);
+        TraitNames { words, others, shortest }
+    }
+
+    /// Whether any name in `ty` spells a trait's name: a cheap filter before
+    /// [`collect`] prints and re-parses the type (a pointer's stars and a
+    /// generic argument can be spelled inside a name, `Array<Shape>*`). A
+    /// trait is a whole word of the spelling, so `ArrayIterator` does not
+    /// mention `Iterator`.
+    fn mentioned_in(&self, ty: &TypeName) -> bool {
+        let name = ty.name.as_str();
+        if name.len() < self.shortest && ty.sub_types.is_empty() {
+            return false;
+        }
+        words(name).any(|word| self.words.iter().any(|w| w.as_bytes() == word))
+            || self.others.iter().any(|other| name.contains(other))
+            || ty.sub_types.iter().any(|sub| self.mentioned_in(sub))
+    }
 }
 
 fn collect(traits: &[TraitDef], ty: &TypeName, found: &mut Vec<TypeName>) {

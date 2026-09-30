@@ -181,9 +181,7 @@ fn block_types(block: &Block, add: &mut impl FnMut(&TypeName)) {
 }
 
 fn expression_types(expr: &Expression, add: &mut impl FnMut(&TypeName)) {
-    // `walk_expression` needs `&mut`; the walk only reads.
-    let mut expr = expr.clone();
-    crate::passes::walk_expression(&mut expr, &mut |e: &mut Expression| match e {
+    crate::passes::visit_expression(expr, &mut |e: &Expression| match e {
         Expression::SymbolRef { ty, .. }
         | Expression::FunctionRef { ty, .. }
         | Expression::Cast { ty, .. }

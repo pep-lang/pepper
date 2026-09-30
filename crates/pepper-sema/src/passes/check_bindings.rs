@@ -127,8 +127,7 @@ fn check_statement(stmt: &Statement, scopes: &mut Scopes) {
 }
 
 fn check_expression(expr: &Expression, scopes: &Scopes) {
-    let mut expr = expr.clone();
-    crate::passes::walk_expression(&mut expr, &mut |e: &mut Expression| {
+    crate::passes::visit_expression(expr, &mut |e: &Expression| {
         let target = match e {
             Expression::Binary { op, lhs, .. } if op.is_assignment() => Some(&**lhs),
             Expression::Unary { op: UnaryOp::PreInc | UnaryOp::PostInc | UnaryOp::PreDec | UnaryOp::PostDec, operand, .. } => Some(&**operand),

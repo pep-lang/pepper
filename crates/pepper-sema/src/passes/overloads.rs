@@ -648,6 +648,15 @@ impl Overloads {
         split_type_arguments(function)
     }
 
+    /// The set a call to `function` names ([`Overloads::call_set`] without
+    /// parsing its type arguments).
+    pub fn call_set_name<'f>(&self, function: &'f str) -> &'f str {
+        if self.constructors.contains(function) || set_name(function) != function {
+            return function;
+        }
+        function.split_once('<').map_or(function, |(base, _)| base)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.sets.is_empty() && self.methods.is_empty()
     }
@@ -791,7 +800,7 @@ impl Overloads {
 
     /// Whether `set` names a method overload set of `receiver`'s struct.
     pub fn is_method_set(&self, receiver: &TypeName, set: &str) -> bool {
-        self.methods.get(&canonical(receiver).to_string()).is_some_and(|sets| sets.contains_key(set))
+        self.method_set_names.contains(set) && self.methods.get(&canonical(receiver).to_string()).is_some_and(|sets| sets.contains_key(set))
     }
 
     /// The member of method set `set` of `receiver`'s struct, visible at
