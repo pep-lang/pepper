@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -190,11 +190,11 @@
 <p>The default error type of <code>Result</code>: a human-readable message.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
-    var n = r.Error.Message.length();   # 4
+    var n = r.error().message.length();   # 4
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="message"><a class="header" href="#message">Message</a></h4>
-<pre><code class="language-pepper">String Message
+<h4 id="message"><a class="header" href="#message">message</a></h4>
+<pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
@@ -214,14 +214,12 @@ wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("b
 <p>The outcome of an operation that can fail: either Ok, holding a <code>TValue</code>,
 or Err, holding a <code>TError</code>, like Rust’s <code>Result&lt;T, E&gt;</code>.</p>
 <p>Build one with the static <code>ok</code> or <code>err</code> functions and test it with
-<code>is_ok()</code> or <code>is_err()</code>. Pepper has no unions, so both the <code>Value</code> and
-the <code>Error</code> fields always exist; only the one matching <code>IsOk</code> is
-meaningful, and the other keeps its default (zero for a POD type, null for
-a struct type, so do not read through it). <code>TError</code> defaults to <code>Error</code>,
-so <code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
+<code>is_ok()</code> or <code>is_err()</code>, then read the outcome with <code>value()</code> or
+<code>error()</code>, each of which panics on the wrong kind of result. <code>TError</code>
+defaults to <code>Error</code>, so <code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
 <p><code>Result&lt;void&gt;</code> is the result of an operation that returns nothing on
 success, like Rust’s <code>Result&lt;(), E&gt;</code>. A <code>void</code> type argument erases what
-it types: that instance has no <code>Value</code> field, <code>ok()</code> takes no argument,
+it types: that instance holds no value, <code>ok()</code> takes no argument,
 and <code>value()</code> returns nothing, so it only checks that the result is Ok.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -237,25 +235,12 @@ and <code>value()</code> returns nothing, so it only checks that the result is O
         return b.ok_or(0);   # 0
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="isok"><a class="header" href="#isok">IsOk</a></h4>
-<pre><code class="language-pepper">bool IsOk
-</code></pre>
-<p>Whether this result is Ok (<code>Value</code> is live) rather than Err (<code>Error</code> is live).</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">TValue Value
-</code></pre>
-<p>The success value; meaningful only when <code>IsOk</code> is true, otherwise the default of <code>TValue</code>.</p>
-<h4 id="error-2"><a class="header" href="#error-2">Error</a></h4>
-<pre><code class="language-pepper">TError Error
-</code></pre>
-<p>The failure value; meaningful only when <code>IsOk</code> is false, otherwise the default of <code>TError</code>.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="result-2"><a class="header" href="#result-2">Result()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates an Err result whose <code>Error</code> and <code>Value</code> both hold their
-type’s default (zero for a POD type, null for a struct type).</p>
+<p>Creates an Err result whose error and value both hold their type’s
+default (zero for a POD type, null for a struct type).</p>
 <p>Prefer <code>ok</code> or <code>err</code>, which set the live field.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var e = Result&lt;int&gt;();   # e.is_ok() == false
@@ -273,7 +258,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>an Ok result whose <code>Value</code> is <code>v</code></li>
+<li>an Ok result whose <code>value()</code> is <code>v</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.ok(42);
@@ -290,7 +275,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>an Err result whose <code>Error</code> is <code>e</code></li>
+<li>an Err result whose <code>error()</code> is <code>e</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
@@ -302,7 +287,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <p>Reports whether this result is Ok.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when <code>Value</code> holds the outcome</li>
+<li>true when the result holds a value</li>
 </ul>
 <h4 id="is_err"><a class="header" href="#is_err">is_err</a></h4>
 <pre><code class="language-pepper">bool is_err()
@@ -310,9 +295,9 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <p>Reports whether this result is Err.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when <code>Error</code> holds the outcome</li>
+<li>true when the result holds an error</li>
 </ul>
-<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<h4 id="value"><a class="header" href="#value">value</a></h4>
 <pre><code class="language-pepper">TValue value()
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
@@ -322,14 +307,31 @@ keeps its reference too.</p>
 result is Ok.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the <code>Value</code> of an Ok result</li>
+<li>the value of an Ok result</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>this.IsOk</code> does not hold, that is, the result is Err (“Result.value on an Err value”)</li>
+<li>if the result is Err (“Result.value on an Err value”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
+</code></pre>
+<h4 id="error-2"><a class="header" href="#error-2">error</a></h4>
+<pre><code class="language-pepper">TError error()
+</code></pre>
+<p>Returns the failure value, panicking if this result is Ok.</p>
+<p>For a struct <code>TError</code> the caller gets its own reference; the result
+keeps its reference too.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the error of an Err result</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is Ok (“Result.error on an Ok value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var e = Result&lt;int&gt;.err(Error("boom")).error();   # e.message == "boom"
 </code></pre>
 <h4 id="ok_or"><a class="header" href="#ok_or">ok_or</a></h4>
 <pre><code class="language-pepper">TValue ok_or(TValue fallback)
@@ -343,7 +345,7 @@ is used.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>Value</code> when the result is Ok, otherwise <code>fallback</code></li>
+<li>the value when the result is Ok, otherwise <code>fallback</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = Result&lt;int&gt;.err(Error("e")).ok_or(-1);   # -1

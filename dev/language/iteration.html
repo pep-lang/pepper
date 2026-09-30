@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -190,8 +190,8 @@ the iterator protocol.</p>
 <p><code>for (var x in source) { ... }</code> runs the body once per element, with <code>x</code> bound
 to the element:</p>
 <pre><code class="language-pepper">struct Item {
-    int Value;
-    construct(this.Value = 0) {}
+    int value;
+    construct(this.value = 0) {}
 }
 
 make_items(): Array&lt;Item&gt; {
@@ -241,16 +241,16 @@ main(): int {
     # but rebinding the loop variable does not touch the array.
     var items = make_items();
     for (var item in items) {
-        item.Value = item.Value * 10;
+        item.value = item.value * 10;
         item = Item(99);
     }
-    assert(items[0].Value == 200, "first element was updated");
-    assert(items[1].Value == 220, "second element was updated");
+    assert(items[0].value == 200, "first element was updated");
+    assert(items[1].value == 220, "second element was updated");
 
     # Iterating a temporary keeps it alive for the whole loop.
     var sum = 0;
     for (var item in make_items()) {
-        sum = sum + item.Value;
+        sum = sum + item.value;
     }
     assert(sum == 42, "temporary array stays alive");
 
@@ -279,7 +279,7 @@ all work.</li>
 <li><strong>The loop variable is a copy</strong>, like any <code>var</code>. Assigning a new value to it
 does not change the collection. For a struct element, though, the copy is
 another reference to the same object (see
-<a href="memory.html">Memory and reference counting</a>), so <code>item.Value = ...</code> does
+<a href="memory.html">Memory and reference counting</a>), so <code>item.value = ...</code> does
 change the element.</li>
 <li><strong>A temporary source stays alive.</strong> The loop holds a reference to what it
 iterates, so <code>for (var item in make_items())</code> is safe.</li>

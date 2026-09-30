@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -212,12 +212,6 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">String Value
-</code></pre>
-<p>The path’s text, exactly as given or built: UTF-8, not normalized,
-possibly empty.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String value = "")
@@ -259,13 +253,13 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the index of the extension’s dot, or <code>name.Size</code> when the name has no extension (including the empty name)</li>
+<li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
-<p>Returns the path’s text, the same String as <code>Value</code>.</p>
+<p>Returns the path’s text, the same String the Path holds, not a copy.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the path as a String</li>
@@ -278,7 +272,7 @@ path”: it is what <code>parent()</code> returns for a root or a bare name, and
 file-system operations on it fail.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when <code>Value</code> is <code>""</code></li>
+<li>true when the path’s text is <code>""</code></li>
 </ul>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
 <pre><code class="language-pepper">bool is_absolute()
@@ -503,19 +497,28 @@ directory that cannot be read, and the empty path all give false. Use
 <ul>
 <li>true for a regular file or a symlink to one; false for anything else, and on any error (including a missing path)</li>
 </ul>
-<h4 id="is_dir"><a class="header" href="#is_dir">is_dir</a></h4>
-<pre><code class="language-pepper">bool is_dir()
+<h4 id="is_directory"><a class="header" href="#is_directory">is_directory</a></h4>
+<pre><code class="language-pepper">bool is_directory()
 </code></pre>
 <p>Returns whether the path names a directory, following symlinks.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true for a directory or a symlink to one; false for anything else, and on any error (including a missing path)</li>
 </ul>
+<h4 id="is_dir"><a class="header" href="#is_dir">is_dir</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'is_directory' instead", "is_directory")] bool is_dir()
+</code></pre>
+<p>Deprecated: use <code>is_directory</code> instead. Returns whether the path
+names a directory, following symlinks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>is_directory()</code></li>
+</ul>
 <h4 id="metadata"><a class="header" href="#metadata">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>
 <p>Returns the metadata of the file or directory at this path, following
-symlinks: the result describes the target (so on POSIX <code>IsSymlink</code> is
+symlinks: the result describes the target (so on POSIX <code>is_symlink</code> is
 always false). <code>stat</code> / <code>statx</code> on POSIX; on Windows the path is
 opened for attributes only.</p>
 <p><strong>Returns</strong></p>
@@ -531,18 +534,18 @@ opened for attributes only.</p>
 
     var m = io.Path("data.bin").metadata();
     if (m.is_ok()) {
-        var size = m.Value.Size;
+        var size = m.value().size;
     }
 </code></pre>
 <h4 id="symlink_metadata"><a class="header" href="#symlink_metadata">symlink_metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; symlink_metadata()
 </code></pre>
 <p>Returns the metadata of the path itself without following a symlink
-at the end of it, so for a symlink <code>IsSymlink</code> is true and the rest
+at the end of it, so for a symlink <code>is_symlink</code> is true and the rest
 describes the link rather than its target. <code>lstat</code> / <code>statx</code> with
 <code>AT_SYMLINK_NOFOLLOW</code> on POSIX; on Windows the path is opened with
 <code>FILE_FLAG_OPEN_REPARSE_POINT</code>, and any reparse point (junctions
-included) reports <code>IsSymlink</code>, together with <code>IsDir</code> for a directory
+included) reports <code>is_symlink</code>, together with <code>is_directory</code> for a directory
 link. For anything that is not a symlink it equals <code>metadata()</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
@@ -574,7 +577,7 @@ removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).
 
     var real = io.Path("a/../b.txt").canonicalize();
     if (real.is_ok()) {
-        print(real.Value.to_string());
+        print(real.value().to_string());
     }
 </code></pre>
 <h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
@@ -591,7 +594,7 @@ results to ignore spelling differences.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when both <code>Value</code>s are equal</li>
+<li>true when both paths’ texts are equal</li>
 </ul>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator !=</a></h4>
 <pre><code class="language-pepper">bool !=(Path rhs)
@@ -604,7 +607,7 @@ with the same byte-by-byte comparison.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the <code>Value</code>s differ</li>
+<li>true when the paths’ texts differ</li>
 </ul>
 
                     </main>

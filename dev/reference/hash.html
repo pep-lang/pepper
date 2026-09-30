@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -229,7 +229,7 @@ argument is released afterwards.</p>
 <p>Returns a 64-bit FNV-1a hash of a String’s bytes, so equal strings hash
 equally wherever they are stored. Keeps equal <code>String</code> keys of a
 <code>HashMap</code> or <code>HashSet</code> in one bucket.</p>
-<p>Hashes the <code>Size</code> bytes of <code>Data</code> (not the NUL terminator) in O(Size). An
+<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) in O(size). An
 empty String hashes to the FNV-1a offset basis.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -279,7 +279,7 @@ state: they are public but may change, and writing to them breaks the map.</p>
 <pre><code class="language-pepper">Array&lt;K&gt; keys
 </code></pre>
 <p>The key of each slot; only slots whose <code>state</code> is 2 hold a live key,
-the rest hold the default of <code>K</code>. Internal: its <code>Size</code> equals
+the rest hold the default of <code>K</code>. Internal: its count equals
 <code>capacity</code> rather than the entry count, and <code>grow</code> replaces it.</p>
 <h4 id="values"><a class="header" href="#values">values</a></h4>
 <pre><code class="language-pepper">Array&lt;V&gt; values
@@ -519,7 +519,7 @@ may change, and writing to them breaks the set.</p>
 <pre><code class="language-pepper">Array&lt;K&gt; keys
 </code></pre>
 <p>The element of each slot; only slots whose <code>state</code> is 2 hold a live
-member, the rest hold the default of <code>K</code>. Internal: its <code>Size</code> equals
+member, the rest hold the default of <code>K</code>. Internal: its count equals
 <code>capacity</code> rather than the member count, and <code>grow</code> replaces it.</p>
 <h4 id="state-1"><a class="header" href="#state-1">state</a></h4>
 <pre><code class="language-pepper">Array&lt;int&gt; state

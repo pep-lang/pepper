@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -208,11 +208,11 @@ main(): int {
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
     assert(good.value() == 2, "value() returns the value");
-    assert(good.Value == 2, "the Value field holds it too");
+    assert(good.value() == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
     assert(bad.is_err(), "x does not parse");
-    assert(bad.Error.Message == "not a digit: x", "the error explains why");
+    assert(bad.error().message == "not a digit: x", "the error explains why");
 
     # ok_or returns the value, or the fallback for an Err. It never panics.
     assert(good.ok_or(-1) == 2, "Ok gives its value");
@@ -244,28 +244,27 @@ main(): int {
 <tr><td><code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
 <tr><td><code>is_ok()</code>, <code>is_err()</code></td><td>Report which kind the result is.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Result.value on an Err value</code> if the result is an Err.</td></tr>
+<tr><td><code>error()</code></td><td>Returns the error; panics with <code>Result.error on an Ok value</code> if the result is Ok.</td></tr>
 <tr><td><code>ok_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the result is an Err. Never panics.</td></tr>
-<tr><td><code>Value</code>, <code>Error</code>, <code>IsOk</code></td><td>The fields behind the methods.</td></tr>
 </tbody>
 </table>
 </div>
 <p><code>TError</code> defaults to <code>Error</code>, so <code>Result&lt;int&gt;</code> means <code>Result&lt;int, Error&gt;</code>, and
 values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). <code>Error</code> is a struct
-with one field, <code>String Message</code>: <code>Error("boom").Message</code> is <code>"boom"</code>.</p>
+with one field, <code>String message</code>: <code>Error("boom").message</code> is <code>"boom"</code>.</p>
 <p>Use <code>value()</code> when an Err would be a bug in your program, since it stops the
 program. When an Err is an expected outcome, test with <code>is_ok()</code> or <code>is_err()</code>,
 or supply a fallback with <code>ok_or</code>.</p>
-<h3 id="both-fields-always-exist"><a class="header" href="#both-fields-always-exist">Both fields always exist</a></h3>
-<p>Pepper has no union types, so a <code>Result</code> stores both a <code>Value</code> and an <code>Error</code>
-field, and <code>IsOk</code> says which one is meaningful. The other one keeps its
-default: zero for a number, and null for a struct type. Read <code>Value</code> only after
-checking <code>is_ok()</code>, and <code>Error</code> only after checking <code>is_err()</code>. Reading a
-field through a null struct reference crashes the program.</p>
+<h3 id="check-before-you-read"><a class="header" href="#check-before-you-read">Check before you read</a></h3>
+<p>Pepper has no union types, so a <code>Result</code> stores both a value and an error in
+private fields, and only one of them is meaningful. <code>value()</code> and <code>error()</code>
+check which one you asked for and panic on the wrong one, so call <code>value()</code>
+only after checking <code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
 uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
-argument erases what it types, so <code>Result&lt;void&gt;</code> has no <code>Value</code> field, <code>ok()</code>
+argument erases what it types, so <code>Result&lt;void&gt;</code> holds no value, <code>ok()</code>
 takes no argument, and <code>value()</code> returns nothing: calling it only checks that
 the result is Ok. Using that call as a value, as in <code>var x = done.value();</code>, is
 a compile error, as it is for any function that returns <code>void</code>.</p>
@@ -319,23 +318,23 @@ parse_number(String s): Result&lt;int, ParseError&gt; {
 add_numbers(String a, String b): Result&lt;int, ParseError&gt; {
     var x = parse_number(a);
     if (x.is_err()) {
-        return Result&lt;int, ParseError&gt;.err(x.Error);
+        return Result&lt;int, ParseError&gt;.err(x.error());
     }
     var y = parse_number(b);
     if (y.is_err()) {
-        return Result&lt;int, ParseError&gt;.err(y.Error);
+        return Result&lt;int, ParseError&gt;.err(y.error());
     }
-    return Result&lt;int, ParseError&gt;.ok(x.Value + y.Value);
+    return Result&lt;int, ParseError&gt;.ok(x.value() + y.value());
 }
 
 # Convert an error into another type on the way out.
 check_total(String a, String b, int limit): Result&lt;void&gt; {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
-        var e = sum.Error;
+        var e = sum.error();
         return Result&lt;void&gt;.err(Error("bad number '" + e.Input + "'"));
     }
-    if (sum.Value &gt; limit) {
+    if (sum.value() &gt; limit) {
         return Result&lt;void&gt;.err(Error("total is over the limit"));
     }
     return Result&lt;void&gt;.ok();
@@ -347,14 +346,14 @@ main(): int {
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
-    assert(bad.Error.Input == "4x2", "the error names the input");
-    assert(bad.Error.Position == 1, "and where it went wrong");
+    assert(bad.error().Input == "4x2", "the error names the input");
+    assert(bad.error().Position == 1, "and where it went wrong");
 
     assert(check_total("1", "2", 10).is_ok(), "3 is within the limit");
     var over = check_total("10", "20", 10);
-    assert(over.Error.Message == "total is over the limit", "30 is not");
+    assert(over.error().message == "total is over the limit", "30 is not");
     var wrong = check_total("1", "", 10);
-    assert(wrong.Error.Message == "bad number ''", "an empty number is an error");
+    assert(wrong.error().message == "bad number ''", "an empty number is an error");
     return 0;
 }
 </code></pre>
@@ -365,7 +364,7 @@ as shown above.</p>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
 alias for <code>Result&lt;T, IoError&gt;</code>, and operations with nothing to return use
-<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>Code</code> and a <code>Message</code>,
+<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>code</code> and a <code>message</code>,
 and has predicates such as <code>is_not_found()</code> and <code>is_permission_denied()</code> for
 deciding what to do about the failure:</p>
 <pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError] from io;
@@ -374,12 +373,12 @@ deciding what to do about the failure:</p>
 read_setting(Path path): String {
     var text = File.read_to_string(path);
     if (text.is_err()) {
-        if (text.Error.is_not_found()) {
+        if (text.error().is_not_found()) {
             return "default";
         }
-        return "error: " + text.Error.Message;
+        return "error: " + text.error().message;
     }
-    return text.Value;
+    return text.value();
 }
 
 main(): int {

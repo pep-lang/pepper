@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -221,33 +221,8 @@ sharing read, write and delete access with other openers.</p>
     if (r.is_err()) {
         return 1;
     }
-    var f = r.Value;
+    var f = r.value();
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="read"><a class="header" href="#read">Read</a></h4>
-<pre><code class="language-pepper">bool Read
-</code></pre>
-<p>Whether the file is opened for reading. Off by default.</p>
-<h4 id="write"><a class="header" href="#write">Write</a></h4>
-<pre><code class="language-pepper">bool Write
-</code></pre>
-<p>Whether the file is opened for writing at the current position. Off by default.</p>
-<h4 id="append"><a class="header" href="#append">Append</a></h4>
-<pre><code class="language-pepper">bool Append
-</code></pre>
-<p>Whether the file is opened for writing at its end only; implies write access. Off by default.</p>
-<h4 id="truncate"><a class="header" href="#truncate">Truncate</a></h4>
-<pre><code class="language-pepper">bool Truncate
-</code></pre>
-<p>Whether an existing file is emptied to 0 bytes when opened; needs write or append. Off by default.</p>
-<h4 id="create"><a class="header" href="#create">Create</a></h4>
-<pre><code class="language-pepper">bool Create
-</code></pre>
-<p>Whether a missing file is created (an existing one is opened as it is); needs write or append. Off by default.</p>
-<h4 id="createnew"><a class="header" href="#createnew">CreateNew</a></h4>
-<pre><code class="language-pepper">bool CreateNew
-</code></pre>
-<p>Whether the file must be newly created: opening fails if it exists (<code>O_EXCL</code> on POSIX, <code>CREATE_NEW</code> on Windows); needs write or append. Off by default.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
@@ -255,7 +230,7 @@ sharing read, write and delete access with other openers.</p>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
 <p>Sets whether the file is opened for reading.</p>
@@ -267,7 +242,7 @@ sharing read, write and delete access with other openers.</p>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
-<h4 id="write-1"><a class="header" href="#write-1">write</a></h4>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
 <pre><code class="language-pepper">OpenOptions write(bool v)
 </code></pre>
 <p>Sets whether the file is opened for writing. Writes go to the
@@ -280,7 +255,7 @@ current position and overwrite what is there.</p>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
-<h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
+<h4 id="append"><a class="header" href="#append">append</a></h4>
 <pre><code class="language-pepper">OpenOptions append(bool v)
 </code></pre>
 <p>Sets append mode: the file is opened for writing and every write
@@ -295,7 +270,7 @@ precedence over <code>write</code>.</p>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
-<h4 id="truncate-1"><a class="header" href="#truncate-1">truncate</a></h4>
+<h4 id="truncate"><a class="header" href="#truncate">truncate</a></h4>
 <pre><code class="language-pepper">OpenOptions truncate(bool v)
 </code></pre>
 <p>Sets whether an existing file is truncated to 0 bytes when it is
@@ -308,7 +283,7 @@ opened. Requires <code>write</code> or <code>append</code>.</p>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
-<h4 id="create-1"><a class="header" href="#create-1">create</a></h4>
+<h4 id="create"><a class="header" href="#create">create</a></h4>
 <pre><code class="language-pepper">OpenOptions create(bool v)
 </code></pre>
 <p>Sets whether a missing file is created. An existing file is opened as
@@ -369,52 +344,52 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 <code>GetFileInformationByHandle</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var m = Path("notes.txt").metadata();
-    if (m.is_ok() &amp;&amp; m.Value.IsFile) {
-        var bytes = m.Value.Size;
+    if (m.is_ok() &amp;&amp; m.value().is_file) {
+        var bytes = m.value().size;
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="size"><a class="header" href="#size">Size</a></h4>
-<pre><code class="language-pepper">ulong Size
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="size"><a class="header" href="#size">size</a></h4>
+<pre><code class="language-pepper">ulong size
 </code></pre>
 <p>The file’s length in bytes.</p>
-<h4 id="isfile"><a class="header" href="#isfile">IsFile</a></h4>
-<pre><code class="language-pepper">bool IsFile
+<h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
+<pre><code class="language-pepper">bool is_file
 </code></pre>
 <p>Whether this is a regular file. On Windows, anything that is neither
 a directory nor a reparse point (symlink) counts as a file.</p>
-<h4 id="isdir"><a class="header" href="#isdir">IsDir</a></h4>
-<pre><code class="language-pepper">bool IsDir
+<h4 id="is_directory"><a class="header" href="#is_directory">is_directory</a></h4>
+<pre><code class="language-pepper">bool is_directory
 </code></pre>
 <p>Whether this is a directory.</p>
-<h4 id="issymlink"><a class="header" href="#issymlink">IsSymlink</a></h4>
-<pre><code class="language-pepper">bool IsSymlink
+<h4 id="is_symlink"><a class="header" href="#is_symlink">is_symlink</a></h4>
+<pre><code class="language-pepper">bool is_symlink
 </code></pre>
 <p>Whether this is a symbolic link itself. Only metadata that does not
 follow links (<code>Path.symlink_metadata()</code>) can report one. On Windows
 this is any reparse point (<code>FILE_ATTRIBUTE_REPARSE_POINT</code>), which
 includes junctions.</p>
-<h4 id="readonly"><a class="header" href="#readonly">ReadOnly</a></h4>
-<pre><code class="language-pepper">bool ReadOnly
+<h4 id="read_only"><a class="header" href="#read_only">read_only</a></h4>
+<pre><code class="language-pepper">bool read_only
 </code></pre>
 <p>Whether the file is read-only: on POSIX, no write permission bit
 (0222) is set for anyone; on Windows, <code>FILE_ATTRIBUTE_READONLY</code> is set.</p>
-<h4 id="modified"><a class="header" href="#modified">Modified</a></h4>
-<pre><code class="language-pepper">long Modified
+<h4 id="modified"><a class="header" href="#modified">modified</a></h4>
+<pre><code class="language-pepper">long modified
 </code></pre>
 <p>The time of the last modification of the contents, in nanoseconds since the Unix epoch.</p>
-<h4 id="accessed"><a class="header" href="#accessed">Accessed</a></h4>
-<pre><code class="language-pepper">long Accessed
+<h4 id="accessed"><a class="header" href="#accessed">accessed</a></h4>
+<pre><code class="language-pepper">long accessed
 </code></pre>
 <p>The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with <code>noatime</code> or <code>relatime</code> update it rarely or never).</p>
-<h4 id="created"><a class="header" href="#created">Created</a></h4>
-<pre><code class="language-pepper">long Created
+<h4 id="created"><a class="header" href="#created">created</a></h4>
+<pre><code class="language-pepper">long created
 </code></pre>
 <p>The creation (birth) time, in nanoseconds since the Unix epoch; 0
 where unavailable, such as on Linux file systems that do not record
 one.</p>
-<h4 id="permissions"><a class="header" href="#permissions">Permissions</a></h4>
-<pre><code class="language-pepper">Mode Permissions
+<h4 id="permissions"><a class="header" href="#permissions">permissions</a></h4>
+<pre><code class="language-pepper">Mode permissions
 </code></pre>
 <p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
 (<code>mode &amp; 07777</code>, for example 256 for owner read); on Windows the
@@ -454,23 +429,13 @@ kinds apart portably.</p>
     f.close();
     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
-<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
-<h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
-<pre><code class="language-pepper">FileHandle Handle
-</code></pre>
-<p>The platform handle: a file descriptor on POSIX (-1 when closed), a
-<code>HANDLE</code> on Windows (null when closed).</p>
-<h4 id="path"><a class="header" href="#path">Path</a></h4>
-<pre><code class="language-pepper">Path Path
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="path"><a class="header" href="#path">path</a></h4>
+<pre><code class="language-pepper">Path path
 </code></pre>
 <p>The path the File was opened with; <code>&lt;stdin&gt;</code>, <code>&lt;stdout&gt;</code> or
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
-<h4 id="owned"><a class="header" href="#owned">Owned</a></h4>
-<pre><code class="language-pepper">bool Owned
-</code></pre>
-<p>Whether the File owns its handle and closes it. False for the
-standard streams (stdin, stdout, stderr), which a File never closes.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="file-2"><a class="header" href="#file-2">File()</a></h4>
 <pre><code class="language-pepper">construct()
@@ -495,12 +460,12 @@ every I/O method fails. Use <code>File.open</code>, <code>File.create</code> or
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.open(Path("config.txt"));
-    if (r.is_err() &amp;&amp; r.Error.is_not_found()) {
+    if (r.is_err() &amp;&amp; r.error().is_not_found()) {
         return 0;
     }
-    var text = r.Value.read_string();
+    var text = r.value().read_string();
 </code></pre>
-<h4 id="create-2"><a class="header" href="#create-2">create</a></h4>
+<h4 id="create-1"><a class="header" href="#create-1">create</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;File&gt; create(Path path)
 </code></pre>
 <p>Opens a file for writing only, creating it if it is missing and
@@ -539,7 +504,7 @@ still writes at the end).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var opts = OpenOptions().write(true).create_new(true);
     var r = File.open_with(Path("lock"), opts);
-    if (r.is_err() &amp;&amp; r.Error.is_already_exists()) {
+    if (r.is_err() &amp;&amp; r.error().is_already_exists()) {
         return 1;
     }
 </code></pre>
@@ -557,11 +522,11 @@ redirection may get a null handle, and the File is then not open.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
-<li><code>name</code> — the display name stored in the File’s <code>Path</code>, such as <code>&lt;stdout&gt;</code></li>
+<li><code>name</code> — the display name stored in the File’s <code>path</code>, such as <code>&lt;stdout&gt;</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a File on that stream, with <code>Owned</code> false</li>
+<li>a File on that stream, that does not close the stream when released</li>
 </ul>
 <h4 id="stdin"><a class="header" href="#stdin">stdin</a></h4>
 <pre><code class="language-pepper">static File stdin()
@@ -614,7 +579,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.read_bytes(Path("image.png"));
     if (r.is_ok()) {
-        var n = r.Value.count();
+        var n = r.value().count();
     }
 </code></pre>
 <h4 id="read_to_string"><a class="header" href="#read_to_string">read_to_string</a></h4>
@@ -635,7 +600,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
     if (r.is_err()) {
         return 1;
     }
-    var text = r.Value;
+    var text = r.value();
 </code></pre>
 <h4 id="write_bytes"><a class="header" href="#write_bytes">write_bytes</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;void&gt; write_bytes(Path path, u8[] data)
@@ -741,7 +706,7 @@ target. Directories are not removed: use <code>Directory.remove</code> or
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.remove(Path("old.txt"));
-    if (r.is_err() &amp;&amp; !r.Error.is_not_found()) {
+    if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
         return 1;
     }
 </code></pre>
@@ -764,7 +729,7 @@ opened.</p>
 <ul>
 <li>an Ok result when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
 </ul>
-<h4 id="read-2"><a class="header" href="#read-2">read</a></h4>
+<h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
 <pre><code class="language-pepper">IoResult&lt;ulong&gt; read(u8[] buf, ulong max)
 </code></pre>
 <p>Reads up to <code>max</code> bytes from the current position and appends them
@@ -789,7 +754,7 @@ failure <code>buf</code> keeps its previous contents.</p>
 <pre><code class="language-pepper">    var buf = Array&lt;u8&gt;();
     while (true) {
         var r = f.read(buf, 4096);
-        if (r.is_err() || r.Value == 0) {
+        if (r.is_err() || r.value() == 0) {
             break;
         }
     }
@@ -815,7 +780,7 @@ as part of the text.</p>
 <ul>
 <li>the text read (empty at end of file); an error with <code>is_invalid_input()</code> when the bytes are not valid UTF-8, or any error <code>read_all</code> returns</li>
 </ul>
-<h4 id="write-2"><a class="header" href="#write-2">write</a></h4>
+<h4 id="write-1"><a class="header" href="#write-1">write</a></h4>
 <pre><code class="language-pepper">IoResult&lt;ulong&gt; write(u8[] data)
 </code></pre>
 <p>Writes bytes from <code>data</code> at the current position (or at the end, in
@@ -935,8 +900,8 @@ and has platform-defined results on Windows.</p>
 <ul>
 <li>the new position, in bytes from the start of the file; an error when the File is closed, <code>whence</code> is not 0, 1 or 2, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
 </ul>
-<h4 id="set_len"><a class="header" href="#set_len">set_len</a></h4>
-<pre><code class="language-pepper">IoResult&lt;void&gt; set_len(ulong size)
+<h4 id="set_length"><a class="header" href="#set_length">set_length</a></h4>
+<pre><code class="language-pepper">IoResult&lt;void&gt; set_length(ulong size)
 </code></pre>
 <p>Truncates or extends the file to exactly <code>size</code> bytes; bytes added
 are zeros. The position is kept, even when it is now past the end.</p>
@@ -948,6 +913,19 @@ are zeros. The position is kept, even when it is now past the end.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
+</ul>
+<h4 id="set_len"><a class="header" href="#set_len">set_len</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'set_length' instead", "set_length")] IoResult&lt;void&gt; set_len(ulong size)
+</code></pre>
+<p>Deprecated: use <code>set_length</code> instead. Truncates or extends the file to
+exactly <code>size</code> bytes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the new length, in bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>set_length(size)</code></li>
 </ul>
 <h4 id="sync"><a class="header" href="#sync">sync</a></h4>
 <pre><code class="language-pepper">IoResult&lt;void&gt; sync()
@@ -972,7 +950,7 @@ permission bits and timestamps.</p>
 <li>the file’s <code>Metadata</code>; an error when the File is closed, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var size = f.metadata().Value.Size;
+<pre><code class="language-pepper">    var size = f.metadata().value().size;
 </code></pre>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
 <pre><code class="language-pepper">IoResult&lt;void&gt; close()

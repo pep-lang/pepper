@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b5fbabc7.js";
+            window.path_to_searchindex_js = "../searchindex-4c468918.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -202,7 +202,7 @@ descriptors 0, 1 and 2. On Windows this is a <code>HANDLE</code> instead.</p>
 <h2 id="errorcode"><a class="header" href="#errorcode">ErrorCode</a></h2>
 <pre><code class="language-pepper">[Target(!OS(Windows))] type ErrorCode = int
 </code></pre>
-<p>The raw platform error code carried by <code>IoError.Code</code>: a POSIX <code>errno</code>
+<p>The raw platform error code carried by <code>IoError.code</code>: a POSIX <code>errno</code>
 value such as <code>ENOENT</code> (2). On Windows this is a <code>DWORD</code> from
 <code>GetLastError()</code> instead.</p>
 <p>The numbers differ between platforms (and a few between Linux and
@@ -243,7 +243,7 @@ POSIX this is an <code>int</code> file descriptor instead.</p>
 <h2 id="errorcode-1"><a class="header" href="#errorcode-1">ErrorCode</a></h2>
 <pre><code class="language-pepper">[Target(OS(Windows))] type ErrorCode = uint
 </code></pre>
-<p>The raw platform error code carried by <code>IoError.Code</code>: a Windows
+<p>The raw platform error code carried by <code>IoError.code</code>: a Windows
 <code>DWORD</code> error code from <code>GetLastError()</code>, such as <code>ERROR_FILE_NOT_FOUND</code>
 (2). On POSIX this is an <code>errno</code> value instead.</p>
 <p>The numbers differ between platforms, so portable code classifies an
@@ -279,7 +279,7 @@ message.</p>
 <p>There are no enums, so the kind of error is a set of predicates over the
 code (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …), each of which
 knows the matching codes on the current platform. Test with those rather
-than comparing <code>Code</code> against numbers. Failures that Pepper detects
+than comparing <code>code</code> against numbers. Failures that Pepper detects
 itself (invalid UTF-8, an empty path, a short write, a closed <code>File</code>)
 use the platform’s own code for the kind they are (<code>EINVAL</code> /
 <code>ERROR_INVALID_PARAMETER</code> for invalid input, <code>ENOENT</code> /
@@ -295,23 +295,23 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 
     var r = io.File.open(io.Path("settings.txt"));
     if (r.is_err()) {
-        if (r.Error.is_not_found()) {
+        if (r.error().is_not_found()) {
             print("no settings file");
         } else {
-            print(r.Error.Message);
+            print(r.error().message);
         }
     }
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="code"><a class="header" href="#code">Code</a></h4>
-<pre><code class="language-pepper">ErrorCode Code
+<h4 id="code"><a class="header" href="#code">code</a></h4>
+<pre><code class="language-pepper">ErrorCode code
 </code></pre>
 <p>The raw platform error code: an <code>errno</code> value on POSIX, a
 <code>GetLastError()</code> code on Windows; 0 means no error.</p>
-<h4 id="message"><a class="header" href="#message">Message</a></h4>
-<pre><code class="language-pepper">String Message
+<h4 id="message"><a class="header" href="#message">message</a></h4>
+<pre><code class="language-pepper">String message
 </code></pre>
-<p>A human-readable description: the platform’s text for <code>Code</code>
+<p>A human-readable description: the platform’s text for <code>code</code>
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
@@ -436,8 +436,8 @@ themselves, so callers rarely see this.</p>
 <h2 id="ioresult"><a class="header" href="#ioresult">IoResult</a></h2>
 <pre><code class="language-pepper">type IoResult&lt;T&gt; = Result&lt;T, IoError&gt;
 </code></pre>
-<p>The result of an io operation: <code>Value</code> on success, an <code>IoError</code> on
-failure. Check <code>is_ok()</code> / <code>is_err()</code> before reading <code>Value</code> or <code>Error</code>;
+<p>The result of an io operation: a value on success, an <code>IoError</code> on
+failure. Check <code>is_ok()</code> / <code>is_err()</code> before calling <code>value()</code> or <code>error()</code>;
 operations that produce nothing return <code>IoResult&lt;void&gt;</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -452,9 +452,9 @@ operations that produce nothing return <code>IoResult&lt;void&gt;</code>.</p>
 
     var cwd = io.Directory.current();
     if (cwd.is_ok()) {
-        print(cwd.Value.to_string());
+        print(cwd.value().to_string());
     } else {
-        print(cwd.Error.Message);
+        print(cwd.error().message);
     }
 </code></pre>
 
