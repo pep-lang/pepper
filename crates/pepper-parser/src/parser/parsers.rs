@@ -343,9 +343,29 @@ fn identifier(input: &mut &str) -> Result<String> {
     Ok(id)
 }
 
+/// `?` suffixes after a type: each wraps it in `Optional<...>`.
+fn optional_suffixes(input: &mut &str, mut ty: TypeName) -> Result<TypeName> {
+    loop {
+        let mut probe: &str = input;
+        ws(&mut probe)?;
+        if !probe.starts_with('?') {
+            return Ok(ty);
+        }
+        if EXPRESSION_PROBE.with(|p| p.get()) && !optional_suffix_in_probe(&probe[1..]) {
+            return Ok(ty);
+        }
+        *input = &probe[1..];
+        let span = Span { start: ty.span.start, end: pos(input) };
+        ty = TypeName { name: OPTIONAL_TYPE.to_string(), generic_types: vec![ty], span, labels: vec![] };
+    }
+}
+
 fn type_name(input: &mut &str) -> Result<TypeName> {
     if input.starts_with('(') {
-        return function_type_name(input);
+        let ty = function_type_name(input)?;
+        // `(int, String)?` is an optional tuple; a function type's `?`
+        // belongs to its return type.
+        return if ty.name == TUPLE_TYPE { optional_suffixes(input, ty) } else { Ok(ty) };
     }
     if let Some(ty) = shared_function_type_name(input)? {
         return Ok(ty);
@@ -375,20 +395,8 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     }
 
     // Optional suffix: `T?` is `Optional<T>` (`int[]?` is an optional array).
-    loop {
-        let mut probe: &str = input;
-        ws(&mut probe)?;
-        if !probe.starts_with('?') {
-            break;
-        }
-        if EXPRESSION_PROBE.with(|p| p.get()) && !optional_suffix_in_probe(&probe[1..]) {
-            break;
-        }
-        *input = &probe[1..];
-        end = pos(input);
-        let start = ty.span.start;
-        ty = TypeName { name: OPTIONAL_TYPE.to_string(), generic_types: vec![ty], span: Span { start, end }, labels: vec![] };
-    }
+    ty = optional_suffixes(input, ty)?;
+    end = end.max(ty.span.end);
 
     // pointer suffix: one or more `*` (e.g. char*, void**). Parsed in every
     // type position so a misplaced `T*` gets a targeted error; it is legal only
@@ -1037,6 +1045,24 @@ fn type_name_parse(input: &mut &str) -> Result<TypeName> {
     type_name(input).map_err(|_| bt(input))
 }
 
+/// A tuple element's label, `line:` in `(line: 3, column: 7)`: consumed with
+/// the whitespace after it, or `None` (consuming nothing) when the element
+/// has none.
+fn tuple_label(input: &mut &str) -> Option<(String, Span)> {
+    let mut probe = *input;
+    let start = pos(probe);
+    let name = identifier(&mut probe).ok()?;
+    let span = Span { start, end: pos(probe) };
+    let _ = ws(&mut probe);
+    if !probe.starts_with(':') || probe.starts_with("::") {
+        return None;
+    }
+    probe = &probe[1..];
+    let _ = ws(&mut probe);
+    *input = probe;
+    Some((name, span))
+}
+
 fn atom(input: &mut &str) -> Result<Expression> {
     if input.starts_with('(') {
         match closure_literal(input) {
@@ -1047,20 +1073,41 @@ fn atom(input: &mut &str) -> Result<Expression> {
         let start = pos(input);
         *input = &input[1..];
         ws(input)?;
+        // `(line: 3, column: 7)`: a labeled tuple labels every element.
+        let mut labels = vec![];
+        let labeled = match tuple_label(input) {
+            Some(label) => {
+                labels.push(label);
+                true
+            }
+            None => false,
+        };
         let expr = expression(input)?;
         ws(input)?;
         // `(a, b, ...)`: a tuple.
-        if input.starts_with(',') {
+        if input.starts_with(',') || labeled {
             let mut elements = vec![expr];
             while input.starts_with(',') {
                 *input = &input[1..];
                 ws(input)?;
+                match tuple_label(input) {
+                    Some(label) if labeled => labels.push(label),
+                    Some((name, span)) => {
+                        return Err(error_at(
+                            span,
+                            format!("unexpected label '{}': the first element has none, so label every element or none", name),
+                        ));
+                    }
+                    None if labeled => return Err(cut_expecting(input, "a label ('name: value'), as the first element has one")),
+                    None => {}
+                }
                 elements.push(expression(input)?);
                 ws(input)?;
             }
+            if elements.len() < 2 { return Err(cut_expecting(input, "','")); }
             if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
             *input = &input[1..];
-            return Ok(Expression::Tuple { elements, span: Span { start, end: pos(input) } });
+            return Ok(Expression::Tuple { elements, labels, span: Span { start, end: pos(input) } });
         }
         if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
         *input = &input[1..];

@@ -335,19 +335,20 @@ struct Parser {
             }
             break;
         }
-        while (true) {
-            if (_at("?") and (!_probing or _optional_suffix_in_probe())) {
-                _take(node);
-                continue;
-            }
-            break;
-        }
+        _optional_suffixes(node);
         while (true) {
             if (_at("*") or _at("**")) {
                 _take(node);
                 continue;
             }
             break;
+        }
+    }
+
+    # `?` optional suffixes, after a named type or a tuple type.
+    _optional_suffixes(node: Node) {
+        while (_at("?") and (!_probing or _optional_suffix_in_probe())) {
+            _take(node);
         }
     }
 
@@ -409,6 +410,8 @@ struct Parser {
         if (!_at("=>")) {
             if (types >= 2) {
                 _restore(position);
+                # `(int, String)?`: an optional tuple.
+                _optional_suffixes(node);
                 return;
             }
             _fail("expected '=>'");
@@ -763,7 +766,12 @@ struct Parser {
             _restore(position);
             var node = Node(NODE_PARENTHESIZED);
             _take(node);
-            node.add(_expression());
+            # `(line: 3, column: 7)`: a label makes it a tuple literal.
+            bool labeled = _at_tuple_label();
+            if (labeled) {
+                node.kind = NODE_TUPLE;
+            }
+            node.add(_tuple_element(labeled));
             if (_failed) {
                 return node;
             }
@@ -772,16 +780,40 @@ struct Parser {
                 node.kind = NODE_TUPLE;
                 while (_at(",")) {
                     _take(node);
-                    node.add(_expression());
+                    node.add(_tuple_element(labeled));
                     if (_failed) {
                         return node;
                     }
                 }
+            } else if (labeled) {
+                _fail("expected ','");
+                return node;
             }
             _expect(node, ")");
             return node;
         }
         return _primary();
+    }
+
+    _at_tuple_label(): bool {
+        return _at_name() and _peek_at(1).is(":");
+    }
+
+    # One element of a tuple literal: `label: expression` when `labeled`,
+    # else an expression alone.
+    _tuple_element(labeled: bool): Node {
+        if (!labeled) {
+            return _expression();
+        }
+        var node = Node(NODE_TUPLE_ELEMENT);
+        if (!_at_tuple_label()) {
+            _fail("expected a label ('name: value'), as the first element has one");
+            return node;
+        }
+        _take(node);
+        _take(node);
+        node.add(_expression());
+        return node;
     }
 
     _primary(): Node {

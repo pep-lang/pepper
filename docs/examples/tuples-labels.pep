@@ -1,6 +1,6 @@
 # Labels name a tuple's elements.
 position(): (line: int, column: int) {
-    return (3, 7);
+    return (line: 3, column: 7);
 }
 
 struct Token {
@@ -16,6 +16,10 @@ main(): int {
     # Labeled and unlabeled tuples convert to each other.
     var plain: (int, int) = p;
     assert(plain.1 == 7, "same elements");
+
+    # A labeled value carries its labels into the variable's type.
+    var end = (line: 4, column: 1);
+    assert(end.line == p.line + 1, "labeled literal");
 
     var t = Token();
     t.at = (5, 6);

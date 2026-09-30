@@ -213,7 +213,9 @@ pub enum Expression {
     Closure(Box<ClosureLiteral>),
     /// A tuple value `(a, b, ...)`: two or more elements. On the left of `=`
     /// it lists the places a destructuring assignment stores into.
-    Tuple { elements: Vec<Expression>, span: Span },
+    /// `labels` is empty, or names every element (`(line: 3, column: 7)`),
+    /// each with the span of its label.
+    Tuple { elements: Vec<Expression>, labels: Vec<(String, Span)>, span: Span },
 }
 
 /// A closure literal. Parameters and the return type written without a type
@@ -891,6 +893,10 @@ impl Display for Expression {
                         write_block_body(f, &c.body)
                     }
                 }
+            }
+            Expression::Tuple { elements, labels, .. } if !labels.is_empty() => {
+                let parts: Vec<String> = elements.iter().zip(labels).map(|(e, (l, _))| format!("{}: {}", l, e)).collect();
+                write!(f, "({})", parts.join(", "))
             }
             Expression::Tuple { elements, .. } => write!(f, "({})", join(elements, ", ")),
         }

@@ -23,11 +23,14 @@ value. Its main use is returning several values from a function:
   instead: `t = (3, t.1);`.
 - `Tuple<A, B>` is another spelling of `(A, B)`, for places where a type in
   angle brackets reads better.
+- `(int, String)?` is an optional tuple, `Optional<(int, String)>` (see
+  [Optional values](optionals.md)).
 
 ## Labels
 
-A tuple type can name its elements: `(line: int, column: int)`. A label is
-another name for a position, so `p.line` and `p.0` read the same element:
+A tuple type can name its elements: `(line: int, column: int)`, and so can a
+tuple value: `(line: 3, column: 7)`. A label is another name for a position,
+so `p.line` and `p.0` read the same element:
 
 ```pepper
 {{#include ../../examples/tuples-labels.pep}}
@@ -38,8 +41,17 @@ another name for a position, so `p.line` and `p.0` read the same element:
   converts to the other freely.
 - Either every element has a label or none does, and labels in one tuple must
   differ.
-- A tuple value cannot have labels yet: write `(3, 7)` where a
-  `(line: int, column: int)` is expected, not `(line: 3, column: 7)`.
+- Labels do not pass through a type argument: `Optional<(line: int, column: int)>`
+  is the same type as `Optional<(int, int)>`, so its `value()` returns an
+  unlabeled tuple. Declare a labeled variable to name the elements again.
+- `var p = (line: 3, column: 7);` gives `p` the labeled type
+  `(line: int, column: int)`. A labeled value takes at least two elements.
+- A labeled value initializing or returned as a labeled type must use its
+  labels in order: `(column: 7, line: 3)` where a `(line: int, column: int)`
+  is expected is an error, not a swap. An unlabeled value, or a labeled one
+  going to an unlabeled type, converts by position.
+- A destructuring assignment lists places alone: `(a, b) = (b, a);`, never
+  `(x: a, y: b) = ...`.
 
 ## Destructuring
 
@@ -102,5 +114,4 @@ yields `(key, value)` tuples:
 
 These come in later phases:
 
-- A tuple value cannot have labels (`(line: 3, column: 7)`).
 - `match` cannot match tuple patterns.

@@ -13,6 +13,46 @@ thread_local! {
     /// The first bad tuple label [`type_name_from`] met. It returns a plain
     /// type, so [`build_file`] reports this once the build finishes.
     static LABEL_ERROR: std::cell::RefCell<Option<Diagnostic>> = const { std::cell::RefCell::new(None) };
+    /// The declared return type of the function or closure whose body is
+    /// being built, for [`check_literal_labels`] on its `return`s.
+    static RETURN_TYPE: std::cell::RefCell<Option<ast::TypeName>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Builds a body with `returns` as the declared return type of its `return`s.
+fn with_return_type<T>(returns: &ast::TypeName, build: impl FnOnce() -> T) -> T {
+    let previous = RETURN_TYPE.with(|r| r.replace(Some(returns.clone())));
+    let built = build();
+    RETURN_TYPE.with(|r| *r.borrow_mut() = previous);
+    built
+}
+
+/// Rejects a labeled tuple literal whose labels differ from those of the
+/// labeled tuple type `expected` it initializes or returns, element by
+/// element and into nested tuples: `var p: (line: int, column: int) =
+/// (column: 7, line: 3);` would otherwise silently swap its meaning.
+fn check_literal_labels(expected: &ast::TypeName, value: &ast::Expression) -> Result<(), Diagnostic> {
+    let ast::Expression::Tuple { elements, labels, .. } = value else { return Ok(()) };
+    if expected.name != ast::TUPLE_TYPE || expected.generic_types.len() != elements.len() {
+        return Ok(());
+    }
+    if !expected.labels.is_empty() {
+        for (i, (label, at)) in labels.iter().enumerate() {
+            if *label != expected.labels[i] {
+                return Err(Diagnostic::error(format!(
+                    "label '{}' does not match '{}', the label of element {} of '{}'",
+                    label,
+                    expected.labels[i],
+                    i,
+                    type_name_from(expected).display()
+                ))
+                .at(loc(*at)));
+            }
+        }
+    }
+    for (element_type, element) in expected.generic_types.iter().zip(elements) {
+        check_literal_labels(element_type, element)?;
+    }
+    Ok(())
 }
 
 /// `span` in the file being built.
@@ -265,15 +305,26 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
         // `(a, b)`: a call of the tuple constructor, whose type
         // `resolve_implicit_types` spells out once the elements' types are
         // known (`__tuple<int, String>(a, b)`).
-        ast::Expression::Tuple { elements, span } => Ok(Expression::FunctionCall {
-            function: crate::type_name::TUPLE.to_string(),
-            args: elements.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
-            loc: loc(*span),
-        }),
+        // A labeled literal `(line: 3, column: 7)` calls
+        // `__tuple(line,column)`, so its type carries the labels.
+        ast::Expression::Tuple { elements, labels, span } => {
+            for (i, (label, at)) in labels.iter().enumerate() {
+                if let Some((_, first)) = labels[..i].iter().find(|(l, _)| l == label) {
+                    return Err(Diagnostic::error(format!("duplicate label '{}' in tuple", label))
+                        .at(loc(*at))
+                        .with_note("previous label here", Some(loc(*first))));
+                }
+            }
+            Ok(Expression::FunctionCall {
+                function: crate::passes::tuples::constructor_name(labels.iter().map(|(l, _)| l.as_str())),
+                args: elements.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                loc: loc(*span),
+            })
+        }
         ast::Expression::Closure(c) => Ok(Expression::ClosureLiteral(Box::new(ClosureLiteral {
             parameters: c.parameters.iter().map(|p| variable_def(p, Kind::Param)).collect::<Result<Vec<_>, _>>()?,
             ty: type_name_from(&c.return_type),
-            body: block(&c.body)?,
+            body: with_return_type(&c.return_type, || block(&c.body))?,
             expression_body: c.expression_body,
             loc: loc(c.span),
         }))),
@@ -299,6 +350,9 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
     check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
     let ty = type_name_from(&decl.type_name);
+    if let Some(value) = &decl.default_value {
+        check_literal_labels(&decl.type_name, value)?;
+    }
     let mut default = decl.default_value.as_ref().map(expression).transpose()?;
     // An optional slot (`Token? leaf;`, `var n: int?;`) starts as None, not
     // null: it gets the default `Optional<T>()`.
@@ -358,10 +412,15 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         ast::Statement::For(f) => for_loop(f),
         ast::Statement::With(w) => with_block(w),
         ast::Statement::Match(m) => match_statement(m),
-        ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
-            expr: ret.expr.as_ref().map(expression).transpose()?,
-            loc: loc(ret.expr.as_ref().map_or(ret.span, |e| e.span())),
-        })),
+        ast::Statement::Return(ret) => {
+            if let (Some(value), Some(returns)) = (&ret.expr, RETURN_TYPE.with(|r| r.borrow().clone())) {
+                check_literal_labels(&returns, value)?;
+            }
+            Ok(Statement::Return(ReturnStatement {
+                expr: ret.expr.as_ref().map(expression).transpose()?,
+                loc: loc(ret.expr.as_ref().map_or(ret.span, |e| e.span())),
+            }))
+        }
         ast::Statement::LoopBreak(lb) => Ok(Statement::LoopBreak(LoopBreak {
             kind: match lb.kind {
                 ast::LoopBreakKind::Break => LoopBreakKind::Break,
@@ -474,7 +533,10 @@ fn bind_elements(tuple: &str, bindings: &[ast::DestructureBinding], is_const: bo
 /// side is evaluated first, so `(a, b) = (b, a)` swaps, and each store is an
 /// ordinary assignment.
 fn destructuring_assignment(lhs: &ast::Expression, rhs: &ast::Expression, span: ast::Span) -> Result<Statement, Diagnostic> {
-    let ast::Expression::Tuple { elements, .. } = lhs else { unreachable!("checked by the caller") };
+    let ast::Expression::Tuple { elements, labels, .. } = lhs else { unreachable!("checked by the caller") };
+    if let Some((_, at)) = labels.first() {
+        return Err(Diagnostic::error("a destructuring assignment cannot have labels: list the places alone").at(loc(*at)));
+    }
     let (hidden, tuple, _) = hidden_tuple(rhs, elements.len())?;
     let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
     assign_elements(&tuple, elements, span, &mut items)?;
@@ -490,7 +552,10 @@ fn assign_elements(tuple: &str, places: &[ast::Expression], span: ast::Span, ite
             continue;
         }
         let at = loc(place.span());
-        if let ast::Expression::Tuple { elements, .. } = place {
+        if let ast::Expression::Tuple { elements, labels, .. } = place {
+            if let Some((_, at)) = labels.first() {
+                return Err(Diagnostic::error("a destructuring assignment cannot have labels: list the places alone").at(loc(*at)));
+            }
             let (hidden, inner) = hidden_tuple_of(tuple_element(tuple, index, at), elements.len(), at);
             items.push(Statement::Declaration(Declaration::Variable(hidden)));
             assign_elements(&inner, elements, span, items)?;
@@ -815,7 +880,7 @@ fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Functi
         .iter()
         .map(|p| variable_def(p, Kind::Param))
         .collect::<Result<Vec<_>, _>>()?;
-    let body = decl.body.as_ref().map(block).transpose()?;
+    let body = with_return_type(&decl.return_type, || decl.body.as_ref().map(block).transpose())?;
     // A comparison's result is a condition; codegen tests it as an i1.
     let declared = &decl.return_type;
     if matches!(decl.name.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=")

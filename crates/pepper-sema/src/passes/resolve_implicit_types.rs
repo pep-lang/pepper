@@ -266,8 +266,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::Destructure { value, .. } => type_of_expr(value, scopes, current_struct),
         // A tuple literal before its type is spelled out: the tuple of its
         // elements' types, once they are all known.
-        Expression::FunctionCall { function, args, .. } if function == crate::type_name::TUPLE => {
-            crate::passes::tuples::literal_type(args.iter().map(|a| type_of_expr(a, scopes, current_struct)))
+        Expression::FunctionCall { function, args, .. } if crate::passes::tuples::constructor_labels(function).is_some() => {
+            crate::passes::tuples::labeled_literal_type(function, args.iter().map(|a| type_of_expr(a, scopes, current_struct)))
                 .unwrap_or_else(TypeName::auto)
         }
         Expression::MemberRef { lhs, name, .. } => {
@@ -943,7 +943,7 @@ fn resolve_expression(
         infer_type_arguments(e, scopes, current);
         // `(a, b)`: spell out its tuple type once the elements' are known.
         if let Expression::FunctionCall { function, args, .. } = e {
-            if function == crate::type_name::TUPLE {
+            if crate::passes::tuples::constructor_labels(function).is_some() {
                 if let Some(ty) = crate::passes::tuples::literal_type(args.iter().map(|a| type_of_expr(a, scopes, current))) {
                     *function = ty.to_string();
                 }

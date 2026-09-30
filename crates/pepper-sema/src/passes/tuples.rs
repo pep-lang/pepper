@@ -36,6 +36,40 @@ pub(crate) fn literal_type(types: impl Iterator<Item = TypeName>) -> Option<Type
     Some(TypeName::with_args(TUPLE, elements))
 }
 
+/// The constructor a tuple literal calls before its type is known:
+/// `__tuple`, or `__tuple(line,column)` for a labeled literal.
+pub(crate) fn constructor_name<'a>(labels: impl Iterator<Item = &'a str>) -> String {
+    let labels: Vec<&str> = labels.collect();
+    if labels.is_empty() {
+        TUPLE.to_string()
+    } else {
+        format!("{}({})", TUPLE, labels.join(","))
+    }
+}
+
+/// The labels of an unspelled tuple constructor (`__tuple`, or
+/// `__tuple(line,column)`), or `None` when `function` is not one.
+pub(crate) fn constructor_labels(function: &str) -> Option<Vec<String>> {
+    let rest = function.strip_prefix(TUPLE)?;
+    if rest.is_empty() {
+        return Some(vec![]);
+    }
+    let labels = rest.strip_prefix('(')?.strip_suffix(')')?;
+    Some(labels.split(',').map(str::to_string).collect())
+}
+
+/// The type of a tuple literal calling `function` (see
+/// [`constructor_labels`]) with arguments of `types`: [`literal_type`],
+/// labeled like the literal.
+pub(crate) fn labeled_literal_type(function: &str, types: impl Iterator<Item = TypeName>) -> Option<TypeName> {
+    let labels = constructor_labels(function)?;
+    let mut ty = literal_type(types)?;
+    if labels.len() == ty.sub_types.len() {
+        ty.labels = labels;
+    }
+    Some(ty)
+}
+
 /// Whether `function` names a tuple constructor (`__tuple<int, String>`):
 /// the call is a tuple literal.
 pub fn is_literal(function: &str) -> bool {

@@ -231,8 +231,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             None
         }
         Expression::ArrayIndex { ty, .. } => Some(ty.clone()),
-        Expression::FunctionCall { function, args, .. } if function == crate::type_name::TUPLE => {
-            crate::passes::tuples::literal_type(args.iter().map(|a| of(a, table, current).unwrap_or_else(TypeName::auto)))
+        Expression::FunctionCall { function, args, .. } if crate::passes::tuples::constructor_labels(function).is_some() => {
+            crate::passes::tuples::labeled_literal_type(function, args.iter().map(|a| of(a, table, current).unwrap_or_else(TypeName::auto)))
         }
         Expression::FunctionCall { function, .. } if function.starts_with("__tuple<") => {
             Some(crate::passes::gather_generics::parse_type_string(function))

@@ -251,6 +251,22 @@ fn pep_fmt_spaces_tuples_and_destructuring() {
 }
 
 #[test]
+fn pep_fmt_reads_optional_tuples() {
+    assert_formats(
+        "find():(int,String)? {\n    var p:(line:int,column:int)?=q;\n    return r;\n}\n",
+        "find(): (int, String)? {\n    var p: (line: int, column: int)? = q;\n    return r;\n}\n",
+    );
+}
+
+#[test]
+fn pep_fmt_formats_labeled_tuple_literals() {
+    assert_formats(
+        "f():(line:int,column:int) {\n    var p=(line:3,column:a?b:c);\n    return (line:p.line,column:( x:1,y:2 ).x);\n}\n",
+        "f(): (line: int, column: int) {\n    var p = (line: 3, column: a ? b : c);\n    return (line: p.line, column: (x: 1, y: 2).x);\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_reads_optional_types_and_keeps_ternaries() {
     assert_formats(
         "struct S {\n    Token?  leaf;\n}\nf(x:int?):Array<int?> {\n    Node? a=x;\n    c ? d : e;\n    var g=h?i:j;\n    return k;\n}\n",

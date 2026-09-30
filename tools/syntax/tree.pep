@@ -118,8 +118,12 @@ export const NODE_CLOSURE_PARAMETER = 46;
 ## alone as the pattern of `for (var (k, v) in pairs)`. A nested pattern is a
 ## `CLOSURE_PARAMETERS` among the bindings.
 export const NODE_DESTRUCTURE = 60;
-## `( expression, expression, ... )`, a tuple literal.
+## `( element, element, ... )`, a tuple literal, whose elements are
+## expressions or, when labeled, `TUPLE_ELEMENT`s.
 export const NODE_TUPLE = 61;
+## `name : expression`, a labeled element of a tuple literal such as
+## `(line: 3, column: 7)`.
+export const NODE_TUPLE_ELEMENT = 62;
 ## `[attribute]... [export] enum Name [GENERIC_PARAMETERS] [: TYPE] MEMBERS`,
 ## whose members are its `ENUM_CASE`s, then its methods.
 export const NODE_ENUM = 47;

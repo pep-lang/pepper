@@ -348,7 +348,11 @@ with no extension, and `module_name()` is the output's stem.
     ride on `TypeName::labels`, which equality, hashing and `Display` ignore
     (`display()` shows them); `check_labels` rejects a partly labeled or
     duplicate set, and `lower_destructures` renames `p.line` to `p.0`
-    (`tuple_index`).
+    (`tuple_index`). A labeled literal `(line: 3, column: 7)` is built as
+    a call to `__tuple(line,column)` (`tuples::constructor_name`), so
+    `type_of_expr` gives an inferred `var` the labeled type
+    (`labeled_literal_type`) before the rename drops the labels; the builder's
+    `check_literal_labels` rejects labels that differ from a declared type's.
   - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
     with `Expression::Destructure { value: e, count }` followed by
     `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block

@@ -1001,6 +1001,14 @@ export struct Formatter {
         if (kind == syntax.NODE_TUPLE) {
             return _delimited(item, false);
         }
+        if (kind == syntax.NODE_TUPLE_ELEMENT) {
+            # `line: 3`
+            return concat()
+                .add(_leaf(item.child(0)))
+                .add(_leaf(item.child(1)))
+                .add(text(" "))
+                .add(_expression(item.child(2)));
+        }
         if (kind == syntax.NODE_MEMBER
             or kind == syntax.NODE_INDEX
             or kind == syntax.NODE_POSTFIX

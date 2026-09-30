@@ -1870,3 +1870,72 @@ fn tuple_label_duplicate() {
          \x20     |          ^~~"
     );
 }
+
+#[test]
+fn tuple_literal_label_missing() {
+    assert_eq!(
+        error_of("tuple_literal_label_missing", "main(): int {\n    var p = (line: 3, 7);\n    return 0;\n}\n"),
+        "main.pep:2:23: error: expected a label ('name: value'), as the first element has one\n\
+         \x20   2 |     var p = (line: 3, 7);\n\
+         \x20     |                       ^"
+    );
+}
+
+#[test]
+fn tuple_literal_label_unexpected() {
+    assert_eq!(
+        error_of("tuple_literal_label_unexpected", "main(): int {\n    var p = (3, column: 7);\n    return 0;\n}\n"),
+        "main.pep:2:17: error: unexpected label 'column': the first element has none, so label every element or none\n\
+         \x20   2 |     var p = (3, column: 7);\n\
+         \x20     |                 ^~~~~~"
+    );
+}
+
+#[test]
+fn tuple_literal_single_labeled_element() {
+    assert_eq!(
+        error_of("tuple_literal_single_labeled_element", "main(): int {\n    var p = (line: 3);\n    return 0;\n}\n"),
+        "main.pep:2:21: error: expected ','\n\
+         \x20   2 |     var p = (line: 3);\n\
+         \x20     |                     ^"
+    );
+}
+
+#[test]
+fn tuple_literal_label_duplicate() {
+    assert_eq!(
+        error_of("tuple_literal_label_duplicate", "main(): int {\n    var p = (x: 1, x: 2);\n    return 0;\n}\n"),
+        "main.pep:2:20: error: duplicate label 'x' in tuple\n\
+         \x20   2 |     var p = (x: 1, x: 2);\n\
+         \x20     |                    ^\n\
+         main.pep:2:14: note: previous label here\n\
+         \x20   2 |     var p = (x: 1, x: 2);\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
+fn destructuring_assignment_rejects_labels() {
+    assert_eq!(
+        error_of(
+            "destructuring_assignment_rejects_labels",
+            "main(): int {\n    var a = 1;\n    var b = 2;\n    (x: a, y: b) = (b, a);\n    return 0;\n}\n"
+        ),
+        "main.pep:4:6: error: a destructuring assignment cannot have labels: list the places alone\n\
+         \x20   4 |     (x: a, y: b) = (b, a);\n\
+         \x20     |      ^"
+    );
+}
+
+#[test]
+fn tuple_literal_label_mismatch() {
+    assert_eq!(
+        error_of(
+            "tuple_literal_label_mismatch",
+            "f(): (line: int, column: int) {\n    return (column: 7, line: 3);\n}\n"
+        ),
+        "main.pep:2:13: error: label 'column' does not match 'line', the label of element 0 of '(line: int, column: int)'\n\
+         \x20   2 |     return (column: 7, line: 3);\n\
+         \x20     |             ^~~~~~"
+    );
+}

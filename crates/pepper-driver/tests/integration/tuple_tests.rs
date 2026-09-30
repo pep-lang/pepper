@@ -479,3 +479,50 @@ fn copying_a_tuple_names_the_element_that_blocks_it() {
     assert!(error.contains("error: cannot copy '(int, Node)' because it contains 'Node'"), "{error}");
     assert!(error.contains("note: '(int, Node)' reaches it through element 1"), "{error}");
 }
+
+#[test]
+fn optional_tuples() {
+    let src = r#"
+find(ok: bool): (int, String)? {
+    if (ok) {
+        return Optional<(int, String)>.some((1, "a"));
+    }
+    return Optional<(int, String)>.none();
+}
+
+test(): int {
+    var r = find(true);
+    var labeled: (line: int, name: String)? = r;
+    if (!r.is_some() || r.value().1 != "a" || labeled.value().0 != 1) { return 1; }
+    if (find(false).is_some()) { return 2; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
+fn labeled_tuple_literals() {
+    let src = r#"
+bounds(): (low: int, high: int) {
+    return (low: 1, high: 9);
+}
+
+test(): int {
+    var p = (line: 3, column: 7);
+    if (p.line != 3 || p.column != 7 || p.0 != 3) { return 1; }
+    var plain: (int, int) = p;
+    if (plain.1 != 7) { return 2; }
+    var nested = (name: "a", at: (line: 1, column: 2));
+    if (nested.at.column != 2 || nested.name != "a") { return 3; }
+    var (low, high) = bounds();
+    if (high - low != 8 || bounds().high != 9) { return 4; }
+    var sum = (x: int, y: int) => x + y;
+    if (sum(p.line, p.column) != 10) { return 5; }
+    var chosen = (first: p.line > 1 ? 1 : 2, second: 0);
+    if (chosen.first != 1) { return 6; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
