@@ -59,10 +59,10 @@ export trait _Driver {
 
     # Waits up to `timeout` milliseconds (forever when negative) until a
     # socket in `waits` may be ready for what its tasks wait for, and
-    # appends each ready socket and what it allows (io._IO_READABLE and
-    # io._IO_WRITABLE or'ed) to `handles` and `interests`. Returns early,
-    # with nothing, on a signal.
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>);
+    # appends each ready socket with what it allows (io._IO_READABLE and
+    # io._IO_WRITABLE or'ed) to `ready_sockets`. Returns early, with nothing, on a
+    # signal.
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>);
 
     # `handle` is about to be closed.
     _forget(handle: io.SocketHandle);
@@ -81,10 +81,10 @@ export trait _Driver {
         return false;
     }
 
-    # Moves the file transfers finished since the last call to `tasks` and
-    # `results` (a byte count, or -1 minus the error code, as
-    # `io._io_file_transfer_raw` returns).
-    _finished_files(tasks: Array<ulong>, results: Array<long>) {}
+    # Moves the file transfers finished since the last call to `finished`:
+    # each task's id and its result (a byte count, or -1 minus the error
+    # code, as `io._io_file_transfer_raw` returns).
+    _finished_files(finished: Array<(task: ulong, result: long)>) {}
 
     # The doorbell that ends this driver's waits early, from any thread.
     _doorbell(): _Doorbell;

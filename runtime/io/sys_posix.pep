@@ -540,30 +540,23 @@ export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
     if (path._value.size() == 0) {
         return IoResult<Metadata>.err(_io_posix_empty_path());
     }
-    var buf = _pep_malloc(_io_stat_buf_size());
-    var rc = _io_stat_path(path._value.c_str(), follow, buf);
-    if (rc != 0) {
-        var e = IoError.last();
-        _pep_free(buf);
-        return IoResult<Metadata>.err(e);
-    }
-    var m = _io_metadata_from_stat(buf);
-    _pep_free(buf);
-    return IoResult<Metadata>.ok(m);
+    var buf = _IoBuffer(_io_stat_buf_size());
+    return _io_posix_stat_result(_io_stat_path(path._value.c_str(), follow, buf._bytes), buf);
 }
 
 [Target(!OS(Windows))]
 export _io_sys_fstat(h: FileHandle): IoResult<Metadata> {
-    var buf = _pep_malloc(_io_stat_buf_size());
-    var rc = _io_stat_fd(h, buf);
+    var buf = _IoBuffer(_io_stat_buf_size());
+    return _io_posix_stat_result(_io_stat_fd(h, buf._bytes), buf);
+}
+
+# The metadata a stat call that returned `rc` wrote into `buf`, or errno.
+[Target(!OS(Windows))]
+export _io_posix_stat_result(rc: int, buf: _IoBuffer): IoResult<Metadata> {
     if (rc != 0) {
-        var e = IoError.last();
-        _pep_free(buf);
-        return IoResult<Metadata>.err(e);
+        return IoResult<Metadata>.err(IoError.last());
     }
-    var m = _io_metadata_from_stat(buf);
-    _pep_free(buf);
-    return IoResult<Metadata>.ok(m);
+    return IoResult<Metadata>.ok(_io_metadata_from_stat(buf._bytes));
 }
 
 # ── Directories ──────────────────────────────────────────────────────────────
@@ -676,15 +669,12 @@ export _io_sys_rename(from: Path, to: Path): IoResult<void> {
 export _io_sys_getcwd(): IoResult<Path> {
     ulong size = 4096;
     while (true) {
-        var buf = _pep_malloc(size);
-        var r = getcwd(buf, size);
+        var buf = _IoBuffer(size);
+        var r = getcwd(buf._bytes as __ptr<char>, size);
         if (r != __null) {
-            var p = Path(String(buf));
-            _pep_free(buf);
-            return IoResult<Path>.ok(p);
+            return IoResult<Path>.ok(Path(_io_string_from_c(r)));
         }
         var e = IoError.last();
-        _pep_free(buf);
         if (e.code != 34) {  # ERANGE: retry with a bigger buffer
             return IoResult<Path>.err(e);
         }
@@ -706,16 +696,12 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
     if (path._value.size() == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
-    var buf = _pep_malloc(4096);  # PATH_MAX (Linux 4096, macOS 1024)
-    var r = realpath(path._value.c_str(), buf);
+    var buf = _IoBuffer(4096);  # PATH_MAX (Linux 4096, macOS 1024)
+    var r = realpath(path._value.c_str(), buf._bytes as __ptr<char>);
     if (r == __null) {
-        var e = IoError.last();
-        _pep_free(buf);
-        return IoResult<Path>.err(e);
+        return IoResult<Path>.err(IoError.last());
     }
-    var p = Path(String(buf));
-    _pep_free(buf);
-    return IoResult<Path>.ok(p);
+    return IoResult<Path>.ok(Path(_io_string_from_c(r)));
 }
 
 [Target(!OS(Windows))]

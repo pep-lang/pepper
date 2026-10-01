@@ -89,7 +89,7 @@ extend _EpollDriver with _Driver {
         return _async_epoll_add(this._epoll, handle);
     }
 
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>) {
         var count = _async_epoll_wait(this._epoll, this._events, timeout);
         var i: ulong = 0;
         while (i < count) {
@@ -97,8 +97,7 @@ extend _EpollDriver with _Driver {
             if (handle == _async_doorbell_key()) {
                 _async_epoll_drain(this._bell);
             } else {
-                handles.append(handle);
-                interests.append(_async_epoll_event_interest(this._events, i));
+                ready_sockets.append((handle, _async_epoll_event_interest(this._events, i)));
             }
             i = i + 1;
         }

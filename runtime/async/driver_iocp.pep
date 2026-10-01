@@ -137,7 +137,7 @@ export struct _IocpDriver {
     }
 
     # Handles one dequeued request block.
-    _complete(block: __ptr<u8>, handles: Array<ulong>, interests: Array<int>) {
+    _complete(block: __ptr<u8>, ready_sockets: Array<(handle: ulong, interest: int)>) {
         var key = block as ulong;
         this._pending.remove(key);
         __ptr<ulong> words = block;
@@ -163,8 +163,7 @@ export struct _IocpDriver {
             # A failed request (not STATUS_SUCCESS) wakes its waiters, which
             # retry the call and see any error.
             if (ready != 0) {
-                handles.append(handle);
-                interests.append(ready);
+                ready_sockets.append((handle, ready));
             }
         }
         _pep_free(block);
@@ -200,13 +199,13 @@ extend _IocpDriver with _Driver {
         return true;
     }
 
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>) {
         var count = _async_iocp_dequeue(this._port, this._entries, _IOCP_CAPACITY, timeout);
         var i: ulong = 0;
         while (i < count) {
             __ptr<u8> block = ((this._entries + i * 32 + 8) as __ptr<__ptr<u8>>)[0];
             if (block != __null) {
-                this._complete(block, handles, interests);
+                this._complete(block, ready_sockets);
             }
             i = i + 1;
         }
@@ -241,11 +240,10 @@ extend _IocpDriver with _Driver {
             var (address, unused) = entry;
             _async_iocp_cancel(this._afd, _async_iocp_block(address) as __ptr<u8>);
         }
-        var drained = Array<ulong>();
-        var drained_interests = Array<int>();
+        var drained = Array<(handle: ulong, interest: int)>();
         var rounds = 0;
         while (this._pending.count() > 0 && rounds < 100) {
-            this._poll(HashMap<ulong, _SocketWaits>(), 10, drained, drained_interests);
+            this._poll(HashMap<ulong, _SocketWaits>(), 10, drained);
             rounds = rounds + 1;
         }
         _async_iocp_close_handle(this._afd);

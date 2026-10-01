@@ -492,6 +492,26 @@ fn generic_param_at(
     Some((Symbol { name: p.name.clone(), name_span: p.name_span, ty }, None))
 }
 
+/// A tuple type's element label at `offset` (`handle` in
+/// `(handle: ulong, interest: int)`), as a symbol of its element's type.
+fn tuple_label_at(module: &ast::Module, text: &str, offset: usize) -> Option<Symbol> {
+    let ty = imports::type_at(module, offset)?;
+    if ty.name != ast::TUPLE_TYPE || ty.labels.is_empty() {
+        return None;
+    }
+    let is_name = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let bytes = text.as_bytes();
+    let start = (0..offset).rev().take_while(|&i| is_name(bytes[i])).last().unwrap_or(offset);
+    let end = (offset..bytes.len()).find(|&i| !is_name(bytes[i])).unwrap_or(bytes.len());
+    if start >= end || !text[end..].trim_start().starts_with(':') {
+        return None;
+    }
+    let name = &text[start..end];
+    let index = ty.labels.iter().position(|l| l == name)?;
+    let element = ty.generic_types.get(index)?;
+    Some(Symbol { name: name.to_string(), name_span: Span { start, end }, ty: element.to_string() })
+}
+
 /// A generic parameter named where `offset` writes a type (`T` in
 /// `Array<T>`), from the declarations around it.
 fn generic_param_used(module: &ast::Module, program: Option<&Program>, offset: usize) -> Option<Symbol> {
@@ -1747,7 +1767,7 @@ impl PepperLsp {
             let value = "`Shared` — built-in constraint\n\nThe type is thread-safe: a `[Shared]` struct, a `shared` function type, or a value type.";
             return Some(Hover { contents: md(value.to_string()), range: None });
         }
-        if let Some(symbol) = generic_param_used(&ast, program, offset) {
+        if let Some(symbol) = generic_param_used(&ast, program, offset).or_else(|| tuple_label_at(&ast, text, offset)) {
             return Some(Hover { contents: md(format!("`{}` — `{}`", symbol.name, symbol.ty)), range: None });
         }
         if let Some((symbol, owner)) = declared_at(&ast, offset) {
@@ -1984,7 +2004,8 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
         // A name where it is declared goes to itself; a generic parameter
         // used as a type, to the parameter.
-        if let Some((symbol, _)) = declared_at(&ast, offset).or_else(|| generic_param_used(&ast, program, offset).map(|s| (s, None))) {
+        if let Some((symbol, _)) = declared_at(&ast, offset)
+            .or_else(|| generic_param_used(&ast, program, offset).or_else(|| tuple_label_at(&ast, text, offset)).map(|s| (s, None))) {
             return Some(vec![Location::new(uri.clone(), span_to_range(text, symbol.name_span))]);
         }
         // A `match` arm's case (`Red =>`), declared in any file.

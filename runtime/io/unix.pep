@@ -24,16 +24,17 @@ import "sys_windows";
 import "types";
 import "wait";
 
-# Writes a sockaddr_un for `path` into `buffer` (at least
-# `_io_sockaddr_capacity()` bytes); returns its length.
-export _io_sockaddr_unix_write(buffer: __ptr<u8>, path: Path): IoResult<int> {
+# `path` as a sockaddr_un.
+export _io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
     var text = path._value;
     var n = text.size();
     var capacity = _io_sys_unix_path_capacity();
     if (n == 0 || n + 1 > capacity) {
         var message = $"a Unix socket path must be 1 to {capacity - 1} bytes: '{text}'";
-        return IoResult<int>.err(IoError(_io_sys_code_invalid_input(), message));
+        return IoResult<_SockAddr>.err(IoError(_io_sys_code_invalid_input(), message));
     }
+    var sockaddr = _SockAddr();
+    var buffer = sockaddr._bytes;
     var p = text.c_str() as __ptr<u8>;
     ulong i = 0;
     while (i < n) {
@@ -41,34 +42,29 @@ export _io_sockaddr_unix_write(buffer: __ptr<u8>, path: Path): IoResult<int> {
         i = i + 1;
     }
     buffer[2 + n] = 0;
-    var length = (2 + n + 1) as int;
-    _io_sys_sockaddr_unix_header(buffer, length);
-    return IoResult<int>.ok(length);
+    sockaddr._length = (2 + n + 1) as int;
+    _io_sys_sockaddr_unix_header(buffer, sockaddr._length);
+    return IoResult<_SockAddr>.ok(sockaddr);
 }
 
 # Binds the socket `h` to `path`.
 export _io_unix_bind(h: SocketHandle, path: Path): IoResult<void> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _io_sockaddr_unix_write(buffer, path);
-    if (length.is_err()) {
-        _pep_free(buffer);
-        return IoResult<void>.err(length.error());
+    var sockaddr = _io_sockaddr_unix_write(path);
+    if (sockaddr.is_err()) {
+        return IoResult<void>.err(sockaddr.error());
     }
-    var result = _io_sys_socket_bind_raw(h, buffer, length.value());
-    _pep_free(buffer);
-    return result;
+    var address = sockaddr.value();
+    return _io_sys_socket_bind_raw(h, address._bytes, address._length);
 }
 
 # Connects the socket `h` to the listener at `path`.
 export _io_unix_connect(h: SocketHandle, path: Path): IoResult<void> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _io_sockaddr_unix_write(buffer, path);
-    if (length.is_err()) {
-        _pep_free(buffer);
-        return IoResult<void>.err(length.error());
+    var sockaddr = _io_sockaddr_unix_write(path);
+    if (sockaddr.is_err()) {
+        return IoResult<void>.err(sockaddr.error());
     }
-    var result = _io_sys_socket_connect_raw(h, buffer, length.value());
-    _pep_free(buffer);
+    var address = sockaddr.value();
+    var result = _io_sys_socket_connect_raw(h, address._bytes, address._length);
     if (result.is_err() && !result.error().is_not_found()) {
         # Windows reports a missing socket file as WSAECONNREFUSED (the same
         # as a file nobody listens on) and a missing directory as
@@ -124,9 +120,7 @@ export struct UnixListener {
     ## Closes the socket if it is still open when the last reference goes.
     ## Errors are ignored; call `close()` to see them. The socket file stays.
     destruct {
-        if (_io_sys_socket_valid(_handle)) {
-            _io_sys_socket_close(_handle);
-        }
+        _io_socket_close_taken(_handle);
     }
 
     ## Creates a Unix domain socket at `path` and starts listening on it.
@@ -177,16 +171,7 @@ export struct UnixListener {
     ## @returns the connected stream; an error when the listener is closed,
     ##   or another platform error
     accept(): IoResult<UnixStream> {
-        if (!is_open()) {
-            return IoResult<UnixStream>.err(_io_socket_closed_error());
-        }
-        var accepted = _io_sys_socket_accept(_handle);
-        if (accepted.is_err()) {
-            return IoResult<UnixStream>.err(accepted.error());
-        }
-        var stream = UnixStream();
-        stream._handle = accepted.value().0;
-        return IoResult<UnixStream>.ok(stream);
+        return UnixStream._accepted(_io_listener_accept(_handle, false));
     }
 
     ## Closes the listener now. Closing a closed listener does nothing.
@@ -195,12 +180,9 @@ export struct UnixListener {
     ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing fails
     close(): IoResult<void> {
-        if (!is_open()) {
-            return _io_ok_void();
-        }
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        return _io_sys_socket_close(h);
+        return _io_socket_close_taken(h);
     }
 }
 
@@ -247,10 +229,7 @@ export struct SharedUnixListener {
 
     ## Closes the socket when the last reference goes.
     destruct {
-        var h = _handle as SocketHandle;
-        if (_io_sys_socket_valid(h)) {
-            _io_sys_socket_close(h);
-        }
+        _io_socket_close_taken(_handle as SocketHandle);
     }
 
     ## Creates a Unix domain socket at `path` and starts listening on it, as
@@ -278,19 +257,7 @@ export struct SharedUnixListener {
     ## @returns the connected stream, owned by the calling thread; an error
     ##   when the waiting task is cancelled, or another platform error
     accept(): IoResult<UnixStream> {
-        var h = _handle as SocketHandle;
-        if (!_io_sys_socket_valid(h)) {
-            return IoResult<UnixStream>.err(_io_socket_closed_error());
-        }
-        var accepted = _io_sys_socket_accept(h);
-        # Another thread may close the socket once this one stops using it.
-        _io_socket_release_idle(h);
-        if (accepted.is_err()) {
-            return IoResult<UnixStream>.err(accepted.error());
-        }
-        var stream = UnixStream();
-        stream._handle = accepted.value().0;
-        return IoResult<UnixStream>.ok(stream);
+        return UnixStream._accepted(_io_listener_accept(_handle as SocketHandle, true));
     }
 }
 
@@ -335,9 +302,7 @@ export struct UnixStream {
     ## Closes the socket if it is still open when the last reference goes.
     ## Errors are ignored; call `close()` to see them.
     destruct {
-        if (_io_sys_socket_valid(_handle)) {
-            _io_sys_socket_close(_handle);
-        }
+        _io_socket_close_taken(_handle);
     }
 
     ## Connects to the listener at `path`.
@@ -368,13 +333,6 @@ export struct UnixStream {
         return _io_sys_socket_valid(_handle);
     }
 
-    _check_open(): IoResult<void> {
-        if (!is_open()) {
-            return IoResult<void>.err(_io_socket_closed_error());
-        }
-        return _io_ok_void();
-    }
-
     ## Waits until data arrives, then appends up to `max` bytes of it to
     ## `buffer` with a single system call, like `TcpStream.read`.
     ##
@@ -384,11 +342,7 @@ export struct UnixStream {
     ##   side of the connection; an error when the stream is closed, or
     ##   another platform error
     read(buffer: u8[], max: ulong): IoResult<ulong> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<ulong>.err(c.error());
-        }
-        return _io_socket_read(_handle, buffer, max);
+        return _io_stream_read(_handle, buffer, max);
     }
 
     ## Reads until exactly `count` more bytes are appended to `buffer`.
@@ -400,11 +354,7 @@ export struct UnixStream {
     ##   count bytes"), or an error as for `read`. The bytes read before an
     ##   error stay in `buffer`.
     read_exact(buffer: u8[], count: ulong): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_read_exact(_handle, buffer, count);
+        return _io_stream_read_exact(_handle, buffer, count);
     }
 
     ## Sends bytes from `data` with a single system call, waiting until the
@@ -416,11 +366,7 @@ export struct UnixStream {
     ##   `data.count()`; an error when the peer has closed the connection,
     ##   when the stream is closed, or another platform error
     write(data: u8[]): IoResult<ulong> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<ulong>.err(c.error());
-        }
-        return _io_sys_socket_send(_handle, data._data, data._size);
+        return _io_stream_write(_handle, data);
     }
 
     ## Sends all of `data`, repeating the send until every byte is sent.
@@ -429,11 +375,7 @@ export struct UnixStream {
     ## @param data the bytes to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
     write_all(data: u8[]): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_send_bytes(_handle, data);
+        return _io_stream_write_all(_handle, data);
     }
 
     ## Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
@@ -444,11 +386,7 @@ export struct UnixStream {
     ## @example
     ##     stream.write_all("ping");
     write_all(text: String): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_send_text(_handle, text);
+        return _io_stream_write_string(_handle, text);
     }
 
     ## Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
@@ -468,11 +406,7 @@ export struct UnixStream {
     ## @returns an Ok result on success; an error when the stream is closed,
     ##   or another platform error
     shutdown_write(): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_sys_socket_shutdown(_handle, 1);
+        return _io_stream_shutdown_write(_handle);
     }
 
     ## Moves the connection out of this stream, into a token another thread
@@ -483,10 +417,7 @@ export struct UnixStream {
     into_transfer(): SocketTransfer {
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        if (_io_sys_socket_valid(h)) {
-            _io_socket_release(h);
-        }
-        return SocketTransfer(h);
+        return _io_socket_transfer(h);
     }
 
     ## Takes the connection out of `transfer` (see `into_transfer`) into a
@@ -497,13 +428,26 @@ export struct UnixStream {
     ## @returns the stream; an error when the token is empty (already
     ##   adopted, or made from a closed stream)
     static adopt(transfer: SocketTransfer): IoResult<UnixStream> {
-        var h = transfer._take();
-        if (!_io_sys_socket_valid(h)) {
-            return IoResult<UnixStream>.err(_io_socket_closed_error());
+        var h = _io_socket_adopt(transfer);
+        if (h.is_err()) {
+            return IoResult<UnixStream>.err(h.error());
         }
+        return IoResult<UnixStream>.ok(_of(h.value()));
+    }
+
+    # A stream owning the open socket `h`.
+    static _of(h: SocketHandle): UnixStream {
         var stream = UnixStream();
         stream._handle = h;
-        return IoResult<UnixStream>.ok(stream);
+        return stream;
+    }
+
+    # What a listener's `accept` returns, for the socket it accepted.
+    static _accepted(accepted: IoResult<(SocketHandle, SocketAddress)>): IoResult<UnixStream> {
+        if (accepted.is_err()) {
+            return IoResult<UnixStream>.err(accepted.error());
+        }
+        return IoResult<UnixStream>.ok(_of(accepted.value().0));
     }
 
     ## Closes the connection now. Closing a closed stream does nothing.
@@ -511,11 +455,8 @@ export struct UnixStream {
     ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing fails
     close(): IoResult<void> {
-        if (!is_open()) {
-            return _io_ok_void();
-        }
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        return _io_sys_socket_close(h);
+        return _io_socket_close_taken(h);
     }
 }

@@ -418,6 +418,30 @@ export _io_text_copy(text: String): __ptr<u8> {
     return bytes;
 }
 
+# A zeroed scratch buffer for a system call wrapper, freed when the last
+# reference goes: a wrapper declares it as a local, and every return frees
+# it at scope exit, so no early return has to.
+export struct _IoBuffer {
+    # The buffer's `size` bytes.
+    __ptr<u8> _bytes;
+
+    construct(size: ulong) {
+        _bytes = _pep_malloc(size);
+    }
+
+    destruct {
+        _pep_free(_bytes);
+    }
+}
+
+# A String from a NUL-terminated C string.
+export _io_string_from_c(p: __ptr<char>): String {
+    if (p == __null) {
+        return String();
+    }
+    return _io_string_from(p, _pep_c_strlen(p));
+}
+
 # Byte `i` of the `n` bytes at `p`, or 0 past the end: a bounds-checked read
 # for scanning a String's bytes (an empty String has no buffer at all).
 export _io_byte(p: __ptr<u8>, n: ulong, i: ulong): int {

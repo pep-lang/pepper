@@ -326,11 +326,8 @@ export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<vo
 
 [Target(!OS(Windows))]
 export _io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _io_sockaddr_write(buffer, address);
-    var result = _io_sys_socket_bind_raw(h, buffer, length);
-    _pep_free(buffer);
-    return result;
+    var sockaddr = _io_sockaddr_write(address);
+    return _io_sys_socket_bind_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Binds `h` to the `length`-byte sockaddr at `buffer`, of any family.
@@ -349,11 +346,8 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
 # and SO_ERROR says how.
 [Target(!OS(Windows))]
 export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _io_sockaddr_write(buffer, address);
-    var result = _io_sys_socket_connect_raw(h, buffer, length);
-    _pep_free(buffer);
-    return result;
+    var sockaddr = _io_sockaddr_write(address);
+    return _io_sys_socket_connect_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Connects `h` to the `length`-byte sockaddr at `buffer`, of any family.
@@ -390,8 +384,9 @@ export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: in
 # Blocks the thread until `h` is ready for `interest` (poll(2)).
 [Target(!OS(Windows))]
 export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
-    var descriptor = _pep_malloc(8) as __ptr<int>;
-    var events = descriptor as __ptr<u16>;
+    var buffer = _IoBuffer(8);
+    var descriptor = buffer._bytes as __ptr<int>;
+    var events = buffer._bytes as __ptr<u16>;
     descriptor[0] = h;
     events[2] = 1;  # POLLIN
     if (interest == _IO_WRITABLE) {
@@ -400,12 +395,10 @@ export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     events[3] = 0;
     while (true) {
         if (poll(descriptor, 1, -1) >= 0) {
-            _pep_free(descriptor);
             return _io_ok_void();
         }
         var e = IoError.last();
         if (!e.is_interrupted()) {
-            _pep_free(descriptor);
             return IoResult<void>.err(e);
         }
     }
@@ -445,21 +438,14 @@ export _io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
 
 [Target(!OS(Windows))]
 export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _pep_malloc(4) as __ptr<uint>;
+    var peer = _SockAddr();
     while (true) {
-        length[0] = _io_sockaddr_capacity() as uint;
-        var fd = _io_posix_accept(h, buffer, length);
+        var fd = _io_posix_accept(h, peer._bytes, peer._length_slot());
         if (fd >= 0) {
-            var peer = _io_sockaddr_read(buffer);
-            _pep_free(buffer);
-            _pep_free(length);
-            return IoResult<(SocketHandle, SocketAddress)>.ok((fd, peer));
+            return IoResult<(SocketHandle, SocketAddress)>.ok((fd, peer._read()));
         }
         var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
-            _pep_free(buffer);
-            _pep_free(length);
             return IoResult<(SocketHandle, SocketAddress)>.err(retry.error());
         }
     }
@@ -498,17 +484,14 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
 
 [Target(!OS(Windows))]
 export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _io_sockaddr_write(buffer, address);
+    var sockaddr = _io_sockaddr_write(address);
     while (true) {
-        var r = sendto(h, source, _io_posix_max_rw(n), _io_msg_nosignal(), buffer, length as uint);
+        var r = sendto(h, source, _io_posix_max_rw(n), _io_msg_nosignal(), sockaddr._bytes, sockaddr._length as uint);
         if (r >= 0) {
-            _pep_free(buffer);
             return IoResult<ulong>.ok(r as ulong);
         }
         var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_WRITABLE);
         if (retry.is_err()) {
-            _pep_free(buffer);
             return IoResult<ulong>.err(retry.error());
         }
     }
@@ -520,21 +503,14 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
 export _io_sys_socket_receive_from(
     h: SocketHandle, destination: __ptr<u8>, n: ulong
 ): IoResult<(ulong, SocketAddress)> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _pep_malloc(4) as __ptr<uint>;
+    var from = _SockAddr();
     while (true) {
-        length[0] = _io_sockaddr_capacity() as uint;
-        var r = recvfrom(h, destination, _io_posix_max_rw(n), 0, buffer, length);
+        var r = recvfrom(h, destination, _io_posix_max_rw(n), 0, from._bytes, from._length_slot());
         if (r >= 0) {
-            var from = _io_sockaddr_read(buffer);
-            _pep_free(buffer);
-            _pep_free(length);
-            return IoResult<(ulong, SocketAddress)>.ok((r as ulong, from));
+            return IoResult<(ulong, SocketAddress)>.ok((r as ulong, from._read()));
         }
         var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
-            _pep_free(buffer);
-            _pep_free(length);
             return IoResult<(ulong, SocketAddress)>.err(retry.error());
         }
     }
@@ -549,35 +525,23 @@ export _io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _pep_malloc(4) as __ptr<uint>;
-    length[0] = _io_sockaddr_capacity() as uint;
-    var rc = getsockname(h, buffer, length);
-    return _io_posix_address_result(rc, buffer, length);
+    var address = _SockAddr();
+    return _io_posix_address_result(getsockname(h, address._bytes, address._length_slot()), address);
 }
 
 [Target(!OS(Windows))]
 export _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
-    var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
-    var length = _pep_malloc(4) as __ptr<uint>;
-    length[0] = _io_sockaddr_capacity() as uint;
-    var rc = getpeername(h, buffer, length);
-    return _io_posix_address_result(rc, buffer, length);
+    var address = _SockAddr();
+    return _io_posix_address_result(getpeername(h, address._bytes, address._length_slot()), address);
 }
 
-# The address getsockname/getpeername wrote, or errno; frees both buffers.
+# The address getsockname/getpeername wrote into `address`, or errno.
 [Target(!OS(Windows))]
-export _io_posix_address_result(rc: int, buffer: __ptr<u8>, length: __ptr<uint>): IoResult<SocketAddress> {
+export _io_posix_address_result(rc: int, address: _SockAddr): IoResult<SocketAddress> {
     if (rc != 0) {
-        var e = IoError.last();
-        _pep_free(buffer);
-        _pep_free(length);
-        return IoResult<SocketAddress>.err(e);
+        return IoResult<SocketAddress>.err(IoError.last());
     }
-    var address = _io_sockaddr_read(buffer);
-    _pep_free(buffer);
-    _pep_free(length);
-    return IoResult<SocketAddress>.ok(address);
+    return IoResult<SocketAddress>.ok(address._read());
 }
 
 # ── Name resolution ──────────────────────────────────────────────────────────
@@ -593,13 +557,12 @@ export _io_addrinfo_address_offset(): ulong { return 32; }
 
 [Target(!OS(Windows))]
 export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
-    var hints = _pep_malloc(48) as __ptr<int>;
-    hints[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
-    var list = _pep_malloc(8) as __ptr<__ptr<u8>>;
-    var rc = getaddrinfo(host.c_str(), __null, hints, list);
-    _pep_free(hints);
+    var hints = _IoBuffer(48);
+    (hints._bytes as __ptr<int>)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
+    var result = _IoBuffer(8);
+    var list = result._bytes as __ptr<__ptr<u8>>;
+    var rc = getaddrinfo(host.c_str(), __null, hints._bytes, list);
     if (rc != 0) {
-        _pep_free(list);
         if (_io_eai_system(rc)) {
             return IoResult<SocketAddress[]>.err(IoError.last());
         }
@@ -622,6 +585,5 @@ export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
         entry = ((entry + 40) as __ptr<__ptr<u8>>)[0];
     }
     freeaddrinfo(list[0]);
-    _pep_free(list);
     return IoResult<SocketAddress[]>.ok(out);
 }

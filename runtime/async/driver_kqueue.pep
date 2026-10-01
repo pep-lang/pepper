@@ -72,7 +72,7 @@ extend _KqueueDriver with _Driver {
         return added;
     }
 
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>) {
         var count = _async_kqueue_call(this._queue, __null, 0, this._events, _KQUEUE_CAPACITY, timeout);
         var i = 0;
         while (i < count) {
@@ -89,8 +89,7 @@ extend _KqueueDriver with _Driver {
             } else if (filter == _KQUEUE_FILTER_READ) {
                 interest = io._IO_READABLE;
             }
-            handles.append((event as __ptr<ulong>)[0]);
-            interests.append(interest);
+            ready_sockets.append(((event as __ptr<ulong>)[0], interest));
             i = i + 1;
         }
     }

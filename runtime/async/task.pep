@@ -302,8 +302,7 @@ struct _Worker {
     var _driver: _Driver;
     var _backend: Backend;
     # Sockets the driver found ready in the last poll, and for what.
-    var _ready_handles: Array<ulong>;
-    var _ready_interests: Array<int>;
+    var _ready_sockets: Array<(handle: ulong, interest: int)>;
     # The tasks waiting on each registered socket.
     var _waits: HashMap<ulong, _SocketWaits>;
     # How many tasks are parked on sockets or file transfers.
@@ -312,8 +311,7 @@ struct _Worker {
     # results of finished transfers not yet taken.
     var _file_waits: HashMap<ulong, _TaskCore>;
     var _file_results: HashMap<ulong, long>;
-    var _finished_tasks: Array<ulong>;
-    var _finished_results: Array<long>;
+    var _finished_files: Array<(task: ulong, result: long)>;
     # Tasks parked on a `Mutex`, `Condition` or `Channel`, by id (see
     # sync_wait.pep).
     var _sync_waits: HashMap<ulong, _TaskCore>;
@@ -332,14 +330,12 @@ struct _Worker {
         this._driver = driver;
         this._backend = chosen;
         this._inbox = _Inbox(driver._doorbell());
-        this._ready_handles = Array<ulong>();
-        this._ready_interests = Array<int>();
+        this._ready_sockets = Array<(handle: ulong, interest: int)>();
         this._waits = HashMap<ulong, _SocketWaits>();
         this._sync_waits = HashMap<ulong, _TaskCore>();
         this._file_waits = HashMap<ulong, _TaskCore>();
         this._file_results = HashMap<ulong, long>();
-        this._finished_tasks = Array<ulong>();
-        this._finished_results = Array<long>();
+        this._finished_files = Array<(task: ulong, result: long)>();
         this._ready = Array<_TaskCore>();
         this._timers = Array<_Timer>();
         this._tasks = Array<_TaskCore>();
@@ -585,13 +581,12 @@ struct _Worker {
     # events, and wakes the tasks they let continue.
     _poll(timeout: long) {
         this._since_poll = 0;
-        this._driver._poll(this._waits, timeout, this._ready_handles, this._ready_interests);
+        this._driver._poll(this._waits, timeout, this._ready_sockets);
         var i: ulong = 0;
-        while (i < this._ready_handles.count()) {
-            var key = this._ready_handles[i];
+        while (i < this._ready_sockets.count()) {
+            var (key, interest) = this._ready_sockets[i];
             if (this._waits.contains(key)) {
                 var waits = this._waits.get(key);
-                var interest = this._ready_interests[i];
                 if ((interest & io._IO_READABLE) != 0) {
                     this._wake_all(waits._readers);
                 }
@@ -601,20 +596,18 @@ struct _Worker {
             }
             i = i + 1;
         }
-        this._ready_handles.clear();
-        this._ready_interests.clear();
-        this._driver._finished_files(this._finished_tasks, this._finished_results);
+        this._ready_sockets.clear();
+        this._driver._finished_files(this._finished_files);
         i = 0;
-        while (i < this._finished_tasks.count()) {
-            var task = this._finished_tasks[i];
-            this._file_results.insert(task, this._finished_results[i]);
+        while (i < this._finished_files.count()) {
+            var (task, result) = this._finished_files[i];
+            this._file_results.insert(task, result);
             if (this._file_waits.contains(task)) {
                 this._wake(this._file_waits.get(task));
             }
             i = i + 1;
         }
-        this._finished_tasks.clear();
-        this._finished_results.clear();
+        this._finished_files.clear();
     }
 
     # Wakes every task in `tasks` and empties it. An index loop: a `for`

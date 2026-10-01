@@ -91,9 +91,8 @@ extend _PollDriver with _Driver {
         return true;
     }
 
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
-        var watched = Array<ulong>();
-        var wanted = Array<int>();
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>) {
+        var watched = Array<(handle: ulong, interest: int)>();
         for (var entry in waits) {
             var (key, waiting) = entry;
             var interest = 0;
@@ -104,18 +103,17 @@ extend _PollDriver with _Driver {
                 interest = interest | io._IO_WRITABLE;
             }
             if (interest != 0) {
-                watched.append(key);
-                wanted.append(interest);
+                watched.append((key, interest));
             }
         }
-        watched.append(this._bell);
-        wanted.append(io._IO_READABLE);
+        watched.append((this._bell as ulong, io._IO_READABLE));
         var count = watched.count();
         var size = _async_poll_entry_size();
         __ptr<u8> descriptors = _pep_malloc(count * size);
         var i: ulong = 0;
         while (i < count) {
-            _async_poll_set(descriptors + i * size, watched[i], wanted[i]);
+            var (handle, interest) = watched[i];
+            _async_poll_set(descriptors + i * size, handle, interest);
             i = i + 1;
         }
         if (_async_poll_call(descriptors, count, timeout) > 0) {
@@ -125,8 +123,8 @@ extend _PollDriver with _Driver {
                 if (ready != 0 && i + 1 == count) {
                     _async_poll_drain(this._bell);
                 } else if (ready != 0) {
-                    handles.append(watched[i]);
-                    interests.append(ready);
+                    var (handle, _) = watched[i];
+                    ready_sockets.append((handle, ready));
                 }
                 i = i + 1;
             }

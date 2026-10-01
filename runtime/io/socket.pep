@@ -38,8 +38,42 @@ export _io_sockaddr_capacity(): ulong {
     return 128;
 }
 
-# Writes `address` into the zeroed `buffer`; returns the sockaddr's length.
-export _io_sockaddr_write(buffer: __ptr<u8>, address: SocketAddress): int {
+# A sockaddr of any family in a buffer of its own, freed with the value:
+# `_io_sockaddr_capacity()` zeroed bytes, then a 4-byte slot for the length
+# a call writes back (a socklen_t, or an int on Windows).
+export struct _SockAddr {
+    # The sockaddr's bytes, then the length slot.
+    __ptr<u8> _bytes;
+    # The sockaddr's length in bytes.
+    int _length;
+
+    construct() {
+        _bytes = _pep_malloc(_io_sockaddr_capacity() + 4);
+        _length = _io_sockaddr_capacity() as int;
+    }
+
+    destruct {
+        _pep_free(_bytes);
+    }
+
+    # The length slot to pass to accept, recvfrom, getsockname or
+    # getpeername, set to the capacity.
+    _length_slot(): __ptr<uint> {
+        var slot = (_bytes + _io_sockaddr_capacity()) as __ptr<uint>;
+        slot[0] = _io_sockaddr_capacity() as uint;
+        return slot;
+    }
+
+    # The address the system wrote (see `_io_sockaddr_read`).
+    _read(): SocketAddress {
+        return _io_sockaddr_read(_bytes);
+    }
+}
+
+# `address` as a sockaddr.
+export _io_sockaddr_write(address: SocketAddress): _SockAddr {
+    var sockaddr = _SockAddr();
+    var buffer = sockaddr._bytes;
     var ip = address._address;
     var port = address._port as ulong;
     buffer[2] = ((port >> 8) & 255) as u8;
@@ -51,7 +85,8 @@ export _io_sockaddr_write(buffer: __ptr<u8>, address: SocketAddress): int {
             buffer[4 + i] = ip._byte(12 + i) as u8;
             i = i + 1;
         }
-        return 16;
+        sockaddr._length = 16;
+        return sockaddr;
     }
     _io_sys_sockaddr_header(buffer, true, 28);
     ulong j = 0;
@@ -59,7 +94,8 @@ export _io_sockaddr_write(buffer: __ptr<u8>, address: SocketAddress): int {
         buffer[8 + j] = ip._byte(j) as u8;
         j = j + 1;
     }
-    return 28;
+    sockaddr._length = 28;
+    return sockaddr;
 }
 
 # The address in a sockaddr the system wrote; `0.0.0.0:0` for a family
@@ -136,9 +172,7 @@ export struct TcpListener {
     ## Closes the socket if it is still open when the last reference goes.
     ## Errors are ignored; call `close()` to see them.
     destruct {
-        if (_io_sys_socket_valid(_handle)) {
-            _io_sys_socket_close(_handle);
-        }
+        _io_socket_close_taken(_handle);
     }
 
     ## Opens a TCP socket bound to `address` and starts listening on it.
@@ -184,17 +218,7 @@ export struct TcpListener {
     ## @returns the connected stream and the peer's address; an error when
     ##   the listener is closed, or another platform error
     accept(): IoResult<(TcpStream, SocketAddress)> {
-        if (!is_open()) {
-            return IoResult<(TcpStream, SocketAddress)>.err(_io_socket_closed_error());
-        }
-        var accepted = _io_sys_socket_accept(_handle);
-        if (accepted.is_err()) {
-            return IoResult<(TcpStream, SocketAddress)>.err(accepted.error());
-        }
-        var (handle, peer) = accepted.value();
-        var stream = TcpStream();
-        stream._handle = handle;
-        return IoResult<(TcpStream, SocketAddress)>.ok((stream, peer));
+        return TcpStream._accepted(_io_listener_accept(_handle, false));
     }
 
     ## Returns the address the listener is bound to, with the port the
@@ -203,10 +227,7 @@ export struct TcpListener {
     ## @returns the local address; an error when the listener is closed, or
     ##   another platform error
     local_address(): IoResult<SocketAddress> {
-        if (!is_open()) {
-            return IoResult<SocketAddress>.err(_io_socket_closed_error());
-        }
-        return _io_sys_socket_local_address(_handle);
+        return _io_socket_local_address(_handle);
     }
 
     ## Closes the listener now. Closing a closed listener does nothing.
@@ -215,12 +236,9 @@ export struct TcpListener {
     ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing fails
     close(): IoResult<void> {
-        if (!is_open()) {
-            return _io_ok_void();
-        }
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        return _io_sys_socket_close(h);
+        return _io_socket_close_taken(h);
     }
 }
 
@@ -270,10 +288,7 @@ export struct SharedTcpListener {
 
     ## Closes the socket when the last reference goes.
     destruct {
-        var h = _handle as SocketHandle;
-        if (_io_sys_socket_valid(h)) {
-            _io_sys_socket_close(h);
-        }
+        _io_socket_close_taken(_handle as SocketHandle);
     }
 
     ## Opens a TCP socket bound to `address` and starts listening on it, as
@@ -303,20 +318,7 @@ export struct SharedTcpListener {
     ##   peer's address; an error when the waiting task is cancelled, or
     ##   another platform error
     accept(): IoResult<(TcpStream, SocketAddress)> {
-        var h = _handle as SocketHandle;
-        if (!_io_sys_socket_valid(h)) {
-            return IoResult<(TcpStream, SocketAddress)>.err(_io_socket_closed_error());
-        }
-        var accepted = _io_sys_socket_accept(h);
-        # Another thread may close the socket once this one stops using it.
-        _io_socket_release_idle(h);
-        if (accepted.is_err()) {
-            return IoResult<(TcpStream, SocketAddress)>.err(accepted.error());
-        }
-        var (handle, peer) = accepted.value();
-        var stream = TcpStream();
-        stream._handle = handle;
-        return IoResult<(TcpStream, SocketAddress)>.ok((stream, peer));
+        return TcpStream._accepted(_io_listener_accept(_handle as SocketHandle, true));
     }
 
     ## Returns the address the listener is bound to, with the port the
@@ -324,11 +326,7 @@ export struct SharedTcpListener {
     ##
     ## @returns the local address, or a platform error
     local_address(): IoResult<SocketAddress> {
-        var h = _handle as SocketHandle;
-        if (!_io_sys_socket_valid(h)) {
-            return IoResult<SocketAddress>.err(_io_socket_closed_error());
-        }
-        return _io_sys_socket_local_address(h);
+        return _io_socket_local_address(_handle as SocketHandle);
     }
 }
 
@@ -377,9 +375,7 @@ export struct TcpStream {
     ## Closes the socket if it is still open when the last reference goes.
     ## Errors are ignored; call `close()` to see them.
     destruct {
-        if (_io_sys_socket_valid(_handle)) {
-            _io_sys_socket_close(_handle);
-        }
+        _io_socket_close_taken(_handle);
     }
 
     ## Opens a connection to `address`, waiting until it is established.
@@ -437,13 +433,6 @@ export struct TcpStream {
         return _io_sys_socket_valid(_handle);
     }
 
-    _check_open(): IoResult<void> {
-        if (!is_open()) {
-            return IoResult<void>.err(_io_socket_closed_error());
-        }
-        return _io_ok_void();
-    }
-
     ## Waits until data arrives, then appends up to `max` bytes of it to
     ## `buffer` with a single system call, like `File.read`.
     ##
@@ -457,11 +446,7 @@ export struct TcpStream {
     ##     var buffer = Array<u8>();
     ##     var n = stream.read(buffer, 4096).value();   # buffer.count() == n
     read(buffer: u8[], max: ulong): IoResult<ulong> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<ulong>.err(c.error());
-        }
-        return _io_socket_read(_handle, buffer, max);
+        return _io_stream_read(_handle, buffer, max);
     }
 
     ## Reads until exactly `count` more bytes are appended to `buffer`.
@@ -474,11 +459,7 @@ export struct TcpStream {
     ##   which no predicate matches), or an error as for `read`. The bytes
     ##   read before an error stay in `buffer`.
     read_exact(buffer: u8[], count: ulong): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_read_exact(_handle, buffer, count);
+        return _io_stream_read_exact(_handle, buffer, count);
     }
 
     ## Sends bytes from `data` with a single system call, waiting until the
@@ -493,11 +474,7 @@ export struct TcpStream {
     ##   has closed or reset the connection, an error when the stream is
     ##   closed, or another platform error
     write(data: u8[]): IoResult<ulong> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<ulong>.err(c.error());
-        }
-        return _io_sys_socket_send(_handle, data._data, data._size);
+        return _io_stream_write(_handle, data);
     }
 
     ## Sends all of `data`, repeating the send until every byte is sent.
@@ -507,11 +484,7 @@ export struct TcpStream {
     ## @param data the bytes to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
     write_all(data: u8[]): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_send_bytes(_handle, data);
+        return _io_stream_write_all(_handle, data);
     }
 
     ## Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
@@ -522,11 +495,7 @@ export struct TcpStream {
     ## @example
     ##     stream.write_all("ping");
     write_all(text: String): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_socket_send_text(_handle, text);
+        return _io_stream_write_string(_handle, text);
     }
 
     ## Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
@@ -546,11 +515,7 @@ export struct TcpStream {
     ## @returns an Ok result on success; an error when the stream is closed,
     ##   or another platform error
     shutdown_write(): IoResult<void> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return c;
-        }
-        return _io_sys_socket_shutdown(_handle, 1);
+        return _io_stream_shutdown_write(_handle);
     }
 
     ## Turns Nagle's algorithm off (`true`) or on (`false`) with
@@ -562,7 +527,7 @@ export struct TcpStream {
     ## @returns an Ok result on success; an error when the stream is closed,
     ##   or another platform error
     set_no_delay(enabled: bool): IoResult<void> {
-        var c = _check_open();
+        var c = _io_socket_require_open(_handle);
         if (c.is_err()) {
             return c;
         }
@@ -574,11 +539,7 @@ export struct TcpStream {
     ## @returns the local address; an error when the stream is closed, or
     ##   another platform error
     local_address(): IoResult<SocketAddress> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<SocketAddress>.err(c.error());
-        }
-        return _io_sys_socket_local_address(_handle);
+        return _io_socket_local_address(_handle);
     }
 
     ## Returns the peer's address.
@@ -586,11 +547,7 @@ export struct TcpStream {
     ## @returns the peer's address; an error when the stream is closed, or
     ##   another platform error
     peer_address(): IoResult<SocketAddress> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<SocketAddress>.err(c.error());
-        }
-        return _io_sys_socket_peer_address(_handle);
+        return _io_socket_peer_address(_handle);
     }
 
     ## Moves the connection out of this stream, into a token another thread
@@ -618,10 +575,7 @@ export struct TcpStream {
     into_transfer(): SocketTransfer {
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        if (_io_sys_socket_valid(h)) {
-            _io_socket_release(h);
-        }
-        return SocketTransfer(h);
+        return _io_socket_transfer(h);
     }
 
     ## Takes the connection out of `transfer` (see `into_transfer`) into a
@@ -632,13 +586,27 @@ export struct TcpStream {
     ## @returns the stream; an error when the token is empty (already
     ##   adopted, or made from a closed stream)
     static adopt(transfer: SocketTransfer): IoResult<TcpStream> {
-        var h = transfer._take();
-        if (!_io_sys_socket_valid(h)) {
-            return IoResult<TcpStream>.err(_io_socket_closed_error());
+        var h = _io_socket_adopt(transfer);
+        if (h.is_err()) {
+            return IoResult<TcpStream>.err(h.error());
         }
+        return IoResult<TcpStream>.ok(_of(h.value()));
+    }
+
+    # A stream owning the open socket `h`.
+    static _of(h: SocketHandle): TcpStream {
         var stream = TcpStream();
         stream._handle = h;
-        return IoResult<TcpStream>.ok(stream);
+        return stream;
+    }
+
+    # What a listener's `accept` returns, for the socket it accepted.
+    static _accepted(accepted: IoResult<(SocketHandle, SocketAddress)>): IoResult<(TcpStream, SocketAddress)> {
+        if (accepted.is_err()) {
+            return IoResult<(TcpStream, SocketAddress)>.err(accepted.error());
+        }
+        var (handle, peer) = accepted.value();
+        return IoResult<(TcpStream, SocketAddress)>.ok((_of(handle), peer));
     }
 
     ## Closes the connection now. Closing a closed stream does nothing.
@@ -646,12 +614,9 @@ export struct TcpStream {
     ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing fails
     close(): IoResult<void> {
-        if (!is_open()) {
-            return _io_ok_void();
-        }
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        return _io_sys_socket_close(h);
+        return _io_socket_close_taken(h);
     }
 }
 
@@ -687,6 +652,128 @@ export struct SocketTransfer {
     _take(): SocketHandle {
         return _handle.exchange(-1) as SocketHandle;
     }
+}
+
+# ── Socket operations ────────────────────────────────────────────────────────
+# The stream and listener types (here and in unix.pep) keep their socket in a
+# `_handle` field and call these for the work, so each of their methods is a
+# line. Each fails with `_io_socket_closed_error()` on a closed (invalid)
+# handle.
+
+# Ok for an open socket, the closed-socket error otherwise.
+export _io_socket_require_open(h: SocketHandle): IoResult<void> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<void>.err(_io_socket_closed_error());
+    }
+    return _io_ok_void();
+}
+
+# A stream's `read`.
+export _io_stream_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<ulong>.err(_io_socket_closed_error());
+    }
+    return _io_socket_read(h, buffer, max);
+}
+
+# A stream's `read_exact`.
+export _io_stream_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
+    var c = _io_socket_require_open(h);
+    if (c.is_err()) {
+        return c;
+    }
+    return _io_socket_read_exact(h, buffer, count);
+}
+
+# A stream's `write` (and a UDP socket's `send`): one send.
+export _io_stream_write(h: SocketHandle, data: u8[]): IoResult<ulong> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<ulong>.err(_io_socket_closed_error());
+    }
+    return _io_sys_socket_send(h, data._data, data._size);
+}
+
+# A stream's `write_all`.
+export _io_stream_write_all(h: SocketHandle, data: u8[]): IoResult<void> {
+    var c = _io_socket_require_open(h);
+    if (c.is_err()) {
+        return c;
+    }
+    return _io_socket_send_bytes(h, data);
+}
+
+# A stream's `write_all(text)`.
+export _io_stream_write_string(h: SocketHandle, text: String): IoResult<void> {
+    var c = _io_socket_require_open(h);
+    if (c.is_err()) {
+        return c;
+    }
+    return _io_socket_send_text(h, text);
+}
+
+# A stream's `shutdown_write`.
+export _io_stream_shutdown_write(h: SocketHandle): IoResult<void> {
+    var c = _io_socket_require_open(h);
+    if (c.is_err()) {
+        return c;
+    }
+    return _io_sys_socket_shutdown(h, 1);
+}
+
+# A socket's `local_address`.
+export _io_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<SocketAddress>.err(_io_socket_closed_error());
+    }
+    return _io_sys_socket_local_address(h);
+}
+
+# A socket's `peer_address`.
+export _io_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<SocketAddress>.err(_io_socket_closed_error());
+    }
+    return _io_sys_socket_peer_address(h);
+}
+
+# Closes `h`, which its owner no longer holds (a `close()`, or a
+# destructor); Ok for an invalid handle.
+export _io_socket_close_taken(h: SocketHandle): IoResult<void> {
+    if (!_io_sys_socket_valid(h)) {
+        return _io_ok_void();
+    }
+    return _io_sys_socket_close(h);
+}
+
+# A stream's `into_transfer`, for `h`, which the stream no longer holds.
+export _io_socket_transfer(h: SocketHandle): SocketTransfer {
+    if (_io_sys_socket_valid(h)) {
+        _io_socket_release(h);
+    }
+    return SocketTransfer(h);
+}
+
+# The socket a stream's `adopt` takes out of `transfer`.
+export _io_socket_adopt(transfer: SocketTransfer): IoResult<SocketHandle> {
+    var h = transfer._take();
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<SocketHandle>.err(_io_socket_closed_error());
+    }
+    return IoResult<SocketHandle>.ok(h);
+}
+
+# A listener's `accept`: the accepted socket and the peer's address.
+# `shared` for a listener other threads may close once this one stops
+# using it (`SharedTcpListener`, `SharedUnixListener`).
+export _io_listener_accept(h: SocketHandle, shared: bool): IoResult<(SocketHandle, SocketAddress)> {
+    if (!_io_sys_socket_valid(h)) {
+        return IoResult<(SocketHandle, SocketAddress)>.err(_io_socket_closed_error());
+    }
+    var accepted = _io_sys_socket_accept(h);
+    if (shared) {
+        _io_socket_release_idle(h);
+    }
+    return accepted;
 }
 
 # Appends up to `max` bytes received on `h` to `buffer` (a stream socket's
@@ -798,9 +885,7 @@ export struct UdpSocket {
     ## Closes the socket if it is still open when the last reference goes.
     ## Errors are ignored; call `close()` to see them.
     destruct {
-        if (_io_sys_socket_valid(_handle)) {
-            _io_sys_socket_close(_handle);
-        }
+        _io_socket_close_taken(_handle);
     }
 
     ## Opens a UDP socket bound to `address`.
@@ -831,13 +916,6 @@ export struct UdpSocket {
         return _io_sys_socket_valid(_handle);
     }
 
-    _check_open(): IoResult<void> {
-        if (!is_open()) {
-            return IoResult<void>.err(_io_socket_closed_error());
-        }
-        return _io_ok_void();
-    }
-
     ## Sends `data` as one datagram to `address`.
     ##
     ## @param data the datagram's bytes
@@ -846,7 +924,7 @@ export struct UdpSocket {
     ##   datagram is too large, when the socket is closed, or another
     ##   platform error
     send_to(data: u8[], address: SocketAddress): IoResult<ulong> {
-        var c = _check_open();
+        var c = _io_socket_require_open(_handle);
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
         }
@@ -862,7 +940,7 @@ export struct UdpSocket {
     ## @returns the number of bytes appended and the sender's address; an
     ##   error when the socket is closed, or another platform error
     receive_from(buffer: u8[], max: ulong): IoResult<(ulong, SocketAddress)> {
-        var c = _check_open();
+        var c = _io_socket_require_open(_handle);
         if (c.is_err()) {
             return IoResult<(ulong, SocketAddress)>.err(c.error());
         }
@@ -885,7 +963,7 @@ export struct UdpSocket {
     ## @returns an Ok result on success; an error when the socket is closed,
     ##   or another platform error
     connect(address: SocketAddress): IoResult<void> {
-        var c = _check_open();
+        var c = _io_socket_require_open(_handle);
         if (c.is_err()) {
             return c;
         }
@@ -898,11 +976,7 @@ export struct UdpSocket {
     ## @returns the number of bytes sent; an error when the socket is not
     ##   connected or is closed, or another platform error
     send(data: u8[]): IoResult<ulong> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<ulong>.err(c.error());
-        }
-        return _io_sys_socket_send(_handle, data._data, data._size);
+        return _io_stream_write(_handle, data);
     }
 
     ## Waits for the next datagram from the connected peer and appends up to
@@ -928,7 +1002,7 @@ export struct UdpSocket {
     ## @returns an Ok result on success; an error when the socket is closed,
     ##   or another platform error
     set_broadcast(enabled: bool): IoResult<void> {
-        var c = _check_open();
+        var c = _io_socket_require_open(_handle);
         if (c.is_err()) {
             return c;
         }
@@ -941,11 +1015,7 @@ export struct UdpSocket {
     ## @returns the local address; an error when the socket is closed, or
     ##   another platform error
     local_address(): IoResult<SocketAddress> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<SocketAddress>.err(c.error());
-        }
-        return _io_sys_socket_local_address(_handle);
+        return _io_socket_local_address(_handle);
     }
 
     ## Returns the connected peer's address.
@@ -953,11 +1023,7 @@ export struct UdpSocket {
     ## @returns the peer's address; an error when the socket is not
     ##   connected or is closed, or another platform error
     peer_address(): IoResult<SocketAddress> {
-        var c = _check_open();
-        if (c.is_err()) {
-            return IoResult<SocketAddress>.err(c.error());
-        }
-        return _io_sys_socket_peer_address(_handle);
+        return _io_socket_peer_address(_handle);
     }
 
     ## Closes the socket now. Closing a closed socket does nothing.
@@ -965,11 +1031,8 @@ export struct UdpSocket {
     ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing fails
     close(): IoResult<void> {
-        if (!is_open()) {
-            return _io_ok_void();
-        }
         var h = _handle;
         _handle = _io_sys_socket_invalid();
-        return _io_sys_socket_close(h);
+        return _io_socket_close_taken(h);
     }
 }

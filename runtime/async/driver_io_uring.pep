@@ -150,8 +150,7 @@ export struct _IoUringDriver {
     # Each file transfer in flight: its user data, and the task it is for.
     var _files: HashMap<ulong, ulong>;
     # File transfers finished since `_finished_files` last took them.
-    var _finished_tasks: Array<ulong>;
-    var _finished_results: Array<long>;
+    var _finished: Array<(task: ulong, result: long)>;
     # A struct io_uring_getevents_arg (24 bytes) followed by the
     # __kernel_timespec it points to (16 bytes), for timed waits.
     var _wait_argument: __ptr<u8>;
@@ -163,8 +162,7 @@ export struct _IoUringDriver {
         this._armed = HashMap<ulong, ulong>();
         this._next_request = 1;
         this._files = HashMap<ulong, ulong>();
-        this._finished_tasks = Array<ulong>();
-        this._finished_results = Array<long>();
+        this._finished = Array<(task: ulong, result: long)>();
     }
 
     # A new driver, or none when the system has no usable io_uring.
@@ -295,7 +293,7 @@ extend _IoUringDriver with _Driver {
         return true;
     }
 
-    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, ready_sockets: Array<(handle: ulong, interest: int)>) {
         this._enter(timeout, true);
         var head = _async_io_uring_load(this._rings, this._cq_head);
         var tail = _async_io_uring_load(this._rings, this._cq_tail);
@@ -307,8 +305,7 @@ extend _IoUringDriver with _Driver {
             head = head + 1;
             if (this._files.contains(data)) {
                 # A file transfer: the count, or -errno as -1 minus the code.
-                this._finished_tasks.append(this._files.get(data));
-                this._finished_results.append(result >= 0 ? result as long : -1 + result as long);
+                this._finished.append((this._files.get(data), result >= 0 ? result as long : -1 + result as long));
                 this._files.remove(data);
             } else if (data == _async_doorbell_key()) {
                 _async_epoll_drain(this._bell);
@@ -324,8 +321,7 @@ extend _IoUringDriver with _Driver {
                     ready = _async_ready_mask(result, _IO_URING_READABLE_EVENTS, _IO_URING_WRITABLE_EVENTS);
                 }
                 if (ready != 0) {
-                    handles.append(handle);
-                    interests.append(ready);
+                    ready_sockets.append((handle, ready));
                 }
                 if ((flags & _IO_URING_CQE_MORE) == 0) {
                     # The kernel ended the request: arm a new one for the
@@ -379,15 +375,13 @@ extend _IoUringDriver with _Driver {
         return true;
     }
 
-    _finished_files(tasks: Array<ulong>, results: Array<long>) {
-        for (var task in this._finished_tasks) {
-            tasks.append(task);
+    _finished_files(finished: Array<(task: ulong, result: long)>) {
+        var i: ulong = 0;
+        while (i < this._finished.count()) {
+            finished.append(this._finished[i]);
+            i = i + 1;
         }
-        for (var result in this._finished_results) {
-            results.append(result);
-        }
-        this._finished_tasks.clear();
-        this._finished_results.clear();
+        this._finished.clear();
     }
 
     _doorbell(): _Doorbell {

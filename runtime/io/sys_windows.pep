@@ -423,16 +423,11 @@ export _io_win_metadata(
 
 [Target(OS(Windows))]
 export _io_sys_fstat(h: FileHandle): IoResult<Metadata> {
-    var info = _pep_malloc(52);
-    var ok = GetFileInformationByHandle(h, info);
-    if (ok == 0) {
-        var e = IoError.last();
-        _pep_free(info);
-        return IoResult<Metadata>.err(e);
+    var info = _IoBuffer(52);
+    if (GetFileInformationByHandle(h, info._bytes) == 0) {
+        return IoResult<Metadata>.err(IoError.last());
     }
-    var m = _io_win_metadata(info, 0, 4, 12, 20, 32, 36);
-    _pep_free(info);
-    return IoResult<Metadata>.ok(m);
+    return IoResult<Metadata>.ok(_io_win_metadata(info._bytes, 0, 4, 12, 20, 32, 36));
 }
 
 # Opens the path for no access (attributes only); without `follow`,
@@ -469,13 +464,13 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
         return IoResult<DirEntry[]>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
     var w = _io_win_wide(path.join(Path("*"))._value);
-    var data = _pep_malloc(592);
+    var buffer = _IoBuffer(592);
+    var data = buffer._bytes;
     var h = FindFirstFileW(w, data);
     _pep_free(w);
     var out = Array<DirEntry>();
     if (!_io_sys_handle_valid(h)) {
         var e = IoError.last();
-        _pep_free(data);
         # FILE_NOT_FOUND means nothing matched `*`: an empty directory with
         # no `.` or `..` entries, as a drive root is. A missing directory
         # says PATH_NOT_FOUND, but confirm it is a directory regardless.
@@ -507,14 +502,12 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
             var code = GetLastError();
             if (code != 18) {  # NO_MORE_FILES
                 FindClose(h);
-                _pep_free(data);
                 return IoResult<DirEntry[]>.err(IoError(code, _io_sys_error_message(code)));
             }
             break;
         }
     }
     FindClose(h);
-    _pep_free(data);
     return IoResult<DirEntry[]>.ok(out);
 }
 
@@ -573,16 +566,13 @@ export _io_sys_getcwd(): IoResult<Path> {
     if (need == 0) {
         return IoResult<Path>.err(IoError.last());
     }
-    var buf = _pep_malloc((need as ulong) * 2) as __ptr<u16>;
+    var buffer = _IoBuffer((need as ulong) * 2);
+    var buf = buffer._bytes as __ptr<u16>;
     var n = GetCurrentDirectoryW(need, buf);
     if (n == 0) {
-        var e = IoError.last();
-        _pep_free(buf);
-        return IoResult<Path>.err(e);
+        return IoResult<Path>.err(IoError.last());
     }
-    var p = Path(_io_win_narrow(buf, n as int));
-    _pep_free(buf);
-    return IoResult<Path>.ok(p);
+    return IoResult<Path>.ok(Path(_io_win_narrow(buf, n as int)));
 }
 
 [Target(OS(Windows))]
@@ -608,16 +598,15 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
         CloseHandle(h.value());
         return IoResult<Path>.err(e);
     }
-    var buf = _pep_malloc((need as ulong) * 2 + 2) as __ptr<u16>;
+    var buffer = _IoBuffer((need as ulong) * 2 + 2);
+    var buf = buffer._bytes as __ptr<u16>;
     var n = GetFinalPathNameByHandleW(h.value(), buf, need, 0);
     var code = GetLastError();
     CloseHandle(h.value());
     if (n == 0) {
-        _pep_free(buf);
         return IoResult<Path>.err(IoError(code, _io_sys_error_message(code)));
     }
     var s = _io_win_narrow(buf, n as int);
-    _pep_free(buf);
     # Drop the `\\?\` prefix, keeping a UNC path's `\\`.
     if (s.starts_with("\\\\?\\UNC\\")) {
         return IoResult<Path>.ok(Path("\\\\" + _io_slice(s, 8, s.size())));
