@@ -123,6 +123,7 @@ pub fn check_bounds(module: &Module) {
     let has = |params: &[GenericParam]| params.iter().any(|p| !p.bounds.is_empty());
     let generic = |f: &FunctionDef| has(&f.generic_params);
     let any = module.functions.iter().any(generic)
+        || module.extensions.iter().any(|e| !e.restated.is_empty())
         || module.structs.iter().any(|st| has(&st.generic_params) || st.generic_methods.iter().any(generic))
         || module.traits.iter().any(|t| has(&t.generic_params) || t.methods.iter().any(generic));
     if !any {
@@ -140,15 +141,35 @@ pub fn check_bounds(module: &Module) {
         checker.function(function, &[], None);
     }
     for st in module.structs.iter().filter(|st| !st.name.contains('<')) {
-        let own: &[GenericParam] = &st.generic_params;
         let current = Some(&st.ty);
-        if has(own) {
-            let methods = st.method_members.iter().chain(&st.constructors).chain([&st.destructor]);
-            for method in methods.filter(|m| m.trait_default.is_none()) {
+        // Inside a constrained extension (`extend Box<T: Named>`), a
+        // parameter offers the struct's constraints and the extension's.
+        let extended: Vec<(std::collections::HashSet<Loc>, Vec<GenericParam>)> =
+            crate::passes::constraints::constrained_extensions(module, &st.name)
+                .into_iter()
+                .map(|c| {
+                    let mut params = st.generic_params.clone();
+                    for (i, bound) in &c.added {
+                        if let Some(p) = params.get_mut(*i) {
+                            p.bounds.push((*bound).clone());
+                        }
+                    }
+                    let locs = c.ext.methods.iter().map(|m| m.loc).collect();
+                    (locs, params)
+                })
+                .collect();
+        let params_of = |m: &FunctionDef| -> &[GenericParam] {
+            extended.iter().find(|(locs, _)| locs.contains(&m.loc)).map_or(&st.generic_params, |(_, p)| p)
+        };
+        let methods = st.method_members.iter().chain(&st.constructors).chain([&st.destructor]);
+        for method in methods.filter(|m| m.trait_default.is_none()) {
+            let own = params_of(method);
+            if has(own) {
                 checker.function(method, own, current);
             }
         }
         for method in st.generic_methods.iter().filter(|m| m.trait_default.is_none()) {
+            let own = params_of(method);
             if has(own) || generic(method) {
                 checker.function(method, own, current);
             }

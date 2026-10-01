@@ -2115,7 +2115,25 @@ fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> 
             }
             ast::Declaration::Struct(s) => out.structs.push(in_generic_scope(&s.generic_params, None, || struct_def(s))?),
             ast::Declaration::Trait(t) => out.traits.push(in_generic_scope(&t.generic_params, None, || trait_def(t))?),
-            ast::Declaration::Extend(e) => out.extensions.push(in_generic_scope(&[], Some(&e.target), || extension_def(e))?),
+            ast::Declaration::Extend(e) => {
+                // A constrained extension's parameters carry the constraints
+                // it adds (`extend Box<T: Named>`), beside the struct's own.
+                let params: Vec<ast::GenericParam> = e
+                    .target
+                    .generic_types
+                    .iter()
+                    .zip(&e.target_bounds)
+                    .filter(|(arg, bounds)| arg.generic_types.is_empty() && !bounds.is_empty())
+                    .map(|(arg, bounds)| ast::GenericParam {
+                        name: arg.name.clone(),
+                        name_span: arg.span,
+                        bounds: bounds.clone(),
+                        default: None,
+                        is_argument: false,
+                    })
+                    .collect();
+                out.extensions.push(in_generic_scope(&params, Some(&e.target), || extension_def(e))?)
+            }
             ast::Declaration::TypeAlias(t) => {
                 check_deprecation(&t.attributes)?;
                 reject_implicit(&t.attributes)?;

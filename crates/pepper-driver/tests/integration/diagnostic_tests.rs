@@ -3208,21 +3208,6 @@ fn constraint_names_an_unknown_type() {
     );
 }
 
-/// An extension may restate its struct's constraints, not add one.
-#[test]
-fn constraint_added_by_extension() {
-    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\ntrait Named {\n    name(): String;\n}\nstruct Box<T: Shape> {\n    var item: T;\n}\nextend Box<T: Shape & Named> {\n}\nmain(): int { return 0; }\n";
-    assert_eq!(
-        error_of("constraint_added_by_extension", source),
-        "main.pep:13:23: error: 'Named' is not a constraint of 'T' in 'Box'; an extension cannot add one\n\
-         \x20  13 | extend Box<T: Shape & Named> {\n\
-         \x20     |                       ^~~~~\n\
-         main.pep:10:12: note: 'T' declared here\n\
-         \x20  10 | struct Box<T: Shape> {\n\
-         \x20     |            ^"
-    );
-}
-
 /// Only the struct's own parameters restate its constraints.
 #[test]
 fn constraint_restated_on_a_specialization() {
@@ -3457,5 +3442,96 @@ fn constrained_parameter_compound_operator_not_declared() {
          main.pep:4:9: note: 'T' is constrained by 'Addable', which has no operator '+='\n\
          \x20   4 | grow<T: Addable>(a: T, b: T): T {\n\
          \x20     |         ^~~~~~~"
+    );
+}
+
+/// A conditional conformance names the condition a type argument misses.
+#[test]
+fn conditional_conformance_not_met_by_argument() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Shape> with Shape {\n    area(): int { return item.area() * 2; }\n}\ntotal<T: Shape>(item: T): int { return item.area(); }\nmain(): int { return total(Box<String>(\"x\")); }\n";
+    assert_eq!(
+        error_of("conditional_conformance_not_met_by_argument", source),
+        "main.pep:19:28: error: 'Box<String>' does not conform to trait 'Shape', required by 'T' in 'total'\n\
+         \x20  19 | main(): int { return total(Box<String>(\"x\")); }\n\
+         \x20     |                            ^~~~~~~~~~~\n\
+         main.pep:18:10: note: constraint declared here\n\
+         \x20  18 | total<T: Shape>(item: T): int { return item.area(); }\n\
+         \x20     |          ^~~~~\n\
+         main.pep:15:15: note: 'Box<String>' conforms to 'Shape' only when 'String' conforms to 'Shape'\n\
+         \x20  15 | extend Box<T: Shape> with Shape {\n\
+         \x20     |               ^~~~~"
+    );
+}
+
+/// Converting to the trait names the condition too.
+#[test]
+fn conditional_conformance_not_met_by_conversion() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Shape> with Shape {\n    area(): int { return item.area() * 2; }\n}\nmain(): int {\n    Shape shape = Box<String>(\"x\");\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("conditional_conformance_not_met_by_conversion", source),
+        "main.pep:19:19: error: 'Box<String>' does not conform to trait 'Shape'\n\
+         \x20  19 |     Shape shape = Box<String>(\"x\");\n\
+         \x20     |                   ^~~~~~~~~~~\n\
+         main.pep:15:15: note: 'Box<String>' conforms to 'Shape' only when 'String' conforms to 'Shape'\n\
+         \x20  15 | extend Box<T: Shape> with Shape {\n\
+         \x20     |               ^~~~~"
+    );
+}
+
+/// Inside a constrained extension, the parameter offers its constraints.
+#[test]
+fn constrained_extension_body_checked() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    shout(): String { return item.yell(); }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_extension_body_checked", source),
+        "main.pep:16:35: error: no member named 'yell' in 'T'\n\
+         \x20  16 |     shout(): String { return item.yell(); }\n\
+         \x20     |                                   ^~~~\n\
+         main.pep:15:15: note: 'T' is constrained by 'Named', which has no member 'yell'\n\
+         \x20  15 | extend Box<T: Named> {\n\
+         \x20     |               ^~~~~"
+    );
+}
+
+/// A constrained extension's member exists only where its constraint is met.
+#[test]
+fn constrained_extension_member_withheld() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    label(): String { return item.name(); }\n}\nmain(): int {\n    var box = Box<Circle>(Circle());\n    box.label();\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("constrained_extension_member_withheld", source),
+        "main.pep:20:9: error: no member named 'label' in 'Box<Circle>'\n\
+         \x20  20 |     box.label();\n\
+         \x20     |         ^~~~~\n\
+         main.pep:15:15: note: 'label' requires 'Circle' to conform to 'Named'\n\
+         \x20  15 | extend Box<T: Named> {\n\
+         \x20     |               ^~~~~"
+    );
+}
+
+/// A conformance for every Box cannot rest on a member only some Boxes have.
+#[test]
+fn conformance_member_only_in_constrained_extension() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    name(): String { return item.name(); }\n}\nextend Box<T> with Named {}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("conformance_member_only_in_constrained_extension", source),
+        "main.pep:18:8: error: 'Box' conforms to 'Named' for every 'T', but its 'name' exists only when 'T' conforms to 'Named'\n\
+         \x20  18 | extend Box<T> with Named {}\n\
+         \x20     |        ^~~~~~\n\
+         main.pep:15:15: note: constraint declared here\n\
+         \x20  15 | extend Box<T: Named> {\n\
+         \x20     |               ^~~~~\n\
+         note: make the conformance conditional: 'extend Box<T: Named> with Named'"
+    );
+}
+
+/// An extension's constraint naming nothing.
+#[test]
+fn constrained_extension_names_an_unknown_type() {
+    let source = "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Nope> {\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_extension_names_an_unknown_type", source),
+        "main.pep:15:15: error: unknown type name 'Nope'\n\
+         \x20  15 | extend Box<T: Nope> {\n\
+         \x20     |               ^~~~"
     );
 }

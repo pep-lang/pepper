@@ -49,6 +49,9 @@ struct Converter {
     conversions: Vec<Conversion>,
     table: StructTable,
     trait_defs: Vec<TraitDef>,
+    /// Present when an extension adds constraints: says which condition of
+    /// a conditional conformance a struct does not meet.
+    conformance: Option<crate::passes::constraints::Conformance>,
     trait_types: HashMap<String, TraitType>,
     functions: HashMap<String, Vec<TypeName>>,
     structs: HashMap<String, StructFacts>,
@@ -179,22 +182,22 @@ impl Converter {
                 if !facts.traits.iter().any(|t| {
                     crate::passes::check_function_types::canonical(t) == expected_canonical
                 }) {
-                    crate::errors::report(
-                        Diagnostic::error(format!(
-                            "'{}' does not conform to trait '{}'",
-                            actual.display(),
-                            expected.display()
-                        ))
-                        .at(loc)
-                        .with_note(
-                            format!(
-                                "declare it with 'extend {} with {}'",
-                                actual.display(),
-                                expected.display()
-                            ),
+                    let error = Diagnostic::error(format!(
+                        "'{}' does not conform to trait '{}'",
+                        actual.display(),
+                        expected.display()
+                    ))
+                    .at(loc);
+                    // A conditional conformance names the condition missed.
+                    let condition = self.conformance.as_ref().and_then(|c| c.condition_note(&actual, expected));
+                    let error = match condition {
+                        Some((note, at)) => error.with_note(note, Some(at)),
+                        None => error.with_note(
+                            format!("declare it with 'extend {} with {}'", actual.display(), expected.display()),
                             Some(facts.loc),
                         ),
-                    );
+                    };
+                    crate::errors::report(error);
                     return;
                 }
                 actual
@@ -752,6 +755,11 @@ pub fn convert_to_traits(module: &mut Module) {
         conversions: vec![],
         table: StructTable::build(module),
         trait_defs: module.traits.clone(),
+        conformance: module
+            .extensions
+            .iter()
+            .any(|e| !e.restated.is_empty())
+            .then(|| crate::passes::constraints::Conformance::of(module)),
         trait_types: HashMap::new(),
         functions: module
             .functions

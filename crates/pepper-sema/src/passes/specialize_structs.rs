@@ -439,6 +439,13 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
 
 pub fn specialize_structs(module: &mut Module) {
     let specs: Vec<TypeName> = module.struct_specs.clone();
+    // Constrained extensions give their members only to specializations
+    // whose arguments meet their constraints.
+    let conformance = module
+        .extensions
+        .iter()
+        .any(|e| !e.restated.is_empty())
+        .then(|| crate::passes::constraints::Conformance::of(module));
     for spec in specs {
         // Dedupe: skip if a struct with this name/type already exists.
         if module
@@ -458,6 +465,17 @@ pub fn specialize_structs(module: &mut Module) {
             continue;
         };
         let mut specialized = specialize_struct(&base, &spec);
+        if let Some(conformance) = &conformance {
+            let withheld = crate::passes::constraints::withhold(module, conformance, &base, &mut specialized);
+            // A withheld member leaves its overload set.
+            if let Some(sets) = module.method_overload_sets.get_mut(&specialized.name) {
+                for members in sets.values_mut() {
+                    members.retain(|m| !withheld.iter().any(|w| w.name == *m));
+                }
+                sets.retain(|_, members| !members.is_empty());
+            }
+            module.withheld.extend(withheld);
+        }
         // Apply synthesized members to the new instance (refcount + methods).
         crate::struct_body::apply_synthesized(&mut specialized);
         module.structs.push(specialized);

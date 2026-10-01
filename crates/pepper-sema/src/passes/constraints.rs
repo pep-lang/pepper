@@ -107,8 +107,11 @@ pub struct Conformance {
     /// Structs by their declared name (generic bases and plain structs).
     structs: HashMap<String, StructFacts>,
     enums: HashMap<String, Loc>,
-    /// Each extension's target and the traits it declares.
-    extensions: Vec<(TypeName, Vec<TypeName>)>,
+    /// Each extension's target, the traits it declares, and the constraints
+    /// it adds to the struct's parameters (`extend Box<T: Shape> with
+    /// Shape` conforms only when `T` does): the parameter's position, the
+    /// trait, and where it is written.
+    extensions: Vec<(TypeName, Vec<TypeName>, Vec<(usize, TypeName, Loc)>)>,
 }
 
 /// A constraint an argument does not meet.
@@ -151,7 +154,14 @@ impl Conformance {
             traits,
             structs,
             enums: module.enums.iter().map(|e| (e.name.clone(), e.loc)).collect(),
-            extensions: module.extensions.iter().map(|e| (e.target.clone(), e.traits.clone())).collect(),
+            extensions: module
+                .extensions
+                .iter()
+                .map(|e| {
+                    let added = added_constraints(module, e).into_iter().map(|(i, b)| (i, b.ty.clone(), b.loc)).collect();
+                    (e.target.clone(), e.traits.clone(), added)
+                })
+                .collect(),
         }
     }
 
@@ -173,10 +183,29 @@ impl Conformance {
         if arg.is_pointer() {
             return false;
         }
-        let Some(st) = self.structs.get(&arg.name) else { return false };
-        self.extensions.iter().any(|(target, traits)| {
+        self.declaring(arg, required).any(|(map, conditions)| {
+            conditions.iter().all(|(i, bound, _)| {
+                let mut bound = bound.clone();
+                replace_map(&mut bound, &map);
+                arg.sub_types.get(*i).is_some_and(|a| self.conforms(a, &bound, scope))
+            })
+        })
+    }
+
+    /// The extensions that declare `required` for `arg`, a struct: each with
+    /// its parameters' arguments and the conditions it adds.
+    #[allow(clippy::type_complexity)]
+    fn declaring<'s>(
+        &'s self,
+        arg: &'s TypeName,
+        required: &TypeName,
+    ) -> impl Iterator<Item = (Vec<(String, TypeName)>, &'s [(usize, TypeName, Loc)])> + 's {
+        let want = canonical(required);
+        let st = self.structs.get(&arg.name).filter(|_| !arg.is_pointer());
+        self.extensions.iter().filter_map(move |(target, traits, conditions)| {
+            let st = st?;
             if target.name != arg.name {
-                return false;
+                return None;
             }
             // `extend Box<T>` (the struct's own parameters) covers every
             // `Box<X>`; `extend Box<int>` only itself.
@@ -188,14 +217,77 @@ impl Conformance {
             } else if canonical(target) == canonical(arg) {
                 vec![]
             } else {
-                return false;
+                return None;
             };
-            traits.iter().any(|t| {
+            let declares = traits.iter().any(|t| {
                 let mut t = t.clone();
                 replace_map(&mut t, &map);
                 canonical(&t) == want
+            });
+            declares.then_some((map, conditions.as_slice()))
+        })
+    }
+
+    /// The note that says why `arg` does not conform to `required` although
+    /// an extension declares it: the condition it does not meet, at the
+    /// extension's constraint.
+    pub fn condition_note(&self, arg: &TypeName, required: &TypeName) -> Option<(String, Loc)> {
+        // Another extension declaring it may be met.
+        if self.conforms(arg, required, &Scope::new()) {
+            return None;
+        }
+        self.declaring(arg, required).find_map(|(map, conditions)| {
+            conditions.iter().find_map(|(i, bound, loc)| {
+                let mut bound = bound.clone();
+                replace_map(&mut bound, &map);
+                let a = arg.sub_types.get(*i)?;
+                (!self.conforms(a, &bound, &Scope::new())).then(|| {
+                    (
+                        format!(
+                            "'{}' conforms to '{}' only when '{}' conforms to '{}'",
+                            spelled(arg),
+                            spelled(required),
+                            spelled(a),
+                            spelled(&bound)
+                        ),
+                        *loc,
+                    )
+                })
             })
         })
+    }
+
+    /// The error for `bound`, a constraint that names no trait: what it
+    /// names instead (a struct, an enum, a type parameter among `params`,
+    /// with a note at its declaration), or nothing.
+    fn not_a_trait<'p>(&self, bound: &Bound, mut params: impl Iterator<Item = &'p GenericParam>) -> Diagnostic {
+        let name = spelled(&bound.ty);
+        let param = if bound.ty.sub_types.is_empty() { params.find(|p| p.name == bound.ty.name) } else { None };
+        let declared = self
+            .structs
+            .get(&bound.ty.name)
+            .map(|st| st.loc)
+            .or_else(|| self.enums.get(&bound.ty.name).copied())
+            .or_else(|| param.map(|p| p.loc))
+            .filter(|l| !l.is_none());
+        let known = declared.is_some()
+            || param.is_some()
+            || crate::type_name::is_integral_name(&bound.ty.name)
+            || bound.ty.is_pointer()
+            || bound.ty.name.starts_with("__");
+        if !known {
+            return Diagnostic::error(format!("unknown type name '{}'", name)).at(bound.loc);
+        }
+        let error = Diagnostic::error(format!("'{}' is not a trait; a constraint must name a trait", name)).at(bound.loc);
+        match declared {
+            Some(at) => error.with_note(format!("'{}' declared here", name), Some(at)),
+            None => error,
+        }
+    }
+
+    /// Whether `arg` meets constraint `bound` (concrete types).
+    pub fn meets(&self, arg: &TypeName, bound: &TypeName) -> bool {
+        self.conforms(arg, bound, &Scope::new())
     }
 
     /// The first constraint of `params` that `args` (a use's arguments,
@@ -282,6 +374,9 @@ impl Conformance {
             }
             return error;
         }
+        if let Some((note, at)) = self.condition_note(&unmet.arg, &unmet.required) {
+            return error.with_note(note, Some(at));
+        }
         if let Some(st) = self.structs.get(&unmet.arg.name).filter(|_| !unmet.arg.is_pointer()) {
             let written = pepper_parser::namespace::demangle(&arg).to_string();
             let required_written = pepper_parser::namespace::demangle(&required).to_string();
@@ -302,6 +397,182 @@ impl Conformance {
         }
         error
     }
+}
+
+/// The constraints extension `ext` adds to its struct's parameters, beyond
+/// the struct's own: the parameter's position and the constraint.
+pub fn added_constraints<'m>(module: &'m Module, ext: &'m ExtensionDef) -> Vec<(usize, &'m Bound)> {
+    if ext.restated.is_empty() {
+        return vec![];
+    }
+    let Some(st) = module.structs.iter().find(|st| st.name == ext.target.name && !st.generic_params.is_empty()) else {
+        return vec![];
+    };
+    ext.restated
+        .iter()
+        .filter(|(i, bound)| {
+            st.generic_params
+                .get(*i)
+                .is_some_and(|p| !p.bounds.iter().any(|b| canonical(&b.ty) == canonical(&bound.ty)))
+        })
+        .map(|(i, bound)| (*i, bound))
+        .collect()
+}
+
+/// Removes from `specialized`, a specialization of `base`, the members and
+/// conformances of each constrained extension whose added constraints its
+/// type arguments do not meet, and returns what it removed.
+pub fn withhold(module: &Module, conformance: &Conformance, base: &StructDef, specialized: &mut StructDef) -> Vec<Withheld> {
+    let mut withheld = vec![];
+    let args = &specialized.ty.sub_types;
+    let map: Vec<(String, TypeName)> = base.generic_params.iter().map(|p| p.name.clone()).zip(args.iter().cloned()).collect();
+    for ext in module.extensions.iter().filter(|e| e.target.name == base.name) {
+        let unmet = added_constraints(module, ext).into_iter().find_map(|(i, bound)| {
+            let mut required = bound.ty.clone();
+            replace_map(&mut required, &map);
+            let arg = args.get(i)?;
+            (!conformance.meets(arg, &required)).then(|| (arg.clone(), required, bound.loc))
+        });
+        let Some((arg, bound, at)) = unmet else { continue };
+        let traits: Vec<TypeName> = ext
+            .traits
+            .iter()
+            .map(|t| {
+                let mut t = t.clone();
+                replace_map(&mut t, &map);
+                canonical(&t)
+            })
+            .collect();
+        // A conformance another extension declares and the arguments meet
+        // stays, with the trait defaults it copied in.
+        let kept: Vec<TypeName> = traits.iter().filter(|t| conformance.meets(&specialized.ty, t)).cloned().collect();
+        let own: HashSet<Loc> = ext.methods.iter().map(|m| m.loc).collect();
+        // Its methods, and the trait defaults its conformances copied in.
+        let from_extension =
+            |m: &FunctionDef| own.contains(&m.loc) || (m.trait_default.is_some() && m.owner == ext.loc && kept.is_empty());
+        for m in specialized.method_members.iter().chain(&specialized.generic_methods).filter(|m| from_extension(m)) {
+            withheld.push(Withheld {
+                owner: specialized.name.clone(),
+                member: crate::passes::overloads::set_name(&m.name).to_string(),
+                name: m.name.clone(),
+                params: m.parameters.len(),
+                arg: arg.clone(),
+                bound: bound.clone(),
+                at,
+            });
+        }
+        specialized.method_members.retain(|m| !from_extension(m));
+        specialized.generic_methods.retain(|m| !from_extension(m));
+        specialized.traits.retain(|t| {
+            let t = canonical(t);
+            !traits.contains(&t) || kept.contains(&t)
+        });
+    }
+    withheld
+}
+
+/// Reports a call of a member a specialization did not get from a
+/// constrained extension (`b.label()` on a `Box<Circle>`, where `label` needs
+/// `T: Named`), with the constraint it misses. Runs once specializations
+/// and their calls are typed.
+pub fn check_withheld(module: &Module) {
+    if module.withheld.is_empty() {
+        return;
+    }
+    let names: HashSet<&str> = module.withheld.iter().map(|w| w.member.as_str()).collect();
+    let free: HashSet<&str> = module.functions.iter().map(|f| crate::passes::overloads::set_name(&f.name)).collect();
+    let table = std::cell::OnceCell::new();
+    let mut found: Option<Diagnostic> = None;
+    let mut visit = |expr: &Expression, current: Option<&TypeName>| {
+        if found.is_some() {
+            return;
+        }
+        // A method call, or a bare call of a method of the enclosing struct.
+        let (receiver, method, count, loc) = match expr {
+            Expression::MethodCall { this, method, args, loc } => {
+                if !names.contains(crate::passes::overloads::set_name(method)) {
+                    return;
+                }
+                let table = table.get_or_init(|| crate::static_type::StructTable::build(module));
+                let Some(receiver) = crate::static_type::of(this, table, current) else { return };
+                (receiver, method, args.len(), *loc)
+            }
+            Expression::FunctionCall { function, args, loc } => {
+                let set = crate::passes::overloads::set_name(function);
+                let Some(current) = current.filter(|_| names.contains(set) && !free.contains(set)) else { return };
+                (current.clone(), function, args.len(), *loc)
+            }
+            _ => return,
+        };
+        let owner = receiver.to_string();
+        let owner = owner.trim_end_matches('*');
+        let member = crate::passes::overloads::set_name(method);
+        // A member the specialization kept that takes this many arguments.
+        let fits = |m: &FunctionDef| {
+            let required = m.parameters.iter().filter(|p| p.default.is_none()).count();
+            count >= required && count <= m.parameters.len()
+        };
+        let has = module.structs.iter().find(|st| st.name == owner).is_some_and(|st| {
+            st.method_members
+                .iter()
+                .chain(&st.generic_methods)
+                .any(|m| crate::passes::overloads::set_name(&m.name) == member && (fits(m) || m.name == *method))
+        });
+        if has {
+            return;
+        }
+        let candidates = module.withheld.iter().filter(|w| w.owner == owner && w.member == member);
+        let mut candidates: Vec<&Withheld> = candidates.collect();
+        // Of several withheld overloads, the one this call's arguments fit.
+        candidates.sort_by_key(|w| w.params != count);
+        if let Some(w) = candidates.first() {
+            found = Some(
+                Diagnostic::error(format!("no member named '{}' in '{}'", member, owner)).at(loc).with_note(
+                    format!("'{}' requires '{}' to conform to '{}'", member, spelled(&w.arg), spelled(&w.bound)),
+                    Some(w.at),
+                ),
+            );
+        }
+    };
+    let mut function = |def: &FunctionDef, current: Option<&TypeName>| {
+        if let Some(body) = &def.body {
+            visit_block(body, &mut |e| visit(e, current));
+        }
+    };
+    for def in module.functions.iter().filter(|f| !f.is_generic_func) {
+        function(def, None);
+    }
+    for st in module.structs.iter().filter(|st| st.generic_params.is_empty()) {
+        for def in st.method_members.iter().chain(&st.constructors).chain([&st.destructor]) {
+            function(def, Some(&st.ty));
+        }
+    }
+    for var in &module.globals {
+        if let Some(default) = &var.default {
+            visit_expression(default, &mut |e| visit(e, None));
+        }
+    }
+    if let Some(error) = found {
+        crate::errors::report(error);
+    }
+}
+
+/// An extension that adds constraints to its struct's parameters, and the
+/// constraints it adds.
+pub struct ConstrainedExtension<'m> {
+    pub ext: &'m ExtensionDef,
+    pub added: Vec<(usize, &'m Bound)>,
+}
+
+/// Every constrained extension of struct `name`.
+pub fn constrained_extensions<'m>(module: &'m Module, name: &str) -> Vec<ConstrainedExtension<'m>> {
+    module
+        .extensions
+        .iter()
+        .filter(|e| e.target.name == name)
+        .map(|ext| ConstrainedExtension { ext, added: added_constraints(module, ext) })
+        .filter(|c| !c.added.is_empty())
+        .collect()
 }
 
 /// The generics a use can name (generic structs, traits, generic functions
@@ -339,7 +610,14 @@ fn scope_of(module: &Module, context: &UseContext) -> Scope {
         }
     }
     for p in &context.scope {
-        scope.insert(p.name.clone(), InScope::of(p));
+        let own = InScope::of(p);
+        match scope.get_mut(&p.name) {
+            // An extension's parameter keeps its struct's constraints.
+            Some(outer) if context.extension.is_some() => outer.bounds.extend(own.bounds),
+            _ => {
+                scope.insert(p.name.clone(), own);
+            }
+        }
     }
     scope
 }
@@ -396,56 +674,25 @@ pub fn check_constraints(module: &Module) {
             if conformance.is_trait(&bound.ty) {
                 continue;
             }
-            let name = spelled(&bound.ty);
-            // A generic parameter it names, of its own list or an enclosing
-            // one.
-            let param = (bound.ty.sub_types.is_empty())
-                .then(|| params.iter().chain(outer).find(|p| p.name == bound.ty.name))
-                .flatten();
-            let declared = conformance
-                .structs
-                .get(&bound.ty.name)
-                .map(|st| st.loc)
-                .or_else(|| conformance.enums.get(&bound.ty.name).copied())
-                .or_else(|| param.map(|p| p.loc))
-                .filter(|l| !l.is_none());
-            let known = declared.is_some()
-                || param.is_some()
-                || crate::type_name::is_integral_name(&bound.ty.name)
-                || bound.ty.is_pointer()
-                || bound.ty.name.starts_with("__");
-            let error = if known {
-                let error = Diagnostic::error(format!("'{}' is not a trait; a constraint must name a trait", name)).at(bound.loc);
-                match declared {
-                    Some(at) => error.with_note(format!("'{}' declared here", name), Some(at)),
-                    None => error,
-                }
-            } else {
-                Diagnostic::error(format!("unknown type name '{}'", name)).at(bound.loc)
-            };
-            crate::errors::report(error);
+            crate::errors::report(conformance.not_a_trait(bound, params.iter().chain(outer)));
             return;
         }
     }
-    // A constraint restated on an extension is one of the struct's own.
+    // A constraint on an extension's parameter: the struct's own, restated,
+    // or one it adds (a constrained extension).
     for ext in &module.extensions {
         for (i, bound) in &ext.restated {
             let base = module.structs.iter().find(|st| st.name == ext.target.name && !st.generic_params.is_empty());
             let param = base.and_then(|st| st.generic_params.get(*i));
             let arg = ext.target.sub_types.get(*i);
             let error = match (base, param, arg) {
-                (Some(st), Some(p), Some(a)) if a.sub_types.is_empty() && a.name == p.name => {
-                    if p.bounds.iter().any(|b| canonical(&b.ty) == canonical(&bound.ty)) {
+                (Some(_), Some(p), Some(a)) if a.sub_types.is_empty() && a.name == p.name => {
+                    // A constraint the struct lacks makes a constrained
+                    // extension; either way it must name a trait.
+                    if conformance.is_trait(&bound.ty) {
                         continue;
                     }
-                    Diagnostic::error(format!(
-                        "'{}' is not a constraint of '{}' in '{}'; an extension cannot add one",
-                        spelled(&bound.ty),
-                        p.name,
-                        st.name
-                    ))
-                    .at(bound.loc)
-                    .with_note(format!("'{}' declared here", p.name), (!p.loc.is_none()).then_some(p.loc))
+                    conformance.not_a_trait(bound, base.iter().flat_map(|st| &st.generic_params))
                 }
                 _ => Diagnostic::error(format!(
                     "only the parameters of '{}' can restate its constraints",
@@ -455,6 +702,65 @@ pub fn check_constraints(module: &Module) {
             };
             crate::errors::report(error);
             return;
+        }
+    }
+    // A conformance needs its members wherever it holds: one a constrained
+    // extension provides (`extend Box<T: Named> { name() }`) does not serve
+    // `extend Box<T> with Named`, which holds for every `Box<X>`.
+    for ext in module.extensions.iter().filter(|e| !e.traits.is_empty()) {
+        let Some(st) = module.structs.iter().find(|st| st.name == ext.target.name && !st.generic_params.is_empty()) else {
+            continue;
+        };
+        let own: Vec<(usize, TypeName)> = added_constraints(module, ext).into_iter().map(|(i, b)| (i, canonical(&b.ty))).collect();
+        let others = constrained_extensions(module, &st.name);
+        for trait_name in &ext.traits {
+            let Some(def) = module.traits.iter().find(|t| t.name == trait_name.name) else { continue };
+            for required in &def.methods {
+                let set = crate::passes::overloads::set_name(&required.name);
+                let implementers: Vec<&FunctionDef> = st
+                    .method_members
+                    .iter()
+                    .chain(&st.generic_methods)
+                    .filter(|m| m.trait_default.is_none() && crate::passes::overloads::set_name(&m.name) == set)
+                    .collect();
+                // The constraint each implementer needs beyond this
+                // conformance's own, if any.
+                let needs = |m: &FunctionDef| {
+                    others.iter().filter(|c| c.ext.methods.iter().any(|x| x.loc == m.loc)).find_map(|c| {
+                        c.added.iter().find(|(i, b)| !own.iter().any(|(j, t)| j == i && *t == canonical(&b.ty))).copied()
+                    })
+                };
+                let needed: Vec<Option<(usize, &Bound)>> = implementers.iter().map(|m| needs(m)).collect();
+                let Some(Some((i, bound))) = needed.first().copied() else { continue };
+                if needed.iter().any(|n| n.is_none()) {
+                    continue;
+                }
+                let param = st.generic_params.get(i).map(|p| p.name.clone()).unwrap_or_default();
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "'{}' conforms to '{}' for every '{}', but its '{}' exists only when '{}' conforms to '{}'",
+                        st.name,
+                        spelled(trait_name),
+                        param,
+                        set,
+                        param,
+                        spelled(&bound.ty)
+                    ))
+                    .at(ext.loc)
+                    .with_note("constraint declared here", Some(bound.loc))
+                    .with_note(
+                        format!(
+                            "make the conformance conditional: 'extend {}<{}: {}> with {}'",
+                            st.name,
+                            param,
+                            spelled(&bound.ty),
+                            spelled(trait_name)
+                        ),
+                        None,
+                    ),
+                );
+                return;
+            }
         }
     }
     // Each default meets its parameter's constraints.

@@ -139,6 +139,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     }
     // And those in the specializations of generic code.
     step!(interpolation::check_interpolations(module));
+    // Calls of members a constrained extension withheld.
+    step!(constraints::check_withheld(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false));
     step!(convert_member_refs(module));

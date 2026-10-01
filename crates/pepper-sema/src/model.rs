@@ -810,6 +810,26 @@ pub struct Bound {
     pub loc: Loc,
 }
 
+/// A member of a constrained extension (`extend Box<T: Named> { label() }`)
+/// that a specialization (`Box<Circle>`) does not have, because its type
+/// argument does not meet the extension's constraint.
+#[derive(Debug, Clone)]
+pub struct Withheld {
+    /// The specialization (`Box<Circle>`).
+    pub owner: String,
+    /// The member's name (its overload set's name).
+    pub member: String,
+    /// The member's own name (`label$2` in an overload set), and how many
+    /// parameters it takes.
+    pub name: String,
+    pub params: usize,
+    /// The type argument that misses the constraint, and the constraint.
+    pub arg: TypeName,
+    pub bound: TypeName,
+    /// Where the extension writes the constraint.
+    pub at: Loc,
+}
+
 /// A generic type written with arguments in the source (`Gallery<Circle>`,
 /// `total_area<Circle>(...)`), recorded by the builder so
 /// `passes::constraints` can check each argument against the constraints
@@ -1123,6 +1143,10 @@ pub struct Module {
     /// Type aliases (`type Name = Target;`), expanded away by
     /// `resolve_type_aliases` before any other pass.
     pub type_aliases: Vec<TypeAliasDef>,
+    /// The members specializations did not get because their type
+    /// arguments miss a constrained extension's constraint (see
+    /// [`Withheld`]), for the error at a call of one.
+    pub withheld: Vec<Withheld>,
     /// Every generic type written with arguments, for `passes::constraints`
     /// (see [`TypeUse`]).
     pub type_uses: Vec<TypeUse>,
@@ -1218,6 +1242,7 @@ impl Module {
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);
+        self.withheld.extend(other.withheld);
         let offset = self.use_contexts.len();
         self.use_contexts.extend(other.use_contexts);
         self.type_uses.extend(other.type_uses.into_iter().map(|mut u| {

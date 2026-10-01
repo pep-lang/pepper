@@ -41,6 +41,11 @@ above does this.
 When `Box` constrains its parameter (`struct Box<T: Shape>`), the extension
 keeps the constraint without restating it; `extend Box<T: Shape>` may
 restate it as documentation (see [constraints](generics.md#constraints)).
+A constraint the struct does not have limits the extension to the
+specializations that meet it: `extend Box<T: Named> { ... }` adds its
+methods to `Box<Square>` but not to `Box<String>`, and
+`extend Box<T: Shape> with Shape` makes a `Box` of shapes a shape (see
+[constrained extensions](generics.md#constrained-extensions)).
 
 `extend Box<int>` targets one specialization: its methods exist only on
 `Box<int>`, and calling one on a `Box<String>` is an error

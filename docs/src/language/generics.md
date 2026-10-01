@@ -153,8 +153,9 @@ as quick fixes.
   error.
 - An extension of a constrained struct keeps its constraints:
   `extend Gallery<TTag, TShape>` needs no `TShape: Shape` of its own. You
-  may restate them as documentation, `extend Gallery<TTag, TShape: Shape>`,
-  but an extension cannot add a constraint the struct does not have.
+  may restate them as documentation, `extend Gallery<TTag, TShape: Shape>`.
+  A constraint the struct does not have makes a
+  [constrained extension](#constrained-extensions).
 - In an [overload set](overloading.md#generic-members), a generic member
   whose inferred type arguments do not meet its constraints is not viable,
   and the error lists why.
@@ -202,6 +203,50 @@ to that type's own method, with no trait value in between. A parameter
 without a constraint keeps working as before: its uses are checked in each
 specialization. In a list that mixes the two, such as `f<T: Shape, U>`, only
 the uses of `T` are checked in the generic.
+
+## Constrained extensions
+
+An extension of a generic struct can add a constraint the struct does not
+have: `extend Box<T: Named> { ... }`. Its members exist only on the
+specializations whose type argument meets it, so `Box<Square>` has
+`label()` and `Box<String>` does not. With `with`, the constraint makes a
+**conditional conformance**: after `extend Box<T: Shape> with Shape`, a
+`Box<Square>` is a `Shape` (it can be passed where `T: Shape` is required
+and converted to a `Shape` value), and a `Box<String>` is not.
+
+```pepper
+{{#include ../../examples/generics-constrained-extensions.pep}}
+```
+
+- Every `Box<X>` keeps the struct's own members and constraints; an
+  extension adds to them, it never removes any.
+- Inside the extension, `T` offers the struct's constraints and the
+  extension's, as in any [constrained generic](#inside-a-constrained-generic).
+- A call of a member the specialization does not have names the constraint
+  it misses:
+
+```text
+main.pep:20:9: error: no member named 'label' in 'Box<Circle>'
+   20 |     box.label();
+      |         ^~~~~
+main.pep:15:15: note: 'label' requires 'Circle' to conform to 'Named'
+   15 | extend Box<T: Named> {
+      |               ^~~~~
+```
+
+  and a type argument that misses a conditional conformance says so too
+  (`'Box<String>' conforms to 'Shape' only when 'String' conforms to
+  'Shape'`).
+- Only the struct's own parameters can carry an extension's constraints:
+  `extend Box<int: Shape>` is an error.
+- A conformance that holds for every `Box` needs its members on every
+  `Box`: `extend Box<T> with Named` cannot rest on a `name()` that only
+  `extend Box<T: Named>` provides. Make the conformance conditional
+  instead (`extend Box<T: Named> with Named`).
+- Several extensions may declare the same trait with different
+  constraints; a specialization conforms when it meets any of them.
+- Inside another generic, a call such as `b.label()` on a `Box<T>` is
+  checked in each specialization, like any member of a generic struct.
 
 ## Overriding a generic function for one type
 
