@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3e1ec90d.js";
+            window.path_to_searchindex_js = "searchindex-c2ebcd64.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24be83d2.js"></script>
@@ -4230,6 +4230,11 @@ for <code>!=</code>. Define <code>==</code> when two distinct objects with the s
 count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
 <code>!==</code> always compare identity, whatever methods the struct declares, so
 <code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
+<p>A struct never equals a number: unless the struct declares an <code>==</code> (or <code>!=</code>)
+taking one, comparing a struct value such as an <code>Optional</code> with an integer is
+an error (<code>cannot compare 'Optional&lt;ulong&gt;' with an integer</code>), since it could
+only ever compare the object itself. Test an optional with <code>is_none()</code> (or
+<code>if (found)</code>) and read its value with <code>value()</code>.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it as a method named <code>[]</code>:</p>
 <ul>
