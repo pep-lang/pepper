@@ -23,7 +23,7 @@
 //! the same error.
 
 use crate::model::*;
-use crate::passes::closures::{closure_name, closure_struct, field};
+use crate::passes::closures::{closure_struct, field, owned_closure_name};
 use crate::static_type::StructTable;
 use crate::type_name::TypeName;
 use std::collections::HashMap;
@@ -160,24 +160,29 @@ pub fn reference_functions(module: &mut Module) {
     let declared = Declared::build(module);
     let mut added = vec![];
     {
-        let mut replacer = Replacer { declared: &declared, added: &mut added, current: None, retyped: HashMap::new(), locals: vec![] };
+        let mut replacer =
+            Replacer { declared: &declared, added: &mut added, current: None, retyped: HashMap::new(), locals: vec![], owner: String::new(), made: 0 };
         for st in module.structs.iter_mut().filter(|s| s.generic_params.is_empty()) {
             replacer.current = Some(st.ty.clone());
             for field in &mut st.field_members {
                 if let Some(default) = &mut field.default {
+                    replacer.owned_by(format!("{}.{}", st.name, field.name));
                     replacer.expression(default, false);
                 }
             }
             for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
+                replacer.owned_by(format!("{}.{}", st.name, method.name));
                 replacer.function(method);
             }
         }
         replacer.current = None;
         for function in module.functions.iter_mut().filter(|f| !f.is_generic_func) {
+            replacer.owned_by(function.name.clone());
             replacer.function(function);
         }
         for var in &mut module.globals {
             if let Some(default) = &mut var.default {
+                replacer.owned_by(var.name.clone());
                 replacer.expression(default, false);
             }
         }
@@ -194,9 +199,18 @@ struct Replacer<'a> {
     /// Names of the locals and parameters in scope, which shadow a struct
     /// of the same name.
     locals: Vec<Vec<String>>,
+    /// The declaration being walked, and how many closures it made, which
+    /// name the next one (`closures::owned_closure_name`).
+    owner: String,
+    made: usize,
 }
 
 impl Replacer<'_> {
+    fn owned_by(&mut self, owner: String) {
+        self.owner = owner;
+        self.made = 0;
+    }
+
     fn function(&mut self, function: &mut FunctionDef) {
         for param in &mut function.parameters {
             if let Some(default) = &mut param.default {
@@ -351,7 +365,8 @@ impl Replacer<'_> {
             }
         };
         let Some(signature) = signature.cloned() else { return };
-        let (base, ty) = closure_name(&[], loc);
+        let (base, ty) = owned_closure_name(&self.owner, self.made, loc);
+        self.made += 1;
 
         let param = |name: &str, ty: &TypeName| VariableDef { kind: Kind::Param, ..field(name, ty.clone(), None, loc) };
         let symbol = |name: &str, ty: &TypeName| Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc };

@@ -41,7 +41,7 @@
 use crate::model::*;
 use crate::passes::check_function_types::canonical;
 use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in};
-use crate::passes::closures::{THIS_FIELD, closure_name, closure_struct, field};
+use crate::passes::closures::{THIS_FIELD, closure_struct, field};
 use crate::passes::function_references::RECEIVER_FIELD;
 use crate::static_type::{self, StructTable};
 use crate::type_name::TypeName;
@@ -99,9 +99,18 @@ struct Converter {
     added: Vec<StructDef>,
     /// Free functions made from closures converted to C function pointers.
     added_functions: Vec<FunctionDef>,
+    /// The declaration being walked, and how many adapters it made, which
+    /// name the next one (`closures::owned_closure_name`).
+    owner: String,
+    made: usize,
 }
 
 impl Converter {
+    fn owned_by(&mut self, owner: String) {
+        self.owner = owner;
+        self.made = 0;
+    }
+
     /// `value` flows into a slot of type `expected`.
     fn convert(&mut self, value: &mut Expression, expected: &TypeName, current: Option<&TypeName>, site: Site) {
         let expected = parsed(expected);
@@ -239,7 +248,8 @@ impl Converter {
     /// A new plain closure of type `to` that holds `inner` (of the `shared`
     /// type `from`) and forwards every call to it.
     fn adapter(&mut self, inner: Expression, from: &TypeName, to: &TypeName, loc: Loc) -> Expression {
-        let (base, ty) = closure_name(&[], loc);
+        let (base, ty) = crate::passes::closures::owned_closure_name(&self.owner, self.made, loc);
+        self.made += 1;
         let mut parameters = vec![];
         let mut forwarded = vec![];
         for (i, param_ty) in to.function_params().iter().enumerate() {
@@ -513,8 +523,11 @@ pub fn shared_functions(module: &mut Module) {
         calls,
         added: vec![],
         added_functions: vec![],
+        owner: String::new(),
+        made: 0,
     };
     for function in &mut module.functions {
+        converter.owned_by(function.name.clone());
         converter.function(function, None);
     }
     for st in &mut module.structs {
@@ -523,14 +536,17 @@ pub fn shared_functions(module: &mut Module) {
         }
         let current = st.ty.clone();
         for constructor in &mut st.constructors {
+            converter.owned_by(format!("{}.{}", st.name, constructor.name));
             converter.function(constructor, Some(&current));
         }
         for method in &mut st.method_members {
+            converter.owned_by(format!("{}.{}", st.name, method.name));
             converter.function(method, Some(&current));
         }
     }
     for var in &mut module.globals {
         let ty = var.ty.clone();
+        converter.owned_by(var.name.clone());
         if let Some(default) = &mut var.default {
             converter.expression(default, None);
             converter.convert(default, &ty, None, Site::Stored);

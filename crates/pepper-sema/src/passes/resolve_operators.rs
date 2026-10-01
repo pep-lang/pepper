@@ -78,6 +78,10 @@ fn resolve_body(
     overloads: &crate::passes::overloads::Overloads,
     current: Option<&TypeName>,
 ) -> Vec<(Loc, String)> {
+    // Temporaries are numbered within their function, after any an earlier
+    // run declared there, so a function's code does not depend on which
+    // functions were resolved before it.
+    INDEX_TEMPORARIES.with(|c| c.set(next_index_temporary(body)));
     dispatch_operators(body, table, current);
     let mut targets = vec![];
     // An overloaded operator names its set (`+`); pick the member. Nested
@@ -367,9 +371,36 @@ fn is_raw_buffer_field(expr: &Expression, table: &StructTable, current: Option<&
 }
 
 thread_local! {
-    /// Numbers the temporaries of compound index assignments; reset for each
-    /// program (`crate::reset_program_counters`) so output is deterministic.
+    /// Numbers the temporaries of compound index assignments within the
+    /// function being resolved (see `resolve_body`).
     static INDEX_TEMPORARIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// One more than the highest `_idx_tmp_N` `block` declares, or 0.
+fn next_index_temporary(block: &Block) -> usize {
+    fn scan(block: &Block, next: &mut usize) {
+        for stmt in &block.items {
+            match stmt {
+                Statement::Declaration(Declaration::Variable(var)) => {
+                    if let Some(n) = var.name.strip_prefix("_idx_tmp_").and_then(|n| n.parse::<usize>().ok()) {
+                        *next = (*next).max(n + 1);
+                    }
+                }
+                Statement::Block(inner) => scan(inner, next),
+                Statement::Branch(branch) => {
+                    scan(&branch.if_block, next);
+                    if let Some(else_block) = &branch.else_block {
+                        scan(else_block, next);
+                    }
+                }
+                Statement::While(wh) => scan(&wh.block, next),
+                _ => {}
+            }
+        }
+    }
+    let mut next = 0;
+    scan(block, &mut next);
+    next
 }
 
 /// Restart temporary numbering (see `crate::reset_program_counters`).

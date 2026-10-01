@@ -3819,3 +3819,19 @@ fn value_type_literal_argument_of_a_method() {
          note: declare it with 'extend int with Doubled'"
     );
 }
+
+/// A generic whose instance asks for a larger instance of itself (#236).
+#[test]
+fn a_generic_that_asks_for_a_larger_instance_of_itself_stops_at_the_depth_limit() {
+    let source = "struct Foo<T> {\n    var inner: Foo<Array<T>>;\n}\n\nmain(): int {\n    var f = Foo<int>();\n    return 0;\n}\n";
+    let error = error_of("specialization_depth", source);
+    let lines: Vec<&str> = error.lines().collect();
+    assert_eq!(
+        lines[0],
+        "main.pep:2:16: error: 'Foo' is specialized 65 levels deep, past the limit of 64; a generic whose instance asks for a larger instance of itself never ends",
+        "{error}"
+    );
+    assert_eq!(lines[1], "    2 |     var inner: Foo<Array<T>>;", "{error}");
+    assert_eq!(lines[2], "      |                ^~~~~~~~~~~~~", "{error}");
+    assert_eq!(lines[3], "main.pep:6:13: note: asked for by 'main' here", "{error}");
+}

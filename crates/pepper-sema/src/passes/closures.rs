@@ -469,6 +469,34 @@ pub(crate) fn closure_name(generics: &[GenericParam], loc: Loc) -> (String, Type
     (base, ty)
 }
 
+/// The name and type of the `index`-th closure struct that a pass after
+/// lifting (a function reference, a `shared` adapter) makes in the code of
+/// `owner`, the declaration it walks (`Array<int>.get`, `main`). Unlike a
+/// literal's number, it depends only on that declaration, not on the order
+/// the program's declarations are walked in, so a specialization makes the
+/// same closures whenever it is created. Private to `loc`'s file, like a
+/// literal's.
+pub(crate) fn owned_closure_name(owner: &str, index: usize, loc: Loc) -> (String, TypeName) {
+    use std::fmt::Write;
+    // Every character but a letter or digit is escaped, `_` included, so
+    // two owners never give one name.
+    let mut escaped = String::new();
+    for c in owner.chars() {
+        if c.is_ascii_alphanumeric() {
+            escaped.push(c);
+        } else {
+            let _ = write!(escaped, "_{:x}_", c as u32);
+        }
+    }
+    let name = format!("{}{}_{}", CLOSURE_PREFIX, escaped, index);
+    let namespace = NAMESPACES.with(|n| n.borrow().get(loc.file.0 as usize).cloned()).filter(|_| !loc.is_none());
+    let base = match namespace {
+        Some(namespace) => pepper_parser::namespace::mangle(&name, &namespace),
+        None => name,
+    };
+    (base.clone(), TypeName::new(&base))
+}
+
 /// The struct a closure becomes (see the module docs): the function-type
 /// head, one field per captured value (`captures`, initialized by the
 /// constructor in order), and `__call` running `body`.

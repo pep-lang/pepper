@@ -23,6 +23,13 @@ compiled for those exact types. There is no runtime cost for using them.
 - Name the type arguments whenever you use the struct: `Stack<int>()`,
   `var s: Stack<String>;`.
 - `Stack<int>` and `Stack<String>` are different types.
+- Each type argument makes a separate copy of the struct, so a struct whose
+  copy needs a copy with a larger argument never ends: `struct Foo<T>` with
+  a field `var inner: Foo<Array<T>>` makes `Foo<int>` need
+  `Foo<Array<int>>`, which needs `Foo<Array<Array<int>>>`, and so on. The
+  compiler stops 64 levels deep with an error at the type that asks for the
+  next level (`'Foo' is specialized 65 levels deep, past the limit of 64`),
+  with a note where the chain started.
 
 > **Note:** Inside a generic struct, `var top = items.last();` cannot infer a
 > type that involves a type parameter yet, and fails with

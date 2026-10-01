@@ -94,6 +94,11 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(constraints::check_constraints(module));
     // Constrained generic code uses only what its constraints offer.
     step!(check_bounds::check_bounds(module));
+
+    // The template stage ends here: every specialization is cloned from the
+    // generic bases as they are now.
+    module.templates = Templates::freeze(module);
+
     step!(specialize_structs(module));
     step!(specialize_functions(module));
     step!(generic_methods::specialize_methods(module));
@@ -108,9 +113,12 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Second pass, resolve dependent types/calls. Specializing can expose
     // further generic uses (`Map<String, int>` → field `Array<String>` →
     // `Array<String>.iterate()` returning `ArrayIterator<String>`), so repeat
-    // until no new specialization appears. Bounded, since a type that nests
-    // itself (`Foo<T>` holding a `Foo<Array<T>>`) never reaches a fixpoint.
-    for _ in 0..16 {
+    // until no new specialization appears. A type that nests itself (`Foo<T>`
+    // holding a `Foo<Array<T>>`) never reaches a fixpoint: the specialization
+    // depth limit reports it (`gather_generics::specialization_too_deep`);
+    // the bound on rounds only backs that up.
+    // A specialization made here gets the passes above after the loop.
+    for _ in 0..4096 {
         let before = (module.structs.len(), module.functions.len());
         step!(gather_generics(module));
         step!(constraints::check_specializations(module));
@@ -141,6 +149,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(constraints::check_withheld(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false));
+    // Specialized extensions (`extend Box<int>`) of the instances the loop
+    // made (once per extension and struct).
+    step!(apply_extensions(module, true));
     step!(convert_member_refs(module));
     step!(synthesize_function_types(module));
 

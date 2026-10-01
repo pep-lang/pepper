@@ -26,16 +26,16 @@ fn convert_type_string(ty: &mut TypeName) {
     }
 }
 
-fn convert_expression(expr: &mut Expression) {
-    crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
-        // Type positions inside expressions: `x as __ptr<T>`, `sizeof<__ptr<T>>`.
-        if let Expression::Cast { ty, .. } | Expression::SizeOf(ty) = e {
-            convert_type_string(ty);
-        }
-        // Intrinsic nodes converted in an earlier run carry their `T`, which
-        // specialization may since have substituted with a `__ptr<U>`
-        // (`Atomic<__ptr<void>>`).
-        match e {
+/// Convert the types an expression node carries: type positions such as
+/// `x as __ptr<T>` and `sizeof<__ptr<T>>`, and the `T` of an intrinsic node,
+/// which specialization may have substituted with a `__ptr<U>`
+/// (`Atomic<__ptr<void>>`), or which a call lowered just now still spells
+/// so (`__default<__ptr<void>>()`).
+fn convert_node_types(e: &mut Expression) {
+    if let Expression::Cast { ty, .. } | Expression::SizeOf(ty) = e {
+        convert_type_string(ty);
+    }
+    match e {
             Expression::IsPod(ty)
             | Expression::Default(ty)
             | Expression::StaticCase { ty, .. }
@@ -49,7 +49,12 @@ fn convert_expression(expr: &mut Expression) {
             | Expression::AtomicCmpXchg(ty, _, _, _)
             | Expression::AtomicFetch(_, ty, _, _) => convert_type_string(ty),
             _ => {}
-        }
+    }
+}
+
+fn convert_expression(expr: &mut Expression) {
+    crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        convert_node_types(e);
         if let Expression::FunctionCall { function, args, .. } = e {
             let base = function.split('<').next().unwrap_or(function);
             if base == "__is_pod" || base == "__default" {
@@ -143,6 +148,8 @@ fn convert_expression(expr: &mut Expression) {
                 let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
                 *e = Expression::AtomicFetch(op, ty, Box::new(ptr), Box::new(val));
             }
+            // The intrinsic node the call became.
+            convert_node_types(e);
         }
     });
 }

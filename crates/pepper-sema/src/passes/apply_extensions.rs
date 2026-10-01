@@ -8,10 +8,13 @@ use crate::type_name::TypeName;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-// Applied-extension dedup set. Thread-local: each transform_pass run owns its
-// own set, so concurrent compilations (test threads) never share indices.
+// Which extension (by index) has been applied to which struct (by name).
+// Thread-local: each transform_pass run owns its own set, so concurrent
+// compilations (test threads) never share indices. By struct, so an
+// instance specialized after an extension first ran (`extend Box<int>`
+// on a `Box<int>` a later round creates) gets it too.
 thread_local! {
-    static APPLIED: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
+    static APPLIED: RefCell<HashSet<(usize, String)>> = RefCell::new(HashSet::new());
 }
 
 fn clone_method(method: &FunctionDef, parent: &str) -> FunctionDef {
@@ -222,19 +225,15 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
     APPLIED.with(|applied_cell| {
         let mut applied = applied_cell.borrow_mut();
         for (ext_idx, ext) in module.extensions.iter().enumerate() {
-            if applied.contains(&ext_idx) {
-                continue;
-            }
             if ext.resolved.is_none() {
                 // Unresolved targets are handled by resolve_resolvables; skip.
                 continue;
             }
-            applied.insert(ext_idx);
             let target_name = ext.resolved.clone().expect("resolved");
             // Apply to every struct matching the resolved name (concrete or
-            // specialized instance).
+            // specialized instance), once each.
             for st in &mut module.structs {
-                if st.name == target_name || st.ty.is_spelled(&target_name) {
+                if (st.name == target_name || st.ty.is_spelled(&target_name)) && applied.insert((ext_idx, st.name.clone())) {
                     apply_to_struct(st, ext, &module.traits);
                     // An extension's methods join the struct's overload sets.
                     let Some(sets) = crate::passes::overloads::group_methods(&mut st.method_members, &st.name) else { return };

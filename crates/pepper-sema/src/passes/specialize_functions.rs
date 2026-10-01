@@ -19,12 +19,11 @@ pub fn specialize_functions(module: &mut Module) {
         if module.functions.iter().any(|f| f.name == spec.to_string()) {
             continue;
         }
-        let Some(base) = module
-            .functions
-            .iter()
-            .find(|f| f.name == spec.name && f.is_generic_func)
-            .cloned()
-        else {
+        if crate::passes::gather_generics::specialization_too_deep(module, &spec) {
+            return;
+        }
+        let bases = if module.templates.frozen { &module.templates.functions } else { &module.functions };
+        let Some(base) = bases.iter().find(|f| f.name == spec.name && f.is_generic_func).cloned() else {
             continue;
         };
         // map base generic_params[idx] -> spec sub_types[idx]

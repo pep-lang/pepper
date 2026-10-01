@@ -339,6 +339,21 @@ main.pep:2:1030: error: code is nested too deeply: the limit is 256 levels; spli
 Split the expression into steps (`var part = ...;`), or move the inner part
 into a function.
 
+**A generic that asks for a larger copy of itself** (see
+[Generics](generics.md)). Each type argument makes a separate copy of a
+generic, so a `Foo<T>` holding a `Foo<Array<T>>` never runs out of copies to
+make. The compiler stops 64 levels deep, at the type that asks for the next
+level, with a note where the chain started:
+
+```text
+main.pep:2:16: error: 'Foo' is specialized 65 levels deep, past the limit of 64; a generic whose instance asks for a larger instance of itself never ends
+    2 |     var inner: Foo<Array<T>>;
+      |                ^~~~~~~~~~~~~
+main.pep:6:13: note: asked for by 'main' here
+    6 |     var f = Foo<int>();
+      |             ^~~~~~~~
+```
+
 ## Errors while the program runs
 
 Some problems can only be found while the program runs, such as an array index

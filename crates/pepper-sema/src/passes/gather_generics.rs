@@ -1,22 +1,41 @@
 //! Port of `source/Sema/GatherGenerics.h`: record generic uses as specs.
 
-use crate::model::{Block, Declaration, Expression, Module, Statement};
+use crate::model::{Block, Declaration, Diagnostic, Expression, Loc, Module, SpecRequest, Statement};
 use crate::passes::walk_function;
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+
+/// How deep specialization may nest: a generic whose instance asks for a
+/// larger instance of itself (`Foo<T>` holding a `Foo<Array<T>>`) never
+/// reaches a fixpoint, so past this many links in its chain of requests it
+/// is an error at the request.
+pub const MAX_SPECIALIZATION_DEPTH: usize = 64;
+
+/// The generic uses found so far, by name: who asked first, and where.
+type Requests = BTreeMap<String, (String, Loc)>;
+
+/// Where a variable's type is written, else its name.
+fn written(var: &crate::model::VariableDef) -> Loc {
+    if var.type_loc.is_none() { var.loc } else { var.type_loc }
+}
+
+fn request(requests: &mut Requests, name: &str, by: &str, loc: Loc) {
+    requests.entry(name.to_string()).or_insert_with(|| (by.to_string(), loc));
+}
 
 pub fn gather_generics(module: &mut Module) {
     concrete_overrides(module);
     let symbols = SymbolTable::build(module);
-    let mut functions: BTreeSet<String> = BTreeSet::new();
-    let mut structs: BTreeSet<String> = BTreeSet::new();
+    let mut functions: Requests = BTreeMap::new();
+    let mut structs: Requests = BTreeMap::new();
 
     // Walk struct bodies for generic calls and TypeLiteral-based generics.
     for st in &mut module.structs {
         let params = param_names(&st.generic_params);
+        let owner = st.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, .. } = expr {
+            if let Expression::FunctionCall { function, loc, .. } = expr {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
@@ -24,7 +43,7 @@ pub fn gather_generics(module: &mut Module) {
                 if function.find('<').is_some() && function.ends_with('>') {
                     let ty = parse_type_string(function);
                     if !contains_param(&ty, &params) {
-                        functions.insert(function.clone());
+                        request(&mut functions, function, &owner, *loc);
                     }
                 }
             }
@@ -44,7 +63,7 @@ pub fn gather_generics(module: &mut Module) {
                 && !field.ty.name.starts_with("__")
                 && !contains_param(&field.ty, &params)
             {
-                structs.insert(field.ty.to_string());
+                request(&mut structs, &field.ty.to_string(), &owner, written(field));
             }
         }
         for method in &st.method_members {
@@ -52,14 +71,14 @@ pub fn gather_generics(module: &mut Module) {
                 && !method.ty.name.starts_with("__")
                 && !contains_param(&method.ty, &params)
             {
-                structs.insert(method.ty.to_string());
+                request(&mut structs, &method.ty.to_string(), &owner, method.loc);
             }
             for param in &method.parameters {
                 if param.ty.is_generic()
                     && !param.ty.name.starts_with("__")
                     && !contains_param(&param.ty, &params)
                 {
-                    structs.insert(param.ty.to_string());
+                    request(&mut structs, &param.ty.to_string(), &owner, written(param));
                 }
             }
         }
@@ -67,8 +86,9 @@ pub fn gather_generics(module: &mut Module) {
 
     for function in &mut module.functions {
         let params = param_names(&function.generic_params);
+        let owner = function.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, .. } = expr {
+            if let Expression::FunctionCall { function, loc, .. } = expr {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
@@ -76,7 +96,7 @@ pub fn gather_generics(module: &mut Module) {
                 if function.find('<').is_some() && function.ends_with('>') {
                     let ty = parse_type_string(function);
                     if !contains_param(&ty, &params) {
-                        functions.insert(function.clone());
+                        request(&mut functions, function, &owner, *loc);
                     }
                 }
             }
@@ -85,11 +105,11 @@ pub fn gather_generics(module: &mut Module) {
         // A generic function's own parameters (`Array<U>` in `f<U>`) are
         // not a use; its specializations' concrete types are.
         if function.ty.is_generic() && !function.ty.name.starts_with("__") && !contains_param(&function.ty, &params) {
-            structs.insert(function.ty.to_string());
+            request(&mut structs, &function.ty.to_string(), &owner, function.loc);
         }
         for param in &function.parameters {
             if param.ty.is_generic() && !param.ty.name.starts_with("__") && !contains_param(&param.ty, &params) {
-                structs.insert(param.ty.to_string());
+                request(&mut structs, &param.ty.to_string(), &owner, written(param));
             }
         }
     }
@@ -97,19 +117,20 @@ pub fn gather_generics(module: &mut Module) {
     // Global initializers: `var x = Array<int>()` at file scope must register
     // the specialization too.
     for var in &mut module.globals {
+        let owner = var.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, .. } = expr {
+            if let Expression::FunctionCall { function, loc, .. } = expr {
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {
-                    functions.insert(function.clone());
+                    request(&mut functions, function, &owner, *loc);
                 }
             }
         };
         crate::passes::walk_global(var, &mut gather);
         if var.ty.is_generic() && !var.ty.name.starts_with("__") {
-            structs.insert(var.ty.to_string());
+            request(&mut structs, &var.ty.to_string(), &owner, written(var));
         }
     }
 
@@ -117,8 +138,9 @@ pub fn gather_generics(module: &mut Module) {
         // `extend Box<T>` extends the generic base: `Maybe<T>(...)` in its
         // methods is unbound here, like the same call in the struct's body.
         let params = extension_params(&module.structs, ext);
+        let owner = ext.target.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, .. } = expr {
+            if let Expression::FunctionCall { function, loc, .. } = expr {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
@@ -126,7 +148,7 @@ pub fn gather_generics(module: &mut Module) {
                 if function.find('<').is_some() && function.ends_with('>') {
                     let ty = parse_type_string(function);
                     if !contains_param(&ty, &params) {
-                        functions.insert(function.clone());
+                        request(&mut functions, function, &owner, *loc);
                     }
                 }
             }
@@ -142,23 +164,29 @@ pub fn gather_generics(module: &mut Module) {
         let params = param_names(&st.generic_params);
         for method in &st.method_members {
             if let Some(body) = &method.body {
-                gather_local_declarations(body, &mut structs, &params);
+                gather_local_declarations(body, &mut structs, &params, &st.name);
             }
         }
         for body in st.constructors.iter().filter_map(|c| c.body.as_ref()) {
-            gather_local_declarations(body, &mut structs, &params);
+            gather_local_declarations(body, &mut structs, &params, &st.name);
         }
     }
     for function in &module.functions {
         let params = param_names(&function.generic_params);
         if let Some(body) = &function.body {
-            gather_local_declarations(body, &mut structs, &params);
+            gather_local_declarations(body, &mut structs, &params, &function.name);
         }
+    }
+
+    // Who asked for each, for the depth limit.
+    for (name, (by, loc)) in structs.iter().chain(&functions) {
+        let key = parse_type_string(name).to_string();
+        module.spec_requests.entry(key).or_insert_with(|| SpecRequest { by: by.clone(), loc: *loc });
     }
 
     // Emit struct specs.
     let mut struct_specs: Vec<TypeName> = module.struct_specs.clone();
-    for name in &structs {
+    for name in structs.keys() {
         let ty = parse_type_string(name);
         if struct_specs.iter().any(|s| s == &ty) {
             continue;
@@ -174,7 +202,7 @@ pub fn gather_generics(module: &mut Module) {
 
     // Emit function specs (constructor calls become struct specs).
     let mut func_specs: Vec<TypeName> = module.func_specs.clone();
-    for name in &functions {
+    for name in functions.keys() {
         let ty = parse_type_string(name);
         if func_specs.iter().any(|s| s == &ty) {
             continue;
@@ -334,11 +362,7 @@ pub fn parse_type_string(s: &str) -> TypeName {
 /// Collect generic types from local variable declarations, recursing into
 /// nested blocks (branch/while bodies). Same predicate as the field and
 /// parameter collection above.
-fn gather_local_declarations(
-    block: &Block,
-    structs: &mut BTreeSet<String>,
-    params: &[TypeName],
-) {
+fn gather_local_declarations(block: &Block, structs: &mut Requests, params: &[TypeName], owner: &str) {
     for stmt in &block.items {
         match stmt {
             Statement::Declaration(Declaration::Variable(var)) => {
@@ -346,18 +370,56 @@ fn gather_local_declarations(
                     && !var.ty.name.starts_with("__")
                     && !contains_param(&var.ty, params)
                 {
-                    structs.insert(var.ty.to_string());
+                    request(structs, &var.ty.to_string(), owner, written(var));
                 }
             }
-            Statement::Block(inner) => gather_local_declarations(inner, structs, params),
+            Statement::Block(inner) => gather_local_declarations(inner, structs, params, owner),
             Statement::Branch(branch) => {
-                gather_local_declarations(&branch.if_block, structs, params);
+                gather_local_declarations(&branch.if_block, structs, params, owner);
                 if let Some(else_block) = &branch.else_block {
-                    gather_local_declarations(else_block, structs, params);
+                    gather_local_declarations(else_block, structs, params, owner);
                 }
             }
-            Statement::While(wh) => gather_local_declarations(&wh.block, structs, params),
+            Statement::While(wh) => gather_local_declarations(&wh.block, structs, params, owner),
             _ => {}
         }
     }
+}
+
+/// Whether making `spec` would nest specialization past
+/// [`MAX_SPECIALIZATION_DEPTH`], following who asked for it
+/// ([`Module::spec_requests`]): an instance asking for an instance asking
+/// for ... If so, reports it at the request, with each place in the chain
+/// as a note.
+pub(crate) fn specialization_too_deep(module: &Module, spec: &TypeName) -> bool {
+    let mut chain: Vec<&SpecRequest> = vec![];
+    let mut name = spec.to_string();
+    while let Some(request) = module.spec_requests.get(&name) {
+        chain.push(request);
+        if chain.len() > MAX_SPECIALIZATION_DEPTH {
+            break;
+        }
+        name = request.by.clone();
+    }
+    if chain.len() <= MAX_SPECIALIZATION_DEPTH {
+        return false;
+    }
+    let mut error = Diagnostic::error(format!(
+        "'{}' is specialized {} levels deep, past the limit of {}; a generic whose instance asks for a larger instance of itself never ends",
+        spec.name,
+        chain.len(),
+        MAX_SPECIALIZATION_DEPTH
+    ))
+    .at(chain[0].loc);
+    // The chain usually repeats one place (a field asking for its own type
+    // with a larger argument): each place once, innermost first.
+    let mut shown: Vec<Loc> = vec![chain[0].loc];
+    for request in &chain[1..] {
+        if !shown.contains(&request.loc) {
+            shown.push(request.loc);
+            error = error.with_note(format!("asked for by '{}' here", request.by), Some(request.loc));
+        }
+    }
+    crate::errors::report(error);
+    true
 }

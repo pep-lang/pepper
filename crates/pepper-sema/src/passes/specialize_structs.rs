@@ -455,12 +455,11 @@ pub fn specialize_structs(module: &mut Module) {
         {
             continue;
         }
-        let Some(base) = module
-            .structs
-            .iter()
-            .find(|st| st.name == spec.name && st.ty.is_generic())
-            .cloned()
-        else {
+        if crate::passes::gather_generics::specialization_too_deep(module, &spec) {
+            return;
+        }
+        let bases = if module.templates.frozen { &module.templates.structs } else { &module.structs };
+        let Some(base) = bases.iter().find(|st| st.name == spec.name && st.ty.is_generic()).cloned() else {
             // Non-generic struct referenced with args, or unknown: skip.
             continue;
         };

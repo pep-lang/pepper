@@ -1203,6 +1203,16 @@ pub struct Module {
     /// location: they are still defined (in the cached object), so they stay
     /// callable and usable as values. See [`Module::is_defined`].
     pub stripped: std::collections::HashSet<Loc>,
+    /// The generic bases as the template stage left them (see
+    /// `passes::transform_pass`): every specialization is cloned from these,
+    /// never from a base later passes may have changed, so it depends only on
+    /// its generic and type arguments. Empty until frozen.
+    pub templates: Templates,
+    /// Who first asked for each specialization (by its name, `Box<int>`,
+    /// `wrap<long>`) and where: what `gather_generics` found the request in.
+    /// The chain of requests bounds how deep specialization nests (see
+    /// `gather_generics::specialization_too_deep`).
+    pub spec_requests: std::collections::HashMap<String, SpecRequest>,
     /// Have `check_confinement` summarize every function and fill
     /// `summaries_to_record`, for the build cache to store.
     pub record_summaries: bool,
@@ -1217,6 +1227,39 @@ pub struct Module {
     /// generic functions are concrete overrides and marked them
     /// (`GenericParam::is_argument`): sema follows those marks alone.
     pub linked: bool,
+}
+
+/// Where a specialization was first requested (see
+/// [`Module::spec_requests`]).
+#[derive(Debug, Clone)]
+pub struct SpecRequest {
+    /// The declaration whose code or signature names it: a struct, a
+    /// function, a global, by name.
+    pub by: String,
+    /// The call or the type that names it.
+    pub loc: Loc,
+}
+
+/// Frozen generic bases (see [`Module::templates`]).
+#[derive(Debug, Clone, Default)]
+pub struct Templates {
+    pub frozen: bool,
+    /// Generic struct bases (`Box` of `Box<T>`), closure structs lifted from
+    /// generic code included.
+    pub structs: Vec<StructDef>,
+    /// Generic free functions.
+    pub functions: Vec<FunctionDef>,
+}
+
+impl Templates {
+    /// Freeze `module`'s generic bases.
+    pub fn freeze(module: &Module) -> Templates {
+        Templates {
+            frozen: true,
+            structs: module.structs.iter().filter(|st| st.ty.is_generic() && st.name == st.ty.name).cloned().collect(),
+            functions: module.functions.iter().filter(|f| f.is_generic_func).cloned().collect(),
+        }
+    }
 }
 
 impl Module {
