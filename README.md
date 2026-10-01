@@ -310,7 +310,10 @@ changes; a change to the extension's own code needs **Developer: Reload
 Window**. When editing the server, setting `pepper.lspPath` to
 `target/release/pepper-lsp.exe` skips the install: each
 `cargo build --release -p pepper-lsp` restarts the server in place.
-**Pepper: Restart Language Server** restarts it on demand. Code a
+**Pepper: Restart Language Server** restarts it on demand. The **Pepper
+Language Server** output channel logs each background analysis (the file,
+how many files its program has, and how long sema took) and every request
+slower than 200 ms. Code a
 `[Target(...)]` attribute leaves out on the platform you build on is shown
 dimmed.
 `pepper.inlayHints.implicitConversions` (default on) shows the constructor

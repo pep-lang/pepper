@@ -1304,28 +1304,52 @@ diagnostics"). The mechanics:
 - **Crash safety.** `main` serves from a thread with the compiler's 8 MB
   stack (`STACK_SIZE`, also the async runtime's worker stack), which fits
   every pass on the deepest tree the parser accepts (`MAX_NESTING`, §2);
-  Windows' 1 MB main thread did not. Every request and `publish_diagnostics`
-  computes under `guarded` (`catch_unwind`), so a panic answers that
-  request with nothing instead of ending the server.
-- Document text lives in `PepperLsp.docs`. **Every request shares one
-  analysis per text** (`PepperLsp::analysis` → `Analysis`, cached in
-  `PepperLsp.analyses` until the text changes, the document closes, or a
-  file its program read from disk changes: `Analysis::is_current` compares
-  their modification times on each lookup, and `did_change_watched_files`
-  (the server asks the client to watch `**/*.pep` in `initialized`) drops
-  the analyses a
-  change affects, including those whose imports failed to load, all of
-  them when a file is created or deleted; the next request rebuilds them.
-  Files the load found but could not read or parse (`Program::failed`)
-  are compared too; a new file that would satisfy a missing import is
-  noticed only through the watcher):
-  `Analysis::program` loads the program and `Analysis::sema` runs sema,
-  each once (`OnceLock`), so concurrent requests on the same text wait for
-  one run instead of starting their own. Sema takes seconds on a program
-  that pulls in much of the runtime, and the editor sends code actions on
-  every cursor move and hovers on every mouse move; recomputing per request
-  queued a go-to-definition behind a minute of stale work.
-- On open or change, `publish_diagnostics` runs these checks:
+  Windows' 1 MB main thread did not. Every request (`PepperLsp::answer`)
+  and background analysis computes under `guarded` (`catch_unwind`), so a
+  panic answers that request with nothing instead of ending the server.
+- **Requests never wait for sema** (`tools/lsp/src/analysis.rs`). Sema
+  takes seconds on a program that pulls in much of the runtime, and the
+  editor sends code actions on every cursor move and hovers on every mouse
+  move; running it per request once queued a go-to-definition behind
+  minutes of stale work.
+  - `Documents` holds each open document: an `Analysis` of its current
+    text (`latest`) and the newest one whose sema passed (`ready`). An
+    `Analysis` loads its program and runs sema each at most once
+    (`OnceLock`), so every reader of one text shares them.
+  - An analysis records every file its program read, or found and failed
+    to load (`Program::failed`), with its modification time.
+    `PepperLsp::view` checks them before each request
+    (`Documents::refresh`, about a millisecond) and schedules a fresh
+    analysis of the same text when one changed; until it passes, requests
+    answer from the current text without sema, since the old analysis
+    would place the changed files' names as they were. The server also asks the client to watch
+    `**/*.pep` (`initialized`), and `did_change_watched_files` reschedules
+    the documents a change affects (`Documents::forget`; all of them when
+    a file is created or deleted, since that can change what an import
+    resolves to). A renewed document has no passed analysis until the
+    fresh one passes.
+  - `did_open`/`did_change` record the text and `schedule_analysis`: after
+    the text has stayed unchanged for `SETTLE` (250 ms), one background
+    analysis at a time (`Documents::running`) runs sema on the blocking
+    pool, becomes `ready` if it passed (`Documents::finished`), publishes
+    its diagnostics if its text is still current, and logs how long it
+    took, then asks the editor to fetch inlay hints again
+    (`inlay_hint_refresh`). An analysis whose text was edited before its
+    turn is skipped.
+  - Requests read a `View`. When `ready` is of an older text, an `EditMap`
+    (the common prefix, in whole lines, and suffix of the two texts) carries
+    the cursor to the old text (`to_old`, only when its line is outside the
+    edit, since a name's meaning depends on its expression) and the answer's ranges in the document back
+    (`range_to_new`). A name inside the edit, or with no passed analysis
+    yet, is answered from the current text's parse and linked program
+    (`Analysis::program`, milliseconds) with no sema model. Code actions
+    use the current text's sema only once it has run. A hover from an
+    analysis older than the current text ends with a note saying so
+    (a declaration edited since may read differently), and says when the
+    latest edit does not check.
+  - A request slower than `SLOW_REQUEST` (200 ms) is logged to the
+    editor's output (`window/logMessage`), as is the server's start.
+- Each background analysis runs these checks (`PepperLsp::diagnostics`):
   1. `parse_source_diag` on the buffer (precise parse errors).
   2. Otherwise, `Analysis::program` → `load_program(Root { unsaved text },
      Setup { mode: Lenient })`, then `sema_model_of` (build every file, run
@@ -1335,9 +1359,9 @@ diagnostics"). The mechanics:
      editor does not know the compile's `-I` directories.
   3. Warnings: the parser's, then `deprecation_warnings` (the program's
      `deprecation_warnings()` and the sema model's `warnings`, in the
-     document only). `code_action` collects them again from the shared
-     analysis (`document_warnings`) and `quick_fixes` turns each fix into a
-     code action.
+     document only). `code_action` collects them again from the
+     analysis (`document_warnings`) and `quick_fixes` turns each fix into
+     a code action.
 - **Code for other platforms** (`platforms.rs`): `inactive_regions` walks
   imports, re-exports, declarations, methods, enum cases and attributed
   blocks, and returns the outermost spans `passes::platform` drops on this

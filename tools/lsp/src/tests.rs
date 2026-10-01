@@ -43,7 +43,8 @@ fn load(test: &str, main: &str, root: &str) -> (Url, String, Program) {
     for (path, text) in GEOMETRY.iter().chain(&[("main.pep", main)]) {
         let path = dir.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, text).unwrap();
+        std::fs::write(&path, text).unwrap();
+        backdate(&path);
     }
     let path = dir.join(root);
     let uri = Url::from_file_path(&path).unwrap();
@@ -52,6 +53,13 @@ fn load(test: &str, main: &str, root: &str) -> (Url, String, Program) {
     let setup = Setup { import_dirs: &deps, mode: Mode::Lenient, ..Default::default() };
     let program = load_program(Root { name: uri.to_string(), source: text.clone(), path }, &setup).unwrap();
     (uri, text, program)
+}
+
+/// Set `path`'s modification time a minute back, as for a file saved before
+/// the test: one saved as a program loads makes its analysis stale at once.
+fn backdate(path: &std::path::Path) {
+    let file = std::fs::File::options().write(true).open(path).unwrap();
+    file.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(60)).unwrap();
 }
 
 /// The byte offset of the `nth` (0-based) occurrence of `needle` in `text`,
@@ -708,41 +716,119 @@ fn guarded_turns_a_panic_into_none() {
     assert_eq!(guarded(|| -> i32 { panic!("a bug in one request") }), None);
 }
 
-const SHARED: &str = r#"struct Point { var x: int; }
-twice(p: Point): int { return p.x * 2; }
-main(): int {
-    var p = Point();
-    p.x = 21;
-    return twice(p);
-}
-"#;
-
-/// Every request on one text of a document reads one analysis, so the
-/// program loads and sema runs once however many requests the editor sends;
-/// an edit starts a fresh one.
-#[test]
-fn requests_on_one_text_share_one_analysis() {
-    let (uri, text, _) = load("shared_analysis", SHARED, "main.pep");
+/// A server holding `text` as the document `uri`, analyzed as the
+/// background analysis would.
+fn analyzed_server(uri: &Url, text: &str) -> LspService<PepperLsp> {
     let (service, _) = LspService::new(PepperLsp::new);
+    let documents = &service.inner().documents;
+    let analysis = documents.set(uri, text.to_string());
+    analyze(documents, &analysis);
+    service
+}
+
+/// The text at `location`'s start, in `text`.
+fn text_at<'a>(text: &'a str, location: &Location) -> &'a str {
+    &text[line_col_to_byte(text, location.range.start.line, location.range.start.character)..]
+}
+
+/// After an edit, a definition that needs sema (the chosen overload) is
+/// answered at once from the last analysis that passed, its place moved with
+/// the edit; the request runs no sema of its own.
+#[test]
+fn definition_after_an_edit_reads_the_last_passed_analysis() {
+    let (uri, text, _) = load("stale_overload", OVERLOADED, "main.pep");
+    let service = analyzed_server(&uri, &text);
     let server = service.inner();
-    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
+    let edited = format!("# A note.\n{}", text);
+    let latest = server.documents.set(&uri, edited.clone());
 
-    let first = server.analysis(&uri).unwrap();
-    let call = at(&text, "twice(p)", 0, 1);
-    assert!(server.diagnostics(&uri).unwrap().is_empty());
-    assert!(server.hover(&uri, call).is_some());
-    let definition = server.definition(&uri, call).expect("a definition");
-    assert_eq!(definition[0].range.start, Position::new(1, 0));
-    let sema = first.sema_model().expect("sema") as *const SemaModule;
-    let again = server.analysis(&uri).unwrap();
-    assert!(Arc::ptr_eq(&first, &again), "one text, one analysis");
-    assert_eq!(again.sema_model().unwrap() as *const SemaModule, sema, "sema runs once");
+    let definition = server.definition(&uri, at(&edited, "scale(2.5)", 0, 2)).expect("a definition");
+    assert!(text_at(&edited, &definition[0]).starts_with("scale(x: double)"), "{:?}", definition);
+    let definition = server.definition(&uri, at(&edited, "scale(4)", 0, 2)).expect("a definition");
+    assert!(text_at(&edited, &definition[0]).starts_with("scale(x: int)"), "{:?}", definition);
+    let hover = server.hover(&uri, at(&edited, "scale(2.5)", 0, 1)).expect("a hover");
+    let HoverContents::Markup(hover) = hover.contents else { panic!() };
+    assert!(hover.value.contains("Scales a fraction"), "{}", hover.value);
+    assert!(hover.value.contains("Checking your latest edit"), "an older analysis's hover says so: {}", hover.value);
+    assert!(latest.sema_if_done().is_none(), "requests run no sema");
+    // Once the edit checks, the note goes.
+    analyze(&server.documents, &latest);
+    let hover = server.hover(&uri, at(&edited, "scale(2.5)", 0, 1)).expect("a hover");
+    let HoverContents::Markup(hover) = hover.contents else { panic!() };
+    assert!(!hover.value.contains("latest edit"), "{}", hover.value);
+    // An edit that does not parse is checked, and the note says it fails.
+    let broken = format!("{}\nmain(: int {{", edited);
+    let latest = server.documents.set(&uri, broken.clone());
+    analyze(&server.documents, &latest);
+    let hover = server.hover(&uri, at(&broken, "scale(2.5)", 0, 1)).expect("a hover");
+    let HoverContents::Markup(hover) = hover.contents else { panic!() };
+    assert!(hover.value.contains("does not check yet"), "{}", hover.value);
+}
 
-    let edited = text.replace("21", "4");
-    server.docs.lock().unwrap().insert(uri.as_str().to_string(), edited.clone());
-    let fresh = server.analysis(&uri).unwrap();
-    assert!(!Arc::ptr_eq(&first, &fresh), "an edit starts a fresh analysis");
-    assert_eq!(fresh.text, edited);
+/// A name inside what changed since the last passed analysis is answered
+/// from the current text, without sema.
+#[test]
+fn definition_inside_an_edit_reads_the_current_text() {
+    let main = "twice(x: int): int { return x * 2; }\nmain(): int { return twice(1); }\n";
+    let (uri, text, _) = load("stale_edit", main, "main.pep");
+    let service = analyzed_server(&uri, &text);
+    let server = service.inner();
+    let edited = text.replace("return twice(1);", "return thrice(1);") + "thrice(x: int): int { return x * 3; }\n";
+    server.documents.set(&uri, edited.clone());
+
+    let definition = server.definition(&uri, at(&edited, "thrice(1)", 0, 2)).expect("a definition");
+    assert!(text_at(&edited, &definition[0]).starts_with("thrice(x: int)"), "{:?}", definition);
+}
+
+/// Every reader of one text shares one analysis; an edit makes a new one.
+#[test]
+fn one_text_has_one_analysis() {
+    let (uri, text, _) = load("shared_analysis", OVERLOADED, "main.pep");
+    let service = analyzed_server(&uri, &text);
+    let documents = &service.inner().documents;
+    let first = documents.latest(&uri).unwrap();
+    assert!(first.sema_model().is_some(), "the analysis passed");
+    assert!(Arc::ptr_eq(&first, &documents.view(&uri).unwrap().ready.unwrap().0));
+    let edited = documents.set(&uri, text.replace("2.5", "3.5"));
+    assert!(!Arc::ptr_eq(&first, &edited));
+    assert!(documents.is_latest(&edited) && !documents.is_latest(&first));
+}
+
+#[test]
+fn edit_map_carries_offsets_around_the_edit() {
+    let old = "var alpha = 1;\nvar beta = 2;\n";
+    let new = "var alpha = 1;\nvar gamma = 3;\nvar beta = 2;\n";
+    let edits = analysis::EditMap::between(old, new);
+    // Before the edit, and after it.
+    assert_eq!(edits.to_old(new, at(new, "alpha", 0, 2)), Some(at(old, "alpha", 0, 2)));
+    assert_eq!(edits.to_old(new, at(new, "beta", 0, 1)), Some(at(old, "beta", 0, 1)));
+    // Inside it.
+    assert_eq!(edits.to_old(new, at(new, "gamma", 0, 1)), None);
+    let beta = span_to_range(old, Span { start: at(old, "beta", 0, 0), end: at(old, "beta", 0, 4) });
+    assert_eq!(edits.range_to_new(old, new, beta), Some(span_to_range(new, Span { start: at(new, "beta", 0, 0), end: at(new, "beta", 0, 4) })));
+    // An empty range at the start of the line a new line went above moves
+    // down with it.
+    let start = Range::new(Position::new(1, 0), Position::new(1, 0));
+    assert_eq!(edits.range_to_new(old, new, start), Some(Range::new(Position::new(2, 0), Position::new(2, 0))));
+
+    // A name on an edited line does not map: editing `p.x` to `q.x`
+    // changes what `x` is.
+    let (old, new) = ("f(ab);", "f(abc);");
+    assert_eq!(analysis::EditMap::between(old, new).to_old(new, 3), None);
+    let (old, new) = ("var a = p.x;\nb;\n", "var a = q.x;\nb;\n");
+    let edits = analysis::EditMap::between(old, new);
+    assert_eq!(edits.to_old(new, at(new, "x;", 0, 0)), None);
+    assert_eq!(edits.to_old(new, at(new, "b;", 0, 0)), Some(at(old, "b;", 0, 0)));
+    // So do answers that came from it, such as a hint around `x`.
+    let x = span_to_range(old, Span { start: at(old, "x;", 0, 0), end: at(old, "x;", 0, 1) });
+    assert_eq!(edits.line_range_to_new(old, new, x), None);
+    let b = span_to_range(old, Span { start: at(old, "b;", 0, 0), end: at(old, "b;", 0, 1) });
+    assert_eq!(edits.line_range_to_new(old, new, b), Some(b));
+
+    // An edit inside a multi-byte character splits at a character boundary.
+    let (old, new) = ("a = \"é\";\nb", "a = \"è\";\nb");
+    let edits = analysis::EditMap::between(old, new);
+    assert_eq!(edits.to_old(new, new.len() - 1), Some(old.len() - 1));
 }
 
 const CONSTRAINED: &str = r#"trait Shape {
@@ -805,58 +891,99 @@ fn a_type_that_does_not_conform_offers_the_extension() {
     assert_eq!(edit.new_text, "\n\nextend Circle with Shape {\n}");
 }
 
-/// An imported file that changes on disk reaches the analysis of a document
-/// that imports it once the server hears of the change, though the
-/// document's own text is unchanged.
+/// An imported file that changes on disk reaches the document's answers
+/// once its fresh analysis passes, though the document's own text is
+/// unchanged; until then they come from the old one.
 #[test]
 fn a_changed_import_refreshes_the_analysis() {
     let main = "import \"util\";\nmain(): int { return twice(2); }\n";
     let (uri, text, _) = load("changed_import", main, "main.pep");
-    let (service, _) = LspService::new(PepperLsp::new);
+    let service = analyzed_server(&uri, &text);
     let server = service.inner();
-    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
     let call = at(&text, "twice(2)", 0, 1);
     assert_eq!(server.definition(&uri, call).expect("a definition")[0].range.start.line, 0);
 
+    let other = uri.to_file_path().unwrap().with_file_name("other.pep");
+    assert!(server.documents.forget(std::slice::from_ref(&other), false).is_empty(), "an unrelated file changes nothing");
     let util = uri.to_file_path().unwrap().with_file_name("util.pep");
     let source = std::fs::read_to_string(&util).unwrap();
-    // Unchanged files keep the analysis; the change reaches it without word
-    // from the editor.
-    let other = uri.to_file_path().unwrap().with_file_name("other.pep");
-    assert!(server.forget_analyses(std::slice::from_ref(&other), false).is_empty());
     std::fs::write(&util, format!("# Moved down a line.\n{}", source)).unwrap();
+    let old = server.documents.latest(&uri).unwrap();
+    assert!(!old.is_current());
+    // Until the fresh analysis passes, from the current text: the new place.
     assert_eq!(server.definition(&uri, call).expect("a definition")[0].range.start.line, 1);
-    // The editor's word about it drops the analysis, spelled as the editor
-    // spells the path.
+    let fresh = server.documents.latest(&uri).unwrap();
+    assert!(fresh.generation > old.generation, "a request notices the change");
+    analyze(&server.documents, &fresh);
+    assert_eq!(server.definition(&uri, call).expect("a definition")[0].range.start.line, 1);
+
+    // The editor's word about it, spelled as the editor spells the path.
     let spelled = Url::from_file_path(&util).unwrap().to_string();
     let spelled = match spelled.strip_prefix("file:///").and_then(|rest| rest.split_once(':')) {
         Some((drive, rest)) if drive.len() == 1 => format!("file:///{}%3A{}", drive.to_lowercase(), rest),
         _ => spelled,
     };
     let changed = Url::parse(&spelled).unwrap().to_file_path().unwrap();
-    assert_eq!(server.forget_analyses(&[changed], false), vec![uri.clone()]);
-    // A new file may change what an import resolves to.
-    server.definition(&uri, call);
-    assert_eq!(server.forget_analyses(&[other], true), vec![uri.clone()]);
+    assert_eq!(server.documents.forget(&[changed], false).len(), 1);
+    // A new file may change what an import resolves to: the passed
+    // analysis no longer answers.
+    analyze(&server.documents, &server.documents.latest(&uri).unwrap());
+    assert!(server.documents.view(&uri).unwrap().ready.is_some());
+    assert_eq!(server.documents.forget(&[other], true).len(), 1);
+    assert!(server.documents.view(&uri).unwrap().ready.is_none());
 }
 
-/// An import whose file did not load (a parse error) marks the analysis:
-/// fixing that file drops it, though no loaded file changed.
+/// An import whose file did not load (a parse error) is watched too:
+/// fixing that file makes the analysis stale.
 #[test]
 fn fixing_an_import_that_did_not_load_refreshes_the_analysis() {
     let main = "import \"broken\";\nmain(): int { return 0; }\n";
     let (uri, text, _) = load("failed_import", main, "main.pep");
     let broken = uri.to_file_path().unwrap().with_file_name("broken.pep");
     std::fs::write(&broken, "export f(): int { return 1 + ; }\n").unwrap();
-    let (service, _) = LspService::new(PepperLsp::new);
-    let server = service.inner();
-    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
-    let analysis = server.analysis(&uri).unwrap();
+    backdate(&broken);
+    let service = analyzed_server(&uri, &text);
+    let analysis = service.inner().documents.latest(&uri).unwrap();
     analysis.program().expect("the program loads without the broken file");
     assert!(analysis.is_current());
     std::fs::write(&broken, "export f(): int { return 1; }\n# Fixed.\n").unwrap();
     assert!(!analysis.is_current(), "fixing the file that did not load makes the analysis stale");
-    assert_eq!(server.forget_analyses(&[broken], false), vec![uri.clone()]);
+    assert_eq!(service.inner().documents.forget(&[broken], false).len(), 1);
+}
+
+/// Renewing an analysis for a changed file never brings back text an edit
+/// replaced, nor a document that closed.
+#[test]
+fn a_renewed_analysis_yields_to_edits_and_closes() {
+    let main = "import \"util\";\nmain(): int { return twice(2); }\n";
+    let (uri, text, _) = load("renew", main, "main.pep");
+    let service = analyzed_server(&uri, &text);
+    let documents = &service.inner().documents;
+    let util = uri.to_file_path().unwrap().with_file_name("util.pep");
+    let edited = text.replace("twice(2)", "twice(3)");
+    documents.set(&uri, edited.clone());
+    // The edit's analysis has not loaded its program yet: it counts as
+    // affected, and its renewal keeps the edited text.
+    let renewed = documents.forget(std::slice::from_ref(&util), false);
+    assert_eq!(renewed.len(), 1);
+    assert_eq!(documents.text(&uri).unwrap(), edited);
+    documents.close(&uri);
+    assert!(documents.forget(&[util], true).is_empty());
+    assert!(documents.refresh(&uri).is_none() && documents.text(&uri).is_none(), "a closed document stays closed");
+}
+
+/// An analysis that passes after a renewal for changed files does not
+/// answer: it may name what an import resolved to before.
+#[test]
+fn an_analysis_older_than_a_renewal_does_not_answer() {
+    let (uri, text, _) = load("late_pass", OVERLOADED, "main.pep");
+    let (service, _) = LspService::new(PepperLsp::new);
+    let documents = &service.inner().documents;
+    let old = documents.set(&uri, text);
+    let created = uri.to_file_path().unwrap().with_file_name("new.pep");
+    assert_eq!(documents.forget(&[created], true).len(), 1);
+    analyze(documents, &old);
+    assert!(documents.view(&uri).unwrap().ready.is_none());
 }
 
 const NESTED: &str = r#"import geometry as g;

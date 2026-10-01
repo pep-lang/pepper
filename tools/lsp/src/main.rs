@@ -7,6 +7,7 @@
 //! plus the sema model; names reached through imports are followed using
 //! what linking recorded (see `imports`).
 
+mod analysis;
 mod imports;
 mod platforms;
 #[cfg(test)]
@@ -15,15 +16,16 @@ mod tests;
 mod sweep;
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::SystemTime;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use pepper_parser::ast::{self, Span};
 use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
 use pepper_parser::namespace::{demangle, demangle_known, demangle_name};
+use analysis::{Analysis, Documents, View};
 use pepper_sema::model::{Conversion, FunctionDef, Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::lsp_types::*;
@@ -1144,119 +1146,16 @@ fn type_base_name(ty: &str) -> Option<String> {
 
 struct PepperLsp {
     client: Client,
-    /// Open documents, keyed by URI string.
-    docs: Mutex<HashMap<String, String>>,
+    /// The open documents and their analyses; shared with the background
+    /// analyses the server schedules.
+    documents: Arc<Documents>,
     /// Show `[Implicit]` constructor conversions as inlay hints: the
     /// client's `inlayHints.implicitConversions` initialization option,
     /// on unless it says `false`.
     conversion_hints: AtomicBool,
-    /// The latest analysis of each open document, keyed by URI string.
-    analyses: Mutex<HashMap<String, Arc<Analysis>>>,
     /// The client can watch files for the server (`workspace/
     /// didChangeWatchedFiles` with dynamic registration).
     watches_files: AtomicBool,
-}
-
-/// One version of a document, analyzed: the program rooted at it and that
-/// program's sema model. Each is computed once, on first use, and shared by
-/// every request on the same text. Sema takes seconds on a program that
-/// pulls in much of the runtime, and the editor asks for code actions on
-/// every cursor move and hovers on every mouse move, so recomputing it per
-/// request queues a go-to-definition behind a minute of stale work.
-struct Analysis {
-    uri: Url,
-    text: String,
-    program: OnceLock<Result<Program, String>>,
-    /// Every file the program read from disk, or found and failed to load,
-    /// with its [`file_key`] and its modification time then: the analysis
-    /// is stale once one differs.
-    read: OnceLock<Vec<(PathBuf, String, Option<SystemTime>)>>,
-    sema: OnceLock<Option<Result<SemaModule, diag::Diagnostic>>>,
-}
-
-/// When `path` was last modified; `None` when it cannot be read.
-fn modified(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).and_then(|m| m.modified()).ok()
-}
-
-/// A file's identity, the same however a path spells it: the editor writes
-/// a Windows drive letter in lowercase (`d:`), and the loader may keep the
-/// `\\?\D:` form `canonicalize` returns.
-fn file_key(path: &Path) -> String {
-    pepper_files::imports::path_key(path)
-}
-
-impl Analysis {
-    fn new(uri: Url, text: String) -> Self {
-        Self { uri, text, program: OnceLock::new(), read: OnceLock::new(), sema: OnceLock::new() }
-    }
-
-    /// Whether every file the program read from disk, or failed to load, is
-    /// as it was: a saved import, a runtime edit, or a change in another
-    /// editor makes it stale. Stats the files, which takes about a
-    /// millisecond. A new file that would satisfy a missing import is
-    /// noticed only through the client's file watcher.
-    fn is_current(&self) -> bool {
-        self.read.get().is_none_or(|read| read.iter().all(|(path, _, time)| modified(path) == *time))
-    }
-
-    /// Whether a change to the files `changed` (their [`file_key`]s) may
-    /// change this analysis: its program read one of them, or failed to
-    /// load it. The document's own text is the editor's, never the file's.
-    fn affected_by(&self, changed: &HashSet<String>) -> bool {
-        // Still loading: it may have read the file before the change.
-        let Some(program) = self.program.get() else { return true };
-        if program.is_err() {
-            return false;
-        }
-        self.read.get().is_some_and(|read| read.iter().any(|(_, key, _)| changed.contains(key)))
-    }
-
-    /// Every file of the program rooted at the document, loaded and linked
-    /// as the driver does: the document itself (possibly unsaved) first,
-    /// then the files its imports reach, then the runtime prelude.
-    /// Unreadable or unparseable imported files are skipped; a parse error
-    /// in the document is returned.
-    fn program(&self) -> Result<&Program, &String> {
-        self.program
-            .get_or_init(|| {
-                let path = self.uri.to_file_path().map_err(|_| "not a file uri".to_string())?;
-                let root = pepper_sema::program::Root { name: self.uri.to_string(), source: self.text.clone(), path };
-                let setup = pepper_sema::program::Setup { mode: pepper_sema::program::Mode::Lenient, ..Default::default() };
-                let program = pepper_sema::program::load_program(root, &setup)?;
-                // Each file's time, then whether it still holds what was
-                // loaded: a file saved while the program loaded has no time,
-                // so the analysis is stale at once.
-                let loaded = program.files[1..].iter().map(|f| {
-                    let path = PathBuf::from(&f.name);
-                    let time = modified(&path).filter(|_| std::fs::read_to_string(&path).is_ok_and(|s| s == f.source));
-                    (path, time)
-                });
-                // A file that did not load changes time once it is fixed.
-                let failed = program.failed.iter().map(|path| (path.clone(), modified(path)));
-                let read = loaded
-                    .chain(failed)
-                    .map(|(path, time)| {
-                        let key = file_key(&path);
-                        (path, key, time)
-                    })
-                    .collect();
-                let _ = self.read.set(read);
-                Ok(program)
-            })
-            .as_ref()
-    }
-
-    /// The program's sema model, or its semantic error; `None` when the
-    /// program did not load.
-    fn sema(&self) -> Option<&Result<SemaModule, diag::Diagnostic>> {
-        self.sema.get_or_init(|| self.program().ok().map(sema_model_of)).as_ref()
-    }
-
-    /// The sema model, when the program loaded and passed semantic analysis.
-    fn sema_model(&self) -> Option<&SemaModule> {
-        self.sema()?.as_ref().ok()
-    }
 }
 
 /// The overload a call or function value in the document resolved to, when
@@ -1346,7 +1245,8 @@ fn conversion_note(c: &Conversion) -> String {
 }
 
 /// The inlay hints around each converted value: `Path(` before and `)`
-/// after, so the call the compiler inserts is visible.
+/// after, so the call the compiler inserts is visible. They come in pairs,
+/// each conversion's two in a row.
 fn conversion_hints(text: &str, sema: &SemaModule) -> Vec<InlayHint> {
     let hint = |offset: usize, label: String| InlayHint {
         position: byte_to_lsp_pos(text, offset),
@@ -1572,46 +1472,42 @@ impl PepperLsp {
     fn new(client: Client) -> Self {
         Self {
             client,
-            docs: Mutex::new(HashMap::new()),
+            documents: Arc::new(Documents::default()),
             conversion_hints: AtomicBool::new(true),
             watches_files: AtomicBool::new(false),
-            analyses: Mutex::new(HashMap::new()),
         }
     }
 
     fn doc(&self, uri: &Url) -> Option<String> {
-        self.docs.lock().unwrap().get(uri.as_str()).cloned()
+        self.documents.text(uri)
     }
 
-    /// The analysis of the open document `uri` as it reads now: the cached
-    /// one while its text is unchanged, else a fresh one that replaces it.
-    fn analysis(&self, uri: &Url) -> Option<Arc<Analysis>> {
-        let mut analyses = self.analyses.lock().unwrap();
-        // Read under `analyses`: `did_close` removes the text before the
-        // analysis, so a document closed meanwhile is never cached again.
-        let text = self.doc(uri)?;
-        if let Some(analysis) = analyses.get(uri.as_str())
-            && analysis.text == text
-            && analysis.is_current()
-        {
-            return Some(analysis.clone());
+    /// What requests read about `uri`: first, when a file its analysis read
+    /// changed on disk, a fresh analysis is scheduled. Until it passes,
+    /// requests answer from the current text without sema, since the last
+    /// passed analysis would place and describe the changed files' names
+    /// as they were.
+    fn view(&self, uri: &Url) -> Option<View> {
+        if let Some(analysis) = self.documents.refresh(uri) {
+            schedule_analysis(self.client.clone(), self.documents.clone(), analysis, Duration::ZERO);
         }
-        let analysis = Arc::new(Analysis::new(uri.clone(), text));
-        analyses.insert(uri.as_str().to_string(), analysis.clone());
-        Some(analysis)
+        let mut view = self.documents.view(uri)?;
+        if view.ready.as_ref().is_some_and(|(ready, _)| !ready.is_current()) {
+            view.ready = None;
+        }
+        Some(view)
     }
 
-    /// Drop the cached analyses the files `changed` may change
-    /// ([`Analysis::affected_by`]), or every one when a file was created or
-    /// deleted (`added`), which can change what an import resolves to; and
-    /// return their documents.
-    fn forget_analyses(&self, changed: &[PathBuf], added: bool) -> Vec<Url> {
-        // Resolved once, before taking the lock every request needs.
-        let changed: HashSet<String> = changed.iter().map(|path| file_key(path)).collect();
-        let mut analyses = self.analyses.lock().unwrap();
-        let stale: Vec<String> =
-            analyses.iter().filter(|(_, a)| added || a.affected_by(&changed)).map(|(uri, _)| uri.clone()).collect();
-        stale.iter().filter_map(|uri| analyses.remove(uri)).map(|a| a.uri.clone()).collect()
+    /// `f()` under `guarded`, logged to the editor's output (the "Pepper
+    /// Language Server" channel) when it takes longer than `SLOW_REQUEST`.
+    async fn answer<R>(&self, method: &str, f: impl FnOnce() -> Option<R>) -> Option<R> {
+        let start = Instant::now();
+        let result = guarded(f).flatten();
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_REQUEST {
+            self.client.log_message(MessageType::WARNING, format!("{} took {} ms", method, elapsed.as_millis())).await;
+        }
+        result
     }
 
     /// Import errors in the program's document (`program.files[0]`),
@@ -1648,18 +1544,12 @@ impl PepperLsp {
         diags
     }
 
-    /// Publish diagnostics for `uri`. A panic computing them leaves the ones
-    /// already published in place.
-    async fn publish_diagnostics(&self, uri: &Url) {
-        let Some(Some(diags)) = guarded(|| self.diagnostics(uri)) else { return };
-        self.client.publish_diagnostics(uri.clone(), diags, None).await;
-    }
-
-    /// Diagnostics for `uri`: parse errors (precise) + sema errors.
-    fn diagnostics(&self, uri: &Url) -> Option<Vec<Diagnostic>> {
+    /// Diagnostics for the text `analysis` is of: parse errors (precise),
+    /// then sema's. Runs sema, which takes seconds: only the background
+    /// analysis calls this.
+    fn diagnostics(analysis: &Analysis) -> Vec<Diagnostic> {
         let mut diags = vec![];
-        let analysis = self.analysis(uri)?;
-        let text = &analysis.text;
+        let (uri, text) = (&analysis.uri, &analysis.text);
         // A parse error, or one found after parsing (a late import, `T*`
         // outside an extern).
         let parsed = pepper_parser::parser::parse_source_diag(text);
@@ -1681,13 +1571,56 @@ impl PepperLsp {
             diags.extend(deprecated.iter().map(|w| lsp_diagnostic(w, uri, &names)));
             diags.extend(Self::visibility_diagnostics(program, uri));
         }
-        Some(diags)
+        diags
     }
 
-    /// Hover at `offset` in document `uri`.
+    /// Hover at `offset` in document `uri`: from the newest analysis whose
+    /// sema passed when the name at `offset` is outside what changed since,
+    /// else from the current text without sema.
     fn hover(&self, uri: &Url, offset: usize) -> Option<Hover> {
-        let analysis = self.analysis(uri)?;
-        Self::hover_at(uri, &analysis.text, analysis.program().ok(), analysis.sema_model(), offset)
+        let view = self.view(uri)?;
+        if let Some((ready, edits)) = &view.ready {
+            // An answer from an older analysis says so: a declaration edited
+            // since may read differently.
+            let note = edits.is_some().then(|| {
+                if view.latest.is_checked() {
+                    "_From before your latest edit, which does not check yet._"
+                } else {
+                    "_Checking your latest edit; this may be out of date._"
+                }
+            });
+            let at = |ready: &Analysis, at| {
+                let hover = Self::hover_at(uri, &ready.text, ready.program().ok(), ready.sema_model(), at)?;
+                Some(match (note, hover.contents) {
+                    (Some(note), HoverContents::Markup(m)) => Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: m.kind,
+                            value: format!("{}\n\n---\n\n{}", m.value, note),
+                        }),
+                        range: hover.range,
+                    },
+                    (_, contents) => Hover { contents, range: hover.range },
+                })
+            };
+            match edits {
+                None => return at(ready, offset),
+                Some(edits) => {
+                    let moved = |mut hover: Hover| {
+                        if let Some(range) = hover.range {
+                            hover.range = Some(edits.range_to_new(&ready.text, view.text(), range)?);
+                        }
+                        Some(hover)
+                    };
+                    if let Some(old) = edits.to_old(view.text(), offset)
+                        && let Some(hover) = at(ready, old).and_then(moved)
+                    {
+                        return Some(hover);
+                    }
+                }
+            }
+        }
+        let latest = &view.latest;
+        Self::hover_at(uri, &latest.text, latest.program().ok(), None, offset)
     }
 
     /// Hover at `offset` in `text`, the document `uri`, which is
@@ -1934,10 +1867,33 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
     }
 
-    /// Go-to-definition at `offset`.
+    /// Go-to-definition at `offset` in document `uri`, answered as
+    /// [`PepperLsp::hover`] is. A place in the document found in an older
+    /// text moves with the edits since.
     fn definition(&self, uri: &Url, offset: usize) -> Option<Vec<Location>> {
-        let analysis = self.analysis(uri)?;
-        Self::definition_at(uri, &analysis.text, analysis.program().ok(), analysis.sema_model(), offset)
+        let view = self.view(uri)?;
+        if let Some((ready, edits)) = &view.ready {
+            let at = |ready: &Analysis, at| Self::definition_at(uri, &ready.text, ready.program().ok(), ready.sema_model(), at);
+            match edits {
+                None => return at(ready, offset),
+                Some(edits) => {
+                    let moved = |mut location: Location| {
+                        if location.uri == *uri {
+                            location.range = edits.range_to_new(&ready.text, view.text(), location.range)?;
+                        }
+                        Some(location)
+                    };
+                    if let Some(old) = edits.to_old(view.text(), offset)
+                        && let Some(locations) = at(ready, old)
+                        && let Some(locations) = locations.into_iter().map(moved).collect::<Option<Vec<_>>>()
+                    {
+                        return Some(locations);
+                    }
+                }
+            }
+        }
+        let latest = &view.latest;
+        Self::definition_at(uri, &latest.text, latest.program().ok(), None, offset)
     }
 
     /// Go-to-definition at `offset` in `text`, the document `uri`, which is
@@ -2190,6 +2146,14 @@ impl LanguageServer for PepperLsp {
             .and_then(|w| w.dynamic_registration)
             .unwrap_or(false);
         self.watches_files.store(watches, Ordering::Relaxed);
+        let refreshes_hints = params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|w| w.inlay_hint.as_ref())
+            .and_then(|h| h.refresh_support)
+            .unwrap_or(false);
+        self.documents.refreshes_hints.store(refreshes_hints, Ordering::Relaxed);
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 inlay_hint_provider: Some(OneOf::Left(true)),
@@ -2211,9 +2175,15 @@ impl LanguageServer for PepperLsp {
         })
     }
 
+    async fn shutdown(&self) -> LspResult<()> {
+        Ok(())
+    }
+
     async fn initialized(&self, _: InitializedParams) {
-        // Cached analyses read imports from disk: ask the client, whatever
-        // editor it is, to report `.pep` files that change.
+        let started = format!("pepper-lsp {} started", env!("CARGO_PKG_VERSION"));
+        self.client.log_message(MessageType::INFO, started).await;
+        // Analyses read imports from disk: ask the client, whatever editor
+        // it is, to report `.pep` files that change.
         if self.watches_files.load(Ordering::Relaxed) {
             let watcher = FileSystemWatcher { glob_pattern: GlobPattern::String("**/*.pep".to_string()), kind: None };
             let options = DidChangeWatchedFilesRegistrationOptions { watchers: vec![watcher] };
@@ -2226,43 +2196,34 @@ impl LanguageServer for PepperLsp {
         }
     }
 
-    async fn shutdown(&self) -> LspResult<()> {
-        Ok(())
-    }
-
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let uri = params.text_document.uri.clone();
-        self.docs.lock().unwrap().insert(uri.as_str().to_string(), params.text_document.text);
-        self.publish_diagnostics(&uri).await;
-    }
-
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri.clone();
-        if let Some(change) = params.content_changes.into_iter().next() {
-            self.docs.lock().unwrap().insert(uri.as_str().to_string(), change.text);
-        }
-        self.publish_diagnostics(&uri).await;
-    }
-
     /// `.pep` files changed on disk (the client watches them for the
-    /// server, see `initialized`): analyses whose programs read one, or failed to load an
-    /// import one may satisfy, are dropped (all of them when a file was
-    /// created or deleted), to be analyzed again when a request needs them.
-    /// Not here: a `git checkout` would otherwise hold every request behind
-    /// a sema run per open document. A request also notices a changed
-    /// loaded file on its own ([`Analysis::is_current`]); this covers
-    /// imports that did not load, and imports a new file resolves
-    /// differently, in clients that watch files.
+    /// server, see `initialized`): each open document whose analysis read
+    /// one, or failed to load it, is analyzed again in the background (every
+    /// one when a file was created or deleted). A request also notices a
+    /// changed file on its own ([`Analysis::is_current`]); this covers the
+    /// diagnostics, and imports a new file resolves differently.
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         let changed: Vec<PathBuf> = params.changes.iter().filter_map(|c| c.uri.to_file_path().ok()).collect();
         let added = params.changes.iter().any(|c| c.typ != FileChangeType::CHANGED);
-        self.forget_analyses(&changed, added);
+        for analysis in self.documents.forget(&changed, added) {
+            schedule_analysis(self.client.clone(), self.documents.clone(), analysis, SETTLE);
+        }
+    }
+
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let analysis = self.documents.set(&params.text_document.uri, params.text_document.text);
+        schedule_analysis(self.client.clone(), self.documents.clone(), analysis, Duration::ZERO);
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let Some(change) = params.content_changes.into_iter().next() else { return };
+        let analysis = self.documents.set(&params.text_document.uri, change.text);
+        schedule_analysis(self.client.clone(), self.documents.clone(), analysis, SETTLE);
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        self.docs.lock().unwrap().remove(uri.as_str());
-        self.analyses.lock().unwrap().remove(uri.as_str());
+        self.documents.close(&uri);
         self.client.publish_diagnostics(uri, vec![], None).await;
     }
 
@@ -2274,71 +2235,163 @@ impl LanguageServer for PepperLsp {
         }
         let uri = params.text_document.uri;
         let range = params.range;
-        Ok(guarded(|| {
-            let analysis = self.analysis(&uri)?;
-            let hints = conversion_hints(&analysis.text, analysis.sema_model()?)
-                .into_iter()
-                .filter(|h| h.position >= range.start && h.position <= range.end)
-                .collect();
-            Some(hints)
-        })
-        .flatten())
+        Ok(self
+            .answer("inlayHint", || {
+                // The newest passed analysis's hints, moved by the edits
+                // since; none inside what changed.
+                let view = self.view(&uri)?;
+                let (ready, edits) = view.ready.as_ref()?;
+                // Each conversion's `To(` and `)` move as one span, so an
+                // edit inside it drops both.
+                let hints: Vec<InlayHint> = conversion_hints(&ready.text, ready.sema_model()?)
+                    .chunks(2)
+                    .filter_map(|pair| {
+                        let [open, close] = pair else { return None };
+                        let (mut open, mut close) = (open.clone(), close.clone());
+                        if let Some(edits) = edits {
+                            let span = edits.line_range_to_new(&ready.text, view.text(), Range::new(open.position, close.position))?;
+                            (open.position, close.position) = (span.start, span.end);
+                        }
+                        Some([open, close])
+                    })
+                    .flatten()
+                    .filter(|h| h.position >= range.start && h.position <= range.end)
+                    .collect();
+                Some(hints)
+            })
+            .await)
     }
 
     async fn hover(&self, params: HoverParams) -> LspResult<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        Ok(guarded(|| {
-            let text = self.doc(&uri)?;
-            self.hover(&uri, line_col_to_byte(&text, pos.line, pos.character))
-        })
-        .flatten())
+        Ok(self
+            .answer("hover", || {
+                let text = self.doc(&uri)?;
+                self.hover(&uri, line_col_to_byte(&text, pos.line, pos.character))
+            })
+            .await)
     }
 
     async fn completion(&self, params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
-        Ok(guarded(|| {
-            let text = self.doc(&uri)?;
-            let offset = line_col_to_byte(&text, pos.line, pos.character);
-            Some(CompletionResponse::Array(self.completion(&uri, offset)))
-        })
-        .flatten())
+        Ok(self
+            .answer("completion", || {
+                let text = self.doc(&uri)?;
+                let offset = line_col_to_byte(&text, pos.line, pos.character);
+                Some(CompletionResponse::Array(self.completion(&uri, offset)))
+            })
+            .await)
     }
 
     async fn goto_definition(&self, params: GotoDefinitionParams) -> LspResult<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        Ok(guarded(|| {
-            let text = self.doc(&uri)?;
-            self.definition(&uri, line_col_to_byte(&text, pos.line, pos.character)).map(Into::into)
-        })
-        .flatten())
+        Ok(self
+            .answer("definition", || {
+                let text = self.doc(&uri)?;
+                self.definition(&uri, line_col_to_byte(&text, pos.line, pos.character)).map(Into::into)
+            })
+            .await)
     }
 
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
-        Ok(guarded(|| {
-            // The document's one semantic analysis serves both kinds of fix:
-            // those a diagnostic carries (a `Copyable` skeleton) and the
-            // missing arms of a `match`.
-            let analysis = self.analysis(&uri)?;
-            let text = &analysis.text;
-            let program = analysis.program().ok();
-            let diagnostics = fixable_diagnostics(text, program, analysis.sema());
-            let mut actions = quick_fixes(&uri, text, &diagnostics, params.range);
-            if let (Some(program), Some(Err(error))) = (program, analysis.sema()) {
-                actions.extend(missing_arms_fix(&uri, text, program, error, params.range));
-            }
-            (!actions.is_empty()).then_some(actions)
-        })
-        .flatten())
+        Ok(self
+            .answer("codeAction", || {
+                // The current text's sema, when the background analysis has
+                // run it, serves both kinds of fix: those a diagnostic carries
+                // (a `Copyable` skeleton) and the missing arms of a `match`.
+                // Until then, only the parser's and the program's fixes.
+                let view = self.view(&uri)?;
+                let analysis = match &view.ready {
+                    Some((ready, None)) if view.latest.sema_if_done().is_none() => ready,
+                    _ => &view.latest,
+                };
+                let text = &analysis.text;
+                let program = analysis.program().ok();
+                let sema = analysis.sema_if_done();
+                let diagnostics = fixable_diagnostics(text, program, sema);
+                let mut actions = quick_fixes(&uri, text, &diagnostics, params.range);
+                if let (Some(program), Some(Err(error))) = (program, sema) {
+                    actions.extend(missing_arms_fix(&uri, text, program, error, params.range));
+                }
+                (!actions.is_empty()).then_some(actions)
+            })
+            .await)
     }
 
     async fn document_symbol(&self, params: DocumentSymbolParams) -> LspResult<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
-        Ok(guarded(|| self.document_symbols(&uri).map(DocumentSymbolResponse::Nested)).flatten())
+        Ok(self.answer("documentSymbol", || self.document_symbols(&uri).map(DocumentSymbolResponse::Nested)).await)
     }
+}
+
+/// How long a document's text must stay unchanged before the server
+/// analyzes it: typing does not start a sema run per keystroke.
+const SETTLE: Duration = Duration::from_millis(250);
+
+/// A request that takes longer is logged to the editor's output.
+const SLOW_REQUEST: Duration = Duration::from_millis(200);
+
+/// Analyze `analysis` in the background once its text has stayed the
+/// document's for `settle`: run sema off the async workers, let requests
+/// answer from it (`Documents::finished`), log how long it took, and publish
+/// its diagnostics if its text is still the document's. One analysis runs
+/// at a time, and one whose text was edited before its turn is skipped.
+fn schedule_analysis(client: Client, documents: Arc<Documents>, analysis: Arc<Analysis>, settle: Duration) {
+    // Outside a runtime (unit tests), the caller analyzes itself.
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
+    runtime.spawn(async move {
+        tokio::time::sleep(settle).await;
+        let _turn = documents.running.lock().await;
+        if !documents.is_latest(&analysis) {
+            return;
+        }
+        let start = Instant::now();
+        let diagnostics = {
+            let (documents, analysis) = (documents.clone(), analysis.clone());
+            tokio::task::spawn_blocking(move || analyze(&documents, &analysis)).await.ok().flatten()
+        };
+        let file = analysis.uri.path_segments().and_then(|mut s| s.next_back()).unwrap_or_default().to_string();
+        let files = analysis.loaded_program().map_or(0, |p| p.files.len());
+        let outcome = match analysis.sema_if_done() {
+            Some(Ok(_)) => "passed",
+            Some(Err(_)) => "found an error",
+            None => "did not load",
+        };
+        let took = format!("analyzed {} ({} files): {} in {} ms", file, files, outcome, start.elapsed().as_millis());
+        client.log_message(MessageType::LOG, took).await;
+        // Hints come from the newest passed analysis: have the editor ask
+        // again now there is one, when it says it can. In a task of its own,
+        // so a slow answer holds up no other analysis.
+        if analysis.sema_model().is_some() && documents.refreshes_hints.load(Ordering::Relaxed) {
+            let client = client.clone();
+            tokio::spawn(async move {
+                let _ = client.inlay_hint_refresh().await;
+            });
+        }
+        if let Some(diagnostics) = diagnostics
+            && documents.is_latest(&analysis)
+        {
+            client.publish_diagnostics(analysis.uri.clone(), diagnostics, None).await;
+            // Closed while they were sent: `did_close`'s clearing may have
+            // gone first, so clear again.
+            if documents.latest(&analysis.uri).is_none() {
+                client.publish_diagnostics(analysis.uri.clone(), vec![], None).await;
+            }
+        }
+    });
+}
+
+/// Run sema on `analysis` and compute its diagnostics, under `guarded`;
+/// requests answer from it from now on when it passed.
+fn analyze(documents: &Documents, analysis: &Arc<Analysis>) -> Option<Vec<Diagnostic>> {
+    let diagnostics = guarded(|| PepperLsp::diagnostics(analysis));
+    analysis.mark_checked();
+    documents.finished(analysis);
+    diagnostics
 }
 
 /// `f()`, or `None` when it panics. The panic message still reaches stderr,
@@ -2371,6 +2424,9 @@ fn main() {
                 let (service, socket) = LspService::new(PepperLsp::new);
                 Server::new(stdin, stdout, socket).serve(service).await;
             });
+            // A background analysis may still be running: exit now rather
+            // than wait for it.
+            runtime.shutdown_background();
         })
         .expect("start the server thread");
     // A panic outside `guarded` has already printed; exit as a crash.
