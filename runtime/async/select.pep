@@ -245,7 +245,7 @@ export struct Select<E> {
     # closed: the next look finds which.
     _sleep(deadline: ulong): int {
         var in_task = _async_in_task();
-        var waiter = in_task ? _async_sync_waiter().value() : _SyncWaiter(_ThreadWake());
+        var waiter = in_task ? _async_sync_waiter() : _SyncWaiter(_ThreadWake());
         var count = _cases.count();
         var joined: ulong = 0;
         var closed: ulong = 0;

@@ -155,11 +155,7 @@ export struct _HttpReader {
             if (take > left) {
                 take = left;
             }
-            ulong i = 0;
-            while (i < take) {
-                into.append(this._buffer[this._start + i]);
-                i = i + 1;
-            }
+            into._append_raw(this._buffer._data + this._start, take);
             this._start = this._start + take;
             left = left - take;
         }
@@ -169,12 +165,13 @@ export struct _HttpReader {
     # Appends everything until the stream ends, up to `limit` bytes.
     _to_end(into: u8[], limit: ulong): io.IoResult<void> {
         while (true) {
-            while (this._available() > 0) {
-                if (into.count() >= limit) {
+            var take = this._available();
+            if (take > 0) {
+                if (into.count() + take > limit) {
                     return io.IoResult<void>.err(_http_error("the body is too large"));
                 }
-                into.append(this._buffer[this._start]);
-                this._start = this._start + 1;
+                into._append_raw(this._buffer._data + this._start, take);
+                this._start = this._start + take;
             }
             var got = this._fill();
             if (got.is_err()) {
@@ -304,21 +301,12 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
         return String(data as __ptr<char>, size);
     }
     var bytes = Array<u8>(size);
-    ulong index = 0;
-    while (index < size) {
-        bytes.append(data[index]);
-        index = index + 1;
-    }
+    bytes._append_raw(data, size);
     return text.Utf8.decode_lossy(bytes);
 }
 
 export _http_append(out: u8[], text: String) {
-    var p = text.c_str() as __ptr<u8>;
-    ulong i = 0;
-    while (i < text.size()) {
-        out.append(p[i]);
-        i = i + 1;
-    }
+    out._append_raw(text.c_str() as __ptr<u8>, text.size());
 }
 
 # ── Text ─────────────────────────────────────────────────────────────────────

@@ -209,12 +209,14 @@ export struct Copies {
 
     # The copy already made of `original`, or null.
     _find<T>(original: T): T {
-        var address = this._address<T>(original);
-        if (!_made.contains(address)) {
+        # One lookup: `get` gives 0, never an object's address, when
+        # `original` was not copied.
+        var made = _made.get(this._address<T>(original));
+        if (made == 0) {
             return __default<T>();
         }
         # Read the address back as a reference: the read acquires it.
-        _cell[0] = _made.get(address);
+        _cell[0] = made;
         __ptr<void> raw = _cell;
         __ptr<T> slot = raw;
         T found = slot[0];

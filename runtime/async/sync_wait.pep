@@ -214,10 +214,10 @@ export struct _SyncQueue {
     _wake_one_locked() {
         while (true) {
             var next = this._pop();
-            if (next.is_none()) {
+            if (!next.0) {
                 return;
             }
-            var waiter = next.value();
+            var waiter = next.1;
             if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_WOKEN)) {
                 _async_sync_wake(waiter);
                 return;
@@ -232,22 +232,23 @@ export struct _SyncQueue {
         }
         while (true) {
             var next = this._pop();
-            if (next.is_none()) {
+            if (!next.0) {
                 return;
             }
-            var waiter = next.value();
+            var waiter = next.1;
             if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_WOKEN)) {
                 _async_sync_wake(waiter);
             }
         }
     }
 
-    # Takes the waiter at the head, if any.
-    _pop(): _SyncWaiter? {
+    # Takes the waiter at the head: `(true, waiter)`, or `(false, null)` when
+    # none waits. A tuple, not an Optional, so a wake allocates nothing.
+    _pop(): (bool, _SyncWaiter) {
         _async_sys_mutex_lock(_lock);
         if (_state[1] == 0) {
             _async_sys_mutex_unlock(_lock);
-            return Optional<_SyncWaiter>.none();
+            return (false, __default<_SyncWaiter>());
         }
         __ptr<_SyncWaiter> slots = this._slots();
         var head = _state[0];
@@ -258,7 +259,7 @@ export struct _SyncQueue {
         _size.store(_state[1]);
         this._shrink();
         _async_sys_mutex_unlock(_lock);
-        return Optional<_SyncWaiter>.some(waiter);
+        return (true, waiter);
     }
 
     # Frees the buffer once no task waits, so an object that tasks waited on

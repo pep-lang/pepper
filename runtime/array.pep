@@ -232,6 +232,28 @@ export struct Array<T> {
         _size = _size + 1;
     }
 
+    # Appends the `count` elements at `source` with one copy, for a POD `T`
+    # only (no reference counting is done): a byte buffer filling from
+    # another. Internal.
+    _append_raw(source: __ptr<T>, count: ulong) {
+        if (count == 0) {
+            return;
+        }
+        _version = _version + 1;
+        if (_size + count > _capacity) {
+            var capacity = _capacity * 2;
+            if (capacity < _size + count) {
+                capacity = _size + count;
+            }
+            reserve(capacity);
+        }
+        # Byte arithmetic: `_data + _size` would pick `T`'s own `+` when `T`
+        # has one.
+        __ptr<u8> end = _data as __ptr<u8>;
+        _array_copy(end + _size * sizeof<T>(), source, count * sizeof<T>());
+        _size = _size + count;
+    }
+
     ## Inserts `item` at position `idx`, shifting the element there and every
     ## later element up by one.
     ##
@@ -736,3 +758,10 @@ export _array_literal<T>(first: T): Array<T> {
 extend ArrayIterator<T> with Iterator<T> {}
 
 extend Array<T> with Copyable<Array<T>> {}
+
+extern void memcpy(void* dest, void* src, ulong n);
+
+# Copies `size` bytes from `source` to `target`.
+_array_copy(target: __ptr<void>, source: __ptr<void>, size: ulong) {
+    memcpy(target, source, size);
+}

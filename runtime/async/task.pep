@@ -385,14 +385,14 @@ struct _Worker {
     # `spawn` off the shared queue, and makes it ready here; false if there
     # is none.
     _take_shared(): bool {
-        var next = this._inbox._pinned.try_receive();
-        if (next.is_err()) {
-            next = this._runtime._queue.try_receive();
+        var next = this._inbox._pinned._try_take();
+        if (!next.0) {
+            next = this._runtime._queue._try_take();
         }
-        if (next.is_err()) {
+        if (!next.0) {
             return false;
         }
-        var shared = next.value();
+        var shared = next.1;
         var core = this._spawn(() => {
             shared._body();
         });
@@ -417,11 +417,10 @@ struct _Worker {
     # Handles the messages other workers sent.
     _receive() {
         while (true) {
-            var next = this._inbox._messages.try_receive();
-            if (next.is_err()) {
+            var (found, message) = this._inbox._messages._try_take();
+            if (!found) {
                 return;
             }
-            var message = next.value();
             var id = message / 4;
             var kind = message % 4;
             if (kind == _MESSAGE_WAKE) {
@@ -559,6 +558,11 @@ struct _Worker {
 
     # Wakes every task whose timer has expired.
     _fire_timers() {
+        # Every scheduler pass comes here; with no timers, skip the clock
+        # read (a system call and an allocation on POSIX).
+        if (this._timers.count() == 0) {
+            return;
+        }
         var now = _async_sys_monotonic_milliseconds();
         while (this._timers.count() > 0) {
             if (this._timers[0]._deadline > now) {
@@ -608,10 +612,14 @@ struct _Worker {
         this._finished_results.clear();
     }
 
-    # Wakes every task in `tasks` and empties it.
+    # Wakes every task in `tasks` and empties it. An index loop: a `for`
+    # would allocate an iterator on every call, and the list is usually
+    # empty.
     _wake_all(tasks: Array<_TaskCore>) {
-        for (var core in tasks) {
-            this._wake(core);
+        ulong index = 0;
+        while (index < tasks.count()) {
+            this._wake(tasks[index]);
+            index = index + 1;
         }
         tasks.clear();
     }
@@ -881,10 +889,15 @@ export _async_in_task(): bool {
 # The running task's slot for the `TaskLocal` numbered `id`, or null when
 # it has no value. Only in a task.
 export _async_task_local_slot(id: ulong): __ptr<void> {
-    for (var local in _async_worker()._current._locals) {
-        if (local._id == id) {
-            return local._slot;
+    # An index loop: `TaskLocal.get` calls this, and a `for` would allocate
+    # an iterator every time.
+    var locals = _async_worker()._current._locals;
+    ulong index = 0;
+    while (index < locals.count()) {
+        if (locals[index]._id == id) {
+            return locals[index]._slot;
         }
+        index = index + 1;
     }
     return __null;
 }
@@ -928,14 +941,13 @@ export _async_holder_id(): ulong {
     return me._token;
 }
 
-# A waiter for the running task to add to a `_SyncQueue`, or none outside a
-# task.
-export _async_sync_waiter(): _SyncWaiter? {
-    if (!_async_in_task()) {
-        return Optional<_SyncWaiter>.none();
-    }
+# A waiter for the running task to add to a `_SyncQueue`. The caller has
+# checked `_async_in_task()`; no Optional is built, since every park takes
+# this path.
+export _async_sync_waiter(): _SyncWaiter {
+    assert(_async_in_task(), "_async_sync_waiter outside a task");
     var worker = _async_worker();
-    return Optional<_SyncWaiter>.some(_SyncWaiter(worker._inbox, worker._current._id));
+    return _SyncWaiter(worker._inbox, worker._current._id);
 }
 
 # What `_async_sync_park` reports.
@@ -1027,10 +1039,7 @@ _async_run_current() {
     body();
     core._release_locals();
     core._finished = true;
-    for (var joiner in core._joiners) {
-        worker._wake(joiner);
-    }
-    core._joiners.clear();
+    worker._wake_all(core._joiners);
 }
 
 # The entry point of every fiber (see the notes at the top of this file).

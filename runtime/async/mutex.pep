@@ -238,7 +238,7 @@ export struct Mutex<T> {
             return;
         }
         while (!_async_sys_mutex_try_lock(_lock)) {
-            var waiter = _async_sync_waiter().value();
+            var waiter = _async_sync_waiter();
             _waiters._push(waiter);
             # An unlock between the first try and the push found no waiter,
             # so try again before parking.
@@ -544,7 +544,7 @@ export struct Condition<T> {
     # notifier holding it cannot miss the task), unlocks, parks until woken
     # or `deadline` (0 for none) passes, and locks again. True if woken.
     _wait_task(me: ulong, deadline: ulong): bool {
-        var waiter = _async_sync_waiter().value();
+        var waiter = _async_sync_waiter();
         _waiters._push(waiter);
         _mutex._unlock();
         var woken = _async_sync_park(_waiters, waiter, deadline, false);

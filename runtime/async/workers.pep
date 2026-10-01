@@ -289,9 +289,9 @@ export struct _Runtime {
     _leave(inbox: _Inbox) {
         _active.fetch_sub(1);
         while (_active.load() > 0) {
-            var late = inbox._pinned.try_receive();
-            if (late.is_ok()) {
-                _push(late.value());
+            var late = inbox._pinned._try_take();
+            if (late.0) {
+                _push(late.1);
             } else {
                 _async_sys_sleep(1);
             }

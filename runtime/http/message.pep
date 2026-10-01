@@ -45,11 +45,12 @@ export struct Headers {
     ## @param name the field name, in any case
     ## @returns a new array of the values; empty when no field has that name
     values(name: String): String[] {
-        var key = name.lower();
-        if (!this._fields.contains(key)) {
+        # One lookup: `get` gives null for a missing field.
+        var found = this._fields.get(name.lower());
+        if (found === __null) {
             return Array<String>();
         }
-        return this._fields[key].clone();
+        return found.clone();
     }
 
     ## Adds a value to the field named `name`, keeping any it has.
@@ -58,10 +59,12 @@ export struct Headers {
     ## @param value the field value
     add(name: String, value: String) {
         var key = name.lower();
-        if (!this._fields.contains(key)) {
-            this._fields[key] = Array<String>();
+        var found = this._fields.get(key);
+        if (found === __null) {
+            found = Array<String>();
+            this._fields[key] = found;
         }
-        this._fields[key].append(value);
+        found.append(value);
     }
 
     ## Replaces every value of the field named `name` with `value`.
@@ -79,11 +82,11 @@ export struct Headers {
     ## @param name the field name, in any case
     ## @returns the value, or none when no field has that name
     get(name: String): String? {
-        var key = name.lower();
-        if (!this._fields.contains(key)) {
+        var found = this._fields.get(name.lower());
+        if (found === __null) {
             return Optional<String>.none();
         }
-        return Optional<String>.some(this._fields[key][0]);
+        return Optional<String>.some(found[0]);
     }
 
     ## Reports whether a field is named `name`.
@@ -108,11 +111,11 @@ export struct Headers {
     ## @param name the field name, in any case
     ## @returns the first value, or `""`
     [](name: String): String {
-        var key = name.lower();
-        if (!this._fields.contains(key)) {
+        var found = this._fields.get(name.lower());
+        if (found === __null) {
             return "";
         }
-        return this._fields[key][0];
+        return found[0];
     }
 
     ## Writes `headers[name] = value`: replaces every value of the field, as

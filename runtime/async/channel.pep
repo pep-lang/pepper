@@ -363,6 +363,27 @@ export struct Channel<T> {
         return received;
     }
 
+    # Takes the value at the head if one is waiting: `(true, value)`, or
+    # `(false, default)` when none is. For the scheduler, which polls
+    # channels that are usually empty: unlike `try_receive`, a miss
+    # allocates nothing (no `Result`, `Error` or message).
+    _try_take(): (bool, T) {
+        _async_sys_mutex_lock(_lock);
+        if (_state[1] == 0) {
+            _async_sys_mutex_unlock(_lock);
+            return (false, __default<T>());
+        }
+        __ptr<T> buffer = this._slots();
+        var head = _state[0];
+        T value = move(buffer[head]);
+        _state[0] = (head + 1) % _state[2];
+        _state[1] = _state[1] - 1;
+        _async_sys_condition_notify_one(_not_full);
+        _senders._wake_one();
+        _async_sys_mutex_unlock(_lock);
+        return (true, value);
+    }
+
     # For `Select`: takes the value at the head if there is one, and
     # otherwise reports whether the channel is closed.
     _select_take(): _Polled<T> {
@@ -409,7 +430,7 @@ export struct Channel<T> {
     # returns which (see `_async_sync_park`). The caller holds the lock,
     # which is released while the task waits and held again on return.
     _park_task(queue: _SyncQueue, deadline: ulong): int {
-        var waiter = _async_sync_waiter().value();
+        var waiter = _async_sync_waiter();
         queue._push(waiter);
         _async_sys_mutex_unlock(_lock);
         var woken = _async_sync_park(queue, waiter, deadline, true);
