@@ -2020,9 +2020,12 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
 - **`ci.yml`** (push to `main`, PRs):
   - `test` is the required check: a gate job that always runs (`if:
     always()`, so never skipped, since a skipped job counts as passing) and
-    passes only when `test-windows`, `test-macos` and `test-linux` succeeded
-    or the PR is prose only. It
-    fails on a draft and on a cancelled run.
+    passes only when `test-windows`, `test-macos` and `test-linux` succeeded,
+    the PR is prose only, or the PR is still a draft (asked again of the API
+    at gate time). It fails on a cancelled run. On a ready PR, `changes`
+    first posts an in-progress `test` check run that `test` completes with
+    its verdict, so a pass left by a draft run cannot let the PR merge while
+    the ready run is still testing it.
   - `test-windows` runs on the self-hosted **`pepper-windows`** runner:
     provision LLVM (`ci-provision-llvm.sh`, cached), `cargo build
     --workspace --locked`, `cargo test --workspace --locked`, and
