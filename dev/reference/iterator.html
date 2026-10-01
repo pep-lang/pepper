@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "../searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -194,7 +194,7 @@
 <code>for</code> loop should go through a separate iterator implements <code>Iterable&lt;T&gt;</code>
 instead. A type with neither protocol is a compile error in a <code>for</code> loop.</p>
 <p>The loop goes by the methods a type has, so declaring the trait is
-optional. Declaring it (<code>extend Foo with Iterator&lt;int&gt; {}</code>) checks that
+optional. Declaring it (<code>extend Foo with Iterator&lt;int&gt;;</code>) checks that
 the methods match and lets the type be used as an <code>Iterator&lt;int&gt;</code> value,
 which a <code>for</code> loop drives through the trait.</p>
 <p><strong>Type parameters</strong></p>
@@ -226,7 +226,7 @@ which a <code>for</code> loop drives through the trait.</p>
         }
     }
 
-    extend Countdown with Iterator&lt;int&gt; {}
+    extend Countdown with Iterator&lt;int&gt;;
 
     main(): int {
         var total = 0;

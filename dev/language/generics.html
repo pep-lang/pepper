@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "../searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -424,7 +424,7 @@ struct Circle {
     area(): int { return 3 * radius * radius; }
 }
 
-extend Circle with Shape {}
+extend Circle with Shape;
 
 struct Square {
     var side: int = 2;
@@ -432,8 +432,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 # Every T must conform to Shape.
 total_area&lt;T: Shape&gt;(shapes: Array&lt;T&gt;): int {
@@ -602,8 +602,8 @@ struct Square {
     &lt;(other: Square): bool { return side &lt; other.side; }
 }
 
-extend Square with Shape {}
-extend Square with Ordered {}
+extend Square with Shape;
+extend Square with Ordered;
 
 # Inside the body, a T offers what Shape and Ordered declare.
 largest&lt;T: Shape &amp; Ordered&gt;(items: Array&lt;T&gt;): T {
@@ -676,8 +676,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 struct Box&lt;T&gt; {
     var item: T;

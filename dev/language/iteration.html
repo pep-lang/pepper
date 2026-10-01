@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "../searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -498,7 +498,7 @@ main(): int {
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
 <code>Array.iterate()</code>), <code>StringIterator</code>, <a href="#looping-over-a-range">ranges</a>, and
-your own iterators once you write <code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+your own iterators once you write <code>extend YourType with Iterator&lt;T&gt;;</code>. The adapter holds its own copy of
 the iterator it wraps (the runtime’s iterators are
 <a href="value-structs.html">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
 so a chain built from a temporary stays alive while the loop runs, and
@@ -592,7 +592,7 @@ struct Countdown {
 }
 
 # Declaring the trait documents the intent; the loop goes by the methods.
-extend Countdown with Iterator&lt;int&gt; {}
+extend Countdown with Iterator&lt;int&gt;;
 
 # An iterable: iterate() hands out a fresh iterator for each loop.
 struct Evens {
@@ -622,8 +622,8 @@ struct EvensIterator {
     }
 }
 
-extend EvensIterator with Iterator&lt;int&gt; {}
-extend Evens with Iterable&lt;int&gt; {}
+extend EvensIterator with Iterator&lt;int&gt;;
+extend Evens with Iterable&lt;int&gt;;
 
 # A generic function can loop over any type that supports the protocol.
 sum&lt;C&gt;(C values): int {
@@ -663,7 +663,7 @@ main(): int {
 <p>Some things to keep in mind:</p>
 <ul>
 <li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
-type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
+type has. Writing <code>extend Countdown with Iterator&lt;int&gt;;</code> documents your
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
 <code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a

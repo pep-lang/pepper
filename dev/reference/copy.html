@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "../searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -257,7 +257,7 @@ or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
 <p>A type that says how <code>copy</code> copies it, for a struct that <code>copy</code> cannot
 copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.</p>
-<p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt; {}</code> and give the
+<p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt;;</code> and give the
 struct a <code>copy(Copies copies)</code> method. The method builds the copy and
 copies each value it holds with <code>copies.copy(value)</code>, which reuses a copy
 already made, so objects referenced twice stay shared.</p>
@@ -290,7 +290,7 @@ already made, so objects referenced twice stay shared.</p>
         }
     }
 
-    extend Buffer with Copyable&lt;Buffer&gt; {}
+    extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>

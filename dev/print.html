@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e2586fcc.js"></script>
@@ -3669,7 +3669,7 @@ trait Shape {
 }
 
 # Each trait member is implemented by the method with its parameter types.
-extend Square with Shape {}
+extend Square with Shape;
 
 total(shape: Shape): int {
     return shape.area() + shape.area(10);
@@ -5773,7 +5773,7 @@ struct Circle {
     area(): int { return 3 * radius * radius; }
 }
 
-extend Circle with Shape {}
+extend Circle with Shape;
 
 struct Square {
     var side: int = 2;
@@ -5781,8 +5781,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 # Every T must conform to Shape.
 total_area&lt;T: Shape&gt;(shapes: Array&lt;T&gt;): int {
@@ -5951,8 +5951,8 @@ struct Square {
     &lt;(other: Square): bool { return side &lt; other.side; }
 }
 
-extend Square with Shape {}
-extend Square with Ordered {}
+extend Square with Shape;
+extend Square with Ordered;
 
 # Inside the body, a T offers what Shape and Ordered declare.
 largest&lt;T: Shape &amp; Ordered&gt;(items: Array&lt;T&gt;): T {
@@ -6025,8 +6025,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 struct Box&lt;T&gt; {
     var item: T;
@@ -6456,12 +6456,23 @@ extend Square with From&lt;int&gt; {
     }
 }
 
+# A trait whose methods all have defaults needs no body: end the extension
+# with `;`, the same as writing an empty `{}`.
+trait Labeled {
+    label(): String {
+        return "shape";
+    }
+}
+
+extend Square with Labeled;
+
 main(): int {
     var sq = Square(3);
     assert(sq.area() == 9, "trait method called on the struct");
     assert(sq.name() == "square", "second trait method");
     assert(sq.describe() == "a square", "default method from the trait");
     assert(Square.from(4).area() == 16, "static method from a generic trait");
+    assert(sq.label() == "shape", "default method from a bodiless extension");
     return 0;
 }
 </code></pre>
@@ -6471,6 +6482,11 @@ main(): int {
 stands for the type that has the trait.</li>
 <li><code>extend Square with Shape, Printable { ... }</code> attaches several traits at
 once.</li>
+<li>When the type already has every method the traits need, from its own
+methods or the traits’ defaults, the extension can end with <code>;</code> instead of
+a body: <code>extend Square with Labeled;</code> is the same as
+<code>extend Square with Labeled {}</code>. Only an extension with a <code>with</code> clause can
+leave out its body; <code>pep-fmt</code> writes an empty one as <code>;</code>.</li>
 <li>A trait can declare several methods of one name with different parameter
 types; the type implements each with the method whose parameter types
 match (see <a href="#extensions-and-traits">Overloading</a>).</li>
@@ -7023,7 +7039,7 @@ main(): int {
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
 <code>Array.iterate()</code>), <code>StringIterator</code>, <a href="#looping-over-a-range">ranges</a>, and
-your own iterators once you write <code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+your own iterators once you write <code>extend YourType with Iterator&lt;T&gt;;</code>. The adapter holds its own copy of
 the iterator it wraps (the runtime’s iterators are
 <a href="#value-structs">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
 so a chain built from a temporary stays alive while the loop runs, and
@@ -7117,7 +7133,7 @@ struct Countdown {
 }
 
 # Declaring the trait documents the intent; the loop goes by the methods.
-extend Countdown with Iterator&lt;int&gt; {}
+extend Countdown with Iterator&lt;int&gt;;
 
 # An iterable: iterate() hands out a fresh iterator for each loop.
 struct Evens {
@@ -7147,8 +7163,8 @@ struct EvensIterator {
     }
 }
 
-extend EvensIterator with Iterator&lt;int&gt; {}
-extend Evens with Iterable&lt;int&gt; {}
+extend EvensIterator with Iterator&lt;int&gt;;
+extend Evens with Iterable&lt;int&gt;;
 
 # A generic function can loop over any type that supports the protocol.
 sum&lt;C&gt;(C values): int {
@@ -7188,7 +7204,7 @@ main(): int {
 <p>Some things to keep in mind:</p>
 <ul>
 <li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
-type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
+type has. Writing <code>extend Countdown with Iterator&lt;int&gt;;</code> documents your
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
 <code>current()</code> (see <a href="#traits-and-extensions">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
@@ -7274,7 +7290,7 @@ struct Session {
     }
 }
 
-extend Session with Scoped&lt;Session&gt; {}
+extend Session with Scoped&lt;Session&gt;;
 
 # enter() may return a null reference: then the body is skipped and the
 # `else` block runs.
@@ -7292,7 +7308,7 @@ struct Lookup {
     exit() {}
 }
 
-extend Lookup with Scoped&lt;Session&gt; {}
+extend Lookup with Scoped&lt;Session&gt;;
 
 first_user(): String {
     with (var session = Session("ada")) {
@@ -7359,7 +7375,7 @@ reference):</p>
 </code></pre>
 <p>A <code>with</code> block goes by the methods a type has, not by the trait: a type
 without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the trait
-(<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent, and the
+(<code>extend Session with Scoped&lt;Session&gt;;</code>) documents the intent, and the
 compiler then checks that the type has both <code>enter()</code> and <code>exit()</code>.</p>
 <h2 id="when-exit-runs"><a class="header" href="#when-exit-runs">When <code>exit()</code> runs</a></h2>
 <p>The block keeps two locals: the scope object and the bound value. Both are
@@ -10508,7 +10524,7 @@ main(): int {
 <li><code>print</code> writes the text alone; <code>print_line</code> adds a <code>\n</code>.</li>
 <li>Both return an <code>IoResult&lt;void&gt;</code>, like <code>write_all</code>.</li>
 <li>Another type gets them by providing <code>write_all(data: u8[])</code> and declaring
-<code>extend MyStream with io.Print {}</code>.</li>
+<code>extend MyStream with io.Print;</code>.</li>
 </ul>
 <h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
 <p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
@@ -15244,7 +15260,7 @@ panic.</p>
 <code>for</code> loop should go through a separate iterator implements <code>Iterable&lt;T&gt;</code>
 instead. A type with neither protocol is a compile error in a <code>for</code> loop.</p>
 <p>The loop goes by the methods a type has, so declaring the trait is
-optional. Declaring it (<code>extend Foo with Iterator&lt;int&gt; {}</code>) checks that
+optional. Declaring it (<code>extend Foo with Iterator&lt;int&gt;;</code>) checks that
 the methods match and lets the type be used as an <code>Iterator&lt;int&gt;</code> value,
 which a <code>for</code> loop drives through the trait.</p>
 <p><strong>Type parameters</strong></p>
@@ -15276,7 +15292,7 @@ which a <code>for</code> loop drives through the trait.</p>
         }
     }
 
-    extend Countdown with Iterator&lt;int&gt; {}
+    extend Countdown with Iterator&lt;int&gt;;
 
     main(): int {
         var total = 0;
@@ -15668,7 +15684,7 @@ has nothing to bind.</p>
         }
     }
 
-    extend Session with Scoped&lt;Session&gt; {}
+    extend Session with Scoped&lt;Session&gt;;
 
     main(): int {
         with (var session = Session()) {
@@ -22312,7 +22328,7 @@ or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
 <p>A type that says how <code>copy</code> copies it, for a struct that <code>copy</code> cannot
 copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.</p>
-<p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt; {}</code> and give the
+<p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt;;</code> and give the
 struct a <code>copy(Copies copies)</code> method. The method builds the copy and
 copies each value it holds with <code>copies.copy(value)</code>, which reuses a copy
 already made, so objects referenced twice stay shared.</p>
@@ -22345,7 +22361,7 @@ already made, so objects referenced twice stay shared.</p>
         }
     }
 
-    extend Buffer with Copyable&lt;Buffer&gt; {}
+    extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
 <h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>

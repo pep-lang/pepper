@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
+            window.path_to_searchindex_js = "../searchindex-00179f0e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -320,7 +320,7 @@ main(): int {
 <li><code>print</code> writes the text alone; <code>print_line</code> adds a <code>\n</code>.</li>
 <li>Both return an <code>IoResult&lt;void&gt;</code>, like <code>write_all</code>.</li>
 <li>Another type gets them by providing <code>write_all(data: u8[])</code> and declaring
-<code>extend MyStream with io.Print {}</code>.</li>
+<code>extend MyStream with io.Print;</code>.</li>
 </ul>
 <h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
 <p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
