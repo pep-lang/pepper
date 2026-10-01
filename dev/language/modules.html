@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-aed5c219.js";
+            window.path_to_searchindex_js = "../searchindex-9463cdad.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-9b67b8db.js"></script>
@@ -500,17 +500,33 @@ same name.</li>
 the same name from a whole-file import. When two whole-file imports provide
 the same name differently, using that name is an error because it is
 ambiguous.</li>
-<li><strong>An imported name keeps its original identity.</strong> An imported name is
-compiled as the name of the declaration it denotes, so a local with that
-declaration’s own name may not be in scope where you use it. If
-<code>g.rect_area</code> is <code>shapes.pep</code>’s <code>area</code>, calling <code>g.rect_area(1, 2)</code> inside a
-function with a parameter named <code>area</code> is an error that asks you to rename
-one of them.</li>
+<li><strong>A local may share an imported declaration’s name.</strong> If <code>g.rect_area</code> is
+<code>shapes.pep</code>’s <code>area</code>, calling <code>g.rect_area(1, 2)</code> inside a function with a
+parameter named <code>area</code> calls <code>shapes.pep</code>’s function. The one exception is a
+re-exported runtime name: if a module exports the runtime’s <code>print</code> as
+<code>say</code>, a local named <code>print</code> where you call <code>say</code> is an error that asks you
+to rename one of them.</li>
 </ul>
-<p>Each file has its own namespace for its private declarations, so files and
-modules may reuse private names freely. Exported names share one namespace,
-so two modules may not export the same name, even though users reach them
-through different qualifiers. See <a href="visibility.html#each-file-has-its-own-namespace">Each file has its own namespace</a>.</p>
+<p>Each file has its own namespace, for its exported declarations as well as
+its private ones, so files and modules may reuse names freely: two modules
+may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay apart. See
+<a href="visibility.html#each-file-has-its-own-namespace">Each file has its own namespace</a>.
+Here <code>metric</code> and <code>imperial</code> each export a <code>Length</code>, a <code>parse</code> and a <code>unit</code>:</p>
+<pre><code class="language-pepper"># Both modules export `Length`, `parse` and `unit`; each keeps its own.
+import "metric" as metric;
+import "imperial" as imp;
+import [unit as imperial_unit] from "imperial";
+
+main(): int {
+    var a: metric.Length = metric.parse("abc");
+    var b: imp.Length = imp.parse("abc");
+    assert(a.metres == 3.0, "metric.parse");
+    assert(b.feet == 9.0, "imperial.parse");
+    assert(metric.unit() == "m", "qualified by the alias");
+    assert(imperial_unit() == "ft", "renamed by the import list");
+    return 0;
+}
+</code></pre>
 <h2 id="platform-specific-imports"><a class="header" href="#platform-specific-imports">Platform-specific imports</a></h2>
 <p>An import or a re-export may carry attributes like any declaration. With a
 <code>[Target(...)]</code> attribute it applies only on matching platforms and is ignored

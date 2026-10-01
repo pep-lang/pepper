@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-aed5c219.js";
+            window.path_to_searchindex_js = "../searchindex-9463cdad.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-9b67b8db.js"></script>
@@ -439,12 +439,19 @@ main(): int {
 <p>This holds across modules too: two modules may each have a <code>util.pep</code> with a
 private <code>helper</code>. Files are told apart by their path inside their module
 (<code>io/file.pep</code>), not by their file name alone.</p>
-<p>Exported names are different: they share one namespace across the whole
-program, because importers reach them by name. Two files may not export the
-same name, even from modules reached through different qualifiers:
-<code>exported 'f' is also declared in b/module.pep</code>. A private name may repeat an
-exported one from another file; in the file that declares it, the file’s own
-declaration is the one that name refers to.</p>
+<p>Exported names work the same way between modules: each module’s exports
+are its own, so two modules may export the same name, and importers tell
+them apart by qualifier (<code>a.parse</code> and <code>b.parse</code>) or by an import list
+(<code>import [parse as parse_b] from b</code>). Using a name that two whole-file
+imports both provide is an error at the use (see
+<a href="modules.html#how-imported-names-behave">Modules and imports</a>). A private name
+may repeat an exported one from another file; in the file that declares it,
+the file’s own declaration is the one that name refers to.</p>
+<p>Two kinds of file keep their exported names program-wide, because every file
+reaches them without an import or by its bare name: the runtime (and any
+<code>--import</code> module), and the program’s main file. So an export may not repeat
+a runtime name: <code>exported 'String' is also declared in</code> followed by the
+runtime’s file.</p>
 <p>A few kinds of declaration are not private in this sense:</p>
 <ul>
 <li><strong><code>extern</code> declarations</strong> name a C function, which is the same function in
