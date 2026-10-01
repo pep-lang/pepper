@@ -1198,6 +1198,21 @@ and `[Shared]`, which are part of the struct's interface. Tuples and trait
 values still call their thunks, which step their elements or object the
 same way.
 
+**Folding pairs** (#263). LLVM's own passes remove an acquire and a
+release of the same object once both are inlined into one function and
+nothing between them can read or change the count, but only if they can
+tell the release does not reach 0. Codegen tells them: a copy from a slot
+that owns a reference (`acquire_copy`, when `reads_owning_slot`: a local,
+parameter, global, field or pointer element, never `this`) loads the count
+with `!range [1, 2^31)`, since the slot's own reference keeps it at 1 or
+more. GVN and InstCombine then fold the copy's step and its release's test
+for 0, and dead-store elimination drops the count stores. Nothing changes
+at `-O0`, observable counts stay exact wherever the program reads them
+(a `__refcount` read is a load of the count, so the steps around it
+stay), and atomic counts are never folded, so no fence is lost. Copies the
+model cannot prove live (a constructor's result, `this`, a parameter at
+entry, whose caller may pass its only reference) keep both steps.
+
 | shared_ptr construct | Where |
 | --- | --- |
 | `make_shared` | The constructor's `return this` is an lvalue read of `this`, so the return site acquires (`Statement::Return` → `is_lvalue_read` → `acquire_ref`). A constructor result therefore arrives with one reference. This is net-identical to AGENTS.md's "construction leaves 0; the first owner acquires": the constructor's `this` local is never tracked, so nothing releases that reference. |

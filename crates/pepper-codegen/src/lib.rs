@@ -2049,7 +2049,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     if self.is_lvalue_read(expr) {
                         let ty = self.value_sema_type(expr).unwrap_or_default();
                         if !ty.is_empty() {
-                            self.acquire_ref(&ty, v)?;
+                            self.acquire_copy(&ty, v, expr)?;
                         }
                     }
                     value = Some(v);
@@ -2182,7 +2182,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map_err(|e| e.to_string())?;
                 self.builder.build_store(slot, cleared).map_err(|e| e.to_string())?;
             } else if is_struct_ref && self.is_lvalue_read(default) {
-                self.acquire_ref(&var.ty.to_string(), value)?;
+                self.acquire_copy(&var.ty.to_string(), value, default)?;
             }
             // Integer literals codegen as i32; adjust into the alloca's width
             // so the full word is defined (widen e.g. the ctor's `u64 size`,
@@ -2821,9 +2821,43 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// struct), so taking a reference costs no call, whichever unit
     /// defines the struct.
     fn acquire_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
+        self.acquire_ref_from(ty_name, val, false)
+    }
+
+    /// Acquire a reference to `val`, a copy of `source`: when `source` reads
+    /// a slot that owns a reference ([`Self::reads_owning_slot`]), the
+    /// object's count is at least 1 before the step, and the inlined step
+    /// tells LLVM so (#263; see [`Self::count_step`]).
+    fn acquire_copy(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, source: &Expression) -> Result<(), String> {
+        let live = self.reads_owning_slot(source);
+        self.acquire_ref_from(ty_name, val, live)
+    }
+
+    fn acquire_ref_from(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, live: bool) -> Result<(), String> {
         match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
-            Some(atomic) => self.inline_count_step(ty_name, val, true, atomic),
+            Some(atomic) => self.inline_count_step(ty_name, val, true, atomic, live),
             None => self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![val]).map(|_| ()),
+        }
+    }
+
+    /// Whether `expr` reads a reference out of a slot that owns one: a
+    /// local, parameter, global, field or pointer element, or a ternary or
+    /// `with` whose every reference result is one (or null). A non-null
+    /// value read so keeps its object alive with a count of at least 1,
+    /// the slot's own reference. `this` is not such a slot: it refers
+    /// without owning, and a constructor's `this` has a count of 0.
+    fn reads_owning_slot(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::SymbolRef { id, .. } if id == "this" => false,
+            Expression::SymbolRef { .. } | Expression::MemberRef { .. } | Expression::Index { .. } | Expression::ArrayIndex { .. } => {
+                self.is_lvalue_read(expr)
+            }
+            Expression::Ternary { true_expr, false_expr, .. } => {
+                let arm = |e: &Expression| matches!(e, Expression::PointerLiteral) || self.reads_owning_slot(e);
+                !self.is_owned_rvalue(expr) && arm(true_expr) && arm(false_expr)
+            }
+            Expression::WithSubject(with) => self.reads_owning_slot(&with.body),
+            _ => false,
         }
     }
 
@@ -2832,14 +2866,15 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// destructor and freeing) a call, to `T.__last_release`.
     fn release_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
         match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
-            Some(atomic) => self.inline_count_step(ty_name, val, false, atomic),
+            Some(atomic) => self.inline_count_step(ty_name, val, false, atomic, false),
             None => self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val]).map(|_| ()),
         }
     }
 
     /// The inlined body of a standard `__acquire` (`increment`) or
-    /// `__release`, as `struct_body` synthesizes them.
-    fn inline_count_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool, atomic: bool) -> Result<(), String> {
+    /// `__release`, as `struct_body` synthesizes them. `live`: another slot
+    /// owns a reference to the object (see [`Self::count_step`]).
+    fn inline_count_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool, atomic: bool, live: bool) -> Result<(), String> {
         let object = val.into_pointer_value();
         // The insert point's function: a thunk is emitted while another
         // function is being compiled.
@@ -2853,7 +2888,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
         self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
         self.builder.position_at_end(step);
-        let after = self.count_step(object, sema::CountField::Strong, increment, atomic)?;
+        let after = self.count_step(object, sema::CountField::Strong, increment, atomic, live)?;
         if increment {
             self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
         } else {
@@ -2896,7 +2931,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.builder.position_at_end(entry);
         let object = function.get_nth_param(0).expect("this").into_pointer_value();
         self.call_function(&format!("{}.__dtor", ty_name), vec![object.into()])?;
-        let weak = self.count_step(object, sema::CountField::Weak, false, atomic)?;
+        let weak = self.count_step(object, sema::CountField::Weak, false, atomic, false)?;
         let free = self.context.append_basic_block(function, "free");
         let done = self.context.append_basic_block(function, "done");
         let zero = self.context.i32_type().const_zero();
@@ -3273,7 +3308,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_conditional_branch(same, cont_block, ops_block)
             .map_err(|e| e.to_string())?;
         self.builder.position_at_end(ops_block);
-        self.acquire_ref(ty_name, new_val)?;
+        self.acquire_copy(ty_name, new_val, source)?;
         self.store_before_release(gep, value_ty, new_val, ty_name)?;
         self.release_ref(ty_name, old)?;
         self.builder
@@ -3546,7 +3581,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicValueEnum::PointerValue(p) => p,
                     other => return Err(format!("head count on a non-reference {:?}", other)),
                 };
-                Ok(self.count_step(this, *field, *increment, *atomic)?.into())
+                Ok(self.count_step(this, *field, *increment, *atomic, false)?.into())
             }
             Expression::FunctionPointer { owner, function, .. } => {
                 let name = match owner {
@@ -4447,12 +4482,19 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// One step of a head count of `object`, returning the count after it.
     /// Every object (and every weak view) starts with the two u32 counts,
     /// so a count sits at a fixed byte offset whatever the struct.
+    ///
+    /// `live` says another slot owns a reference to the object, so the count
+    /// is between 1 and `i32::MAX` before the step: the load carries that
+    /// range (`!range`), and LLVM folds the matching release's test for 0
+    /// away once both steps are in one function and nothing between them
+    /// may change the count (#263). Atomic counts are never folded.
     fn count_step(
         &mut self,
         object: PointerValue<'ctx>,
         field: sema::CountField,
         increment: bool,
         atomic: bool,
+        live: bool,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
         let count = self.head_count_ptr(object, field)?;
         let i32_type = self.context.i32_type();
@@ -4469,7 +4511,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             self.builder.build_atomicrmw(op, count, one, ordering).map_err(|e| e.to_string())?
         } else {
-            self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?.into_int_value()
+            let load = self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?;
+            if live {
+                let range = self.context.metadata_node(&[one.into(), i32_type.const_int(1 << 31, false).into()]);
+                let instruction = inkwell::values::BasicValue::as_instruction_value(&load).ok_or_else(|| "count load".to_string())?;
+                instruction.set_metadata(range, self.context.get_kind_id("range")).map_err(|e| e.to_string())?;
+            }
+            load.into_int_value()
         };
         let new = if increment {
             self.builder.build_int_add(old, one, "count_after")
@@ -5669,7 +5717,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         let ty = self.value_sema_type(arm);
         if self.is_struct_ref_name(&ty) {
-            self.acquire_ref(&ty.unwrap_or_default(), value)?;
+            self.acquire_copy(&ty.unwrap_or_default(), value, arm)?;
         }
         Ok(())
     }
