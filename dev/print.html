@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-14030659.js";
+            window.path_to_searchindex_js = "searchindex-3e1ec90d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6e3ed46d.js"></script>
+        <script src="toc-24be83d2.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1077,6 +1077,42 @@ main(): int {
         out.append(" ".repeat(4)).append(text.trim_end()).append("\n");
     }
     assert(out.to_string() == "    one\n    two\n", "StringBuilder");
+    return 0;
+}
+</code></pre>
+<p>To search and take text apart, <code>find(needle, from)</code> starts at a byte offset
+and <code>rfind</code> finds the last match, <code>split(separator)</code> cuts at every separator
+and <code>split_once</code> at the first (giving an optional pair), <code>separator.join(parts)</code>
+puts the parts back together, and <code>replace(from, to)</code> swaps every match. To
+read a number, <code>math.parse_int(text, base)</code> (after <code>import math</code>) gives an
+optional <code>long</code>, empty when the text is not an integer:</p>
+<pre><code class="language-pepper"># Searching, splitting, joining and replacing text, and reading numbers.
+import math;
+
+main(): int {
+    # find takes a byte offset to start from; rfind finds the last match.
+    var path = "src/lib/main.pep";
+    var first = path.find("/");
+    assert(path.find("/", (first as ulong) + 1) == 7, "the second slash");
+    assert(path.rfind("/") == 7, "the last slash");
+
+    # split cuts at every separator; split_once at the first, if any.
+    var fields = "name,,age".split(",");
+    assert(fields.count() == 3 &amp;&amp; fields[1] == "", "an empty field");
+    var header = "Content-Type: text/plain".split_once(": ");
+    if (header.is_some()) {
+        var (name, value) = header.value();
+        assert(name == "Content-Type" &amp;&amp; value == "text/plain", "both halves");
+    }
+
+    # join puts the separator between the parts; replace swaps every match.
+    assert(" | ".join(fields) == "name |  | age", "joined");
+    assert("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n", "line endings");
+
+    # math.parse_int reads an integer, in any base from 2 to 36.
+    assert(math.parse_int("-42").value() == -42, "decimal");
+    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
+    assert(math.parse_int("4 2").is_none(), "not an integer");
     return 0;
 }
 </code></pre>
@@ -11745,7 +11781,7 @@ content and its own buffer.</p>
 <li>an independent copy of this String</li>
 </ul>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
-<pre><code class="language-pepper">find(needle: String): long
+<pre><code class="language-pepper">find(needle: String, from: ulong = 0): long
 </code></pre>
 <p>Returns the <strong>byte offset</strong> of the first occurrence of <code>needle</code>, or -1
 when it does not occur.</p>
@@ -11754,18 +11790,134 @@ when it does not occur.</p>
 An empty <code>needle</code> is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
 valid UTF-8. Runs in O(size() * needle.size()).</p>
+<p>With <code>from</code>, the search starts at that byte offset, which must be a
+code point boundary (an offset <code>find</code> returned, plus a match’s size,
+is one); an offset past the end, or inside a code point, finds
+nothing. The result still counts from the start of the String.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+<li><code>from</code> — the byte offset to start searching at; 0 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte offset of the first match at or after <code>from</code>, or -1 when there is none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var s = "TESTING";
+    assert(s.find("STI") == 2, "byte offset");
+    assert(s.find("xyz") == -1, "absent");
+    assert("a,b,c".find(",", 2) == 3, "the second comma");
+</code></pre>
+<h4 id="rfind"><a class="header" href="#rfind">rfind</a></h4>
+<pre><code class="language-pepper">rfind(needle: String): long
+</code></pre>
+<p>Returns the byte offset of the last place <code>needle</code> occurs in this
+String, or -1 when it does not occur. An empty <code>needle</code> is found at
+<code>size()</code>. Runs in O(size() * needle.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the byte offset of the first match, or -1 when there is none</li>
+<li>the byte offset of the last match, or -1 when there is none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "TESTING";
-    assert(s.find("STI") == 2, "byte offset");
-    assert(s.find("xyz") == -1, "absent");
+<pre><code class="language-pepper">    assert("a/b/c".rfind("/") == 3, "the last slash");
+    assert("abc".rfind("x") == -1, "absent");
+</code></pre>
+<h4 id="split"><a class="header" href="#split">split</a></h4>
+<pre><code class="language-pepper">split(separator: String): String[]
+</code></pre>
+<p>Splits the String at every occurrence of <code>separator</code> and returns the
+pieces between them, in order. Adjacent separators give an empty
+piece, and so does a separator at either end: <code>"a,,b".split(",")</code> is
+<code>["a", "", "b"]</code> and <code>",a".split(",")</code> is <code>["", "a"]</code>. A String
+without <code>separator</code>, the empty String included, gives one piece: the
+whole String. Runs in O(size() * separator.size()).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Array with one new String per piece</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var parts = "a,b,,c".split(",");
+    assert(parts.count() == 4, "four pieces");
+    assert(parts[2] == "", "an empty piece");
+</code></pre>
+<h4 id="split_once"><a class="header" href="#split_once">split_once</a></h4>
+<pre><code class="language-pepper">split_once(separator: String): (String, String)?
+</code></pre>
+<p>Splits the String at the first occurrence of <code>separator</code>: the text
+before it and the text after it, or none when it does not occur.
+Runs in O(size() * separator.size()).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pieces before and after the first <code>separator</code>, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var header = "Host: example.com".split_once(": ");
+    assert(header.is_some(), "has a colon");
+    var (name, value) = header.value();
+    assert(name == "Host" &amp;&amp; value == "example.com", "split");
+</code></pre>
+<h4 id="join"><a class="header" href="#join">join</a></h4>
+<pre><code class="language-pepper">join(parts: String[]): String
+</code></pre>
+<p>Returns the pieces of <code>parts</code> joined into one String, with this String
+between each two of them: <code>", ".join(names)</code>. No parts give an empty
+String, and one part gives a copy of it. Runs in O(total size).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>parts</code> — the pieces to join</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var parts = Array&lt;String&gt;();
+    parts.append("a");
+    parts.append("b");
+    assert(", ".join(parts) == "a, b", "joined");
+</code></pre>
+<h4 id="replace"><a class="header" href="#replace">replace</a></h4>
+<pre><code class="language-pepper">replace(from: String, to: String): String
+</code></pre>
+<p>Returns a copy of this String with every occurrence of <code>from</code> replaced
+by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size() * from.size()) plus the result’s
+size.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the text to replace</li>
+<li><code>to</code> — the text to put in its place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>from</code> is empty</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
 </code></pre>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">contains(needle: String): bool
@@ -14830,7 +14982,7 @@ path is relative.</p>
 <ul>
 <li>true when the path is not absolute</li>
 </ul>
-<h4 id="join"><a class="header" href="#join">join</a></h4>
+<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
 <pre><code class="language-pepper">join(other: Path): Path
 </code></pre>
 <p>Returns this path with <code>other</code> appended as further components.</p>
@@ -17617,7 +17769,7 @@ result can be out of date by the time it is used. Always false for a
 <ul>
 <li>true if the thread can be joined</li>
 </ul>
-<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
+<h4 id="join-2"><a class="header" href="#join-2">join</a></h4>
 <pre><code class="language-pepper">join()
 </code></pre>
 <p>Waits for the thread’s body to return.</p>
@@ -18016,7 +18168,7 @@ task can, since it stays on this thread.</p>
 <li>outside <code>run</code></li>
 </ul>
 <h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
-<h4 id="join-2"><a class="header" href="#join-2">join</a></h4>
+<h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
 <p>Waits for the task to finish and returns its value. Other tasks run
@@ -18729,7 +18881,7 @@ calling thread already holding the lock counts as busy.</p>
         print("busy; try later\n");
     }
 </code></pre>
-<h4 id="replace"><a class="header" href="#replace">replace</a></h4>
+<h4 id="replace-1"><a class="header" href="#replace-1">replace</a></h4>
 <pre><code class="language-pepper">replace([Move] value: T): T
 </code></pre>
 <p>Replaces the whole value and returns the one the Mutex held, which the
@@ -20462,6 +20614,56 @@ can take it from with <code>UnixStream.adopt</code>, as
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/math/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="mathmodulepep"><a class="header" href="#mathmodulepep">math/module.pep</a></h1>
+<p>Numbers beyond the operators: parsing them from text for now, and the
+rest of the math library as it grows.</p>
+<p>Bring it in with <code>import math</code>.</p>
+<ul>
+<li><a href="#mathparsepep">Parsing</a>: <code>parse_int</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import math;
+
+    main(): int {
+        var port = math.parse_int("8080");
+        assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/math/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/math/parse.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="mathparsepep"><a class="header" href="#mathparsepep">math/parse.pep</a></h1>
+<p>Reading integers from text.</p>
+<p>Source: <code>runtime/math/parse.pep</code></p>
+<h2 id="parse_int"><a class="header" href="#parse_int">parse_int</a></h2>
+<pre><code class="language-pepper">parse_int(text: String, base: int = 10): long?
+</code></pre>
+<p>Parses <code>text</code> as an integer written in <code>base</code>: an optional <code>+</code> or <code>-</code>,
+then one or more digits, and nothing else. Digits past 9 are the
+letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
+(<code>0x</code>) or separators are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value does not fit a <code>long</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import math;
+
+    assert(math.parse_int("-42").value() == -42, "decimal");
+    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
+    assert(!math.parse_int("12x").is_some(), "not a number");
+    assert(!math.parse_int("9223372036854775808").is_some(), "too big");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/tls/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="tlsmodulepep"><a class="header" href="#tlsmodulepep">tls/module.pep</a></h1>
 <p>Encrypted connections: TLS 1.2 and 1.3 over TCP, for clients and servers.</p>

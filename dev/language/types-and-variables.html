@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-14030659.js";
+            window.path_to_searchindex_js = "../searchindex-3e1ec90d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6e3ed46d.js"></script>
+        <script src="../toc-24be83d2.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -390,6 +390,42 @@ main(): int {
         out.append(" ".repeat(4)).append(text.trim_end()).append("\n");
     }
     assert(out.to_string() == "    one\n    two\n", "StringBuilder");
+    return 0;
+}
+</code></pre>
+<p>To search and take text apart, <code>find(needle, from)</code> starts at a byte offset
+and <code>rfind</code> finds the last match, <code>split(separator)</code> cuts at every separator
+and <code>split_once</code> at the first (giving an optional pair), <code>separator.join(parts)</code>
+puts the parts back together, and <code>replace(from, to)</code> swaps every match. To
+read a number, <code>math.parse_int(text, base)</code> (after <code>import math</code>) gives an
+optional <code>long</code>, empty when the text is not an integer:</p>
+<pre><code class="language-pepper"># Searching, splitting, joining and replacing text, and reading numbers.
+import math;
+
+main(): int {
+    # find takes a byte offset to start from; rfind finds the last match.
+    var path = "src/lib/main.pep";
+    var first = path.find("/");
+    assert(path.find("/", (first as ulong) + 1) == 7, "the second slash");
+    assert(path.rfind("/") == 7, "the last slash");
+
+    # split cuts at every separator; split_once at the first, if any.
+    var fields = "name,,age".split(",");
+    assert(fields.count() == 3 &amp;&amp; fields[1] == "", "an empty field");
+    var header = "Content-Type: text/plain".split_once(": ");
+    if (header.is_some()) {
+        var (name, value) = header.value();
+        assert(name == "Content-Type" &amp;&amp; value == "text/plain", "both halves");
+    }
+
+    # join puts the separator between the parts; replace swaps every match.
+    assert(" | ".join(fields) == "name |  | age", "joined");
+    assert("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n", "line endings");
+
+    # math.parse_int reads an integer, in any base from 2 to 36.
+    assert(math.parse_int("-42").value() == -42, "decimal");
+    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
+    assert(math.parse_int("4 2").is_none(), "not an integer");
     return 0;
 }
 </code></pre>
