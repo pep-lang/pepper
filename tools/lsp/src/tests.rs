@@ -974,3 +974,43 @@ fn hover_on_an_inferred_local_and_its_fields() {
     assert!(done.contains("`bool`"), "{}", done);
 }
 
+
+const ASSIGNED: &str = r#"struct Core { var n: int; }
+struct Task {
+    ## What the scheduler knows about the task.
+    var core: Core;
+    construct(start: Core) {
+        this.core = start;
+    }
+    swap(other: Core): int {
+        this.core = other;
+        return other.n;
+    }
+}
+extend Task {
+    bump(by: int): int {
+        var total = by + this.core.n;
+        return total;
+    }
+}
+"#;
+
+/// Parameters are in scope (in constructors, methods and extensions), and
+/// the left side of an assignment hovers, though the parser starts an
+/// assignment's span at its `=`.
+#[test]
+fn hover_on_parameters_and_assigned_fields() {
+    let (uri, text, program) = load("assigned_hover", ASSIGNED, "main.pep");
+    let field = hover(&uri, &text, &program, at(&text, "core = start", 0, 1));
+    assert!(field.contains("`.core` — `Core`") && field.contains("scheduler knows"), "{}", field);
+    let start = hover(&uri, &text, &program, at(&text, "start;", 0, 1));
+    assert!(start.contains("`start` — `Core`"), "{}", start);
+    let other = hover(&uri, &text, &program, at(&text, "other.n", 0, 1));
+    assert!(other.contains("`other` — `Core`"), "{}", other);
+    let by = hover(&uri, &text, &program, at(&text, "by + this", 0, 0));
+    let core = hover(&uri, &text, &program, at(&text, "core.n;", 0, 1));
+    assert!(core.contains("`.core` — `Core`") && core.contains("scheduler knows"), "in an extension: {}", core);
+    assert!(by.contains("`by` — `int`"), "{}", by);
+    assert!(definition(&uri, &text, &program, at(&text, "start;", 0, 1)).1.starts_with("start: Core"));
+    assert!(definition(&uri, &text, &program, at(&text, "total;", 0, 1)).1.starts_with("total = by"));
+}

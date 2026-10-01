@@ -344,40 +344,57 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
     }
 }
 
-/// The function body containing `offset`, if any, plus the enclosing struct.
-fn body_at<'a>(module: &'a ast::Module, offset: usize) -> Option<(&'a ast::Block, Option<&'a ast::StructDecl>)> {
+/// The function, method or constructor whose body contains `offset`, if
+/// any, plus the enclosing struct (none for an extension's method).
+fn function_at(module: &ast::Module, offset: usize) -> Option<(&ast::FunctionDecl, Option<&ast::StructDecl>)> {
+    let inside = |f: &&ast::FunctionDecl| f.span.start <= offset && offset < f.span.end && f.body.is_some();
     for decl in &module.declarations {
         match decl {
-            ast::Declaration::Function(f) => {
-                if f.span.start <= offset && offset < f.span.end
-                    && let Some(body) = &f.body
-                {
-                    return Some((body, None));
+            ast::Declaration::Function(f) if inside(&f) => return Some((f, None)),
+            ast::Declaration::Struct(s) if s.span.start <= offset && offset < s.span.end => {
+                if let Some(f) = s.methods.iter().chain(&s.constructors).find(inside) {
+                    return Some((f, Some(s)));
                 }
             }
-            ast::Declaration::Struct(s) => {
-                if !(s.span.start <= offset && offset < s.span.end) {
-                    continue;
-                }
-                for m in &s.methods {
-                    if m.span.start <= offset && offset < m.span.end
-                        && let Some(body) = &m.body
-                    {
-                        return Some((body, Some(s)));
-                    }
-                }
-                if let Some(c) = s.constructors.iter().find(|c| c.span.start <= offset && offset < c.span.end)
-                    && c.span.start <= offset
-                    && offset < c.span.end
-                    && let Some(body) = &c.body
-                {
-                    return Some((body, Some(s)));
+            ast::Declaration::Extend(e) => {
+                if let Some(f) = e.methods.iter().find(inside) {
+                    return Some((f, None));
                 }
             }
             _ => {}
         }
     }
     None
+}
+
+/// The function body containing `offset`, if any, plus the enclosing struct.
+fn body_at(module: &ast::Module, offset: usize) -> Option<(&ast::Block, Option<&ast::StructDecl>)> {
+    let (f, s) = function_at(module, offset)?;
+    Some((f.body.as_ref()?, s))
+}
+
+/// The name of the type the extension around `offset` extends.
+fn extended_at(module: &ast::Module, offset: usize) -> Option<String> {
+    module.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Extend(e) if e.span.start <= offset && offset < e.span.end => Some(e.target.name.clone()),
+        _ => None,
+    })
+}
+
+/// The locals in scope at `offset`: the enclosing function's parameters,
+/// then what its body declares before `offset`.
+fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
+    let Some((f, _)) = function_at(module, offset) else { return vec![] };
+    let mut out: Vec<Symbol> = f
+        .parameters
+        .iter()
+        .filter(|p| p.name != "this")
+        .map(|p| Symbol { name: p.name.clone(), name_span: p.name_span, ty: variable_type(p) })
+        .collect();
+    if let Some(body) = &f.body {
+        out.extend(locals_at(body, offset));
+    }
+    out
 }
 
 // ── Expression lookup ─────────────────────────────────────────────────────────
@@ -450,7 +467,12 @@ fn find_expr<'a>(module: &'a ast::Module, offset: usize) -> Option<&'a ast::Expr
 
 fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a ast::Expression> {
     for stmt in &block.statements {
-        let s = stmt.span();
+        let mut s = stmt.span();
+        // An expression statement's span is its expression's: an
+        // assignment's starts at the `=`.
+        if let ast::Statement::Expression(e) = stmt {
+            s.start = s.start.min(expr_start(e));
+        }
         if !(s.start <= offset && offset < s.end) {
             continue;
         }
@@ -1452,8 +1474,7 @@ impl PepperLsp {
             return Some(Hover { contents: md(overload_hover(program, function, others)), range: None });
         }
         // A local's name where it is declared (`var worker = ...`).
-        if let Some((body, _)) = body_at(&ast, offset)
-            && let Some(local) = locals_at(body, offset)
+        if let Some(local) = scope_locals(&ast, offset)
                 .into_iter()
                 .find(|s| s.name_span.start <= offset && offset <= s.name_span.end)
         {
@@ -1462,10 +1483,10 @@ impl PepperLsp {
         }
         let expr = find_expr(&ast, offset)?;
 
-        let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
+        let Some((_, enclosing_struct)) = body_at(&ast, offset) else {
             return None;
         };
-        let locals: Vec<Symbol> = locals_at(body, offset);
+        let locals: Vec<Symbol> = scope_locals(&ast, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
         let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
@@ -1485,7 +1506,9 @@ impl PepperLsp {
         let member_docs = |lhs: &ast::Expression, name: &str| {
             let program = program?;
             let owner = match lhs {
-                ast::Expression::SymbolRef { id, .. } if id == "this" => enclosing_struct.map(|s| s.name.clone()),
+                ast::Expression::SymbolRef { id, .. } if id == "this" => {
+                    enclosing_struct.map(|s| s.name.clone()).or_else(|| extended_at(&ast, offset))
+                }
                 ast::Expression::SymbolRef { id, .. } => {
                     match locals.iter().rev().chain(&struct_members).chain(&globals).find(|s| s.name == *id) {
                         Some(symbol) => type_base_name(&symbol_type(symbol)),
@@ -1554,6 +1577,8 @@ Returns a fresh value: it shares nothing with the arguments.");
                                 .and_then(|m| enclosing_struct.and_then(|s| find_sema_struct(m, &s.name)))
                                 .and_then(|st| struct_member_type(st, name))
                         })
+                        // In an extension's method, by the extended type.
+                        .or_else(|| sema.and_then(|m| pepper_sema::member_lookup::field_type(m, FileId(0), offset)).map(|t| t.to_string()))
                         .unwrap_or_else(|| "unknown".to_string())
                 } else if let Some(case) = sema.and_then(|m| enum_case_of(m, lhs, name)).or_else(|| enum_case_in(&ast, lhs, name)) {
                     case
@@ -1637,10 +1662,10 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
         let expr = find_expr(&ast, offset)?;
 
-        let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
+        let Some((_, enclosing_struct)) = body_at(&ast, offset) else {
             return None;
         };
-        let locals: Vec<Symbol> = locals_at(body, offset);
+        let locals: Vec<Symbol> = scope_locals(&ast, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
         let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
@@ -1651,7 +1676,7 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
 
         let target_span = match expr {
-            ast::Expression::SymbolRef { id, .. } => locals.iter().find(|s| s.name == *id)
+            ast::Expression::SymbolRef { id, .. } => locals.iter().rev().find(|s| s.name == *id)
                 .or_else(|| struct_members.iter().find(|s| s.name == *id))
                 .or_else(|| globals.iter().find(|s| s.name == *id))
                 .map(|s| s.name_span),
@@ -1775,7 +1800,7 @@ Returns a fresh value: it shares nothing with the arguments.");
             && let Ok(ast) = parse_source(uri.as_str(), &text).or_else(|e| parse_after_dot(uri, &text, offset).ok_or(e))
         {
             let scope = body_at(&ast, offset);
-            let locals: Vec<Symbol> = scope.as_ref().map(|(b, _)| locals_at(b, offset)).unwrap_or_default();
+            let locals: Vec<Symbol> = scope_locals(&ast, offset);
             let globals = collect_globals(&ast);
             let struct_members: Vec<Symbol> = scope
                 .as_ref()

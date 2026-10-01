@@ -1338,7 +1338,11 @@ diagnostics"). The mechanics:
   Hover types a local whose type is inferred (`var w = f()`) from the sema
   model (`member_lookup::local_type`, by its name's location; also on the
   name where it is declared), and a field reached through any owner by
-  `member_lookup::field_type`.
+  `member_lookup::field_type`. The locals in scope (`scope_locals`) are the
+  enclosing function's parameters (`function_at`: functions, methods,
+  constructors, extension methods) and what its body declares before the
+  cursor. An expression statement starts at its expression's start
+  (`expr_start`), since an assignment's span starts at its `=`.
 - **Implicit conversions.** `convert_to_traits` records each conversion it
   inserts whose value has a location in `Module::conversions` (string
   literals carry their `Loc` for this, and the `String` constructor call
