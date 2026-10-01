@@ -873,7 +873,11 @@ How the language lowers:
   (a `?:` chain). An owned subject is a deferred temporary, released at the
   end of the full expression, so an arm may yield one of its fields. A `?:`
   with one owned arm is owned: `codegen_ternary` acquires the other arm's
-  read (`copy_arm`), as C++ yields a prvalue copy there.
+  read (`copy_arm`), as C++ yields a prvalue copy there. Numeric arms of
+  different types convert, each in its own block before the branch, to
+  `arithmetic::conditional_result` of the two (`convert_arm`), the type
+  sema's `static_type::of` and codegen's `value_sema_type` report for the
+  `?:`, so a `return`, initializer, argument or assignment converts from it.
 - **Enum cases that carry nothing**: `StaticCase` (`static_case`) is the
   global `<Enum>.case<tag>`, the enum's struct with its counts at
   `STATIC_REFCOUNT` and 1, its `__tag` set and every other field zero. It

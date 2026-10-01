@@ -2818,10 +2818,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let callee_ty = pepper_sema::passes::gather_generics::parse_type_string(&self.value_sema_type(callee)?);
                 callee_ty.function_return().map(|t| t.to_string())
             }
-            // Both ternary arms have the same declared type (enforced by
-            // sema): report it so consumers (var defs, refcount helpers)
-            // see the arm's type, not nothing.
-            Expression::Ternary { true_expr, .. } => self.value_sema_type(true_expr),
+            // Numeric arms have their common type (`codegen_ternary`
+            // converts each to it); other arms share the true arm's type.
+            Expression::Ternary { true_expr, false_expr, .. } => {
+                self.conditional_type(true_expr, false_expr).or_else(|| self.value_sema_type(true_expr))
+            }
             Expression::Subject { ty, .. } => Some(ty.to_string()),
             Expression::WithSubject(with) => self.value_sema_type(&with.body),
             // Atomic intrinsics: the load yields T, the store is void, the
@@ -5870,6 +5871,30 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// The numeric type a `?:` converts both arms to
+    /// (`conditional_result`), or `None` when an arm is not a number or its
+    /// type is unknown.
+    fn conditional_type(&self, true_expr: &Expression, false_expr: &Expression) -> Option<String> {
+        let true_name = self.value_sema_type(true_expr)?;
+        let false_name = self.value_sema_type(false_expr)?;
+        if !llvm_ops::is_numeric_type(&true_name) || !llvm_ops::is_numeric_type(&false_name) {
+            return None;
+        }
+        Some(llvm_ops::conditional_result(&true_name, &false_name))
+    }
+
+    /// Converts a `?:` arm's numeric value to the conditional's type
+    /// `common`, from the arm's own type (which carries its signedness).
+    fn convert_arm(&self, expr: &Expression, value: BasicValueEnum<'ctx>, common: Option<&str>) -> BasicValueEnum<'ctx> {
+        match common {
+            Some(common) => {
+                let from = self.numeric_source_name(expr, &value);
+                llvm_ops::coerce(self.context, &self.builder, value, &from, common)
+            }
+            None => value,
+        }
+    }
+
     fn codegen_ternary(
         &mut self,
         condition: &Expression,
@@ -5894,10 +5919,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         // One owned arm makes the result owned: copy the other arm's read.
         let owned = self.is_owned_rvalue(true_expr) || self.is_owned_rvalue(false_expr);
         self.builder.position_at_end(true_block);
+        // Numeric arms convert to the conditional's type (C's usual
+        // arithmetic conversions, `conditional_result`) inside their own
+        // block, before the branch, so the phi sees one type and its
+        // consumers convert from the type `value_sema_type` reports.
+        let common = self.conditional_type(true_expr, false_expr);
         let true_val = self.codegen_expr_in_arm(true_expr)?;
         if owned {
             self.copy_arm(true_expr, true_val)?;
         }
+        let true_val = self.convert_arm(true_expr, true_val, common.as_deref());
         // The arm's creation ref survives into the phi: a ternary of owned
         // rvalues is itself an owned rvalue (the consumer releases it once),
         // exactly as C++'s conditional operator yields one temporary.
@@ -5911,25 +5942,28 @@ impl<'ctx> CodeGenerator<'ctx> {
         if owned {
             self.copy_arm(false_expr, false_val)?;
         }
+        let false_val = self.convert_arm(false_expr, false_val, common.as_deref());
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;
         let false_end = self.builder.get_insert_block().expect("insert block");
 
         self.builder.position_at_end(merge_block);
-        // Mixed-width arms (e.g. `cond ? sizeof<T>() : 8` — i64 vs an i32
-        // literal) must promote to a common type before the phi, mirroring
-        // binary-op promotion; equal LLVM types need no work.
+        // Arms of unknown type that still differ in width promote at the
+        // end of their own blocks, by their LLVM types.
         let (true_val, false_val) = if true_val.get_type() == false_val.get_type() {
             (true_val, false_val)
         } else {
-            let true_name = self.value_sema_type(true_expr).unwrap_or_else(|| value_type_name(&true_val));
-            let false_name = self.value_sema_type(false_expr).unwrap_or_else(|| value_type_name(&false_val));
-            let common = llvm_ops::result_type(&true_name, &false_name);
-            (
-                llvm_ops::coerce(self.context, &self.builder, true_val, &value_type_name(&true_val), &common),
-                llvm_ops::coerce(self.context, &self.builder, false_val, &value_type_name(&false_val), &common),
-            )
+            let common = llvm_ops::result_type(&value_type_name(&true_val), &value_type_name(&false_val));
+            let promote = |value: BasicValueEnum<'ctx>, block: inkwell::basic_block::BasicBlock<'ctx>| {
+                if let Some(branch) = block.get_terminator() {
+                    self.builder.position_before(&branch);
+                }
+                llvm_ops::coerce(self.context, &self.builder, value, &value_type_name(&value), &common)
+            };
+            let promoted = (promote(true_val, true_end), promote(false_val, false_end));
+            self.builder.position_at_end(merge_block);
+            promoted
         };
         let phi = self
             .builder

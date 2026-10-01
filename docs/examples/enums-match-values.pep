@@ -27,6 +27,16 @@ keyword(word: String): int {
     };
 }
 
+# The arms' values are numbers of different types (`0` is an `int`,
+# `length()` a `long`), so the `match` has their common type, `long`, and
+# converts to the `int` this function returns.
+length_of(word: String): int {
+    return match (word) {
+        "" => 0,
+        else => word.length(),
+    };
+}
+
 main(): int {
     var total = area(Shape.Rect(2, 3)) + keyword("extern");
 
@@ -56,6 +66,7 @@ main(): int {
         else => "many",
     };
     assert(size == "many", "total is past three");
+    assert(length_of("four") == 4 && length_of("") == 0, "lengths convert");
     assert(total == 6 + 2 + 1 + 3 + 100, "every step adds up");
     return 0;
 }

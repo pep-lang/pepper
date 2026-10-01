@@ -5,7 +5,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
-pub use pepper_sema::arithmetic::{is_float_type, is_numeric_type, is_unsigned_int_type, result_type};
+pub use pepper_sema::arithmetic::{conditional_result, is_float_type, is_numeric_type, is_unsigned_int_type, result_type};
 
 /// Coerce a value to the target integer/float type name (port of the coerce
 /// helper in `OperatorGen.cpp`).

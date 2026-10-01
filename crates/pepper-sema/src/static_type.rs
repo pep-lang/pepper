@@ -273,7 +273,18 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
                 }
             }
         }
-        Expression::Ternary { true_expr, .. } => of(true_expr, table, current),
+        // Numeric arms have their common type; others the true arm's.
+        Expression::Ternary { true_expr, false_expr, .. } => {
+            let true_ty = of(true_expr, table, current)?;
+            match of(false_expr, table, current) {
+                Some(false_ty) if crate::arithmetic::is_numeric_type(&true_ty.to_string())
+                    && crate::arithmetic::is_numeric_type(&false_ty.to_string()) =>
+                {
+                    Some(TypeName::new(&crate::arithmetic::conditional_result(&true_ty.to_string(), &false_ty.to_string())))
+                }
+                _ => Some(true_ty),
+            }
+        }
         Expression::Unary { op: crate::model::UnaryOp::LogicalNot, .. } => Some(TypeName::bool_()),
         Expression::Unary { op: crate::model::UnaryOp::Neg | crate::model::UnaryOp::BitNot, operand, .. } => {
             of(operand, table, current)

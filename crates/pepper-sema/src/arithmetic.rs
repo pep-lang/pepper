@@ -106,3 +106,21 @@ pub fn binary_result(op: crate::model::BinaryOp, lhs: &str, rhs: &str) -> Option
         _ => result_type(lhs, rhs),
     })
 }
+
+/// Type of a conditional `c ? a : b` whose arms have types `a` and `b`, and
+/// so of a `match` expression (a `?:` chain over its arms): the arms' type
+/// when they agree (`int` and `i32` agree), else, for two numbers, the
+/// usual arithmetic conversions of the two (`int` and `long` give `long`),
+/// as C's conditional operator does. Codegen converts each arm to it, so a
+/// consumer converts the value from this type. Anything else keeps `a`.
+pub fn conditional_result(a: &str, b: &str) -> String {
+    use crate::passes::check_function_types::canonical;
+    use crate::type_name::TypeName;
+    if a == b || canonical(&TypeName::new(a)) == canonical(&TypeName::new(b)) {
+        return a.to_string();
+    }
+    if !is_primitive_numeric(a) || !is_primitive_numeric(b) {
+        return a.to_string();
+    }
+    result_type(a, b)
+}

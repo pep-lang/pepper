@@ -326,6 +326,10 @@ conversions"), so code ported from C gives the same results:
 - **Integer and floating point** gives floating point: `3 * 0.5` is 1.5.
 - **Division** of integers truncates toward zero (`-7 / 2` is -3), and `%` takes
   the sign of the left operand (`-7 % 3` is -1).
+- **Conditionals.** `c ? a : b` with numeric arms of different types has
+  their common type by the same rules (`c ? 0 : s.length()` is a `long`), and
+  so does a [`match` expression](enums.md#match-expressions-is-and-literal-patterns)
+  over its arms. The value converts from that type wherever it goes.
 - **Shifts** take the type of the (promoted) left operand. `>>` keeps the sign for
   signed types and fills with zeros for unsigned types.
 - **Overflow** of unsigned arithmetic wraps around. As in C, signed overflow,

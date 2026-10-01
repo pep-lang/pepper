@@ -1314,8 +1314,9 @@ fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
 }
 
 /// Report a `match` expression whose arms produce values of types that do
-/// not mix: it has the first arm's type. Numbers mix (they convert), and
-/// `__null` fits any reference.
+/// not mix: it has the first arm's type, or, when the arms are numbers, their
+/// common type (`arithmetic::conditional_result`). Numbers mix (they
+/// convert), and `__null` fits any reference.
 fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, current: Option<&TypeName>) {
     crate::passes::walk_block(block, &mut |e| {
         let Expression::WithSubject(with) = e else { return };

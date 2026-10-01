@@ -878,6 +878,74 @@ test(): int {
 }
 
 #[test]
+fn match_and_ternary_arms_of_different_integer_types_convert_where_they_flow() {
+    // `0` is an `int` and `length()` a `long`: the value has the arms'
+    // common type (`long`), converted to each slot it flows into.
+    let src = r#"
+enum Message {
+    Empty,
+    Text(text: String),
+}
+
+describe(m: Message): int {
+    return match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    };
+}
+
+long_first(m: Message): int {
+    return match (m) {
+        Text(text) => text.length(),
+        Empty => 0,
+    };
+}
+
+take(x: int): int { return x; }
+
+take_long(x: long): long { return x; }
+
+pick(c: bool, s: String): int {
+    return c ? 0 : s.length();
+}
+
+test(): int {
+    var m = Message.Text("four");
+    var init: int = match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    };
+    var inferred = match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    };
+    var argument = take(match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    });
+    var wide = take_long(match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    });
+    var assigned = 0;
+    assigned = match (m) {
+        Empty => 0,
+        Text(text) => text.length(),
+    };
+    var ternary: int = init == 4 ? 1 : "ab".length();
+    var unsigned_arm = init == 4 ? 200 as byte : -1;
+    var signed_arm: long = init == 4 ? -1 as char : 7 as long;
+    if (describe(m) != 4 || describe(Message.Empty) != 0 || long_first(m) != 4) { return 1; }
+    if (init != 4 || inferred != 4 as long || argument != 4 || wide != 4 as long) { return 2; }
+    if (assigned != 4 || ternary != 1 || pick(false, "four") != 4 || pick(true, "four") != 0) { return 3; }
+    if (unsigned_arm != 200 || signed_arm != -1 as long) { return 4; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
 fn a_match_expression_must_handle_every_case() {
     let err = error_of(&format!("{}{}", SHAPE, "test(): int { return match (Shape.Empty) { Empty => 0 }; }"));
     assert!(err.contains("match on 'Shape' does not handle 'Circle' and 'Rect'"), "{err}");

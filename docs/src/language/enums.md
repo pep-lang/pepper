@@ -176,7 +176,10 @@ of an enum whose cases carry values panics with `match on a null 'Name'`.
   arms are separated by commas (one after the last is allowed). It follows
   the rules above: a pattern binds names for its arm's value, and the arms
   must handle every case unless there is an `else`. The value has the first
-  arm's type, and every other arm's value must convert to it. A closure in
+  arm's type, and every other arm's value must convert to it. When the arms
+  are numbers of different types, the value has their common type, as C's
+  `? :` does (`int` and `long` give `long`), and converts from it wherever
+  it goes (`0` or a `long` `length()`, returned as an `int`). A closure in
   an arm's value cannot use a name the arm binds; use a `match` statement
   there.
 - **`value is Pattern`** is a `bool`: whether `value` holds that case
