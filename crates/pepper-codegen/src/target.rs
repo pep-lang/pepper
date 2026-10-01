@@ -62,12 +62,96 @@ compile_error!(
      inkwell target-* feature in the arch-gated dependency tables"
 );
 
-/// The machine to emit for: the host, CPU `generic`.
+/// How much LLVM optimizes the code it is given: `-O0` through `-O3`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum OptLevel {
+    /// No optimization (the default): only the dead-code removal that
+    /// `partition::finish` runs.
+    #[default]
+    O0,
+    O1,
+    O2,
+    O3,
+}
+
+impl OptLevel {
+    /// The level `-O<n>` names, or `None` for a number above 3.
+    pub fn from_number(n: u8) -> Option<OptLevel> {
+        match n {
+            0 => Some(OptLevel::O0),
+            1 => Some(OptLevel::O1),
+            2 => Some(OptLevel::O2),
+            3 => Some(OptLevel::O3),
+            _ => None,
+        }
+    }
+
+    /// The `n` of `-O<n>`.
+    pub fn number(self) -> u8 {
+        self as u8
+    }
+
+    /// The level `PEPPER_OPT_LEVEL` names (`0` to `3`), when it is set and
+    /// not empty: what the compiler uses without `-O`, and what every
+    /// [`crate::CodeGenerator`] starts with, so the whole test suite can run
+    /// optimized.
+    pub fn from_env() -> Result<Option<OptLevel>, String> {
+        let Some(value) = std::env::var_os("PEPPER_OPT_LEVEL").filter(|v| !v.is_empty()) else {
+            return Ok(None);
+        };
+        let value = value.to_string_lossy();
+        value
+            .parse::<u8>()
+            .ok()
+            .and_then(OptLevel::from_number)
+            .map(Some)
+            .ok_or_else(|| format!("PEPPER_OPT_LEVEL is '{}'; expected 0, 1, 2 or 3", value))
+    }
+
+    /// The code generator's level for the machine.
+    pub fn machine_level(self) -> OptimizationLevel {
+        match self {
+            OptLevel::O0 => OptimizationLevel::None,
+            OptLevel::O1 => OptimizationLevel::Less,
+            OptLevel::O2 => OptimizationLevel::Default,
+            OptLevel::O3 => OptimizationLevel::Aggressive,
+        }
+    }
+
+    /// LLVM's standard pipeline for the level (`default<O2>`, what clang
+    /// runs at `-O2`), or `None` at `-O0`.
+    pub fn pipeline(self) -> Option<&'static str> {
+        match self {
+            OptLevel::O0 => None,
+            OptLevel::O1 => Some("default<O1>"),
+            OptLevel::O2 => Some("default<O2>"),
+            OptLevel::O3 => Some("default<O3>"),
+        }
+    }
+}
+
+/// Run `level`'s pipeline over `module` (nothing at `-O0`).
+pub fn optimize(module: &inkwell::module::Module<'_>, level: OptLevel) -> Result<(), String> {
+    let Some(pipeline) = level.pipeline() else {
+        return Ok(());
+    };
+    let machine = host_machine_at(level)?;
+    module
+        .run_passes(pipeline, &machine, inkwell::passes::PassBuilderOptions::create())
+        .map_err(|e| format!("cannot optimize '{}': {}", module.get_name().to_string_lossy(), e.to_string()))
+}
+
+/// The machine to emit for, unoptimized: the host, CPU `generic`.
+pub fn host_machine() -> Result<TargetMachine, String> {
+    host_machine_at(OptLevel::O0)
+}
+
+/// The machine to emit for at `level`: the host, CPU `generic`.
 ///
 /// `generic` is a port of `LLVMCodeGenerator.cpp:245-258` and is a valid CPU
 /// name for both supported architectures; naming the host CPU instead would
 /// bake the build machine's microarchitecture into the output.
-pub fn host_machine() -> Result<TargetMachine, String> {
+pub fn host_machine_at(level: OptLevel) -> Result<TargetMachine, String> {
     initialize_host();
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
@@ -76,7 +160,7 @@ pub fn host_machine() -> Result<TargetMachine, String> {
             &triple,
             "generic",
             "",
-            OptimizationLevel::None,
+            level.machine_level(),
             // PIC so the objects link into PIE executables. `Default` emits
             // non-relocatable code, which GNU ld rejects once clang links with
             // -pie (the Linux default): "relocation R_X86_64_32 ... can not be

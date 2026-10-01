@@ -90,13 +90,16 @@ pub fn run(options: Options) -> Result<i32, String> {
     let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
 
-    // --emit-llvm: write the whole program's IR as one module.
+    // --emit-llvm: write the whole program's IR as one module, optimized at
+    // the `-O` level.
     if options.emit_llvm {
         let ctx = inkwell::context::Context::create();
         let mut generator = CodeGenerator::new(&ctx, &module_name);
         generator.file_namespaces = namespaces;
         generator.generate(&sema_module).map_err(|d| sema_module.sources.render(&d))?;
         timer.stage("codegen");
+        pepper_codegen::target::optimize(&generator.module, options.effective_opt_level()?)?;
+        timer.stage("optimize");
         let ir_path = build_dir.join(format!("{}.ll", module_name));
         std::fs::write(&ir_path, generator.module.to_string())
             .map_err(|e| format!("cannot write {}: {}", ir_path.display(), e))?;
@@ -179,7 +182,8 @@ pub fn objects(
 ) -> Result<Vec<UnitObject>, String> {
     let keys = keys::Keys::new(program);
     let units = &keys.units;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root)).transpose()?;
+    let opt_level = options.effective_opt_level()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, opt_level)).transpose()?;
     let interfaces = match cache {
         Some(_) => file_interfaces(module, program, interfaces)?,
         None => vec![],
@@ -236,6 +240,7 @@ pub fn objects(
         unit_of_file: keys.unit_of_file.clone(),
         cache: cache.as_ref(),
         verify: options.verifying_cache(),
+        opt_level,
     };
     // Register the backend once, before the threads use it.
     default_target_machine()?;
@@ -316,6 +321,8 @@ struct UnitSetup<'a> {
     /// `--verify-cache`: generate hit units anyway and check their code
     /// matches the cached object's.
     verify: bool,
+    /// The level objects are optimized at (`-O`).
+    opt_level: pepper_codegen::target::OptLevel,
 }
 
 /// Put one unit's object at `job.object`: from the cache when the unit's
@@ -367,7 +374,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
             }
             Ok(Some(outcome))
         }
-        _ => cache::emit(&generate()?, &job.object).map(|_| None),
+        _ => cache::emit(&generate()?, &job.object, setup.opt_level).map(|_| None),
     }
 }
 

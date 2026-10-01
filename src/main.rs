@@ -4,7 +4,7 @@ use pepper_driver::parser_diagnostic::{colorize, is_rendered};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let options = Options::parse();
+    let options = Options::parse_from(pepper_driver::options::normalize_args(std::env::args_os()));
     let color = pepper_driver::stderr_color();
 
     if options.source_files.is_empty() {

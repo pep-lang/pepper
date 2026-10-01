@@ -160,7 +160,8 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `-l <lib>` | Link a C library. See [linking](../language/linking.md). |
 | `--import <name>` | Load a module into every file of the program, like the standard library. |
 | `--build <dir>` | Write intermediate files to `<dir>` instead of `.pep/build/`. |
-| `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`. |
+| `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `PEPPER_OPT_LEVEL` (`0` to `3`) when set. |
+| `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`, optimized at the `-O` level. |
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |
 | `-T time` | Print how long each stage of the compile took. |

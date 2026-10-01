@@ -99,7 +99,9 @@ The CLI produces an executable and never runs it. Tests usually stop after
 
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
-`--import`, `-l`, `-o`, `--build`, `--emit-llvm`, `--emit-ast`, and
+`--import`, `-l`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
+[4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
+`--emit-llvm`, `--emit-ast`, and
 `--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
 and build, sema passes, codegen and emission, link), and `-T cache`, which
@@ -987,7 +989,25 @@ reference held per reference element.
 
 `run` emits one object per compilation unit through `objects` (see
 [4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), plus the
-program object `<build>/<module>.o`, with the host `TargetMachine`. It collects
+program object `<build>/<module>.o`, with the host `TargetMachine`.
+
+**Optimization** (`codegen/src/target.rs`). `OptLevel` is `-O0` through
+`-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (`main.rs` spells a bare
+`-O` as `-O2` before clap sees it, so `-O main.pep` does not read the file
+as a level). `cache::emit` runs `target::optimize` (LLVM's `default<On>`
+pipeline, nothing at `-O0`) on each unit's module after `partition::finish`
+and after the cache hashed its bitcode, then writes the object with
+`host_machine_at(level)`, whose codegen level matches. So the cache's code
+hash is of the unoptimized module and a "same code" unit skips the
+pipeline too; the level is in `Cache::compiler` and so in every key and
+code hash. `--emit-llvm` optimizes the whole-program module the same way,
+and the JIT (`create_jit_engine`) optimizes at `CodeGenerator::opt_level`,
+which starts at `PEPPER_OPT_LEVEL`. Units are optimized separately: there is
+no LTO, so a call into another unit (the runtime's `_pep_trace_ptr`,
+`_pep_malloc`) stays a call, while `linkonce_odr` instantiations, compiled
+into each unit that calls them, inline.
+
+It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as
 `-L<dir> -l<name>`), then `link_libraries(&module)`, which gathers the
 `[Link("name")]` attributes of externs that survived platform filtering,

@@ -29,7 +29,12 @@ pub struct Options {
     #[arg(long = "build", value_name = "DIR")]
     pub build_dir: Option<PathBuf>,
 
-    /// Emit LLVM IR.
+    /// Optimization level: `-O0` (the default) through `-O3`; `-O` alone is
+    /// `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set.
+    #[arg(short = 'O', value_name = "LEVEL", value_parser = clap::value_parser!(u8).range(0..=3))]
+    pub opt_level: Option<u8>,
+
+    /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
 
@@ -85,7 +90,21 @@ pub struct Options {
     pub msvc: bool,
 }
 
+/// The command line with a bare `-O` spelled `-O2`, so `-O` may come
+/// before a source file without taking it as its level.
+pub fn normalize_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    args.into_iter().map(|arg| if arg == "-O" { "-O2".into() } else { arg }).collect()
+}
+
 impl Options {
+    /// The optimization level: `-O`, else `$PEPPER_OPT_LEVEL`, else `-O0`.
+    pub fn effective_opt_level(&self) -> Result<pepper_codegen::target::OptLevel, String> {
+        match self.opt_level {
+            Some(n) => pepper_codegen::target::OptLevel::from_number(n).ok_or_else(|| format!("invalid optimization level '-O{}'", n)),
+            None => Ok(pepper_codegen::target::OptLevel::from_env()?.unwrap_or_default()),
+        }
+    }
+
     /// Port of `Options::defaults`: build dir = $CWD/.pep/build, forced
     /// imports = internals + range.
     pub fn effective_build_dir(&self) -> PathBuf {
@@ -145,5 +164,26 @@ impl Options {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "main".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pepper_codegen::target::OptLevel;
+
+    fn parse(args: &[&str]) -> Options {
+        Options::parse_from(normalize_args(args.iter().map(|a| std::ffi::OsString::from(*a))))
+    }
+
+    #[test]
+    fn optimization_levels() {
+        // A bare -O is -O2, and does not take the source file as its level.
+        let options = parse(&["pepper", "-O", "main.pep"]);
+        assert_eq!(options.source_files, [PathBuf::from("main.pep")]);
+        assert_eq!(options.effective_opt_level(), Ok(OptLevel::O2));
+        assert_eq!(parse(&["pepper", "main.pep", "-O3"]).effective_opt_level(), Ok(OptLevel::O3));
+        assert_eq!(parse(&["pepper", "main.pep", "-O0"]).effective_opt_level(), Ok(OptLevel::O0));
+        assert!(Options::try_parse_from(["pepper", "main.pep", "-O4"]).is_err());
     }
 }

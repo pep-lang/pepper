@@ -27,7 +27,7 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// search paths, forced imports and runtime.
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     // Files whose text is unchanged come from the build cache's syntax trees.
-    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?)).transpose()?;
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &options.forced_imports,
@@ -202,7 +202,7 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
     let Some(root) = options.effective_cache_dir() else {
         return Ok(Reused::default());
     };
-    let cache = crate::cache::Cache::open(&root)?;
+    let cache = crate::cache::Cache::open(&root, options.effective_opt_level()?)?;
     let n = program.files.len();
     let mut reused = Reused { files: vec![false; n], summaries: HashMap::new(), interfaces: vec![None; n] };
     let file_of: HashMap<&str, usize> = program.files.iter().enumerate().map(|(i, f)| (f.namespace.as_str(), i)).collect();

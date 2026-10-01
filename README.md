@@ -223,6 +223,7 @@ cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout
 cargo run -- tests/hello.pep --emit-llvm    # emit IR to .pep/build/hello.ll
 cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
+cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
@@ -256,7 +257,19 @@ whose generated code did not change is not emitted again. Editing a function
 body recompiles only that file: the files importing it are reused. A file
 whose text did not change is not even parsed again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
-`PEPPER_CACHE_DIR`.
+`PEPPER_CACHE_DIR`. The optimization level is part of every object's key, so
+switching between `-O0` and `-O2` never reuses the other level's objects.
+
+`-O` runs LLVM's standard `default<O2>` pipeline (what clang runs at `-O2`)
+over each file's object; `-O1` and `-O3` run theirs. Files are optimized
+separately, so a call into another file (the runtime, for example) is not
+inlined; generic instantiations are compiled into each file that uses them
+and do inline. `PEPPER_OPT_LEVEL=2` makes `-O2` the default, for the compiler
+and for the JIT the tests run, so the whole suite can run optimized:
+
+```bash
+PEPPER_OPT_LEVEL=2 cargo test --workspace
+```
 
 The compiler needs the standard library in `runtime/`. It uses the directory
 named by `PEPPER_RUNTIME` when that is set, and otherwise searches near the

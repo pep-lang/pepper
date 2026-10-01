@@ -17,7 +17,6 @@ use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{AsValueRef, BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 use inkwell::types::AnyType as _;
-use inkwell::OptimizationLevel;
 use ops as llvm_ops;
 
 /// Field index of `__invoke` in a function object: after the
@@ -141,6 +140,10 @@ pub struct CodeGenerator<'ctx> {
     /// Generate one compilation unit instead of the whole program (see
     /// [`partition`]).
     pub unit: Option<partition::UnitFilter>,
+    /// How much the JIT optimizes the module ([`Self::jit_engine`]); the
+    /// driver optimizes objects itself. Starts at `PEPPER_OPT_LEVEL`, else
+    /// `-O0`.
+    pub opt_level: target::OptLevel,
 }
 /// Stands in, under the JIT, for a C function the process cannot resolve.
 extern "C" fn unresolved_c_function() {
@@ -184,6 +187,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             owners: HashMap::new(),
             file_namespaces: Vec::new(),
             unit: None,
+            opt_level: target::OptLevel::from_env().ok().flatten().unwrap_or_default(),
         }
     }
 
@@ -637,20 +641,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(ee)
     }
 
-    /// An MCJIT engine for the module. On Windows its sections share one
-    /// reserved region (see `jit_memory`), with the options
-    /// `create_jit_execution_engine` uses.
+    /// An MCJIT engine for the module, optimized at [`Self::opt_level`]. On
+    /// Windows its sections share one reserved region (see `jit_memory`),
+    /// with the options `create_jit_execution_engine` uses.
     fn create_jit_engine(&self) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
+        target::optimize(&self.module, self.opt_level)?;
+        let level = self.opt_level.machine_level();
         #[cfg(windows)]
         let ee = self.module.create_mcjit_execution_engine_with_memory_manager(
             jit_memory::JitMemory::new()?,
-            OptimizationLevel::None,
+            level,
             inkwell::targets::CodeModel::JITDefault,
             false,
             false,
         );
         #[cfg(not(windows))]
-        let ee = self.module.create_jit_execution_engine(OptimizationLevel::None);
+        let ee = self.module.create_jit_execution_engine(level);
         ee.map_err(|e| format!("JIT failed: {}", e.to_string()))
     }
 

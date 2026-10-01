@@ -30,6 +30,17 @@ fn build_entry(entry: &Path, cache: &Path, build: &Path) -> Vec<UnitObject> {
 /// Build `entry` with the cache at `cache` into `build`, verifying the
 /// cache when `verify`: the module sema produced and the objects.
 fn compile_entry(entry: &Path, cache: &Path, build: &Path, verify: bool) -> (pepper_sema::model::Module, Vec<UnitObject>) {
+    compile_entry_with(entry, cache, build, verify, &[])
+}
+
+/// [`compile_entry`] with the extra options `extra`.
+fn compile_entry_with(
+    entry: &Path,
+    cache: &Path,
+    build: &Path,
+    verify: bool,
+    extra: &[&str],
+) -> (pepper_sema::model::Module, Vec<UnitObject>) {
     // chdir so namespaces (paths from the project) resolve like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     let mut args = vec![
@@ -42,6 +53,7 @@ fn compile_entry(entry: &Path, cache: &Path, build: &Path, verify: bool) -> (pep
     ];
     // Not verifying overrides PEPPER_CACHE_VERIFY, which CI sets.
     args.push(if verify { "--verify-cache" } else { "--no-verify-cache" }.to_string());
+    args.extend(extra.iter().map(|a| a.to_string()));
     let options = pepper_driver::Options::parse_from(args);
     let compiled = pepper_driver::compiler::compile_for_objects(&options, &pepper_driver::units_dir(build, "main")).unwrap();
     let objects = pepper_driver::objects(&options, &compiled.module, compiled.trial.as_ref(), &compiled.interfaces, &compiled.program, build, "main")
@@ -102,6 +114,24 @@ fn unchanged_units_come_from_the_cache() {
 }
 
 #[test]
+fn the_optimization_level_is_part_of_every_key() {
+    let dir = scratch("optimize");
+    let cache = dir.join("cache");
+    let entry = PathBuf::from("docs/examples/tutorial-hello.pep");
+    let at = |level: &str, build: &str| compile_entry_with(&entry, &cache, &dir.join(build), true, &[level]).1;
+    let units = |objects: &[UnitObject]| objects.iter().filter(|o| o.unit != "__program").map(|o| o.outcome).collect::<Vec<_>>();
+    let unoptimized = at("-O0", "a");
+    // An -O0 object is never reused at -O2, not even as the same code.
+    let optimized = at("-O2", "b");
+    assert!(units(&optimized).iter().all(|&o| o == Some(Outcome::Miss)), "{:?}", outcomes(&optimized));
+    assert!(units(&at("-O2", "c")).iter().all(|&o| o == Some(Outcome::Hit)));
+    assert!(units(&at("-O0", "d")).iter().all(|&o| o == Some(Outcome::Hit)));
+    let prelude = |objects: &[UnitObject]| std::fs::read(&objects.iter().find(|o| o.unit == "prelude").unwrap().path).unwrap();
+    assert_ne!(prelude(&unoptimized), prelude(&optimized), "-O2 made the same object as -O0");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_runtime_unit_is_shared_between_programs() {
     let dir = scratch("shared");
     let cache = dir.join("cache");
@@ -118,9 +148,11 @@ fn a_record_that_does_not_match_is_a_miss() {
     let dir = scratch("stale");
     let cache = dir.join("cache");
     build("tutorial-hello", &cache, &dir.join("a"));
+    // `v1/<target>/O<n>/`
     let record = std::fs::read_dir(cache.join("v1"))
         .unwrap()
         .flatten()
+        .flat_map(|target| std::fs::read_dir(target.path()).unwrap().flatten())
         .map(|e| e.path().join("docs/examples/tutorial_hello.json"))
         .find(|p| p.is_file())
         .expect("the unit's record");

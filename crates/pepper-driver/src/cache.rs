@@ -1,7 +1,8 @@
 //! The build cache: one object per compilation unit under
-//! `.pep/cache/v1/<target>/`, reused without generating code when the
-//! unit's sources and inputs are unchanged, or without emitting it when its
-//! LLVM bitcode is (build cache phases 1, 2a and 2b; see INTERNALS.md §4.3).
+//! `.pep/cache/v1/<target>/O<n>/` (a directory per `-O` level), reused
+//! without generating code when the unit's sources and inputs are
+//! unchanged, or without emitting it when its LLVM bitcode is (build cache
+//! phases 1, 2a and 2b; see INTERNALS.md §4.3).
 //!
 //! Each unit has three files, named by the unit's path (`io/file`):
 //!
@@ -19,7 +20,8 @@
 //!
 //! And one file per source file, whatever its unit (phase 2c):
 //!
-//! - `parsed/<hash of its path>.pepi`: its syntax tree, `postcard`-encoded
+//! - `parsed/<hash of its path>.pepi`, beside the `O<n>` directories (one
+//!   for every level): its syntax tree, `postcard`-encoded
 //!   after a 32-byte stamp (a hash of the compiler and the file's text), so
 //!   an unchanged file is not parsed again (see [`ParseCache`]). Written
 //!   through a temporary file and a rename, without a lock: every writer of
@@ -38,6 +40,7 @@
 //! another, so two compilers cannot deadlock.
 
 use inkwell::module::Module;
+use pepper_codegen::target::OptLevel;
 use pepper_sema::program::ParseCache;
 use std::fs::File;
 use std::io::Write;
@@ -50,14 +53,24 @@ const VERSION: &str = "v1";
 pub struct Cache {
     dir: PathBuf,
     compiler: String,
+    /// The level objects are optimized at; part of [`Cache::compiler`].
+    opt_level: OptLevel,
+    /// Where syntax trees are kept, and the compiler they are stamped with:
+    /// shared by every `-O` level, since parsing does not depend on it.
+    parsed_dir: PathBuf,
+    parser: String,
 }
 
 impl Cache {
-    /// The cache under `root` for the host target, created if missing.
-    pub fn open(root: &Path) -> Result<Cache, String> {
+    /// The cache under `root` for the host target, created if missing, for
+    /// objects optimized at `opt_level`.
+    pub fn open(root: &Path, opt_level: OptLevel) -> Result<Cache, String> {
         let machine = crate::default_target_machine()?;
         let triple = machine.get_triple().as_str().to_string_lossy().into_owned();
-        let dir = root.join(VERSION).join(triple);
+        // A directory per level, so switching between `-O0` and `-O2` builds
+        // keeps both levels' objects (a unit has one record per directory).
+        let target = root.join(VERSION).join(triple);
+        let dir = target.join(format!("O{}", opt_level.number()));
         std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
         let tag = root.join("CACHEDIR.TAG");
         if !tag.exists() {
@@ -67,7 +80,12 @@ impl Cache {
                 b"Signature: 8a477f597d28d172789f06886806bc55\n# The Pepper build cache (.pep/cache). It can be deleted.\n",
             );
         }
-        Ok(Cache { dir, compiler: compiler_id() })
+        // The level is part of the compiler's identity, so it is in every
+        // key and code hash: an object built at another level never hits,
+        // nor counts as the same code.
+        let parser = compiler_id();
+        let compiler = format!("{} -O{}", parser, opt_level.number());
+        Ok(Cache { dir, compiler, opt_level, parsed_dir: target.join("parsed"), parser })
     }
 
     /// Reuse the unit `name` before sema, so sema may skip its bodies
@@ -159,7 +177,7 @@ impl Cache {
             }
             if !same_code {
                 let temporary = temporary_path(&object);
-                emit(&module, &temporary)?;
+                emit(&module, &temporary, self.opt_level)?;
                 std::fs::rename(&temporary, &object).map_err(|e| format!("cannot write {}: {}", object.display(), e))?;
             }
             write_atomically(&self.path(name, "summaries"), summaries.as_bytes())?;
@@ -207,14 +225,14 @@ impl Cache {
     /// Where the syntax tree of the source file at `source` is kept.
     fn parsed_path(&self, source: &Path) -> PathBuf {
         let key = pepper_files::imports::path_key(source);
-        self.dir.join("parsed").join(format!("{}.pepi", &blake3::hash(key.as_bytes()).to_hex()[..32]))
+        self.parsed_dir.join(format!("{}.pepi", &blake3::hash(key.as_bytes()).to_hex()[..32]))
     }
 
     /// What a kept tree is stamped with: this compiler and the text parsed.
     fn parsed_stamp(&self, text: &str) -> blake3::Hash {
         let mut hasher = blake3::Hasher::new();
         hasher.update(b"pepper pepi 1\0");
-        hasher.update(self.compiler.as_bytes());
+        hasher.update(self.parser.as_bytes());
         hasher.update(&[0]);
         hasher.update(text.as_bytes());
         hasher.finalize()
@@ -370,12 +388,15 @@ fn json_string<'a>(record: &'a str, field: &str) -> Option<&'a str> {
     Some(&rest[..rest.find('"')?])
 }
 
-/// Write an object file for `module` at `path`.
-pub fn emit(module: &Module<'_>, path: &Path) -> Result<(), String> {
+/// Write an object file for `module` at `path`, optimized at `opt_level`
+/// first. The cache hashes a unit's code before this, so a unit whose code
+/// did not change is not optimized again.
+pub fn emit(module: &Module<'_>, path: &Path, opt_level: OptLevel) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
     }
-    crate::default_target_machine()?
+    pepper_codegen::target::optimize(module, opt_level)?;
+    pepper_codegen::target::host_machine_at(opt_level)?
         .write_to_file(module, inkwell::targets::FileType::Object, path)
         .map_err(|e| format!("obj emission failed: {}", e))
 }
