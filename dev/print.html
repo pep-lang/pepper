@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-65d26a96.js";
+            window.path_to_searchindex_js = "searchindex-916fb5d7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6e3ed46d.js"></script>
@@ -3932,6 +3932,31 @@ picks the best fit (see <a href="#methods-and-operators">Overloading</a>).</li>
 no <code>this</code>, and you call it on the type name: <code>Vector.unit_x()</code>. Static methods
 are the usual way to offer named constructors, such as the standard library’s
 <code>Result&lt;int&gt;.ok(42)</code>.</p>
+<p>Inside the struct, any method, static or not, can call a static method by
+its bare name: <code>unit_x()</code> in a method of <code>Vector</code> means <code>Vector.unit_x()</code>.</p>
+<pre><code class="language-pepper"># Static methods belong to the type; inside it, they are called by name.
+struct Vector {
+    var x: double = 0.0;
+    var y: double = 0.0;
+    construct(this.x = 0.0, this.y = 0.0) {}
+
+    static unit_x(): Vector {
+        return Vector(1.0, 0.0);
+    }
+
+    # A static method calls another by its bare name.
+    static scaled_unit_x(factor: double): Vector {
+        var unit = unit_x();
+        return Vector(unit.x * factor, unit.y * factor);
+    }
+}
+
+main(): int {
+    var v = Vector.scaled_unit_x(3.0);
+    assert(v.x == 3.0 &amp;&amp; v.y == 0.0, "called on the type name outside it");
+    return 0;
+}
+</code></pre>
 <h2 id="operators-1"><a class="header" href="#operators-1">Operators</a></h2>
 <p>A struct can define what the operators do for it. Declare a method whose name
 is the operator, written like any other method: <code>==(other: Money): bool</code>.
