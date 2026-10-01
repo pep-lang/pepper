@@ -163,7 +163,7 @@ export trait Iterator<T> {
     ##     var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
     to_array(): Array<T> {
         # A copy: a value iterator is left where it was.
-        var source = this;
+        Iterator<T> source = this;
         var result = Array<T>();
         while (source.next()) {
             result.append(source.current());
