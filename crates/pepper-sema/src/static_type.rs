@@ -280,6 +280,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         }
         // `x as T` has the cast target's type.
         Expression::Cast { ty, .. } => Some(ty.clone()),
+        Expression::Default(ty) => Some(ty.clone()),
+        Expression::IsPod(_) => Some(TypeName::bool_()),
         Expression::FunctionRef { ty, .. } => Some(ty.clone()),
         Expression::MakeClosure { ty, .. } if !ty.contains_auto() => Some(ty.clone()),
         Expression::ToTrait { to, .. } => Some(to.clone()),

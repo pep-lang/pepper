@@ -92,6 +92,28 @@ test(): int {
 }
 
 #[test]
+fn default_element() {
+    // `__default<T>()` as an element: the literal's type needs the
+    // intrinsic's, in a generic body and a concrete one.
+    let src = r#"
+missing<T>(): (bool, T) {
+    return (false, __default<T>());
+}
+
+test(): int {
+    var (found, n) = missing<int>();
+    if (found || n != 0) { return 1; }
+    var (_, d) = missing<f64>();
+    if (d != 0.0) { return 2; }
+    var t = (true, __default<long>());
+    if (!t.0 || t.1 != 0) { return 3; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
 fn element_access() {
     let src = r#"
 nested(): (int, (String, long)) {

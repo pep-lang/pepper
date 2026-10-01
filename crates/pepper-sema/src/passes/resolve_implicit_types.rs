@@ -492,6 +492,13 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     }
                     return TypeName::auto();
                 }
+                // `__default<T>()` (until `convert_intrinsics` makes it a
+                // `Default` node) is a `T`.
+                "__default" => {
+                    let parsed = crate::passes::gather_generics::parse_type_string(function);
+                    return parsed.sub_types.into_iter().next().unwrap_or_else(TypeName::auto);
+                }
+                "__is_pod" => return TypeName::bool_(),
                 "__atomic_store" => return TypeName::new("void"),
                 "__atomic_cmpxchg" => return TypeName::new("bool"),
                 _ => {}
@@ -527,7 +534,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::RefCount(..) | Expression::CountStep { .. } => TypeName::new("u32"),
         Expression::FunctionPointer { .. } => TypeName::new("void*"),
         Expression::Weak(op, ty, _) => op.result(ty),
-        Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) => ty.clone(),
+        Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) | Expression::Default(ty) => ty.clone(),
+        Expression::IsPod(_) => TypeName::bool_(),
         Expression::AtomicStore(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),
