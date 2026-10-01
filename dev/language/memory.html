@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-16197d7a.js";
+            window.path_to_searchindex_js = "../searchindex-5d978288.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -590,7 +590,7 @@ of your own that takes over its argument uses <code>[Move]</code>.</p>
 </thead>
 <tbody>
 <tr><td><code>var b = a;</code></td><td><code>b</code> takes a new reference to <code>a</code>’s object.</td></tr>
-<tr><td><code>b = c;</code></td><td><code>b</code> takes a reference to <code>c</code>’s object, then releases its old one.</td></tr>
+<tr><td><code>b = c;</code></td><td><code>b</code> takes a reference to <code>c</code>’s object and holds it, then releases its old one. A destructor that runs then and reads <code>b</code> finds <code>c</code>’s object.</td></tr>
 <tr><td><code>f(a)</code></td><td>The parameter takes a reference for the duration of the call.</td></tr>
 <tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
