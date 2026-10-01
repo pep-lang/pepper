@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c69ad534.js";
+            window.path_to_searchindex_js = "../searchindex-233eebdd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -212,7 +212,8 @@ main(): int {
 }
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
-member of it. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
+member of it; the files of one <a href="modules.html#modules">module</a> may share a
+set. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
 set too, and so are its static methods, its operators, its
 <a href="#constructors">constructors</a>, and the methods its
 <a href="#extensions-and-traits">extensions</a> add.</p>
@@ -233,9 +234,46 @@ main.pep:1:1: note: previous declaration is here
 a <code>redefinition of 'f'</code>.</p>
 </li>
 <li>
-<p><strong>One file, one set.</strong> A file’s own functions hide an imported function of
-the same name, as before; overloads do not merge across files.</p>
+<p><strong>A file’s own functions hide imported ones.</strong> A file’s functions of a
+name hide an imported function of that name, as before: a file cannot add
+members to an imported set.</p>
 </li>
+<li>
+<p><strong>Files of one module share a set.</strong> When an import or a re-export takes
+one name from two files of the same module, and both are functions
+declared under that name, it takes their union: one set of every member. Here <code>shapes/module.pep</code>
+re-exports <code>area</code> from two files:</p>
+<pre><code class="language-pepper"># Each file adds members to `area`; the module exports one set.
+</code></pre>
+</li>
+</ul>
+<p>export * from “square”;
+export * from “rect”;</p>
+<pre><code>
+```pepper
+export area(side: int): int {
+  return side * side;
+}
+</code></pre>
+<pre><code class="language-pepper">export area(width: int, height: int): int {
+  return width * height;
+}
+</code></pre>
+<pre><code class="language-pepper">import "shapes";
+
+main(): int {
+  assert(area(3) == 9, "square.pep's member");
+  assert(area(2, 5) == 10, "rect.pep's member");
+  return 0;
+}
+</code></pre>
+<p>A file of the module that imports both files (<code>import "square";</code> and
+<code>import "rect";</code>, or an import list naming <code>area</code> from each) sees the
+same set. Members from different files must still differ in their
+parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
+such as two structs <code>Point</code>, and a renaming re-export
+(<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
+<ul>
 <li>
 <p><strong>Members may differ in visibility.</strong> Exported members are what other
 files see; a private member is a candidate only for calls in its own
@@ -277,10 +315,9 @@ whole set. A re-export (<code>export area;</code>, <code>export * from "shapes"<
 on the exported members too; a set whose members are all private is
 re-exported whole.</p>
 <ul>
-<li><strong>Two imports of one name are ambiguous.</strong> When two imported files or
-modules each export a set named <code>parse</code>, an unqualified <code>parse(…)</code> is an
-error (<code>'parse' is ambiguous: more than one import provides it</code>), even
-when their parameters differ: the sets do not merge. A qualifier
+<li><strong>Two modules’ sets do not merge.</strong> When two imported modules, or two
+files outside any module, each export a set named <code>parse</code>, an
+unqualified <code>parse(…)</code> is an error (<code>'parse' is ambiguous: more than one import provides it</code>), even when their parameters differ. A qualifier
 (<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</li>
 <li><strong><code>extern</code> functions do not overload</strong>: a C function has one symbol. Wrap
 it in a Pepper function to give it company.</li>
@@ -613,8 +650,9 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <ul>
 <li><strong>Unary operators</strong> cannot be declared at all yet.</li>
 <li><strong><code>extern</code> functions</strong> do not overload.</li>
-<li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name
-hide an imported set of that name.</li>
+<li><strong>Overloads across modules</strong> do not merge: two modules’ sets of one name
+are ambiguous where both are imported, and a file’s own functions of a
+name hide an imported set of that name.</li>
 </ul>
 
                     </main>
