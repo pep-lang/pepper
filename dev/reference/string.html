@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eaea7ecf.js";
+            window.path_to_searchindex_js = "../searchindex-d715f80b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-cf0312c8.js"></script>
+        <script src="../toc-f75ba97a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -265,6 +265,19 @@ whole count 0.</p>
 <li>the number of code points, or 0 for invalid UTF-8</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="bytes"><a class="header" href="#bytes">bytes</a></h4>
+<pre><code class="language-pepper">bytes(): u8[]
+</code></pre>
+<p>Returns a new array holding the String’s UTF-8 bytes, without a
+terminating NUL. Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>size()</code> bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var data = "hi".bytes();
+    assert(data.count() == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
+</code></pre>
 <h4 id="length"><a class="header" href="#length">length</a></h4>
 <pre><code class="language-pepper">length(): ulong
 </code></pre>
@@ -702,6 +715,60 @@ only). Runs in O(size()).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
     assert("  indented".trim_end() == "  indented", "leading kept");
+</code></pre>
+<h4 id="trim_start"><a class="header" href="#trim_start">trim_start</a></h4>
+<pre><code class="language-pepper">trim_start(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the start: spaces,
+tabs, carriage returns, line feeds, vertical tabs and form feeds
+(ASCII only). Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading whitespace removed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("  \tcode".trim_start() == "code", "leading whitespace");
+</code></pre>
+<h4 id="trim"><a class="header" href="#trim">trim</a></h4>
+<pre><code class="language-pepper">trim(): String
+</code></pre>
+<p>Returns a new String without the whitespace at either end, as
+<code>trim_start</code> and <code>trim_end</code> do. Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading and trailing whitespace removed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(" \t value \r\n".trim() == "value", "both ends");
+</code></pre>
+<h4 id="lower"><a class="header" href="#lower">lower</a></h4>
+<pre><code class="language-pepper">lower(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters <code>A</code> to <code>Z</code> changed to <code>a</code>
+to <code>z</code>. Every other character, including non-ASCII letters, is kept
+as it is, so the result is valid UTF-8 of the same size. Runs in
+O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String in lowercase</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("Content-Type".lower() == "content-type", "ASCII lowered");
+    assert("Ärger".lower() == "Ärger", "non-ASCII kept");
+</code></pre>
+<h4 id="upper"><a class="header" href="#upper">upper</a></h4>
+<pre><code class="language-pepper">upper(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters <code>a</code> to <code>z</code> changed to <code>A</code>
+to <code>Z</code>. Every other character, including non-ASCII letters, is kept
+as it is, so the result is valid UTF-8 of the same size. Runs in
+O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String in uppercase</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("get".upper() == "GET", "ASCII raised");
 </code></pre>
 <h4 id="lines"><a class="header" href="#lines">lines</a></h4>
 <pre><code class="language-pepper">lines(): String[]

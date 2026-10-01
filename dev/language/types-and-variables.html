@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eaea7ecf.js";
+            window.path_to_searchindex_js = "../searchindex-d715f80b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-cf0312c8.js"></script>
+        <script src="../toc-f75ba97a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -352,7 +352,9 @@ method.</p>
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
 <code>find</code> returns), <code>compare</code> and <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code> order strings byte by byte
 (code-point order for UTF-8), <code>lines()</code> splits on <code>"\n"</code> or <code>"\r\n"</code>,
-<code>trim_end()</code> drops trailing whitespace, and <code>repeat(n)</code> joins <code>n</code> copies. A
+<code>trim()</code>, <code>trim_start()</code> and <code>trim_end()</code> drop whitespace, <code>lower()</code> and
+<code>upper()</code> change the case of ASCII letters, <code>repeat(n)</code> joins <code>n</code> copies, and
+<code>bytes()</code> copies the UTF-8 bytes into an array. A
 <code>StringBuilder</code> builds a long String from many pieces without recopying the
 text built so far on every append:</p>
 <pre><code class="language-pepper"># Numbers to text, byte-level access, ordering, and building text in pieces.
@@ -376,6 +378,11 @@ main(): int {
     var lines = "one  \r\ntwo\n".lines();
     assert(lines.count() == 2, "no empty line after the final newline");
     assert(lines[0].trim_end() == "one", "trim_end");
+
+    # trim() drops whitespace at both ends; lower() and upper() change ASCII case.
+    var field = "  Content-Type ".trim();
+    assert(field.lower() == "content-type", "lower");
+    assert(field.upper() == "CONTENT-TYPE", "upper");
 
     # repeat joins copies; StringBuilder appends without recopying the text.
     var out = StringBuilder();
