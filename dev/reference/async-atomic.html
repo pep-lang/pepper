@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -185,7 +185,7 @@
 <h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
 <p>Source: <code>runtime/async/atomic.pep</code></p>
 <h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
-<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Atomic&lt;T: Shared&gt;
 </code></pre>
 <p>A value of type <code>T</code> that threads can read and update without data races,
 like C++ <code>std::atomic&lt;T&gt;</code>.</p>
@@ -198,11 +198,13 @@ caller its own reference. Memory ordering: <code>load</code> is an acquire,
 acquire-release.</p>
 <p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
 be used from several threads at once: pass the Atomic around (or keep it
-in a <code>const</code> global) to share the value between threads. A struct <code>T</code> must be
-thread-safe (itself <code>[Shared]</code>); <code>async.Atomic&lt;String&gt;</code> is a compile error.</p>
+in a <code>const</code> global) to share the value between threads, so <code>T</code> is
+constrained <code>Shared</code>: a number, <code>bool</code>, an enum, a <code>[Shared]</code> struct, or
+another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile error at
+<code>String</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the stored value</li>
+<li><code>T</code> — the type of the stored value, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    main(): int {

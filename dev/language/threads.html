@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -385,18 +385,30 @@ never assigned again, so threads cannot race on it. To change shared state,
 give the struct a thread-safe member such as an <code>Atomic&lt;T&gt;</code>.</p>
 </li>
 <li>
-<p><strong>Every field must have a thread-safe type.</strong> These are the thread-safe
-types:</p>
+<p><strong>Every field must have a thread-safe type.</strong> These are all the
+thread-safe types, the same ones the constraint
+<a href="generics.html#the-shared-constraint"><code>T: Shared</code></a> accepts:</p>
 <ul>
-<li>numbers and <code>bool</code>;</li>
-<li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
+<li>every number type (<code>int</code>, <code>long</code>, <code>byte</code>, <code>char</code>, <code>short</code>, <code>float</code>,
+<code>double</code> and the rest), <code>bool</code>, and <code>void</code>;</li>
+<li><a href="enums.html">enums</a> whose cases carry no values, which are stored as
+integers;</li>
+<li><code>[Shared]</code> structs, and enums whose cases carry values that are declared
+<code>[Shared]</code>;</li>
+<li>weak references to thread-safe types;</li>
+<li>raw pointers (<code>__ptr&lt;T&gt;</code>, and <code>void*</code>) to thread-safe types;</li>
 <li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
-<a href="function-types.html#sharing-function-values-between-threads">Function types</a>);</li>
-<li><code>[Shared]</code> structs, and weak references to them;</li>
-<li><a href="tuples.html">tuples</a> whose elements are all thread-safe.</li>
+<a href="function-types.html#sharing-function-values-between-threads">Function types</a>),
+and C function pointer types (<code>extern (int) =&gt; int</code>);</li>
+<li><a href="tuples.html">tuples</a> whose elements are all thread-safe;</li>
+<li>inside a generic, a type parameter constrained <code>T: Shared</code>.</li>
 </ul>
-<p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
-thread-safe, and neither is a plain function type such as <code>() =&gt; void</code>:</p>
+<p>Nothing else is. A struct is never thread-safe on its own, even when all
+its fields are numbers: a struct value is a reference to a
+reference-counted object, and only a <code>[Shared]</code> struct counts those
+references atomically. So <code>String</code>, <code>Array</code> and other structs that are not
+<code>[Shared]</code> are not thread-safe, and neither is a plain function type such
+as <code>() =&gt; void</code>:</p>
 <pre><code class="language-text">main.pep:3:14: error: field 'F' of shared struct 'H' has type '() =&gt; void', which is not thread-safe
     3 |     const F: () =&gt; void;
       |              ^~~~~~~~~~
@@ -404,15 +416,37 @@ note: declare the function type 'shared () =&gt; void' to share it between threa
 </code></pre>
 </li>
 </ul>
-<p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
-<code>Atomic&lt;T&gt;</code> is <code>[Shared]</code>, so <code>Atomic&lt;int&gt;</code> and <code>Atomic&lt;Settings&gt;</code> are fine,
-and <code>Atomic&lt;String&gt;</code> is an error that points at the code that names it:</p>
-<pre><code class="language-text">main.pep:3:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    3 |     var a = async.Atomic&lt;String&gt;();
-      |             ^~~~~~~~~~~~~~~~~~~~
-runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
-runtime/string.pep:33:15: note: 'String' is not declared [Shared]
+<p>A generic <code>[Shared]</code> struct whose parameter has no constraint is checked
+for each set of type arguments, and the error points at the code that asked
+for the specialization:</p>
+<pre><code class="language-pepper">[Shared]
+struct Cell&lt;T&gt; {
+    const value: T;
+}
+
+make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+
+main(): int {
+    var c = make&lt;String&gt;();
+    return 0;
+}
 </code></pre>
+<pre><code class="language-text">main.pep:9:13: error: 'make&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    9 |     var c = make&lt;String&gt;();
+      |             ^~~~~~~~~~~~
+main.pep:6:29: note: 'Cell&lt;String&gt;' is required here, in 'make&lt;String&gt;'
+    6 | make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+      |                             ^~~~~~~
+main.pep:3:18: note: required by field 'value' declared here
+    3 |     const value: T;
+      |                  ^
+runtime/string.pep:41:15: note: 'String' is not declared [Shared]
+</code></pre>
+<p>A generic can state the rule up front with the built-in constraint
+<a href="generics.html#the-shared-constraint"><code>T: Shared</code></a>: <code>[Shared] struct Cell&lt;T: Shared&gt;</code> accepts exactly the type arguments above, and a wrong one
+is reported where it is written (<code>'String' does not conform to 'Shared', required by 'T' in 'Cell'</code>). The standard library’s <code>Atomic&lt;T&gt;</code>, <code>spawn</code>,
+<code>run_blocking</code> and <code>Lazy&lt;T&gt;</code> do this, so <code>Atomic&lt;String&gt;</code> is reported at
+<code>String</code>.</p>
 <p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
 reported at the field:</p>
 <pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6e3ed46d.js"></script>
@@ -3062,10 +3062,11 @@ main(): int {
 <p><strong>What converts to <code>shared</code>.</strong> A named function, which holds no state; a
 method, constructor or generic function value with nothing captured, such
 as <code>Point.norm</code> or <code>Box&lt;int&gt;</code>; and a closure literal (or a bound method
-such as <code>p.norm</code>) whose captured values are all thread-safe: numbers,
-<code>Atomic&lt;T&gt;</code> and other <code>[Shared]</code> structs, weak references to them, and
-<code>shared</code> function values. The value must be written where the <code>shared</code>
-type is expected, so that it is made thread-safe from the start.</p>
+such as <code>p.norm</code>) whose captured values are all
+<a href="#what-threads-can-share">thread-safe</a>: numbers, <code>Atomic&lt;T&gt;</code>
+and other <code>[Shared]</code> structs, <code>shared</code> function values, and the rest of
+that list. The value must be written where the <code>shared</code> type is expected,
+so that it is made thread-safe from the start.</p>
 </li>
 <li>
 <p><strong>What does not.</strong> A closure that captures a value that is not thread-safe
@@ -4374,7 +4375,9 @@ slot does. <code>===</code> and <code>!==</code> compare identity.</li>
 the enum itself, directly or through other types, so lists and trees are
 enums.</li>
 <li>The enum can be <code>[Shared]</code> when every value its cases carry is
-thread-safe (see <a href="#threads-and-shared-data">Threads</a>). It can conform to a trait with
+thread-safe (see <a href="#what-threads-can-share">What threads can share</a>).
+An enum whose cases carry nothing is stored as an integer and is always
+thread-safe. It can conform to a trait with
 <code>extend Name with Trait</code>, like a struct, and its methods can come from an
 <code>extend</code> block too.</li>
 <li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no
@@ -5351,6 +5354,50 @@ value of the trait type (see
 </ul>
 <p>Numbers, <code>bool</code>, enums, pointers, tuples and function types conform to no
 trait.</p>
+<h3 id="the-shared-constraint"><a class="header" href="#the-shared-constraint">The <code>Shared</code> constraint</a></h3>
+<p><code>T: Shared</code> is built in: it requires a type that is safe to share between
+threads, by the same rule as a field of a <code>[Shared]</code> struct. The types that
+conform are listed in
+<a href="#what-threads-can-share">What threads can share</a>; no <code>extend</code>
+can make another type conform. It gives <code>T</code> no methods, and it joins other
+constraints with <code>&amp;</code> (<code>T: Shared &amp; Named</code>):</p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Settings {
+    const workers: int;
+    construct(this.workers = 1) {}
+}
+
+# A cell that any thread may read: its value must be thread-safe.
+[Shared]
+struct Cell&lt;T: Shared&gt; {
+    const value: T;
+    construct(value: T) { this.value = value; }
+}
+
+share&lt;T: Shared&gt;(value: T): Cell&lt;T&gt; { return Cell&lt;T&gt;(value); }
+
+main(): int {
+    var count = share(3);
+    var settings = share(Settings(4));
+    assert(count.value == 3 and settings.value.workers == 4, "shared cells");
+
+    # The runtime states the same rule: spawn&lt;T: Shared&gt;.
+    async.run(() =&gt; {
+        var task = async.spawn&lt;Settings&gt;(() =&gt; { return Settings(2); });
+        assert(task.join().value().workers == 2, "spawned");
+    });
+    return 0;
+}
+</code></pre>
+<p>The standard library states the rule this way where it applies:
+<code>spawn&lt;T: Shared&gt;</code>, <code>run_blocking&lt;T: Shared&gt;</code> and <code>Lazy&lt;T: Shared&gt;</code>, so
+<code>async.spawn&lt;String&gt;(...)</code> is reported at <code>String</code>, with a note saying why
+it is not thread-safe (<code>'String' is not declared [Shared]</code>). In a
+constraint, <code>Shared</code> always means this built-in, so a trait cannot be
+named <code>Shared</code>. A generic that passes its own <code>T</code> to one of these (say
+<code>run_blocking&lt;T&gt;</code>) needs <code>T: Shared</code> too.</p>
 <p>The compiler checks every use: a type argument you write, one it infers from
 a call, a default, and a
 <a href="#overriding-a-generic-function-for-one-type">concrete override</a>. The error
@@ -7655,10 +7702,14 @@ the same object), not the objects’ contents.</li>
 floating-point or struct <code>T</code> compiles, but stops the program when it runs.</li>
 <li><strong><code>is_lock_free()</code></strong> is true for any number type of 8 bytes or less, and for
 any struct type.</li>
-<li><strong>A struct <code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so
-its <code>T</code> must be a <code>[Shared]</code> struct too (or a number, pointer or function
-type). <code>Atomic&lt;String&gt;</code> is a compile error. See
-<a href="#what-threads-can-share">What threads can share</a>.</li>
+<li><strong><code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so it is
+declared <code>Atomic&lt;T: Shared&gt;</code>: <code>T</code> is a number, <code>bool</code>, an enum, a
+<code>[Shared]</code> struct, or another type in
+<a href="#what-threads-can-share">What threads can share</a>.
+<code>Atomic&lt;String&gt;</code> is a compile error at <code>String</code> (see
+<a href="#the-shared-constraint">the <code>Shared</code> constraint</a>). A tuple is
+thread-safe, but its value cannot be stored atomically, so <code>Atomic</code> of a
+tuple is an error too.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
 <pre><code class="language-pepper">import async;
@@ -7946,18 +7997,30 @@ never assigned again, so threads cannot race on it. To change shared state,
 give the struct a thread-safe member such as an <code>Atomic&lt;T&gt;</code>.</p>
 </li>
 <li>
-<p><strong>Every field must have a thread-safe type.</strong> These are the thread-safe
-types:</p>
+<p><strong>Every field must have a thread-safe type.</strong> These are all the
+thread-safe types, the same ones the constraint
+<a href="#the-shared-constraint"><code>T: Shared</code></a> accepts:</p>
 <ul>
-<li>numbers and <code>bool</code>;</li>
-<li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
+<li>every number type (<code>int</code>, <code>long</code>, <code>byte</code>, <code>char</code>, <code>short</code>, <code>float</code>,
+<code>double</code> and the rest), <code>bool</code>, and <code>void</code>;</li>
+<li><a href="#enums-and-match">enums</a> whose cases carry no values, which are stored as
+integers;</li>
+<li><code>[Shared]</code> structs, and enums whose cases carry values that are declared
+<code>[Shared]</code>;</li>
+<li>weak references to thread-safe types;</li>
+<li>raw pointers (<code>__ptr&lt;T&gt;</code>, and <code>void*</code>) to thread-safe types;</li>
 <li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
-<a href="#sharing-function-values-between-threads">Function types</a>);</li>
-<li><code>[Shared]</code> structs, and weak references to them;</li>
-<li><a href="#tuples-and-multiple-return-values">tuples</a> whose elements are all thread-safe.</li>
+<a href="#sharing-function-values-between-threads">Function types</a>),
+and C function pointer types (<code>extern (int) =&gt; int</code>);</li>
+<li><a href="#tuples-and-multiple-return-values">tuples</a> whose elements are all thread-safe;</li>
+<li>inside a generic, a type parameter constrained <code>T: Shared</code>.</li>
 </ul>
-<p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
-thread-safe, and neither is a plain function type such as <code>() =&gt; void</code>:</p>
+<p>Nothing else is. A struct is never thread-safe on its own, even when all
+its fields are numbers: a struct value is a reference to a
+reference-counted object, and only a <code>[Shared]</code> struct counts those
+references atomically. So <code>String</code>, <code>Array</code> and other structs that are not
+<code>[Shared]</code> are not thread-safe, and neither is a plain function type such
+as <code>() =&gt; void</code>:</p>
 <pre><code class="language-text">main.pep:3:14: error: field 'F' of shared struct 'H' has type '() =&gt; void', which is not thread-safe
     3 |     const F: () =&gt; void;
       |              ^~~~~~~~~~
@@ -7965,15 +8028,37 @@ note: declare the function type 'shared () =&gt; void' to share it between threa
 </code></pre>
 </li>
 </ul>
-<p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
-<code>Atomic&lt;T&gt;</code> is <code>[Shared]</code>, so <code>Atomic&lt;int&gt;</code> and <code>Atomic&lt;Settings&gt;</code> are fine,
-and <code>Atomic&lt;String&gt;</code> is an error that points at the code that names it:</p>
-<pre><code class="language-text">main.pep:3:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    3 |     var a = async.Atomic&lt;String&gt;();
-      |             ^~~~~~~~~~~~~~~~~~~~
-runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
-runtime/string.pep:33:15: note: 'String' is not declared [Shared]
+<p>A generic <code>[Shared]</code> struct whose parameter has no constraint is checked
+for each set of type arguments, and the error points at the code that asked
+for the specialization:</p>
+<pre><code class="language-pepper">[Shared]
+struct Cell&lt;T&gt; {
+    const value: T;
+}
+
+make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+
+main(): int {
+    var c = make&lt;String&gt;();
+    return 0;
+}
 </code></pre>
+<pre><code class="language-text">main.pep:9:13: error: 'make&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    9 |     var c = make&lt;String&gt;();
+      |             ^~~~~~~~~~~~
+main.pep:6:29: note: 'Cell&lt;String&gt;' is required here, in 'make&lt;String&gt;'
+    6 | make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+      |                             ^~~~~~~
+main.pep:3:18: note: required by field 'value' declared here
+    3 |     const value: T;
+      |                  ^
+runtime/string.pep:41:15: note: 'String' is not declared [Shared]
+</code></pre>
+<p>A generic can state the rule up front with the built-in constraint
+<a href="#the-shared-constraint"><code>T: Shared</code></a>: <code>[Shared] struct Cell&lt;T: Shared&gt;</code> accepts exactly the type arguments above, and a wrong one
+is reported where it is written (<code>'String' does not conform to 'Shared', required by 'T' in 'Cell'</code>). The standard library’s <code>Atomic&lt;T&gt;</code>, <code>spawn</code>,
+<code>run_blocking</code> and <code>Lazy&lt;T&gt;</code> do this, so <code>Atomic&lt;String&gt;</code> is reported at
+<code>String</code>.</p>
 <p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
 reported at the field:</p>
 <pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
@@ -8840,9 +8925,11 @@ main(): int {
 </code></pre>
 <p>Because such a task may run on another thread, its body must be a <code>shared</code>
 function: it may capture only thread-safe values, as a
-<a href="#threads-and-shared-data">thread</a>’s body. Its result crosses threads too, so <code>T</code> must be
-thread-safe (a number, a <code>[Shared]</code> struct, or a <code>shared</code> function type);
-<code>async.spawn&lt;String&gt;</code> is a compile error. <code>join</code>, <code>cancel</code> and
+<a href="#threads-and-shared-data">thread</a>’s body. Its result crosses threads too, so <code>spawn</code>
+constrains it <a href="#the-shared-constraint"><code>T: Shared</code></a>: a
+<a href="#what-threads-can-share">thread-safe type</a> such as a number, a
+<code>[Shared]</code> struct, or a <code>shared</code> function type. <code>async.spawn&lt;String&gt;</code> is a
+compile error at <code>String</code>. <code>join</code>, <code>cancel</code> and
 <code>is_finished</code> work as for <code>spawn_local</code>, from the task that started it.</p>
 <p>A task, once started, stays on its worker until it finishes, so the tasks it
 starts with <code>spawn_local</code> share values with it safely. An idle worker takes
@@ -17160,7 +17247,7 @@ values only. See the language guide’s Threads chapter.</p>
 <h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
 <p>Source: <code>runtime/async/atomic.pep</code></p>
 <h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
-<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Atomic&lt;T: Shared&gt;
 </code></pre>
 <p>A value of type <code>T</code> that threads can read and update without data races,
 like C++ <code>std::atomic&lt;T&gt;</code>.</p>
@@ -17173,11 +17260,13 @@ caller its own reference. Memory ordering: <code>load</code> is an acquire,
 acquire-release.</p>
 <p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
 be used from several threads at once: pass the Atomic around (or keep it
-in a <code>const</code> global) to share the value between threads. A struct <code>T</code> must be
-thread-safe (itself <code>[Shared]</code>); <code>async.Atomic&lt;String&gt;</code> is a compile error.</p>
+in a <code>const</code> global) to share the value between threads, so <code>T</code> is
+constrained <code>Shared</code>: a number, <code>bool</code>, an enum, a <code>[Shared]</code> struct, or
+another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile error at
+<code>String</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the stored value</li>
+<li><code>T</code> — the type of the stored value, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    main(): int {
@@ -18000,19 +18089,20 @@ still running are cancelled (see <code>Task.cancel</code>), on every worker, and
 <li>if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend <code>options</code> asks for</li>
 </ul>
 <h2 id="spawn-1"><a class="header" href="#spawn-1">spawn</a></h2>
-<pre><code class="language-pepper">spawn&lt;T&gt;(body: shared () =&gt; T): Task&lt;T&gt;
+<pre><code class="language-pepper">spawn&lt;T: Shared&gt;(body: shared () =&gt; T): Task&lt;T&gt;
 </code></pre>
 <p>Starts a task that runs <code>body</code> on whichever worker is free first, and
 returns it. Unlike <code>Task&lt;T&gt;.spawn_local</code>, the task may run on another
 thread, in parallel with the calling task, so the body must be a
 <code>shared</code> function (it may capture only thread-safe values) and its result
-crosses threads, so <code>T</code> must be thread-safe too: a number, a <code>[Shared]</code>
-struct, or a <code>shared</code> function type (<code>spawn&lt;String&gt;</code> is a compile error).</p>
+crosses threads, so <code>T</code> is constrained <code>Shared</code>: a thread-safe type such
+as a number, a <code>[Shared]</code> struct, or a <code>shared</code> function type
+(<code>spawn&lt;String&gt;</code> is a compile error at <code>String</code>).</p>
 <p>A task, once started, stays on the worker that started it. Joining and
 cancelling work as for <code>spawn_local</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe (<code>T: Shared</code>); <code>void</code> when there is none</li>
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -18096,7 +18186,7 @@ a <code>shared</code> function.</p>
     }
 </code></pre>
 <h2 id="run_blocking"><a class="header" href="#run_blocking">run_blocking</a></h2>
-<pre><code class="language-pepper">run_blocking&lt;T&gt;(body: shared () =&gt; T): T
+<pre><code class="language-pepper">run_blocking&lt;T: Shared&gt;(body: shared () =&gt; T): T
 </code></pre>
 <p>Runs <code>body</code> on a separate thread and returns what it returns, parking
 the calling task meanwhile so the worker keeps running other tasks. Use it
@@ -18105,7 +18195,8 @@ the operating system (reading a file, resolving a host name, a C library
 that waits) or a long computation.</p>
 <p>The runtime keeps a pool of threads for these calls, started as needed up
 to <code>RuntimeOptions.blocking_threads</code>. <code>body</code> runs on one of them, so it
-must be a <code>shared</code> function and <code>T</code> must be thread-safe, as for <code>spawn</code>.
+must be a <code>shared</code> function and <code>T</code> is constrained <code>Shared</code>, as for
+<code>spawn</code>.
 On a pool thread, sockets block the thread, and <code>sleep</code> and the other task
 functions behave as outside <code>run</code>.</p>
 <p><code>body</code> always runs to the end: cancelling the calling task, or a <code>timeout</code>
@@ -18113,7 +18204,7 @@ around the call expiring, takes effect once <code>run_blocking</code> has return
 Outside a task, <code>run_blocking</code> just calls <code>body</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe (<code>T: Shared</code>); <code>void</code> when there is none</li>
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -18959,19 +19050,19 @@ when this returns.</p>
 <li>true once a <code>call</code> has completed its body on some thread</li>
 </ul>
 <h2 id="lazy"><a class="header" href="#lazy">Lazy</a></h2>
-<pre><code class="language-pepper">[Shared] struct Lazy&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Lazy&lt;T: Shared&gt;
 </code></pre>
 <p>A value built on first use by whichever thread asks first, like Rust’s
 <code>LazyLock</code>. The usual way to give a module-scope variable a value that is
 expensive to build, or that cannot be built before <code>main</code> runs.</p>
 <p>The first <code>get()</code> runs the initializer; threads that call <code>get()</code> while it
 runs wait for it, and every later call returns the same value.</p>
-<p><code>T</code> must be thread-safe (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-type), because every thread gets the same value; <code>Lazy&lt;String&gt;</code> is a
-compile error.</p>
+<p><code>T</code> is constrained <code>Shared</code> (a thread-safe type such as a number, a
+<code>[Shared]</code> struct, or a <code>shared</code> function type), because every thread
+gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the value’s type, which must be thread-safe</li>
+<li><code>T</code> — the value’s type, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;

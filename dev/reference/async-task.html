@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -444,19 +444,20 @@ still running are cancelled (see <code>Task.cancel</code>), on every worker, and
 <li>if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend <code>options</code> asks for</li>
 </ul>
 <h2 id="spawn"><a class="header" href="#spawn">spawn</a></h2>
-<pre><code class="language-pepper">spawn&lt;T&gt;(body: shared () =&gt; T): Task&lt;T&gt;
+<pre><code class="language-pepper">spawn&lt;T: Shared&gt;(body: shared () =&gt; T): Task&lt;T&gt;
 </code></pre>
 <p>Starts a task that runs <code>body</code> on whichever worker is free first, and
 returns it. Unlike <code>Task&lt;T&gt;.spawn_local</code>, the task may run on another
 thread, in parallel with the calling task, so the body must be a
 <code>shared</code> function (it may capture only thread-safe values) and its result
-crosses threads, so <code>T</code> must be thread-safe too: a number, a <code>[Shared]</code>
-struct, or a <code>shared</code> function type (<code>spawn&lt;String&gt;</code> is a compile error).</p>
+crosses threads, so <code>T</code> is constrained <code>Shared</code>: a thread-safe type such
+as a number, a <code>[Shared]</code> struct, or a <code>shared</code> function type
+(<code>spawn&lt;String&gt;</code> is a compile error at <code>String</code>).</p>
 <p>A task, once started, stays on the worker that started it. Joining and
 cancelling work as for <code>spawn_local</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe (<code>T: Shared</code>); <code>void</code> when there is none</li>
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -540,7 +541,7 @@ a <code>shared</code> function.</p>
     }
 </code></pre>
 <h2 id="run_blocking"><a class="header" href="#run_blocking">run_blocking</a></h2>
-<pre><code class="language-pepper">run_blocking&lt;T&gt;(body: shared () =&gt; T): T
+<pre><code class="language-pepper">run_blocking&lt;T: Shared&gt;(body: shared () =&gt; T): T
 </code></pre>
 <p>Runs <code>body</code> on a separate thread and returns what it returns, parking
 the calling task meanwhile so the worker keeps running other tasks. Use it
@@ -549,7 +550,8 @@ the operating system (reading a file, resolving a host name, a C library
 that waits) or a long computation.</p>
 <p>The runtime keeps a pool of threads for these calls, started as needed up
 to <code>RuntimeOptions.blocking_threads</code>. <code>body</code> runs on one of them, so it
-must be a <code>shared</code> function and <code>T</code> must be thread-safe, as for <code>spawn</code>.
+must be a <code>shared</code> function and <code>T</code> is constrained <code>Shared</code>, as for
+<code>spawn</code>.
 On a pool thread, sockets block the thread, and <code>sleep</code> and the other task
 functions behave as outside <code>run</code>.</p>
 <p><code>body</code> always runs to the end: cancelling the calling task, or a <code>timeout</code>
@@ -557,7 +559,7 @@ around the call expiring, takes effect once <code>run_blocking</code> has return
 Outside a task, <code>run_blocking</code> just calls <code>body</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the body’s result, which must be thread-safe; <code>void</code> when there is none</li>
+<li><code>T</code> — the type of the body’s result, which must be thread-safe (<code>T: Shared</code>); <code>void</code> when there is none</li>
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>

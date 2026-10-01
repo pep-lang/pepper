@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -247,19 +247,19 @@ when this returns.</p>
 <li>true once a <code>call</code> has completed its body on some thread</li>
 </ul>
 <h2 id="lazy"><a class="header" href="#lazy">Lazy</a></h2>
-<pre><code class="language-pepper">[Shared] struct Lazy&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Lazy&lt;T: Shared&gt;
 </code></pre>
 <p>A value built on first use by whichever thread asks first, like Rust’s
 <code>LazyLock</code>. The usual way to give a module-scope variable a value that is
 expensive to build, or that cannot be built before <code>main</code> runs.</p>
 <p>The first <code>get()</code> runs the initializer; threads that call <code>get()</code> while it
 runs wait for it, and every later call returns the same value.</p>
-<p><code>T</code> must be thread-safe (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-type), because every thread gets the same value; <code>Lazy&lt;String&gt;</code> is a
-compile error.</p>
+<p><code>T</code> is constrained <code>Shared</code> (a thread-safe type such as a number, a
+<code>[Shared]</code> struct, or a <code>shared</code> function type), because every thread
+gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the value’s type, which must be thread-safe</li>
+<li><code>T</code> — the value’s type, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;

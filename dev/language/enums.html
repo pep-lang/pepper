@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -349,7 +349,9 @@ slot does. <code>===</code> and <code>!==</code> compare identity.</li>
 the enum itself, directly or through other types, so lists and trees are
 enums.</li>
 <li>The enum can be <code>[Shared]</code> when every value its cases carry is
-thread-safe (see <a href="threads.html">Threads</a>). It can conform to a trait with
+thread-safe (see <a href="threads.html#what-threads-can-share">What threads can share</a>).
+An enum whose cases carry nothing is stored as an integer and is always
+thread-safe. It can conform to a trait with
 <code>extend Name with Trait</code>, like a struct, and its methods can come from an
 <code>extend</code> block too.</li>
 <li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no

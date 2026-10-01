@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -261,9 +261,11 @@ main(): int {
 </code></pre>
 <p>Because such a task may run on another thread, its body must be a <code>shared</code>
 function: it may capture only thread-safe values, as a
-<a href="threads.html">thread</a>’s body. Its result crosses threads too, so <code>T</code> must be
-thread-safe (a number, a <code>[Shared]</code> struct, or a <code>shared</code> function type);
-<code>async.spawn&lt;String&gt;</code> is a compile error. <code>join</code>, <code>cancel</code> and
+<a href="threads.html">thread</a>’s body. Its result crosses threads too, so <code>spawn</code>
+constrains it <a href="generics.html#the-shared-constraint"><code>T: Shared</code></a>: a
+<a href="threads.html#what-threads-can-share">thread-safe type</a> such as a number, a
+<code>[Shared]</code> struct, or a <code>shared</code> function type. <code>async.spawn&lt;String&gt;</code> is a
+compile error at <code>String</code>. <code>join</code>, <code>cancel</code> and
 <code>is_finished</code> work as for <code>spawn_local</code>, from the task that started it.</p>
 <p>A task, once started, stays on its worker until it finishes, so the tasks it
 starts with <code>spawn_local</code> share values with it safely. An idle worker takes

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -483,6 +483,50 @@ value of the trait type (see
 </ul>
 <p>Numbers, <code>bool</code>, enums, pointers, tuples and function types conform to no
 trait.</p>
+<h3 id="the-shared-constraint"><a class="header" href="#the-shared-constraint">The <code>Shared</code> constraint</a></h3>
+<p><code>T: Shared</code> is built in: it requires a type that is safe to share between
+threads, by the same rule as a field of a <code>[Shared]</code> struct. The types that
+conform are listed in
+<a href="threads.html#what-threads-can-share">What threads can share</a>; no <code>extend</code>
+can make another type conform. It gives <code>T</code> no methods, and it joins other
+constraints with <code>&amp;</code> (<code>T: Shared &amp; Named</code>):</p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Settings {
+    const workers: int;
+    construct(this.workers = 1) {}
+}
+
+# A cell that any thread may read: its value must be thread-safe.
+[Shared]
+struct Cell&lt;T: Shared&gt; {
+    const value: T;
+    construct(value: T) { this.value = value; }
+}
+
+share&lt;T: Shared&gt;(value: T): Cell&lt;T&gt; { return Cell&lt;T&gt;(value); }
+
+main(): int {
+    var count = share(3);
+    var settings = share(Settings(4));
+    assert(count.value == 3 and settings.value.workers == 4, "shared cells");
+
+    # The runtime states the same rule: spawn&lt;T: Shared&gt;.
+    async.run(() =&gt; {
+        var task = async.spawn&lt;Settings&gt;(() =&gt; { return Settings(2); });
+        assert(task.join().value().workers == 2, "spawned");
+    });
+    return 0;
+}
+</code></pre>
+<p>The standard library states the rule this way where it applies:
+<code>spawn&lt;T: Shared&gt;</code>, <code>run_blocking&lt;T: Shared&gt;</code> and <code>Lazy&lt;T: Shared&gt;</code>, so
+<code>async.spawn&lt;String&gt;(...)</code> is reported at <code>String</code>, with a note saying why
+it is not thread-safe (<code>'String' is not declared [Shared]</code>). In a
+constraint, <code>Shared</code> always means this built-in, so a trait cannot be
+named <code>Shared</code>. A generic that passes its own <code>T</code> to one of these (say
+<code>run_blocking&lt;T&gt;</code>) needs <code>T: Shared</code> too.</p>
 <p>The compiler checks every use: a type argument you write, one it infers from
 a call, a default, and a
 <a href="#overriding-a-generic-function-for-one-type">concrete override</a>. The error

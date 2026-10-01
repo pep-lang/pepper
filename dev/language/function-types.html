@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -650,10 +650,11 @@ main(): int {
 <p><strong>What converts to <code>shared</code>.</strong> A named function, which holds no state; a
 method, constructor or generic function value with nothing captured, such
 as <code>Point.norm</code> or <code>Box&lt;int&gt;</code>; and a closure literal (or a bound method
-such as <code>p.norm</code>) whose captured values are all thread-safe: numbers,
-<code>Atomic&lt;T&gt;</code> and other <code>[Shared]</code> structs, weak references to them, and
-<code>shared</code> function values. The value must be written where the <code>shared</code>
-type is expected, so that it is made thread-safe from the start.</p>
+such as <code>p.norm</code>) whose captured values are all
+<a href="threads.html#what-threads-can-share">thread-safe</a>: numbers, <code>Atomic&lt;T&gt;</code>
+and other <code>[Shared]</code> structs, <code>shared</code> function values, and the rest of
+that list. The value must be written where the <code>shared</code> type is expected,
+so that it is made thread-safe from the start.</p>
 </li>
 <li>
 <p><strong>What does not.</strong> A closure that captures a value that is not thread-safe

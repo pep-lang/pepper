@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a4d375.js";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -261,10 +261,14 @@ the same object), not the objects’ contents.</li>
 floating-point or struct <code>T</code> compiles, but stops the program when it runs.</li>
 <li><strong><code>is_lock_free()</code></strong> is true for any number type of 8 bytes or less, and for
 any struct type.</li>
-<li><strong>A struct <code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so
-its <code>T</code> must be a <code>[Shared]</code> struct too (or a number, pointer or function
-type). <code>Atomic&lt;String&gt;</code> is a compile error. See
-<a href="threads.html#what-threads-can-share">What threads can share</a>.</li>
+<li><strong><code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so it is
+declared <code>Atomic&lt;T: Shared&gt;</code>: <code>T</code> is a number, <code>bool</code>, an enum, a
+<code>[Shared]</code> struct, or another type in
+<a href="threads.html#what-threads-can-share">What threads can share</a>.
+<code>Atomic&lt;String&gt;</code> is a compile error at <code>String</code> (see
+<a href="generics.html#the-shared-constraint">the <code>Shared</code> constraint</a>). A tuple is
+thread-safe, but its value cannot be stored atomically, so <code>Atomic</code> of a
+tuple is an error too.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
 <pre><code class="language-pepper">import async;
