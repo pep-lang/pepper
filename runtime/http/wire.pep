@@ -4,6 +4,7 @@
 # head.
 
 import io;
+import text;
 import tls;
 import "message";
 
@@ -308,7 +309,7 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
         bytes.append(data[index]);
         index = index + 1;
     }
-    return String._from_bytes(bytes);
+    return text.Utf8.decode_lossy(bytes);
 }
 
 export _http_append(out: u8[], text: String) {

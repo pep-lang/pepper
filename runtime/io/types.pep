@@ -354,66 +354,6 @@ export _io_byte(p: __ptr<u8>, n: ulong, i: ulong): int {
     return p[i];
 }
 
-# True when the bytes are valid UTF-8 (empty is valid).
-# Strict (RFC 3629): no overlong forms, surrogates, or code points past
-# U+10FFFF.
-export _io_utf8_valid(p: __ptr<char>, n: ulong): bool {
-    var b = p as __ptr<u8>;
-    ulong i = 0;
-    while (i < n) {
-        var c = _io_byte(b, n, i);
-        if (c < 128) {
-            i = i + 1;
-            continue;
-        }
-        ulong extra = 0;
-        var lo = 128;  # allowed range of the first continuation byte
-        var hi = 191;
-        if (c >= 194 && c <= 223) {
-            extra = 1;
-        } else {
-            if (c >= 224 && c <= 239) {
-                extra = 2;
-                if (c == 224) {
-                    lo = 160;
-                }  # no overlong 3-byte forms
-                if (c == 237) {
-                    hi = 159;
-                }  # no surrogates
-            } else {
-                if (c >= 240 && c <= 244) {
-                    extra = 3;
-                    if (c == 240) {
-                        lo = 144;
-                    }  # no overlong 4-byte forms
-                    if (c == 244) {
-                        hi = 143;
-                    }  # nothing past U+10FFFF
-                } else {
-                    return false;  # continuation byte, 0xC0/0xC1, >= 0xF5
-                }
-            }
-        }
-        if (i + extra >= n) {
-            return false;  # truncated sequence
-        }
-        var first = _io_byte(b, n, i + 1);
-        if (first < lo || first > hi) {
-            return false;
-        }
-        ulong k = 2;
-        while (k <= extra) {
-            var cont = _io_byte(b, n, i + k);
-            if (cont < 128 || cont > 191) {
-                return false;
-            }
-            k = k + 1;
-        }
-        i = i + extra + 1;
-    }
-    return true;
-}
-
 export _io_ok_void(): IoResult<void> {
     return IoResult<void>.ok();
 }

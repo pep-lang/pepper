@@ -1,5 +1,6 @@
 # OpenOptions, Metadata, File.
 
+import text;
 import "path";
 import "sys_posix";
 import "sys_windows";
@@ -528,12 +529,11 @@ export struct File {
         if (r.is_err()) {
             return IoResult<String>.err(r.error());
         }
-        var bytes = r.value();
-        var p = bytes._data as __ptr<char>;
-        if (!_io_utf8_valid(p, bytes._size)) {
+        var decoded = text.Utf8.decode(r.value());
+        if (decoded.is_none()) {
             return IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "stream did not contain valid UTF-8"));
         }
-        return IoResult<String>.ok(_io_string_from(p, bytes._size));
+        return IoResult<String>.ok(decoded.value());
     }
 
     ## Writes bytes from `data` at the current position (or at the end, in

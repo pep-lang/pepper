@@ -386,6 +386,48 @@ test(): int {
 }
 
 #[test]
+fn text_module_encodes_and_decodes() {
+    assert_eq!(compile_jit_with_runtime(r#"
+import text;
+
+test(): int {
+    var s = "héllo €𝄞";
+    var b = text.Utf8.encode(s);
+    if (!(text.Utf8.decode(b).value() == s)) { return -1; }
+    var bad = Array<u8>();
+    bad.append(104);
+    bad.append(255);
+    if (!(text.Utf8.decode(bad).is_none())) { return -2; }
+    if (!(text.Utf8.decode_lossy(bad) == "h\u{FFFD}")) { return -3; }
+    var le = text.Utf16.encode(s);
+    if (!(le.count() == 18)) { return -4; }
+    if (!(text.Utf16.decode(le).value() == s)) { return -5; }
+    var be = text.Utf16.encode(s, true);
+    if (!(be[0] == 0 && be[1] == 104)) { return -6; }
+    if (!(text.Utf16.decode(be, true).value() == s)) { return -7; }
+    var lone = Array<u8>();
+    lone.append(0);
+    lone.append(216);
+    if (!(text.Utf16.decode(lone).is_none())) { return -8; }
+    if (!(text.Utf16.decode_lossy(lone) == "\u{FFFD}")) { return -9; }
+    if (!(text.Ascii.encode("ok").value().count() == 2)) { return -10; }
+    if (!(text.Ascii.encode(s).is_none())) { return -11; }
+    var q = text.Ascii.encode_lossy("aé€");
+    if (!(q.count() == 3 && q[1] == 63)) { return -12; }
+    if (!(text.Ascii.decode(bad).is_none())) { return -13; }
+    if (!(text.Ascii.decode_lossy(bad) == "h\u{FFFD}")) { return -14; }
+    var before = _pep_live_allocs();
+    {
+        var x = text.Utf16.decode_lossy(text.Utf16.encode(s));
+        var y = text.Ascii.encode_lossy(x);
+    }
+    if (!(_pep_live_allocs() == before)) { return -15; }
+    return 0;
+}
+"#), 0);
+}
+
+#[test]
 fn find_from_rfind_split_join_replace() {
     assert_eq!(
         compile_jit_with_runtime(

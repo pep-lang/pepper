@@ -1,6 +1,8 @@
 ## HTTP messages: `Headers`, `Request` and `Response`, the values a
 ## `Client` sends and receives and a `Server` handler takes and returns.
 
+import text;
+
 ## HTTP header fields, by name. Names ignore ASCII case: they are stored
 ## lowercased, so `Content-Type` and `content-type` are the same field. A
 ## name may hold several values, kept in the order added. Different names
@@ -230,7 +232,7 @@ export struct Request {
     ##
     ## @returns the body's bytes decoded as a String
     text(): String {
-        return String._from_bytes(this._body);
+        return _http_body_text(this._body);
     }
 }
 
@@ -299,7 +301,7 @@ export struct Response {
     ##
     ## @returns the body's bytes decoded as a String
     text(): String {
-        return String._from_bytes(this._body);
+        return _http_body_text(this._body);
     }
 
     ## Reports whether the status is 2xx.
@@ -308,4 +310,10 @@ export struct Response {
     is_success(): bool {
         return this.status >= 200 && this.status < 300;
     }
+}
+
+# `body` decoded as UTF-8, invalid bytes becoming U+FFFD. Outside the
+# structs, whose `text()` methods would take the name `text`.
+_http_body_text(body: u8[]): String {
+    return text.Utf8.decode_lossy(body);
 }

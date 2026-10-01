@@ -11,6 +11,7 @@
 
 - [Types and variables](language/types-and-variables.md)
 - [String interpolation](language/interpolation.md)
+- [Text encodings](language/text.md)
 - [Statements and semicolons](language/statements.md)
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)
@@ -94,6 +95,10 @@
   - [math/module.pep](reference/math-module.md)
     - [math/parse.pep](reference/math-parse.md)
   - [number.pep](reference/number.md)
+    - [text/ascii.pep](reference/text-ascii.md)
+  - [text/module.pep](reference/text-module.md)
+    - [text/utf16.pep](reference/text-utf16.md)
+    - [text/utf8.pep](reference/text-utf8.md)
   - [tls/module.pep](reference/tls-module.md)
     - [tls/stream.pep](reference/tls-stream.md)
   - [uri.pep](reference/uri.md)

@@ -131,8 +131,8 @@ export struct String {
     }
 
     # A new String decoded from the UTF-8 bytes in `data`, each byte that
-    # does not start a valid sequence becoming U+FFFD. For the http and
-    # process modules until text.Utf8.decode_lossy replaces it.
+    # does not start a valid sequence becoming U+FFFD: `text.Utf8.decode_lossy`,
+    # here so prelude files (uri.pep) can use it without importing `text`.
     static _from_bytes(data: u8[]): String {
         var size = data.count();
         if (size == 0) {
