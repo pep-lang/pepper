@@ -209,71 +209,83 @@ pub fn specialization(name: &str, args: Vec<TypeName>) -> String {
     TypeName::with_args(name, args).to_string()
 }
 
-/// Report each call to a generic function whose type arguments were neither
-/// written nor inferred. Runs after the last type inference; generic bases
-/// are skipped (their specializations are checked).
+/// Report each call to a generic function or method whose type arguments
+/// were neither written nor inferred. Runs after the last type inference;
+/// generic bases are skipped (their specializations are checked).
 pub fn check_type_arguments(module: &Module) {
     let generics: HashMap<&str, &FunctionDef> =
         module.functions.iter().filter(|f| f.is_generic_func).map(|f| (f.name.as_str(), f)).collect();
-    if generics.is_empty() {
+    let has_methods = module.structs.iter().any(|s| !s.generic_methods.is_empty());
+    if generics.is_empty() && !has_methods {
         return;
     }
-    let report = |expr: &Expression| {
-        if let Expression::FunctionCall { function, args, loc } = expr {
-            // An argument naming nothing gives no type to infer from;
-            // `resolve_resolvables` reports it as undeclared instead.
-            let undeclared = args.iter().any(|a| matches!(a, Expression::SymbolRef { ty, .. } if ty.is_empty() || ty.is_auto()));
-            if undeclared {
-                return;
+    // Built on the first method call that may name a generic method.
+    let statics = std::cell::OnceCell::new();
+    // An operator (`<`) is never a generic callee.
+    let named = |callee: &str| callee.starts_with(|c: char| c.is_alphabetic() || c == '_');
+    let report = |expr: &Expression, current: Option<&TypeName>| {
+        let (callee, args, loc, base) = match expr {
+            Expression::FunctionCall { function, args, loc } if named(function) => {
+                let name = crate::passes::gather_generics::parse_type_string(function).name;
+                let Some(base) = generics.get(name.as_str()) else { return };
+                (function, args, loc, *base)
             }
+            Expression::MethodCall { this, method, args, loc } if has_methods && named(method) => {
+                let name = crate::passes::gather_generics::parse_type_string(method).name;
+                if !module.structs.iter().any(|s| s.generic_methods.iter().any(|m| m.name == name)) {
+                    return;
+                }
+                let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
+                let Some(owner) = crate::static_type::of(this, statics, current) else { return };
+                let key = owner.to_string();
+                let Some(st) = module.structs.iter().find(|s| s.ty.is_spelled(key.trim_end_matches('*'))) else { return };
+                // A specialization the call already names is complete.
+                if st.method_members.iter().any(|m| m.name == *method) {
+                    return;
+                }
+                let Some(base) = st.generic_methods.iter().find(|m| m.name == name) else { return };
+                (method, args, loc, base)
+            }
+            _ => return,
+        };
+        // An argument naming nothing gives no type to infer from;
+        // `resolve_resolvables` reports it as undeclared instead.
+        let undeclared = args.iter().any(|a| matches!(a, Expression::SymbolRef { ty, .. } if ty.is_empty() || ty.is_auto()));
+        if undeclared {
+            return;
+        }
+        let written = crate::passes::gather_generics::parse_type_string(callee);
+        let all = base.generic_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
+        let message = if written.sub_types.is_empty() {
+            format!(
+                "cannot infer the type arguments of '{}' from its arguments; write them: {}<{}>(...)",
+                written.name, written.name, all
+            )
+        } else {
             // `count_all<int>(it)` for `count_all<T, I>` whose arguments did
             // not give the rest.
-            let written = crate::passes::gather_generics::parse_type_string(function);
-            if function.starts_with(|c: char| c.is_alphabetic() || c == '_')
-                && let Some(base) = generics.get(written.name.as_str())
-                && !written.sub_types.is_empty()
-                && let Some(missing) = base.generic_params.get(written.sub_types.len()..)
-                && let Some(unbound) = missing.iter().find(|p| p.default.is_none())
-            {
-                crate::errors::report(
-                    Diagnostic::error(format!(
-                        "cannot infer the type argument '{}' of '{}' from its arguments; write it: {}<{}>(...)",
-                        unbound.name,
-                        written.name,
-                        written.name,
-                        base.generic_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")
-                    ))
-                    .at(*loc)
-                    .with_note("declared here", Some(base.loc)),
-                );
+            let Some(unbound) = base.generic_params.get(written.sub_types.len()..).and_then(|m| m.iter().find(|p| p.default.is_none()))
+            else {
                 return;
-            }
-            if let Some(base) = generics.get(function.as_str()) {
-                let params: Vec<&str> = base.generic_params.iter().map(|p| p.name.as_str()).collect();
-                crate::errors::report(
-                    Diagnostic::error(format!(
-                        "cannot infer the type arguments of '{}' from its arguments; write them: {}<{}>(...)",
-                        function,
-                        function,
-                        params.join(", ")
-                    ))
-                    .at(*loc)
-                    .with_note("declared here", Some(base.loc)),
-                );
-            }
-        }
-    };
-    let visit = |function: &FunctionDef| {
-        if let Some(body) = &function.body {
-            crate::passes::visit_block(body, &mut |e| report(e));
-        }
+            };
+            format!(
+                "cannot infer the type argument '{}' of '{}' from its arguments; write it: {}<{}>(...)",
+                unbound.name, written.name, written.name, all
+            )
+        };
+        crate::errors::report(Diagnostic::error(message).at(*loc).with_note("declared here", Some(base.loc)));
     };
     for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {
+        let current = Some(&st.ty);
         for method in st.method_members.iter().chain(st.constructors.iter()) {
-            visit(method);
+            if let Some(body) = &method.body {
+                crate::passes::visit_block(body, &mut |e| report(e, current));
+            }
         }
     }
     for function in module.functions.iter().filter(|f| !f.is_generic_func) {
-        visit(function);
+        if let Some(body) = &function.body {
+            crate::passes::visit_block(body, &mut |e| report(e, None));
+        }
     }
 }

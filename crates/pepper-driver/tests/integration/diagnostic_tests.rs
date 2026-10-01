@@ -1707,6 +1707,30 @@ fn written_type_arguments_too_few() {
 }
 
 #[test]
+fn method_type_arguments_not_inferred() {
+    // A generic method's call is reported in sema, not as a missing member
+    // in codegen: with no type arguments, and with too few.
+    assert_eq!(
+        error_of("method_type_arguments_not_inferred", "struct S {\n    make<T>(): int { return 0; }\n}\nmain(): int {\n    var s = S();\n    return s.make();\n}\n"),
+        "main.pep:6:14: error: cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)\n\
+         \x20   6 |     return s.make();\n\
+         \x20     |              ^~~~\n\
+         main.pep:2:5: note: declared here\n\
+         \x20   2 |     make<T>(): int { return 0; }\n\
+         \x20     |     ^~~~"
+    );
+    assert_eq!(
+        error_of("method_type_arguments_too_few", "struct S {\n    make<T, U>(a: T): int { return 0; }\n}\nmain(): int {\n    var s = S();\n    return s.make<int>(1);\n}\n"),
+        "main.pep:6:14: error: cannot infer the type argument 'U' of 'make' from its arguments; write it: make<T, U>(...)\n\
+         \x20   6 |     return s.make<int>(1);\n\
+         \x20     |              ^~~~\n\
+         main.pep:2:5: note: declared here\n\
+         \x20   2 |     make<T, U>(a: T): int { return 0; }\n\
+         \x20     |     ^~~~"
+    );
+}
+
+#[test]
 fn shared_closure_captures_not_thread_safe() {
     // At the capture's first use in the closure, with a note at the
     // captured variable.
