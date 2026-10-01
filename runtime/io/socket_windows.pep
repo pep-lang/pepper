@@ -302,20 +302,12 @@ export _io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
 
 [Target(OS(Windows))]
 export _io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
-    var value = 0;
-    if (enabled) {
-        value = 1;
-    }
-    return _io_win_set_int_option(h, 6, 1, value);  # IPPROTO_TCP, TCP_NODELAY
+    return _io_win_set_int_option(h, 6, 1, enabled ? 1 : 0);  # IPPROTO_TCP, TCP_NODELAY
 }
 
 [Target(OS(Windows))]
 export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
-    var value = 0;
-    if (enabled) {
-        value = 1;
-    }
-    return _io_win_set_int_option(h, 65535, 32, value);  # SOL_SOCKET, SO_BROADCAST
+    return _io_win_set_int_option(h, 65535, 32, enabled ? 1 : 0);  # SOL_SOCKET, SO_BROADCAST
 }
 
 [Target(OS(Windows))]

@@ -214,7 +214,7 @@ _http_last_space(line: String): long {
     var i = line.size();
     while (i > 0) {
         i = i - 1;
-        if (p[i] == 32) {
+        if (p[i] == ' ') {
             return i as long;
         }
     }
@@ -229,9 +229,12 @@ _http_refuse(reader: _HttpReader, status: int) {
 _http_send_response(connection: _HttpConnection, response: Response, head: bool, keep: bool) {
     var headers = Headers();
     for (var name in response.headers.names()) {
-        if (name != "content-length" && name != "transfer-encoding" && name != "connection") {
-            for (var value in response.headers.values(name)) {
-                headers.add(name, value);
+        match (name) {
+            "content-length", "transfer-encoding", "connection" => {}
+            else => {
+                for (var value in response.headers.values(name)) {
+                    headers.add(name, value);
+                }
             }
         }
     }
@@ -248,7 +251,7 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
         reason = reason_phrase(status);
     }
     var out = Array<u8>();
-    _http_write_head(out, "HTTP/1.1 " + to_string(status) + " " + reason, headers);
+    _http_write_head(out, $"HTTP/1.1 {status} {reason}", headers);
     if (!head && !bodiless) {
         out.append_all(response._body);
     }
@@ -261,35 +264,37 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
 ## @returns the phrase, such as `Not Found` for 404; an empty string for a
 ##   code without one
 export reason_phrase(status: int): String {
-    if (status == 100) { return "Continue"; }
-    if (status == 101) { return "Switching Protocols"; }
-    if (status == 200) { return "OK"; }
-    if (status == 201) { return "Created"; }
-    if (status == 202) { return "Accepted"; }
-    if (status == 204) { return "No Content"; }
-    if (status == 206) { return "Partial Content"; }
-    if (status == 301) { return "Moved Permanently"; }
-    if (status == 302) { return "Found"; }
-    if (status == 303) { return "See Other"; }
-    if (status == 304) { return "Not Modified"; }
-    if (status == 307) { return "Temporary Redirect"; }
-    if (status == 308) { return "Permanent Redirect"; }
-    if (status == 400) { return "Bad Request"; }
-    if (status == 401) { return "Unauthorized"; }
-    if (status == 403) { return "Forbidden"; }
-    if (status == 404) { return "Not Found"; }
-    if (status == 405) { return "Method Not Allowed"; }
-    if (status == 408) { return "Request Timeout"; }
-    if (status == 409) { return "Conflict"; }
-    if (status == 410) { return "Gone"; }
-    if (status == 413) { return "Content Too Large"; }
-    if (status == 415) { return "Unsupported Media Type"; }
-    if (status == 429) { return "Too Many Requests"; }
-    if (status == 431) { return "Request Header Fields Too Large"; }
-    if (status == 500) { return "Internal Server Error"; }
-    if (status == 501) { return "Not Implemented"; }
-    if (status == 502) { return "Bad Gateway"; }
-    if (status == 503) { return "Service Unavailable"; }
-    if (status == 504) { return "Gateway Timeout"; }
-    return "";
+    return match (status) {
+        100 => "Continue",
+        101 => "Switching Protocols",
+        200 => "OK",
+        201 => "Created",
+        202 => "Accepted",
+        204 => "No Content",
+        206 => "Partial Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        303 => "See Other",
+        304 => "Not Modified",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        408 => "Request Timeout",
+        409 => "Conflict",
+        410 => "Gone",
+        413 => "Content Too Large",
+        415 => "Unsupported Media Type",
+        429 => "Too Many Requests",
+        431 => "Request Header Fields Too Large",
+        500 => "Internal Server Error",
+        501 => "Not Implemented",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        else => "",
+    };
 }

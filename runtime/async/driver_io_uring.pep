@@ -56,6 +56,7 @@
 
 import io;
 import "driver";
+import "driver_epoll";
 import "task";
 import "workers";
 
@@ -69,8 +70,6 @@ extern int munmap(void* address, ulong length);
 extern int close(int descriptor);
 [Target(OS(Linux))]
 extern int eventfd(uint initial, int flags);
-[Target(OS(Linux))]
-extern long read(int fd, void* buf, ulong n);
 
 # System call numbers: the same on x86-64 and AArch64.
 const _IO_URING_SETUP = 425;
@@ -312,7 +311,7 @@ extend _IoUringDriver with _Driver {
                 this._finished_results.append(result >= 0 ? result as long : -1 + result as long);
                 this._files.remove(data);
             } else if (data == _async_doorbell_key()) {
-                _async_io_uring_drain(this._bell);
+                _async_epoll_drain(this._bell);
                 this._arm_bell();
             } else if (this._requests.contains(data)) {
                 var request = this._requests.get(data);
@@ -322,13 +321,7 @@ extend _IoUringDriver with _Driver {
                 # and sees any error.
                 var ready = covered;
                 if (result > 0) {
-                    ready = 0;
-                    if ((result & _IO_URING_READABLE_EVENTS) != 0) {
-                        ready = ready | io._IO_READABLE;
-                    }
-                    if ((result & _IO_URING_WRITABLE_EVENTS) != 0) {
-                        ready = ready | io._IO_WRITABLE;
-                    }
+                    ready = _async_ready_mask(result, _IO_URING_READABLE_EVENTS, _IO_URING_WRITABLE_EVENTS);
                 }
                 if (ready != 0) {
                     handles.append(handle);
@@ -523,14 +516,6 @@ _async_io_uring_create_bell(): long {
     return eventfd(0, 526336) as long;  # EFD_NONBLOCK | EFD_CLOEXEC
 }
 
-# Resets the doorbell eventfd `bell` to 0.
-[Target(OS(Linux))]
-_async_io_uring_drain(bell: long) {
-    __ptr<ulong> value = _pep_malloc(8);
-    read(bell as int, value, 8);
-    _pep_free(value);
-}
-
 # Elsewhere there is no io_uring.
 
 [Target(!OS(Linux))]
@@ -551,6 +536,3 @@ _async_io_uring_close(fd: long) {}
 _async_io_uring_create_bell(): long {
     return -1;
 }
-
-[Target(!OS(Linux))]
-_async_io_uring_drain(bell: long) {}

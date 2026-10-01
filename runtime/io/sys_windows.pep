@@ -230,6 +230,17 @@ export _io_win_check(ok: int): IoResult<void> {
     return IoResult<void>.err(IoError.last());
 }
 
+# A BOOL result `ok`, with `code`, the GetLastError() read right after the
+# call (before freeing its arguments could change it): nonzero -> Ok, 0 ->
+# that error.
+[Target(OS(Windows))]
+export _io_win_check_code(ok: int, code: ErrorCode): IoResult<void> {
+    if (ok != 0) {
+        return _io_ok_void();
+    }
+    return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
+}
+
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
@@ -372,10 +383,7 @@ export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
     var ok = SetFileInformationByHandle(h, 6, info, 8);
     var code = GetLastError();
     _pep_free(info);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 [Target(OS(Windows))]
@@ -529,10 +537,7 @@ export _io_sys_mkdir(path: Path): IoResult<void> {
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
     _pep_free(w);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 [Target(OS(Windows))]
@@ -541,10 +546,7 @@ export _io_sys_rmdir(path: Path): IoResult<void> {
     var ok = RemoveDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 [Target(OS(Windows))]
@@ -553,10 +555,7 @@ export _io_sys_unlink(path: Path): IoResult<void> {
     var ok = DeleteFileW(w);
     var code = GetLastError();
     _pep_free(w);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 # A directory symlink (junction) is removed with RemoveDirectoryW, anything
@@ -578,10 +577,7 @@ export _io_sys_rename(from: Path, to: Path): IoResult<void> {
     var code = GetLastError();
     _pep_free(wf);
     _pep_free(wt);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 [Target(OS(Windows))]
@@ -608,10 +604,7 @@ export _io_sys_chdir(path: Path): IoResult<void> {
     var ok = SetCurrentDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
-    if (ok == 0) {
-        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
-    }
-    return _io_ok_void();
+    return _io_win_check_code(ok, code);
 }
 
 # GetFinalPathNameByHandleW answers `\\?\C:\x` or `\\?\UNC\server\share`;

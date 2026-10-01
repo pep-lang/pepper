@@ -71,14 +71,14 @@ export struct Uri {
         ulong index = 0;
         while (index < size) {
             var c = data[index] as int;
-            if (c <= 32 || c >= 127) {
+            if (c <= ' ' || c >= 127) {
                 return _uri_invalid(text, $"character {index} must be percent-encoded");
             }
-            if (c == 37) {
+            if (c == '%') {
                 if (index + 2 >= size) {
                     return _uri_invalid(text, "'%' is not followed by two hexadecimal digits");
                 }
-                if (_uri_hex_digit(data[index + 1]) < 0 || _uri_hex_digit(data[index + 2]) < 0) {
+                if (_pep_hex_digit(data[index + 1]) < 0 || _pep_hex_digit(data[index + 2]) < 0) {
                     return _uri_invalid(text, "'%' is not followed by two hexadecimal digits");
                 }
             }
@@ -90,20 +90,20 @@ export struct Uri {
         # The scheme is the text before the first ':' that comes before any
         # '/', '?' or '#'.
         index = 0;
-        while (index < size && !_uri_ends_segment(data[index]) && data[index] != 58) {
+        while (index < size && !_uri_ends_segment(data[index]) && data[index] != ':') {
             index = index + 1;
         }
-        if (index < size && data[index] == 58) {
+        if (index < size && data[index] == ':') {
             var scheme = text.substr_bytes(0, index);
             if (!_uri_is_scheme(scheme)) {
-                return _uri_invalid(text, "invalid scheme '" + scheme + "'");
+                return _uri_invalid(text, $"invalid scheme '{scheme}'");
             }
             uri.scheme = scheme.lower();
             start = index + 1;
         }
 
         # The authority follows "//" and runs to the next '/', '?' or '#'.
-        if (start + 1 < size && data[start] == 47 && data[start + 1] == 47) {
+        if (start + 1 < size && data[start] == '/' && data[start + 1] == '/') {
             start = start + 2;
             var end = start;
             while (end < size && !_uri_ends_segment(data[end])) {
@@ -119,14 +119,14 @@ export struct Uri {
 
         # The path runs to '?' or '#', the query from '?' to '#'.
         var end = start;
-        while (end < size && data[end] != 63 && data[end] != 35) {
+        while (end < size && data[end] != '?' && data[end] != '#') {
             end = end + 1;
         }
         uri.path = text.substr_bytes(start, end - start);
-        if (end < size && data[end] == 63) {
+        if (end < size && data[end] == '?') {
             start = end + 1;
             end = start;
-            while (end < size && data[end] != 35) {
+            while (end < size && data[end] != '#') {
                 end = end + 1;
             }
             uri.query = Optional<String>.some(text.substr_bytes(start, end - start));
@@ -156,14 +156,14 @@ export struct Uri {
         ulong index = 0;
         while (index < size) {
             var c = data[index];
-            if (c == 37) {
+            if (c == '%') {
                 if (index + 2 >= size) {
-                    return Result<String>.err(Error("invalid percent-escape in '" + text + "'"));
+                    return Result<String>.err(Error($"invalid percent-escape in '{text}'"));
                 }
-                var high = _uri_hex_digit(data[index + 1]);
-                var low = _uri_hex_digit(data[index + 2]);
+                var high = _pep_hex_digit(data[index + 1]);
+                var low = _pep_hex_digit(data[index + 2]);
                 if (high < 0 || low < 0) {
-                    return Result<String>.err(Error("invalid percent-escape in '" + text + "'"));
+                    return Result<String>.err(Error($"invalid percent-escape in '{text}'"));
                 }
                 decoded.append((high * 16 + low) as u8);
                 index = index + 3;
@@ -192,21 +192,22 @@ export struct Uri {
         if (host.is_none()) {
             return Optional<String>.none();
         }
-        var text = "";
+        var text = StringBuilder();
         if (user_info.is_some()) {
-            text = user_info.value() + "@";
+            text.append(user_info.value());
+            text.append("@");
         }
         var name = host.value();
         if (name.contains(":")) {
-            text = text + "[" + name + "]";
+            text.append($"[{name}]");
         } else {
-            text = text + name;
+            text.append(name);
         }
         if (port.is_some()) {
             var number = port.value();
-            text = text + $":{number}";
+            text.append($":{number}");
         }
-        return Optional<String>.some(text);
+        return Optional<String>.some(text.to_string());
     }
 
     ## Returns the path and query, as an HTTP request line names its target:
@@ -215,12 +216,9 @@ export struct Uri {
     ##
     ## @returns the path and query, such as `/items?page=2`
     path_and_query(): String {
-        var text = path;
-        if (text.size() == 0) {
-            text = "/";
-        }
+        var text = path.size() == 0 ? "/" : path;
         if (query.is_some()) {
-            text = text + "?" + query.value();
+            return $"{text}?{query.value()}";
         }
         return text;
     }
@@ -231,49 +229,38 @@ export struct Uri {
     ##
     ## @returns the URI reference as a String
     to_string(): String {
-        var text = "";
+        var text = StringBuilder();
         if (scheme.size() > 0) {
-            text = scheme + ":";
+            text.append(scheme);
+            text.append(":");
         }
         var named = authority();
         if (named.is_some()) {
-            text = text + "//" + named.value();
+            text.append("//");
+            text.append(named.value());
         }
-        text = text + path;
+        text.append(path);
         if (query.is_some()) {
-            text = text + "?" + query.value();
+            text.append("?");
+            text.append(query.value());
         }
         if (fragment.is_some()) {
-            text = text + "#" + fragment.value();
+            text.append("#");
+            text.append(fragment.value());
         }
-        return text;
+        return text.to_string();
     }
 }
 
 extend Uri with ToString {}
 
 _uri_invalid(text: String, why: String): Result<Uri> {
-    return Result<Uri>.err(Error("invalid URI '" + text + "': " + why));
+    return Result<Uri>.err(Error($"invalid URI '{text}': {why}"));
 }
 
 # Whether `c` ends the scheme or the authority: '/', '?' or '#'.
 _uri_ends_segment(c: u8): bool {
-    return c == 47 || c == 63 || c == 35;
-}
-
-# The value of the hexadecimal digit `c`, or -1.
-_uri_hex_digit(c: u8): int {
-    var value = c as int;
-    if (value >= 48 && value <= 57) {
-        return value - 48;
-    }
-    if (value >= 65 && value <= 70) {
-        return value - 55;
-    }
-    if (value >= 97 && value <= 102) {
-        return value - 87;
-    }
-    return -1;
+    return c == '/' || c == '?' || c == '#';
 }
 
 # Whether `text` is a scheme: a letter, then letters, digits, '+', '-' or '.'.
@@ -281,8 +268,8 @@ _uri_is_scheme(text: String): bool {
     ulong index = 0;
     while (index < text.size()) {
         var c = text.byte_at(index) as int;
-        var letter = (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
-        var other = (c >= 48 && c <= 57) || c == 43 || c == 45 || c == 46;
+        var letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        var other = (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.';
         if (!letter && (index == 0 || !other)) {
             return false;
         }
@@ -328,20 +315,20 @@ _uri_parse_authority(uri: Uri, authority: String): String {
     # An empty port ("host:") is allowed and means none.
     if (has_port && port_text.size() > 0) {
         if (port_text.size() > 5) {
-            return "invalid port '" + port_text + "'";
+            return $"invalid port '{port_text}'";
         }
         long port = 0;
         ulong index = 0;
         while (index < port_text.size()) {
             var c = port_text.byte_at(index) as int;
-            if (c < 48 || c > 57) {
-                return "invalid port '" + port_text + "'";
+            if (c < '0' || c > '9') {
+                return $"invalid port '{port_text}'";
             }
-            port = port * 10 + (c - 48);
+            port = port * 10 + (c - '0');
             index = index + 1;
         }
         if (port > 65535) {
-            return "invalid port '" + port_text + "'";
+            return $"invalid port '{port_text}'";
         }
         uri.port = Optional<u16>.some(port as u16);
     }

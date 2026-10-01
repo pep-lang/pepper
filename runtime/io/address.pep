@@ -130,17 +130,18 @@ export struct IpAddress {
         var p = text.c_str() as __ptr<u8>;
         var n = text.size();
         var v4 = _io_parse_v4(p, n, 0, n);
-        if (v4.0) {
+        if (v4.is_some()) {
             var address = IpAddress();
-            address._low = v4.1;
+            address._low = v4.value();
             return IoResult<IpAddress>.ok(address);
         }
         var v6 = _io_parse_v6(p, n, 0, n);
-        if (v6.0) {
+        if (v6.is_some()) {
+            var bits: (high: ulong, low: ulong) = v6.value();
             var address = IpAddress();
             address._is_v6 = true;
-            address._high = v6.1;
-            address._low = v6.2;
+            address._high = bits.high;
+            address._low = bits.low;
             return IoResult<IpAddress>.ok(address);
         }
         return IoResult<IpAddress>.err(IoError(_io_sys_code_invalid_input(), "invalid IP address syntax"));
@@ -361,26 +362,27 @@ export struct SocketAddress {
             }
         }
         var port = _io_parse_port(p, n, colon + 1, n);
-        if (!port.0) {
+        if (port.is_none()) {
             return bad;
         }
         var address = IpAddress();
         if (v6) {
             var groups = _io_parse_v6(p, n, 1, colon - 1);
-            if (!groups.0) {
+            if (groups.is_none()) {
                 return bad;
             }
+            var bits: (high: ulong, low: ulong) = groups.value();
             address._is_v6 = true;
-            address._high = groups.1;
-            address._low = groups.2;
+            address._high = bits.high;
+            address._low = bits.low;
         } else {
             var value = _io_parse_v4(p, n, 0, colon);
-            if (!value.0) {
+            if (value.is_none()) {
                 return bad;
             }
-            address._low = value.1;
+            address._low = value.value();
         }
-        return IoResult<SocketAddress>.ok(SocketAddress(address, port.1 as u16));
+        return IoResult<SocketAddress>.ok(SocketAddress(address, port.value() as u16));
     }
 
     ## Returns the IP address.
@@ -505,22 +507,9 @@ export _io_is_digit(c: int): bool {
     return c >= '0' && c <= '9';
 }
 
-# The value of a hex digit, or 16 when `c` is not one.
-export _io_hex_value(c: int): ulong {
-    if (c >= '0' && c <= '9') {
-        return (c - '0') as ulong;
-    }
-    if (c >= 'a' && c <= 'f') {
-        return (c - 'a' + 10) as ulong;
-    }
-    if (c >= 'A' && c <= 'F') {
-        return (c - 'A' + 10) as ulong;
-    }
-    return 16;
-}
-
-# Dotted decimal: exactly four parts of 0 to 255, no leading zeros.
-export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ulong) {
+# Dotted decimal: exactly four parts of 0 to 255, no leading zeros. Returns
+# the 32-bit value, or none when the text is not an IPv4 address.
+export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
     ulong value = 0;
     ulong parts = 0;
     var i = start;
@@ -537,37 +526,38 @@ export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
             digits = digits + 1;
             i = i + 1;
             if (digits > 3) {
-                return (false, 0 as ulong);
+                return Optional<ulong>.none();
             }
         }
         if (digits == 0 || part > 255) {
-            return (false, 0 as ulong);
+            return Optional<ulong>.none();
         }
         if (digits > 1 && first == '0') {
-            return (false, 0 as ulong);
+            return Optional<ulong>.none();
         }
         value = (value << 8) | part;
         parts = parts + 1;
         if (parts < 4) {
             if (i >= end) {
-                return (false, 0 as ulong);
+                return Optional<ulong>.none();
             }
             if (_io_byte(p, n, i) != '.') {
-                return (false, 0 as ulong);
+                return Optional<ulong>.none();
             }
             i = i + 1;
         }
     }
     if (i != end) {
-        return (false, 0 as ulong);
+        return Optional<ulong>.none();
     }
-    return (true, value);
+    return Optional<ulong>.some(value);
 }
 
 # RFC 4291 text: up to eight hex groups, at most one `::`, an optional
-# dotted IPv4 tail. Returns (ok, high 64 bits, low 64 bits).
-export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ulong, ulong) {
-    var fail = (false, 0 as ulong, 0 as ulong);
+# dotted IPv4 tail. Returns the high and low 64 bits, or none when the text
+# is not an IPv6 address.
+export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<(high: ulong, low: ulong)> {
+    var fail = Optional<(high: ulong, low: ulong)>.none();
     if (start >= end) {
         return fail;
     }
@@ -592,7 +582,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
         }
         var j = i;
         while (j < end) {
-            if (_io_hex_value(_io_byte(p, n, j)) == 16) {
+            if (_pep_hex_digit(_io_byte(p, n, j)) < 0) {
                 break;
             }
             j = j + 1;
@@ -600,11 +590,11 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
         if (j < end && _io_byte(p, n, j) == '.') {
             # The last 32 bits as an IPv4 address.
             var v4 = _io_parse_v4(p, n, i, end);
-            if (!v4.0) {
+            if (v4.is_none()) {
                 return fail;
             }
-            groups.append(v4.1 >> 16);
-            groups.append(v4.1 & 65535);
+            groups.append(v4.value() >> 16);
+            groups.append(v4.value() & 65535);
             i = end;
             break;
         }
@@ -613,7 +603,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
         }
         ulong group = 0;
         while (i < j) {
-            group = group * 16 + _io_hex_value(_io_byte(p, n, i));
+            group = group * 16 + _pep_hex_digit(_io_byte(p, n, i)) as ulong;
             i = i + 1;
         }
         groups.append(group);
@@ -655,26 +645,27 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ul
     }
     var high = (all[0] << 48) | (all[1] << 32) | (all[2] << 16) | all[3];
     var low = (all[4] << 48) | (all[5] << 32) | (all[6] << 16) | all[7];
-    return (true, high, low);
+    return Optional<(high: ulong, low: ulong)>.some((high: high, low: low));
 }
 
-# A decimal port, 0 to 65535, one to five digits.
-export _io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): (bool, ulong) {
+# A decimal port, 0 to 65535, one to five digits; none when the text is not
+# one.
+export _io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
     if (start >= end || end - start > 5) {
-        return (false, 0 as ulong);
+        return Optional<ulong>.none();
     }
     ulong value = 0;
     var i = start;
     while (i < end) {
         var c = _io_byte(p, n, i);
         if (!_io_is_digit(c)) {
-            return (false, 0 as ulong);
+            return Optional<ulong>.none();
         }
         value = value * 10 + (c - '0') as ulong;
         i = i + 1;
     }
     if (value > 65535) {
-        return (false, 0 as ulong);
+        return Optional<ulong>.none();
     }
-    return (true, value);
+    return Optional<ulong>.some(value);
 }

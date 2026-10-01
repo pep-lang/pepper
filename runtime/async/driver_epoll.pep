@@ -189,9 +189,10 @@ export _async_epoll_ring(bell: long) {
     _pep_free(one);
 }
 
-# Resets the doorbell eventfd `bell` to 0.
+# Resets the doorbell eventfd `bell` to 0. The io_uring driver's doorbell is
+# an eventfd too, and drains with this.
 [Target(OS(Linux))]
-_async_epoll_drain(bell: long) {
+export _async_epoll_drain(bell: long) {
     __ptr<ulong> value = _pep_malloc(8);
     read(bell as int, value, 8);
     _pep_free(value);
@@ -218,14 +219,7 @@ _async_epoll_event_handle(events: __ptr<u8>, index: ulong): ulong {
 _async_epoll_event_interest(events: __ptr<u8>, index: ulong): int {
     var event = events + index * (_EPOLL_EVENT_SIZE as ulong);
     var bits = (event as __ptr<uint>)[0];
-    var interest = 0;
-    if ((bits & _EPOLL_READABLE_EVENTS) != 0) {
-        interest = interest | io._IO_READABLE;
-    }
-    if ((bits & _EPOLL_WRITABLE_EVENTS) != 0) {
-        interest = interest | io._IO_WRITABLE;
-    }
-    return interest;
+    return _async_ready_mask(bits, _EPOLL_READABLE_EVENTS, _EPOLL_WRITABLE_EVENTS);
 }
 
 # Elsewhere there is no epoll.
@@ -247,7 +241,7 @@ _async_epoll_create_bell(epoll: long): long {
 export _async_epoll_ring(bell: long) {}
 
 [Target(!OS(Linux))]
-_async_epoll_drain(bell: long) {}
+export _async_epoll_drain(bell: long) {}
 
 [Target(!OS(Linux))]
 _async_epoll_events(): __ptr<u8> {

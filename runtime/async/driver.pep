@@ -254,3 +254,17 @@ _async_backend_from_environment(): Backend {
     panic("async.run: PEPPER_IO_BACKEND must be epoll, io_uring, kqueue, iocp or poll");
     return Backend.Automatic;
 }
+
+# The `io._IO_READABLE` and `io._IO_WRITABLE` bits a system event mask
+# `events` allows: readable when it has any bit of `readable`, writable when
+# it has any bit of `writable`.
+export _async_ready_mask(events: long, readable: long, writable: long): int {
+    var ready = 0;
+    if ((events & readable) != 0) {
+        ready = ready | io._IO_READABLE;
+    }
+    if ((events & writable) != 0) {
+        ready = ready | io._IO_WRITABLE;
+    }
+    return ready;
+}

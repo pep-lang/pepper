@@ -855,7 +855,7 @@ export struct String {
     ##     assert("Content-Type".lower() == "content-type", "ASCII lowered");
     ##     assert("Ärger".lower() == "Ärger", "non-ASCII kept");
     lower(): String {
-        return _map_case(65, 32);
+        return _map_case('A', 'a' - 'A');
     }
 
     ## Returns a new String with the ASCII letters `a` to `z` changed to `A`
@@ -867,7 +867,7 @@ export struct String {
     ## @example
     ##     assert("get".upper() == "GET", "ASCII raised");
     upper(): String {
-        return _map_case(97, 0 - 32);
+        return _map_case('a', 'A' - 'a');
     }
 
     # A copy with the 26 letters from `first` shifted by `shift`.
@@ -889,7 +889,7 @@ export struct String {
 
     # Whether `value` is ASCII whitespace: space, \t, \n, \v, \f or \r.
     static _is_space(value: byte): bool {
-        return value == ' ' || (value >= 9 && value <= 13);
+        return value == ' ' || (value >= '\t' && value <= '\r');
     }
 
     ## Splits the String into lines and returns them without their line

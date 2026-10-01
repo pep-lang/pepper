@@ -72,9 +72,7 @@ export struct Headers {
     ## @param name the field name, in any case
     ## @param value the field value
     set(name: String, value: String) {
-        var values = Array<String>();
-        values.append(value);
-        this._fields[name.lower()] = values;
+        this._fields[name.lower()] = [value];
     }
 
     ## Returns the first value of the field named `name`.

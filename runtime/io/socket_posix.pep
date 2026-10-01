@@ -349,20 +349,12 @@ export _io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
-    var value = 0;
-    if (enabled) {
-        value = 1;
-    }
-    return _io_posix_set_int_option(h, 6, 1, value);  # IPPROTO_TCP, TCP_NODELAY
+    return _io_posix_set_int_option(h, 6, 1, enabled ? 1 : 0);  # IPPROTO_TCP, TCP_NODELAY
 }
 
 [Target(!OS(Windows))]
 export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
-    var value = 0;
-    if (enabled) {
-        value = 1;
-    }
-    return _io_posix_set_int_option(h, _io_sol_socket(), _io_so_broadcast(), value);
+    return _io_posix_set_int_option(h, _io_sol_socket(), _io_so_broadcast(), enabled ? 1 : 0);
 }
 
 [Target(!OS(Windows))]

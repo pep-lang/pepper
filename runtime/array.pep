@@ -468,14 +468,8 @@ export struct Array<T> {
         }
         # Bottom-up merge sort, merging runs of `width` from `source` into
         # `target` and swapping the two each pass.
-        var source = Array<T>(_size);
-        var target = Array<T>(_size);
-        ulong index = 0;
-        while (index < _size) {
-            source.append(this[index]);
-            target.append(this[index]);
-            index = index + 1;
-        }
+        var source = this.clone();
+        var target = this.clone();
         ulong width = 1;
         while (width < _size) {
             ulong low = 0;
@@ -504,7 +498,7 @@ export struct Array<T> {
             target = swapped;
             width = width * 2;
         }
-        index = 0;
+        ulong index = 0;
         while (index < _size) {
             this[index] = source[index];
             index = index + 1;

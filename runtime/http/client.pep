@@ -123,19 +123,26 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
     var headers = Headers();
     headers.add("Host", url._authority);
     for (var name in request.headers.names()) {
-        if (name != "host" && name != "content-length" && name != "connection") {
-            for (var value in request.headers.values(name)) {
-                headers.add(name, value);
+        match (name) {
+            "host", "content-length", "connection" => {}
+            else => {
+                for (var value in request.headers.values(name)) {
+                    headers.add(name, value);
+                }
             }
         }
     }
     var method = request.method;
-    if (request._body.count() > 0 || method == "POST" || method == "PUT" || method == "PATCH") {
+    var sends_body = match (method) {
+        "POST", "PUT", "PATCH" => true,
+        else => request._body.count() > 0,
+    };
+    if (sends_body) {
         headers.add("Content-Length", to_string(request._body.count()));
     }
     headers.add("Connection", "close");
     var out = Array<u8>();
-    _http_write_head(out, method + " " + url._target + " HTTP/1.1", headers);
+    _http_write_head(out, $"{method} {url._target} HTTP/1.1", headers);
     var sent = connection._write_all(out);
     if (sent.is_err()) {
         return io.IoResult<Response>.err(sent.error());
@@ -171,11 +178,11 @@ _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
     var line = status_line.value();
     # HTTP/1.x SP code [SP reason]
     if (!line.starts_with("HTTP/1.") || line.size() < 12) {
-        return io.IoResult<Response>.err(_http_error("not an HTTP/1.x response: '" + line + "'"));
+        return io.IoResult<Response>.err(_http_error($"not an HTTP/1.x response: '{line}'"));
     }
     var code = _http_parse_decimal(line.substr_bytes(9, 3));
     if (code < 100 || code > 999) {
-        return io.IoResult<Response>.err(_http_error("invalid status line: '" + line + "'"));
+        return io.IoResult<Response>.err(_http_error($"invalid status line: '{line}'"));
     }
     var response = Response(code as int);
     if (line.size() > 13) {
@@ -216,7 +223,7 @@ struct _HttpUrl {
 }
 
 _http_invalid_url(url: String, why: String): io.IoResult<_HttpUrl> {
-    return io.IoResult<_HttpUrl>.err(io.IoError(_http_code_invalid_input(), "invalid URL '" + url + "': " + why));
+    return io.IoResult<_HttpUrl>.err(io.IoError(_http_code_invalid_input(), $"invalid URL '{url}': {why}"));
 }
 
 [Target(OS(Linux))]
@@ -243,13 +250,17 @@ _http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
     if (!uri.is_absolute() || uri.host.is_none()) {
         return _http_invalid_url(url, "no scheme, such as 'https://'");
     }
-    if (uri.scheme == "http") {
-        parsed._port = 80;
-    } else if (uri.scheme == "https") {
-        parsed._secure = true;
-        parsed._port = 443;
-    } else {
-        return _http_invalid_url(url, "the scheme '" + uri.scheme + "' is not supported; use http or https");
+    match (uri.scheme) {
+        "http" => {
+            parsed._port = 80;
+        }
+        "https" => {
+            parsed._secure = true;
+            parsed._port = 443;
+        }
+        else => {
+            return _http_invalid_url(url, $"the scheme '{uri.scheme}' is not supported; use http or https");
+        }
     }
     if (uri.user_info.is_some()) {
         return _http_invalid_url(url, "user information is not supported");

@@ -231,14 +231,7 @@ _async_poll_ready(descriptor: __ptr<u8>): int {
     if ((returned & 56) != 0) {
         return io._IO_READABLE | io._IO_WRITABLE;
     }
-    var ready = 0;
-    if ((returned & 1) != 0) {
-        ready = ready | io._IO_READABLE;
-    }
-    if ((returned & 4) != 0) {
-        ready = ready | io._IO_WRITABLE;
-    }
-    return ready;
+    return _async_ready_mask(returned, 1, 4);  # POLLIN, POLLOUT
 }
 
 [Target(!OS(Windows))]
@@ -349,14 +342,7 @@ _async_poll_ready(descriptor: __ptr<u8>): int {
     if ((returned & 7) != 0) {
         return io._IO_READABLE | io._IO_WRITABLE;
     }
-    var ready = 0;
-    if ((returned & 256) != 0) {
-        ready = ready | io._IO_READABLE;
-    }
-    if ((returned & 16) != 0) {
-        ready = ready | io._IO_WRITABLE;
-    }
-    return ready;
+    return _async_ready_mask(returned, 256, 16);  # POLLRDNORM, POLLWRNORM
 }
 
 [Target(OS(Windows))]

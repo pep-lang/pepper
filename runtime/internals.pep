@@ -187,15 +187,15 @@ hex(v: ulong): __ptr<char> {
 dec(v: long): __ptr<char> {
     var buf = _pep_malloc(24);
     var n = 0;
-    var neg = 0;
+    var neg = false;
     # The magnitude as a ulong, so the most negative long negates too.
     ulong magnitude = v as ulong;
     if (v < 0) {
-        neg = 1;
+        neg = true;
         magnitude = 0 - magnitude;
     }
     if (magnitude == 0) {
-        buf[n] = 48;
+        buf[n] = '0';
         n = n + 1;
     }
     while (magnitude > 0) {
@@ -203,7 +203,7 @@ dec(v: long): __ptr<char> {
         n = n + 1;
         magnitude = magnitude / 10;
     }
-    if (neg == 1) {
+    if (neg) {
         buf[n] = '-';
         n = n + 1;
     }
@@ -328,6 +328,21 @@ export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
 # ── UTF-8 helpers (length-based; no NUL assumptions on language data) ───────
 # C strings from getenv are NUL-terminated by the C standard; a byte walk is
 # the only way to measure them (never used for language string data).
+# The value of the hexadecimal digit `c` (`0`-`9`, `a`-`f` or `A`-`F`), or
+# -1 when `c` is not one. Shared by the URI, HTTP and address parsers.
+export _pep_hex_digit(c: int): int {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
 export _pep_c_strlen(s: __ptr<char>): ulong {
     var i = 0;
     while (s[i] != 0) {

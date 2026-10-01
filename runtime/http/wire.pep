@@ -111,10 +111,10 @@ export struct _HttpReader {
         while (true) {
             var p = this._buffer._data;
             while (scanned < this._available()) {
-                if (p[this._start + scanned] == 10) {
+                if (p[this._start + scanned] == '\n') {
                     var end = scanned;
                     if (end > 0) {
-                        if (p[this._start + end - 1] == 13) {
+                        if (p[this._start + end - 1] == '\r') {
                             end = end - 1;
                         }
                     }
@@ -218,7 +218,7 @@ export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<vo
         }
         var colon = line.find(":");
         if (colon <= 0) {
-            return io.IoResult<void>.err(_http_error("a header field has no name: '" + line + "'"));
+            return io.IoResult<void>.err(_http_error($"a header field has no name: '{line}'"));
         }
         var name = line.substr_bytes(0, colon as ulong);
         var value = line.substr_bytes(colon as ulong + 1, line.size() - colon as ulong - 1).trim();
@@ -242,7 +242,7 @@ export _http_read_body(
     if (length.is_some()) {
         var n = _http_parse_decimal(length.value());
         if (n < 0) {
-            return io.IoResult<void>.err(_http_error("invalid Content-Length: '" + length.value() + "'"));
+            return io.IoResult<void>.err(_http_error($"invalid Content-Length: '{length.value()}'"));
         }
         if (n as ulong > limit) {
             return io.IoResult<void>.err(_http_too_large("the body is too large"));
@@ -269,7 +269,7 @@ export _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoR
         }
         var size = _http_parse_hex(line.trim());
         if (size < 0) {
-            return io.IoResult<void>.err(_http_error("invalid chunk size: '" + line + "'"));
+            return io.IoResult<void>.err(_http_error($"invalid chunk size: '{line}'"));
         }
         if (size == 0) {
             # The trailer fields, which are dropped.
@@ -337,10 +337,10 @@ export _http_parse_decimal(text: String): long {
     ulong i = 0;
     while (i < t.size()) {
         var c = p[i];
-        if (c < 48 || c > 57) {
+        if (c < '0' || c > '9') {
             return -1;
         }
-        value = value * 10 + (c - 48) as long;
+        value = value * 10 + (c - '0') as long;
         i = i + 1;
     }
     return value;
@@ -355,19 +355,11 @@ export _http_parse_hex(text: String): long {
     long value = 0;
     ulong i = 0;
     while (i < text.size()) {
-        var c = p[i];
-        long digit = -1;
-        if (c >= 48 && c <= 57) {
-            digit = (c - 48) as long;
-        } else if (c >= 97 && c <= 102) {
-            digit = (c - 87) as long;
-        } else if (c >= 65 && c <= 70) {
-            digit = (c - 55) as long;
-        }
+        var digit = _pep_hex_digit(p[i]);
         if (digit < 0) {
             return -1;
         }
-        value = value * 16 + digit;
+        value = value * 16 + digit as long;
         i = i + 1;
     }
     return value;

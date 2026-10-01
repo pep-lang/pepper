@@ -27,9 +27,7 @@ extern void* dlsym(void* handle, char* name);
 # The libssl names to try, in order.
 [Target(OS(Linux))]
 _tls_openssl_paths(): String[] {
-    var paths = Array<String>();
-    paths.append("libssl.so.3");
-    return paths;
+    return ["libssl.so.3"];
 }
 
 [Target(OS(Mac))]
@@ -37,12 +35,12 @@ extern void* dlopen(char* path, int flags);
 
 [Target(OS(Mac))]
 _tls_openssl_paths(): String[] {
-    var paths = Array<String>();
-    paths.append("/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib");
-    paths.append("/usr/local/opt/openssl@3/lib/libssl.3.dylib");
-    paths.append("/opt/local/lib/libssl.3.dylib");
-    paths.append("libssl.3.dylib");
-    return paths;
+    return [
+        "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib",
+        "/usr/local/opt/openssl@3/lib/libssl.3.dylib",
+        "/opt/local/lib/libssl.3.dylib",
+        "libssl.3.dylib",
+    ];
 }
 
 # The OpenSSL functions tls calls, or none when libssl could not be opened.
@@ -239,10 +237,7 @@ _tls_bio_read(bio: __ptr<void>, data: __ptr<void>, n: int): int {
 # Only BIO_CTRL_FLUSH (11) needs an answer: the writes are not buffered.
 [Target(!OS(Windows))]
 _tls_bio_ctrl(bio: __ptr<void>, command: int, number: long, pointer: __ptr<void>): long {
-    if (command == 11) {
-        return 1;
-    }
-    return 0;
+    return command == 11 ? 1 : 0;
 }
 
 # ── Errors ───────────────────────────────────────────────────────────────────
@@ -274,7 +269,7 @@ _tls_openssl_error(what: String): io.IoError {
     }
     __ptr<char> buffer = _pep_malloc(256);
     text(code, buffer, 256);
-    var message = what + ": " + String(buffer);
+    var message = $"{what}: {String(buffer)}";
     _pep_free(buffer);
     return _tls_error(message);
 }
@@ -298,7 +293,7 @@ _tls_session_failure(session: __ptr<void>, rc: int, what: String): io.IoError {
         var reason = ssl._verify_error_string;
         var clear = ssl._error_clear;
         clear();
-        return _tls_error("certificate verify failed: " + String(reason(verified) as __ptr<char>));
+        return _tls_error($"certificate verify failed: {String(reason(verified) as __ptr<char>)}");
     }
     return _tls_openssl_error(what);
 }
@@ -311,12 +306,9 @@ _tls_openssl_loaded(): io.IoResult<_OpenSsl> {
     if (!ssl._loaded) {
         var names = "";
         for (var path in _tls_openssl_paths()) {
-            if (names.size() > 0) {
-                names = names + ", ";
-            }
-            names = names + path;
+            names = names.size() > 0 ? $"{names}, {path}" : path;
         }
-        return io.IoResult<_OpenSsl>.err(_tls_error("OpenSSL 3 was not found (tried " + names + ")"));
+        return io.IoResult<_OpenSsl>.err(_tls_error($"OpenSSL 3 was not found (tried {names})"));
     }
     return io.IoResult<_OpenSsl>.ok(ssl);
 }
@@ -383,9 +375,9 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     var key_text = key.to_string();
     var failure = "";
     if (use_chain(context, chain_text.c_str()) != 1) {
-        failure = "cannot load the certificate chain '" + chain_text + "'";
+        failure = $"cannot load the certificate chain '{chain_text}'";
     } else if (use_key(context, key_text.c_str(), 1) != 1) {  # SSL_FILETYPE_PEM
-        failure = "cannot load the private key '" + key_text + "'";
+        failure = $"cannot load the private key '{key_text}'";
     } else if (check_key(context) != 1) {
         failure = "the private key does not match the certificate";
     }
@@ -405,7 +397,7 @@ export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void>
     var load = ssl._context_load_roots;
     var text = path.to_string();
     if (load(context, text.c_str(), __null) != 1) {
-        return io.IoResult<void>.err(_tls_openssl_error("cannot load the certificates in '" + text + "'"));
+        return io.IoResult<void>.err(_tls_openssl_error($"cannot load the certificates in '{text}'"));
     }
     return io.IoResult<void>.ok();
 }

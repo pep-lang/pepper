@@ -232,7 +232,7 @@ export _tls_error(message: String): io.IoError {
 # `what` and the status in hexadecimal.
 [Target(OS(Windows))]
 _tls_status_error(what: String, status: int): io.IoError {
-    return _tls_error(what + " (" + _tls_hex(status as uint) + ")");
+    return _tls_error($"{what} ({_tls_hex(status as uint)})");
 }
 
 [Target(OS(Windows))]
@@ -243,25 +243,15 @@ _tls_hex(value: uint): String {
 # Why the certificate check failed, from CERT_CHAIN_POLICY_STATUS.dwError.
 [Target(OS(Windows))]
 _tls_certificate_reason(error: uint): String {
-    if (error == 2148204809) {  # CERT_E_UNTRUSTEDROOT
-        return "self-signed certificate or untrusted root";
-    }
-    if (error == 2148204815) {  # CERT_E_CN_NO_MATCH
-        return "the certificate is not for this host";
-    }
-    if (error == 2148204801) {  # CERT_E_EXPIRED
-        return "certificate has expired";
-    }
-    if (error == 2148204810) {  # CERT_E_CHAINING
-        return "unable to get local issuer certificate";
-    }
-    if (error == 2148204812) {  # CERT_E_REVOKED
-        return "certificate revoked";
-    }
-    if (error == 2148204814) {  # CERT_E_WRONG_USAGE
-        return "unsupported certificate purpose";
-    }
-    return "error " + _tls_hex(error);
+    return match (error) {
+        2148204809 => "self-signed certificate or untrusted root",  # CERT_E_UNTRUSTEDROOT
+        2148204815 => "the certificate is not for this host",       # CERT_E_CN_NO_MATCH
+        2148204801 => "certificate has expired",                    # CERT_E_EXPIRED
+        2148204810 => "unable to get local issuer certificate",     # CERT_E_CHAINING
+        2148204812 => "certificate revoked",                        # CERT_E_REVOKED
+        2148204814 => "unsupported certificate purpose",            # CERT_E_WRONG_USAGE
+        else => $"error {_tls_hex(error)}",
+    };
 }
 
 # ── Memory helpers ───────────────────────────────────────────────────────────
@@ -337,8 +327,8 @@ _tls_buffer_at(desc: __ptr<u8>, index: ulong): __ptr<u8> {
 [Target(OS(Windows))]
 _tls_pem_blocks(text: String, label: String): Array<u8[]> {
     var blocks = Array<u8[]>();
-    var begin = "-----BEGIN " + label + "-----";
-    var end = "-----END " + label + "-----";
+    var begin = $"-----BEGIN {label}-----";
+    var end = $"-----END {label}-----";
     ulong from = 0;
     while (true) {
         var start = text.find(begin, from);
@@ -372,9 +362,7 @@ _tls_pem_blocks(text: String, label: String): Array<u8[]> {
 _tls_read_text(path: io.Path, what: String): io.IoResult<String> {
     var text = io.File.read_to_string(path);
     if (text.is_err()) {
-        return io.IoResult<String>.err(
-            _tls_error("cannot read " + what + " '" + path.to_string() + "': " + text.error().message)
-        );
+        return io.IoResult<String>.err(_tls_error($"cannot read {what} '{path}': {text.error().message}"));
     }
     return text;
 }
@@ -466,7 +454,7 @@ _tls_import_key(der: u8[]): io.IoResult<__ptr<u16>> {
         return io.IoResult<__ptr<u16>>.err(_tls_error("cannot open the key storage provider"));
     }
     var number = _tls_key_count.fetch_add(1);
-    var name = io._io_win_wide("pepper-tls-" + to_string(GetCurrentProcessId() as ulong) + "-" + to_string(number));
+    var name = io._io_win_wide($"pepper-tls-{GetCurrentProcessId() as ulong}-{number}");
     # NCryptBufferDesc { version, count, buffers } with one NCryptBuffer
     # { cbBuffer, BufferType = NCRYPTBUFFER_PKCS_KEY_NAME, pvBuffer }: the
     # same layout as SecBufferDesc and SecBuffer.
@@ -520,7 +508,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     var certificates = _tls_pem_blocks(chain_text.value(), "CERTIFICATE");
     if (certificates.count() == 0) {
         return io.IoResult<__ptr<void>>.err(
-            _tls_error("cannot load the certificate chain '" + chain.to_string() + "': no certificate in it")
+            _tls_error($"cannot load the certificate chain '{chain}': no certificate in it")
         );
     }
     var key_text = _tls_read_text(key, "the private key");
@@ -530,7 +518,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     var keys = _tls_pem_blocks(key_text.value(), "PRIVATE KEY");
     if (keys.count() == 0) {
         return io.IoResult<__ptr<void>>.err(
-            _tls_error("cannot load the private key '" + key.to_string() + "': no PKCS #8 PRIVATE KEY block in it")
+            _tls_error($"cannot load the private key '{key}': no PKCS #8 PRIVATE KEY block in it")
         );
     }
     var store = _tls_memory_store();
@@ -549,9 +537,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
             CertFreeCertificateContext(certificate);
         }
         CertCloseStore(store, 0);
-        return io.IoResult<__ptr<void>>.err(
-            _tls_error("cannot load the certificate chain '" + chain.to_string() + "'")
-        );
+        return io.IoResult<__ptr<void>>.err(_tls_error($"cannot load the certificate chain '{chain}'"));
     }
     var imported = _tls_import_key(keys[0]);
     if (imported.is_err()) {
@@ -596,14 +582,12 @@ export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void>
     }
     var certificates = _tls_pem_blocks(text.value(), "CERTIFICATE");
     if (certificates.count() == 0) {
-        return io.IoResult<void>.err(
-            _tls_error("cannot load the certificates in '" + path.to_string() + "': none found")
-        );
+        return io.IoResult<void>.err(_tls_error($"cannot load the certificates in '{path}': none found"));
     }
     var store = _tls_pointer(context as __ptr<u8>, 24) as __ptr<void>;
     for (var der in certificates) {
         if (!_tls_add_certificate(store, der, __null)) {
-            return io.IoResult<void>.err(_tls_error("cannot load the certificates in '" + path.to_string() + "'"));
+            return io.IoResult<void>.err(_tls_error($"cannot load the certificates in '{path}'"));
         }
     }
     return io.IoResult<void>.ok();
@@ -899,7 +883,7 @@ _tls_verify(session: __ptr<u8>): io.IoResult<void> {
     }
     CertFreeCertificateContext(certificate);
     if (error != 0) {
-        return io.IoResult<void>.err(_tls_error("certificate verify failed: " + _tls_certificate_reason(error)));
+        return io.IoResult<void>.err(_tls_error($"certificate verify failed: {_tls_certificate_reason(error)}"));
     }
     return io.IoResult<void>.ok();
 }
