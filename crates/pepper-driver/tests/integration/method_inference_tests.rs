@@ -60,3 +60,29 @@ test(): int {
 "#;
     assert_eq!(compile_jit_with_runtime(source), 0);
 }
+
+/// An operator on a bare call to one of the struct's own methods resolves
+/// like one on `this.m()`: the implicit receiver was an untyped `this`
+/// symbol, so `label() + label()` stayed a raw `+` and codegen failed with
+/// "unsupported op Add" (#243).
+#[test]
+fn operator_on_an_implicit_this_call() {
+    let source = r#"
+struct Box {
+    int value;
+    construct(int value) { this.value = value; }
+    String label() { return "x"; }
+    String twice() { return label() + label(); }
+    bool same() { return label() == label(); }
+    Box doubled() { return Box(value * 2); }
+    int sum() { return doubled().value + doubled().value; }
+}
+test(): int {
+    var b = Box(3);
+    if (b.twice() != "xx") { return 1; }
+    if (!b.same()) { return 2; }
+    return b.sum() - 12;
+}
+"#;
+    assert_eq!(compile_jit_with_runtime(source), 0);
+}

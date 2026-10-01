@@ -97,18 +97,24 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 if methods.contains(function) {
                     let method = function.clone();
                     let call_args = args.clone();
+                    // A sibling static is called on the struct's name; any
+                    // other method on `this` as written (`ThisRef`), so the
+                    // receiver types as the enclosing struct: an untyped
+                    // `this` symbol left the call's type unknown, and an
+                    // operator on it (`label() + label()`) never resolved to
+                    // its overload.
                     let receiver = if methods.contains(&format!("{}{}", STATIC_MARK, function)) {
                         // A generic base has no name to call on; its
                         // specializations, copied from it, convert the call.
                         if methods.contains(&GENERIC_BASE.to_string()) {
                             return;
                         }
-                        struct_name.to_string()
+                        Expression::SymbolRef { id: struct_name.to_string(), ty: TypeName::auto(), loc: Loc::NONE }
                     } else {
-                        "this".to_string()
+                        Expression::ThisRef
                     };
                     *e = Expression::MethodCall {
-                        this: Box::new(Expression::SymbolRef { id: receiver, ty: TypeName::auto(), loc: Loc::NONE }),
+                        this: Box::new(receiver),
                         method,
                         args: call_args,
                         loc: *loc,

@@ -126,10 +126,6 @@ means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through `this` explicitly only for the trait's own methods.
 
-> **Known problem:** a default body that uses a string literal does not work
-> yet: it fails to compile (`not a struct`) or the program crashes. Write such a
-> method in each extension instead.
-
 ### Traits as types
 
 A trait's name is also a type. A variable, parameter, field, return value, or

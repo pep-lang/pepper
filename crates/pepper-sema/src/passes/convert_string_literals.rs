@@ -76,6 +76,18 @@ pub fn convert_string_literals(module: &mut Module) {
         }
     }
 
+    // Trait default bodies: `apply_extensions` copies each into the
+    // structs that take it, after this pass, so a literal left raw here
+    // reached codegen as a bare `char*` returned where a String was due.
+    for tr in &mut module.traits {
+        for method in &mut tr.methods {
+            convert_defaults(&mut method.parameters);
+            if let Some(body) = &mut method.body {
+                walk_body(body);
+            }
+        }
+    }
+
     // Extension methods.
     for ext in &mut module.extensions {
         for method in &mut ext.methods {

@@ -2,6 +2,11 @@
 trait Shape {
     area(): int;
     name(): String;
+
+    # A method with a body is a default: every type with the trait gets it.
+    describe(): String {
+        return "a " + name();
+    }
 }
 
 struct Square {
@@ -37,6 +42,7 @@ main(): int {
     var sq = Square(3);
     assert(sq.area() == 9, "trait method called on the struct");
     assert(sq.name() == "square", "second trait method");
+    assert(sq.describe() == "a square", "default method from the trait");
     assert(Square.from(4).area() == 16, "static method from a generic trait");
     return 0;
 }

@@ -664,3 +664,53 @@ test(): int {
     assert_eq!(result, 7);
     assert_eq!(leaked, 0);
 }
+
+/// A default body's string literals are Strings, as in any other method:
+/// they were left raw (`apply_extensions` copies the body after literals are
+/// converted), so a default returning one crashed at run time and one
+/// concatenating one failed with "no member named '+' in ''" (#242).
+const NAMED: &str = r#"
+trait Named {
+    String name();
+
+    String label() {
+        return "pet";
+    }
+
+    String greet() {
+        return "hi " + name();
+    }
+}
+
+struct Dog {
+    construct() {}
+}
+
+extend Dog with Named {
+    String name() { return "dog"; }
+}
+"#;
+
+#[test]
+fn a_default_method_returns_a_string_literal() {
+    let source = format!(
+        "{NAMED}\nint test() {{\n    var d = Dog();\n    return d.label() == \"pet\" ? 0 : 1;\n}}\n"
+    );
+    assert_eq!(run(&source), (0, 0));
+}
+
+#[test]
+fn a_default_method_concatenates_a_string_literal() {
+    let source = format!(
+        "{NAMED}\nint test() {{\n    var d = Dog();\n    return d.greet() == \"hi dog\" ? 0 : 1;\n}}\n"
+    );
+    assert_eq!(run(&source), (0, 0));
+}
+
+#[test]
+fn a_default_method_with_a_string_literal_runs_through_a_trait_value() {
+    let source = format!(
+        "{NAMED}\nint test() {{\n    Named n = Dog();\n    return n.label() + n.greet() == \"pethi dog\" ? 0 : 1;\n}}\n"
+    );
+    assert_eq!(run(&source), (0, 0));
+}
