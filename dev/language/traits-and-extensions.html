@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-407fd0c0.js";
+            window.path_to_searchindex_js = "../searchindex-65d26a96.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -287,7 +287,12 @@ to every specialization: <code>Box&lt;int&gt;</code>, <code>Box&lt;String&gt;</c
 above does this.</p>
 <p>When <code>Box</code> constrains its parameter (<code>struct Box&lt;T: Shape&gt;</code>), the extension
 keeps the constraint without restating it; <code>extend Box&lt;T: Shape&gt;</code> may
-restate it as documentation (see <a href="generics.html#constraints">constraints</a>).</p>
+restate it as documentation (see <a href="generics.html#constraints">constraints</a>).
+A constraint the struct does not have limits the extension to the
+specializations that meet it: <code>extend Box&lt;T: Named&gt; { ... }</code> adds its
+methods to <code>Box&lt;Square&gt;</code> but not to <code>Box&lt;String&gt;</code>, and
+<code>extend Box&lt;T: Shape&gt; with Shape</code> makes a <code>Box</code> of shapes a shape (see
+<a href="generics.html#constrained-extensions">constrained extensions</a>).</p>
 <p><code>extend Box&lt;int&gt;</code> targets one specialization: its methods exist only on
 <code>Box&lt;int&gt;</code>, and calling one on a <code>Box&lt;String&gt;</code> is an error
 (<code>no member named 'doubled' in 'Box&lt;String&gt;'</code>).</p>

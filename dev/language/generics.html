@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-407fd0c0.js";
+            window.path_to_searchindex_js = "../searchindex-65d26a96.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e3ed46d.js"></script>
@@ -506,8 +506,9 @@ as quick fixes.</p>
 error.</li>
 <li>An extension of a constrained struct keeps its constraints:
 <code>extend Gallery&lt;TTag, TShape&gt;</code> needs no <code>TShape: Shape</code> of its own. You
-may restate them as documentation, <code>extend Gallery&lt;TTag, TShape: Shape&gt;</code>,
-but an extension cannot add a constraint the struct does not have.</li>
+may restate them as documentation, <code>extend Gallery&lt;TTag, TShape: Shape&gt;</code>.
+A constraint the struct does not have makes a
+<a href="#constrained-extensions">constrained extension</a>.</li>
 <li>In an <a href="overloading.html#generic-members">overload set</a>, a generic member
 whose inferred type arguments do not meet its constraints is not viable,
 and the error lists why.</li>
@@ -597,6 +598,87 @@ to that type’s own method, with no trait value in between. A parameter
 without a constraint keeps working as before: its uses are checked in each
 specialization. In a list that mixes the two, such as <code>f&lt;T: Shape, U&gt;</code>, only
 the uses of <code>T</code> are checked in the generic.</p>
+<h2 id="constrained-extensions"><a class="header" href="#constrained-extensions">Constrained extensions</a></h2>
+<p>An extension of a generic struct can add a constraint the struct does not
+have: <code>extend Box&lt;T: Named&gt; { ... }</code>. Its members exist only on the
+specializations whose type argument meets it, so <code>Box&lt;Square&gt;</code> has
+<code>label()</code> and <code>Box&lt;String&gt;</code> does not. With <code>with</code>, the constraint makes a
+<strong>conditional conformance</strong>: after <code>extend Box&lt;T: Shape&gt; with Shape</code>, a
+<code>Box&lt;Square&gt;</code> is a <code>Shape</code> (it can be passed where <code>T: Shape</code> is required
+and converted to a <code>Shape</code> value), and a <code>Box&lt;String&gt;</code> is not.</p>
+<pre><code class="language-pepper">trait Shape {
+    area(): int;
+}
+
+trait Named {
+    name(): String;
+}
+
+struct Square {
+    area(): int { return 4; }
+    name(): String { return "square"; }
+}
+
+extend Square with Shape {}
+extend Square with Named {}
+
+struct Box&lt;T&gt; {
+    var item: T;
+    construct(item: T) { this.item = item; }
+}
+
+# Only a Box of something Named has `label()`.
+extend Box&lt;T: Named&gt; {
+    label(): String { return "box of " + item.name(); }
+}
+
+# A Box of shapes is itself a shape.
+extend Box&lt;T: Shape&gt; with Shape {
+    area(): int { return item.area() * 2; }
+}
+
+main(): int {
+    var box = Box&lt;Square&gt;(Square());
+    assert(box.label() == "box of square", "constrained extension");
+
+    Shape shape = box;
+    assert(shape.area() == 8, "conditional conformance");
+
+    # Box&lt;String&gt; is still a Box, without `label()` or `area()`.
+    var text = Box&lt;String&gt;("plain");
+    assert(text.item == "plain", "any Box");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Every <code>Box&lt;X&gt;</code> keeps the struct’s own members and constraints; an
+extension adds to them, it never removes any.</li>
+<li>Inside the extension, <code>T</code> offers the struct’s constraints and the
+extension’s, as in any <a href="#inside-a-constrained-generic">constrained generic</a>.</li>
+<li>A call of a member the specialization does not have names the constraint
+it misses:</li>
+</ul>
+<pre><code class="language-text">main.pep:20:9: error: no member named 'label' in 'Box&lt;Circle&gt;'
+   20 |     box.label();
+      |         ^~~~~
+main.pep:15:15: note: 'label' requires 'Circle' to conform to 'Named'
+   15 | extend Box&lt;T: Named&gt; {
+      |               ^~~~~
+</code></pre>
+<p>and a type argument that misses a conditional conformance says so too
+(<code>'Box&lt;String&gt;' conforms to 'Shape' only when 'String' conforms to   'Shape'</code>).</p>
+<ul>
+<li>Only the struct’s own parameters can carry an extension’s constraints:
+<code>extend Box&lt;int: Shape&gt;</code> is an error.</li>
+<li>A conformance that holds for every <code>Box</code> needs its members on every
+<code>Box</code>: <code>extend Box&lt;T&gt; with Named</code> cannot rest on a <code>name()</code> that only
+<code>extend Box&lt;T: Named&gt;</code> provides. Make the conformance conditional
+instead (<code>extend Box&lt;T: Named&gt; with Named</code>).</li>
+<li>Several extensions may declare the same trait with different
+constraints; a specialization conforms when it meets any of them.</li>
+<li>Inside another generic, a call such as <code>b.label()</code> on a <code>Box&lt;T&gt;</code> is
+checked in each specialization, like any member of a generic struct.</li>
+</ul>
 <h2 id="overriding-a-generic-function-for-one-type"><a class="header" href="#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a></h2>
 <p>You can give a generic function a separate definition for a specific type
 argument. Write the concrete type where the type parameter would go:</p>
