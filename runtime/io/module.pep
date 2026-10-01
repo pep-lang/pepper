@@ -62,9 +62,11 @@ export Metadata;
 export SeekFrom;
 export StdStream;
 export File;
+export Lines;
 export Print;
 
 export DirEntry;
+export DirectoryIterator;
 export Directory;
 
 export IpAddress;

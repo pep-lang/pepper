@@ -362,7 +362,8 @@ entries(): IoResult<DirEntry[]>
 Reads the directory's listing now, all at once: every entry except
 `.` and `..`, in the order the operating system returns them (not
 sorted). Uses `opendir`/`readdir` on POSIX and
-`FindFirstFileW`/`FindNextFileW` on Windows.
+`FindFirstFileW`/`FindNextFileW` on Windows. To read the entries one
+at a time instead, loop over the `Directory` itself (see `iterate`).
 
 **Returns**
 - the entries, possibly none; an error when the directory cannot be read: `is_not_found()` when it no longer exists (or, on POSIX, `path` is empty), `is_permission_denied()`, or on POSIX `is_not_a_directory()` when `path` now names a file
@@ -376,3 +377,107 @@ sorted). Uses `opendir`/`readdir` on POSIX and
         var n = list.value().count();
     }
 ```
+
+#### iterate
+
+```pepper
+iterate(): DirectoryIterator
+```
+
+Returns an iterator that reads the directory's listing one entry at a
+time, as `for (var entry in dir)` does, without building an array.
+
+Each element is an `IoResult<DirEntry>`. The listing is opened by the
+first `next()`, so a directory that cannot be read yields one error
+(the same errors as `entries()`) and then ends; an error while
+reading also ends it. The entries come in the order the operating
+system returns them, without `.` and `..`. The listing is closed
+when it ends, or when the iterator is released, so leaving the loop
+early with `break` or `return` closes it too.
+
+**Returns**
+- a new `DirectoryIterator` positioned before the first entry
+
+**Example**
+```pepper
+    import io;
+
+    var dir = io.Directory.open(io.Path(".")).value();
+    for (var entry in dir) {
+        if (entry.is_err()) {
+            print(entry.error().message);
+            break;
+        }
+        print(entry.value().name);
+    }
+```
+
+## DirectoryIterator
+
+```pepper
+struct DirectoryIterator
+```
+
+The iterator `Directory.iterate()` returns, and a `for` loop over a
+`Directory` drives: the directory's entries, read one at a time, each
+as an `IoResult<DirEntry>`.
+
+It holds the open listing (a `DIR*` on POSIX, a find handle on Windows)
+from the first `next()` until the listing ends, an error ends it, or the
+iterator is released.
+
+**See also**
+- `Directory.iterate`
+
+**Example**
+```pepper
+    import io;
+
+    var it = io.Directory.open(io.Path(".")).value().iterate();
+    while (it.next()) {
+        var entry = it.current();
+    }
+```
+
+### Constructor
+
+#### DirectoryIterator()
+
+```pepper
+construct(path: Path)
+```
+
+Makes an iterator over the entries of the directory at `path`. Nothing
+is opened until the first `next()`.
+
+**Parameters**
+- `path` — the directory to list
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Reads the next entry, opening the listing on the first call.
+
+Once it returns false it keeps returning false.
+
+**Returns**
+- true if there is a current element (an entry, or the error that ends the listing), false once the listing has ended
+
+#### current
+
+```pepper
+current(): IoResult<DirEntry>
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current entry, or the error that ended the listing
+
+**Panics**
+- if `next()` was never called, or already returned false ("DirectoryIterator.current() without an entry")

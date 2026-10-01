@@ -604,6 +604,27 @@ export struct File {
         return r;
     }
 
+    ## Returns an iterator over the rest of the file's lines, read as it
+    ## goes, so a `for` loop handles a large file without reading it all.
+    ##
+    ## Each element is an `IoResult<String>`: a line without its line ending
+    ## (`\n`, or `\r\n`). The last line counts even without a final line
+    ## ending, and a file that ends with one has no empty line after it. A
+    ## read error, or a line that is not valid UTF-8 (`is_invalid_input()`),
+    ## is yielded as an error and ends the lines. Reading starts at the
+    ## current position and moves it in 64 KiB chunks, so the position after
+    ## the loop is not the end of the last line returned.
+    ##
+    ## @returns a new `Lines` positioned before the first line
+    ## @example
+    ##     var f = File.open(Path("notes.txt")).value();
+    ##     for (var line in f.lines()) {
+    ##         print(line.value());
+    ##     }
+    lines(): Lines {
+        return Lines(this);
+    }
+
     ## Reads everything from the current position to the end of the file,
     ## in 64 KiB chunks, leaving the position at the end.
     ##
@@ -1106,3 +1127,110 @@ export struct File {
         return _io_sys_unlink(path);
     }
 }
+
+## The iterator `File.lines()` returns: the lines of a file, read in chunks
+## as the loop asks for them, each as an `IoResult<String>`.
+##
+## @example
+##     var f = File.open(Path("notes.txt")).value();
+##     var it = f.lines();
+##     while (it.next()) {
+##         var line = it.current();
+##     }
+## @see File.lines
+export struct Lines {
+    ## The file being read.
+    File _file;
+    ## The last chunk read from the file.
+    u8[] _chunk;
+    ## The position in `_chunk` of the first byte not yet looked at.
+    ulong _position;
+    ## The bytes of the line being collected.
+    u8[] _line;
+    ## Whether the lines have ended (at the end of the file, or after an
+    ## error); `next()` then returns false.
+    bool _finished;
+    ## Whether `_value` holds the element the last `next()` moved to.
+    bool _has_value;
+    ## The current element.
+    IoResult<String> _value;
+
+    ## Makes an iterator over the lines of `file`, from its current position.
+    ##
+    ## @param file the open file to read
+    construct(file: File) {
+        _file = file;
+        _chunk = Array<u8>();
+        _line = Array<u8>();
+        _value = IoResult<String>.ok("");
+    }
+
+    ## Reads the next line.
+    ##
+    ## Once it returns false it keeps returning false.
+    ##
+    ## @returns true if there is a current element (a line, or the error that
+    ## ends the lines), false at the end of the file
+    next(): bool {
+        _has_value = false;
+        if (_finished) {
+            return false;
+        }
+        _line.clear();
+        while (true) {
+            if (_position == _chunk.count()) {
+                _chunk.clear();
+                _position = 0;
+                var read = _file.read(_chunk, _io_chunk_size());
+                if (read.is_err()) {
+                    _finished = true;
+                    return _yield(IoResult<String>.err(read.error()));
+                }
+                if (read.value() == 0) {
+                    _finished = true;
+                    if (_line.empty()) {
+                        return false;
+                    }
+                    return _yield_line();
+                }
+            }
+            var byte = _chunk[_position];
+            _position += 1;
+            if (byte == '\n') {
+                return _yield_line();
+            }
+            _line.append(byte);
+        }
+    }
+
+    # Makes the collected bytes, without a final `\r`, the current element.
+    _yield_line(): bool {
+        if (!_line.empty() && _line.last() == '\r') {
+            _line.pop();
+        }
+        var decoded = text.Utf8.decode(_line);
+        if (decoded.is_none()) {
+            _finished = true;
+            return _yield(IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "line is not valid UTF-8")));
+        }
+        return _yield(IoResult<String>.ok(decoded.value()));
+    }
+
+    # Makes `value` the current element.
+    _yield(value: IoResult<String>): bool {
+        _value = value;
+        _has_value = true;
+        return true;
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current line, or the error that ended the lines
+    ## @panics if `next()` was never called, or already returned false ("Lines.current() without a line")
+    current(): IoResult<String> {
+        assert(_has_value, "Lines.current() without a line");
+        return _value;
+    }
+}
+
+extend Lines with Iterator<IoResult<String>> {}

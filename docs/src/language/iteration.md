@@ -159,6 +159,31 @@ so a chain built from a temporary stays alive while the loop runs, and
 [Generics](generics.md#generic-methods)), so they are not callable through an
 `Iterator<T>` trait value.
 
+## Reading files and directories
+
+Input that can fail partway, such as a directory listing or a file read line
+by line, yields a [`Result`](results.md) per element: an `IoResult<T>` from
+the [io module](../reference/io-module.md). Handle each error where it
+happens; there is nothing to check after the loop.
+
+```pepper
+{{#include ../../examples/iteration-streams.pep}}
+```
+
+- **A `Directory` is iterable.** `for (var entry in dir)` reads the listing
+  one entry at a time (`Directory.iterate()` returns a `DirectoryIterator`),
+  without building an array the way `dir.entries()` does. Each element is an
+  `IoResult<DirEntry>`. A directory that cannot be read yields one error and
+  then ends.
+- **`file.lines()`** yields each line of an open `File` from its current
+  position, as an `IoResult<String>` without the `\n` or `\r\n`. The last
+  line counts even without a line ending. A read error, or a line that is not
+  valid UTF-8, is yielded as an error and ends the lines.
+- **An error ends the sequence**: after an `Err` element, `next()` returns
+  `false`.
+- **Leaving early cleans up.** The listing is closed when the loop ends,
+  including by `break` or `return`, because the iterator is released then.
+
 ## Writing your own iterator
 
 To make your own type work in a `for` loop, give it `next()` and `current()`

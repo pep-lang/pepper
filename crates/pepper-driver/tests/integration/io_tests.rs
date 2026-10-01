@@ -832,6 +832,118 @@ fn io_is_a_module_not_prelude() {
 /// Every program the host tests build and run, as (name, source): the
 /// simulated-host tests push each one through the same pipeline for every
 /// other platform.
+/// Streaming iteration: `for (var entry in dir)` reads a directory one entry
+/// at a time, and `file.lines()` a file one line at a time, each yielding
+/// `IoResult`s; leaving early closes the listing, and nothing leaks.
+fn streams_program(scratch: &str) -> String {
+    r##"
+import [File, Path, Directory, DirectoryIterator] from io;
+
+count_entries(dir: Directory): int {
+    var n = 0;
+    for (var entry in dir) {
+        assert(entry.is_ok(), "entry");
+        n += 1;
+    }
+    return n;
+}
+
+first_name(dir: Directory): String {
+    for (var entry in dir) {
+        return entry.value().name;   # leaves the loop with the listing open
+    }
+    return "";
+}
+
+lines_of(text: String, p: Path): Array<String> {
+    assert(File.write_text(p, text).is_ok(), "write lines");
+    var f = File.open(p).value();
+    var out = Array<String>();
+    for (var line in f.lines()) {
+        out.append(line.value());
+    }
+    return out;
+}
+
+exercise(base: Path) {
+    var dir = Directory.open(base).value();
+
+    # An empty directory yields nothing; then three entries, each once.
+    assert(count_entries(dir) == 0, "empty");
+    assert(File.write_text(base.join("a.txt"), "x").is_ok(), "a");
+    assert(File.write_text(base.join("b.txt"), "y").is_ok(), "b");
+    assert(Directory.create(base.join("sub")).is_ok(), "sub");
+    assert(count_entries(dir) == 3, "three entries");
+    var it = dir.iterate();
+    var seen = 0;
+    while (it.next()) {
+        var entry = it.current().value();
+        assert(entry.path == base.join(entry.name), "entry path");
+        if (entry.name == "sub") {
+            assert(entry.is_directory && !entry.is_file, "sub is a directory");
+            seen += 1;
+        }
+    }
+    assert(seen == 1 && !it.next(), "sub once, then ended");
+    assert(dir.entries().value().count() == 3, "entries agrees");
+
+    # Leaving early closes the listing: thousands of early exits do not run
+    # out of handles.
+    int i = 0;
+    while (i < 3000) {
+        assert(first_name(dir).size() > 0, "first name");
+        i += 1;
+    }
+
+    # A missing directory yields one error, then ends.
+    var errors = 0;
+    for (var entry in DirectoryIterator(base.join("missing"))) {
+        assert(entry.is_err() && entry.error().is_not_found(), "missing is not found");
+        errors += 1;
+    }
+    assert(errors == 1, "one error");
+
+    # Lines: endings stripped, \r\n too, no empty line after a final ending.
+    var p = base.join("lines.txt");
+    var lines = lines_of("one\r\ntwo\n\nlast", p);
+    assert(lines.count() == 4, "four lines");
+    assert(lines[0] == "one" && lines[1] == "two" && lines[2] == "" && lines[3] == "last", "line text");
+    assert(lines_of("a\nb\n", p).count() == 2, "final newline");
+    assert(lines_of("", p).count() == 0, "empty file");
+    var big = "";
+    while (big.size() < 200000) {
+        big += "0123456789abcdef\n";
+    }
+    assert(lines_of(big, p).count() == big.size() / 17, "lines across chunks");
+    assert(File.write_bytes(p, [104 as u8, 255 as u8, 10 as u8]).is_ok(), "bad utf-8");
+    var f = File.open(p).value();
+    var bad = f.lines().to_array();
+    assert(bad.count() == 1 && bad[0].is_err() && bad[0].error().is_invalid_input(), "invalid UTF-8 ends the lines");
+
+}
+
+main(): int {
+    var base = Directory.temp().join("SCRATCH");
+    Directory.remove_all(base);
+    assert(Directory.create(base).is_ok(), "create base");
+    var before = _pep_live_allocs();
+    exercise(base);
+    assert(_pep_live_allocs() == before, "leak");
+    assert(Directory.remove_all(base).is_ok(), "clean up");
+    print("io-streams-ok");
+    return 0;
+}
+"##
+    .replace("SCRATCH", scratch)
+}
+
+#[test]
+fn directory_and_line_streams() {
+    let scratch = scratch_name("streams");
+    let out = assert_runs("streams", &streams_program(&scratch));
+    assert!(out.contains("io-streams-ok"), "output: {out}");
+}
+
 fn all_programs() -> Vec<(&'static str, String)> {
     vec![
         ("path", PATH_PROGRAM.to_string()),
@@ -841,6 +953,7 @@ fn all_programs() -> Vec<(&'static str, String)> {
         ("enums", enums_program("x")),
         ("import_names", IMPORT_NAMES_PROGRAM.to_string()),
         ("print_trait", PRINT_TRAIT_PROGRAM.to_string()),
+        ("streams", streams_program("x")),
     ]
 }
 

@@ -110,3 +110,7 @@ To decide what to do about the failure, `kind()` returns the code's portable
 
 See [io: errors and platform types](../reference/io-types.md) for the full list
 of kinds and the platform codes each one covers.
+
+Reading a directory or a file line by line in a `for` loop yields one
+`IoResult` per element, so each error is handled where it happens; see
+[Iteration](iteration.md#reading-files-and-directories).

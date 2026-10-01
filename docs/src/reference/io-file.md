@@ -944,6 +944,34 @@ failure `buf` keeps its previous contents.
     }
 ```
 
+#### lines
+
+```pepper
+lines(): Lines
+```
+
+Returns an iterator over the rest of the file's lines, read as it
+goes, so a `for` loop handles a large file without reading it all.
+
+Each element is an `IoResult<String>`: a line without its line ending
+(`\n`, or `\r\n`). The last line counts even without a final line
+ending, and a file that ends with one has no empty line after it. A
+read error, or a line that is not valid UTF-8 (`is_invalid_input()`),
+is yielded as an error and ends the lines. Reading starts at the
+current position and moves it in 64 KiB chunks, so the position after
+the loop is not the end of the last line returned.
+
+**Returns**
+- a new `Lines` positioned before the first line
+
+**Example**
+```pepper
+    var f = File.open(Path("notes.txt")).value();
+    for (var line in f.lines()) {
+        print(line.value());
+    }
+```
+
 #### read_all
 
 ```pepper
@@ -1245,3 +1273,66 @@ stream stays open, and `File.stdout()` and the like still work.
         return 1;
     }
 ```
+
+## Lines
+
+```pepper
+struct Lines
+```
+
+The iterator `File.lines()` returns: the lines of a file, read in chunks
+as the loop asks for them, each as an `IoResult<String>`.
+
+**See also**
+- `File.lines`
+
+**Example**
+```pepper
+    var f = File.open(Path("notes.txt")).value();
+    var it = f.lines();
+    while (it.next()) {
+        var line = it.current();
+    }
+```
+
+### Constructor
+
+#### Lines()
+
+```pepper
+construct(file: File)
+```
+
+Makes an iterator over the lines of `file`, from its current position.
+
+**Parameters**
+- `file` — the open file to read
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Reads the next line.
+
+Once it returns false it keeps returning false.
+
+**Returns**
+- true if there is a current element (a line, or the error that ends the lines), false at the end of the file
+
+#### current
+
+```pepper
+current(): IoResult<String>
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current line, or the error that ended the lines
+
+**Panics**
+- if `next()` was never called, or already returned false ("Lines.current() without a line")

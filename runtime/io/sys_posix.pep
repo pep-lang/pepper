@@ -575,28 +575,34 @@ export _io_dirent_type_offset(): ulong { return 20; }
 [Target(OS(Mac))]
 export _io_dirent_name_offset(): ulong { return 21; }
 
+# Opens the listing of `iterator._path` and reads its first entry into
+# `iterator._entry`: false when there is none.
 [Target(!OS(Windows))]
-export _io_sys_list(path: Path): IoResult<DirEntry[]> {
-    if (path._value.size() == 0) {
-        return IoResult<DirEntry[]>.err(_io_posix_empty_path());
+export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
+    if (iterator._path._value.size() == 0) {
+        return IoResult<bool>.err(_io_posix_empty_path());
     }
-    var dir = opendir(path._value.c_str());
-    if (dir == __null) {
-        return IoResult<DirEntry[]>.err(IoError.last());
+    iterator._handle = opendir(iterator._path._value.c_str());
+    if (iterator._handle == __null) {
+        return IoResult<bool>.err(IoError.last());
     }
-    var out = Array<DirEntry>();
+    return _io_sys_directory_next(iterator);
+}
+
+# Reads the next entry of an open listing into `iterator._entry`, skipping
+# `.` and `..`: false at the end.
+[Target(!OS(Windows))]
+export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
     while (true) {
         # readdir returns null at the end and on error; only errno tells.
         _io_errno()[0] = 0;
-        var ent: __ptr<u8> = readdir(dir);
+        var ent: __ptr<u8> = readdir(iterator._handle);
         if (ent == __null) {
             var code = _io_sys_last_error();
             if (code != 0) {
-                var e = IoError(code, _io_sys_error_message(code));
-                closedir(dir);
-                return IoResult<DirEntry[]>.err(e);
+                return IoResult<bool>.err(IoError(code, _io_sys_error_message(code)));
             }
-            break;
+            return IoResult<bool>.ok(false);
         }
         var name = String((ent + _io_dirent_name_offset()) as __ptr<char>);
         if (name == "." || name == "..") {
@@ -604,7 +610,7 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
         }
         var entry = DirEntry();
         entry.name = name;
-        entry.path = path.join(Path(name));
+        entry.path = iterator._path.join(Path(name));
         var kind = ent[_io_dirent_type_offset()];
         if (kind == 0) {
             # DT_UNKNOWN: the file system did not say; ask lstat.
@@ -621,10 +627,15 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
             entry.is_symlink = kind == 10;   # DT_LNK
             entry.file_type = _io_file_type(entry.is_file, entry.is_directory, entry.is_symlink);
         }
-        out.append(entry);
+        iterator._entry = entry;
+        return IoResult<bool>.ok(true);
     }
-    closedir(dir);
-    return IoResult<DirEntry[]>.ok(out);
+}
+
+# Closes an open listing.
+[Target(!OS(Windows))]
+export _io_sys_directory_close(handle: __ptr<void>) {
+    closedir(handle);
 }
 
 [Target(!OS(Windows))]

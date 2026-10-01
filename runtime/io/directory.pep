@@ -124,7 +124,8 @@ export struct Directory {
     ## Reads the directory's listing now, all at once: every entry except
     ## `.` and `..`, in the order the operating system returns them (not
     ## sorted). Uses `opendir`/`readdir` on POSIX and
-    ## `FindFirstFileW`/`FindNextFileW` on Windows.
+    ## `FindFirstFileW`/`FindNextFileW` on Windows. To read the entries one
+    ## at a time instead, loop over the `Directory` itself (see `iterate`).
     ##
     ## @returns the entries, possibly none; an error when the directory
     ## cannot be read: `is_not_found()` when it no longer exists (or, on
@@ -138,7 +139,34 @@ export struct Directory {
     ##         var n = list.value().count();
     ##     }
     entries(): IoResult<DirEntry[]> {
-        return _io_sys_list(path);
+        return _io_list(path);
+    }
+
+    ## Returns an iterator that reads the directory's listing one entry at a
+    ## time, as `for (var entry in dir)` does, without building an array.
+    ##
+    ## Each element is an `IoResult<DirEntry>`. The listing is opened by the
+    ## first `next()`, so a directory that cannot be read yields one error
+    ## (the same errors as `entries()`) and then ends; an error while
+    ## reading also ends it. The entries come in the order the operating
+    ## system returns them, without `.` and `..`. The listing is closed
+    ## when it ends, or when the iterator is released, so leaving the loop
+    ## early with `break` or `return` closes it too.
+    ##
+    ## @returns a new `DirectoryIterator` positioned before the first entry
+    ## @example
+    ##     import io;
+    ##
+    ##     var dir = io.Directory.open(io.Path(".")).value();
+    ##     for (var entry in dir) {
+    ##         if (entry.is_err()) {
+    ##             print(entry.error().message);
+    ##             break;
+    ##         }
+    ##         print(entry.value().name);
+    ##     }
+    iterate(): DirectoryIterator {
+        return DirectoryIterator(path);
     }
 
     ## Creates one directory (`mkdir` on POSIX, with mode 0777 less the
@@ -239,7 +267,7 @@ export struct Directory {
         if (m.value().is_symlink || !m.value().is_directory) {
             return _io_sys_remove_link(path, m.value().is_directory);
         }
-        var list = _io_sys_list(path);
+        var list = _io_list(path);
         if (list.is_err()) {
             return IoResult<void>.err(list.error());
         }
@@ -306,4 +334,129 @@ export struct Directory {
     static temp(): Path {
         return _io_sys_temp_dir();
     }
+}
+
+## The iterator `Directory.iterate()` returns, and a `for` loop over a
+## `Directory` drives: the directory's entries, read one at a time, each
+## as an `IoResult<DirEntry>`.
+##
+## It holds the open listing (a `DIR*` on POSIX, a find handle on Windows)
+## from the first `next()` until the listing ends, an error ends it, or the
+## iterator is released.
+##
+## @example
+##     import io;
+##
+##     var it = io.Directory.open(io.Path(".")).value().iterate();
+##     while (it.next()) {
+##         var entry = it.current();
+##     }
+## @see Directory.iterate
+export struct DirectoryIterator {
+    ## The directory being listed.
+    Path _path;
+    ## The open listing: a `DIR*` on POSIX, a find `HANDLE` on Windows; null
+    ## before the first `next()` and once the listing is closed.
+    __ptr<void> _handle;
+    ## Windows only: the `WIN32_FIND_DATAW` the find functions fill; null on
+    ## POSIX.
+    __ptr<u8> _data;
+    ## Windows only: whether `_data` holds an entry `FindFirstFileW` read that
+    ## `next()` has not returned yet.
+    bool _pending;
+    ## Whether `next()` has been called.
+    bool _started;
+    ## Whether the listing has ended (or failed); `next()` then returns false.
+    bool _finished;
+    ## The entry the platform layer read last.
+    DirEntry _entry;
+    ## Whether `_value` holds the element the last `next()` moved to.
+    bool _has_value;
+    ## The current element.
+    IoResult<DirEntry> _value;
+
+    ## Makes an iterator over the entries of the directory at `path`. Nothing
+    ## is opened until the first `next()`.
+    ##
+    ## @param path the directory to list
+    construct(path: Path) {
+        _path = path;
+        _value = IoResult<DirEntry>.ok(DirEntry());
+    }
+
+    # Not through a call taking `this`: the destructor runs at refcount zero.
+    destruct {
+        _close();
+    }
+
+    # Closes the listing and frees the find data, if open.
+    _close() {
+        if (_handle != __null) {
+            _io_sys_directory_close(_handle);
+            _handle = __null;
+        }
+        if (_data != __null) {
+            _pep_free(_data);
+            _data = __null;
+        }
+    }
+
+    ## Reads the next entry, opening the listing on the first call.
+    ##
+    ## Once it returns false it keeps returning false.
+    ##
+    ## @returns true if there is a current element (an entry, or the error
+    ## that ends the listing), false once the listing has ended
+    next(): bool {
+        if (_finished) {
+            _has_value = false;
+            return false;
+        }
+        IoResult<bool> read;
+        if (_started) {
+            read = _io_sys_directory_next(this);
+        } else {
+            _started = true;
+            read = _io_sys_directory_first(this);
+        }
+        if (read.is_err()) {
+            _finished = true;
+            _close();
+            _value = IoResult<DirEntry>.err(read.error());
+            _has_value = true;
+            return true;
+        }
+        if (!read.value()) {
+            _finished = true;
+            _close();
+            _has_value = false;
+            return false;
+        }
+        _value = IoResult<DirEntry>.ok(_entry);
+        _has_value = true;
+        return true;
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current entry, or the error that ended the listing
+    ## @panics if `next()` was never called, or already returned false ("DirectoryIterator.current() without an entry")
+    current(): IoResult<DirEntry> {
+        assert(_has_value, "DirectoryIterator.current() without an entry");
+        return _value;
+    }
+}
+
+extend DirectoryIterator with Iterator<IoResult<DirEntry>> {}
+
+# Every entry of the directory at `path`, all at once (`Directory.entries()`).
+export _io_list(path: Path): IoResult<DirEntry[]> {
+    var out = Array<DirEntry>();
+    for (var entry in DirectoryIterator(path)) {
+        if (entry.is_err()) {
+            return IoResult<DirEntry[]>.err(entry.error());
+        }
+        out.append(entry.value());
+    }
+    return IoResult<DirEntry[]>.ok(out);
 }

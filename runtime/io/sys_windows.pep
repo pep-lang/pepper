@@ -457,18 +457,19 @@ export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
 # nFileSizeHigh @28, nFileSizeLow @32, cFileName (NUL-terminated WCHAR[260])
 # @44.
 
+# Opens the listing of `iterator._path` and reads its first entry into
+# `iterator._entry`: false when there is none.
 [Target(OS(Windows))]
-export _io_sys_list(path: Path): IoResult<DirEntry[]> {
+export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
+    var path = iterator._path;
     # An empty path would search `*`, the current directory; POSIX fails.
     if (path._value.size() == 0) {
-        return IoResult<DirEntry[]>.err(IoError(_io_sys_code_not_found(), "empty path"));
+        return IoResult<bool>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
     var w = _io_win_wide(path.join(Path("*"))._value);
-    var buffer = _IoBuffer(592);
-    var data = buffer._bytes;
-    var h = FindFirstFileW(w, data);
+    iterator._data = _pep_malloc(592);
+    var h = FindFirstFileW(w, iterator._data);
     _pep_free(w);
-    var out = Array<DirEntry>();
     if (!_io_sys_handle_valid(h)) {
         var e = IoError.last();
         # FILE_NOT_FOUND means nothing matched `*`: an empty directory with
@@ -478,37 +479,55 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
             var m = _io_sys_stat(path, true);
             if (m.is_ok()) {
                 if (m.value().is_directory) {
-                    return IoResult<DirEntry[]>.ok(out);
+                    return IoResult<bool>.ok(false);
                 }
             }
         }
-        return IoResult<DirEntry[]>.err(e);
+        return IoResult<bool>.err(e);
     }
+    iterator._handle = h;
+    # FindFirstFileW already read the first entry into `_data`.
+    iterator._pending = true;
+    return _io_sys_directory_next(iterator);
+}
+
+# Reads the next entry of an open listing into `iterator._entry`, skipping
+# `.` and `..`: false at the end.
+[Target(OS(Windows))]
+export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
+    var data = iterator._data;
     while (true) {
-        var name_ptr = (data + 44) as __ptr<u16>;
-        var name = _io_win_narrow(name_ptr, _io_win_wide_len(name_ptr));
-        if (name != "." && name != "..") {
-            var m = _io_win_metadata(data, 0, 4, 12, 20, 28, 32);
-            var entry = DirEntry();
-            entry.name = name;
-            entry.path = path.join(Path(name));
-            entry.is_file = m.is_file;
-            entry.is_directory = m.is_directory;
-            entry.is_symlink = m.is_symlink;
-            entry.file_type = m.file_type;
-            out.append(entry);
-        }
-        if (FindNextFileW(h, data) == 0) {
+        if (iterator._pending) {
+            iterator._pending = false;
+        } else if (FindNextFileW(iterator._handle, data) == 0) {
             var code = GetLastError();
             if (code != 18) {  # NO_MORE_FILES
-                FindClose(h);
-                return IoResult<DirEntry[]>.err(IoError(code, _io_sys_error_message(code)));
+                return IoResult<bool>.err(IoError(code, _io_sys_error_message(code)));
             }
-            break;
+            return IoResult<bool>.ok(false);
         }
+        var name_ptr = (data + 44) as __ptr<u16>;
+        var name = _io_win_narrow(name_ptr, _io_win_wide_len(name_ptr));
+        if (name == "." || name == "..") {
+            continue;
+        }
+        var m = _io_win_metadata(data, 0, 4, 12, 20, 28, 32);
+        var entry = DirEntry();
+        entry.name = name;
+        entry.path = iterator._path.join(Path(name));
+        entry.is_file = m.is_file;
+        entry.is_directory = m.is_directory;
+        entry.is_symlink = m.is_symlink;
+        entry.file_type = m.file_type;
+        iterator._entry = entry;
+        return IoResult<bool>.ok(true);
     }
-    FindClose(h);
-    return IoResult<DirEntry[]>.ok(out);
+}
+
+# Closes an open listing.
+[Target(OS(Windows))]
+export _io_sys_directory_close(handle: __ptr<void>) {
+    FindClose(handle);
 }
 
 [Target(OS(Windows))]
