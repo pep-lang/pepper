@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-00179f0e.js";
+            window.path_to_searchindex_js = "searchindex-7403bc30.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e2586fcc.js"></script>
@@ -5663,9 +5663,11 @@ main(): int {
 }
 </code></pre>
 <p>Pepper infers the type arguments from the arguments, so <code>larger(3, 9)</code> calls
-<code>larger&lt;int&gt;</code>. You can always write them out, <code>larger&lt;float&gt;(2.5, 1.5)</code>, and
-must when the arguments do not determine every type parameter, for example one
-that appears only in the return type:</p>
+<code>larger&lt;int&gt;</code>. You can always write them out, <code>larger&lt;float&gt;(2.5, 1.5)</code>, or
+write only the leading ones and let the arguments give the rest:
+<code>pick&lt;int&gt;(1, "x")</code> for <code>pick&lt;T, U&gt;(a: T, b: U)</code>. You must write them when the
+arguments do not determine every type parameter, for example one that appears
+only in the return type:</p>
 <pre><code class="language-text">main.pep:4:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make&lt;T&gt;(...)
     4 |     var b = make();
       |             ^~~~
@@ -5889,6 +5891,41 @@ it is not thread-safe (<code>'String' is not declared [Shared]</code>). In a
 constraint, <code>Shared</code> always means this built-in, so a trait cannot be
 named <code>Shared</code>. A generic that passes its own <code>T</code> to one of these (say
 <code>run_blocking&lt;T&gt;</code>) needs <code>T: Shared</code> too.</p>
+<p>A constraint can name another type parameter of the same declaration:
+<code>count_all&lt;T, I: Iterator&lt;T&gt;&gt;(source: I)</code>. Inference reads it too: the
+argument gives <code>I</code>, and the <code>Iterator&lt;...&gt;</code> that <code>I</code> declares gives <code>T</code>. A
+trait’s default method may name the trait’s own parameters
+(<code>put_all&lt;I: Iterator&lt;T&gt;&gt;</code> in <code>trait Sink&lt;T&gt;</code>), which take the arguments of
+the conformance (<code>extend Sum with Sink&lt;int&gt;</code>).</p>
+<pre><code class="language-pepper"># `I`'s constraint names `T`: the argument's type gives `I`, and the
+# `Iterator&lt;T&gt;` it declares gives `T`.
+count_all&lt;T, I: Iterator&lt;T&gt;&gt;(source: I): int {
+    var count = 0;
+    while (source.next()) {
+        count += 1;
+    }
+    return count;
+}
+
+first&lt;T, I: Iterator&lt;T&gt;&gt;(source: I): T {
+    source.next();
+    return source.current();
+}
+
+main(): int {
+    var words = Array&lt;String&gt;();
+    words.append("pepper");
+    words.append("salt");
+
+    # Both inferred: I = ArrayIterator&lt;String&gt;, T = String.
+    assert(count_all(words.iterate()) == 2, "count");
+    assert(first(words.iterate()) == "pepper", "first");
+
+    # Written type arguments may stop early; the rest are inferred.
+    assert(count_all&lt;String&gt;(words.iterate()) == 2, "partial");
+    return 0;
+}
+</code></pre>
 <p>The compiler checks every use: a type argument you write, one it infers from
 a call, a default, and a
 <a href="#overriding-a-generic-function-for-one-type">concrete override</a>. The error
