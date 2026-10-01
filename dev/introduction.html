@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d715f80b.js";
+            window.path_to_searchindex_js = "searchindex-b178e930.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f75ba97a.js"></script>
@@ -251,9 +251,8 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 <li>Free functions, methods, operators, constructors, extension methods and
 trait members can be <a href="language/overloading.html">overloaded</a>.</li>
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
-wherever the generic is used; the body of a generic is not yet checked
-against its constraints (see
-<a href="language/generics.html#constraints">constraints</a>).</li>
+wherever the generic is used and, inside the generic, against what the
+traits declare (see <a href="language/generics.html#constraints">constraints</a>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>

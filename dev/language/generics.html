@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d715f80b.js";
+            window.path_to_searchindex_js = "../searchindex-b178e930.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f75ba97a.js"></script>
@@ -515,12 +515,88 @@ and the error lists why.</li>
 argument: <code>describe&lt;Point: Shape&gt;</code> declares a generic function whose
 parameter happens to be named <code>Point</code>.</li>
 </ul>
-<blockquote>
-<p><strong>Note:</strong> For now a constraint is checked where the generic is used, not
-inside it. The body of <code>total_area&lt;T: Shape&gt;</code> is still compiled for each
-type argument, so it may call methods that <code>Shape</code> does not declare, and a
-mistake there is reported when a use compiles it.</p>
-</blockquote>
+<h3 id="inside-a-constrained-generic"><a class="header" href="#inside-a-constrained-generic">Inside a constrained generic</a></h3>
+<p>The compiler also checks the generic itself, once, whether or not anything
+uses it: inside <code>largest&lt;T: Shape &amp; Ordered&gt;</code>, a value of type <code>T</code> offers
+exactly what <code>Shape</code> and <code>Ordered</code> declare. It may:</p>
+<ul>
+<li>call their instance methods and operators (<code>item.area()</code>, <code>best &lt; item</code>),</li>
+<li>call their static members through the parameter (<code>T.unit()</code>),</li>
+<li>convert to one of their trait types (<code>var shape: Shape = item;</code>),</li>
+<li>be stored, passed, returned, and compared with <code>==</code>, <code>!=</code>, <code>===</code> and <code>!==</code>.</li>
+</ul>
+<pre><code class="language-pepper">trait Shape {
+    area(): int;
+    scaled(by: int): this;
+    static unit(): this;
+}
+
+trait Ordered {
+    &lt;(other: this): bool;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+    area(): int { return side * side; }
+    scaled(by: int): Square { return Square(side * by); }
+    static unit(): Square { return Square(1); }
+    &lt;(other: Square): bool { return side &lt; other.side; }
+}
+
+extend Square with Shape {}
+extend Square with Ordered {}
+
+# Inside the body, a T offers what Shape and Ordered declare.
+largest&lt;T: Shape &amp; Ordered&gt;(items: Array&lt;T&gt;): T {
+    var best = items[0];
+    for (var item in items) {
+        if (best &lt; item) {
+            best = item;
+        }
+    }
+    return best;
+}
+
+# Static members are called through the parameter.
+unit_area&lt;T: Shape&gt;(): int { return T.unit().area(); }
+
+# A T converts to the trait types of its constraints.
+as_shape&lt;T: Shape&gt;(item: T): Shape {
+    var shape: Shape = item.scaled(2);
+    return shape;
+}
+
+main(): int {
+    var squares = Array&lt;Square&gt;();
+    squares.append(Square(2));
+    squares.append(Square(3));
+    assert(largest(squares).side == 3, "largest");
+    assert(unit_area&lt;Square&gt;() == 1, "static member");
+    assert(as_shape(Square(3)).area() == 36, "conversion");
+    return 0;
+}
+</code></pre>
+<p>Anything else is an error at the member or operator, even before any use:
+a field, a method no constraint declares, a constructor <code>T()</code>, a call of a
+constraint’s method with the wrong number or types of arguments, or
+initializing, assigning or returning a <code>T</code> as another type. (Passing a <code>T</code>
+to a function that takes another type is still reported in each
+specialization.)</p>
+<pre><code class="language-text">main.pep:5:45: error: no member named 'perimeter' in 'T'
+    5 | total&lt;T: Shape&gt;(item: T): int { return item.perimeter(); }
+      |                                             ^~~~~~~~~
+main.pep:5:10: note: 'T' is constrained by 'Shape', which has no member 'perimeter'
+    5 | total&lt;T: Shape&gt;(item: T): int { return item.perimeter(); }
+      |          ^~~~~
+</code></pre>
+<p>A method that two constraints both declare is an error too
+(<code>'name' is declared by both 'Named' and 'Titled'; call it through one of them</code>).</p>
+<p>Each use is still compiled for its type argument, so a call goes straight
+to that type’s own method, with no trait value in between. A parameter
+without a constraint keeps working as before: its uses are checked in each
+specialization. In a list that mixes the two, such as <code>f&lt;T: Shape, U&gt;</code>, only
+the uses of <code>T</code> are checked in the generic.</p>
 <h2 id="overriding-a-generic-function-for-one-type"><a class="header" href="#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a></h2>
 <p>You can give a generic function a separate definition for a specific type
 argument. Write the concrete type where the type parameter would go:</p>
