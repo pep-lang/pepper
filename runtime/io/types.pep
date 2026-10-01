@@ -39,8 +39,8 @@ export type SocketHandle = int;
 ## `GetLastError()` instead.
 ##
 ## The numbers differ between platforms (and a few between Linux and
-## macOS), so portable code classifies an error with the `IoError`
-## predicates (`is_not_found()`, ...) rather than comparing codes.
+## macOS), so portable code classifies an error with `IoError.kind()` or
+## its predicates (`is_not_found()`, ...) rather than comparing codes.
 ##
 ## @see IoError
 [Target(!OS(Windows))]
@@ -89,8 +89,8 @@ export type SocketHandle = ulong;
 ## (2). On POSIX this is an `errno` value instead.
 ##
 ## The numbers differ between platforms, so portable code classifies an
-## error with the `IoError` predicates (`is_not_found()`, ...) rather than
-## comparing codes.
+## error with `IoError.kind()` or its predicates (`is_not_found()`, ...)
+## rather than comparing codes.
 ##
 ## @see IoError
 [Target(OS(Windows))]
@@ -111,19 +111,75 @@ export type Mode = uint;
 ## everywhere.
 export type Offset = long;
 
+## The portable kind of an `IoError`, as `IoError.kind()` returns it: the
+## platform's error code sorted into the cases a program usually handles.
+##
+## Each case except `Other` has a matching `IoError` predicate
+## (`NotFound` and `is_not_found()`, ...), whose documentation lists the
+## codes it covers on each platform. A code that fits none of them, such as
+## the `EIO` of a short write or the `EBADF` of a closed `File`, is `Other`.
+##
+## @example
+##     import io;
+##
+##     var r = io.File.open(io.Path("settings.txt"));
+##     if (r.is_err()) {
+##         match (r.error().kind()) {
+##             NotFound => { print("no settings file"); }
+##             PermissionDenied => { print("settings file is not readable"); }
+##             else => { print(r.error().message); }
+##         }
+##     }
+## @see IoError.kind
+export enum ErrorKind {
+    ## The file, directory or host name does not exist (`is_not_found()`).
+    NotFound,
+    ## Access was denied (`is_permission_denied()`).
+    PermissionDenied,
+    ## The target already exists (`is_already_exists()`).
+    AlreadyExists,
+    ## A directory was expected but something else was found
+    ## (`is_not_a_directory()`).
+    NotADirectory,
+    ## A file was expected but a directory was found (`is_is_a_directory()`).
+    IsADirectory,
+    ## A directory to remove still has entries (`is_directory_not_empty()`).
+    DirectoryNotEmpty,
+    ## An argument or the data was invalid (`is_invalid_input()`).
+    InvalidInput,
+    ## The operation was interrupted before it finished (`is_interrupted()`).
+    Interrupted,
+    ## Nothing accepted the connection (`is_connection_refused()`).
+    ConnectionRefused,
+    ## The peer reset, aborted or closed the connection
+    ## (`is_connection_reset()`).
+    ConnectionReset,
+    ## Another socket already uses the address (`is_address_in_use()`).
+    AddressInUse,
+    ## The address cannot be used on this machine
+    ## (`is_address_not_available()`).
+    AddressNotAvailable,
+    ## The operation timed out (`is_timed_out()`).
+    TimedOut,
+    ## Cancelling the task ended the operation (`is_cancelled()`).
+    Cancelled,
+    ## Any other code, including 0 (no error).
+    Other,
+}
+
 ## An I/O failure: the raw platform error code plus a human-readable
 ## message.
 ##
-## There are no enums, so the kind of error is a set of predicates over the
-## code (`is_not_found()`, `is_permission_denied()`, ...), each of which
-## knows the matching codes on the current platform. Test with those rather
-## than comparing `code` against numbers. Failures that Pepper detects
+## `kind()` sorts the code into an `ErrorKind`, and a predicate per kind
+## (`is_not_found()`, `is_permission_denied()`, ...) tests for one of them;
+## each knows the matching codes on the current platform. Test with those
+## rather than comparing `code` against numbers. Failures that Pepper detects
 ## itself (invalid UTF-8, an empty path, a short write, a closed `File`)
 ## use the platform's own code for the kind they are (`EINVAL` /
 ## `ERROR_INVALID_PARAMETER` for invalid input, `ENOENT` /
-## `ERROR_FILE_NOT_FOUND` for an empty path, ...), so the predicates hold
+## `ERROR_FILE_NOT_FOUND` for an empty path, ...), so the kinds hold
 ## for them too. A short write uses `EIO` / `ERROR_WRITE_FAULT` and a closed
-## `File` uses `EBADF` / `ERROR_INVALID_HANDLE`; no predicate matches those.
+## `File` uses `EBADF` / `ERROR_INVALID_HANDLE`; those are `ErrorKind.Other`.
 ##
 ## @example
 ##     import io;
@@ -137,6 +193,7 @@ export type Offset = long;
 ##         }
 ##     }
 ## @see IoResult
+## @see ErrorKind
 export struct IoError {
     ## The raw platform error code: an `errno` value on POSIX, a
     ## `GetLastError()` code on Windows; 0 means no error.
@@ -174,6 +231,21 @@ export struct IoError {
         return IoError(code, _io_sys_error_message(code));
     }
 
+    ## Returns the portable kind of the error: `code` sorted by the codes the
+    ## current platform uses for each kind. Each predicate below is
+    ## `kind() == ErrorKind.X` for its kind.
+    ##
+    ## @returns the kind of `code`; `ErrorKind.Other` for a code that fits no
+    ##   kind, and for 0
+    ## @example
+    ##     import io;
+    ##
+    ##     var r = io.File.open(io.Path("missing.txt"));
+    ##     if (r.is_err() && r.error().kind() == io.ErrorKind.NotFound) {
+    ##         print("no such file");
+    ##     }
+    kind(): ErrorKind { return _io_sys_error_kind(code); }
+
     ## Returns whether the error means the file or directory does not exist.
     ##
     ## Matches `ENOENT` on POSIX, and `ERROR_FILE_NOT_FOUND` or
@@ -186,7 +258,7 @@ export struct IoError {
     ##
     ## @returns true when a path, or a directory on the way to it, is missing,
     ##   or a host name has no address
-    is_not_found(): bool { return _io_sys_is_not_found(code); }
+    is_not_found(): bool { return kind() == ErrorKind.NotFound; }
 
     ## Returns whether the operation was refused for lack of permission.
     ##
@@ -195,7 +267,7 @@ export struct IoError {
     ## read-only file).
     ##
     ## @returns true when access was denied
-    is_permission_denied(): bool { return _io_sys_is_permission_denied(code); }
+    is_permission_denied(): bool { return kind() == ErrorKind.PermissionDenied; }
 
     ## Returns whether the operation failed because its target already
     ## exists, such as `Directory.create` on an existing path or opening with
@@ -205,7 +277,7 @@ export struct IoError {
     ## `ERROR_ALREADY_EXISTS` on Windows.
     ##
     ## @returns true when the target already exists
-    is_already_exists(): bool { return _io_sys_is_already_exists(code); }
+    is_already_exists(): bool { return kind() == ErrorKind.AlreadyExists; }
 
     ## Returns whether a path that had to name a directory names something
     ## else, such as `Directory.open` or `Directory.remove` on a file (or,
@@ -215,7 +287,7 @@ export struct IoError {
     ## name is invalid") on Windows.
     ##
     ## @returns true when a directory was expected
-    is_not_a_directory(): bool { return _io_sys_is_not_a_directory(code); }
+    is_not_a_directory(): bool { return kind() == ErrorKind.NotADirectory; }
 
     ## Returns whether an operation that needs a file was given a directory,
     ## such as reading from a directory opened as a `File`.
@@ -224,7 +296,7 @@ export struct IoError {
     ## Windows (which `File` reads report for a directory handle).
     ##
     ## @returns true when a directory was given where a file was expected
-    is_is_a_directory(): bool { return _io_sys_is_is_a_directory(code); }
+    is_is_a_directory(): bool { return kind() == ErrorKind.IsADirectory; }
 
     ## Returns whether a directory could not be removed because it still has
     ## entries (`Directory.remove` on a non-empty directory).
@@ -233,7 +305,7 @@ export struct IoError {
     ## `ERROR_DIR_NOT_EMPTY` on Windows.
     ##
     ## @returns true when the directory is not empty
-    is_directory_not_empty(): bool { return _io_sys_is_directory_not_empty(code); }
+    is_directory_not_empty(): bool { return kind() == ErrorKind.DirectoryNotEmpty; }
 
     ## Returns whether an argument was invalid: bad options (such as opening
     ## with no access mode), data that is not valid UTF-8 where text was
@@ -243,16 +315,17 @@ export struct IoError {
     ## `ERROR_INVALID_NAME` on Windows.
     ##
     ## @returns true when the input was invalid
-    is_invalid_input(): bool { return _io_sys_is_invalid_input(code); }
+    is_invalid_input(): bool { return kind() == ErrorKind.InvalidInput; }
 
     ## Returns whether the operation was interrupted before it finished.
     ##
-    ## Matches `EINTR` on POSIX and `ERROR_OPERATION_ABORTED` on Windows.
-    ## The io functions retry interrupted POSIX opens, reads and writes
+    ## Matches `EINTR` on POSIX and `WSAEINTR` on Windows. An aborted
+    ## Windows operation (`ERROR_OPERATION_ABORTED`) is `is_cancelled()`
+    ## instead. The io functions retry interrupted POSIX opens, reads and writes
     ## themselves, so callers rarely see this.
     ##
     ## @returns true when the operation was interrupted
-    is_interrupted(): bool { return _io_sys_is_interrupted(code); }
+    is_interrupted(): bool { return kind() == ErrorKind.Interrupted; }
 
     ## Returns whether a connection attempt was refused: nothing listens on
     ## that port (the peer answered with a reset).
@@ -260,7 +333,7 @@ export struct IoError {
     ## Matches `ECONNREFUSED` on POSIX and `WSAECONNREFUSED` on Windows.
     ##
     ## @returns true when the connection was refused
-    is_connection_refused(): bool { return _io_sys_is_connection_refused(code); }
+    is_connection_refused(): bool { return kind() == ErrorKind.ConnectionRefused; }
 
     ## Returns whether an established connection was broken by the peer:
     ## reset, aborted, or (when writing) already closed.
@@ -269,7 +342,7 @@ export struct IoError {
     ## `WSAECONNRESET` or `WSAECONNABORTED` on Windows.
     ##
     ## @returns true when the connection was reset or closed by the peer
-    is_connection_reset(): bool { return _io_sys_is_connection_reset(code); }
+    is_connection_reset(): bool { return kind() == ErrorKind.ConnectionReset; }
 
     ## Returns whether binding failed because another socket already uses
     ## the address and port.
@@ -277,7 +350,7 @@ export struct IoError {
     ## Matches `EADDRINUSE` on POSIX and `WSAEADDRINUSE` on Windows.
     ##
     ## @returns true when the address is in use
-    is_address_in_use(): bool { return _io_sys_is_address_in_use(code); }
+    is_address_in_use(): bool { return kind() == ErrorKind.AddressInUse; }
 
     ## Returns whether an address cannot be used here: binding to an IP
     ## address that is not one of this machine's, or connecting to port 0.
@@ -285,7 +358,7 @@ export struct IoError {
     ## Matches `EADDRNOTAVAIL` on POSIX and `WSAEADDRNOTAVAIL` on Windows.
     ##
     ## @returns true when the address is not available
-    is_address_not_available(): bool { return _io_sys_is_address_not_available(code); }
+    is_address_not_available(): bool { return kind() == ErrorKind.AddressNotAvailable; }
 
     ## Returns whether an operation gave up because the peer did not answer
     ## in time, such as a connection attempt to an unreachable host, or
@@ -294,7 +367,7 @@ export struct IoError {
     ## Matches `ETIMEDOUT` on POSIX and `WSAETIMEDOUT` on Windows.
     ##
     ## @returns true when the operation timed out
-    is_timed_out(): bool { return _io_sys_is_timed_out(code); }
+    is_timed_out(): bool { return kind() == ErrorKind.TimedOut; }
 
     ## Returns whether an operation stopped because the task waiting for it
     ## was cancelled (see `async.Task.cancel`).
@@ -303,7 +376,7 @@ export struct IoError {
     ## `ERROR_CANCELLED` on Windows.
     ##
     ## @returns true when cancellation ended the operation
-    is_cancelled(): bool { return _io_sys_is_cancelled(code); }
+    is_cancelled(): bool { return kind() == ErrorKind.Cancelled; }
 }
 
 ## The result of an io operation: a value on success, an `IoError` on

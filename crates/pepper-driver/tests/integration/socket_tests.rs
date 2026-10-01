@@ -177,8 +177,8 @@ exchange() {
     assert(server.local_address().value() == local, "the server side is on the listener's address");
     assert(client.set_no_delay(true).is_ok(), "no delay");
 
-    # write_string / read_exact, then write / read appending
-    assert(client.write_string("hello").is_ok(), "write_string");
+    # write_all(String) / read_exact, then write / read appending
+    assert(client.write_all("hello").is_ok(), "write_all(String)");
     var buffer = Array<u8>();
     assert(server.read_exact(buffer, 5).is_ok(), "read_exact");
     assert(bytes_equal(buffer, "hello"), "read what was written");
@@ -209,7 +209,7 @@ exchange() {
     assert(received == big, "big transfer intact");
 
     # shutdown_write: the peer reads what was sent, then 0.
-    client.write_string("bye");
+    client.write_all("bye");
     assert(client.shutdown_write().is_ok(), "shutdown_write");
     var tail = Array<u8>();
     assert(server.read_exact(tail, 3).is_ok(), "read before end");
@@ -218,7 +218,7 @@ exchange() {
     assert(short.is_err(), "read_exact past the end");
     assert(short.error().message == "connection closed after 0 of 1 bytes", "short read message");
     # The client can still read after shutting down its sending side.
-    server.write_string("late");
+    server.write_all("late");
     var late = Array<u8>();
     assert(client.read_exact(late, 4).is_ok(), "read after shutdown_write");
 
@@ -226,7 +226,7 @@ exchange() {
     assert(server.close().is_ok(), "close");
     assert(!server.is_open(), "closed");
     assert(server.close().is_ok(), "close twice");
-    assert(server.write_string("x").is_err(), "write on closed");
+    assert(server.write_all("x").is_err(), "write on closed");
     assert(server.read(tail, 1).is_err(), "read on closed");
     assert(server.peer_address().is_err(), "peer_address on closed");
     assert(client.read(late, 10).value() == 0, "peer closed");
@@ -281,7 +281,7 @@ ipv6() {
     var client = io.TcpStream.connect(local).value();
     var (server, peer) = listener.accept().value();
     assert(peer.is_v6(), "v6 peer");
-    client.write_string("six");
+    client.write_all("six");
     var buffer = Array<u8>();
     assert(server.read_exact(buffer, 3).is_ok(), "v6 read");
     assert(bytes_equal(buffer, "six"), "v6 data");
@@ -400,7 +400,7 @@ main(): int {
         }
         total = total + n;
     }
-    server.write_string("ok");
+    server.write_all("ok");
     client.join();
     assert(total == 4194304 && sent.load() == 4194304, "every byte arrived");
     assert(errors == 0, "in order");
@@ -430,13 +430,13 @@ main(): int {
 
     var client = io.UnixStream.connect(path).value();
     var server = listener.accept().value();
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     client.shutdown_write();
     var request = Array<u8>();
     while (server.read(request, 4096).value() > 0) {
     }
     assert(request.count() == 4, "the whole request arrived");
-    assert(server.write_string("pong").is_ok(), "send the reply");
+    assert(server.write_all("pong").is_ok(), "send the reply");
     var reply = Array<u8>();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' && reply[3] == 'g', "the reply is pong");
@@ -487,7 +487,7 @@ main(): int {
                 var stream = io.UnixStream.connect(socket_path()).value();
                 var round = 0;
                 while (round < 100) {
-                    stream.write_string("0123456789");
+                    stream.write_all("0123456789");
                     var got = Array<u8>();
                     if (stream.read_exact(got, 10).is_err()) {
                         return false;

@@ -44,7 +44,7 @@ closed listener fails with an error no `IoError` predicate identifies
     print(listener.local_address().value().to_string());   # 127.0.0.1:<port>
     while (true) {
         var (stream, peer) = listener.accept().value();
-        stream.write_string("hello " + peer.to_string());
+        stream.write_all("hello " + peer.to_string());
     }
 ```
 
@@ -158,7 +158,7 @@ them (`accept` then fails and the loop returns).
                         return;
                     }
                     var (stream, peer) = accepted.value();
-                    stream.write_string("hello");
+                    stream.write_all("hello");
                 }
             });
         });
@@ -256,7 +256,7 @@ closed stream fails with an error no `IoError` predicate identifies
     import io;
 
     var stream = io.TcpStream.connect_host("example.com", 80).value();
-    stream.write_string("HEAD / HTTP/1.0\r\n\r\n");
+    stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
     var reply = Array<u8>();
     while (stream.read(reply, 4096).value() > 0) {
     }
@@ -414,20 +414,43 @@ If an error occurs part of `data` may already have been sent.
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
 
-#### write_string
+#### write_all
 
 ```pepper
-write_string(text: String): IoResult<void>
+write_all(text: String): IoResult<void>
 ```
 
-Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
-newline or terminator is added.
+Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+No newline or terminator is added.
 
 **Parameters**
 - `text` — the text to send
 
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
+
+**Example**
+```pepper
+    stream.write_all("ping");
+```
+
+#### write_string
+
+```pepper
+[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult<void>
+```
+
+Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+`text`, exactly like `write_all(text)`.
+
+**Parameters**
+- `text` — the text to send
+
+**Returns**
+- an Ok result once every byte is sent; an error as for `write_all`
+
+**See also**
+- `write_all`
 
 #### shutdown_write
 
@@ -508,7 +531,7 @@ one started with `async.spawn`.
         var transfer = stream.into_transfer();
         async.spawn<void>(() => {
             var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_string("hello from another worker");
+            mine.write_all("hello from another worker");
         });
     }
 ```

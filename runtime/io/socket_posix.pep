@@ -122,39 +122,6 @@ export _io_msg_nosignal(): int {
 # ── Errors ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux))]
-export _io_sys_is_connection_refused(code: ErrorCode): bool { return code == 111; }
-
-[Target(OS(Mac))]
-export _io_sys_is_connection_refused(code: ErrorCode): bool { return code == 61; }
-
-[Target(OS(Linux))]
-export _io_sys_is_connection_reset(code: ErrorCode): bool {
-    return code == 104 || code == 103 || code == 32;  # ECONNRESET, ECONNABORTED, EPIPE
-}
-
-[Target(OS(Mac))]
-export _io_sys_is_connection_reset(code: ErrorCode): bool {
-    return code == 54 || code == 53 || code == 32;  # ECONNRESET, ECONNABORTED, EPIPE
-}
-
-[Target(OS(Linux))]
-export _io_sys_is_address_in_use(code: ErrorCode): bool { return code == 98; }
-
-[Target(OS(Mac))]
-export _io_sys_is_address_in_use(code: ErrorCode): bool { return code == 48; }
-
-[Target(OS(Linux))]
-export _io_sys_is_address_not_available(code: ErrorCode): bool { return code == 99; }
-
-[Target(OS(Mac))]
-export _io_sys_is_address_not_available(code: ErrorCode): bool { return code == 49; }
-
-[Target(!OS(Windows))]
-export _io_sys_is_timed_out(code: ErrorCode): bool {
-    return code == _io_sys_code_timed_out();
-}
-
-[Target(OS(Linux))]
 export _io_sys_code_timed_out(): ErrorCode {
     return 110;
 }  # ETIMEDOUT
@@ -455,7 +422,7 @@ export _io_posix_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResul
     if (_io_posix_would_block(code)) {
         return _io_socket_wait(h, interest);
     }
-    if (_io_sys_is_interrupted(code)) {
+    if (_io_sys_error_kind(code) == ErrorKind.Interrupted) {
         return _io_ok_void();
     }
     return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));

@@ -120,51 +120,49 @@ export _io_sys_error_message(code: ErrorCode): String {
     return String(strerror(code));
 }
 
-# errno values (identical on Linux and macOS except ENOTEMPTY).
-[Target(!OS(Windows))]
-export _io_sys_is_not_found(code: ErrorCode): bool {
-    return code == _io_sys_code_not_found();
-}
-
-[Target(!OS(Windows))]
-export _io_sys_is_permission_denied(code: ErrorCode): bool {
-    return code == 13 || code == 1;  # EACCES, EPERM
-}
-
-[Target(!OS(Windows))]
-export _io_sys_is_already_exists(code: ErrorCode): bool {
-    return code == 17;
-}  # EEXIST
-
-[Target(!OS(Windows))]
-export _io_sys_is_not_a_directory(code: ErrorCode): bool {
-    return code == _io_sys_code_not_a_directory();
-}
-
-[Target(!OS(Windows))]
-export _io_sys_is_is_a_directory(code: ErrorCode): bool {
-    return code == 21;
-}  # EISDIR
-
+# The ErrorKind of an errno value. Linux and macOS share the file codes
+# except ENOTEMPTY and ECANCELED; most socket codes differ.
 [Target(OS(Linux))]
-export _io_sys_is_directory_not_empty(code: ErrorCode): bool {
-    return code == 39;
-}  # ENOTEMPTY
+export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+    return match (code) {
+        2 => ErrorKind.NotFound,                    # ENOENT
+        13, 1 => ErrorKind.PermissionDenied,        # EACCES, EPERM
+        17 => ErrorKind.AlreadyExists,              # EEXIST
+        20 => ErrorKind.NotADirectory,              # ENOTDIR
+        21 => ErrorKind.IsADirectory,               # EISDIR
+        39 => ErrorKind.DirectoryNotEmpty,          # ENOTEMPTY
+        22 => ErrorKind.InvalidInput,               # EINVAL
+        4 => ErrorKind.Interrupted,                 # EINTR
+        111 => ErrorKind.ConnectionRefused,         # ECONNREFUSED
+        104, 103, 32 => ErrorKind.ConnectionReset,  # ECONNRESET, ECONNABORTED, EPIPE
+        98 => ErrorKind.AddressInUse,               # EADDRINUSE
+        99 => ErrorKind.AddressNotAvailable,        # EADDRNOTAVAIL
+        110 => ErrorKind.TimedOut,                  # ETIMEDOUT
+        125 => ErrorKind.Cancelled,                 # ECANCELED
+        else => ErrorKind.Other,
+    };
+}
 
 [Target(OS(Mac))]
-export _io_sys_is_directory_not_empty(code: ErrorCode): bool {
-    return code == 66;
-}  # ENOTEMPTY
-
-[Target(!OS(Windows))]
-export _io_sys_is_invalid_input(code: ErrorCode): bool {
-    return code == _io_sys_code_invalid_input();
+export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+    return match (code) {
+        2 => ErrorKind.NotFound,                  # ENOENT
+        13, 1 => ErrorKind.PermissionDenied,      # EACCES, EPERM
+        17 => ErrorKind.AlreadyExists,            # EEXIST
+        20 => ErrorKind.NotADirectory,            # ENOTDIR
+        21 => ErrorKind.IsADirectory,             # EISDIR
+        66 => ErrorKind.DirectoryNotEmpty,        # ENOTEMPTY
+        22 => ErrorKind.InvalidInput,             # EINVAL
+        4 => ErrorKind.Interrupted,               # EINTR
+        61 => ErrorKind.ConnectionRefused,        # ECONNREFUSED
+        54, 53, 32 => ErrorKind.ConnectionReset,  # ECONNRESET, ECONNABORTED, EPIPE
+        48 => ErrorKind.AddressInUse,             # EADDRINUSE
+        49 => ErrorKind.AddressNotAvailable,      # EADDRNOTAVAIL
+        60 => ErrorKind.TimedOut,                 # ETIMEDOUT
+        89 => ErrorKind.Cancelled,                # ECANCELED
+        else => ErrorKind.Other,
+    };
 }
-
-[Target(!OS(Windows))]
-export _io_sys_is_interrupted(code: ErrorCode): bool {
-    return code == 4;
-}  # EINTR
 
 # Codes for errors Pepper raises itself.
 [Target(!OS(Windows))]
@@ -203,11 +201,6 @@ export _io_sys_code_cancelled(): ErrorCode {
 }  # ECANCELED
 
 [Target(!OS(Windows))]
-export _io_sys_is_cancelled(code: ErrorCode): bool {
-    return code == _io_sys_code_cancelled();
-}
-
-[Target(!OS(Windows))]
 export _io_posix_err_none(): IoResult<void> {
     return IoResult<void>.err(IoError.last());
 }
@@ -240,8 +233,12 @@ export _io_sys_handle_valid(h: FileHandle): bool {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_std_handle(which: int): FileHandle {
-    return which;  # 0, 1, 2
+export _io_sys_std_handle(stream: StdStream): FileHandle {
+    return match (stream) {
+        Input => 0,
+        Output => 1,
+        Error => 2,
+    };
 }
 
 # ── O_* flags ────────────────────────────────────────────────────────────────
@@ -522,17 +519,18 @@ export _io_stat_time(buf: __ptr<void>, offset: ulong): long {
 export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
     var m = Metadata();
     var mode = _io_read_u16(buf, _io_stat_mode_offset());
-    var kind = mode & 61440;          # S_IFMT 0170000
-    m.is_file = kind == 32768;        # S_IFREG 0100000
-    m.is_directory = kind == 16384;   # S_IFDIR 0040000
-    m.is_symlink = kind == 40960;     # S_IFLNK 0120000
+    var kind = mode & 61440;         # S_IFMT 0170000
+    m.is_file = kind == 32768;       # S_IFREG 0100000
+    m.is_directory = kind == 16384;  # S_IFDIR 0040000
+    m.is_symlink = kind == 40960;    # S_IFLNK 0120000
+    m.file_type = _io_file_type(m.is_file, m.is_directory, m.is_symlink);
     m.permissions = mode & 4095;      # 07777
     m.read_only = (mode & 146) == 0;  # no 0222 write bit
     m.size = _io_read_i64(buf, _io_stat_size_offset()) as ulong;
     m.accessed = _io_stat_time(buf, _io_stat_atime_offset());
     m.modified = _io_stat_time(buf, _io_stat_mtime_offset());
     if (_io_stat_has_btime(buf)) {
-        m.created = _io_stat_time(buf, _io_stat_btime_offset());
+        m.created = Optional<long>.some(_io_stat_time(buf, _io_stat_btime_offset()));
     }
     return m;
 }
@@ -622,11 +620,13 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
                 entry.is_file = m.value().is_file;
                 entry.is_directory = m.value().is_directory;
                 entry.is_symlink = m.value().is_symlink;
+                entry.file_type = m.value().file_type;
             }
         } else {
             entry.is_directory = kind == 4;  # DT_DIR
             entry.is_file = kind == 8;       # DT_REG
             entry.is_symlink = kind == 10;   # DT_LNK
+            entry.file_type = _io_file_type(entry.is_file, entry.is_directory, entry.is_symlink);
         }
         out.append(entry);
     }

@@ -105,31 +105,6 @@ export _io_win_socket_startup() {
 # ── Errors ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_is_connection_refused(code: ErrorCode): bool {
-    return code == 10061;  # WSAECONNREFUSED
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_connection_reset(code: ErrorCode): bool {
-    return code == 10054 || code == 10053;  # WSAECONNRESET, WSAECONNABORTED
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_address_in_use(code: ErrorCode): bool {
-    return code == 10048;  # WSAEADDRINUSE
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_address_not_available(code: ErrorCode): bool {
-    return code == 10049;  # WSAEADDRNOTAVAIL
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_timed_out(code: ErrorCode): bool {
-    return code == 10060;  # WSAETIMEDOUT
-}
-
-[Target(OS(Windows))]
 export _io_sys_code_timed_out(): ErrorCode { return 10060; }
 
 # Code for a stream that ended before the bytes asked for: ERROR_HANDLE_EOF.

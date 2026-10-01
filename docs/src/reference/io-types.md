@@ -51,8 +51,8 @@ value such as `ENOENT` (2). On Windows this is a `DWORD` from
 `GetLastError()` instead.
 
 The numbers differ between platforms (and a few between Linux and
-macOS), so portable code classifies an error with the `IoError`
-predicates (`is_not_found()`, ...) rather than comparing codes.
+macOS), so portable code classifies an error with `IoError.kind()` or
+its predicates (`is_not_found()`, ...) rather than comparing codes.
 
 **See also**
 - `IoError`
@@ -121,8 +121,8 @@ The raw platform error code carried by `IoError.code`: a Windows
 (2). On POSIX this is an `errno` value instead.
 
 The numbers differ between platforms, so portable code classifies an
-error with the `IoError` predicates (`is_not_found()`, ...) rather than
-comparing codes.
+error with `IoError.kind()` or its predicates (`is_not_found()`, ...)
+rather than comparing codes.
 
 **See also**
 - `IoError`
@@ -152,6 +152,162 @@ A byte position or distance within a file, as taken and returned by the
 POSIX, `LARGE_INTEGER` on Windows), so files larger than 4 GiB work
 everywhere.
 
+## ErrorKind
+
+```pepper
+enum ErrorKind
+```
+
+The portable kind of an `IoError`, as `IoError.kind()` returns it: the
+platform's error code sorted into the cases a program usually handles.
+
+Each case except `Other` has a matching `IoError` predicate
+(`NotFound` and `is_not_found()`, ...), whose documentation lists the
+codes it covers on each platform. A code that fits none of them, such as
+the `EIO` of a short write or the `EBADF` of a closed `File`, is `Other`.
+
+**See also**
+- `IoError.kind`
+
+**Example**
+```pepper
+    import io;
+
+    var r = io.File.open(io.Path("settings.txt"));
+    if (r.is_err()) {
+        match (r.error().kind()) {
+            NotFound => { print("no settings file"); }
+            PermissionDenied => { print("settings file is not readable"); }
+            else => { print(r.error().message); }
+        }
+    }
+```
+
+### Cases
+
+#### NotFound
+
+```pepper
+NotFound
+```
+
+The file, directory or host name does not exist (`is_not_found()`).
+
+#### PermissionDenied
+
+```pepper
+PermissionDenied
+```
+
+Access was denied (`is_permission_denied()`).
+
+#### AlreadyExists
+
+```pepper
+AlreadyExists
+```
+
+The target already exists (`is_already_exists()`).
+
+#### NotADirectory
+
+```pepper
+NotADirectory
+```
+
+A directory was expected but something else was found
+(`is_not_a_directory()`).
+
+#### IsADirectory
+
+```pepper
+IsADirectory
+```
+
+A file was expected but a directory was found (`is_is_a_directory()`).
+
+#### DirectoryNotEmpty
+
+```pepper
+DirectoryNotEmpty
+```
+
+A directory to remove still has entries (`is_directory_not_empty()`).
+
+#### InvalidInput
+
+```pepper
+InvalidInput
+```
+
+An argument or the data was invalid (`is_invalid_input()`).
+
+#### Interrupted
+
+```pepper
+Interrupted
+```
+
+The operation was interrupted before it finished (`is_interrupted()`).
+
+#### ConnectionRefused
+
+```pepper
+ConnectionRefused
+```
+
+Nothing accepted the connection (`is_connection_refused()`).
+
+#### ConnectionReset
+
+```pepper
+ConnectionReset
+```
+
+The peer reset, aborted or closed the connection
+(`is_connection_reset()`).
+
+#### AddressInUse
+
+```pepper
+AddressInUse
+```
+
+Another socket already uses the address (`is_address_in_use()`).
+
+#### AddressNotAvailable
+
+```pepper
+AddressNotAvailable
+```
+
+The address cannot be used on this machine
+(`is_address_not_available()`).
+
+#### TimedOut
+
+```pepper
+TimedOut
+```
+
+The operation timed out (`is_timed_out()`).
+
+#### Cancelled
+
+```pepper
+Cancelled
+```
+
+Cancelling the task ended the operation (`is_cancelled()`).
+
+#### Other
+
+```pepper
+Other
+```
+
+Any other code, including 0 (no error).
+
 ## IoError
 
 ```pepper
@@ -161,19 +317,20 @@ struct IoError
 An I/O failure: the raw platform error code plus a human-readable
 message.
 
-There are no enums, so the kind of error is a set of predicates over the
-code (`is_not_found()`, `is_permission_denied()`, ...), each of which
-knows the matching codes on the current platform. Test with those rather
-than comparing `code` against numbers. Failures that Pepper detects
+`kind()` sorts the code into an `ErrorKind`, and a predicate per kind
+(`is_not_found()`, `is_permission_denied()`, ...) tests for one of them;
+each knows the matching codes on the current platform. Test with those
+rather than comparing `code` against numbers. Failures that Pepper detects
 itself (invalid UTF-8, an empty path, a short write, a closed `File`)
 use the platform's own code for the kind they are (`EINVAL` /
 `ERROR_INVALID_PARAMETER` for invalid input, `ENOENT` /
-`ERROR_FILE_NOT_FOUND` for an empty path, ...), so the predicates hold
+`ERROR_FILE_NOT_FOUND` for an empty path, ...), so the kinds hold
 for them too. A short write uses `EIO` / `ERROR_WRITE_FAULT` and a closed
-`File` uses `EBADF` / `ERROR_INVALID_HANDLE`; no predicate matches those.
+`File` uses `EBADF` / `ERROR_INVALID_HANDLE`; those are `ErrorKind.Other`.
 
 **See also**
 - `IoResult`
+- `ErrorKind`
 
 **Example**
 ```pepper
@@ -247,6 +404,29 @@ between (including one that allocates) may overwrite the code.
 - an error holding the current `errno` / `GetLastError()` code and its message
 
 ### Methods
+
+#### kind
+
+```pepper
+kind(): ErrorKind
+```
+
+Returns the portable kind of the error: `code` sorted by the codes the
+current platform uses for each kind. Each predicate below is
+`kind() == ErrorKind.X` for its kind.
+
+**Returns**
+- the kind of `code`; `ErrorKind.Other` for a code that fits no kind, and for 0
+
+**Example**
+```pepper
+    import io;
+
+    var r = io.File.open(io.Path("missing.txt"));
+    if (r.is_err() && r.error().kind() == io.ErrorKind.NotFound) {
+        print("no such file");
+    }
+```
 
 #### is_not_found
 
@@ -368,8 +548,9 @@ is_interrupted(): bool
 
 Returns whether the operation was interrupted before it finished.
 
-Matches `EINTR` on POSIX and `ERROR_OPERATION_ABORTED` on Windows.
-The io functions retry interrupted POSIX opens, reads and writes
+Matches `EINTR` on POSIX and `WSAEINTR` on Windows. An aborted
+Windows operation (`ERROR_OPERATION_ABORTED`) is `is_cancelled()`
+instead. The io functions retry interrupted POSIX opens, reads and writes
 themselves, so callers rarely see this.
 
 **Returns**

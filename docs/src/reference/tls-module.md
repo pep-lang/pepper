@@ -22,7 +22,7 @@ connector or acceptor is made; on Windows it uses SChannel.
     main(): int {
         var connector = tls.TlsConnector.create().value();
         var stream = connector.connect_host("localhost", 8443).value();
-        stream.write_string("ping");
+        stream.write_all("ping");
         var reply = Array<u8>();
         while (stream.read(reply, 4096).value() > 0) {
         }

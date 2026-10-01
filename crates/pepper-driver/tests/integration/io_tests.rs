@@ -529,6 +529,120 @@ fn file_system_round_trips() {
     assert!(!std::env::temp_dir().join(&scratch).exists(), "scratch directory left behind");
 }
 
+/// The enums of the io API: `ErrorKind` from `IoError.kind()`, `SeekFrom`,
+/// `FileType` on `Metadata` and `DirEntry`, `StdStream`, and the optional
+/// `Metadata.created`.
+fn enums_program(scratch: &str) -> String {
+    r##"
+import [File, Directory, DirEntry, Path, IoError, ErrorKind, SeekFrom, FileType, StdStream, Metadata] from io;
+
+# Windows and macOS always report a creation time.
+[Target(!OS(Linux))]
+check_created(m: Metadata) {
+    assert(m.created.is_some(), "created is reported");
+    assert(m.created.value() > 0, "created is after 1970");
+}
+
+# Linux reports one only when the file system records it.
+[Target(OS(Linux))]
+check_created(m: Metadata) {
+    if (m.created) {
+        assert(m.created.value() > 0, "created is after 1970");
+    }
+}
+
+kind_name(e: IoError): String {
+    return match (e.kind()) {
+        NotFound => "not found",
+        AlreadyExists => "exists",
+        else => "other",
+    };
+}
+
+main(): int {
+    var base = Directory.temp().join("SCRATCH");
+    Directory.remove_all(base);
+    assert(Directory.create_all(base).is_ok(), "create scratch");
+
+    # ErrorKind agrees with the predicates.
+    var missing = File.open(base.join("missing.txt"));
+    assert(missing.is_err(), "missing file");
+    assert(missing.error().kind() == ErrorKind.NotFound, "missing is NotFound");
+    assert(missing.error().is_not_found(), "is_not_found");
+    assert(!missing.error().is_permission_denied(), "not permission denied");
+    assert(kind_name(missing.error()) == "not found", "match on the kind");
+    var again = Directory.create(base);
+    assert(again.error().kind() == ErrorKind.AlreadyExists && again.error().is_already_exists(), "AlreadyExists");
+    assert(kind_name(again.error()) == "exists", "match AlreadyExists");
+    assert(IoError().kind() == ErrorKind.Other, "code 0 is Other");
+    assert(ErrorKind.TimedOut.name() == "TimedOut", "case names");
+
+    # SeekFrom.
+    var path = base.join("data.bin");
+    assert(File.write_text(path, "0123456789").is_ok(), "write data");
+    var f = File.open(path).value();
+    assert(f.seek(SeekFrom.End(0)).value() == 10, "End(0) is the length");
+    assert(f.seek(SeekFrom.Start(4)).value() == 4, "Start(4)");
+    assert(f.seek(SeekFrom.Current(-2)).value() == 2, "Current(-2)");
+    assert(f.seek(SeekFrom.End(-3)).value() == 7, "End(-3)");
+    var buf = Array<u8>();
+    assert(f.read(buf, 1).value() == 1 && buf[0] == 55, "read at 7");
+    assert(f.seek(SeekFrom.Current(0)).value() == 8, "position after the read");
+    assert(f.seek(SeekFrom.Start(-1)).is_err(), "before the start");
+    f.close();
+    assert(f.seek(SeekFrom.Start(0)).is_err(), "seek on a closed File");
+
+    # FileType on Metadata and DirEntry.
+    var fm = path.metadata().value();
+    assert(fm.file_type == FileType.File && fm.is_file, "file metadata");
+    check_created(fm);
+    var dm = base.metadata().value();
+    assert(dm.file_type == FileType.Directory && dm.is_directory, "directory metadata");
+    check_created(dm);
+    var opened = File.open(path).value();
+    var om = opened.metadata().value();
+    assert(om.file_type == FileType.File, "fstat file type");
+    assert(om.created.is_some() == fm.created.is_some(), "stat and fstat agree on created");
+    opened.close();
+    assert(Metadata().file_type == FileType.Other && Metadata().created.is_none(), "default Metadata");
+    assert(DirEntry().file_type == FileType.Other, "default DirEntry");
+
+    assert(Directory.create(base.join("sub")).is_ok(), "create sub");
+    var list = Directory.open(base).value().entries().value();
+    var files = 0;
+    var dirs = 0;
+    for (var e in list) {
+        if (e.name == "data.bin") {
+            assert(e.file_type == FileType.File && e.is_file, "entry is a file");
+            files = files + 1;
+        }
+        if (e.name == "sub") {
+            assert(e.file_type == FileType.Directory && e.is_directory, "entry is a directory");
+            dirs = dirs + 1;
+        }
+    }
+    assert(files == 1 && dirs == 1, "both entries listed");
+
+    # StdStream.
+    var err = File.std_file(StdStream.Error, "<err>");
+    assert(err.is_open() && err.path.to_string() == "<err>", "std_file(StdStream)");
+
+    assert(Directory.remove_all(base).is_ok(), "clean up");
+    print("io-enums-ok");
+    return 0;
+}
+"##
+    .replace("SCRATCH", scratch)
+}
+
+#[test]
+fn io_enums() {
+    let scratch = scratch_name("enums");
+    let out = assert_runs("enums", &enums_program(&scratch));
+    assert!(out.contains("io-enums-ok"), "output: {out}");
+    assert!(!std::env::temp_dir().join(&scratch).exists(), "scratch directory left behind");
+}
+
 /// A File's destructor closes its handle, and a loop of opens never runs out
 /// of handles.
 fn close_program(scratch: &str) -> String {
@@ -664,6 +778,7 @@ fn all_programs() -> Vec<(&'static str, String)> {
         ("fs", fs_program("x")),
         ("stdout", STDOUT_PROGRAM.to_string()),
         ("close", close_program("x")),
+        ("enums", enums_program("x")),
         ("import_names", IMPORT_NAMES_PROGRAM.to_string()),
     ]
 }

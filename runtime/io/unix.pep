@@ -103,7 +103,7 @@ export _io_unix_connect(h: SocketHandle, path: Path): IoResult<void> {
 ##     var listener = io.UnixListener.bind(path).value();
 ##     while (true) {
 ##         var stream = listener.accept().value();
-##         stream.write_string("hello");
+##         stream.write_all("hello");
 ##     }
 ## @see UnixStream
 [NotCopyable("owns an operating-system socket and cannot be copied")]
@@ -226,7 +226,7 @@ export struct UnixListener {
 ##                     if (accepted.is_err()) {
 ##                         return;
 ##                     }
-##                     accepted.value().write_string("hello");
+##                     accepted.value().write_all("hello");
 ##                 }
 ##             });
 ##         });
@@ -315,7 +315,7 @@ export struct SharedUnixListener {
 ##     import io;
 ##
 ##     var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
-##     stream.write_string("ping");
+##     stream.write_all("ping");
 ##     var reply = Array<u8>();
 ##     stream.read_exact(reply, 4).value();
 ## @see UnixListener
@@ -436,17 +436,30 @@ export struct UnixStream {
         return _io_socket_send_bytes(_handle, data);
     }
 
-    ## Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
-    ## newline or terminator is added.
+    ## Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+    ## No newline or terminator is added.
     ##
     ## @param text the text to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
-    write_string(text: String): IoResult<void> {
+    ## @example
+    ##     stream.write_all("ping");
+    write_all(text: String): IoResult<void> {
         var c = _check_open();
         if (c.is_err()) {
             return c;
         }
         return _io_socket_send_text(_handle, text);
+    }
+
+    ## Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+    ## `text`, exactly like `write_all(text)`.
+    ##
+    ## @param text the text to send
+    ## @returns an Ok result once every byte is sent; an error as for `write_all`
+    ## @see write_all
+    [Deprecated("use 'write_all' instead", "write_all")]
+    write_string(text: String): IoResult<void> {
+        return write_all(text);
     }
 
     ## Closes the sending side of the connection: the peer's reads return 0

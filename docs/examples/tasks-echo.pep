@@ -40,7 +40,7 @@ main(): int {
             replies.append(async.Task<ulong>.spawn_local(() => {
                 var stream = io.TcpStream.connect(address).value();
                 var message = $"hello from {k}";
-                stream.write_string(message);
+                stream.write_all(message);
                 var buffer = Array<u8>();
                 stream.read_exact(buffer, message.size());
                 return buffer.count();

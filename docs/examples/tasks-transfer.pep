@@ -18,7 +18,7 @@ main(): int {
         var transfer = stream.into_transfer();
         var handler = async.spawn<void>(() => {
             var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_string("from any worker").value();
+            mine.write_all("from any worker").value();
         });
         handler.join();
         assert(client.join().value() == 15, "the moved stream answered");

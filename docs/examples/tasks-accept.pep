@@ -19,7 +19,7 @@ main(): int {
                 var (stream, peer) = accepted.value();
                 served.fetch_add(1);
                 async.Task<void>.spawn_local(() => {
-                    stream.write_string("hello").value();
+                    stream.write_all("hello").value();
                 });
             }
         });

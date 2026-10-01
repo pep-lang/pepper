@@ -145,44 +145,26 @@ export _io_sys_error_message(code: ErrorCode): String {
     return s;
 }
 
+# The ErrorKind of a GetLastError() / WSAGetLastError() code.
 [Target(OS(Windows))]
-export _io_sys_is_not_found(code: ErrorCode): bool {
-    return code == 2 || code == 3;  # FILE_NOT_FOUND, PATH_NOT_FOUND
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_permission_denied(code: ErrorCode): bool {
-    return code == 5;  # ACCESS_DENIED
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_already_exists(code: ErrorCode): bool {
-    return code == 80 || code == 183;  # FILE_EXISTS, ALREADY_EXISTS
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_not_a_directory(code: ErrorCode): bool {
-    return code == 267;  # DIRECTORY (invalid directory name)
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_is_a_directory(code: ErrorCode): bool {
-    return code == 336;  # DIRECTORY_NOT_SUPPORTED
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_directory_not_empty(code: ErrorCode): bool {
-    return code == 145;  # DIR_NOT_EMPTY
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_invalid_input(code: ErrorCode): bool {
-    return code == 87 || code == 123 || code == 131;  # INVALID_PARAMETER, INVALID_NAME, NEGATIVE_SEEK
-}
-
-[Target(OS(Windows))]
-export _io_sys_is_interrupted(code: ErrorCode): bool {
-    return code == 995;  # OPERATION_ABORTED
+export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+    return match (code) {
+        2, 3 => ErrorKind.NotFound,                 # FILE_NOT_FOUND, PATH_NOT_FOUND
+        5 => ErrorKind.PermissionDenied,            # ACCESS_DENIED
+        80, 183 => ErrorKind.AlreadyExists,         # FILE_EXISTS, ALREADY_EXISTS
+        267 => ErrorKind.NotADirectory,             # DIRECTORY (invalid directory name)
+        336 => ErrorKind.IsADirectory,              # DIRECTORY_NOT_SUPPORTED
+        145 => ErrorKind.DirectoryNotEmpty,         # DIR_NOT_EMPTY
+        87, 123, 131 => ErrorKind.InvalidInput,     # INVALID_PARAMETER, INVALID_NAME, NEGATIVE_SEEK
+        10004 => ErrorKind.Interrupted,             # WSAEINTR
+        10061 => ErrorKind.ConnectionRefused,       # WSAECONNREFUSED
+        10054, 10053 => ErrorKind.ConnectionReset,  # WSAECONNRESET, WSAECONNABORTED
+        10048 => ErrorKind.AddressInUse,            # WSAEADDRINUSE
+        10049 => ErrorKind.AddressNotAvailable,     # WSAEADDRNOTAVAIL
+        10060 => ErrorKind.TimedOut,                # WSAETIMEDOUT
+        995, 1223 => ErrorKind.Cancelled,           # OPERATION_ABORTED, CANCELLED
+        else => ErrorKind.Other,
+    };
 }
 
 # Codes for errors Pepper raises itself.
@@ -215,11 +197,6 @@ export _io_sys_code_write_zero(): ErrorCode {
 export _io_sys_code_cancelled(): ErrorCode {
     return 995;
 }  # OPERATION_ABORTED
-
-[Target(OS(Windows))]
-export _io_sys_is_cancelled(code: ErrorCode): bool {
-    return code == 995 || code == 1223;  # OPERATION_ABORTED, CANCELLED
-}
 
 # A BOOL result: nonzero -> Ok, 0 -> the GetLastError() error.
 [Target(OS(Windows))]
@@ -257,8 +234,13 @@ export _io_sys_handle_valid(h: FileHandle): bool {
 # STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are (DWORD)-10,
 # -11 and -12.
 [Target(OS(Windows))]
-export _io_sys_std_handle(which: int): FileHandle {
-    return GetStdHandle((4294967286 - which) as uint);
+export _io_sys_std_handle(stream: StdStream): FileHandle {
+    uint which = match (stream) {
+        Input => 4294967286,   # STD_INPUT_HANDLE (-10)
+        Output => 4294967285,  # STD_OUTPUT_HANDLE (-11)
+        Error => 4294967284,   # STD_ERROR_HANDLE (-12)
+    };
+    return GetStdHandle(which);
 }
 
 # CreateFileW sharing everything (FILE_SHARE_READ | WRITE | DELETE) with
@@ -426,10 +408,14 @@ export _io_win_metadata(
     m.is_directory = (attrs & 16) != 0;  # FILE_ATTRIBUTE_DIRECTORY
     m.is_symlink = (attrs & 1024) != 0;  # FILE_ATTRIBUTE_REPARSE_POINT
     m.is_file = !m.is_directory && !m.is_symlink;
+    m.file_type = _io_file_type(m.is_file, m.is_directory, m.is_symlink);
     m.read_only = (attrs & 1) != 0;  # FILE_ATTRIBUTE_READONLY
     m.permissions = attrs as uint;
     m.size = (_io_win_u32(buf, size_high) << 32) | _io_win_u32(buf, size_low);
-    m.created = _io_win_time(buf, created);
+    var born = _io_win_time(buf, created);
+    if (born != 0) {
+        m.created = Optional<long>.some(born);
+    }
     m.accessed = _io_win_time(buf, accessed);
     m.modified = _io_win_time(buf, written);
     return m;
@@ -514,6 +500,7 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
             entry.is_file = m.is_file;
             entry.is_directory = m.is_directory;
             entry.is_symlink = m.is_symlink;
+            entry.file_type = m.file_type;
             out.append(entry);
         }
         if (FindNextFileW(h, data) == 0) {

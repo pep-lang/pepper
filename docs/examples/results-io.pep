@@ -1,4 +1,4 @@
-import [File, Directory, Path, IoResult, IoError] from io;
+import [File, Directory, Path, IoResult, IoError, ErrorKind] from io;
 
 # IoResult<T> is Result<T, IoError>: the same methods, a richer error.
 read_setting(Path path): String {
@@ -12,6 +12,15 @@ read_setting(Path path): String {
     return text.value();
 }
 
+# kind() sorts the platform's code into an ErrorKind, for a match.
+describe(error: IoError): String {
+    return match (error.kind()) {
+        NotFound => "missing",
+        PermissionDenied => "not allowed",
+        else => error.message,
+    };
+}
+
 main(): int {
     var dir = Directory.temp().join("pepper-results-io-example");
     var created = Directory.create_all(dir);
@@ -19,6 +28,9 @@ main(): int {
 
     var path = dir.join("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
+    var missing = File.open(path);
+    assert(missing.is_err() && missing.error().kind() == ErrorKind.NotFound, "the kind of the error");
+    assert(describe(missing.error()) == "missing", "a match on the kind");
 
     IoResult<void> written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");

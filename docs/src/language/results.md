@@ -95,13 +95,15 @@ shown above.
 The [io module](../reference/io-module.md) is a good model of a library built
 on `Result`. Every operation that can fail returns an `IoResult<T>`, a type
 alias for `Result<T, IoError>`, and operations with nothing to return use
-`IoResult<void>`. `IoError` holds the platform's error `code` and a `message`,
-and has predicates such as `is_not_found()` and `is_permission_denied()` for
-deciding what to do about the failure:
+`IoResult<void>`. `IoError` holds the platform's error `code` and a `message`.
+To decide what to do about the failure, `kind()` returns the code's portable
+`ErrorKind` (`NotFound`, `PermissionDenied`, `AlreadyExists`, ...,
+`Other`), an [enum](enums.md) to `match` on, and a predicate per kind, such as
+`is_not_found()` and `is_permission_denied()`, tests for one of them:
 
 ```pepper
 {{#include ../../examples/results-io.pep}}
 ```
 
 See [io: errors and platform types](../reference/io-types.md) for the full list
-of `IoError` predicates.
+of kinds and the platform codes each one covers.

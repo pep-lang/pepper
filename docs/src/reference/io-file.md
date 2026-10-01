@@ -178,6 +178,165 @@ Opens `path` with these options. The same as
     log.write_all("started");
 ```
 
+## FileType
+
+```pepper
+enum FileType
+```
+
+The kind of a file system object, as `Metadata.file_type` and
+`DirEntry.file_type` report it.
+
+A symlink is reported as `Symlink` only where links are not followed
+(`Path.symlink_metadata()` and directory listings); on Windows that is any
+reparse point, junctions included, even one that points to a directory.
+
+**See also**
+- `Metadata`
+
+**Example**
+```pepper
+    import io;
+
+    var m = io.Path("notes.txt").metadata();
+    if (m.is_ok()) {
+        match (m.value().file_type) {
+            File => { print("a file"); }
+            Directory => { print("a directory"); }
+            Symlink, Other => { print("something else"); }
+        }
+    }
+```
+
+### Cases
+
+#### File
+
+```pepper
+File
+```
+
+A regular file. On Windows, anything that is neither a directory nor
+a reparse point.
+
+#### Directory
+
+```pepper
+Directory
+```
+
+A directory.
+
+#### Symlink
+
+```pepper
+Symlink
+```
+
+A symbolic link itself (on Windows, any reparse point).
+
+#### Other
+
+```pepper
+Other
+```
+
+Anything else, such as a FIFO, socket or device on POSIX.
+
+## SeekFrom
+
+```pepper
+enum SeekFrom
+```
+
+Where `File.seek` measures its offset from, with the offset itself.
+
+**See also**
+- `File.seek`
+
+**Example**
+```pepper
+    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();     # at the end
+    f.seek(SeekFrom.Start(4));                        # 4 bytes in
+    var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+```
+
+### Cases
+
+#### Start
+
+```pepper
+Start(offset: Offset)
+```
+
+`offset` bytes from the start of the file.
+
+**Parameters**
+- `offset` — the new position; negative is an error
+
+#### Current
+
+```pepper
+Current(offset: Offset)
+```
+
+`offset` bytes from the current position.
+
+**Parameters**
+- `offset` — the distance to move; negative moves back
+
+#### End
+
+```pepper
+End(offset: Offset)
+```
+
+`offset` bytes from the end of the file.
+
+**Parameters**
+- `offset` — the distance from the end; negative moves back from it
+
+## StdStream
+
+```pepper
+enum StdStream
+```
+
+One of the process's standard streams, as `File.std_file` takes it.
+
+**See also**
+- `File.std_file`
+
+### Cases
+
+#### Input
+
+```pepper
+Input
+```
+
+Standard input: file descriptor 0 on POSIX, `STD_INPUT_HANDLE` on
+Windows.
+
+#### Output
+
+```pepper
+Output
+```
+
+Standard output: file descriptor 1 on POSIX, `STD_OUTPUT_HANDLE` on
+Windows.
+
+#### Error
+
+```pepper
+Error
+```
+
+Standard error: file descriptor 2 on POSIX, `STD_ERROR_HANDLE` on
+Windows.
+
 ## Metadata
 
 ```pepper
@@ -211,6 +370,17 @@ ulong size
 ```
 
 The file's length in bytes.
+
+#### file_type
+
+```pepper
+FileType file_type
+```
+
+The kind of object: `File`, `Directory`, `Symlink` or `Other`. It
+agrees with `is_file`, `is_directory` and `is_symlink`, except that a
+Windows reparse point to a directory is `Symlink` with both
+`is_directory` and `is_symlink` set.
 
 #### is_file
 
@@ -268,12 +438,12 @@ The time of the last access, in nanoseconds since the Unix epoch (file systems m
 #### created
 
 ```pepper
-long created
+long? created
 ```
 
-The creation (birth) time, in nanoseconds since the Unix epoch; 0
-where unavailable, such as on Linux file systems that do not record
-one.
+The creation (birth) time, in nanoseconds since the Unix epoch; none
+where the platform does not report one, such as on Linux file systems
+that do not record it.
 
 #### permissions
 
@@ -293,8 +463,9 @@ The raw permission bits: on POSIX the `mode_t` permission bits
 construct()
 ```
 
-Creates a `Metadata` with every field zero or false. Metadata is
-normally obtained from a query such as `File.metadata()`.
+Creates a `Metadata` with every number zero, every flag false,
+`file_type` `Other` and `created` none. Metadata is normally obtained
+from a query such as `File.metadata()`.
 
 ## File
 
@@ -444,7 +615,7 @@ still writes at the end).
 #### std_file
 
 ```pepper
-static std_file(which: int, name: String): File
+static std_file(stream: StdStream, name: String): File
 ```
 
 Returns a File for one of the process's standard streams. The File
@@ -452,17 +623,38 @@ does not own the handle, so neither `close()` nor the destructor
 closes the stream. `stdin()`, `stdout()` and `stderr()` are the usual
 way to call this.
 
-On POSIX `which` is used directly as the file descriptor. On Windows
-it selects `GetStdHandle(STD_INPUT_HANDLE - which)`, so only 0, 1
-and 2 are meaningful there; a process without a console or
-redirection may get a null handle, and the File is then not open.
+On Windows a process without a console or redirection may get a null
+handle, and the File is then not open.
 
 **Parameters**
-- `which` — the stream: 0 for standard input, 1 for standard output, 2 for standard error
+- `stream` — the stream
 - `name` — the display name stored in the File's `path`, such as `<stdout>`
 
 **Returns**
 - a File on that stream, that does not close the stream when released
+
+**Example**
+```pepper
+    var err = File.std_file(StdStream.Error, "<stderr>");
+    err.write_all("warning");
+```
+
+#### std_file
+
+```pepper
+[Deprecated("use 'std_file' with a 'StdStream' instead")] static std_file(which: int, name: String): File
+```
+
+Deprecated: use `std_file(StdStream, String)` instead. Returns a File
+for the standard stream numbered `which`, as `std_file` does for the
+matching `StdStream`.
+
+**Parameters**
+- `which` — the stream: 0 for standard input, 1 for standard output, 2 for standard error
+- `name` — the display name stored in the File's `path`
+
+**Returns**
+- a File on that stream; a File that is not open for any other `which`
 
 #### stdin
 
@@ -859,13 +1051,41 @@ Deprecated: use `write_all` instead. Writes all of the UTF-8 bytes of
 **See also**
 - `write_all`
 
+#### seek
+
+```pepper
+seek(from: SeekFrom): IoResult<Offset>
+```
+
+Moves the position as `from` says: to an offset from the start, from
+the current position, or from the end of the file.
+
+Seeking past the end is allowed; a later write there fills the gap
+with zeros. A position before the start of the file is an error.
+Seeking a stream that has no position (a pipe or a terminal) fails on
+POSIX and has platform-defined results on Windows.
+
+**Parameters**
+- `from` — the origin and the offset from it
+
+**Returns**
+- the new position, in bytes from the start of the file; an error when the File is closed, the resulting position would be negative (on POSIX, with `is_invalid_input()`), or the stream cannot seek
+
+**Example**
+```pepper
+    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();
+    f.seek(SeekFrom.Start(0));
+```
+
 #### seek_start
 
 ```pepper
 seek_start(pos: Offset): IoResult<Offset>
 ```
 
-Moves the position to `pos` bytes from the start of the file.
+Moves the position to `pos` bytes from the start of the file, like
+`seek(SeekFrom.Start(pos))` without allocating the `SeekFrom`.
 
 Seeking past the end is allowed; a later write there fills the gap
 with zeros.
@@ -885,8 +1105,9 @@ with zeros.
 seek_end(delta: Offset): IoResult<Offset>
 ```
 
-Moves the position to `delta` bytes from the end of the file.
-`seek_end(0)` moves to the end and returns the file's length.
+Moves the position to `delta` bytes from the end of the file, like
+`seek(SeekFrom.End(delta))`. `seek_end(0)` moves to the end and
+returns the file's length.
 
 **Parameters**
 - `delta` — the offset from the end of the file, in bytes; negative moves back from the end
@@ -903,8 +1124,9 @@ Moves the position to `delta` bytes from the end of the file.
 seek_current(delta: Offset): IoResult<Offset>
 ```
 
-Moves the position by `delta` bytes from where it is.
-`seek_current(0)` returns the current position without moving it.
+Moves the position by `delta` bytes from where it is, like
+`seek(SeekFrom.Current(delta))`. `seek_current(0)` returns the
+current position without moving it.
 
 **Parameters**
 - `delta` — the offset from the current position, in bytes; negative moves back
@@ -918,22 +1140,18 @@ Moves the position by `delta` bytes from where it is.
 #### seek
 
 ```pepper
-seek(offset: Offset, whence: int): IoResult<Offset>
+[Deprecated("use 'seek' with a 'SeekFrom' instead")] seek(offset: Offset, whence: int): IoResult<Offset>
 ```
 
-Moves the position by `offset` relative to the origin `whence`.
-`seek_start`, `seek_end` and `seek_current` name the three origins.
-
-A position before the start of the file is an error. Seeking a
-stream that has no position (a pipe or a terminal) fails on POSIX
-and has platform-defined results on Windows.
+Deprecated: use `seek(SeekFrom)` instead. Moves the position by
+`offset` relative to the origin `whence`.
 
 **Parameters**
 - `offset` — the offset in bytes from the origin; may be negative
-- `whence` — the origin: 0 the start of the file, 1 the current position, 2 the end of the file (`SEEK_SET`, `SEEK_CUR`, `SEEK_END` on POSIX; `FILE_BEGIN`, `FILE_CURRENT`, `FILE_END` on Windows)
+- `whence` — the origin: 0 the start of the file, 1 the current position, 2 the end of the file
 
 **Returns**
-- the new position, in bytes from the start of the file; an error when the File is closed, `whence` is not 0, 1 or 2, the resulting position would be negative (on POSIX, with `is_invalid_input()`), or the stream cannot seek
+- the new position, in bytes from the start of the file; an error as for `seek(SeekFrom)`, or when `whence` is not 0, 1 or 2
 
 #### set_length
 

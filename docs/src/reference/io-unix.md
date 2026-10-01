@@ -47,7 +47,7 @@ on Windows).
     var listener = io.UnixListener.bind(path).value();
     while (true) {
         var stream = listener.accept().value();
-        stream.write_string("hello");
+        stream.write_all("hello");
     }
 ```
 
@@ -157,7 +157,7 @@ goes. The socket file stays.
                     if (accepted.is_err()) {
                         return;
                     }
-                    accepted.value().write_string("hello");
+                    accepted.value().write_all("hello");
                 }
             });
         });
@@ -240,7 +240,7 @@ closed stream fails with an error no `IoError` predicate identifies.
     import io;
 
     var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
     var reply = Array<u8>();
     stream.read_exact(reply, 4).value();
 ```
@@ -364,20 +364,43 @@ If an error occurs part of `data` may already have been sent.
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
 
-#### write_string
+#### write_all
 
 ```pepper
-write_string(text: String): IoResult<void>
+write_all(text: String): IoResult<void>
 ```
 
-Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
-newline or terminator is added.
+Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+No newline or terminator is added.
 
 **Parameters**
 - `text` — the text to send
 
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
+
+**Example**
+```pepper
+    stream.write_all("ping");
+```
+
+#### write_string
+
+```pepper
+[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult<void>
+```
+
+Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+`text`, exactly like `write_all(text)`.
+
+**Parameters**
+- `text` — the text to send
+
+**Returns**
+- an Ok result once every byte is sent; an error as for `write_all`
+
+**See also**
+- `write_all`
 
 #### shutdown_write
 

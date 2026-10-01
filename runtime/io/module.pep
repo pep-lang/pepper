@@ -13,7 +13,7 @@
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 ## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
-## - [Errors and platform types](io-types.md): `IoError`, `IoResult`, and handle types
+## - [Errors and platform types](io-types.md): `IoError`, `ErrorKind`, `IoResult`, and handle types
 ##
 ## @example
 ##     import io;
@@ -47,6 +47,7 @@ export FileHandle;
 export ErrorCode;
 export Mode;
 export Offset;
+export ErrorKind;
 export IoError;
 export IoResult;
 export SocketHandle;
@@ -54,7 +55,10 @@ export SocketHandle;
 export Path;
 
 export OpenOptions;
+export FileType;
 export Metadata;
+export SeekFrom;
+export StdStream;
 export File;
 
 export DirEntry;

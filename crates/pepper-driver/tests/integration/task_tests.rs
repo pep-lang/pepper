@@ -269,7 +269,7 @@ main(): int {
                 var round = 0;
                 while (round < 10) {
                     var message = $"message {k} {round}";
-                    assert(stream.write_string(message).is_ok(), "write");
+                    assert(stream.write_all(message).is_ok(), "write");
                     var buffer = Array<u8>();
                     assert(stream.read_exact(buffer, message.size()).is_ok(), "read");
                     echoed = echoed + buffer.count() as int;
@@ -633,7 +633,7 @@ main(): int {
                 var stream = io.TcpStream.connect_host("127.0.0.1", port).value();
                 # The last server closes without reading, so the peer may
                 # see a reset rather than an end.
-                stream.write_string("ping");
+                stream.write_all("ping");
                 var reply = Array<u8>();
                 while (true) {
                     var got = stream.read(reply, 64);
@@ -661,7 +661,7 @@ main(): int {
                 var mine = io.TcpStream.adopt(transfer).value();
                 var buffer = Array<u8>();
                 mine.read_exact(buffer, 4).value();
-                mine.write_string("pong!").value();
+                mine.write_all("pong!").value();
                 assert(io.TcpStream.adopt(transfer).is_err(), "a token is adopted once");
             }));
         }
@@ -686,7 +686,7 @@ main(): int {
                 }
                 var (stream, peer) = accepted.value();
                 served.fetch_add(1);
-                stream.write_string("hi").value();
+                stream.write_all("hi").value();
             }
         });
         assert(loops.count() == 4, "one loop per worker");

@@ -118,7 +118,7 @@ export _io_big_endian(p: __ptr<u8>, count: ulong): ulong {
 ##     print(listener.local_address().value().to_string());   # 127.0.0.1:<port>
 ##     while (true) {
 ##         var (stream, peer) = listener.accept().value();
-##         stream.write_string("hello " + peer.to_string());
+##         stream.write_all("hello " + peer.to_string());
 ##     }
 ## @see TcpStream
 [NotCopyable("owns an operating-system socket and cannot be copied")]
@@ -249,7 +249,7 @@ export struct TcpListener {
 ##                         return;
 ##                     }
 ##                     var (stream, peer) = accepted.value();
-##                     stream.write_string("hello");
+##                     stream.write_all("hello");
 ##                 }
 ##             });
 ##         });
@@ -356,7 +356,7 @@ export struct SharedTcpListener {
 ##     import io;
 ##
 ##     var stream = io.TcpStream.connect_host("example.com", 80).value();
-##     stream.write_string("HEAD / HTTP/1.0\r\n\r\n");
+##     stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
 ##     var reply = Array<u8>();
 ##     while (stream.read(reply, 4096).value() > 0) {
 ##     }
@@ -514,17 +514,30 @@ export struct TcpStream {
         return _io_socket_send_bytes(_handle, data);
     }
 
-    ## Sends all of the UTF-8 bytes of `text`, as `write_all` does. No
-    ## newline or terminator is added.
+    ## Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+    ## No newline or terminator is added.
     ##
     ## @param text the text to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
-    write_string(text: String): IoResult<void> {
+    ## @example
+    ##     stream.write_all("ping");
+    write_all(text: String): IoResult<void> {
         var c = _check_open();
         if (c.is_err()) {
             return c;
         }
         return _io_socket_send_text(_handle, text);
+    }
+
+    ## Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+    ## `text`, exactly like `write_all(text)`.
+    ##
+    ## @param text the text to send
+    ## @returns an Ok result once every byte is sent; an error as for `write_all`
+    ## @see write_all
+    [Deprecated("use 'write_all' instead", "write_all")]
+    write_string(text: String): IoResult<void> {
+        return write_all(text);
     }
 
     ## Closes the sending side of the connection: the peer's reads return 0
@@ -599,7 +612,7 @@ export struct TcpStream {
     ##         var transfer = stream.into_transfer();
     ##         async.spawn<void>(() => {
     ##             var mine = io.TcpStream.adopt(transfer).value();
-    ##             mine.write_string("hello from another worker");
+    ##             mine.write_all("hello from another worker");
     ##         });
     ##     }
     into_transfer(): SocketTransfer {

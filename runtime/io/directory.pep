@@ -32,6 +32,10 @@ export struct DirEntry {
     Path path;
     ## The entry's own file name, without any directory part.
     String name;
+    ## The kind of the entry, without following symlinks: `Symlink` for a
+    ## symlink (on Windows, any reparse point, even one to a directory),
+    ## `Other` for anything that is not a file, directory or symlink.
+    FileType file_type;
     ## Whether the entry is a regular file (never true for a symlink).
     bool is_file;
     ## Whether the entry is a directory. On POSIX never true for a symlink;
@@ -42,8 +46,11 @@ export struct DirEntry {
     bool is_symlink;
 
     ## Creates an empty entry: empty `path` and `name`, all kind flags
-    ## false. Entries are normally obtained from `Directory.entries()`.
-    construct() {}
+    ## false and `file_type` `Other`. Entries are normally obtained from
+    ## `Directory.entries()`.
+    construct() {
+        file_type = FileType.Other;
+    }
 
     ## Returns the metadata of the entry, following symlinks, exactly like
     ## `Path.metadata()` on the entry's `path`. The file system is queried

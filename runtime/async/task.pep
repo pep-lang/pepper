@@ -1365,7 +1365,7 @@ _async_push(worker: _Worker, proxy: _TaskCore, run: shared () => void, worker_pl
 ##                     }
 ##                     var (stream, peer) = accepted.value();
 ##                     async.Task<void>.spawn_local(() => {
-##                         stream.write_string("hello");
+##                         stream.write_all("hello");
 ##                     });
 ##                 }
 ##             });

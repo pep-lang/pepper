@@ -34,7 +34,7 @@ task. Configure it (`add_root_certificate`) before the first `connect`.
 
     var connector = tls.TlsConnector.create().value();
     var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
 ```
 
 ### Constructor
@@ -142,7 +142,7 @@ one.
         var (tcp, peer) = listener.accept().value();
         var accepted = acceptor.accept(tcp);
         if (accepted.is_ok()) {
-            accepted.value().write_string("hello over TLS");
+            accepted.value().write_all("hello over TLS");
         }
     }
 ```
@@ -223,7 +223,7 @@ goes; `close()` closes it earlier. Neither sends close_notify; call
 **Example**
 ```pepper
     var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
     var reply = Array<u8>();
     while (stream.read(reply, 4096).value() > 0) {
     }
@@ -317,19 +317,43 @@ Sends all of `data`, repeating the send until every byte is sent.
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
 
-#### write_string
+#### write_all
 
 ```pepper
-write_string(text: String): io.IoResult<void>
+write_all(text: String): io.IoResult<void>
 ```
 
-Sends all of the UTF-8 bytes of `text`, as `write_all` does.
+Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+No newline or terminator is added.
 
 **Parameters**
 - `text` — the text to send
 
 **Returns**
 - an Ok result once every byte is sent; an error as for `write`
+
+**Example**
+```pepper
+    stream.write_all("ping");
+```
+
+#### write_string
+
+```pepper
+[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): io.IoResult<void>
+```
+
+Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+`text`, exactly like `write_all(text)`.
+
+**Parameters**
+- `text` — the text to send
+
+**Returns**
+- an Ok result once every byte is sent; an error as for `write_all`
+
+**See also**
+- `write_all`
 
 #### shutdown
 

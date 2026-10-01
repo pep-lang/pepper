@@ -52,7 +52,8 @@ A `TcpListener` waits for connections. Each `TcpStream` is one connection:
   the peer has closed its side. `read_exact(buffer, count)` loops until
   `count` bytes have arrived.
 - `write(data)` sends what the system will take in one call.
-  `write_all(data)` and `write_string(text)` loop until everything is sent.
+  `write_all(data)` loops until everything is sent; `data` is a `u8[]` or a
+  `String`.
 - `shutdown_write()` tells the peer that nothing more is coming, while this
   side can still read.
 - `set_no_delay(true)` sends small writes immediately instead of combining
@@ -127,7 +128,7 @@ produce a `TlsStream`, which reads and writes like a `TcpStream`:
 - `TlsAcceptor.create(certificate_chain, private_key)` reads PEM files, and
   `acceptor.accept(tcp)` runs the handshake over a connection a
   `TcpListener` accepted.
-- `read`, `read_exact`, `write`, `write_all` and `write_string` work on the
+- `read`, `read_exact`, `write` and `write_all` work on the
   decrypted bytes. `shutdown()` sends the TLS close_notify, and `read`
   returns 0 once the peer has sent one or closed the connection.
 - A failed handshake returns an error whose message says why, such as

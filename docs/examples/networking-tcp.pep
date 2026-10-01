@@ -12,7 +12,7 @@ main(): int {
     assert(peer == client.local_address().value(), "accept reports who connected");
 
     # The client sends a request and closes its sending side.
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     client.shutdown_write();
 
     # The server reads until the client is done: read returns 0 at the end.
@@ -22,7 +22,7 @@ main(): int {
     assert(request.count() == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
-    server.write_string("pong");
+    server.write_all("pong");
     var reply = Array<u8>();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' && reply[1] == 'o', "the reply is pong");

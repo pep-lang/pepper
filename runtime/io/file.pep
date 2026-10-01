@@ -142,6 +142,75 @@ export struct OpenOptions {
     }
 }
 
+## The kind of a file system object, as `Metadata.file_type` and
+## `DirEntry.file_type` report it.
+##
+## A symlink is reported as `Symlink` only where links are not followed
+## (`Path.symlink_metadata()` and directory listings); on Windows that is any
+## reparse point, junctions included, even one that points to a directory.
+##
+## @example
+##     import io;
+##
+##     var m = io.Path("notes.txt").metadata();
+##     if (m.is_ok()) {
+##         match (m.value().file_type) {
+##             File => { print("a file"); }
+##             Directory => { print("a directory"); }
+##             Symlink, Other => { print("something else"); }
+##         }
+##     }
+## @see Metadata
+export enum FileType {
+    ## A regular file. On Windows, anything that is neither a directory nor
+    ## a reparse point.
+    File,
+    ## A directory.
+    Directory,
+    ## A symbolic link itself (on Windows, any reparse point).
+    Symlink,
+    ## Anything else, such as a FIFO, socket or device on POSIX.
+    Other,
+}
+
+## Where `File.seek` measures its offset from, with the offset itself.
+##
+## @example
+##     var f = File.open(Path("data.bin")).value();
+##     var length = f.seek(SeekFrom.End(0)).value();     # at the end
+##     f.seek(SeekFrom.Start(4));                        # 4 bytes in
+##     var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+## @see File.seek
+export enum SeekFrom {
+    ## `offset` bytes from the start of the file.
+    ##
+    ## @param offset the new position; negative is an error
+    Start(offset: Offset),
+    ## `offset` bytes from the current position.
+    ##
+    ## @param offset the distance to move; negative moves back
+    Current(offset: Offset),
+    ## `offset` bytes from the end of the file.
+    ##
+    ## @param offset the distance from the end; negative moves back from it
+    End(offset: Offset),
+}
+
+## One of the process's standard streams, as `File.std_file` takes it.
+##
+## @see File.std_file
+export enum StdStream {
+    ## Standard input: file descriptor 0 on POSIX, `STD_INPUT_HANDLE` on
+    ## Windows.
+    Input,
+    ## Standard output: file descriptor 1 on POSIX, `STD_OUTPUT_HANDLE` on
+    ## Windows.
+    Output,
+    ## Standard error: file descriptor 2 on POSIX, `STD_ERROR_HANDLE` on
+    ## Windows.
+    Error,
+}
+
 ## Describes a file system object: its kind, size, read-only flag,
 ## permission bits and timestamps, as a snapshot taken when it was queried.
 ##
@@ -160,6 +229,11 @@ export struct OpenOptions {
 export struct Metadata {
     ## The file's length in bytes.
     ulong size;
+    ## The kind of object: `File`, `Directory`, `Symlink` or `Other`. It
+    ## agrees with `is_file`, `is_directory` and `is_symlink`, except that a
+    ## Windows reparse point to a directory is `Symlink` with both
+    ## `is_directory` and `is_symlink` set.
+    FileType file_type;
     ## Whether this is a regular file. On Windows, anything that is neither
     ## a directory nor a reparse point (symlink) counts as a file.
     bool is_file;
@@ -177,18 +251,36 @@ export struct Metadata {
     long modified;
     ## The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with `noatime` or `relatime` update it rarely or never).
     long accessed;
-    ## The creation (birth) time, in nanoseconds since the Unix epoch; 0
-    ## where unavailable, such as on Linux file systems that do not record
-    ## one.
-    long created;
+    ## The creation (birth) time, in nanoseconds since the Unix epoch; none
+    ## where the platform does not report one, such as on Linux file systems
+    ## that do not record it.
+    long? created;
     ## The raw permission bits: on POSIX the `mode_t` permission bits
     ## (`mode & 07777`, for example 256 for owner read); on Windows the
     ## `FILE_ATTRIBUTE_*` bits.
     Mode permissions;
 
-    ## Creates a `Metadata` with every field zero or false. Metadata is
-    ## normally obtained from a query such as `File.metadata()`.
-    construct() {}
+    ## Creates a `Metadata` with every number zero, every flag false,
+    ## `file_type` `Other` and `created` none. Metadata is normally obtained
+    ## from a query such as `File.metadata()`.
+    construct() {
+        file_type = FileType.Other;
+    }
+}
+
+# The FileType of an object with these kind flags; a symlink wins over the
+# directory flag Windows also sets for a link to a directory.
+export _io_file_type(is_file: bool, is_directory: bool, is_symlink: bool): FileType {
+    if (is_symlink) {
+        return FileType.Symlink;
+    }
+    if (is_directory) {
+        return FileType.Directory;
+    }
+    if (is_file) {
+        return FileType.File;
+    }
+    return FileType.Other;
 }
 
 # Bytes per read when a whole file or stream is read.
@@ -367,22 +459,41 @@ export struct File {
     ## closes the stream. `stdin()`, `stdout()` and `stderr()` are the usual
     ## way to call this.
     ##
-    ## On POSIX `which` is used directly as the file descriptor. On Windows
-    ## it selects `GetStdHandle(STD_INPUT_HANDLE - which)`, so only 0, 1
-    ## and 2 are meaningful there; a process without a console or
-    ## redirection may get a null handle, and the File is then not open.
+    ## On Windows a process without a console or redirection may get a null
+    ## handle, and the File is then not open.
     ##
-    ## @param which the stream: 0 for standard input, 1 for standard
-    ##   output, 2 for standard error
+    ## @param stream the stream
     ## @param name the display name stored in the File's `path`, such as
     ##   `<stdout>`
     ## @returns a File on that stream, that does not close the stream when released
-    static std_file(which: int, name: String): File {
+    ## @example
+    ##     var err = File.std_file(StdStream.Error, "<stderr>");
+    ##     err.write_all("warning");
+    static std_file(stream: StdStream, name: String): File {
         var f = File();
-        f._handle = _io_sys_std_handle(which);
+        f._handle = _io_sys_std_handle(stream);
         f.path = Path(name);
         f._owned = false;
         return f;
+    }
+
+    ## Deprecated: use `std_file(StdStream, String)` instead. Returns a File
+    ## for the standard stream numbered `which`, as `std_file` does for the
+    ## matching `StdStream`.
+    ##
+    ## @param which the stream: 0 for standard input, 1 for standard
+    ##   output, 2 for standard error
+    ## @param name the display name stored in the File's `path`
+    ## @returns a File on that stream; a File that is not open for any other
+    ##   `which`
+    [Deprecated("use 'std_file' with a 'StdStream' instead")]
+    static std_file(which: int, name: String): File {
+        return match (which) {
+            0 => std_file(StdStream.Input, name),
+            1 => std_file(StdStream.Output, name),
+            2 => std_file(StdStream.Error, name),
+            else => File(),
+        };
     }
 
     ## Returns a File reading the process's standard input. Each call
@@ -392,7 +503,7 @@ export struct File {
     ##
     ## @returns a File on standard input, named `<stdin>`
     static stdin(): File {
-        return std_file(0, "<stdin>");
+        return std_file(StdStream.Input, "<stdin>");
     }
 
     ## Returns a File writing to the process's standard output. Each call
@@ -406,7 +517,7 @@ export struct File {
     ##     var out = File.stdout();
     ##     out.write_all("hello");
     static stdout(): File {
-        return std_file(1, "<stdout>");
+        return std_file(StdStream.Output, "<stdout>");
     }
 
     ## Returns a File writing to the process's standard error. Each call
@@ -416,7 +527,7 @@ export struct File {
     ##
     ## @returns a File on standard error, named `<stderr>`
     static stderr(): File {
-        return std_file(2, "<stderr>");
+        return std_file(StdStream.Error, "<stderr>");
     }
 
     ## Returns whether the File holds a valid handle: true after a
@@ -619,9 +730,33 @@ export struct File {
         return write_all(s);
     }
 
-    # No SeekFrom enum: one method per origin. Each returns the new offset
-    # from the start of the file.
-    ## Moves the position to `pos` bytes from the start of the file.
+    ## Moves the position as `from` says: to an offset from the start, from
+    ## the current position, or from the end of the file.
+    ##
+    ## Seeking past the end is allowed; a later write there fills the gap
+    ## with zeros. A position before the start of the file is an error.
+    ## Seeking a stream that has no position (a pipe or a terminal) fails on
+    ## POSIX and has platform-defined results on Windows.
+    ##
+    ## @param from the origin and the offset from it
+    ## @returns the new position, in bytes from the start of the file; an
+    ##   error when the File is closed, the resulting position would be
+    ##   negative (on POSIX, with `is_invalid_input()`), or the stream cannot
+    ##   seek
+    ## @example
+    ##     var f = File.open(Path("data.bin")).value();
+    ##     var length = f.seek(SeekFrom.End(0)).value();
+    ##     f.seek(SeekFrom.Start(0));
+    seek(from: SeekFrom): IoResult<Offset> {
+        return match (from) {
+            Start(offset) => _seek(offset, 0),
+            Current(offset) => _seek(offset, 1),
+            End(offset) => _seek(offset, 2),
+        };
+    }
+
+    ## Moves the position to `pos` bytes from the start of the file, like
+    ## `seek(SeekFrom.Start(pos))` without allocating the `SeekFrom`.
     ##
     ## Seeking past the end is allowed; a later write there fills the gap
     ## with zeros.
@@ -631,11 +766,12 @@ export struct File {
     ##   error as for `seek`
     ## @see seek
     seek_start(pos: Offset): IoResult<Offset> {
-        return seek(pos, 0);
+        return _seek(pos, 0);
     }
 
-    ## Moves the position to `delta` bytes from the end of the file.
-    ## `seek_end(0)` moves to the end and returns the file's length.
+    ## Moves the position to `delta` bytes from the end of the file, like
+    ## `seek(SeekFrom.End(delta))`. `seek_end(0)` moves to the end and
+    ## returns the file's length.
     ##
     ## @param delta the offset from the end of the file, in bytes; negative
     ##   moves back from the end
@@ -643,11 +779,12 @@ export struct File {
     ##   error as for `seek`
     ## @see seek
     seek_end(delta: Offset): IoResult<Offset> {
-        return seek(delta, 2);
+        return _seek(delta, 2);
     }
 
-    ## Moves the position by `delta` bytes from where it is.
-    ## `seek_current(0)` returns the current position without moving it.
+    ## Moves the position by `delta` bytes from where it is, like
+    ## `seek(SeekFrom.Current(delta))`. `seek_current(0)` returns the
+    ## current position without moving it.
     ##
     ## @param delta the offset from the current position, in bytes; negative
     ##   moves back
@@ -655,25 +792,25 @@ export struct File {
     ##   error as for `seek`
     ## @see seek
     seek_current(delta: Offset): IoResult<Offset> {
-        return seek(delta, 1);
+        return _seek(delta, 1);
     }
 
-    ## Moves the position by `offset` relative to the origin `whence`.
-    ## `seek_start`, `seek_end` and `seek_current` name the three origins.
-    ##
-    ## A position before the start of the file is an error. Seeking a
-    ## stream that has no position (a pipe or a terminal) fails on POSIX
-    ## and has platform-defined results on Windows.
+    ## Deprecated: use `seek(SeekFrom)` instead. Moves the position by
+    ## `offset` relative to the origin `whence`.
     ##
     ## @param offset the offset in bytes from the origin; may be negative
     ## @param whence the origin: 0 the start of the file, 1 the current
-    ##   position, 2 the end of the file (`SEEK_SET`, `SEEK_CUR`, `SEEK_END`
-    ##   on POSIX; `FILE_BEGIN`, `FILE_CURRENT`, `FILE_END` on Windows)
+    ##   position, 2 the end of the file
     ## @returns the new position, in bytes from the start of the file; an
-    ##   error when the File is closed, `whence` is not 0, 1 or 2, the
-    ##   resulting position would be negative (on POSIX, with
-    ##   `is_invalid_input()`), or the stream cannot seek
+    ##   error as for `seek(SeekFrom)`, or when `whence` is not 0, 1 or 2
+    [Deprecated("use 'seek' with a 'SeekFrom' instead")]
     seek(offset: Offset, whence: int): IoResult<Offset> {
+        return _seek(offset, whence);
+    }
+
+    # whence: 0 the start, 1 the current position, 2 the end (the POSIX
+    # SEEK_* values, which Windows' FILE_* origins share).
+    _seek(offset: Offset, whence: int): IoResult<Offset> {
         var c = check_open();
         if (c.is_err()) {
             return IoResult<Offset>.err(c.error());

@@ -26,7 +26,7 @@ import "schannel";
 ##
 ##     var connector = tls.TlsConnector.create().value();
 ##     var stream = connector.connect_host("localhost", 8443).value();
-##     stream.write_string("ping");
+##     stream.write_all("ping");
 ## @see TlsStream
 [Shared]
 export struct TlsConnector {
@@ -129,7 +129,7 @@ export struct TlsConnector {
 ##         var (tcp, peer) = listener.accept().value();
 ##         var accepted = acceptor.accept(tcp);
 ##         if (accepted.is_ok()) {
-##             accepted.value().write_string("hello over TLS");
+##             accepted.value().write_all("hello over TLS");
 ##         }
 ##     }
 ## @see TlsStream
@@ -206,7 +206,7 @@ export struct TlsAcceptor {
 ##
 ## @example
 ##     var stream = connector.connect_host("localhost", 8443).value();
-##     stream.write_string("ping");
+##     stream.write_all("ping");
 ##     var reply = Array<u8>();
 ##     while (stream.read(reply, 4096).value() > 0) {
 ##     }
@@ -323,11 +323,14 @@ export struct TlsStream {
         return r;
     }
 
-    ## Sends all of the UTF-8 bytes of `text`, as `write_all` does.
+    ## Sends all of the UTF-8 bytes of `text`, as `write_all(u8[])` does.
+    ## No newline or terminator is added.
     ##
     ## @param text the text to send
     ## @returns an Ok result once every byte is sent; an error as for `write`
-    write_string(text: String): io.IoResult<void> {
+    ## @example
+    ##     stream.write_all("ping");
+    write_all(text: String): io.IoResult<void> {
         if (!io._io_in_task()) {
             return _write_all(text.c_str() as __ptr<u8>, text.size());
         }
@@ -337,6 +340,17 @@ export struct TlsStream {
         var r = _write_all(bytes, text.size());
         _pep_free(bytes);
         return r;
+    }
+
+    ## Deprecated: use `write_all` instead. Sends all of the UTF-8 bytes of
+    ## `text`, exactly like `write_all(text)`.
+    ##
+    ## @param text the text to send
+    ## @returns an Ok result once every byte is sent; an error as for `write_all`
+    ## @see write_all
+    [Deprecated("use 'write_all' instead", "write_all")]
+    write_string(text: String): io.IoResult<void> {
+        return write_all(text);
     }
 
     _write_all(p: __ptr<u8>, n: ulong): io.IoResult<void> {

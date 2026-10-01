@@ -418,7 +418,7 @@ a `shared` function.
                     }
                     var (stream, peer) = accepted.value();
                     async.Task<void>.spawn_local(() => {
-                        stream.write_string("hello");
+                        stream.write_all("hello");
                     });
                 }
             });

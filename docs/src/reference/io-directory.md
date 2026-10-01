@@ -52,6 +52,16 @@ String name
 
 The entry's own file name, without any directory part.
 
+#### file_type
+
+```pepper
+FileType file_type
+```
+
+The kind of the entry, without following symlinks: `Symlink` for a
+symlink (on Windows, any reparse point, even one to a directory),
+`Other` for anything that is not a file, directory or symlink.
+
 #### is_file
 
 ```pepper
@@ -87,7 +97,8 @@ construct()
 ```
 
 Creates an empty entry: empty `path` and `name`, all kind flags
-false. Entries are normally obtained from `Directory.entries()`.
+false and `file_type` `Other`. Entries are normally obtained from
+`Directory.entries()`.
 
 ### Methods
 
