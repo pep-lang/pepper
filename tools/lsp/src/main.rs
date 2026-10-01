@@ -376,15 +376,37 @@ fn body_at<'a>(module: &'a ast::Module, offset: usize) -> Option<(&'a ast::Block
 
 // ── Expression lookup ─────────────────────────────────────────────────────────
 
+/// Where `expr`'s text starts. The parser starts a binary expression's
+/// span at its operator (where its errors point), after its left operand,
+/// and an expression that starts with one (a ternary's condition, an `is`
+/// test's value, a member's, index's or call's owner, a cast's value, a
+/// postfix operator's operand) inherits that.
+fn expr_start(expr: &ast::Expression) -> usize {
+    let first = match expr {
+        ast::Expression::Binary { lhs, .. }
+        | ast::Expression::Index { lhs, .. }
+        | ast::Expression::MemberAccess { lhs, .. } => lhs,
+        ast::Expression::Ternary { condition, .. } => condition,
+        ast::Expression::Is { value, .. } => value,
+        ast::Expression::Cast { expr: value, .. } => value,
+        ast::Expression::FunctionCall { function, .. } => function,
+        ast::Expression::Unary { operand, prefix: false, .. } => operand,
+        _ => return expr.span().start,
+    };
+    expr.span().start.min(expr_start(first))
+}
+
 /// The innermost expression containing `offset`.
 fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expression> {
-    let s = expr.span();
+    let s = Span { start: expr_start(expr), end: expr.span().end };
     if !(s.start <= offset && offset < s.end) {
         return None;
     }
     match expr {
         ast::Expression::Binary { lhs, rhs, .. } => expr_at(lhs, offset).or_else(|| expr_at(rhs, offset)),
         ast::Expression::Unary { operand, .. } => expr_at(operand, offset),
+        ast::Expression::Is { value, .. } => expr_at(value, offset).or(Some(expr)),
+        ast::Expression::Cast { expr: value, .. } => expr_at(value, offset).or(Some(expr)),
         ast::Expression::Ternary { condition, true_expr, false_expr, .. } => {
             expr_at(condition, offset)
                 .or_else(|| expr_at(true_expr, offset))
@@ -1567,6 +1589,17 @@ Returns a fresh value: it shares nothing with the arguments.");
             let f = program.files.get(file)?;
             let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
             return Some(vec![Location::new(target_uri, span_to_range(&f.source, function.loc.span))]);
+        }
+        // A member of any expression (`x.y.z`, `f().m()`), by its owner's
+        // type in the sema model.
+        if let Some(program) = program
+            && let Some(sema) = sema
+            && let Some(loc) = pepper_sema::member_lookup::member_declaration(sema, FileId(0), offset)
+        {
+            let file = loc.file.0 as usize;
+            let f = program.files.get(file)?;
+            let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
+            return Some(vec![Location::new(target_uri, span_to_range(&f.source, loc.span))]);
         }
         let expr = find_expr(&ast, offset)?;
 

@@ -3,6 +3,7 @@ pub mod builder;
 pub mod deprecation;
 pub mod enums;
 pub mod interface;
+pub mod member_lookup;
 pub(crate) mod errors;
 pub mod model;
 pub mod modules;

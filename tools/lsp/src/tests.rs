@@ -858,3 +858,87 @@ fn fixing_an_import_that_did_not_load_refreshes_the_analysis() {
     assert!(!analysis.is_current(), "fixing the file that did not load makes the analysis stale");
     assert_eq!(server.forget_analyses(&[broken], false), vec![uri.clone()]);
 }
+
+const NESTED: &str = r#"import geometry as g;
+struct Inner {
+    var z: int;
+    twice(): int { return z * 2; }
+}
+struct Outer { var y: Inner; }
+struct Top {
+    var o: Outer;
+    f(): int { return this.o.y.z; }
+}
+main(): int {
+    var x = Outer();
+    var w: Outer = Outer();
+    var p = g.make(1, 2);
+    return x.y.z + w.y.twice() + p.y;
+}
+"#;
+
+/// Go to Definition on each member of a chain (`x.y.z`), whatever the owner:
+/// an inferred or declared local, `this`, a method call, the left operand of
+/// a binary expression, or a struct from an imported module.
+#[test]
+fn definition_of_a_nested_member() {
+    let (uri, text, program) = load("nested_member", NESTED, "main.pep");
+    let starts = |offset: usize| definition(&uri, &text, &program, offset);
+    // Each member of `this.o.y.z`.
+    assert!(starts(at(&text, "o.y.z", 0, 0)).1.starts_with("o: Outer"));
+    assert!(starts(at(&text, "y.z;", 0, 0)).1.starts_with("y: Inner"));
+    assert!(starts(at(&text, "z;", 0, 0)).1.starts_with("z: int"));
+    // `x.y.z` on an inferred local, the left operand of `+`.
+    assert!(starts(at(&text, "x.y.z", 0, 0)).1.starts_with("x = Outer"));
+    assert!(starts(at(&text, "y.z +", 0, 0)).1.starts_with("y: Inner"));
+    assert!(starts(at(&text, "z +", 0, 0)).1.starts_with("z: int"));
+    // A method reached through a member.
+    let (_, rest) = starts(at(&text, "twice()", 1, 1));
+    assert!(rest.starts_with("twice(): int"), "{}", rest);
+    // A field of a struct another file declares.
+    let (file, rest) = starts(at(&text, "p.y", 0, 2));
+    assert_eq!(file, "geometry/module.pep");
+    assert!(rest.starts_with("y: int"), "{}", rest);
+}
+
+const SYNTHESIZED: &str = r#"struct Money {
+    var cents: int;
+    +(other: Money): Money { var m = Money(); m.cents = cents + other.cents; return m; }
+}
+main(): int {
+    var xs = [1, 2];
+    var i = 0;
+    var total = xs[i];
+    for (var v in xs) { total = total + v; }
+    var a = Money();
+    var b = a + a;
+    var c = b.cents > 0 ? 1 : 2;
+    var d = (a + b).cents;
+    var f = (): int => { return b.cents; };
+    return total + b.cents + c + d + f();
+}
+"#;
+
+/// A name sema wrapped in a call of its own (an index, a loop, an
+/// operator, a literal) still goes to its declaration, not the call's.
+#[test]
+fn definition_inside_a_synthesized_call_is_the_name() {
+    let (uri, text, program) = load("synthesized", SYNTHESIZED, "main.pep");
+    let starts = |needle: &str, nth: usize| definition(&uri, &text, &program, at(&text, needle, nth, 0)).1;
+    assert!(starts("xs[i]", 0).starts_with("xs = [1"));
+    assert!(starts("i];", 0).starts_with("i = 0"));
+    assert!(starts("xs) {", 0).starts_with("xs = [1"));
+    assert!(starts("a + a", 0).starts_with("a = Money"));
+    assert!(starts("a;\n", 0).starts_with("a = Money"));
+    assert!(starts("cents;", 0).starts_with("cents: int"));
+    // The condition of a ternary starts before its operator.
+    assert!(starts("b.cents > 0", 0).starts_with("b = a"));
+    // The left operand of a call's owner.
+    assert!(starts("a + b)", 0).starts_with("a = Money"));
+    // A local a closure captures is not a member of the closure: no jump
+    // to the use itself.
+    let captured = at(&text, "b.cents; }", 0, 0);
+    let found = PepperLsp::definition_at(&uri, &text, Some(&program), sema_model_of(&program).ok().as_ref(), captured);
+    let used = byte_to_lsp_pos(&text, captured);
+    assert!(found.as_ref().is_none_or(|l| l[0].range.start != used), "{:?}", found);
+}
