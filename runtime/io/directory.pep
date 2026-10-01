@@ -178,8 +178,8 @@ export struct Directory {
             return _io_ok_void();
         }
         var parent = path.parent();
-        if (parent._value.size() > 0) {
-            var p = create_all(parent);
+        if (parent) {
+            var p = create_all(parent.value());
             if (p.is_err()) {
                 return p;
             }

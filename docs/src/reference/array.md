@@ -478,25 +478,32 @@ there are two or more elements.
 #### find
 
 ```pepper
-find(item: T): long
+find(item: T): ulong?
 ```
 
-Returns the position of the first element equal to `item`.
+Returns the position of the first element equal to `item`, or none
+when no element matches.
 
 Runs in O(count), scanning from the front. Elements are compared with
 `==`: when `T` declares an `==` operator (as `String` does) that
 operator decides; for any other struct `T` it compares references, so
 only the very same object matches.
 
+Breaking change: `find` used to return a `long` that was `-1` when
+nothing matched. It now returns `ulong?`: test it with `is_some()` (or
+as a condition) and read the index with `value()`.
+
 **Parameters**
 - `item` — the value to look for
 
 **Returns**
-- the index of the first match, or -1 when no element matches
+- the index of the first match, or none when no element matches (always none for an empty Array)
 
 **Example**
 ```pepper
-    var i = a.find(9);   # -1 if a holds no 9
+    var a = [3, 9, 4];
+    var i = a.find(9);         # i.value() == 1
+    var missing = a.find(7);   # missing.is_none() == true
 ```
 
 #### contains

@@ -16,8 +16,13 @@ An owned file-system path: the text of the path plus operations on it
 Every method except `exists`, `is_file`, `is_dir`, `metadata`,
 `symlink_metadata` and `canonicalize` is pure text manipulation: it never
 touches the file system, so `..` is not resolved against symlinks and
-nothing needs to exist. "No path" is the empty Path (there is no
-Option): `parent()` of a root, for example, is `Path("")`.
+nothing needs to exist. A part that may be missing comes back as an
+optional, as in Rust: `parent()` of a root is none.
+
+Breaking change: `parent()`, `file_name()`, `file_stem()`, `extension()`
+and `dot_index()` used to return an empty Path or String (or
+`name.size()`) for "none"; they now return `Path?`, `String?` and
+`ulong?`.
 
 Separators: on POSIX only `/` separates components (`\` is an ordinary
 byte of a name). On Windows both `/` and `\` separate, and a path may
@@ -32,9 +37,9 @@ dots are ASCII, so splitting at them never cuts a character in two.
     import io;
 
     var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
-    var name = p.file_name();                       # "guide.md"
-    var ext = p.extension();                        # "md"
-    var dir = p.parent();                           # io.Path("docs")
+    var name = p.file_name().value();               # "guide.md"
+    var ext = p.extension().value_or("");           # "md"
+    var dir = p.parent();                           # some io.Path("docs")
     if (p.is_file()) {
         print(p.to_string());
     }
@@ -83,18 +88,21 @@ Returns the separator this platform inserts when it builds a path.
 #### dot_index
 
 ```pepper
-static dot_index(name: String): ulong
+static dot_index(name: String): ulong?
 ```
 
 Returns the byte offset of the dot that starts the extension in the
 file name `name`: the last `.` that is not the first byte. A leading
 dot (`.bashrc`) starts the name, not an extension.
 
+Breaking change: this used to return `name.size()` for "no
+extension"; it now returns none.
+
 **Parameters**
 - `name` — a file name (one component, as `file_name()` returns)
 
 **Returns**
-- the index of the extension's dot, or `name.size` when the name has no extension (including the empty name)
+- the index of the extension's dot, or none when the name has no such dot (`noext`, `.bashrc`, the empty name)
 
 ### Methods
 
@@ -115,9 +123,8 @@ Returns the path's text, the same String the Path holds, not a copy.
 is_empty(): bool
 ```
 
-Returns whether the path has no text at all. The empty path means "no
-path": it is what `parent()` returns for a root or a bare name, and
-file-system operations on it fail.
+Returns whether the path has no text at all. File-system operations
+on the empty path fail.
 
 **Returns**
 - true when the path's text is `""`
@@ -226,7 +233,7 @@ as `\x` and `C:x`. On POSIX it equals `is_absolute()`.
 #### parent
 
 ```pepper
-parent(): Path
+parent(): Path?
 ```
 
 Returns the path without its last component. Pure text: `..` is not
@@ -237,62 +244,75 @@ dropped (`a/b/` and `a//b` both give `a`). The parent of a top-level
 name keeps the root and prefix (`/a` gives `/`, `C:\x` gives `C:\`,
 `C:x` gives `C:`).
 
+Breaking change: this used to return the empty path for "no parent";
+it now returns none.
+
 **Returns**
-- the parent path, or the empty path for a root (`/`, `C:\`), a bare name (`a`, `.`, `..`), or the empty path
+- the parent path, or none for a root (`/`, `C:\`, a bare prefix such as `C:`), a bare name with no root (`a`, `.`, `..`), or the empty path
 
 **Example**
 ```pepper
     import io;
 
-    var p = io.Path("/a/b/c.txt").parent();   # "/a/b"
-    var root = io.Path("/a").parent();        # "/"
-    var none = io.Path("/").parent();         # "" (empty)
+    var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+    var root = io.Path("/a").parent().value();        # "/"
+    var none = io.Path("/").parent();                 # none
 ```
 
 #### file_name
 
 ```pepper
-file_name(): String
+file_name(): String?
 ```
 
 Returns the last component of the path, ignoring trailing separators
 (`a/b/` gives `b`).
 
+Breaking change: this used to return `""` for "no file name"; it now
+returns none.
+
 **Returns**
-- the last component, or `""` for a root, the empty path, or a path whose last component is `.` or `..`
+- the last component, or none for a root (`/`, `C:\`), the empty path, or a path whose last component is `.` or `..`
 
 **Example**
 ```pepper
     import io;
 
-    var name = io.Path("/a/b/c.txt").file_name();   # "c.txt"
-    var none = io.Path("a/..").file_name();         # ""
+    var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+    var none = io.Path("a/..").file_name();                 # none
 ```
 
 #### file_stem
 
 ```pepper
-file_stem(): String
+file_stem(): String?
 ```
 
 Returns the file name without its extension: everything before the
 last dot, unless that dot is the first character.
 
+Breaking change: this used to return `""` for "no file name"; it now
+returns none.
+
 **Returns**
-- the stem (`c.tar` for `c.tar.gz`, `.bashrc` for `.bashrc`, `foo` for `foo.`), or `""` when there is no file name (see `file_name()`)
+- the stem (`c.tar` for `c.tar.gz`, `.bashrc` for `.bashrc`, `foo` for `foo.`, `noext` for `noext`), or none when there is no file name (see `file_name()`)
 
 #### extension
 
 ```pepper
-extension(): String
+extension(): String?
 ```
 
 Returns the file name's extension, without its dot: the text after
 the last dot, unless that dot is the first character. Only the file
 name counts; a dot in a directory name (`a.b/c`) is not an extension.
 
+Breaking change: this used to return `""` for "no extension"; it now
+returns none. As in Rust, a name ending in a dot (`foo.`) has the
+empty extension, which is not none.
+
 **Returns**
-- the extension (`gz` for `c.tar.gz`), or `""` when there is none (`noext`, `.bashrc`, `foo.`) or no file name
+- the extension (`gz` for `c.tar.gz`, `""` for `foo.`), or none when the file name has no dot after its first character (`noext`, `.bashrc`) or there is no file name
 
 #### with_extension
 

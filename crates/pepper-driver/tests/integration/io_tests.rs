@@ -109,28 +109,33 @@ main(): int {
     assert(io.Path("usr").join_str("lib").to_string() == w("usr/lib"), "deprecated join_str");
 
     # parent
-    assert(io.Path("/a/b/c.txt").parent().to_string() == "/a/b", "parent");
-    assert(io.Path("/a").parent().to_string() == "/", "parent of top-level");
-    assert(io.Path("/").parent().to_string() == "", "parent of root");
-    assert(io.Path("a").parent().to_string() == "", "parent of bare name");
-    assert(io.Path("a/b/").parent().to_string() == "a", "parent ignores trailing separator");
-    assert(io.Path("a//b").parent().to_string() == "a", "parent collapses separators");
-    assert(io.Path("").parent().to_string() == "", "parent of empty");
+    assert(io.Path("/a/b/c.txt").parent().value().to_string() == "/a/b", "parent");
+    assert(io.Path("/a").parent().value().to_string() == "/", "parent of top-level");
+    assert(io.Path("/").parent().is_none(), "parent of root");
+    assert(io.Path("a").parent().is_none(), "parent of bare name");
+    assert(io.Path("a/b/").parent().value().to_string() == "a", "parent ignores trailing separator");
+    assert(io.Path("a//b").parent().value().to_string() == "a", "parent collapses separators");
+    assert(io.Path("").parent().is_none(), "parent of empty");
 
     # file_name / file_stem / extension
-    assert(io.Path("/a/b/c.txt").file_name() == "c.txt", "file_name");
-    assert(io.Path("a/b/").file_name() == "b", "file_name trailing separator");
-    assert(io.Path("/").file_name() == "", "file_name of root");
-    assert(io.Path("a/..").file_name() == "", "file_name of ..");
-    assert(io.Path("").file_name() == "", "file_name of empty");
-    assert(io.Path("c.tar.gz").file_stem() == "c.tar", "file_stem");
-    assert(io.Path("c.tar.gz").extension() == "gz", "extension");
-    assert(io.Path("/x/.bashrc").file_stem() == ".bashrc", "dotfile stem");
-    assert(io.Path("/x/.bashrc").extension() == "", "dotfile has no extension");
-    assert(io.Path("foo.").file_stem() == "foo", "trailing dot stem");
-    assert(io.Path("foo.").extension() == "", "trailing dot extension");
-    assert(io.Path("a.b/c").extension() == "", "dot in a directory name");
-    assert(io.Path("noext").file_stem() == "noext", "no extension stem");
+    assert(io.Path("/a/b/c.txt").file_name().value() == "c.txt", "file_name");
+    assert(io.Path("a/b/").file_name().value() == "b", "file_name trailing separator");
+    assert(io.Path("/").file_name().is_none(), "file_name of root");
+    assert(io.Path("a/..").file_name().is_none(), "file_name of ..");
+    assert(io.Path("").file_name().is_none(), "file_name of empty");
+    assert(io.Path("c.tar.gz").file_stem().value() == "c.tar", "file_stem");
+    assert(io.Path("c.tar.gz").extension().value() == "gz", "extension");
+    assert(io.Path("/x/.bashrc").file_stem().value() == ".bashrc", "dotfile stem");
+    assert(io.Path("/x/.bashrc").extension().is_none(), "dotfile has no extension");
+    assert(io.Path("foo.").file_stem().value() == "foo", "trailing dot stem");
+    assert(io.Path("foo.").extension().value() == "", "trailing dot: the empty extension");
+    assert(io.Path("a.b/c").extension().is_none(), "dot in a directory name");
+    assert(io.Path("noext").file_stem().value() == "noext", "no extension stem");
+    assert(io.Path("noext").extension().is_none(), "no extension");
+    assert(io.Path("/").file_stem().is_none(), "file_stem of root");
+    assert(io.Path(".").parent().is_none() && io.Path("..").parent().is_none(), "parent of . and ..");
+    assert(io.Path.dot_index("c.tar.gz").value() == 5, "dot_index");
+    assert(io.Path.dot_index(".bashrc").is_none() && io.Path.dot_index("").is_none(), "dot_index none");
 
     # with_extension
     assert(io.Path("a/b.txt").with_extension("md").to_string() == "a/b.md", "replace extension");
@@ -172,7 +177,7 @@ main(): int {
         # POSIX: a root makes a path absolute; `\` is an ordinary byte.
         assert(io.Path("/x").is_absolute(), "absolute");
         assert(io.Path("//a//b/").normalize().to_string() == "/a/b", "leading separators collapse");
-        assert(io.Path("a\\b").file_name() == "a\\b", "backslash is not a separator");
+        assert(io.Path("a\\b").file_name().value() == "a\\b", "backslash is not a separator");
     }
     [Target(OS(Windows))] {
         # Windows: `\` and `/` both separate; absolute needs a drive and a
@@ -181,11 +186,11 @@ main(): int {
         assert(!io.Path("C:x").is_absolute(), "a drive without a root is relative");
         assert(io.Path("C:/x").is_absolute() && io.Path(w("C:/x")).is_absolute(), "drive and root");
         assert(io.Path(w("//server/share/x")).is_absolute(), "UNC");
-        assert(io.Path(w("a/b/c.txt")).parent().to_string() == w("a/b"), "parent with backslashes");
-        assert(io.Path(w("a/b/c.txt")).file_name() == "c.txt", "file_name with backslashes");
+        assert(io.Path(w("a/b/c.txt")).parent().value().to_string() == w("a/b"), "parent with backslashes");
+        assert(io.Path(w("a/b/c.txt")).file_name().value() == "c.txt", "file_name with backslashes");
         assert(io.Path("C:/a//./b/").normalize().to_string() == w("C:/a/b"), "normalize keeps the drive");
-        assert(io.Path("C:/x").parent().to_string() == "C:/", "parent of a top-level name keeps the root");
-        assert(io.Path("C:/").parent().to_string() == "", "parent of a drive root");
+        assert(io.Path("C:/x").parent().value().to_string() == "C:/", "parent of a top-level name keeps the root");
+        assert(io.Path("C:/").parent().is_none(), "parent of a drive root");
         var wc = io.Path(w("C:/a/b")).components();
         assert(wc.count() == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
         assert(io.Path("a").join("C:/x").to_string() == "C:/x", "join a drive path replaces");

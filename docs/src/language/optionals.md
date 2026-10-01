@@ -59,6 +59,35 @@ such as `int` or `ulong`. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 [Memory and reference counting](memory.md)).
 
+## Optionals in the standard library
+
+Standard library lookups that can come up empty return an optional rather
+than a sentinel value:
+
+| API | Returns | None when |
+|---|---|---|
+| `Array<T>.find(item)` | `ulong?` | no element equals `item` |
+| `io.Path.parent()` | `Path?` | the path is a root (`/`, `C:\`), a bare name with no root (`a`, `.`, `..`), or empty |
+| `io.Path.file_name()` | `String?` | the path is a root or empty, or its last component is `.` or `..` |
+| `io.Path.file_stem()` | `String?` | there is no file name |
+| `io.Path.extension()` | `String?` | there is no file name, or the name has no dot after its first character (`Makefile`, `.bashrc`); `foo.` has the empty extension `""` |
+| `io.Path.dot_index(name)` | `ulong?` | `name` has no dot after its first character |
+| `http.Headers.get(name)` | `String?` | no field has that name |
+
+```pepper
+{{#include ../../examples/optionals-library.pep}}
+```
+
+**Breaking change.** `Array.find` used to return a `long` that was `-1` for
+"not found", and the `Path` methods above returned an empty `Path` or
+`String` (or `name.size()` for `dot_index`). Code written against the old
+API must test the optional instead: `a.find(x) >= 0` becomes
+`a.find(x).is_some()`, `p.parent().is_empty()` becomes
+`p.parent().is_none()`, and a value is read with `value()` or `value_or`.
+A comparison such as `a.find(x) == -1` still compiles but compares the
+optional object rather than an index, so search for these and rewrite them.
+`String.find` is unchanged and still returns `-1`.
+
 ## Optional or Result
 
 An `Optional<T>` says only that a value is missing. When the caller needs to
@@ -72,6 +101,6 @@ error.
   on it yet. `Optional` will become an [enum](enums.md) with `None` and
   `Some(value)` cases, as enum cases can now carry values; its methods stay
   the same.
-- The runtime's own APIs still use null references or default values for
-  "missing" (a `HashMap` returns the default value for a missing key, for
-  example).
+- Some runtime APIs still use null references, default values or sentinels
+  for "missing": a `HashMap` returns the default value for a missing key,
+  and `String.find` returns `-1`, for example.

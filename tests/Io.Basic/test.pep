@@ -5,8 +5,8 @@ import [File, Path] from io;
 
 main(): int {
     var p = io.Path("dir/name.txt");
-    if (!(p.extension() == "txt")) { return 1; }
-    if (!(p.parent().to_string() == "dir")) { return 2; }
+    if (!(p.extension().value() == "txt")) { return 1; }
+    if (!(p.parent().value().to_string() == "dir")) { return 2; }
 
     var f = io.Directory.temp().join("pepper_corpus_io_basic.txt");
     if (File.write_text(f, "corpus").is_err()) { return 3; }

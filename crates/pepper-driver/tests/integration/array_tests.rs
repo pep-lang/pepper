@@ -251,8 +251,8 @@ test(): int {
     a.append(1);
     a.append(2);
     a.append(3);
-    if (a.find(2) != 1) { return -1; }
-    if (a.find(99) != -1) { return -2; }
+    if (a.find(2).value() != 1) { return -1; }
+    if (a.find(99).is_some()) { return -2; }
     if (!a.contains(3)) { return -3; }
     if (a.contains(99)) { return -4; }
     return 0;
@@ -403,7 +403,7 @@ test(): int {
     var s = Array<String>();
     s.append("hello");
     s.append("world");
-    if (s.find("world") != 1) { return -1; }
+    if (s.find("world").value() != 1) { return -1; }
     if (!s.contains("hello")) { return -2; }
     var t = Array<String>();
     t.append("hello");
@@ -726,7 +726,7 @@ test(): int {
     var e = Array<int>();
     if (!e.empty()) { return -1; }
     if (e.count() != 0) { return -2; }
-    if (e.find(1) != -1) { return -3; }
+    if (e.find(1).is_some()) { return -3; }
     if (e.contains(1)) { return -4; }
     var f = Array<int>();
     if (!(e == f)) { return -5; }
@@ -941,7 +941,7 @@ test(): int {
     var st = Array<String>();
     st.append("ab");
     st.append("cd");
-    if (st.find("cd") != 1) { return -1; }
+    if (st.find("cd").value() != 1) { return -1; }
     if (!st.contains("ab")) { return -2; }
     if (!(st[0] == "ab")) { return -3; }
     var other = Array<String>();

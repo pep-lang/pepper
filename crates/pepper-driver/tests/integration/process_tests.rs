@@ -154,7 +154,7 @@ child(args: String[]): int {
         return 0;
     }
     if (mode == "directory") {
-        print(process.working_directory().value().file_name());
+        print(process.working_directory().value().file_name().value());
         return 0;
     }
     if (mode == "sleep") {
@@ -180,7 +180,7 @@ main(args: String[]): int {
         return child(args);
     }
     var self = process.executable_path().value().to_string();
-    print(process.executable_path().value().file_name().contains("process_command") ? "path ok" : "path wrong");
+    print(process.executable_path().value().file_name().value().contains("process_command") ? "path ok" : "path wrong");
 
     var arguments = process.Command(self).arguments(["arguments", "two words", "", "quote\"d", "back\\slash\\", "tab\there"]).run().value();
     print(arguments.stdout);

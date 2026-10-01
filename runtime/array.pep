@@ -520,26 +520,34 @@ export struct Array<T> {
         return b;
     }
 
-    ## Returns the position of the first element equal to `item`.
+    ## Returns the position of the first element equal to `item`, or none
+    ## when no element matches.
     ##
     ## Runs in O(count), scanning from the front. Elements are compared with
     ## `==`: when `T` declares an `==` operator (as `String` does) that
     ## operator decides; for any other struct `T` it compares references, so
     ## only the very same object matches.
     ##
+    ## Breaking change: `find` used to return a `long` that was `-1` when
+    ## nothing matched. It now returns `ulong?`: test it with `is_some()` (or
+    ## as a condition) and read the index with `value()`.
+    ##
     ## @param item the value to look for
-    ## @returns the index of the first match, or -1 when no element matches
+    ## @returns the index of the first match, or none when no element matches
+    ## (always none for an empty Array)
     ## @example
-    ##     var i = a.find(9);   # -1 if a holds no 9
-    find(item: T): long {
-        ulong idx = 0;
-        while (idx < _size) {
-            if (_data[idx] == item) {
-                return idx;
+    ##     var a = [3, 9, 4];
+    ##     var i = a.find(9);         # i.value() == 1
+    ##     var missing = a.find(7);   # missing.is_none() == true
+    find(item: T): ulong? {
+        ulong index = 0;
+        while (index < _size) {
+            if (_data[index] == item) {
+                return Optional<ulong>.some(index);
             }
-            idx = idx + 1;
+            index = index + 1;
         }
-        return -1;
+        return Optional<ulong>.none();
     }
 
     ## Reports whether any element equals `item`, compared as `find` does.
@@ -549,7 +557,7 @@ export struct Array<T> {
     ## @param item the value to look for
     ## @returns true when `find(item)` finds a match
     contains(item: T): bool {
-        return find(item) >= 0;
+        return find(item).is_some();
     }
 
     ## Appends every element of `rhs`, in order, to the end of this Array.

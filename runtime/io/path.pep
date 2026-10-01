@@ -3,7 +3,8 @@
 # Everything except exists/is_file/is_dir/metadata/symlink_metadata/
 # canonicalize is pure string manipulation. Paths are scanned byte by byte:
 # separators and dots are ASCII, so splitting at them never cuts a UTF-8
-# sequence. "No value" is the empty Path / String (there is no Option).
+# sequence. "No value" is an Optional (`Path?`, `String?`, `ulong?`) that is
+# none, as in Rust; the empty Path is an ordinary (relative) path.
 #
 # Bytes are read through `_io_byte`, which is bounds-checked (an empty String
 # has no buffer at all).
@@ -156,8 +157,13 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 ## Every method except `exists`, `is_file`, `is_dir`, `metadata`,
 ## `symlink_metadata` and `canonicalize` is pure text manipulation: it never
 ## touches the file system, so `..` is not resolved against symlinks and
-## nothing needs to exist. "No path" is the empty Path (there is no
-## Option): `parent()` of a root, for example, is `Path("")`.
+## nothing needs to exist. A part that may be missing comes back as an
+## optional, as in Rust: `parent()` of a root is none.
+##
+## Breaking change: `parent()`, `file_name()`, `file_stem()`, `extension()`
+## and `dot_index()` used to return an empty Path or String (or
+## `name.size()`) for "none"; they now return `Path?`, `String?` and
+## `ulong?`.
 ##
 ## Separators: on POSIX only `/` separates components (`\` is an ordinary
 ## byte of a name). On Windows both `/` and `\` separate, and a path may
@@ -171,9 +177,9 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 ##     import io;
 ##
 ##     var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
-##     var name = p.file_name();                       # "guide.md"
-##     var ext = p.extension();                        # "md"
-##     var dir = p.parent();                           # io.Path("docs")
+##     var name = p.file_name().value();               # "guide.md"
+##     var ext = p.extension().value_or("");           # "md"
+##     var dir = p.parent();                           # some io.Path("docs")
 ##     if (p.is_file()) {
 ##         print(p.to_string());
 ##     }
@@ -216,9 +222,8 @@ export struct Path {
         return _value;
     }
 
-    ## Returns whether the path has no text at all. The empty path means "no
-    ## path": it is what `parent()` returns for a root or a bare name, and
-    ## file-system operations on it fail.
+    ## Returns whether the path has no text at all. File-system operations
+    ## on the empty path fail.
     ##
     ## @returns true when the path's text is `""`
     is_empty(): bool {
@@ -324,95 +329,125 @@ export struct Path {
     ## name keeps the root and prefix (`/a` gives `/`, `C:\x` gives `C:\`,
     ## `C:x` gives `C:`).
     ##
-    ## @returns the parent path, or the empty path for a root (`/`, `C:\`),
-    ## a bare name (`a`, `.`, `..`), or the empty path
+    ## Breaking change: this used to return the empty path for "no parent";
+    ## it now returns none.
+    ##
+    ## @returns the parent path, or none for a root (`/`, `C:\`, a bare
+    ## prefix such as `C:`), a bare name with no root (`a`, `.`, `..`), or
+    ## the empty path
     ## @example
     ##     import io;
     ##
-    ##     var p = io.Path("/a/b/c.txt").parent();   # "/a/b"
-    ##     var root = io.Path("/a").parent();        # "/"
-    ##     var none = io.Path("/").parent();         # "" (empty)
-    parent(): Path {
+    ##     var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+    ##     var root = io.Path("/a").parent().value();        # "/"
+    ##     var none = io.Path("/").parent();                 # none
+    parent(): Path? {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
-            return Path();
+            return Optional<Path>.none();
         }
         var start = _io_path_name_start(_value, e);
         if (start <= root) {
-            return Path(_io_slice(_value, 0, root));
+            if (root == 0) {
+                return Optional<Path>.none();
+            }
+            return Optional<Path>.some(Path(_io_slice(_value, 0, root)));
         }
         var p = _value.c_str() as __ptr<u8>;
         var j = start;
         while (j > root && _io_path_is_sep(_io_byte(p, _value.size(), j - 1))) {
             j = j - 1;
         }
-        return Path(_io_slice(_value, 0, j));
+        return Optional<Path>.some(Path(_io_slice(_value, 0, j)));
     }
 
     ## Returns the last component of the path, ignoring trailing separators
     ## (`a/b/` gives `b`).
     ##
-    ## @returns the last component, or `""` for a root, the empty path, or a
-    ## path whose last component is `.` or `..`
+    ## Breaking change: this used to return `""` for "no file name"; it now
+    ## returns none.
+    ##
+    ## @returns the last component, or none for a root (`/`, `C:\`), the
+    ## empty path, or a path whose last component is `.` or `..`
     ## @example
     ##     import io;
     ##
-    ##     var name = io.Path("/a/b/c.txt").file_name();   # "c.txt"
-    ##     var none = io.Path("a/..").file_name();         # ""
-    file_name(): String {
+    ##     var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+    ##     var none = io.Path("a/..").file_name();                 # none
+    file_name(): String? {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
-            return String();
+            return Optional<String>.none();
         }
         var name = _io_slice(_value, _io_path_name_start(_value, e), e);
         if (name == "." || name == "..") {
-            return String();
+            return Optional<String>.none();
         }
-        return name;
+        return Optional<String>.some(name);
     }
 
     ## Returns the byte offset of the dot that starts the extension in the
     ## file name `name`: the last `.` that is not the first byte. A leading
     ## dot (`.bashrc`) starts the name, not an extension.
     ##
+    ## Breaking change: this used to return `name.size()` for "no
+    ## extension"; it now returns none.
+    ##
     ## @param name a file name (one component, as `file_name()` returns)
-    ## @returns the index of the extension's dot, or `name.size` when the
-    ## name has no extension (including the empty name)
-    static dot_index(name: String): ulong {
+    ## @returns the index of the extension's dot, or none when the name has
+    ## no such dot (`noext`, `.bashrc`, the empty name)
+    static dot_index(name: String): ulong? {
         # A dot at 0 starts a hidden file's name, not an extension.
         var dot = name.rfind(".");
         if (dot > 0) {
-            return dot as ulong;
+            return Optional<ulong>.some(dot as ulong);
         }
-        return name.size();
+        return Optional<ulong>.none();
     }
 
     ## Returns the file name without its extension: everything before the
     ## last dot, unless that dot is the first character.
     ##
+    ## Breaking change: this used to return `""` for "no file name"; it now
+    ## returns none.
+    ##
     ## @returns the stem (`c.tar` for `c.tar.gz`, `.bashrc` for `.bashrc`,
-    ## `foo` for `foo.`), or `""` when there is no file name (see
-    ## `file_name()`)
-    file_stem(): String {
+    ## `foo` for `foo.`, `noext` for `noext`), or none when there is no file
+    ## name (see `file_name()`)
+    file_stem(): String? {
         var name = file_name();
-        return _io_slice(name, 0, Path.dot_index(name));
+        if (!name) {
+            return Optional<String>.none();
+        }
+        var text = name.value();
+        var dot = Path.dot_index(text).value_or(text.size());
+        return Optional<String>.some(_io_slice(text, 0, dot));
     }
 
     ## Returns the file name's extension, without its dot: the text after
     ## the last dot, unless that dot is the first character. Only the file
     ## name counts; a dot in a directory name (`a.b/c`) is not an extension.
     ##
-    ## @returns the extension (`gz` for `c.tar.gz`), or `""` when there is
-    ## none (`noext`, `.bashrc`, `foo.`) or no file name
-    extension(): String {
+    ## Breaking change: this used to return `""` for "no extension"; it now
+    ## returns none. As in Rust, a name ending in a dot (`foo.`) has the
+    ## empty extension, which is not none.
+    ##
+    ## @returns the extension (`gz` for `c.tar.gz`, `""` for `foo.`), or none
+    ## when the file name has no dot after its first character (`noext`,
+    ## `.bashrc`) or there is no file name
+    extension(): String? {
         var name = file_name();
-        var dot = Path.dot_index(name);
-        if (dot >= name.size()) {
-            return String();
+        if (!name) {
+            return Optional<String>.none();
         }
-        return _io_slice(name, dot + 1, name.size());
+        var text = name.value();
+        var dot = Path.dot_index(text);
+        if (!dot) {
+            return Optional<String>.none();
+        }
+        return Optional<String>.some(_io_slice(text, dot.value() + 1, text.size()));
     }
 
     ## Returns this path with its file name's extension replaced by `ext`,
@@ -430,14 +465,14 @@ export struct Path {
     ##     var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
     ##     var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
     with_extension(ext: String): Path {
-        var name = file_name();
-        if (name.size() == 0) {
+        var stem = file_stem();
+        if (!stem) {
             return Path(_value.copy());
         }
         var e = _io_path_trimmed_end(_value);
         var start = _io_path_name_start(_value, e);
         var s = _io_slice(_value, 0, start);
-        s.append(_io_slice(name, 0, Path.dot_index(name)));
+        s.append(stem.value());
         if (ext.size() > 0) {
             s.append(".");
             s.append(ext);
