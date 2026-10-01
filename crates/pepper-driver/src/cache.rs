@@ -38,6 +38,15 @@
 //!   through a temporary file and a rename, without a lock: every writer of
 //!   one stamp writes the same tree, and a reader checks the stamp.
 //!
+//! And one file per checked runtime (canonical specialization phase 4):
+//!
+//! - `runtime/<key>.checked`, beside `parsed/`: the runtime checked alone
+//!   (`pepper_sema::checked::CheckedRuntime`), `postcard`-encoded after a
+//!   32-byte stamp (a hash of the compiler and the key, which hashes the
+//!   target and the runtime files' names, namespaces and texts). Its
+//!   locations number the runtime files in order, mapped to and from the
+//!   program's (`with_file_map`). Written like the syntax trees.
+//!
 //! **Locking.** A compiler holds an exclusive OS lock on `<unit>.lock`
 //! while it checks the record and, on a miss, generates the unit and writes
 //! the object and the record. Each file is written under a temporary name and renamed into
@@ -52,6 +61,7 @@
 
 use inkwell::module::Module;
 use pepper_codegen::target::OptLevel;
+use pepper_sema::checked::{CheckedRuntime, RuntimeStore};
 use pepper_sema::program::ParseCache;
 use std::fs::File;
 use std::io::Write;
@@ -70,6 +80,9 @@ pub struct Cache {
     /// shared by every `-O` level, since parsing does not depend on it.
     parsed_dir: PathBuf,
     parser: String,
+    /// Where checked runtimes are kept (see [`RuntimeStore`]), shared by
+    /// every `-O` level like the syntax trees.
+    runtime_dir: PathBuf,
 }
 
 impl Cache {
@@ -98,7 +111,7 @@ impl Cache {
         // nor counts as the same code. Parsing depends on neither.
         let parser = compiler_id();
         let compiler = format!("{} -{}", parser, options);
-        Ok(Cache { dir, compiler, opt_level, parsed_dir: target.join("parsed"), parser })
+        Ok(Cache { dir, compiler, opt_level, parsed_dir: target.join("parsed"), parser, runtime_dir: target.join("runtime") })
     }
 
     /// Reuse the unit `name` before sema, so sema may skip its bodies
@@ -291,6 +304,21 @@ impl Cache {
         self.parsed_dir.join(format!("{}.pepi", &blake3::hash(key.as_bytes()).to_hex()[..32]))
     }
 
+    /// Where the checked runtime stored under `key` is kept.
+    fn runtime_path(&self, key: &str) -> PathBuf {
+        self.runtime_dir.join(format!("{}.checked", &key[..32.min(key.len())]))
+    }
+
+    /// What a checked runtime is stamped with: this compiler and its key.
+    fn runtime_stamp(&self, key: &str) -> blake3::Hash {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"pepper checked 1\0");
+        hasher.update(self.parser.as_bytes());
+        hasher.update(&[0]);
+        hasher.update(key.as_bytes());
+        hasher.finalize()
+    }
+
     /// What a kept tree is stamped with: this compiler and the text parsed.
     fn parsed_stamp(&self, text: &str) -> blake3::Hash {
         let mut hasher = blake3::Hasher::new();
@@ -363,6 +391,29 @@ impl ParseCache for Cache {
         if let Some(parent) = at.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
+        let _ = write_atomically(&at, &bytes);
+    }
+}
+
+impl RuntimeStore for Cache {
+    fn load(&self, key: &str, files: &[u32]) -> Option<CheckedRuntime> {
+        let bytes = std::fs::read(self.runtime_path(key)).ok()?;
+        let (stamp, runtime) = bytes.split_at_checked(32)?;
+        if stamp != self.runtime_stamp(key).as_bytes() {
+            return None;
+        }
+        let map = files.iter().enumerate().map(|(i, &file)| (i as u32, file)).collect();
+        pepper_parser::diagnostic::with_file_map(map, || postcard::from_bytes(runtime).ok())
+    }
+
+    fn save(&self, key: &str, files: &[u32], runtime: &CheckedRuntime) {
+        let map = files.iter().enumerate().map(|(i, &file)| (file, i as u32)).collect();
+        let Ok(encoded) = pepper_parser::diagnostic::with_file_map(map, || postcard::to_stdvec(runtime)) else { return };
+        let mut bytes = self.runtime_stamp(key).as_bytes().to_vec();
+        bytes.extend(encoded);
+        let at = self.runtime_path(key);
+        // A cache that cannot be written only costs the next compile a check.
+        let _ = std::fs::create_dir_all(&self.runtime_dir);
         let _ = write_atomically(&at, &bytes);
     }
 }

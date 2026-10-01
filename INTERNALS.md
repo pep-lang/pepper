@@ -99,7 +99,8 @@ The CLI produces an executable and never runs it. Tests usually stop after
 `design-notes/sema/canonical-specialization.md`). The test harnesses
 (`compiler::compile_with_runtime`) and the language server (`sema_model_of`)
 check many programs against one runtime, so they check the runtime alone
-once per process and reuse it: `checked_runtime` builds the runtime files
+once per process and reuse it, and the CLI keeps it in the build cache
+(§4.3) for the next process: `checked_runtime` builds the runtime files
 (`runtime_files`: the prelude, forced imports, files under a runtime
 folder), runs the passes, and marks every declaration checked
 (`Module::checked`); `on_checked_runtime` clones that, swaps in the
@@ -109,10 +110,10 @@ and leave them alone (`checked::stash_bodies` keeps their bodies out of
 the passes that walk bodies), specializations the runtime already made are
 reused, and `check_confinement` starts from the runtime's recorded link
 summaries. The process-wide cache (`CHECKED_RUNTIMES`, a few entries) is
-keyed by the target platform and each runtime file's place, name and
-text. A program that overrides a runtime generic (`hash<int>`) changes
-the runtime's own instances, so it is checked whole, as the CLI checks
-every program until the checked runtime is stored on disk.
+keyed by the target platform and each runtime file's place, name,
+namespace (its mangled names carry it) and text. With a store (the CLI),
+the store is the cache and memory is skipped. A program that overrides a runtime generic (`hash<int>`) changes
+the runtime's own instances, so it is checked whole (`compiler::merge`).
 
 ### 2.1 CLI options (`crates/pepper-driver/src/options.rs`)
 
@@ -1205,8 +1206,16 @@ parsed.
   proposal sketched: bodies are skipped later, in sema (phase 2b), where
   their link summaries are known, and a per-file tree also spares parsing
   the unchanged files of a unit that misses.
-- **Not yet** (phase 3): compiling units on separate threads through sema,
-  and the language server and test harnesses reusing the runtime in memory.
+- **Checked runtime** (`.checked`, canonical specialization phase 4):
+  `checked::checked_runtime` takes a `RuntimeStore`, which the driver backs
+  with the cache (`impl RuntimeStore for Cache`): `runtime/<key>.checked`
+  holds the runtime checked alone (§2), `postcard`-encoded after a stamp
+  hashing the compiler and the key (the target and the runtime files' names,
+  namespaces and texts, not their places in the program). Its locations number the
+  runtime files in order; `with_file_map` maps them to and from the
+  program's `FileId`s. A missing, stale or damaged file is checked again
+  and rewritten.
+- **Not yet**: compiling units on separate threads through sema.
 
 ---
 
@@ -1708,7 +1717,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Parser unit | `crates/pepper-parser/src/parser/parsers.rs` (`mod tests`), `parser.rs`, `diagnostic.rs`, `doc.rs` | Helpers `parse`, `parse_expr`, and `parse_type` take the `track_source` guard. `parser.rs` tests pin exact rendered parse errors. |
 | Sema model | `crates/pepper-sema/src/model_tests.rs`, `visibility.rs` tests | `compile()` = parse → `build` → filters → `struct_body::apply` → `transform_pass`, then assertions on the model. |
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
-| Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, store types (`store_type_tests.rs`), edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). `compile_with_runtime` checks the program against the checked runtime (§2), so only the CLI-based tests check whole programs. Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
+| Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, store types (`store_type_tests.rs`), edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). `compile_with_runtime` checks the program against the checked runtime (§2), as the CLI does. Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |

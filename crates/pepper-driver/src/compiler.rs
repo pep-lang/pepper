@@ -86,10 +86,7 @@ pub fn check_with_runtime(name: &str, source: &str) -> Result<(), String> {
 /// once per process and reused (see [`on_checked_runtime`]).
 pub fn compile_with_runtime(name: &str, source: &str) -> Result<Compiled, String> {
     let program = load_with_runtime(name, source)?;
-    if let Some(result) = on_checked_runtime(&program) {
-        return result;
-    }
-    let mut module = merge(&program)?;
+    let mut module = on_checked_runtime(&program, None)?;
     run_passes(&mut module)?;
     Ok(module)
 }
@@ -148,9 +145,10 @@ pub fn compile_for_objects(options: &Options, units_dir: &Path) -> Result<ForObj
     }
     // Numbered as if the program were compiled for the first time.
     pepper_sema::reset_program_counters();
-    let mut trial = merge(&done.program)?;
+    let cache = runtime_store(options)?;
+    let mut trial = on_checked_runtime(&done.program, cache.as_ref().map(|c| c as _))?;
     trial.cached_files = reused.files;
-    trial.recorded_summaries = reused.summaries;
+    trial.recorded_summaries.extend(reused.summaries);
     run_passes(&mut trial).map_err(|e| format!("build cache: skipping the cached units' bodies broke sema:\n{}", e))?;
     done.trial = Some(trial);
     Ok(done)
@@ -178,10 +176,11 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
             return Ok((SemaModule::default(), program, reused_units));
         }
     }
-    let mut module = merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))?;
+    let cache = runtime_store(options)?;
+    let mut module = on_checked_runtime(&program, cache.as_ref().map(|c| c as _)).inspect_err(|_| crate::report_warnings(&program.render_warnings()))?;
     module.record_summaries = record;
     module.cached_files = std::mem::take(&mut reused_units.files);
-    module.recorded_summaries = std::mem::take(&mut reused_units.summaries);
+    module.recorded_summaries.extend(std::mem::take(&mut reused_units.summaries));
     timer.stage("check and build");
     // Warnings print whether or not the passes succeed, as clang prints
     // them beside errors.
@@ -192,26 +191,30 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     Ok((module, program, reused_units))
 }
 
-/// Check `program` against its runtime checked alone, which this process
-/// reuses for every program that loads the same runtime files (see
-/// `pepper_sema::checked`). `None` when the runtime cannot be checked alone.
-fn on_checked_runtime(program: &Program) -> Option<Result<SemaModule, String>> {
-    let in_runtime = pepper_sema::checked::runtime_files(program)?;
-    let sources = |d: &pepper_parser::diagnostic::Diagnostic| {
+/// The build cache, where checked runtimes are kept; none with
+/// `--no-cache`.
+fn runtime_store(options: &Options) -> Result<Option<crate::cache::Cache>, String> {
+    options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()
+}
+
+/// `program` merged into one module, ready for [`run_passes`]: on its
+/// runtime checked alone when the runtime can be (see
+/// `pepper_sema::checked`), so the passes check only the other files; else
+/// every file, as [`merge`] does.
+fn on_checked_runtime(program: &Program, store: Option<&dyn pepper_sema::checked::RuntimeStore>) -> Result<SemaModule, String> {
+    let Some(in_runtime) = pepper_sema::checked::runtime_files(program) else {
+        return merge(program);
+    };
+    program.check()?;
+    let mut module = pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Strict, store).map_err(|d| {
         let mut sources = pepper_parser::diagnostic::SourceMap::default();
         for file in &program.files {
             sources.add(&file.name, &file.source);
         }
-        sources.render(d)
-    };
-    Some((|| {
-        program.check()?;
-        let mut module = pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Strict).map_err(|d| sources(&d))?;
-        module.warnings = program.warnings();
-        let result = run_passes(&mut module);
-        crate::report_warnings(&module.render_warnings());
-        result.map(|_| module)
-    })())
+        sources.render(&d)
+    })?;
+    module.warnings = program.warnings();
+    Ok(module)
 }
 
 /// The units whose objects came from the cache before sema.

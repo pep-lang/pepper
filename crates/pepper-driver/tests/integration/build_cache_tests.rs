@@ -501,3 +501,44 @@ fn an_unchanged_program_skips_sema_and_the_link() {
     assert!(pepper_driver::compiler::compile_for_objects(&options(), &units).unwrap().cached.is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_program_loads_the_runtime_another_program_checked() {
+    let dir = scratch("checked_runtime");
+    let cache = dir.join("cache");
+    // `first` numbers its files root, helper, runtime; `second` root, runtime.
+    let first = dir.join("first");
+    let second = dir.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    write(&first, &[("main.pep", "import \"helper\";\nmain(): int { return three() - 3; }\n"), ("helper.pep", "export three(): int { return 3; }\n")]);
+    write(&second, &[("main.pep", "main(): int {\n    var a = Array<int>();\n    a.append(4);\n    return a[0] - 4;\n}\n")]);
+    std::env::set_current_dir(repo_root()).unwrap();
+    let run = |project: &Path| {
+        let exe = project.join(if cfg!(windows) { "main.exe" } else { "main" });
+        pepper_driver::run(pepper_driver::Options::parse_from([
+            "pepper".to_string(),
+            project.join("main.pep").to_string_lossy().into_owned(),
+            "-o".to_string(),
+            exe.to_string_lossy().into_owned(),
+            "--cache".to_string(),
+            cache.to_string_lossy().into_owned(),
+            "--build".to_string(),
+            project.join("build").to_string_lossy().into_owned(),
+        ]))
+        .unwrap();
+        std::process::Command::new(&exe).status().unwrap().code()
+    };
+    assert_eq!(run(&first), Some(0));
+    let stored: Vec<PathBuf> = std::fs::read_dir(cache.join("v1"))
+        .unwrap()
+        .flat_map(|target| std::fs::read_dir(target.unwrap().path().join("runtime")).unwrap())
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(stored.len(), 1, "{:?}", stored);
+    let written = std::fs::metadata(&stored[0]).unwrap().modified().unwrap();
+    // The runtime comes from the cache, renumbered.
+    assert_eq!(run(&second), Some(0));
+    assert_eq!(std::fs::metadata(&stored[0]).unwrap().modified().unwrap(), written, "the runtime was checked again");
+    let _ = std::fs::remove_dir_all(&dir);
+}

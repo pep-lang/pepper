@@ -71,6 +71,7 @@ pub fn restore_bodies(module: &mut Module) {
 
 /// A runtime checked alone (see [`checked_runtime`]): the module the passes
 /// left, its declarations marked checked.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CheckedRuntime {
     pub module: Module,
     /// The link summaries `check_confinement` recorded for it.
@@ -82,13 +83,24 @@ pub struct CheckedRuntime {
 
 /// What identifies a checked runtime: the target platform, whose
 /// `[Target(...)]` filters it went through, and each runtime file's place in
-/// the program, name and text. Programs that load the same runtime files in
-/// the same places for one platform share one.
-type RuntimeKey = ((String, String), Vec<(usize, String, String)>);
+/// the program, name, namespace (which its mangled names carry, and which
+/// depends on where the compiler runs) and text. Programs that load the
+/// same runtime files in the same places for one platform share one.
+type RuntimeKey = ((String, String), Vec<(usize, String, String, String)>);
 
 /// The runtimes checked so far in this process: the test harnesses and the
 /// language server check many programs against one runtime.
 static CHECKED_RUNTIMES: LazyLock<Mutex<HashMap<RuntimeKey, Arc<CheckedRuntime>>>> = LazyLock::new(Default::default);
+
+/// Where checked runtimes are kept between processes (the build cache).
+pub trait RuntimeStore {
+    /// The runtime stored under `key`, its locations' files translated from
+    /// the stored list to `files` (the program's runtime files, in order).
+    fn load(&self, key: &str, files: &[u32]) -> Option<CheckedRuntime>;
+    /// Store `runtime` under `key`, its locations' files (`files`, in
+    /// order) translated to their places in that list.
+    fn save(&self, key: &str, files: &[u32], runtime: &CheckedRuntime);
+}
 
 /// How many checked runtimes [`CHECKED_RUNTIMES`] keeps.
 const KEPT_RUNTIMES: usize = 8;
@@ -127,12 +139,42 @@ fn empty(program: &Program) -> Module {
 }
 
 /// Check `program`'s runtime files (`in_runtime`, from [`runtime_files`])
-/// alone, or reuse the result of checking the same files before.
-pub fn checked_runtime(program: &Program, in_runtime: &[bool]) -> Result<Arc<CheckedRuntime>, Diagnostic> {
-    let files = program.files.iter().enumerate().filter(|(i, _)| in_runtime[*i]).map(|(i, f)| (i, f.name.clone(), f.source.clone()));
+/// alone, or reuse the result of checking the same files before: in this
+/// process, else from `store`.
+pub fn checked_runtime(program: &Program, in_runtime: &[bool], store: Option<&dyn RuntimeStore>) -> Result<Arc<CheckedRuntime>, Diagnostic> {
+    let files = program.files.iter().enumerate().filter(|(i, _)| in_runtime[*i]).map(|(i, f)| (i, f.name.clone(), f.namespace.clone(), f.source.clone()));
     let key: RuntimeKey = ((crate::passes::platform::host_os(), crate::passes::platform::host_arch()), files.collect());
-    if let Some(found) = CHECKED_RUNTIMES.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+    // With a store (the CLI), the store is the cache: a process checks one
+    // program.
+    if store.is_none()
+        && let Some(found) = CHECKED_RUNTIMES.lock().unwrap_or_else(|e| e.into_inner()).get(&key)
+    {
         return Ok(found.clone());
+    }
+    let ids: Vec<u32> = key.1.iter().map(|(i, _, _, _)| *i as u32).collect();
+    // Stored by the files' names, namespaces and texts, not their places in
+    // a program.
+    let stored = store.map(|_| {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"pepper checked runtime 1\0");
+        for part in [&key.0 .0, &key.0 .1] {
+            hasher.update(part.as_bytes());
+            hasher.update(&[0]);
+        }
+        for (_, name, namespace, source) in &key.1 {
+            for part in [name, namespace] {
+                hasher.update(part.as_bytes());
+                hasher.update(&[0]);
+            }
+            hasher.update(&(source.len() as u64).to_le_bytes());
+            hasher.update(source.as_bytes());
+        }
+        hasher.finalize().to_hex().to_string()
+    });
+    if let (Some(store), Some(stored)) = (store, &stored)
+        && let Some(runtime) = store.load(stored, &ids)
+    {
+        return Ok(Arc::new(runtime));
     }
     let mut runtime = empty(program);
     for (i, file) in program.files.iter().enumerate().filter(|(i, _)| in_runtime[*i]) {
@@ -153,7 +195,17 @@ pub fn checked_runtime(program: &Program, in_runtime: &[bool]) -> Result<Arc<Che
     runtime.checked = Checked::all(&runtime);
     runtime.record_summaries = false;
     let summaries = std::mem::take(&mut runtime.summaries_to_record).into_iter().collect();
-    let checked = Arc::new(CheckedRuntime { module: runtime, summaries, aliases });
+    let checked = CheckedRuntime { module: runtime, summaries, aliases };
+    if let (Some(store), Some(stored)) = (store, &stored) {
+        store.save(stored, &ids, &checked);
+        return Ok(Arc::new(checked));
+    }
+    Ok(keep(key, checked))
+}
+
+/// Keep `runtime` in this process under `key`.
+fn keep(key: RuntimeKey, runtime: CheckedRuntime) -> Arc<CheckedRuntime> {
+    let checked = Arc::new(runtime);
     let mut runtimes = CHECKED_RUNTIMES.lock().unwrap_or_else(|e| e.into_inner());
     // Editing a runtime file in the language server checks a new runtime
     // per change: keep only a few.
@@ -161,7 +213,7 @@ pub fn checked_runtime(program: &Program, in_runtime: &[bool]) -> Result<Arc<Che
         runtimes.clear();
     }
     runtimes.insert(key, checked.clone());
-    Ok(checked)
+    checked
 }
 
 /// How [`on_checked_runtime`] builds the files outside the runtime.
@@ -175,10 +227,10 @@ pub enum Build {
 }
 
 /// `program`'s module, ready for [`run_passes`], on its runtime checked
-/// alone ([`checked_runtime`]): the passes read the runtime's declarations
+/// alone ([`checked_runtime`], from `store` when it has it): the passes read the runtime's declarations
 /// and check only the other files.
-pub fn on_checked_runtime(program: &Program, in_runtime: &[bool], build: Build) -> Result<Module, Diagnostic> {
-    let runtime = checked_runtime(program, in_runtime)?;
+pub fn on_checked_runtime(program: &Program, in_runtime: &[bool], build: Build, store: Option<&dyn RuntimeStore>) -> Result<Module, Diagnostic> {
+    let runtime = checked_runtime(program, in_runtime, store)?;
     let mut module = runtime.module.clone();
     let fresh = empty(program);
     module.sources = fresh.sources;

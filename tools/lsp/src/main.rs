@@ -1596,7 +1596,7 @@ fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
     // The runtime is checked once and reused (see `pepper_sema::checked`),
     // unless the document is part of it.
     let on_runtime = pepper_sema::checked::runtime_files(program).filter(|in_runtime| !in_runtime[0]).and_then(|in_runtime| {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Document))).ok()
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Document, None))).ok()
     });
     let module = match on_runtime {
         Some(Ok(module)) => module,
