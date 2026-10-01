@@ -688,3 +688,56 @@ fn a_default_method_with_a_string_literal_runs_through_a_trait_value() {
     );
     assert_eq!(run(&source), (0, 0));
 }
+
+/// A trait-typed local in a default method of a struct specialized at a raw
+/// pointer in a later specialization round (`Holder<__ptr<char>>`, reached
+/// only through `Box<T>.holder()`): the local's references take the pointer
+/// spelling `convert_intrinsics` gives its declaration, so calls go through
+/// `Source<char*>`, not an unknown `Source<__ptr<char>>`.
+#[test]
+fn a_trait_local_in_a_default_method_holds_a_pointer_element() {
+    let source = r#"
+trait Source<T> {
+    get(): T;
+
+    copy_get(): T {
+        Source<T> source = this;
+        return source.get();
+    }
+}
+
+struct Holder<T> {
+    T value;
+
+    construct(v: T) {
+        value = v;
+    }
+
+    get(): T {
+        return value;
+    }
+}
+
+extend Holder<T> with Source<T> {}
+
+struct Box<T> {
+    T value;
+
+    construct(v: T) {
+        value = v;
+    }
+
+    holder(): Holder<T> {
+        return Holder<T>(value);
+    }
+}
+
+test(): int {
+    var text = "hi";
+    var box = Box<__ptr<char>>(text.c_str());
+    var p = box.holder().copy_get();
+    return p[0] == 'h' ? 0 : 1;
+}
+"#;
+    assert_eq!(run(source), (0, 0));
+}

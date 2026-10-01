@@ -278,4 +278,38 @@ pub fn convert_intrinsics(module: &mut Module) {
         }
         convert_function(&mut st.destructor);
     }
+    convert_trait_refs(module);
+}
+
+/// The type a reference to a trait-typed variable carries, converted like
+/// the variable's declaration. A later specialization round can infer it
+/// before this pass runs (`Iterator<T> source` in a trait's default method,
+/// copied into `ArrayIterator<__ptr<char>>`), and calls through the value
+/// would then name an `Iterator<__ptr<char>>` no declaration has. Only trait
+/// types: elsewhere a reference's `__ptr<S>` spelling is what tells a raw
+/// pointer from a reference to struct `S`.
+fn convert_trait_refs(module: &mut Module) {
+    let traits: HashSet<String> = module.traits.iter().map(|t| t.name.clone()).collect();
+    if traits.is_empty() {
+        return;
+    }
+    let mut convert = |e: &mut Expression| {
+        if let Expression::SymbolRef { ty, .. } = e
+            && traits.contains(&ty.name)
+        {
+            convert_type_string(ty);
+        }
+    };
+    for function in &mut module.functions {
+        if let Some(body) = &mut function.body {
+            crate::passes::walk_block(body, &mut convert);
+        }
+    }
+    for st in &mut module.structs {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
+            if let Some(body) = &mut method.body {
+                crate::passes::walk_block(body, &mut convert);
+            }
+        }
+    }
 }
