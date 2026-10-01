@@ -181,6 +181,12 @@ happens; there is nothing to check after the loop.
   valid UTF-8, is yielded as an error and ends the lines.
 - **An error ends the sequence**: after an `Err` element, `next()` returns
   `false`.
+- **`listener.incoming()`** accepts connections on a
+  [`TcpListener`](networking.md), yielding each one as an
+  `IoResult<TcpStream>`. It is the exception to the rule above: a failed
+  accept is yielded and the loop goes on, since the next connection may
+  succeed. It ends only once the listener is closed, so a server loop
+  `break`s or `return`s when it is done.
 - **Leaving early cleans up.** The listing is closed when the loop ends,
   including by `break` or `return`, because the iterator is released then.
 

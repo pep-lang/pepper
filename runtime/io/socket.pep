@@ -221,6 +221,31 @@ export struct TcpListener {
         return TcpStream._accepted(_io_listener_accept(_handle, false));
     }
 
+    ## Returns an iterator that accepts connections one at a time, for a
+    ## `for` loop over incoming streams.
+    ##
+    ## Each step waits in `accept()` and yields the connected stream, or the
+    ## error `accept()` returned; an error does not end the iteration, so a
+    ## server can log it and keep going, or `break`. The iteration ends once
+    ## the listener is closed. Use `accept()` instead when the peer's address
+    ## is needed.
+    ##
+    ## @returns a new `Incoming` positioned before the first connection
+    ## @example
+    ##     import io;
+    ##
+    ##     var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+    ##     for (var connection in listener.incoming()) {
+    ##         if (connection.is_err()) {
+    ##             print(connection.error().message);
+    ##             continue;
+    ##         }
+    ##         connection.value().write_all("hello");
+    ##     }
+    incoming(): Incoming {
+        return Incoming(this);
+    }
+
     ## Returns the address the listener is bound to, with the port the
     ## system chose when it was bound to port 0.
     ##
@@ -241,6 +266,61 @@ export struct TcpListener {
         return _io_socket_close_taken(h);
     }
 }
+
+## The iterator `TcpListener.incoming()` returns: each connection the
+## listener accepts, as an `IoResult<TcpStream>`.
+##
+## `next()` waits for the next connection; an accept error is yielded as an
+## item rather than ending the iteration. The iteration ends once the
+## listener is closed. The iterator holds a reference to the listener, so
+## the listener stays open while the iterator lives.
+export struct Incoming {
+    ## The listener to accept on.
+    TcpListener _listener;
+    ## Whether `_value` holds the item the last `next()` moved to.
+    bool _has_value;
+    ## The item the last `next()` moved to.
+    IoResult<TcpStream> _value;
+
+    ## Makes an iterator over the connections `listener` accepts.
+    ##
+    ## @param listener the listener to accept on
+    construct(listener: TcpListener) {
+        _listener = listener;
+        _value = IoResult<TcpStream>.ok(TcpStream());
+    }
+
+    ## Waits for the next connection.
+    ##
+    ## @returns true with the connection or the accept error as the current
+    ##   item; false once the listener is closed
+    next(): bool {
+        if (!_listener.is_open()) {
+            _has_value = false;
+            return false;
+        }
+        var accepted = _listener.accept();
+        if (accepted.is_err()) {
+            _value = IoResult<TcpStream>.err(accepted.error());
+        } else {
+            var (stream, peer) = accepted.value();
+            _value = IoResult<TcpStream>.ok(stream);
+        }
+        _has_value = true;
+        return true;
+    }
+
+    ## Returns the item the last successful `next()` moved to.
+    ##
+    ## @returns the accepted stream, or the error accepting it
+    ## @panics if `next()` was never called or returned false ("Incoming.current() without a connection")
+    current(): IoResult<TcpStream> {
+        assert(_has_value, "Incoming.current() without a connection");
+        return _value;
+    }
+}
+
+extend Incoming with Iterator<IoResult<TcpStream>>;
 
 ## A TCP listening socket that any thread can accept connections on: the
 ## thread-safe counterpart of `TcpListener`, for servers that accept on every

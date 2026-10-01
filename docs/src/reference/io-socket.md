@@ -99,6 +99,38 @@ Waits for the next incoming connection and returns it.
 **Returns**
 - the connected stream and the peer's address; an error when the listener is closed, or another platform error
 
+#### incoming
+
+```pepper
+incoming(): Incoming
+```
+
+Returns an iterator that accepts connections one at a time, for a
+`for` loop over incoming streams.
+
+Each step waits in `accept()` and yields the connected stream, or the
+error `accept()` returned; an error does not end the iteration, so a
+server can log it and keep going, or `break`. The iteration ends once
+the listener is closed. Use `accept()` instead when the peer's address
+is needed.
+
+**Returns**
+- a new `Incoming` positioned before the first connection
+
+**Example**
+```pepper
+    import io;
+
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+    for (var connection in listener.incoming()) {
+        if (connection.is_err()) {
+            print(connection.error().message);
+            continue;
+        }
+        connection.value().write_all("hello");
+    }
+```
+
 #### local_address
 
 ```pepper
@@ -122,6 +154,60 @@ Connections already accepted stay open.
 
 **Returns**
 - an Ok result on success or when already closed; the platform error when closing fails
+
+## Incoming
+
+```pepper
+struct Incoming
+```
+
+The iterator `TcpListener.incoming()` returns: each connection the
+listener accepts, as an `IoResult<TcpStream>`.
+
+`next()` waits for the next connection; an accept error is yielded as an
+item rather than ending the iteration. The iteration ends once the
+listener is closed. The iterator holds a reference to the listener, so
+the listener stays open while the iterator lives.
+
+### Constructor
+
+#### Incoming()
+
+```pepper
+construct(listener: TcpListener)
+```
+
+Makes an iterator over the connections `listener` accepts.
+
+**Parameters**
+- `listener` — the listener to accept on
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Waits for the next connection.
+
+**Returns**
+- true with the connection or the accept error as the current item; false once the listener is closed
+
+#### current
+
+```pepper
+current(): IoResult<TcpStream>
+```
+
+Returns the item the last successful `next()` moved to.
+
+**Returns**
+- the accepted stream, or the error accepting it
+
+**Panics**
+- if `next()` was never called or returned false ("Incoming.current() without a connection")
 
 ## SharedTcpListener
 

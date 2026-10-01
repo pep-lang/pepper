@@ -43,7 +43,9 @@ A `TcpListener` waits for connections. Each `TcpStream` is one connection:
 - `TcpListener.bind(address)` listens on a local address. Port 0 lets the
   system pick a free port, and `local_address()` says which one it picked.
   `accept()` waits for the next connection and returns the stream and the
-  peer's address as a [tuple](tuples.md).
+  peer's address as a [tuple](tuples.md). `for (var connection in
+  listener.incoming())` accepts one connection per step, yielding an
+  `IoResult<TcpStream>` (see [Iteration](iteration.md#reading-files-and-directories)).
 - `TcpStream.connect(address)` connects to an address.
   `TcpStream.connect_host(host, port)` resolves a name and tries each of its
   addresses in turn.

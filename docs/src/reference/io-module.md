@@ -15,7 +15,7 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 - [File](io-file.md): opening, reading, and writing files, and whole-file helpers
 - [Directory](io-directory.md): listing, creating, and removing directories
 - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
-- [Sockets](io-socket.md): `TcpListener`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
+- [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
 - [Print](io-print.md): `print` and `print_line` on files and sockets
 - [Errors and platform types](io-types.md): `IoError`, `ErrorKind`, `IoResult`, and handle types

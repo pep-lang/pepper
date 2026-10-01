@@ -287,6 +287,32 @@ ipv6() {
     assert(bytes_equal(buffer, "six"), "v6 data");
 }
 
+# A for loop over listener.incoming() takes connections until it breaks,
+# and ends once the listener is closed.
+incoming() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var local = listener.local_address().value();
+    var first = io.TcpStream.connect(local).value();
+    var second = io.TcpStream.connect(local).value();
+    assert(first.write_all("a").is_ok(), "first writes");
+    assert(second.write_all("b").is_ok(), "second writes");
+    var received = Array<u8>();
+    for (var connection in listener.incoming()) {
+        assert(connection.is_ok(), "accepted");
+        assert(connection.value().read_exact(received, 1).is_ok(), "read from the accepted stream");
+        if (received.count() == 2) {
+            break;
+        }
+    }
+    assert(bytes_equal(received, "ab"), "both connections, in order");
+    assert(listener.close().is_ok(), "close");
+    var steps = 0;
+    for (var connection in listener.incoming()) {
+        steps = steps + 1;
+    }
+    assert(steps == 0, "a closed listener yields nothing");
+}
+
 main(): int {
     exchange();
     # Warm up (lazy runtime state, Winsock startup), then check that sockets
@@ -294,6 +320,7 @@ main(): int {
     var before = _pep_live_allocs();
     exchange();
     errors();
+    incoming();
     assert(_pep_live_allocs() == before, "sockets leak nothing");
     by_name();
     ipv6();
