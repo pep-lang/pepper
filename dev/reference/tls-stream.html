@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -207,7 +207,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 
     var connector = tls.TlsConnector.create().value();
     var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
@@ -293,7 +293,7 @@ one.</p>
         var (tcp, peer) = listener.accept().value();
         var accepted = acceptor.accept(tcp);
         if (accepted.is_ok()) {
-            accepted.value().write_string("hello over TLS");
+            accepted.value().write_all("hello over TLS");
         }
     }
 </code></pre>
@@ -356,7 +356,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
     var reply = Array&lt;u8&gt;();
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
@@ -433,10 +433,11 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">write_string(text: String): io.IoResult&lt;void&gt;
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): io.IoResult&lt;void&gt;
 </code></pre>
-<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does.</p>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to send</li>
@@ -444,6 +445,26 @@ it to <code>buffer</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    stream.write_all("ping");
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
 </ul>
 <h4 id="shutdown"><a class="header" href="#shutdown">shutdown</a></h4>
 <pre><code class="language-pepper">shutdown(): io.IoResult&lt;void&gt;

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -215,7 +215,7 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
     print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
     while (true) {
         var (stream, peer) = listener.accept().value();
-        stream.write_string("hello " + peer.to_string());
+        stream.write_all("hello " + peer.to_string());
     }
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
@@ -302,7 +302,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
                         return;
                     }
                     var (stream, peer) = accepted.value();
-                    stream.write_string("hello");
+                    stream.write_all("hello");
                 }
             });
         });
@@ -378,7 +378,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
 <pre><code class="language-pepper">    import io;
 
     var stream = io.TcpStream.connect_host("example.com", 80).value();
-    stream.write_string("HEAD / HTTP/1.0\r\n\r\n");
+    stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
     var reply = Array&lt;u8&gt;();
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
@@ -505,11 +505,11 @@ Use <code>write_all</code> to send everything.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">write_string(text: String): IoResult&lt;void&gt;
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): IoResult&lt;void&gt;
 </code></pre>
-<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does. No
-newline or terminator is added.</p>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to send</li>
@@ -517,6 +517,26 @@ newline or terminator is added.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    stream.write_all("ping");
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
 </ul>
 <h4 id="shutdown_write"><a class="header" href="#shutdown_write">shutdown_write</a></h4>
 <pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
@@ -581,7 +601,7 @@ one started with <code>async.spawn</code>.</p>
         var transfer = stream.into_transfer();
         async.spawn&lt;void&gt;(() =&gt; {
             var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_string("hello from another worker");
+            mine.write_all("hello from another worker");
         });
     }
 </code></pre>

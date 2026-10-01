@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -529,7 +529,7 @@ a <code>shared</code> function.</p>
                     }
                     var (stream, peer) = accepted.value();
                     async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                        stream.write_string("hello");
+                        stream.write_all("hello");
                     });
                 }
             });

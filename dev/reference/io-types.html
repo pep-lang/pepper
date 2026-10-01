@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -221,8 +221,8 @@ instead.</p>
 value such as <code>ENOENT</code> (2). On Windows this is a <code>DWORD</code> from
 <code>GetLastError()</code> instead.</p>
 <p>The numbers differ between platforms (and a few between Linux and
-macOS), so portable code classifies an error with the <code>IoError</code>
-predicates (<code>is_not_found()</code>, …) rather than comparing codes.</p>
+macOS), so portable code classifies an error with <code>IoError.kind()</code> or
+its predicates (<code>is_not_found()</code>, …) rather than comparing codes.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoError</code></li>
@@ -278,8 +278,8 @@ descriptor instead.</p>
 <code>DWORD</code> error code from <code>GetLastError()</code>, such as <code>ERROR_FILE_NOT_FOUND</code>
 (2). On POSIX this is an <code>errno</code> value instead.</p>
 <p>The numbers differ between platforms, so portable code classifies an
-error with the <code>IoError</code> predicates (<code>is_not_found()</code>, …) rather than
-comparing codes.</p>
+error with <code>IoError.kind()</code> or its predicates (<code>is_not_found()</code>, …)
+rather than comparing codes.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoError</code></li>
@@ -302,24 +302,114 @@ whole <code>FILE_ATTRIBUTE_*</code> word of the file (<code>FILE_ATTRIBUTE_READO
 <code>File.seek*</code> methods: a signed 64-bit integer on every target (<code>off_t</code> on
 POSIX, <code>LARGE_INTEGER</code> on Windows), so files larger than 4 GiB work
 everywhere.</p>
+<h2 id="errorkind"><a class="header" href="#errorkind">ErrorKind</a></h2>
+<pre><code class="language-pepper">enum ErrorKind
+</code></pre>
+<p>The portable kind of an <code>IoError</code>, as <code>IoError.kind()</code> returns it: the
+platform’s error code sorted into the cases a program usually handles.</p>
+<p>Each case except <code>Other</code> has a matching <code>IoError</code> predicate
+(<code>NotFound</code> and <code>is_not_found()</code>, …), whose documentation lists the
+codes it covers on each platform. A code that fits none of them, such as
+the <code>EIO</code> of a short write or the <code>EBADF</code> of a closed <code>File</code>, is <code>Other</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>IoError.kind</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var r = io.File.open(io.Path("settings.txt"));
+    if (r.is_err()) {
+        match (r.error().kind()) {
+            NotFound =&gt; { print("no settings file"); }
+            PermissionDenied =&gt; { print("settings file is not readable"); }
+            else =&gt; { print(r.error().message); }
+        }
+    }
+</code></pre>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="notfound"><a class="header" href="#notfound">NotFound</a></h4>
+<pre><code class="language-pepper">NotFound
+</code></pre>
+<p>The file, directory or host name does not exist (<code>is_not_found()</code>).</p>
+<h4 id="permissiondenied"><a class="header" href="#permissiondenied">PermissionDenied</a></h4>
+<pre><code class="language-pepper">PermissionDenied
+</code></pre>
+<p>Access was denied (<code>is_permission_denied()</code>).</p>
+<h4 id="alreadyexists"><a class="header" href="#alreadyexists">AlreadyExists</a></h4>
+<pre><code class="language-pepper">AlreadyExists
+</code></pre>
+<p>The target already exists (<code>is_already_exists()</code>).</p>
+<h4 id="notadirectory"><a class="header" href="#notadirectory">NotADirectory</a></h4>
+<pre><code class="language-pepper">NotADirectory
+</code></pre>
+<p>A directory was expected but something else was found
+(<code>is_not_a_directory()</code>).</p>
+<h4 id="isadirectory"><a class="header" href="#isadirectory">IsADirectory</a></h4>
+<pre><code class="language-pepper">IsADirectory
+</code></pre>
+<p>A file was expected but a directory was found (<code>is_is_a_directory()</code>).</p>
+<h4 id="directorynotempty"><a class="header" href="#directorynotempty">DirectoryNotEmpty</a></h4>
+<pre><code class="language-pepper">DirectoryNotEmpty
+</code></pre>
+<p>A directory to remove still has entries (<code>is_directory_not_empty()</code>).</p>
+<h4 id="invalidinput"><a class="header" href="#invalidinput">InvalidInput</a></h4>
+<pre><code class="language-pepper">InvalidInput
+</code></pre>
+<p>An argument or the data was invalid (<code>is_invalid_input()</code>).</p>
+<h4 id="interrupted"><a class="header" href="#interrupted">Interrupted</a></h4>
+<pre><code class="language-pepper">Interrupted
+</code></pre>
+<p>The operation was interrupted before it finished (<code>is_interrupted()</code>).</p>
+<h4 id="connectionrefused"><a class="header" href="#connectionrefused">ConnectionRefused</a></h4>
+<pre><code class="language-pepper">ConnectionRefused
+</code></pre>
+<p>Nothing accepted the connection (<code>is_connection_refused()</code>).</p>
+<h4 id="connectionreset"><a class="header" href="#connectionreset">ConnectionReset</a></h4>
+<pre><code class="language-pepper">ConnectionReset
+</code></pre>
+<p>The peer reset, aborted or closed the connection
+(<code>is_connection_reset()</code>).</p>
+<h4 id="addressinuse"><a class="header" href="#addressinuse">AddressInUse</a></h4>
+<pre><code class="language-pepper">AddressInUse
+</code></pre>
+<p>Another socket already uses the address (<code>is_address_in_use()</code>).</p>
+<h4 id="addressnotavailable"><a class="header" href="#addressnotavailable">AddressNotAvailable</a></h4>
+<pre><code class="language-pepper">AddressNotAvailable
+</code></pre>
+<p>The address cannot be used on this machine
+(<code>is_address_not_available()</code>).</p>
+<h4 id="timedout"><a class="header" href="#timedout">TimedOut</a></h4>
+<pre><code class="language-pepper">TimedOut
+</code></pre>
+<p>The operation timed out (<code>is_timed_out()</code>).</p>
+<h4 id="cancelled"><a class="header" href="#cancelled">Cancelled</a></h4>
+<pre><code class="language-pepper">Cancelled
+</code></pre>
+<p>Cancelling the task ended the operation (<code>is_cancelled()</code>).</p>
+<h4 id="other"><a class="header" href="#other">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Any other code, including 0 (no error).</p>
 <h2 id="ioerror"><a class="header" href="#ioerror">IoError</a></h2>
 <pre><code class="language-pepper">struct IoError
 </code></pre>
 <p>An I/O failure: the raw platform error code plus a human-readable
 message.</p>
-<p>There are no enums, so the kind of error is a set of predicates over the
-code (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …), each of which
-knows the matching codes on the current platform. Test with those rather
-than comparing <code>code</code> against numbers. Failures that Pepper detects
+<p><code>kind()</code> sorts the code into an <code>ErrorKind</code>, and a predicate per kind
+(<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) tests for one of them;
+each knows the matching codes on the current platform. Test with those
+rather than comparing <code>code</code> against numbers. Failures that Pepper detects
 itself (invalid UTF-8, an empty path, a short write, a closed <code>File</code>)
 use the platform’s own code for the kind they are (<code>EINVAL</code> /
 <code>ERROR_INVALID_PARAMETER</code> for invalid input, <code>ENOENT</code> /
-<code>ERROR_FILE_NOT_FOUND</code> for an empty path, …), so the predicates hold
+<code>ERROR_FILE_NOT_FOUND</code> for an empty path, …), so the kinds hold
 for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</code> and a closed
-<code>File</code> uses <code>EBADF</code> / <code>ERROR_INVALID_HANDLE</code>; no predicate matches those.</p>
+<code>File</code> uses <code>EBADF</code> / <code>ERROR_INVALID_HANDLE</code>; those are <code>ErrorKind.Other</code>.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoResult</code></li>
+<li><code>ErrorKind</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
@@ -372,6 +462,24 @@ between (including one that allocates) may overwrite the code.</p>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="kind"><a class="header" href="#kind">kind</a></h4>
+<pre><code class="language-pepper">kind(): ErrorKind
+</code></pre>
+<p>Returns the portable kind of the error: <code>code</code> sorted by the codes the
+current platform uses for each kind. Each predicate below is
+<code>kind() == ErrorKind.X</code> for its kind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the kind of <code>code</code>; <code>ErrorKind.Other</code> for a code that fits no kind, and for 0</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var r = io.File.open(io.Path("missing.txt"));
+    if (r.is_err() &amp;&amp; r.error().kind() == io.ErrorKind.NotFound) {
+        print("no such file");
+    }
+</code></pre>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">is_not_found(): bool
 </code></pre>
@@ -459,8 +567,9 @@ expected, or a malformed path.</p>
 <pre><code class="language-pepper">is_interrupted(): bool
 </code></pre>
 <p>Returns whether the operation was interrupted before it finished.</p>
-<p>Matches <code>EINTR</code> on POSIX and <code>ERROR_OPERATION_ABORTED</code> on Windows.
-The io functions retry interrupted POSIX opens, reads and writes
+<p>Matches <code>EINTR</code> on POSIX and <code>WSAEINTR</code> on Windows. An aborted
+Windows operation (<code>ERROR_OPERATION_ABORTED</code>) is <code>is_cancelled()</code>
+instead. The io functions retry interrupted POSIX opens, reads and writes
 themselves, so callers rarely see this.</p>
 <p><strong>Returns</strong></p>
 <ul>

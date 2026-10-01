@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -331,6 +331,111 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     log.write_all("started");
 </code></pre>
+<h2 id="filetype"><a class="header" href="#filetype">FileType</a></h2>
+<pre><code class="language-pepper">enum FileType
+</code></pre>
+<p>The kind of a file system object, as <code>Metadata.file_type</code> and
+<code>DirEntry.file_type</code> report it.</p>
+<p>A symlink is reported as <code>Symlink</code> only where links are not followed
+(<code>Path.symlink_metadata()</code> and directory listings); on Windows that is any
+reparse point, junctions included, even one that points to a directory.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var m = io.Path("notes.txt").metadata();
+    if (m.is_ok()) {
+        match (m.value().file_type) {
+            File =&gt; { print("a file"); }
+            Directory =&gt; { print("a directory"); }
+            Symlink, Other =&gt; { print("something else"); }
+        }
+    }
+</code></pre>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="file-1"><a class="header" href="#file-1">File</a></h4>
+<pre><code class="language-pepper">File
+</code></pre>
+<p>A regular file. On Windows, anything that is neither a directory nor
+a reparse point.</p>
+<h4 id="directory"><a class="header" href="#directory">Directory</a></h4>
+<pre><code class="language-pepper">Directory
+</code></pre>
+<p>A directory.</p>
+<h4 id="symlink"><a class="header" href="#symlink">Symlink</a></h4>
+<pre><code class="language-pepper">Symlink
+</code></pre>
+<p>A symbolic link itself (on Windows, any reparse point).</p>
+<h4 id="other"><a class="header" href="#other">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Anything else, such as a FIFO, socket or device on POSIX.</p>
+<h2 id="seekfrom"><a class="header" href="#seekfrom">SeekFrom</a></h2>
+<pre><code class="language-pepper">enum SeekFrom
+</code></pre>
+<p>Where <code>File.seek</code> measures its offset from, with the offset itself.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.seek</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();     # at the end
+    f.seek(SeekFrom.Start(4));                        # 4 bytes in
+    var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+</code></pre>
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="start"><a class="header" href="#start">Start</a></h4>
+<pre><code class="language-pepper">Start(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the start of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the new position; negative is an error</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">Current</a></h4>
+<pre><code class="language-pepper">Current(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the current position.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance to move; negative moves back</li>
+</ul>
+<h4 id="end"><a class="header" href="#end">End</a></h4>
+<pre><code class="language-pepper">End(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the end of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance from the end; negative moves back from it</li>
+</ul>
+<h2 id="stdstream"><a class="header" href="#stdstream">StdStream</a></h2>
+<pre><code class="language-pepper">enum StdStream
+</code></pre>
+<p>One of the process’s standard streams, as <code>File.std_file</code> takes it.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.std_file</code></li>
+</ul>
+<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h4 id="input"><a class="header" href="#input">Input</a></h4>
+<pre><code class="language-pepper">Input
+</code></pre>
+<p>Standard input: file descriptor 0 on POSIX, <code>STD_INPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="output"><a class="header" href="#output">Output</a></h4>
+<pre><code class="language-pepper">Output
+</code></pre>
+<p>Standard output: file descriptor 1 on POSIX, <code>STD_OUTPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="error"><a class="header" href="#error">Error</a></h4>
+<pre><code class="language-pepper">Error
+</code></pre>
+<p>Standard error: file descriptor 2 on POSIX, <code>STD_ERROR_HANDLE</code> on
+Windows.</p>
 <h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
 <pre><code class="language-pepper">struct Metadata
 </code></pre>
@@ -353,6 +458,13 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 <pre><code class="language-pepper">ulong size
 </code></pre>
 <p>The file’s length in bytes.</p>
+<h4 id="file_type"><a class="header" href="#file_type">file_type</a></h4>
+<pre><code class="language-pepper">FileType file_type
+</code></pre>
+<p>The kind of object: <code>File</code>, <code>Directory</code>, <code>Symlink</code> or <code>Other</code>. It
+agrees with <code>is_file</code>, <code>is_directory</code> and <code>is_symlink</code>, except that a
+Windows reparse point to a directory is <code>Symlink</code> with both
+<code>is_directory</code> and <code>is_symlink</code> set.</p>
 <h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
 <pre><code class="language-pepper">bool is_file
 </code></pre>
@@ -383,11 +495,11 @@ includes junctions.</p>
 </code></pre>
 <p>The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with <code>noatime</code> or <code>relatime</code> update it rarely or never).</p>
 <h4 id="created"><a class="header" href="#created">created</a></h4>
-<pre><code class="language-pepper">long created
+<pre><code class="language-pepper">long? created
 </code></pre>
-<p>The creation (birth) time, in nanoseconds since the Unix epoch; 0
-where unavailable, such as on Linux file systems that do not record
-one.</p>
+<p>The creation (birth) time, in nanoseconds since the Unix epoch; none
+where the platform does not report one, such as on Linux file systems
+that do not record it.</p>
 <h4 id="permissions"><a class="header" href="#permissions">permissions</a></h4>
 <pre><code class="language-pepper">Mode permissions
 </code></pre>
@@ -398,9 +510,10 @@ one.</p>
 <h4 id="metadata-1"><a class="header" href="#metadata-1">Metadata()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates a <code>Metadata</code> with every field zero or false. Metadata is
-normally obtained from a query such as <code>File.metadata()</code>.</p>
-<h2 id="file-1"><a class="header" href="#file-1">File</a></h2>
+<p>Creates a <code>Metadata</code> with every number zero, every flag false,
+<code>file_type</code> <code>Other</code> and <code>created</code> none. Metadata is normally obtained
+from a query such as <code>File.metadata()</code>.</p>
+<h2 id="file-2"><a class="header" href="#file-2">File</a></h2>
 <pre><code class="language-pepper">[NotCopyable( "owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread" )] struct File
 </code></pre>
 <p>An open file, or a standard stream, read and written through its
@@ -438,7 +551,7 @@ kinds apart portably.</p>
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
-<h4 id="file-2"><a class="header" href="#file-2">File()</a></h4>
+<h4 id="file-3"><a class="header" href="#file-3">File()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed File that owns nothing yet: <code>is_open()</code> is false and
@@ -510,24 +623,41 @@ still writes at the end).</p>
     }
 </code></pre>
 <h4 id="std_file"><a class="header" href="#std_file">std_file</a></h4>
-<pre><code class="language-pepper">static std_file(which: int, name: String): File
+<pre><code class="language-pepper">static std_file(stream: StdStream, name: String): File
 </code></pre>
 <p>Returns a File for one of the process’s standard streams. The File
 does not own the handle, so neither <code>close()</code> nor the destructor
 closes the stream. <code>stdin()</code>, <code>stdout()</code> and <code>stderr()</code> are the usual
 way to call this.</p>
-<p>On POSIX <code>which</code> is used directly as the file descriptor. On Windows
-it selects <code>GetStdHandle(STD_INPUT_HANDLE - which)</code>, so only 0, 1
-and 2 are meaningful there; a process without a console or
-redirection may get a null handle, and the File is then not open.</p>
+<p>On Windows a process without a console or redirection may get a null
+handle, and the File is then not open.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
+<li><code>stream</code> — the stream</li>
 <li><code>name</code> — the display name stored in the File’s <code>path</code>, such as <code>&lt;stdout&gt;</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a File on that stream, that does not close the stream when released</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var err = File.std_file(StdStream.Error, "&lt;stderr&gt;");
+    err.write_all("warning");
+</code></pre>
+<h4 id="std_file-1"><a class="header" href="#std_file-1">std_file</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'std_file' with a 'StdStream' instead")] static std_file(which: int, name: String): File
+</code></pre>
+<p>Deprecated: use <code>std_file(StdStream, String)</code> instead. Returns a File
+for the standard stream numbered <code>which</code>, as <code>std_file</code> does for the
+matching <code>StdStream</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
+<li><code>name</code> — the display name stored in the File’s <code>path</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on that stream; a File that is not open for any other <code>which</code></li>
 </ul>
 <h4 id="stdin"><a class="header" href="#stdin">stdin</a></h4>
 <pre><code class="language-pepper">static stdin(): File
@@ -852,10 +982,33 @@ No newline or terminator is added.</p>
 <ul>
 <li><code>write_all</code></li>
 </ul>
+<h4 id="seek"><a class="header" href="#seek">seek</a></h4>
+<pre><code class="language-pepper">seek(from: SeekFrom): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position as <code>from</code> says: to an offset from the start, from
+the current position, or from the end of the file.</p>
+<p>Seeking past the end is allowed; a later write there fills the gap
+with zeros. A position before the start of the file is an error.
+Seeking a stream that has no position (a pipe or a terminal) fails on
+POSIX and has platform-defined results on Windows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the origin and the offset from it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error when the File is closed, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();
+    f.seek(SeekFrom.Start(0));
+</code></pre>
 <h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
 <pre><code class="language-pepper">seek_start(pos: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position to <code>pos</code> bytes from the start of the file.</p>
+<p>Moves the position to <code>pos</code> bytes from the start of the file, like
+<code>seek(SeekFrom.Start(pos))</code> without allocating the <code>SeekFrom</code>.</p>
 <p>Seeking past the end is allowed; a later write there fills the gap
 with zeros.</p>
 <p><strong>Parameters</strong></p>
@@ -873,8 +1026,9 @@ with zeros.</p>
 <h4 id="seek_end"><a class="header" href="#seek_end">seek_end</a></h4>
 <pre><code class="language-pepper">seek_end(delta: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position to <code>delta</code> bytes from the end of the file.
-<code>seek_end(0)</code> moves to the end and returns the file’s length.</p>
+<p>Moves the position to <code>delta</code> bytes from the end of the file, like
+<code>seek(SeekFrom.End(delta))</code>. <code>seek_end(0)</code> moves to the end and
+returns the file’s length.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>delta</code> — the offset from the end of the file, in bytes; negative moves back from the end</li>
@@ -890,8 +1044,9 @@ with zeros.</p>
 <h4 id="seek_current"><a class="header" href="#seek_current">seek_current</a></h4>
 <pre><code class="language-pepper">seek_current(delta: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position by <code>delta</code> bytes from where it is.
-<code>seek_current(0)</code> returns the current position without moving it.</p>
+<p>Moves the position by <code>delta</code> bytes from where it is, like
+<code>seek(SeekFrom.Current(delta))</code>. <code>seek_current(0)</code> returns the
+current position without moving it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>delta</code> — the offset from the current position, in bytes; negative moves back</li>
@@ -904,22 +1059,19 @@ with zeros.</p>
 <ul>
 <li><code>seek</code></li>
 </ul>
-<h4 id="seek"><a class="header" href="#seek">seek</a></h4>
-<pre><code class="language-pepper">seek(offset: Offset, whence: int): IoResult&lt;Offset&gt;
+<h4 id="seek-1"><a class="header" href="#seek-1">seek</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'seek' with a 'SeekFrom' instead")] seek(offset: Offset, whence: int): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position by <code>offset</code> relative to the origin <code>whence</code>.
-<code>seek_start</code>, <code>seek_end</code> and <code>seek_current</code> name the three origins.</p>
-<p>A position before the start of the file is an error. Seeking a
-stream that has no position (a pipe or a terminal) fails on POSIX
-and has platform-defined results on Windows.</p>
+<p>Deprecated: use <code>seek(SeekFrom)</code> instead. Moves the position by
+<code>offset</code> relative to the origin <code>whence</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>offset</code> — the offset in bytes from the origin; may be negative</li>
-<li><code>whence</code> — the origin: 0 the start of the file, 1 the current position, 2 the end of the file (<code>SEEK_SET</code>, <code>SEEK_CUR</code>, <code>SEEK_END</code> on POSIX; <code>FILE_BEGIN</code>, <code>FILE_CURRENT</code>, <code>FILE_END</code> on Windows)</li>
+<li><code>whence</code> — the origin: 0 the start of the file, 1 the current position, 2 the end of the file</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the new position, in bytes from the start of the file; an error when the File is closed, <code>whence</code> is not 0, 1 or 2, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek(SeekFrom)</code>, or when <code>whence</code> is not 0, 1 or 2</li>
 </ul>
 <h4 id="set_length"><a class="header" href="#set_length">set_length</a></h4>
 <pre><code class="language-pepper">set_length(size: ulong): IoResult&lt;void&gt;

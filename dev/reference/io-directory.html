@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -216,6 +216,12 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 <pre><code class="language-pepper">String name
 </code></pre>
 <p>The entry’s own file name, without any directory part.</p>
+<h4 id="file_type"><a class="header" href="#file_type">file_type</a></h4>
+<pre><code class="language-pepper">FileType file_type
+</code></pre>
+<p>The kind of the entry, without following symlinks: <code>Symlink</code> for a
+symlink (on Windows, any reparse point, even one to a directory),
+<code>Other</code> for anything that is not a file, directory or symlink.</p>
 <h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
 <pre><code class="language-pepper">bool is_file
 </code></pre>
@@ -235,7 +241,8 @@ junctions included), which is not followed.</p>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
-false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
+false and <code>file_type</code> <code>Other</code>. Entries are normally obtained from
+<code>Directory.entries()</code>.</p>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="metadata"><a class="header" href="#metadata">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;

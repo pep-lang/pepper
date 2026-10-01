@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -378,10 +378,12 @@ shown above.</p>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
 alias for <code>Result&lt;T, IoError&gt;</code>, and operations with nothing to return use
-<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>code</code> and a <code>message</code>,
-and has predicates such as <code>is_not_found()</code> and <code>is_permission_denied()</code> for
-deciding what to do about the failure:</p>
-<pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError] from io;
+<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>code</code> and a <code>message</code>.
+To decide what to do about the failure, <code>kind()</code> returns the code’s portable
+<code>ErrorKind</code> (<code>NotFound</code>, <code>PermissionDenied</code>, <code>AlreadyExists</code>, …,
+<code>Other</code>), an <a href="enums.html">enum</a> to <code>match</code> on, and a predicate per kind, such as
+<code>is_not_found()</code> and <code>is_permission_denied()</code>, tests for one of them:</p>
+<pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError, ErrorKind] from io;
 
 # IoResult&lt;T&gt; is Result&lt;T, IoError&gt;: the same methods, a richer error.
 read_setting(Path path): String {
@@ -395,6 +397,15 @@ read_setting(Path path): String {
     return text.value();
 }
 
+# kind() sorts the platform's code into an ErrorKind, for a match.
+describe(error: IoError): String {
+    return match (error.kind()) {
+        NotFound =&gt; "missing",
+        PermissionDenied =&gt; "not allowed",
+        else =&gt; error.message,
+    };
+}
+
 main(): int {
     var dir = Directory.temp().join("pepper-results-io-example");
     var created = Directory.create_all(dir);
@@ -402,6 +413,9 @@ main(): int {
 
     var path = dir.join("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
+    var missing = File.open(path);
+    assert(missing.is_err() &amp;&amp; missing.error().kind() == ErrorKind.NotFound, "the kind of the error");
+    assert(describe(missing.error()) == "missing", "a match on the kind");
 
     IoResult&lt;void&gt; written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");
@@ -412,7 +426,7 @@ main(): int {
 }
 </code></pre>
 <p>See <a href="../reference/io-types.html">io: errors and platform types</a> for the full list
-of <code>IoError</code> predicates.</p>
+of kinds and the platform codes each one covers.</p>
 
                     </main>
 

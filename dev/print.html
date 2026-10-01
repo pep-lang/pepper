@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8fc0870b.js"></script>
@@ -7117,10 +7117,12 @@ shown above.</p>
 <p>The <a href="#the-io-module">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
 alias for <code>Result&lt;T, IoError&gt;</code>, and operations with nothing to return use
-<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>code</code> and a <code>message</code>,
-and has predicates such as <code>is_not_found()</code> and <code>is_permission_denied()</code> for
-deciding what to do about the failure:</p>
-<pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError] from io;
+<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>code</code> and a <code>message</code>.
+To decide what to do about the failure, <code>kind()</code> returns the code’s portable
+<code>ErrorKind</code> (<code>NotFound</code>, <code>PermissionDenied</code>, <code>AlreadyExists</code>, …,
+<code>Other</code>), an <a href="#enums-and-match">enum</a> to <code>match</code> on, and a predicate per kind, such as
+<code>is_not_found()</code> and <code>is_permission_denied()</code>, tests for one of them:</p>
+<pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError, ErrorKind] from io;
 
 # IoResult&lt;T&gt; is Result&lt;T, IoError&gt;: the same methods, a richer error.
 read_setting(Path path): String {
@@ -7134,6 +7136,15 @@ read_setting(Path path): String {
     return text.value();
 }
 
+# kind() sorts the platform's code into an ErrorKind, for a match.
+describe(error: IoError): String {
+    return match (error.kind()) {
+        NotFound =&gt; "missing",
+        PermissionDenied =&gt; "not allowed",
+        else =&gt; error.message,
+    };
+}
+
 main(): int {
     var dir = Directory.temp().join("pepper-results-io-example");
     var created = Directory.create_all(dir);
@@ -7141,6 +7152,9 @@ main(): int {
 
     var path = dir.join("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
+    var missing = File.open(path);
+    assert(missing.is_err() &amp;&amp; missing.error().kind() == ErrorKind.NotFound, "the kind of the error");
+    assert(describe(missing.error()) == "missing", "a match on the kind");
 
     IoResult&lt;void&gt; written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");
@@ -7151,7 +7165,7 @@ main(): int {
 }
 </code></pre>
 <p>See <a href="#errors-and-platform-types">io: errors and platform types</a> for the full list
-of <code>IoError</code> predicates.</p>
+of kinds and the platform codes each one covers.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="optional-values"><a class="header" href="#optional-values">Optional values</a></h1>
 <p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>, written <code>T?</code> for
@@ -9457,7 +9471,7 @@ main(): int {
             replies.append(async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
                 var stream = io.TcpStream.connect(address).value();
                 var message = $"hello from {k}";
-                stream.write_string(message);
+                stream.write_all(message);
                 var buffer = Array&lt;u8&gt;();
                 stream.read_exact(buffer, message.size());
                 return buffer.count();
@@ -9512,7 +9526,7 @@ main(): int {
                 var (stream, peer) = accepted.value();
                 served.fetch_add(1);
                 async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                    stream.write_string("hello").value();
+                    stream.write_all("hello").value();
                 });
             }
         });
@@ -9561,7 +9575,7 @@ main(): int {
         var transfer = stream.into_transfer();
         var handler = async.spawn&lt;void&gt;(() =&gt; {
             var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_string("from any worker").value();
+            mine.write_all("from any worker").value();
         });
         handler.join();
         assert(client.join().value() == 15, "the moved stream answered");
@@ -9766,7 +9780,7 @@ main(): int {
     assert(peer == client.local_address().value(), "accept reports who connected");
 
     # The client sends a request and closes its sending side.
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     client.shutdown_write();
 
     # The server reads until the client is done: read returns 0 at the end.
@@ -9776,7 +9790,7 @@ main(): int {
     assert(request.count() == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
-    server.write_string("pong");
+    server.write_all("pong");
     var reply = Array&lt;u8&gt;();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -9796,7 +9810,8 @@ bytes of it to <code>buffer</code>, the same way <code>File.read</code> does. It
 the peer has closed its side. <code>read_exact(buffer, count)</code> loops until
 <code>count</code> bytes have arrived.</li>
 <li><code>write(data)</code> sends what the system will take in one call.
-<code>write_all(data)</code> and <code>write_string(text)</code> loop until everything is sent.</li>
+<code>write_all(data)</code> loops until everything is sent; <code>data</code> is a <code>u8[]</code> or a
+<code>String</code>.</li>
 <li><code>shutdown_write()</code> tells the peer that nothing more is coming, while this
 side can still read.</li>
 <li><code>set_no_delay(true)</code> sends small writes immediately instead of combining
@@ -9855,10 +9870,10 @@ main(): int {
     var client = io.UnixStream.connect(path).value();
     var server = listener.accept().value();
 
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     var request = Array&lt;u8&gt;();
     assert(server.read_exact(request, 4).is_ok(), "read the request");
-    server.write_string("pong");
+    server.write_all("pong");
     var reply = Array&lt;u8&gt;();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -9920,7 +9935,7 @@ main(): int {
                 var stream = acceptor.accept(tcp).value();
                 var request = Array&lt;u8&gt;();
                 stream.read_exact(request, 4);
-                stream.write_string("pong");
+                stream.write_all("pong");
                 stream.shutdown();
             });
 
@@ -9928,7 +9943,7 @@ main(): int {
             var client = connector.value();
             assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
             var stream = client.connect_host("localhost", port).value();
-            stream.write_string("ping");
+            stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 4096).value() &gt; 0) {}
             assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -9952,7 +9967,7 @@ the certificate’s addresses.</li>
 <li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
 <code>acceptor.accept(tcp)</code> runs the handshake over a connection a
 <code>TcpListener</code> accepted.</li>
-<li><code>read</code>, <code>read_exact</code>, <code>write</code>, <code>write_all</code> and <code>write_string</code> work on the
+<li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>
 <li>A failed handshake returns an error whose message says why, such as
@@ -11093,6 +11108,9 @@ the code it replaces:</p>
 <tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
 <tr><td><code>io.File.write_string(String)</code></td><td><code>io.File.write_all(String)</code></td></tr>
+<tr><td><code>io.TcpStream.write_string(String)</code>, <code>io.UnixStream.write_string(String)</code>, <code>tls.TlsStream.write_string(String)</code></td><td><code>write_all(String)</code></td></tr>
+<tr><td><code>io.File.seek(Offset, int)</code></td><td><code>io.File.seek(io.SeekFrom)</code></td></tr>
+<tr><td><code>io.File.std_file(int, String)</code></td><td><code>io.File.std_file(io.StdStream, String)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
 <tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
@@ -15087,11 +15105,11 @@ is used.</p>
 <ul>
 <li><a href="#path">Path</a>: building, splitting, and inspecting paths</li>
 <li><a href="#file">File</a>: opening, reading, and writing files, and whole-file helpers</li>
-<li><a href="#directory">Directory</a>: listing, creating, and removing directories</li>
+<li><a href="#directory-1">Directory</a>: listing, creating, and removing directories</li>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
 <li><a href="#iounixpep">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
-<li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
+<li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>ErrorKind</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
@@ -15145,8 +15163,8 @@ instead.</p>
 value such as <code>ENOENT</code> (2). On Windows this is a <code>DWORD</code> from
 <code>GetLastError()</code> instead.</p>
 <p>The numbers differ between platforms (and a few between Linux and
-macOS), so portable code classifies an error with the <code>IoError</code>
-predicates (<code>is_not_found()</code>, …) rather than comparing codes.</p>
+macOS), so portable code classifies an error with <code>IoError.kind()</code> or
+its predicates (<code>is_not_found()</code>, …) rather than comparing codes.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoError</code></li>
@@ -15202,8 +15220,8 @@ descriptor instead.</p>
 <code>DWORD</code> error code from <code>GetLastError()</code>, such as <code>ERROR_FILE_NOT_FOUND</code>
 (2). On POSIX this is an <code>errno</code> value instead.</p>
 <p>The numbers differ between platforms, so portable code classifies an
-error with the <code>IoError</code> predicates (<code>is_not_found()</code>, …) rather than
-comparing codes.</p>
+error with <code>IoError.kind()</code> or its predicates (<code>is_not_found()</code>, …)
+rather than comparing codes.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoError</code></li>
@@ -15226,24 +15244,114 @@ whole <code>FILE_ATTRIBUTE_*</code> word of the file (<code>FILE_ATTRIBUTE_READO
 <code>File.seek*</code> methods: a signed 64-bit integer on every target (<code>off_t</code> on
 POSIX, <code>LARGE_INTEGER</code> on Windows), so files larger than 4 GiB work
 everywhere.</p>
+<h2 id="errorkind"><a class="header" href="#errorkind">ErrorKind</a></h2>
+<pre><code class="language-pepper">enum ErrorKind
+</code></pre>
+<p>The portable kind of an <code>IoError</code>, as <code>IoError.kind()</code> returns it: the
+platform’s error code sorted into the cases a program usually handles.</p>
+<p>Each case except <code>Other</code> has a matching <code>IoError</code> predicate
+(<code>NotFound</code> and <code>is_not_found()</code>, …), whose documentation lists the
+codes it covers on each platform. A code that fits none of them, such as
+the <code>EIO</code> of a short write or the <code>EBADF</code> of a closed <code>File</code>, is <code>Other</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>IoError.kind</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var r = io.File.open(io.Path("settings.txt"));
+    if (r.is_err()) {
+        match (r.error().kind()) {
+            NotFound =&gt; { print("no settings file"); }
+            PermissionDenied =&gt; { print("settings file is not readable"); }
+            else =&gt; { print(r.error().message); }
+        }
+    }
+</code></pre>
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="notfound"><a class="header" href="#notfound">NotFound</a></h4>
+<pre><code class="language-pepper">NotFound
+</code></pre>
+<p>The file, directory or host name does not exist (<code>is_not_found()</code>).</p>
+<h4 id="permissiondenied"><a class="header" href="#permissiondenied">PermissionDenied</a></h4>
+<pre><code class="language-pepper">PermissionDenied
+</code></pre>
+<p>Access was denied (<code>is_permission_denied()</code>).</p>
+<h4 id="alreadyexists"><a class="header" href="#alreadyexists">AlreadyExists</a></h4>
+<pre><code class="language-pepper">AlreadyExists
+</code></pre>
+<p>The target already exists (<code>is_already_exists()</code>).</p>
+<h4 id="notadirectory"><a class="header" href="#notadirectory">NotADirectory</a></h4>
+<pre><code class="language-pepper">NotADirectory
+</code></pre>
+<p>A directory was expected but something else was found
+(<code>is_not_a_directory()</code>).</p>
+<h4 id="isadirectory"><a class="header" href="#isadirectory">IsADirectory</a></h4>
+<pre><code class="language-pepper">IsADirectory
+</code></pre>
+<p>A file was expected but a directory was found (<code>is_is_a_directory()</code>).</p>
+<h4 id="directorynotempty"><a class="header" href="#directorynotempty">DirectoryNotEmpty</a></h4>
+<pre><code class="language-pepper">DirectoryNotEmpty
+</code></pre>
+<p>A directory to remove still has entries (<code>is_directory_not_empty()</code>).</p>
+<h4 id="invalidinput"><a class="header" href="#invalidinput">InvalidInput</a></h4>
+<pre><code class="language-pepper">InvalidInput
+</code></pre>
+<p>An argument or the data was invalid (<code>is_invalid_input()</code>).</p>
+<h4 id="interrupted"><a class="header" href="#interrupted">Interrupted</a></h4>
+<pre><code class="language-pepper">Interrupted
+</code></pre>
+<p>The operation was interrupted before it finished (<code>is_interrupted()</code>).</p>
+<h4 id="connectionrefused"><a class="header" href="#connectionrefused">ConnectionRefused</a></h4>
+<pre><code class="language-pepper">ConnectionRefused
+</code></pre>
+<p>Nothing accepted the connection (<code>is_connection_refused()</code>).</p>
+<h4 id="connectionreset"><a class="header" href="#connectionreset">ConnectionReset</a></h4>
+<pre><code class="language-pepper">ConnectionReset
+</code></pre>
+<p>The peer reset, aborted or closed the connection
+(<code>is_connection_reset()</code>).</p>
+<h4 id="addressinuse"><a class="header" href="#addressinuse">AddressInUse</a></h4>
+<pre><code class="language-pepper">AddressInUse
+</code></pre>
+<p>Another socket already uses the address (<code>is_address_in_use()</code>).</p>
+<h4 id="addressnotavailable"><a class="header" href="#addressnotavailable">AddressNotAvailable</a></h4>
+<pre><code class="language-pepper">AddressNotAvailable
+</code></pre>
+<p>The address cannot be used on this machine
+(<code>is_address_not_available()</code>).</p>
+<h4 id="timedout"><a class="header" href="#timedout">TimedOut</a></h4>
+<pre><code class="language-pepper">TimedOut
+</code></pre>
+<p>The operation timed out (<code>is_timed_out()</code>).</p>
+<h4 id="cancelled"><a class="header" href="#cancelled">Cancelled</a></h4>
+<pre><code class="language-pepper">Cancelled
+</code></pre>
+<p>Cancelling the task ended the operation (<code>is_cancelled()</code>).</p>
+<h4 id="other"><a class="header" href="#other">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Any other code, including 0 (no error).</p>
 <h2 id="ioerror"><a class="header" href="#ioerror">IoError</a></h2>
 <pre><code class="language-pepper">struct IoError
 </code></pre>
 <p>An I/O failure: the raw platform error code plus a human-readable
 message.</p>
-<p>There are no enums, so the kind of error is a set of predicates over the
-code (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …), each of which
-knows the matching codes on the current platform. Test with those rather
-than comparing <code>code</code> against numbers. Failures that Pepper detects
+<p><code>kind()</code> sorts the code into an <code>ErrorKind</code>, and a predicate per kind
+(<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) tests for one of them;
+each knows the matching codes on the current platform. Test with those
+rather than comparing <code>code</code> against numbers. Failures that Pepper detects
 itself (invalid UTF-8, an empty path, a short write, a closed <code>File</code>)
 use the platform’s own code for the kind they are (<code>EINVAL</code> /
 <code>ERROR_INVALID_PARAMETER</code> for invalid input, <code>ENOENT</code> /
-<code>ERROR_FILE_NOT_FOUND</code> for an empty path, …), so the predicates hold
+<code>ERROR_FILE_NOT_FOUND</code> for an empty path, …), so the kinds hold
 for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</code> and a closed
-<code>File</code> uses <code>EBADF</code> / <code>ERROR_INVALID_HANDLE</code>; no predicate matches those.</p>
+<code>File</code> uses <code>EBADF</code> / <code>ERROR_INVALID_HANDLE</code>; those are <code>ErrorKind.Other</code>.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>IoResult</code></li>
+<li><code>ErrorKind</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
@@ -15296,6 +15404,24 @@ between (including one that allocates) may overwrite the code.</p>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
 <h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h4 id="kind"><a class="header" href="#kind">kind</a></h4>
+<pre><code class="language-pepper">kind(): ErrorKind
+</code></pre>
+<p>Returns the portable kind of the error: <code>code</code> sorted by the codes the
+current platform uses for each kind. Each predicate below is
+<code>kind() == ErrorKind.X</code> for its kind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the kind of <code>code</code>; <code>ErrorKind.Other</code> for a code that fits no kind, and for 0</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var r = io.File.open(io.Path("missing.txt"));
+    if (r.is_err() &amp;&amp; r.error().kind() == io.ErrorKind.NotFound) {
+        print("no such file");
+    }
+</code></pre>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">is_not_found(): bool
 </code></pre>
@@ -15383,8 +15509,9 @@ expected, or a malformed path.</p>
 <pre><code class="language-pepper">is_interrupted(): bool
 </code></pre>
 <p>Returns whether the operation was interrupted before it finished.</p>
-<p>Matches <code>EINTR</code> on POSIX and <code>ERROR_OPERATION_ABORTED</code> on Windows.
-The io functions retry interrupted POSIX opens, reads and writes
+<p>Matches <code>EINTR</code> on POSIX and <code>WSAEINTR</code> on Windows. An aborted
+Windows operation (<code>ERROR_OPERATION_ABORTED</code>) is <code>is_cancelled()</code>
+instead. The io functions retry interrupted POSIX opens, reads and writes
 themselves, so callers rarely see this.</p>
 <p><strong>Returns</strong></p>
 <ul>
@@ -16055,6 +16182,111 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     log.write_all("started");
 </code></pre>
+<h2 id="filetype"><a class="header" href="#filetype">FileType</a></h2>
+<pre><code class="language-pepper">enum FileType
+</code></pre>
+<p>The kind of a file system object, as <code>Metadata.file_type</code> and
+<code>DirEntry.file_type</code> report it.</p>
+<p>A symlink is reported as <code>Symlink</code> only where links are not followed
+(<code>Path.symlink_metadata()</code> and directory listings); on Windows that is any
+reparse point, junctions included, even one that points to a directory.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var m = io.Path("notes.txt").metadata();
+    if (m.is_ok()) {
+        match (m.value().file_type) {
+            File =&gt; { print("a file"); }
+            Directory =&gt; { print("a directory"); }
+            Symlink, Other =&gt; { print("something else"); }
+        }
+    }
+</code></pre>
+<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h4 id="file-1"><a class="header" href="#file-1">File</a></h4>
+<pre><code class="language-pepper">File
+</code></pre>
+<p>A regular file. On Windows, anything that is neither a directory nor
+a reparse point.</p>
+<h4 id="directory"><a class="header" href="#directory">Directory</a></h4>
+<pre><code class="language-pepper">Directory
+</code></pre>
+<p>A directory.</p>
+<h4 id="symlink"><a class="header" href="#symlink">Symlink</a></h4>
+<pre><code class="language-pepper">Symlink
+</code></pre>
+<p>A symbolic link itself (on Windows, any reparse point).</p>
+<h4 id="other-1"><a class="header" href="#other-1">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Anything else, such as a FIFO, socket or device on POSIX.</p>
+<h2 id="seekfrom"><a class="header" href="#seekfrom">SeekFrom</a></h2>
+<pre><code class="language-pepper">enum SeekFrom
+</code></pre>
+<p>Where <code>File.seek</code> measures its offset from, with the offset itself.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.seek</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();     # at the end
+    f.seek(SeekFrom.Start(4));                        # 4 bytes in
+    var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+</code></pre>
+<h3 id="cases-1-1"><a class="header" href="#cases-1-1">Cases</a></h3>
+<h4 id="start"><a class="header" href="#start">Start</a></h4>
+<pre><code class="language-pepper">Start(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the start of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the new position; negative is an error</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">Current</a></h4>
+<pre><code class="language-pepper">Current(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the current position.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance to move; negative moves back</li>
+</ul>
+<h4 id="end"><a class="header" href="#end">End</a></h4>
+<pre><code class="language-pepper">End(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the end of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance from the end; negative moves back from it</li>
+</ul>
+<h2 id="stdstream"><a class="header" href="#stdstream">StdStream</a></h2>
+<pre><code class="language-pepper">enum StdStream
+</code></pre>
+<p>One of the process’s standard streams, as <code>File.std_file</code> takes it.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.std_file</code></li>
+</ul>
+<h3 id="cases-2-1"><a class="header" href="#cases-2-1">Cases</a></h3>
+<h4 id="input"><a class="header" href="#input">Input</a></h4>
+<pre><code class="language-pepper">Input
+</code></pre>
+<p>Standard input: file descriptor 0 on POSIX, <code>STD_INPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="output"><a class="header" href="#output">Output</a></h4>
+<pre><code class="language-pepper">Output
+</code></pre>
+<p>Standard output: file descriptor 1 on POSIX, <code>STD_OUTPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="error-3"><a class="header" href="#error-3">Error</a></h4>
+<pre><code class="language-pepper">Error
+</code></pre>
+<p>Standard error: file descriptor 2 on POSIX, <code>STD_ERROR_HANDLE</code> on
+Windows.</p>
 <h2 id="metadata-1"><a class="header" href="#metadata-1">Metadata</a></h2>
 <pre><code class="language-pepper">struct Metadata
 </code></pre>
@@ -16077,6 +16309,13 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 <pre><code class="language-pepper">ulong size
 </code></pre>
 <p>The file’s length in bytes.</p>
+<h4 id="file_type"><a class="header" href="#file_type">file_type</a></h4>
+<pre><code class="language-pepper">FileType file_type
+</code></pre>
+<p>The kind of object: <code>File</code>, <code>Directory</code>, <code>Symlink</code> or <code>Other</code>. It
+agrees with <code>is_file</code>, <code>is_directory</code> and <code>is_symlink</code>, except that a
+Windows reparse point to a directory is <code>Symlink</code> with both
+<code>is_directory</code> and <code>is_symlink</code> set.</p>
 <h4 id="is_file-1"><a class="header" href="#is_file-1">is_file</a></h4>
 <pre><code class="language-pepper">bool is_file
 </code></pre>
@@ -16107,11 +16346,11 @@ includes junctions.</p>
 </code></pre>
 <p>The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with <code>noatime</code> or <code>relatime</code> update it rarely or never).</p>
 <h4 id="created"><a class="header" href="#created">created</a></h4>
-<pre><code class="language-pepper">long created
+<pre><code class="language-pepper">long? created
 </code></pre>
-<p>The creation (birth) time, in nanoseconds since the Unix epoch; 0
-where unavailable, such as on Linux file systems that do not record
-one.</p>
+<p>The creation (birth) time, in nanoseconds since the Unix epoch; none
+where the platform does not report one, such as on Linux file systems
+that do not record it.</p>
 <h4 id="permissions"><a class="header" href="#permissions">permissions</a></h4>
 <pre><code class="language-pepper">Mode permissions
 </code></pre>
@@ -16122,9 +16361,10 @@ one.</p>
 <h4 id="metadata-1-1"><a class="header" href="#metadata-1-1">Metadata()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates a <code>Metadata</code> with every field zero or false. Metadata is
-normally obtained from a query such as <code>File.metadata()</code>.</p>
-<h2 id="file-1"><a class="header" href="#file-1">File</a></h2>
+<p>Creates a <code>Metadata</code> with every number zero, every flag false,
+<code>file_type</code> <code>Other</code> and <code>created</code> none. Metadata is normally obtained
+from a query such as <code>File.metadata()</code>.</p>
+<h2 id="file-2"><a class="header" href="#file-2">File</a></h2>
 <pre><code class="language-pepper">[NotCopyable( "owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread" )] struct File
 </code></pre>
 <p>An open file, or a standard stream, read and written through its
@@ -16162,7 +16402,7 @@ kinds apart portably.</p>
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
 <h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
-<h4 id="file-2"><a class="header" href="#file-2">File()</a></h4>
+<h4 id="file-3"><a class="header" href="#file-3">File()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed File that owns nothing yet: <code>is_open()</code> is false and
@@ -16234,24 +16474,41 @@ still writes at the end).</p>
     }
 </code></pre>
 <h4 id="std_file"><a class="header" href="#std_file">std_file</a></h4>
-<pre><code class="language-pepper">static std_file(which: int, name: String): File
+<pre><code class="language-pepper">static std_file(stream: StdStream, name: String): File
 </code></pre>
 <p>Returns a File for one of the process’s standard streams. The File
 does not own the handle, so neither <code>close()</code> nor the destructor
 closes the stream. <code>stdin()</code>, <code>stdout()</code> and <code>stderr()</code> are the usual
 way to call this.</p>
-<p>On POSIX <code>which</code> is used directly as the file descriptor. On Windows
-it selects <code>GetStdHandle(STD_INPUT_HANDLE - which)</code>, so only 0, 1
-and 2 are meaningful there; a process without a console or
-redirection may get a null handle, and the File is then not open.</p>
+<p>On Windows a process without a console or redirection may get a null
+handle, and the File is then not open.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
+<li><code>stream</code> — the stream</li>
 <li><code>name</code> — the display name stored in the File’s <code>path</code>, such as <code>&lt;stdout&gt;</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a File on that stream, that does not close the stream when released</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var err = File.std_file(StdStream.Error, "&lt;stderr&gt;");
+    err.write_all("warning");
+</code></pre>
+<h4 id="std_file-1"><a class="header" href="#std_file-1">std_file</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'std_file' with a 'StdStream' instead")] static std_file(which: int, name: String): File
+</code></pre>
+<p>Deprecated: use <code>std_file(StdStream, String)</code> instead. Returns a File
+for the standard stream numbered <code>which</code>, as <code>std_file</code> does for the
+matching <code>StdStream</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
+<li><code>name</code> — the display name stored in the File’s <code>path</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on that stream; a File that is not open for any other <code>which</code></li>
 </ul>
 <h4 id="stdin"><a class="header" href="#stdin">stdin</a></h4>
 <pre><code class="language-pepper">static stdin(): File
@@ -16576,10 +16833,33 @@ No newline or terminator is added.</p>
 <ul>
 <li><code>write_all</code></li>
 </ul>
+<h4 id="seek"><a class="header" href="#seek">seek</a></h4>
+<pre><code class="language-pepper">seek(from: SeekFrom): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position as <code>from</code> says: to an offset from the start, from
+the current position, or from the end of the file.</p>
+<p>Seeking past the end is allowed; a later write there fills the gap
+with zeros. A position before the start of the file is an error.
+Seeking a stream that has no position (a pipe or a terminal) fails on
+POSIX and has platform-defined results on Windows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the origin and the offset from it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error when the File is closed, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
+    var length = f.seek(SeekFrom.End(0)).value();
+    f.seek(SeekFrom.Start(0));
+</code></pre>
 <h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
 <pre><code class="language-pepper">seek_start(pos: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position to <code>pos</code> bytes from the start of the file.</p>
+<p>Moves the position to <code>pos</code> bytes from the start of the file, like
+<code>seek(SeekFrom.Start(pos))</code> without allocating the <code>SeekFrom</code>.</p>
 <p>Seeking past the end is allowed; a later write there fills the gap
 with zeros.</p>
 <p><strong>Parameters</strong></p>
@@ -16597,8 +16877,9 @@ with zeros.</p>
 <h4 id="seek_end"><a class="header" href="#seek_end">seek_end</a></h4>
 <pre><code class="language-pepper">seek_end(delta: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position to <code>delta</code> bytes from the end of the file.
-<code>seek_end(0)</code> moves to the end and returns the file’s length.</p>
+<p>Moves the position to <code>delta</code> bytes from the end of the file, like
+<code>seek(SeekFrom.End(delta))</code>. <code>seek_end(0)</code> moves to the end and
+returns the file’s length.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>delta</code> — the offset from the end of the file, in bytes; negative moves back from the end</li>
@@ -16614,8 +16895,9 @@ with zeros.</p>
 <h4 id="seek_current"><a class="header" href="#seek_current">seek_current</a></h4>
 <pre><code class="language-pepper">seek_current(delta: Offset): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position by <code>delta</code> bytes from where it is.
-<code>seek_current(0)</code> returns the current position without moving it.</p>
+<p>Moves the position by <code>delta</code> bytes from where it is, like
+<code>seek(SeekFrom.Current(delta))</code>. <code>seek_current(0)</code> returns the
+current position without moving it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>delta</code> — the offset from the current position, in bytes; negative moves back</li>
@@ -16628,22 +16910,19 @@ with zeros.</p>
 <ul>
 <li><code>seek</code></li>
 </ul>
-<h4 id="seek"><a class="header" href="#seek">seek</a></h4>
-<pre><code class="language-pepper">seek(offset: Offset, whence: int): IoResult&lt;Offset&gt;
+<h4 id="seek-1"><a class="header" href="#seek-1">seek</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'seek' with a 'SeekFrom' instead")] seek(offset: Offset, whence: int): IoResult&lt;Offset&gt;
 </code></pre>
-<p>Moves the position by <code>offset</code> relative to the origin <code>whence</code>.
-<code>seek_start</code>, <code>seek_end</code> and <code>seek_current</code> name the three origins.</p>
-<p>A position before the start of the file is an error. Seeking a
-stream that has no position (a pipe or a terminal) fails on POSIX
-and has platform-defined results on Windows.</p>
+<p>Deprecated: use <code>seek(SeekFrom)</code> instead. Moves the position by
+<code>offset</code> relative to the origin <code>whence</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>offset</code> — the offset in bytes from the origin; may be negative</li>
-<li><code>whence</code> — the origin: 0 the start of the file, 1 the current position, 2 the end of the file (<code>SEEK_SET</code>, <code>SEEK_CUR</code>, <code>SEEK_END</code> on POSIX; <code>FILE_BEGIN</code>, <code>FILE_CURRENT</code>, <code>FILE_END</code> on Windows)</li>
+<li><code>whence</code> — the origin: 0 the start of the file, 1 the current position, 2 the end of the file</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the new position, in bytes from the start of the file; an error when the File is closed, <code>whence</code> is not 0, 1 or 2, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek(SeekFrom)</code>, or when <code>whence</code> is not 0, 1 or 2</li>
 </ul>
 <h4 id="set_length"><a class="header" href="#set_length">set_length</a></h4>
 <pre><code class="language-pepper">set_length(size: ulong): IoResult&lt;void&gt;
@@ -16719,7 +16998,7 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
     }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/directory.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="directory"><a class="header" href="#directory">Directory</a></h1>
+<h1 id="directory-1"><a class="header" href="#directory-1">Directory</a></h1>
 <p>Source: <code>runtime/io/directory.pep</code></p>
 <h2 id="direntry"><a class="header" href="#direntry">DirEntry</a></h2>
 <pre><code class="language-pepper">struct DirEntry
@@ -16753,6 +17032,12 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 <pre><code class="language-pepper">String name
 </code></pre>
 <p>The entry’s own file name, without any directory part.</p>
+<h4 id="file_type-1"><a class="header" href="#file_type-1">file_type</a></h4>
+<pre><code class="language-pepper">FileType file_type
+</code></pre>
+<p>The kind of the entry, without following symlinks: <code>Symlink</code> for a
+symlink (on Windows, any reparse point, even one to a directory),
+<code>Other</code> for anything that is not a file, directory or symlink.</p>
 <h4 id="is_file-2"><a class="header" href="#is_file-2">is_file</a></h4>
 <pre><code class="language-pepper">bool is_file
 </code></pre>
@@ -16772,7 +17057,8 @@ junctions included), which is not followed.</p>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
-false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
+false and <code>file_type</code> <code>Other</code>. Entries are normally obtained from
+<code>Directory.entries()</code>.</p>
 <h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
@@ -16789,7 +17075,7 @@ read.</p>
 <ul>
 <li><code>Path.metadata</code></li>
 </ul>
-<h2 id="directory-1"><a class="header" href="#directory-1">Directory</a></h2>
+<h2 id="directory-1-1"><a class="header" href="#directory-1-1">Directory</a></h2>
 <pre><code class="language-pepper">struct Directory
 </code></pre>
 <p>A directory on the file system, identified by its path, together with
@@ -16929,7 +17215,7 @@ Windows a read-only file inside the tree is such a failure
         print(r.error().message);
     }
 </code></pre>
-<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
 <pre><code class="language-pepper">static current(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
@@ -17401,7 +17687,7 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
     print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
     while (true) {
         var (stream, peer) = listener.accept().value();
-        stream.write_string("hello " + peer.to_string());
+        stream.write_all("hello " + peer.to_string());
     }
 </code></pre>
 <h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
@@ -17488,7 +17774,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
                         return;
                     }
                     var (stream, peer) = accepted.value();
-                    stream.write_string("hello");
+                    stream.write_all("hello");
                 }
             });
         });
@@ -17564,7 +17850,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
 <pre><code class="language-pepper">    import io;
 
     var stream = io.TcpStream.connect_host("example.com", 80).value();
-    stream.write_string("HEAD / HTTP/1.0\r\n\r\n");
+    stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
     var reply = Array&lt;u8&gt;();
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
@@ -17691,11 +17977,11 @@ Use <code>write_all</code> to send everything.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_string-1"><a class="header" href="#write_string-1">write_string</a></h4>
-<pre><code class="language-pepper">write_string(text: String): IoResult&lt;void&gt;
+<h4 id="write_all-1-1"><a class="header" href="#write_all-1-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): IoResult&lt;void&gt;
 </code></pre>
-<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does. No
-newline or terminator is added.</p>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to send</li>
@@ -17703,6 +17989,26 @@ newline or terminator is added.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    stream.write_all("ping");
+</code></pre>
+<h4 id="write_string-1"><a class="header" href="#write_string-1">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
 </ul>
 <h4 id="shutdown_write"><a class="header" href="#shutdown_write">shutdown_write</a></h4>
 <pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
@@ -17767,7 +18073,7 @@ one started with <code>async.spawn</code>.</p>
         var transfer = stream.into_transfer();
         async.spawn&lt;void&gt;(() =&gt; {
             var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_string("hello from another worker");
+            mine.write_all("hello from another worker");
         });
     }
 </code></pre>
@@ -18314,7 +18620,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
     worker.join();
 </code></pre>
-<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
+<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
@@ -18937,7 +19243,7 @@ a <code>shared</code> function.</p>
                     }
                     var (stream, peer) = accepted.value();
                     async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                        stream.write_string("hello");
+                        stream.write_all("hello");
                     });
                 }
             });
@@ -19114,7 +19420,7 @@ it.</p>
 </code></pre>
 <p>The I/O backend a runtime waits on sockets with (see
 <code>RuntimeOptions.backend</code>).</p>
-<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h3 id="cases-3"><a class="header" href="#cases-3">Cases</a></h3>
 <h4 id="automatic"><a class="header" href="#automatic">Automatic</a></h4>
 <pre><code class="language-pepper">Automatic
 </code></pre>
@@ -19187,7 +19493,7 @@ also waits for it and collects what it wrote.</p>
 </code></pre>
 <p>Where a child’s standard input, output or error goes (see
 <code>Command.stdin</code>, <code>Command.stdout</code> and <code>Command.stderr</code>).</p>
-<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h3 id="cases-4"><a class="header" href="#cases-4">Cases</a></h3>
 <h4 id="inherit"><a class="header" href="#inherit">Inherit</a></h4>
 <pre><code class="language-pepper">Inherit
 </code></pre>
@@ -19203,7 +19509,7 @@ or writes where the parent writes.</p>
 </code></pre>
 <p>The stream is the null device: reading it finds the end at once, and
 what is written to it is thrown away.</p>
-<h2 id="output"><a class="header" href="#output">Output</a></h2>
+<h2 id="output-1"><a class="header" href="#output-1">Output</a></h2>
 <pre><code class="language-pepper">struct Output
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
@@ -19225,7 +19531,7 @@ when standard output was not piped.</p>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
 <h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
-<h4 id="output-1"><a class="header" href="#output-1">Output()</a></h4>
+<h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
 <p>Creates an Output from its parts.</p>
@@ -19883,7 +20189,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
+<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
@@ -21455,7 +21761,7 @@ on Windows).</p>
     var listener = io.UnixListener.bind(path).value();
     while (true) {
         var stream = listener.accept().value();
-        stream.write_string("hello");
+        stream.write_all("hello");
     }
 </code></pre>
 <h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
@@ -21538,7 +21844,7 @@ goes. The socket file stays.</p>
                     if (accepted.is_err()) {
                         return;
                     }
-                    accepted.value().write_string("hello");
+                    accepted.value().write_all("hello");
                 }
             });
         });
@@ -21603,7 +21909,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
 <pre><code class="language-pepper">    import io;
 
     var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
@@ -21704,11 +22010,11 @@ If an error occurs part of <code>data</code> may already have been sent.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_string-2"><a class="header" href="#write_string-2">write_string</a></h4>
-<pre><code class="language-pepper">write_string(text: String): IoResult&lt;void&gt;
+<h4 id="write_all-1-2"><a class="header" href="#write_all-1-2">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): IoResult&lt;void&gt;
 </code></pre>
-<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does. No
-newline or terminator is added.</p>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to send</li>
@@ -21716,6 +22022,26 @@ newline or terminator is added.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    stream.write_all("ping");
+</code></pre>
+<h4 id="write_string-2"><a class="header" href="#write_string-2">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
 </ul>
 <h4 id="shutdown_write-1"><a class="header" href="#shutdown_write-1">shutdown_write</a></h4>
 <pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
@@ -22324,7 +22650,7 @@ connector or acceptor is made; on Windows it uses SChannel.</p>
     main(): int {
         var connector = tls.TlsConnector.create().value();
         var stream = connector.connect_host("localhost", 8443).value();
-        stream.write_string("ping");
+        stream.write_all("ping");
         var reply = Array&lt;u8&gt;();
         while (stream.read(reply, 4096).value() &gt; 0) {
         }
@@ -22358,7 +22684,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 
     var connector = tls.TlsConnector.create().value();
     var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
 </code></pre>
 <h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
@@ -22444,7 +22770,7 @@ one.</p>
         var (tcp, peer) = listener.accept().value();
         var accepted = acceptor.accept(tcp);
         if (accepted.is_ok()) {
-            accepted.value().write_string("hello over TLS");
+            accepted.value().write_all("hello over TLS");
         }
     }
 </code></pre>
@@ -22507,7 +22833,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_string("ping");
+    stream.write_all("ping");
     var reply = Array&lt;u8&gt;();
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
@@ -22584,10 +22910,11 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_string-3"><a class="header" href="#write_string-3">write_string</a></h4>
-<pre><code class="language-pepper">write_string(text: String): io.IoResult&lt;void&gt;
+<h4 id="write_all-1-3"><a class="header" href="#write_all-1-3">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): io.IoResult&lt;void&gt;
 </code></pre>
-<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does.</p>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to send</li>
@@ -22595,6 +22922,26 @@ it to <code>buffer</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    stream.write_all("ping");
+</code></pre>
+<h4 id="write_string-3"><a class="header" href="#write_string-3">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
 </ul>
 <h4 id="shutdown"><a class="header" href="#shutdown">shutdown</a></h4>
 <pre><code class="language-pepper">shutdown(): io.IoResult&lt;void&gt;

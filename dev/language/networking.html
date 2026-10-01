@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f6a3599.js";
+            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -245,7 +245,7 @@ main(): int {
     assert(peer == client.local_address().value(), "accept reports who connected");
 
     # The client sends a request and closes its sending side.
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     client.shutdown_write();
 
     # The server reads until the client is done: read returns 0 at the end.
@@ -255,7 +255,7 @@ main(): int {
     assert(request.count() == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
-    server.write_string("pong");
+    server.write_all("pong");
     var reply = Array&lt;u8&gt;();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -275,7 +275,8 @@ bytes of it to <code>buffer</code>, the same way <code>File.read</code> does. It
 the peer has closed its side. <code>read_exact(buffer, count)</code> loops until
 <code>count</code> bytes have arrived.</li>
 <li><code>write(data)</code> sends what the system will take in one call.
-<code>write_all(data)</code> and <code>write_string(text)</code> loop until everything is sent.</li>
+<code>write_all(data)</code> loops until everything is sent; <code>data</code> is a <code>u8[]</code> or a
+<code>String</code>.</li>
 <li><code>shutdown_write()</code> tells the peer that nothing more is coming, while this
 side can still read.</li>
 <li><code>set_no_delay(true)</code> sends small writes immediately instead of combining
@@ -334,10 +335,10 @@ main(): int {
     var client = io.UnixStream.connect(path).value();
     var server = listener.accept().value();
 
-    assert(client.write_string("ping").is_ok(), "send the request");
+    assert(client.write_all("ping").is_ok(), "send the request");
     var request = Array&lt;u8&gt;();
     assert(server.read_exact(request, 4).is_ok(), "read the request");
-    server.write_string("pong");
+    server.write_all("pong");
     var reply = Array&lt;u8&gt;();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");
     assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -399,7 +400,7 @@ main(): int {
                 var stream = acceptor.accept(tcp).value();
                 var request = Array&lt;u8&gt;();
                 stream.read_exact(request, 4);
-                stream.write_string("pong");
+                stream.write_all("pong");
                 stream.shutdown();
             });
 
@@ -407,7 +408,7 @@ main(): int {
             var client = connector.value();
             assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
             var stream = client.connect_host("localhost", port).value();
-            stream.write_string("ping");
+            stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 4096).value() &gt; 0) {}
             assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
@@ -431,7 +432,7 @@ the certificate’s addresses.</li>
 <li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
 <code>acceptor.accept(tcp)</code> runs the handshake over a connection a
 <code>TcpListener</code> accepted.</li>
-<li><code>read</code>, <code>read_exact</code>, <code>write</code>, <code>write_all</code> and <code>write_string</code> work on the
+<li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>
 <li>A failed handshake returns an error whose message says why, such as
