@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1146054d.js";
+            window.path_to_searchindex_js = "searchindex-097509df.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-8fc0870b.js"></script>
+        <script src="toc-3dd6b05c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -423,6 +423,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
+<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="#debugging">debugging</a>.</td></tr>
 <tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>. Without it, <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when set.</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>, optimized at the <code>-O</code> level.</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
@@ -11935,6 +11936,138 @@ const IDENTITY = matrix(1, 0, 0,
 <p>Each comment goes on its own line, between declarations or statements, and
 the pair must be in the same block (or both at the top level). Without a
 <code># format: on</code>, the region runs to the end of the block or file.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="debugging"><a class="header" href="#debugging">Debugging</a></h1>
+<p>Build with <code>-g</code> to debug a Pepper program in gdb, lldb, Visual Studio or
+WinDbg. The compiler then describes the program to the debugger, which can:</p>
+<ul>
+<li>stop at a <code>file:line</code> breakpoint;</li>
+<li>step through the source one statement at a time;</li>
+<li>show a backtrace with the source line of every Pepper frame;</li>
+<li>print parameters, locals, module-scope variables and struct fields.</li>
+</ul>
+<pre><code class="language-bash">pepper -g main.pep -o main        # Linux and macOS: DWARF in the executable
+pepper -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
+</code></pre>
+<p><code>-g</code> and <code>-O</code> work together. Optimized code still steps and shows a
+backtrace, and a call the optimizer inlined still appears as its own frame.
+A variable the optimizer removed shows as optimized out.</p>
+<h2 id="a-session"><a class="header" href="#a-session">A session</a></h2>
+<p>This program builds an array of points and adds up the first one:</p>
+<pre><code class="language-pepper"># Build with `-g` to debug this program: break on line 18 and print `first`.
+struct Point {
+    var x: int = 0;
+    var y: int = 0;
+}
+
+total(p: Point): int {
+    return p.x + p.y;
+}
+
+main(): int {
+    var points = Array&lt;Point&gt;();
+    var p = Point();
+    p.x = 1;
+    p.y = 2;
+    points.append(p);
+    var first = points[0];
+    return total(first) - 3;
+}
+</code></pre>
+<p>Stop on line 18, after <code>first</code> is assigned, and look around. In gdb:</p>
+<pre><code class="language-text">$ pepper -g debugging.pep -o debugging
+$ gdb ./debugging
+(gdb) break debugging.pep:18
+(gdb) run
+Breakpoint 1, main () at debugging.pep:18
+18	    return total(first) - 3;
+(gdb) info locals
+points = 0x5555555592f0
+p = 0x5555555592c0
+first = 0x5555555592c0
+(gdb) print *first
+$1 = {__refcount = 3, __weakcount = 1, x = 1, y = 2}
+(gdb) step
+total (p=0x5555555592c0) at debugging.pep:8
+8	    return p.x + p.y;
+(gdb) backtrace
+#0  total (p=0x5555555592c0) at debugging.pep:8
+#1  main () at debugging.pep:18
+</code></pre>
+<p>lldb takes the same steps with <code>b debugging.pep:18</code>, <code>r</code>, <code>frame variable</code>
+and <code>bt</code>. In Visual Studio, open the executable as a project (File &gt; Open &gt;
+Project/Solution), set a breakpoint in the source file and start debugging.
+The <code>.pdb</code> beside the executable is found automatically.</p>
+<h2 id="what-the-debugger-sees"><a class="header" href="#what-the-debugger-sees">What the debugger sees</a></h2>
+<ul>
+<li><strong>Functions</strong> under the names you wrote: <code>total</code>, <code>Point.length</code>,
+<code>Array&lt;int&gt;.append</code>. Methods the compiler writes for a struct, such as
+<code>__acquire</code> and <code>__release</code>, are marked artificial and placed on the
+struct’s line.</li>
+<li><strong>Structs.</strong> A variable of a struct type holds a reference, so the
+debugger shows an address. Dereference it (<code>print *first</code>) to see the
+fields. The fields include the <code>__refcount</code> and <code>__weakcount</code> head, which
+helps when chasing an ownership bug.</li>
+<li><strong>Numbers</strong> under their Pepper names (<code>int</code>, <code>ulong</code>, <code>u8</code>).</li>
+<li><strong>Enums.</strong> A plain enum shows its case by name. An enum with payloads
+shows as a struct holding its tag and its payload fields.</li>
+<li><strong>Tuples</strong> as a struct with members <code>0</code>, <code>1</code>, and so on.</li>
+<li><strong>Trait values</strong> as the object they refer to and its vtable.</li>
+<li><strong>Generics.</strong> Each instantiation is its own type, such as <code>Array&lt;long&gt;</code>.</li>
+<li><strong>Module-scope variables</strong> under their names.</li>
+<li><strong><code>String</code>, <code>Array</code> and <code>Optional</code></strong> read naturally once the
+debugger loads Pepper’s formatters (see below): a <code>String</code> as its text,
+an <code>Array</code> as its count and elements, an <code>Optional</code> as <code>none</code> or <code>some</code>
+and its value. Each also shows its reference counts as <code>[ref count]</code>
+(strong references) and <code>[weak count]</code>.</li>
+</ul>
+<p>Not yet supported: an enum with payloads shows its tag and every payload
+field, rather than the active case and its payload alone.</p>
+<h2 id="formatters-for-the-runtimes-types"><a class="header" href="#formatters-for-the-runtimes-types">Formatters for the runtime’s types</a></h2>
+<p>The runtime ships formatters for each debugger in <code>runtime/debuggers/</code>.
+The sessions below stop in a program holding <code>var name = "pepper";</code>, an
+<code>Array&lt;int&gt;</code> <code>values</code> of 3 and 4, and <code>var found = Optional&lt;int&gt;.some(7);</code>.</p>
+<ul>
+<li>
+<p><strong>gdb.</strong> On Linux a <code>-g</code> program carries <code>gdb_printers.py</code> in its
+<code>.debug_gdb_scripts</code> section. gdb loads it from directories on its
+auto-load safe path, so add the program’s directory to it, on the command
+line or in <code>~/.gdbinit</code>:</p>
+<pre><code class="language-bash">gdb -iex "add-auto-load-safe-path ." ./debugging
+</code></pre>
+<pre><code class="language-text">(gdb) print name
+$1 = "pepper" = {[ref count] = 1, [weak count] = 1}
+(gdb) print values
+$2 = Array&lt;int&gt; of count 2 = {[ref count] = 1, [weak count] = 1, [0] = 3, [1] = 4}
+(gdb) print found
+$3 = some = {[ref count] = 1, [weak count] = 1, value = 7}
+</code></pre>
+</li>
+<li>
+<p><strong>lldb.</strong> Import <code>lldb_formatters.py</code>, once per session or in
+<code>~/.lldbinit</code>:</p>
+<pre><code class="language-text">(lldb) command script import runtime/debuggers/lldb_formatters.py
+(lldb) frame variable name *values
+(String *) name = 0x00005555555592c0 "pepper"
+(Array&lt;int&gt;) *values = count=2 {
+  [ref count] = 1
+  [weak count] = 1
+  [0] = 3
+  [1] = 4
+}
+</code></pre>
+</li>
+<li>
+<p><strong>Visual Studio and WinDbg.</strong> A <code>-g</code> program’s <code>.pdb</code> carries
+<code>pepper.natvis</code>, so nothing needs loading.</p>
+</li>
+</ul>
+<h2 id="building-with--g"><a class="header" href="#building-with--g">Building with <code>-g</code></a></h2>
+<p>Debug info changes the code each file compiles to, so <code>-g</code> builds keep
+their own objects in the build cache, apart from builds without it. With
+<code>-g</code>, editing a file recompiles the files that import it, even when the edit
+only moves a declaration: their code records the line numbers of the
+generics they instantiate from it.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="standard-library-reference"><a class="header" href="#standard-library-reference">Standard library reference</a></h1>
 <p>The standard library is the Pepper runtime: the files under <code>runtime/</code> that
