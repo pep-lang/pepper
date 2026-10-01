@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2a2c38d1.js";
+            window.path_to_searchindex_js = "searchindex-aed5c219.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-3dd6b05c.js"></script>
+        <script src="toc-9b67b8db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -9990,6 +9990,44 @@ them.</li>
 <li><code>local_address()</code> and <code>peer_address()</code> return the two ends of the
 connection.</li>
 </ul>
+<h2 id="printing-to-a-stream"><a class="header" href="#printing-to-a-stream">Printing to a stream</a></h2>
+<p>A <code>File</code>, a <code>TcpStream</code> and a <code>UnixStream</code> have the <code>io.Print</code> trait, which
+gives them <code>print(value)</code> and <code>print_line(value)</code>. They write the text that
+<code>to_string</code> makes of any value, as the global <code>print</code> does on standard
+output:</p>
+<pre><code class="language-pepper">import io;
+
+# `print` and `print_line` write a value's text to a File or a socket, the
+# way the global `print` writes to standard output.
+main(): int {
+    var path = io.Directory.temp().join("networking-print.txt");
+    var file = io.File.create(path).value();
+    file.print("total: ");
+    file.print_line(42);
+    file.print_line((1, "two"));
+    file.close();
+    assert(io.File.read_to_string(path).value() == "total: 42\n(1, two)\n", "the file holds both lines");
+    io.File.remove(path);
+
+    # The same calls work on a TcpStream (and a UnixStream).
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+    var client = io.TcpStream.connect(listener.local_address().value()).value();
+    var (server, peer) = listener.accept().value();
+    client.print_line($"hello from {client.local_address().value()}");
+    client.shutdown_write();
+    var received = Array&lt;u8&gt;();
+    while (server.read(received, 4096).value() &gt; 0) {
+    }
+    assert(received[received.count() - 1] == '\n', "print_line ends the line");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>print</code> writes the text alone; <code>print_line</code> adds a <code>\n</code>.</li>
+<li>Both return an <code>IoResult&lt;void&gt;</code>, like <code>write_all</code>.</li>
+<li>Another type gets them by providing <code>write_all(data: u8[])</code> and declaring
+<code>extend MyStream with io.Print {}</code>.</li>
+</ul>
 <h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
 <p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
 at all, and in no guaranteed order:</p>
@@ -15436,6 +15474,7 @@ is used.</p>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
 <li><a href="#iounixpep">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
+<li><a href="#print-2">Print</a>: <code>print</code> and <code>print_line</code> on files and sockets</li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>ErrorKind</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -18600,6 +18639,89 @@ chose when it was bound to port 0.</p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/print.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="print-2"><a class="header" href="#print-2">Print</a></h1>
+<p><code>Print</code>: <code>print</code> and <code>print_line</code> for anything that writes bytes, such as
+a <code>File</code>, a <code>TcpStream</code> or a <code>UnixStream</code>.</p>
+<p>Source: <code>runtime/io/print.pep</code></p>
+<h2 id="print-1-1"><a class="header" href="#print-1-1">Print</a></h2>
+<pre><code class="language-pepper">trait Print
+</code></pre>
+<p>A byte stream that values can be printed to, as the global <code>print</code> prints
+to standard output.</p>
+<p>A type has the trait by providing <code>write_all(data: u8[])</code>; it then gets
+<code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes of a
+value (the text <code>$"{value}"</code> would hold). <code>File</code>, <code>TcpStream</code> and
+<code>UnixStream</code> have it.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    main(): int {
+        var path = io.Directory.temp().join("report.txt");
+        var file = io.File.create(path).value();
+        file.print("total: ");
+        file.print_line(42);
+        file.close();
+        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+        io.File.remove(path);
+        return 0;
+    }
+</code></pre>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the stream fails</li>
+</ul>
+<h4 id="print-2-1"><a class="header" href="#print-2-1">print</a></h4>
+<pre><code class="language-pepper">print&lt;T&gt;(value: T): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes the text of <code>value</code>, with no line break after it: a String as
+it is, anything else through <code>to_string</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the text is written; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    file.print("n = ");
+    file.print(3);   # the file now holds "n = 3"
+</code></pre>
+<h4 id="print_line"><a class="header" href="#print_line">print_line</a></h4>
+<pre><code class="language-pepper">print_line&lt;T&gt;(value: T): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes the text of <code>value</code> and a line break (<code>\n</code>), as the global
+<code>print</code> does on standard output.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the line is written; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    file.print_line($"total: {total}");
+    file.print_line((1, "two"));   # (1, two)
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-async-module"><a class="header" href="#the-async-module">The async module</a></h1>
 <p>Threads and concurrency, modeled on Rust’s <code>std::thread</code> and C++
@@ -18700,7 +18822,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <pre><code class="language-pepper">    var a = async.Atomic&lt;int&gt;(41);
     var p = async.Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">load(): T
 </code></pre>
@@ -18990,7 +19112,7 @@ early.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">id(): ThreadId
 </code></pre>
@@ -19093,7 +19215,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -19270,7 +19392,7 @@ function called in a task can wait without being marked in any way.</p>
 <ul>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
@@ -19927,7 +20049,7 @@ parent’s environment and current directory, and inherited streams.</p>
 <ul>
 <li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
 </ul>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
 <h4 id="argument"><a class="header" href="#argument">argument</a></h4>
 <pre><code class="language-pepper">argument(value: String): Command
 </code></pre>
@@ -20107,7 +20229,7 @@ signal.</p>
 <li><code>code</code> — the exit code, when the process exited</li>
 <li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
 </ul>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="success"><a class="header" href="#success">success</a></h4>
 <pre><code class="language-pepper">success(): bool
 </code></pre>
@@ -20380,7 +20502,7 @@ threads.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -20617,7 +20739,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -20951,7 +21073,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -21110,7 +21232,7 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -21227,7 +21349,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -21433,7 +21555,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -21546,7 +21668,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -21612,7 +21734,7 @@ have no defined order, as HTTP allows.</p>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
 <pre><code class="language-pepper">count(): ulong
 </code></pre>
@@ -22029,7 +22151,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -22124,7 +22246,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -22338,7 +22460,7 @@ system can take at least some of them. The send may be partial; use
 <ul>
 <li>the number of bytes sent, which may be less than <code>data.count()</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
 </ul>
-<h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
+<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.
@@ -23045,7 +23167,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -23239,7 +23361,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes sent; an error when the stream is closed, a TLS error, or an io error from the socket</li>
 </ul>
-<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
+<h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
@@ -23407,7 +23529,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
