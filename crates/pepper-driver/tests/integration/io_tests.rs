@@ -746,12 +746,18 @@ fn print_and_stdout_keep_order() {
 const PRINT_TRAIT_PROGRAM: &str = r##"
 import io;
 
-# A type of the program's own gets print and print_line from write_all.
+# A type of the program's own gets print and print_line from write and
+# write_all.
 struct Collector {
     var bytes: u8[];
 
     construct() {
         bytes = Array<u8>();
+    }
+
+    write(data: u8[]): io.IoResult<ulong> {
+        write_all(data);
+        return io.IoResult<ulong>.ok(data.count());
     }
 
     write_all(data: u8[]): io.IoResult<void> {
@@ -762,10 +768,10 @@ struct Collector {
     }
 }
 
-extend Collector with io.Print {}
+extend Collector with io.Writer {}
 
-# Any Print works through a constraint.
-greet<T: io.Print>(out: T) {
+# Any Writer works through a constraint.
+greet<T: io.Writer>(out: T) {
     out.print_line("hello");
 }
 
@@ -790,12 +796,91 @@ main(): int {
 }
 "##;
 
-/// `io.Print` gives `print`/`print_line` to File and to any type with
-/// `write_all(u8[])`, and works as a generic constraint.
+/// `io.Writer` gives `print`/`print_line` to File and to any type with
+/// `write` and `write_all(u8[])`, and works as a generic constraint.
 #[test]
 fn print_trait_writes_text() {
     let out = assert_runs("print_trait", PRINT_TRAIT_PROGRAM);
     assert_eq!(out.trim_end(), "print-ok");
+}
+
+const READER_TRAIT_PROGRAM: &str = r##"
+import io;
+
+# A type of the program's own gets lines() and chunks() from read: it hands
+# out its text two bytes at a time, so lines and chunks span reads.
+struct Pieces {
+    var data: u8[];
+    var position: ulong;
+
+    construct(text: String) {
+        data = text.bytes();
+    }
+
+    read(buffer: u8[], max: ulong): io.IoResult<ulong> {
+        ulong count = 0;
+        while (count < max && count < 2 && position < data.count()) {
+            buffer.append(data[position]);
+            position += 1;
+            count += 1;
+        }
+        return io.IoResult<ulong>.ok(count);
+    }
+}
+
+extend Pieces with io.Reader {}
+
+# Any Reader, as a trait value.
+joined(source: io.Reader): String {
+    var text = "";
+    for (var line in source.lines()) {
+        text = text + line.value() + "|";
+    }
+    return text;
+}
+
+# Any Reader, through a constraint.
+total<R: io.Reader>(source: R, size: ulong): ulong {
+    ulong count = 0;
+    for (var chunk in source.chunks(size)) {
+        assert(chunk.value().count() <= size, "a chunk is at most size bytes");
+        count += chunk.value().count();
+    }
+    return count;
+}
+
+exercise() {
+    assert(joined(Pieces("one\r\ntwo\n\nlast")) == "one|two||last|", "lines across reads");
+    assert(total(Pieces("abcdefg"), 3) == 7, "chunks of a type of the program's own");
+
+    var path = io.Directory.temp().join("reader_trait_test.txt");
+    assert(io.File.write_text(path, "alpha\nbeta\n").is_ok(), "write");
+    assert(joined(io.File.open(path).value()) == "alpha|beta|", "a File is a Reader");
+    assert(total(io.File.open(path).value(), 4) == 11, "chunks of a File");
+    var empty = 0;
+    for (var chunk in io.File.open(path).value().chunks(100)) {
+        empty += 1;
+    }
+    assert(empty == 1, "one read takes the whole small file");
+    io.File.remove(path);
+}
+
+main(): int {
+    exercise();
+    var before = _pep_live_allocs();
+    exercise();
+    assert(_pep_live_allocs() == before, "readers leak nothing");
+    print("reader-ok");
+    return 0;
+}
+"##;
+
+/// `io.Reader` gives `lines()` and `chunks()` to File and to any type with
+/// `read(u8[], ulong)`, as a trait value and as a generic constraint.
+#[test]
+fn reader_trait_reads_lines_and_chunks() {
+    let out = assert_runs("reader_trait", READER_TRAIT_PROGRAM);
+    assert_eq!(out.trim_end(), "reader-ok");
 }
 
 #[test]
@@ -953,6 +1038,7 @@ fn all_programs() -> Vec<(&'static str, String)> {
         ("enums", enums_program("x")),
         ("import_names", IMPORT_NAMES_PROGRAM.to_string()),
         ("print_trait", PRINT_TRAIT_PROGRAM.to_string()),
+        ("reader_trait", READER_TRAIT_PROGRAM.to_string()),
         ("streams", streams_program("x")),
     ]
 }

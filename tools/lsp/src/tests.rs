@@ -1203,7 +1203,7 @@ const TRAIT_CALL: &str = r#"trait Driver {
     poll(timeout: int): bool;
 }
 struct Quiet { poll(timeout: int): bool { return false; } }
-extend Quiet with Driver {}
+extend Quiet with Driver;
 struct Worker {
     var driver: Driver;
     tick(): bool { return this.driver.poll(5); }

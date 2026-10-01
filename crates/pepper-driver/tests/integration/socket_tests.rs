@@ -313,6 +313,20 @@ incoming() {
     assert(steps == 0, "a closed listener yields nothing");
 }
 
+# A TcpStream is an io.Reader: lines() reads until the peer shuts down.
+stream_lines() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var client = io.TcpStream.connect(listener.local_address().value()).value();
+    var (server, peer) = listener.accept().value();
+    assert(client.write_all("first\r\nsecond\n").is_ok(), "write lines");
+    assert(client.shutdown_write().is_ok(), "shutdown_write");
+    var got = Array<String>();
+    for (var line in server.lines()) {
+        got.append(line.value());
+    }
+    assert(got.count() == 2 && got[0] == "first" && got[1] == "second", "lines over a socket");
+}
+
 main(): int {
     exchange();
     # Warm up (lazy runtime state, Winsock startup), then check that sockets
@@ -321,6 +335,7 @@ main(): int {
     exchange();
     errors();
     incoming();
+    stream_lines();
     assert(_pep_live_allocs() == before, "sockets leak nothing");
     by_name();
     ipv6();

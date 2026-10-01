@@ -110,7 +110,7 @@ export struct Client {
             if (stream.is_err()) {
                 return io.IoResult<Response>.err(stream.error());
             }
-            connection._tls = Optional<tls.TlsStream>.some(stream.value());
+            connection._use_tls(stream.value());
         }
         var result = _http_exchange(connection, request, url);
         connection._close();

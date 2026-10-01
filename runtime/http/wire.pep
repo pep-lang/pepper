@@ -1,5 +1,5 @@
 # HTTP/1.1 on the wire, shared by the client and the server: a connection
-# that is a TcpStream or a TlsStream, a buffered reader over it, header and
+# that reads and writes a TcpStream or a TlsStream, a buffered reader over it, header and
 # body parsing (Content-Length, chunked, to the end), and writing a message
 # head.
 
@@ -42,28 +42,35 @@ export _http_too_large(message: String): io.IoError {
     return io.IoError(_http_code_too_large(), message);
 }
 
-# One connection: plain TCP, or TLS over it.
+# One connection: plain TCP, or TLS over it. Reads and writes go through
+# `_reader` and `_writer`, which are the TLS stream once `_use_tls` is called
+# and the TCP stream before.
 export struct _HttpConnection {
     var _tcp: io.TcpStream;
     var _tls: tls.TlsStream?;
+    var _reader: io.Reader;
+    var _writer: io.Writer;
 
     construct(tcp: io.TcpStream) {
         this._tcp = tcp;
         this._tls = Optional<tls.TlsStream>.none();
+        this._reader = tcp;
+        this._writer = tcp;
+    }
+
+    # Reads and writes through `stream`, a TLS session over `_tcp`.
+    _use_tls(stream: tls.TlsStream) {
+        this._tls = Optional<tls.TlsStream>.some(stream);
+        this._reader = stream;
+        this._writer = stream;
     }
 
     _read(buffer: u8[], max: ulong): io.IoResult<ulong> {
-        if (this._tls.is_some()) {
-            return this._tls.value().read(buffer, max);
-        }
-        return this._tcp.read(buffer, max);
+        return this._reader.read(buffer, max);
     }
 
     _write_all(data: u8[]): io.IoResult<void> {
-        if (this._tls.is_some()) {
-            return this._tls.value().write_all(data);
-        }
-        return this._tcp.write_all(data);
+        return this._writer.write_all(data);
     }
 
     # Ends the connection: close_notify over TLS, then the socket.

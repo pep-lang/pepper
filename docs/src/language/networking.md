@@ -63,21 +63,29 @@ A `TcpListener` waits for connections. Each `TcpStream` is one connection:
 - `local_address()` and `peer_address()` return the two ends of the
   connection.
 
-## Printing to a stream
+## Reading and writing any stream
 
-A `File`, a `TcpStream` and a `UnixStream` have the `io.Print` trait, which
-gives them `print(value)` and `print_line(value)`. They write the text that
-`to_string` makes of any value, as the global `print` does on standard
-output:
+A `File`, a `TcpStream`, a `UnixStream` and a `tls.TlsStream` have the
+`io.Reader` and `io.Writer` traits, so a function that takes an
+`io.Reader` (or `<R: io.Reader>`) reads from any of them:
 
 ```pepper
 {{#include ../../examples/networking-print.pep}}
 ```
 
-- `print` writes the text alone; `print_line` adds a `\n`.
-- Both return an `IoResult<void>`, like `write_all`.
-- Another type gets them by providing `write_all(data: u8[])` and declaring
-  `extend MyStream with io.Print;`.
+- **`io.Reader`** needs `read(buffer, max)` and gives `lines()`, the
+  stream's lines as `IoResult<String>`s, and `chunks(size)`, its bytes in
+  arrays of at most `size`, both read as a `for` loop asks for them (see
+  [Iteration](iteration.md#reading-files-and-directories)).
+- **`io.Writer`** needs `write(data)` and `write_all(data: u8[])` and gives
+  `print(value)` and `print_line(value)`. They write the text that
+  `to_string` makes of any value, as the global `print` does on standard
+  output; `print_line` adds a `\n`. Both return an `IoResult<void>`, like
+  `write_all`.
+- Another type gets them by providing those methods and declaring
+  `extend MyStream with io.Reader;` or `extend MyStream with io.Writer;`.
+- `io.Print`, which gave only `print` and `print_line`, is deprecated: use
+  `io.Writer`.
 
 ## UDP
 

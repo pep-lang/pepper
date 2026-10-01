@@ -17,7 +17,8 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
-- [Print](io-print.md): `print` and `print_line` on files and sockets
+- [Streams](io-stream.md): the `Reader` and `Writer` traits, `lines()` and `chunks()`
+- [Print](io-print.md): deprecated; use `Writer`
 - [Errors and platform types](io-types.md): `IoError`, `ErrorKind`, `IoResult`, and handle types
 
 **Example**

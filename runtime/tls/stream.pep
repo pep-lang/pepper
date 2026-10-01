@@ -401,3 +401,7 @@ export struct TlsStream {
         return _tcp.close();
     }
 }
+
+extend TlsStream with io.Reader;
+
+extend TlsStream with io.Writer;

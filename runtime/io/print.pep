@@ -1,18 +1,19 @@
-## `Print`: `print` and `print_line` for anything that writes bytes, such as
-## a `File`, a `TcpStream` or a `UnixStream`.
+## `Print`, deprecated: `Writer` gives `print` and `print_line` to every
+## stream.
 
 import "file";
 import "socket";
 import "types";
 import "unix";
 
+## Deprecated: use `Writer` instead.
+##
 ## A byte stream that values can be printed to, as the global `print` prints
 ## to standard output.
 ##
 ## A type has the trait by providing `write_all(data: u8[])`; it then gets
 ## `print` and `print_line`, which write the text `to_string` makes of a
-## value (the text `$"{value}"` would hold). `File`, `TcpStream` and
-## `UnixStream` have it.
+## value (the text `$"{value}"` would hold).
 ##
 ## @example
 ##     import io;
@@ -27,6 +28,7 @@ import "unix";
 ##         io.File.remove(path);
 ##         return 0;
 ##     }
+[Deprecated("use 'Writer' instead", "Writer")]
 export trait Print {
     ## Writes all of `data`.
     ##
@@ -63,9 +65,3 @@ export trait Print {
         return write_all((to_string(value) + "\n").bytes());
     }
 }
-
-extend File with Print;
-
-extend TcpStream with Print;
-
-extend UnixStream with Print;

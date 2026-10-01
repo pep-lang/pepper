@@ -133,7 +133,7 @@ _http_serve_connection(server: Server, tcp: io.TcpStream, handler: shared (Reque
             tcp.close();
             return;
         }
-        connection._tls = Optional<tls.TlsStream>.some(stream.value());
+        connection._use_tls(stream.value());
     }
     var reader = _HttpReader(connection);
     while (true) {

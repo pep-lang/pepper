@@ -94,6 +94,7 @@
     - [http/message.pep](reference/http-message.md)
   - [http/module.pep](reference/http-module.md)
     - [http/server.pep](reference/http-server.md)
+    - [io/stream.pep](reference/io-stream.md)
     - [io/unix.pep](reference/io-unix.md)
   - [math/module.pep](reference/math-module.md)
     - [math/parse.pep](reference/math-parse.md)

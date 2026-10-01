@@ -175,10 +175,14 @@ happens; there is nothing to check after the loop.
   without building an array the way `dir.entries()` does. Each element is an
   `IoResult<DirEntry>`. A directory that cannot be read yields one error and
   then ends.
-- **`file.lines()`** yields each line of an open `File` from its current
-  position, as an `IoResult<String>` without the `\n` or `\r\n`. The last
-  line counts even without a line ending. A read error, or a line that is not
-  valid UTF-8, is yielded as an error and ends the lines.
+- **`lines()`** yields each line of an open `File`, or of any other
+  [`io.Reader`](networking.md#reading-and-writing-any-stream) such as a
+  socket, from what it reads next, as an `IoResult<String>` without the `\n`
+  or `\r\n`. The last line counts even without a line ending. A read error,
+  or a line that is not valid UTF-8, is yielded as an error and ends the
+  lines.
+- **`chunks(size)`** yields the rest of a `Reader` in arrays of at most
+  `size` bytes, one `read` each, as `IoResult<u8[]>`s.
 - **An error ends the sequence**: after an `Err` element, `next()` returns
   `false`.
 - **`listener.incoming()`** accepts connections on a
