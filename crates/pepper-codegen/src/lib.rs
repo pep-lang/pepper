@@ -4460,6 +4460,30 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MethodCall {
                 this, method, args, ..
             } => {
+                // `x.__acquire()` / `x.__release()` step the count of the
+                // value `x` holds, and do nothing for plain data, which has
+                // none (as C++'s `std::destroy_at` does nothing for a
+                // trivially destructible type). On a buffer slot
+                // (`_data[i].__release()`) the step leaves the slot as it
+                // is: a container releasing its elements just before it
+                // frees the buffer has no reason to write them.
+                if (method == "__acquire" || method == "__release") && args.is_empty() {
+                    if let Some(ty) = self.value_sema_type(this) {
+                        let none = self.context.i32_type().const_zero().into();
+                        if self.is_pod_name(&ty) {
+                            return Ok(none);
+                        }
+                        if matches!(this.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                            let value = self.codegen_expr(this)?;
+                            if method == "__acquire" {
+                                self.acquire_ref(&ty, value)?;
+                            } else {
+                                self.release_ref(&ty, value)?;
+                            }
+                            return Ok(none);
+                        }
+                    }
+                }
                 // Receiver is a buffer slot (`_data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they
                 // address the pointee's own data (`s[0]` on `String s`), so

@@ -3,11 +3,17 @@ import "internals";
 # Elements of a struct-typed Array are references: the constructor initializes
 # each to null (zero-init), every store into a slot releases the old occupant
 # and acquires the new value (codegen, at the store site), and every place an
-# element leaves the live range nulls its slot so the reference is released.
-# Shifts (insert backward, remove_at forward) move each reference to its new
-# slot with _pep_move_ref, and swap exchanges two slots with _pep_swap_refs:
-# a move does not change a reference's count, exactly as moving shared_ptrs
-# between slots would not.
+# element leaves the live range nulls its slot so the reference is released
+# (or moves out with `move`). The destructor detaches the buffer and releases
+# each element (`data[i].__release()`) without writing the slot, since the
+# buffer is freed next. A plain-value `T` (`int`,
+# a tuple of numbers) owns nothing, so none of this applies to it: its slots
+# are left as they are.
+#
+# Shifts (insert, remove_at) move a whole run of slots with one memmove, swap
+# exchanges two slots' bytes, and sort permutes raw slots through a scratch
+# buffer: a move does not change a reference's count, exactly as moving
+# shared_ptrs between slots would not.
 #
 # Every mutating method (element store, append, insert, remove_at, pop, clear,
 # truncate, swap) bumps _version; an ArrayIterator panics when it sees a
@@ -51,7 +57,8 @@ import "internals";
 ## @see ArrayIterator
 export struct Array<T> {
     ## The element buffer: `_capacity` slots, of which the first `_size` hold
-    ## live elements and the rest are zeroed (null for struct `T`). Null while
+    ## live elements. When `T` holds references the rest are zeroed (null for
+    ## struct `T`); for a plain-value `T` they may hold stale values. Null while
     ## `_capacity` is 0. Internal storage; use the methods instead of touching
     ## it directly.
     __ptr<T> _data;
@@ -87,16 +94,61 @@ export struct Array<T> {
     }
 
     destruct {
-        # Storing the default releases each element; a plain value owns
-        # nothing, so its slots are freed as they are.
+        # Detach the buffer before releasing anything: an element's
+        # destructor that reaches this Array through a cycle then finds it
+        # empty, never an element being destroyed. The slots are not
+        # written, since the buffer is freed next. Anything such a
+        # destructor appends lands in a new buffer, released the same way.
+        # The pointer compares as bytes: `__ptr<T>` would pick `T`'s own `!=`.
+        while ((_data as __ptr<u8>) != __null) {
+            __ptr<T> data = _data;
+            ulong count = _size;
+            _data = __null;
+            _size = 0;
+            _capacity = 0;
+            # A plain value owns nothing, so it is skipped.
+            if (!__is_pod<T>()) {
+                ulong index = 0;
+                while (index < count) {
+                    data[index].__release();
+                    index = index + 1;
+                }
+            }
+            _pep_free(data);
+        }
+    }
+
+    # The address of slot `index`, in bytes: `_data + index` would pick `T`'s
+    # own `+` when `T` has one.
+    _slot(index: ulong): __ptr<u8> {
+        __ptr<u8> bytes = _data as __ptr<u8>;
+        return bytes + index * sizeof<T>();
+    }
+
+    # Releases the elements in slots `start` up to `end`, nulling each slot
+    # before its element is released (`operator=`), so a destructor that
+    # reads the Array finds null there, never the element being destroyed.
+    # Leaves `_size` alone.
+    _release_range(start: ulong, end: ulong) {
         if (!__is_pod<T>()) {
-            ulong __i = 0;
-            while (__i < _size) {
-                _data[__i] = __default<T>();
-                __i = __i + 1;
+            ulong index = start;
+            while (index < end) {
+                _data[index] = __default<T>();
+                index = index + 1;
             }
         }
-        _pep_free(_data);
+    }
+
+    # Makes room for `extra` more elements, at least doubling the capacity
+    # when it must grow so that repeated bulk appends stay amortized O(1).
+    _reserve_extra(extra: ulong) {
+        if (_size + extra > _capacity) {
+            var capacity = _capacity * 2;
+            if (capacity < _size + extra) {
+                capacity = _size + extra;
+            }
+            reserve(capacity);
+        }
     }
 
     ## Returns an iterator over the elements in index order; this is what
@@ -244,17 +296,8 @@ export struct Array<T> {
             return;
         }
         _version = _version + 1;
-        if (_size + count > _capacity) {
-            var capacity = _capacity * 2;
-            if (capacity < _size + count) {
-                capacity = _size + count;
-            }
-            reserve(capacity);
-        }
-        # Byte arithmetic: `_data + _size` would pick `T`'s own `+` when `T`
-        # has one.
-        __ptr<u8> end = _data as __ptr<u8>;
-        _array_copy(end + _size * sizeof<T>(), source, count * sizeof<T>());
+        _reserve_extra(count);
+        _array_copy(_slot(_size), source, count * sizeof<T>());
         _size = _size + count;
     }
 
@@ -279,15 +322,14 @@ export struct Array<T> {
         assert(idx <= _size, "Array insert index out of bounds");
         _version = _version + 1;
         grow();
-        # Backward shift as a raw pointer move: each slot's reference is
-        # transferred to its new position without changing its count, exactly
-        # as moving `shared_ptr`s between slots would. A per-slot release/
-        # acquire store would destroy elements the Array solely owns (their
-        # only reference) and churn counts of externally shared ones.
-        ulong cursor = _size;
-        while (cursor > idx) {
-            _pep_move_ref(_data, sizeof<T>(), cursor - 1, cursor);
-            cursor = cursor - 1;
+        # Shift the tail up one slot as raw bytes: each reference moves to
+        # its new slot without changing its count, exactly as moving
+        # `shared_ptr`s between slots would. The vacated slot still holds a
+        # copy of the bits it moved, so it is zeroed before the store, which
+        # would otherwise release it.
+        if (idx < _size) {
+            _array_move(_slot(idx + 1), _slot(idx), (_size - idx) * sizeof<T>());
+            _array_zero(_slot(idx), sizeof<T>());
         }
         _data[idx] = item;
         _size = _size + 1;
@@ -311,21 +353,14 @@ export struct Array<T> {
     remove_at(idx: ulong): T {
         assert(idx < _size, "Array remove index out of bounds");
         _version = _version + 1;
-        T removed = _data[idx];
-        # The copy above acquired a reference for `removed`; release the
-        # slot's own reference now — the forward shift below overwrites this
-        # slot, and a shared_ptr move-assign would release its old occupant.
-        _data[idx] = __default<T>();
-        # Forward shift as a raw pointer move: each slot's reference is
-        # transferred to its new position without changing its count; the
-        # vacated tail is nulled so its reference is released. A per-slot
-        # release/acquire store would destroy elements the Array solely owns.
-        ulong cursor = idx;
-        while (cursor + 1 < _size) {
-            _pep_move_ref(_data, sizeof<T>(), cursor + 1, cursor);
-            cursor = cursor + 1;
+        # The slot's reference moves to the caller, with no count step.
+        var removed = move(_data[idx]);
+        # Shift the tail down one slot as raw bytes (references keep their
+        # counts), then zero the last slot, whose reference moved down.
+        _array_move(_slot(idx), _slot(idx + 1), (_size - idx - 1) * sizeof<T>());
+        if (!__is_pod<T>()) {
+            _array_zero(_slot(_size - 1), sizeof<T>());
         }
-        _data[_size - 1] = __default<T>();
         _size = _size - 1;
         return removed;
     }
@@ -342,10 +377,9 @@ export struct Array<T> {
     pop(): T {
         assert(_size > 0, "Array pop on empty Array");
         _version = _version + 1;
-        T r = _data[_size - 1];
-        _data[_size - 1] = __default<T>();
         _size = _size - 1;
-        return r;
+        # The slot's reference moves to the caller, with no count step.
+        return move(_data[_size]);
     }
 
     ## Returns the first element without removing it; the same as `a[0]`.
@@ -376,14 +410,7 @@ export struct Array<T> {
     ## Array.
     clear() {
         _version = _version + 1;
-        # A plain value owns nothing, so its slots are left as they are.
-        if (!__is_pod<T>()) {
-            ulong __i = 0;
-            while (__i < _size) {
-                _data[__i] = __default<T>();
-                __i = __i + 1;
-            }
-        }
+        _release_range(0, _size);
         _size = 0;
     }
 
@@ -401,11 +428,7 @@ export struct Array<T> {
     truncate(count: ulong) {
         if (count < _size) {
             _version = _version + 1;
-            ulong __i = count;
-            while (__i < _size) {
-                _data[__i] = __default<T>();
-                __i = __i + 1;
-            }
+            _release_range(count, _size);
             _size = count;
         }
     }
@@ -424,25 +447,29 @@ export struct Array<T> {
         assert(a < _size, "Array swap index out of bounds");
         assert(b < _size, "Array swap index out of bounds");
         _version = _version + 1;
-        _pep_swap_refs(_data, sizeof<T>(), a, b);
+        if (a != b) {
+            _array_swap(_slot(a), _slot(b), sizeof<T>());
+        }
     }
 
     ## Reverses the order of the elements in place.
     ##
-    ## Runs in O(count) using `swap`, so reference counts are unchanged. An
-    ## Array of fewer than two elements is left untouched and its iterators
-    ## stay valid; otherwise running iterators are invalidated.
+    ## Runs in O(count), exchanging elements pairwise, so reference counts
+    ## are unchanged. An Array of fewer than two elements is left untouched
+    ## and its iterators stay valid; otherwise running iterators are
+    ## invalidated.
     ##
     ## @example
     ##     a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
     reverse() {
         if (_size >= 2) {
-            ulong lo = 0;
-            ulong hi = _size - 1;
-            while (lo < hi) {
-                swap(lo, hi);
-                lo = lo + 1;
-                hi = hi - 1;
+            _version = _version + 1;
+            ulong low = 0;
+            ulong high = _size - 1;
+            while (low < high) {
+                _array_swap(_slot(low), _slot(high), sizeof<T>());
+                low = low + 1;
+                high = high - 1;
             }
         }
     }
@@ -455,12 +482,15 @@ export struct Array<T> {
     ## `b`, 0 when their order does not matter, and a positive number when
     ## `a` belongs after `b`, the convention `String.compare` follows. It is
     ## a merge sort: O(count log count) calls to `compare`, plus a scratch
-    ## copy of the elements. For struct `T` the references are copied into
-    ## the scratch Array and back, which acquires and releases them but
-    ## leaves every count as it was. Invalidates running iterators when
-    ## there are two or more elements.
+    ## buffer of `count()` slots. Elements move between the two buffers
+    ## without changing any reference count. Invalidates running iterators
+    ## when there are two or more elements.
+    ##
+    ## `compare` must not modify the Array: its elements are spread over
+    ## the two buffers while the sort runs.
     ##
     ## @param compare returns the order of its two arguments, as above
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
     ## @example
     ##     var names = Array<String>();
     ##     names.append("pear");
@@ -474,10 +504,16 @@ export struct Array<T> {
         if (_size < 2) {
             return;
         }
-        # Bottom-up merge sort, merging runs of `width` from `source` into
-        # `target` and swapping the two each pass.
-        var source = this.clone();
-        var target = this.clone();
+        _version = _version + 1;
+        var version = _version;
+        # Bottom-up merge sort: runs of `width` merge from `source` into
+        # `target`, and the two swap each pass. Each element moves (`move`
+        # nulls the slot it leaves and the store takes its reference without
+        # a count step), so the sort changes no count, and every pass starts
+        # with an all-null `target` (`_pep_malloc` zeroes `scratch`).
+        __ptr<T> scratch = _pep_malloc(sizeof<T>() * _size);
+        __ptr<T> source = _data;
+        __ptr<T> target = scratch;
         ulong width = 1;
         while (width < _size) {
             ulong low = 0;
@@ -490,11 +526,18 @@ export struct Array<T> {
                 while (out < high) {
                     # Take from the right run only when it is strictly
                     # smaller, which keeps equal elements in order.
-                    if (left < middle && (right >= high || compare(source[right], source[left]) >= 0)) {
-                        target[out] = source[left];
+                    var take_left = left < middle;
+                    if (take_left && right < high) {
+                        take_left = compare(source[right], source[left]) >= 0;
+                        # `compare` must not change the Array: its elements
+                        # are spread over two buffers.
+                        assert(_version == version, "Array modified during sort");
+                    }
+                    if (take_left) {
+                        target[out] = move(source[left]);
                         left = left + 1;
                     } else {
-                        target[out] = source[right];
+                        target[out] = move(source[right]);
                         right = right + 1;
                     }
                     out = out + 1;
@@ -506,11 +549,12 @@ export struct Array<T> {
             target = swapped;
             width = width * 2;
         }
-        ulong index = 0;
-        while (index < _size) {
-            this[index] = source[index];
-            index = index + 1;
+        # The sorted elements ended in `scratch`: copy them back as bytes,
+        # leaving `scratch` with copies it does not own, and free it as is.
+        if ((source as __ptr<u8>) == (scratch as __ptr<u8>)) {
+            _array_copy(_data, scratch, sizeof<T>() * _size);
         }
+        _pep_free(scratch);
     }
 
     # An array literal `[a, b, c]` is built as
@@ -570,8 +614,8 @@ export struct Array<T> {
 
     ## Appends every element of `rhs`, in order, to the end of this Array.
     ##
-    ## Runs in O(count of `rhs`), reserving the needed capacity once up
-    ## front. `rhs` is unchanged, and it may be this same Array
+    ## Runs in O(count of `rhs`), growing the buffer at most once and copying
+    ## the elements in one block. `rhs` is unchanged, and it may be this same Array
     ## (`a.append_all(a)` doubles `a`). For a struct `T` each appended element
     ## is acquired once more, since both Arrays now hold it. Invalidates this
     ## Array's running iterators when `rhs` is not empty.
@@ -580,15 +624,24 @@ export struct Array<T> {
     ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @see +=
     append_all(rhs: Array<T>) {
-        # Snapshot the bound: with `a += a` (rhs aliases this), appending
-        # grows _size and an unbounded loop would never terminate.
-        ulong n = rhs._size;
-        reserve(_size + n);
-        ulong idx = 0;
-        while (idx < n) {
-            append(rhs._data[idx]);
-            idx = idx + 1;
+        # Snapshot the count, and read `rhs._data` only after growing: with
+        # `a += a` (rhs aliases this) both change.
+        ulong count = rhs._size;
+        if (count == 0) {
+            return;
         }
+        _version = _version + 1;
+        _reserve_extra(count);
+        _array_copy(_slot(_size), rhs._data, count * sizeof<T>());
+        # The copied slots are new references to the same elements.
+        if (!__is_pod<T>()) {
+            ulong index = _size;
+            while (index < _size + count) {
+                _data[index].__acquire();
+                index = index + 1;
+            }
+        }
+        _size = _size + count;
     }
 
     ## Returns a new Array holding the same elements in the same order.
@@ -692,7 +745,8 @@ export struct Array<T> {
     ## @example
     ##     var c = a + b;
     +(rhs: Array<T>): Array<T> {
-        Array<T> result = clone();
+        Array<T> result = Array<T>(_size + rhs._size);
+        result.append_all(this);
         result.append_all(rhs);
         return result;
     }
@@ -754,7 +808,7 @@ export struct ArrayIterator<T> {
         assert(_source._version == _version, "Array modified during iteration");
         assert(_started, "ArrayIterator.current() before next()");
         assert(_index < _source._size, "ArrayIterator.current() past the end");
-        return _source[_index];
+        return _source._data[_index];
     }
 }
 
@@ -771,8 +825,44 @@ extend ArrayIterator<T> with Iterator<T>;
 extend Array<T> with Copyable<Array<T>>;
 
 extern void memcpy(void* dest, void* src, ulong n);
+extern void memmove(void* dest, void* src, ulong n);
+extern void memset(void* p, int c, ulong n);
 
-# Copies `size` bytes from `source` to `target`.
+# Copies `size` bytes from `source` to `target`; the two must not overlap.
 _array_copy(target: __ptr<void>, source: __ptr<void>, size: ulong) {
     memcpy(target, source, size);
+}
+
+# Copies `size` bytes from `source` to `target`, which may overlap.
+_array_move(target: __ptr<void>, source: __ptr<void>, size: ulong) {
+    memmove(target, source, size);
+}
+
+# Sets `size` bytes at `target` to 0.
+_array_zero(target: __ptr<void>, size: ulong) {
+    memset(target, 0, size);
+}
+
+# Exchanges the `size` bytes at `a` with those at `b` (distinct slots of one
+# buffer), eight at a time while `size` allows and then byte by byte, with
+# no allocation.
+_array_swap(a: __ptr<u8>, b: __ptr<u8>, size: ulong) {
+    ulong offset = 0;
+    if (size % 8 == 0) {
+        while (offset < size) {
+            __ptr<ulong> x = (a + offset) as __ptr<ulong>;
+            __ptr<ulong> y = (b + offset) as __ptr<ulong>;
+            ulong held = x[0];
+            x[0] = y[0];
+            y[0] = held;
+            offset = offset + 8;
+        }
+        return;
+    }
+    while (offset < size) {
+        u8 held = a[offset];
+        a[offset] = b[offset];
+        b[offset] = held;
+        offset = offset + 1;
+    }
 }

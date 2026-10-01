@@ -433,9 +433,10 @@ reverse()
 
 Reverses the order of the elements in place.
 
-Runs in O(count) using `swap`, so reference counts are unchanged. An
-Array of fewer than two elements is left untouched and its iterators
-stay valid; otherwise running iterators are invalidated.
+Runs in O(count), exchanging elements pairwise, so reference counts
+are unchanged. An Array of fewer than two elements is left untouched
+and its iterators stay valid; otherwise running iterators are
+invalidated.
 
 **Example**
 ```pepper
@@ -456,13 +457,18 @@ order.
 `b`, 0 when their order does not matter, and a positive number when
 `a` belongs after `b`, the convention `String.compare` follows. It is
 a merge sort: O(count log count) calls to `compare`, plus a scratch
-copy of the elements. For struct `T` the references are copied into
-the scratch Array and back, which acquires and releases them but
-leaves every count as it was. Invalidates running iterators when
-there are two or more elements.
+buffer of `count()` slots. Elements move between the two buffers
+without changing any reference count. Invalidates running iterators
+when there are two or more elements.
+
+`compare` must not modify the Array: its elements are spread over
+the two buffers while the sort runs.
 
 **Parameters**
 - `compare` — returns the order of its two arguments, as above
+
+**Panics**
+- if `compare` modifies the Array ("Array modified during sort")
 
 **Example**
 ```pepper
@@ -531,8 +537,8 @@ append_all(rhs: Array<T>)
 
 Appends every element of `rhs`, in order, to the end of this Array.
 
-Runs in O(count of `rhs`), reserving the needed capacity once up
-front. `rhs` is unchanged, and it may be this same Array
+Runs in O(count of `rhs`), growing the buffer at most once and copying
+the elements in one block. `rhs` is unchanged, and it may be this same Array
 (`a.append_all(a)` doubles `a`). For a struct `T` each appended element
 is acquired once more, since both Arrays now hold it. Invalidates this
 Array's running iterators when `rhs` is not empty.

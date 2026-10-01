@@ -1,7 +1,7 @@
 //! Array API coverage: each snippet is compiled together with the runtime
 //! prelude and JIT-executed through the entry function `test`.
 
-use crate::support::compile_jit_with_runtime;
+use crate::support::{compile_jit_with_runtime, jit_census};
 
 #[test]
 fn append_and_count() {
@@ -1122,4 +1122,136 @@ test(): int {
         ),
         0
     );
+}
+
+// ── Bulk and raw-slot paths: counts and leaks ──────────────────────────────
+
+#[test]
+fn refcount_bulk_operations_keep_counts() {
+    // sort, reverse and swap permute raw slots; append_all, `+` and clone
+    // copy a block and acquire each copy; truncate and the destructor
+    // release without per-slot stores. Every count must come back to 1 and
+    // nothing may leak.
+    let (result, leaked) = jit_census(
+        r#"
+struct Point {
+    int x;
+    construct(this.x = 0) {}
+}
+test(): int {
+    var p = Point(5);
+    var q = Point(1);
+    var r = Point(3);
+    {
+        var a = Array<Point>();
+        a.append(p);
+        a.append(q);
+        a.append(r);
+        a.sort((m, n) => m.x - n.x);
+        if (a[0].x != 1 || a[1].x != 3 || a[2].x != 5) { return -1; }
+        if (__refcount<Point>(p) != 2 || __refcount<Point>(q) != 2) { return -2; }
+        a.reverse();
+        a.swap(0, 2);
+        if (a[0].x != 1 || a[2].x != 5) { return -3; }
+        a += a;
+        if (a.count() != 6 || __refcount<Point>(p) != 3) { return -4; }
+        var b = a + a.clone();
+        if (b.count() != 12 || __refcount<Point>(p) != 7) { return -5; }
+        b.truncate(1);
+        if (__refcount<Point>(q) != 4 || __refcount<Point>(p) != 3) { return -6; }
+        var popped = a.pop();
+        if (popped.x != 5 || __refcount<Point>(p) != 3) { return -7; }
+        var removed = a.remove_at(0);
+        if (removed.x != 1 || __refcount<Point>(q) != 4) { return -8; }
+    }
+    if (__refcount<Point>(p) != 1 || __refcount<Point>(q) != 1 || __refcount<Point>(r) != 1) { return -9; }
+    return 0;
+}"#,
+    );
+    assert_eq!((result, leaked), (0, 0));
+}
+
+#[test]
+fn value_elements_holding_references_are_released() {
+    // Tuples holding a String are not plain data: every path that drops or
+    // moves them must release or move the String exactly once.
+    let (result, leaked) = jit_census(
+        r#"
+test(): int {
+    {
+        var a = Array<(int, String)>();
+        var i = 0;
+        while (i < 20) {
+            a.append((20 - i, "item {i}"));
+            i = i + 1;
+        }
+        a.insert(3, (100, "inserted"));
+        var gone = a.remove_at(5);
+        a.sort((m, n) => m.0 - n.0);
+        if (a[0].0 != 1 || a[a.count() - 1].1 != "inserted") { return -1; }
+        a.reverse();
+        a.append_all(a);
+        a.truncate(30);
+        var last = a.pop();
+        a.clear();
+        a.append((1, "again"));
+    }
+    return 0;
+}"#,
+    );
+    assert_eq!((result, leaked), (0, 0));
+}
+
+#[test]
+fn sort_is_stable_and_handles_odd_lengths() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var a = Array<(int, int)>();
+    var i = 0;
+    while (i < 37) {
+        a.append((i % 5, i));
+        i = i + 1;
+    }
+    a.sort((m, n) => m.0 - n.0);
+    i = 1;
+    while (i < 37) {
+        var before = a[i - 1];
+        var here = a[i];
+        if (before.0 > here.0) { return -1; }
+        if (before.0 == here.0 && before.1 > here.1) { return -2; }
+        i = i + 1;
+    }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn sort_and_destroy_elements_with_their_own_comparison() {
+    // String and Array declare `==`/`!=`: comparisons of the raw buffer
+    // pointers inside Array must not dispatch to them.
+    let (result, leaked) = jit_census(
+        r#"
+test(): int {
+    {
+        var names = Array<String>();
+        names.append("pear");
+        names.append("apple");
+        names.append("fig");
+        names.sort((a, b) => a.compare(b));
+        if (names[0] != "apple" || names[2] != "pear") { return -1; }
+        var nested = Array<Array<int>>();
+        nested.append([3, 4]);
+        nested.append([1]);
+        nested.sort((a, b) => (a.count() as int) - (b.count() as int));
+        if (nested[0][0] != 1) { return -2; }
+    }
+    return 0;
+}"#,
+    );
+    assert_eq!((result, leaked), (0, 0));
 }

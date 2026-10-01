@@ -1096,7 +1096,13 @@ fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Opt
         }
         // `c.name()` on an enum value calls the function `Color::name(c)`,
         // and `x.doubled()` on an `int` with that method `i32::doubled(x)`.
-        if let Expression::MethodCall { this, method, args, loc } = e {
+        // `x.__acquire()` / `x.__release()` stay method calls for every
+        // type: codegen steps the count, or does nothing for plain data.
+        let refcount_step = matches!(e, Expression::MethodCall { method, args, .. }
+            if (method == "__acquire" || method == "__release") && args.is_empty());
+        if let Expression::MethodCall { this, method, args, loc } = e
+            && !refcount_step
+        {
             let this_type = type_of_expr(this, scopes, current);
             let key = crate::value_types::key(&this_type.to_string());
             let value_method = key.as_deref().is_some_and(|k| crate::enums::method_is_static(k, method).is_some());

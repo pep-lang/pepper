@@ -588,7 +588,10 @@ with no extension, and `module_name()` is the output's stem.
     parameter (`check_implicit_constructor`); anywhere else,
     `reject_implicit` reports it at the attribute.
   - Member names that start with `__` are rejected, except `__acquire` and
-    `__release`, which source code may call.
+    `__release`, which source code may call. Codegen makes either a no-op
+    on plain data (`__is_pod`), and on a buffer slot (`_data[i].__release()`)
+    steps the count of the reference the slot holds without writing the
+    slot: Array's destructor releases its elements that way.
   - An operator the builder has no mapping for is reported (`unsupported
     binary operator '…'`), and a comparison overload (`==`, `<`, …) whose
     declared return type is not `bool` is rejected, as is a `!` or `!!`
@@ -1002,7 +1005,7 @@ value is a struct reference with its concrete type erased, like a
 - **Identity.** `==`/`!=` on trait values compare objects, and
   `store_refcount_ops` treats the same object as self-assignment.
   `__address`/`__refcount` read the object. Array slots of a trait type are
-  16 bytes, which `_pep_move_ref`/`_pep_swap_refs` move whole.
+  16 bytes, which Array's shifts and swaps move whole as bytes.
 
 ### 4.3 Tuples (`passes/tuples.rs`, codegen `register_tuple`)
 
@@ -1558,7 +1561,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. Both hash containers hold one `[Value] _HashTable<K, V>` inline; a `HashSet`'s values are the empty `_NoValue`, whose stores `sizeof<V>()` guards drop. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
@@ -2147,7 +2150,7 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   value and `_push` moves it into its slot under the lock, and `_pop` moves
   it out.
 - **Confinement and raw memory.** Raw pointers, `extern` code and
-  `_pep_move_ref` are the code's own promise. A reference read through a
+  Array's raw slot moves are the code's own promise. A reference read through a
   pointer the walk cannot follow to its owner (one an `extern` returned,
   such as a thread-local slot, or one a `[Shared]` struct's field holds,
   such as a `Channel`'s buffer) is tainted, never fresh. The runtime's

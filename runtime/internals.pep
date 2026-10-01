@@ -205,34 +205,6 @@ export _pep_panic(message: __ptr<char>) {
     abort();
 }
 
-# ── Swap two `stride`-byte slots of a buffer (a struct reference is one
-# pointer, a trait value an object and a vtable pointer) ─────────────────────
-export _pep_swap_refs(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
-    if (i != j) {
-        var a: __ptr<void> = p + (i * stride);
-        var b: __ptr<void> = p + (j * stride);
-        var len = stride;
-        var tmp = _pep_malloc(len);
-        memcpy(tmp, a, len);
-        memcpy(a, b, len);
-        memcpy(b, tmp, len);
-        _pep_free(tmp);
-    }
-}
-
-# ── Move one `stride`-byte slot into another (raw reference transfer, no
-# refcount change) and zero the source so it releases nothing later: a
-# shifted slot must not keep a stale copy of the reference. ───────────────────
-export _pep_move_ref(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
-    if (i != j) {
-        var a: __ptr<void> = p + (i * stride);
-        var b: __ptr<void> = p + (j * stride);
-        var len = stride;
-        memcpy(b, a, len);
-        memset(a, 0, len);
-    }
-}
-
 # ── Byte hash: 8 bytes per step, then a final avalanche ──────────────────────
 # Each 8-byte word is xored in and multiplied by an odd constant, with the
 # high half folded down so later words reach the low bits; the tail's 1-7

@@ -427,6 +427,28 @@ main(): int {{
 }
 
 #[test]
+fn modifying_an_array_during_sort_panics() {
+    // sort permutes raw slots in place, so a compare that changes the Array
+    // would see (and could free) a half-permuted buffer.
+    let (ok, stdout) = run_binary(
+        "sort_mut_append",
+        r#"
+main(): int {
+    var nums = Array<int>();
+    nums.append(2);
+    nums.append(1);
+    nums.sort((a, b) => {
+        nums.append(3);
+        return a - b;
+    });
+    return 0;
+}"#,
+    );
+    assert!(!ok, "expected a panic");
+    assert!(stdout.contains("Array modified during sort"), "stdout: {stdout:?}");
+}
+
+#[test]
 fn modifying_a_string_during_iteration_panics() {
     let (ok, stdout) = run_binary(
         "iter_mut_string",
