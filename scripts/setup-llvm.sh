@@ -251,9 +251,25 @@ apt_install() {
     echo "Installing $pkgs (apt) ..."
     local sudo=""
     [[ "$(id -u)" != "0" ]] && sudo="sudo"
-    $sudo apt-get update -qq || return 1
+    apt_get update -qq || return 1
     # shellcheck disable=SC2086 # deliberate word splitting of the package list
-    $sudo apt-get install -y $pkgs || return 1
+    apt_get install -y $pkgs || return 1
+}
+
+# apt-get, as `$sudo`, waiting for another apt-get on this host (CI runs
+# several runners per host, and a release runs the LLVM matrix twice side by
+# side): dpkg's lock is waited for up to 5 minutes, and `update`'s list lock,
+# which no option waits for, by retrying up to 10 times.
+apt_get() {
+    local tries=0
+    until $sudo apt-get -o DPkg::Lock::Timeout=300 "$@"; do
+        tries=$((tries + 1))
+        if (( tries >= 10 )); then
+            return 1
+        fi
+        echo "apt-get $1 failed (another apt-get may hold its lock); retrying in 15s" >&2
+        sleep 15
+    done
 }
 
 brew_install() {

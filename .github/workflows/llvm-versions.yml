@@ -59,7 +59,18 @@ jobs:
                       | sed -nE 's/^SUPPORTED_MAJORS="([^"]+)".*/\1/p' | head -1)
           [ -n "$supported" ] || { echo "::error::cannot read SUPPORTED_MAJORS"; exit 1; }
 
-          sudo apt-get update -qq
+          # Another apt-get on this host may hold the list lock (several
+          # runners share a host, and a release runs this job twice side by
+          # side), and no option waits for it: retry.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            sudo apt-get -o DPkg::Lock::Timeout=300 update -qq && break
+            if [ "$attempt" -eq 10 ]; then
+              echo "::error::apt-get update kept failing"
+              exit 1
+            fi
+            echo "apt-get update failed (another apt-get may hold its lock); retrying in 15s"
+            sleep 15
+          done
           majors=''
           for major in $supported; do
             # LC_ALL=C: apt translates "Candidate:", and a runner image that
