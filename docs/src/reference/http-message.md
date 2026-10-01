@@ -260,16 +260,30 @@ Sets the body to `data`, which may be any bytes (see `body`).
 **Returns**
 - this request
 
+#### uri
+
+```pepper
+uri(): Result<Uri>
+```
+
+Parses `url` as a URI reference: an absolute URL for a request a
+client sends, or the target (`/items?page=2`) for one a server
+received.
+
+**Returns**
+- the parsed URL, or an error when `url` is not a valid URI reference (see `Uri.parse`)
+
 #### path
 
 ```pepper
 path(): String
 ```
 
-Returns the path: the target up to any `?`.
+Returns the path of `url`, with its percent-escapes: `/` when the path
+is empty.
 
 **Returns**
-- the path, such as `/items`
+- the path, such as `/items`, or an empty string when `url` is not a valid URI reference
 
 #### query
 
@@ -277,10 +291,11 @@ Returns the path: the target up to any `?`.
 query(): String
 ```
 
-Returns the query: the target after the first `?`.
+Returns the query of `url`: the text after `?`, with its
+percent-escapes (see `Uri.decode`).
 
 **Returns**
-- the query without the `?`, or an empty string for none
+- the query without the `?`, or an empty string for none or when `url` is not a valid URI reference
 
 #### body
 

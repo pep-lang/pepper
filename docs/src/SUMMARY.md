@@ -88,6 +88,7 @@
     - [io/unix.pep](reference/io-unix.md)
   - [tls/module.pep](reference/tls-module.md)
     - [tls/stream.pep](reference/tls-stream.md)
+  - [uri.pep](reference/uri.md)
 <!-- reference:end -->
 
 # Contributing

@@ -176,28 +176,44 @@ export struct Request {
         return this;
     }
 
-    ## Returns the path: the target up to any `?`.
+    ## Parses `url` as a URI reference: an absolute URL for a request a
+    ## client sends, or the target (`/items?page=2`) for one a server
+    ## received.
     ##
-    ## @returns the path, such as `/items`
-    path(): String {
-        var target = _http_target_of(this.url);
-        var mark = target.find("?");
-        if (mark < 0) {
-            return target;
-        }
-        return target.substr_bytes(0, mark as ulong);
+    ## @returns the parsed URL, or an error when `url` is not a valid URI
+    ##   reference (see `Uri.parse`)
+    uri(): Result<Uri> {
+        return Uri.parse(this.url);
     }
 
-    ## Returns the query: the target after the first `?`.
+    ## Returns the path of `url`, with its percent-escapes: `/` when the path
+    ## is empty.
     ##
-    ## @returns the query without the `?`, or an empty string for none
-    query(): String {
-        var target = _http_target_of(this.url);
-        var mark = target.find("?");
-        if (mark < 0) {
+    ## @returns the path, such as `/items`, or an empty string when `url` is
+    ##   not a valid URI reference
+    path(): String {
+        var parsed = this.uri();
+        if (parsed.is_err()) {
             return "";
         }
-        return target.substr_bytes(mark as ulong + 1, target.size() - mark as ulong - 1);
+        var path = parsed.value().path;
+        if (path.size() == 0) {
+            return "/";
+        }
+        return path;
+    }
+
+    ## Returns the query of `url`: the text after `?`, with its
+    ## percent-escapes (see `Uri.decode`).
+    ##
+    ## @returns the query without the `?`, or an empty string for none or
+    ##   when `url` is not a valid URI reference
+    query(): String {
+        var parsed = this.uri();
+        if (parsed.is_err()) {
+            return "";
+        }
+        return parsed.value().query.value_or("");
     }
 
     ## Returns the body's bytes, as they were sent or received: use it for a
@@ -292,30 +308,4 @@ export struct Response {
     is_success(): bool {
         return this.status >= 200 && this.status < 300;
     }
-}
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-# The request target in `url`: from the path on (`/a?b`), or `url` itself
-# when it has no scheme.
-export _http_target_of(url: String): String {
-    var scheme = url.find("://");
-    if (scheme < 0) {
-        return url;
-    }
-    var rest = url.substr_bytes(scheme as ulong + 3, url.size() - scheme as ulong - 3);
-    var slash = rest.find("/");
-    var mark = rest.find("?");
-    if (slash < 0 && mark < 0) {
-        return "/";
-    }
-    var start = slash;
-    if (slash < 0 || (mark >= 0 && mark < slash)) {
-        start = mark;
-    }
-    var target = rest.substr_bytes(start as ulong, rest.size() - start as ulong);
-    if (target.starts_with("?")) {
-        return "/" + target;
-    }
-    return target;
 }

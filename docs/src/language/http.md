@@ -12,8 +12,8 @@ waits parks only its task.
 
 - A `Request` has a `method`, a `url`, `headers` and a body. For a client
   the `url` is absolute (`https://example.com/items?page=2`); a server
-  handler gets the request target (`/items?page=2`), and `path()` and
-  `query()` split it at the `?`.
+  handler gets the request target (`/items?page=2`). `uri()` parses either
+  as a [`Uri`](#urls), and `path()` and `query()` return its parts.
 - A `Response` has a `status`, a `reason`, `headers` and a body.
   `is_success()` tests for a 2xx status.
 - `Headers` maps each field name to its values. Names ignore case (they are
@@ -24,6 +24,19 @@ waits parks only its task.
 - `set_text` and `set_body` fill a request or response and return it, so
   they chain. `body()` returns the bytes, for any body including binary
   ones; `text()` decodes them as UTF-8, replacing invalid bytes with U+FFFD.
+
+## URLs
+
+`Uri` (in the prelude, so no import is needed) parses any URI reference
+following RFC 3986: an absolute URI with any scheme (`https:`, `mailto:`,
+`file:`) or a relative reference such as a request target. It splits the
+text into `scheme`, `user_info`, `host`, `port`, `path`, `query` and
+`fragment`; the parts that can be missing are optionals. Components keep
+their percent-escapes, and `Uri.decode` turns one into text.
+
+```pepper
+{{#include ../../examples/http-uri.pep}}
+```
 
 ## Client
 
@@ -64,5 +77,6 @@ waits parks only its task.
   supported yet.
 
 The reference pages for [messages](../reference/http-message.md), the
-[client](../reference/http-client.md) and the
-[server](../reference/http-server.md) document every method.
+[client](../reference/http-client.md), the
+[server](../reference/http-server.md) and [`Uri`](../reference/uri.md)
+document every method.

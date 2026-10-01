@@ -67,6 +67,7 @@ mod temp_lifetime_tests;
 mod trait_value_tests;
 mod tuple_tests;
 mod unary_operator_tests;
+mod uri_tests;
 mod variadic_extern_tests;
 mod visibility_tests;
 mod weak_tests;

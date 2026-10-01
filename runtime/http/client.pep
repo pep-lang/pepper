@@ -228,89 +228,43 @@ _http_code_invalid_input(): io.ErrorCode { return 22; }
 [Target(OS(Windows))]
 _http_code_invalid_input(): io.ErrorCode { return 87; }
 
-# Whether `text` is a URL scheme: a letter, then letters, digits, '+', '-'
-# or '.'.
-_http_is_scheme(text: String): bool {
-    ulong index = 0;
-    while (index < text.size()) {
-        var c = text.byte_at(index) as int;
-        var letter = (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
-        var other = (c >= 48 && c <= 57) || c == 43 || c == 45 || c == 46;
-        if (!letter && (index == 0 || !other)) {
-            return false;
-        }
-        index = index + 1;
+_http_parse_url(url: String): io.IoResult<_HttpUrl> {
+    var uri = Uri.parse(url);
+    if (uri.is_err()) {
+        return io.IoResult<_HttpUrl>.err(io.IoError(_http_code_invalid_input(), uri.error().message));
     }
-    return text.size() > 0;
+    return _http_url_of(url, uri.value());
 }
 
-_http_parse_url(url: String): io.IoResult<_HttpUrl> {
+# The parts of `uri`, parsed from `url`, that a request needs. Any scheme
+# parses; the client then takes only http and https.
+_http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
     var parsed = _HttpUrl();
-    # Any scheme (RFC 3986: a letter, then letters, digits, '+', '-' or
-    # '.'), in any case, followed by "://"; the client then takes only
-    # http and https.
-    var separator = url.find("://");
-    if (separator <= 0 || !_http_is_scheme(url.substr_bytes(0, separator as ulong))) {
+    if (!uri.is_absolute() || uri.host.is_none()) {
         return _http_invalid_url(url, "no scheme, such as 'https://'");
     }
-    var scheme = url.substr_bytes(0, separator as ulong).lower();
-    if (scheme == "http") {
+    if (uri.scheme == "http") {
         parsed._port = 80;
-    } else if (scheme == "https") {
+    } else if (uri.scheme == "https") {
         parsed._secure = true;
         parsed._port = 443;
     } else {
-        return _http_invalid_url(url, "the scheme '" + scheme + "' is not supported; use http or https");
+        return _http_invalid_url(url, "the scheme '" + uri.scheme + "' is not supported; use http or https");
     }
-    var start = separator as ulong + 3;
-    var rest = url.substr_bytes(start, url.size() - start);
-    parsed._target = _http_target_of(url);
-    var end = rest.size();
-    var slash = rest.find("/");
-    if (slash >= 0) {
-        end = slash as ulong;
-    }
-    var mark = rest.find("?");
-    if (mark >= 0 && (mark as ulong) < end) {
-        end = mark as ulong;
-    }
-    var authority = rest.substr_bytes(0, end);
-    if (authority.find("@") >= 0) {
+    if (uri.user_info.is_some()) {
         return _http_invalid_url(url, "user information is not supported");
     }
-    parsed._authority = authority;
-    var host = authority;
-    var port_text = "";
-    if (authority.starts_with("[")) {
-        var close = authority.find("]");
-        if (close < 0) {
-            return _http_invalid_url(url, "no ']' after an IPv6 address");
-        }
-        host = authority.substr_bytes(1, close as ulong - 1);
-        var after = authority.substr_bytes(close as ulong + 1, authority.size() - close as ulong - 1);
-        if (after.size() > 0) {
-            if (!after.starts_with(":")) {
-                return _http_invalid_url(url, "unexpected text after the address");
-            }
-            port_text = after.substr_bytes(1, after.size() - 1);
-        }
-    } else {
-        var colon = authority.find(":");
-        if (colon >= 0) {
-            host = authority.substr_bytes(0, colon as ulong);
-            port_text = authority.substr_bytes(colon as ulong + 1, authority.size() - colon as ulong - 1);
-        }
-    }
-    if (host.size() == 0) {
+    parsed._host = uri.host.value();
+    if (parsed._host.size() == 0) {
         return _http_invalid_url(url, "no host");
     }
-    if (port_text.size() > 0) {
-        var port = _http_parse_decimal(port_text);
-        if (port < 1 || port > 65535) {
+    if (uri.port.is_some()) {
+        if (uri.port.value() == 0) {
             return _http_invalid_url(url, "invalid port");
         }
-        parsed._port = port as u16;
+        parsed._port = uri.port.value();
     }
-    parsed._host = host;
+    parsed._authority = uri.authority().value();
+    parsed._target = uri.path_and_query();
     return io.IoResult<_HttpUrl>.ok(parsed);
 }
