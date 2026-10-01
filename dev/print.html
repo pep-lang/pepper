@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3a2d0d81.js";
+            window.path_to_searchindex_js = "searchindex-3cf94704.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-06f18f27.js"></script>
@@ -14641,9 +14641,10 @@ element, but still invalidates running iterators like every swap.</p>
 <pre><code class="language-pepper">reverse()
 </code></pre>
 <p>Reverses the order of the elements in place.</p>
-<p>Runs in O(count) using <code>swap</code>, so reference counts are unchanged. An
-Array of fewer than two elements is left untouched and its iterators
-stay valid; otherwise running iterators are invalidated.</p>
+<p>Runs in O(count), exchanging elements pairwise, so reference counts
+are unchanged. An Array of fewer than two elements is left untouched
+and its iterators stay valid; otherwise running iterators are
+invalidated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 </code></pre>
@@ -14657,13 +14658,18 @@ order.</p>
 <code>b</code>, 0 when their order does not matter, and a positive number when
 <code>a</code> belongs after <code>b</code>, the convention <code>String.compare</code> follows. It is
 a merge sort: O(count log count) calls to <code>compare</code>, plus a scratch
-copy of the elements. For struct <code>T</code> the references are copied into
-the scratch Array and back, which acquires and releases them but
-leaves every count as it was. Invalidates running iterators when
-there are two or more elements.</p>
+buffer of <code>count()</code> slots. Elements move between the two buffers
+without changing any reference count. Invalidates running iterators
+when there are two or more elements.</p>
+<p><code>compare</code> must not modify the Array: its elements are spread over
+the two buffers while the sort runs.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>compare</code> — returns the order of its two arguments, as above</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>compare</code> modifies the Array (“Array modified during sort”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var names = Array&lt;String&gt;();
@@ -14717,8 +14723,8 @@ as a condition) and read the index with <code>value()</code>.</p>
 <pre><code class="language-pepper">append_all(rhs: Array&lt;T&gt;)
 </code></pre>
 <p>Appends every element of <code>rhs</code>, in order, to the end of this Array.</p>
-<p>Runs in O(count of <code>rhs</code>), reserving the needed capacity once up
-front. <code>rhs</code> is unchanged, and it may be this same Array
+<p>Runs in O(count of <code>rhs</code>), growing the buffer at most once and copying
+the elements in one block. <code>rhs</code> is unchanged, and it may be this same Array
 (<code>a.append_all(a)</code> doubles <code>a</code>). For a struct <code>T</code> each appended element
 is acquired once more, since both Arrays now hold it. Invalidates this
 Array’s running iterators when <code>rhs</code> is not empty.</p>
