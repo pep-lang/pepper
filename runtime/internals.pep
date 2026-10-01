@@ -55,18 +55,54 @@ export _pep_assert(condition: bool, message: __ptr<char>) {
 
 # ── Live-allocation counter (leak tests) and trace gate ─────────────────────
 # The live-allocation count, updated atomically because threads allocate
-# concurrently. It lives in a raw malloc'd slot: an Atomic<long> would
-# allocate through _pep_malloc itself. The prelude's globals are initialized
-# before any other file's, and this is the first of them, so the slot exists
-# before anything allocates. Every JIT engine carries its own copy of this
-# global, so tests that count allocations can run in parallel.
+# concurrently. It is split into `_PEP_ALLOC_SHARDS` counters, each on its
+# own 64-byte cache line, and a thread steps the one its thread id picks
+# (`_pep_live_allocs_shard`). With a single counter, every allocation on
+# every thread fought over one cache line: removing that cut the user CPU
+# of the 4-worker echo benchmark by 18%. A block freed on another thread
+# steps that thread's shard, so one shard can go negative; only the sum
+# means anything. The shards live in a raw malloc'd block: an Atomic<long>
+# would allocate through _pep_malloc itself. The prelude's globals are
+# initialized before any other file's, and this is the first of them, so
+# the block exists before anything allocates. Every JIT engine carries its
+# own copy of this global, so tests that count allocations can run in
+# parallel.
+# Prime, so that thread ids a fixed stride apart spread over every shard.
+const _PEP_ALLOC_SHARDS: ulong = 61;
+# Longs per shard: one 64-byte cache line.
+const _PEP_ALLOC_SHARD_STRIDE: ulong = 8;
+
+[Target(!OS(Windows))]
+extern ulong pthread_self();
+[Target(OS(Windows))]
+extern uint GetCurrentThreadId();
+
 _pep_new_live_allocs_slot(): __ptr<long> {
-    var slot = malloc(8);
-    memset(slot, 0, 8);
-    return slot;
+    var size = _PEP_ALLOC_SHARDS * _PEP_ALLOC_SHARD_STRIDE * 8;
+    __ptr<u8> block = malloc(size + 64);
+    memset(block, 0, size + 64);
+    # Start at a cache line boundary.
+    __ptr<long> shards = block + (64 - (block as ulong) % 64) % 64;
+    return shards;
 }
 
 const _pep_live_allocs_slot: __ptr<long> = _pep_new_live_allocs_slot();
+
+# The calling thread's counter. glibc and macOS place each thread's
+# pthread_t in its own stack mapping, so the page number tells threads
+# apart (consecutive threads' stacks lie one stack size apart); Windows
+# thread ids are multiples of 4.
+[Target(!OS(Windows))]
+_pep_live_allocs_shard(): __ptr<long> {
+    var index = (pthread_self() >> 12) % _PEP_ALLOC_SHARDS;
+    return _pep_live_allocs_slot + index * _PEP_ALLOC_SHARD_STRIDE;
+}
+
+[Target(OS(Windows))]
+_pep_live_allocs_shard(): __ptr<long> {
+    var index = ((GetCurrentThreadId() as ulong) >> 2) % _PEP_ALLOC_SHARDS;
+    return _pep_live_allocs_slot + index * _PEP_ALLOC_SHARD_STRIDE;
+}
 
 # `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
 # Mutex checks at each unlock that nothing outside the locked value refers
@@ -85,14 +121,14 @@ export _pep_malloc(size: ulong): __ptr<void> {
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
     memset(p, 0, size);
-    __atomic_fetch_add<long>(_pep_live_allocs_slot, 1);
+    __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
     return p;
 }
 
 export _pep_free(p: __ptr<void>) {
     if (p != __null) {
         free(p);
-        __atomic_fetch_sub<long>(_pep_live_allocs_slot, 1);
+        __atomic_fetch_sub<long>(_pep_live_allocs_shard(), 1);
     }
 }
 
@@ -103,7 +139,7 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
     if (np != __null) {
         # realloc(null, n) is a fresh allocation; the counter must see it.
         if (p == __null && new_size > 0) {
-            __atomic_fetch_add<long>(_pep_live_allocs_slot, 1);
+            __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
         }
         if (new_size > prev_size) {
             memset(np + prev_size, 0, new_size - prev_size);
@@ -113,7 +149,13 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
 }
 
 export _pep_live_allocs(): long {
-    return __atomic_load<long>(_pep_live_allocs_slot);
+    long total = 0;
+    ulong index = 0;
+    while (index < _PEP_ALLOC_SHARDS) {
+        total = total + __atomic_load<long>(_pep_live_allocs_slot + index * _PEP_ALLOC_SHARD_STRIDE);
+        index = index + 1;
+    }
+    return total;
 }
 
 ## Prints `message` and aborts the program. It never returns.

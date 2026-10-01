@@ -1463,7 +1463,9 @@ once, in `internals.pep` (module constants initialize file by file, and
 that file's allocation counter must exist before any `String` is built).
 
 `_pep_live_allocs()` counts live
-allocations (an atomic counter, since threads allocate concurrently);
+allocations: the sum of 61 atomic counters on separate cache lines, one
+picked per thread by its id, so threads allocating concurrently do not
+contend for one cache line;
 leak-census tests (`crates/pepper-driver/tests/integration/shared_ptr_semantics_tests.rs`)
 read it through the JIT. The counter lives in a runtime global, and every
 JIT engine has its own copy of the runtime, so each test counts only its own

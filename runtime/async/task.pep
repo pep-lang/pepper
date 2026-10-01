@@ -233,7 +233,10 @@ struct _TaskCore {
     # another worker.
     _is_cancelled(): bool {
         if (!this._cancelled && this._shared.is_some()) {
-            if (this._shared.value()._cancelled.load() != 0) {
+            # Reads the flag through the optional's field rather than
+            # `value()`, whose result is a new reference: two atomic count
+            # steps on every socket wait.
+            if (this._shared._value._cancelled.load() != 0) {
                 this._cancelled = true;
             }
         }
