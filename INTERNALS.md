@@ -1338,6 +1338,13 @@ diagnostics"). The mechanics:
      document only). `code_action` collects them again from the shared
      analysis (`document_warnings`) and `quick_fixes` turns each fix into a
      code action.
+- **Code for other platforms** (`platforms.rs`): `inactive_regions` walks
+  imports, re-exports, declarations, methods, enum cases and attributed
+  blocks, and returns the outermost spans `passes::platform` drops on this
+  host, mirroring it (constructors, destructors and fields are never
+  dropped);
+  `diagnostics` publishes each as a hint with the `Unnecessary` tag
+  (`inactive_hints`), which the editor dims.
 - `lsp_diagnostic` maps a `Diagnostic` to the document. A location in
   another file appears at the top of the document, prefixed with that
   file's name. Notes become `relatedInformation`.

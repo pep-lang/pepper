@@ -8,6 +8,7 @@
 //! what linking recorded (see `imports`).
 
 mod imports;
+mod platforms;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -1404,6 +1405,30 @@ fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
     }
 }
 
+/// A dimmed hint over each region of `text` (the document, parsed as
+/// `module`) its `[Target(...)]` attributes leave out on the build target,
+/// as a diagnostic with the `Unnecessary` tag, which editors show faded.
+fn inactive_hints(text: &str, module: &ast::Module) -> Vec<Diagnostic> {
+    let os = match pepper_sema::passes::platform::host_os().as_str() {
+        "windows" => "Windows".to_string(),
+        "linux" => "Linux".to_string(),
+        "macos" => "macOS".to_string(),
+        other => other.to_string(),
+    };
+    let target = format!("{} {}", os, pepper_sema::passes::platform::host_arch());
+    platforms::inactive_regions(text, module)
+        .into_iter()
+        .map(|span| Diagnostic {
+            range: span_to_range(text, span),
+            severity: Some(DiagnosticSeverity::HINT),
+            tags: Some(vec![DiagnosticTag::UNNECESSARY]),
+            source: Some("pepper".to_string()),
+            message: format!("inactive: not compiled for this target ({})", target),
+            ..Default::default()
+        })
+        .collect()
+}
+
 /// Each file of `program` as (name, text), indexed like its diagnostics'
 /// file ids.
 fn program_names(program: &Program) -> Vec<(&str, &str)> {
@@ -1641,7 +1666,10 @@ impl PepperLsp {
         match &parsed {
             Err(d) => diags.push(lsp_diagnostic(d, uri, &[(uri.as_str(), text)])),
             // Warnings (deprecated syntax) come with quick fixes; see `quick_fixes`.
-            Ok(module) => diags.extend(module.warnings.iter().map(|w| lsp_diagnostic(w, uri, &[(uri.as_str(), text)]))),
+            Ok(module) => {
+                diags.extend(module.warnings.iter().map(|w| lsp_diagnostic(w, uri, &[(uri.as_str(), text)])));
+                diags.extend(inactive_hints(text, module));
+            }
         }
         if parsed.is_ok() && let Ok(program) = analysis.program() {
             let names = program_names(program);

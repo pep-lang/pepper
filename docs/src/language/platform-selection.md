@@ -68,7 +68,9 @@ Code whose condition does not match is removed before type checking. That is
 what makes the examples above work: a call to `GetCurrentProcessId`, which
 exists only on Windows, is fine in a block that is removed everywhere else.
 Removed code is not checked for errors beyond parsing, so a typo in it goes
-unnoticed until you build on the platform that keeps it.
+unnoticed until you build on the platform that keeps it. The VS Code
+extension shows it dimmed, from its attribute to its end, with a hint saying
+it is not compiled for the platform you are building on.
 
 It still has to parse, and every `Target` condition is validated on every
 platform, even one inside removed code. A misspelled value is always an error,

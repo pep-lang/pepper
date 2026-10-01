@@ -1091,3 +1091,56 @@ fn hover_on_a_trait_method_call() {
     let shown = hover(&uri, &text, &program, at(&text, "poll(5)", 0, 1));
     assert!(shown.contains("poll(timeout: int): bool") && shown.contains("Waits for events"), "{}", shown);
 }
+
+const PLATFORMS: &str = r#"[Target(OS(Windows))]
+import "win_only";
+
+[Target(OS(Linux))]
+open_linux(): int { return 1; }
+
+[Target(OS(Windows))]
+open_windows(): int { return 2; }
+
+struct File {
+    var size: int;
+
+    [Target(OS(Windows))]
+    construct() {}
+
+    [Target(OS(Windows))]
+    close() {}
+
+    read(): int {
+        [Target(OS(Windows))] {
+            return 1;
+        }
+        [Target(!OS(Windows))] {
+            return 2;
+        }
+        for (var i in [1, 2]) {
+            [Target(OS(Windows))] {
+                return i;
+            }
+        }
+        return 0;
+    }
+}
+"#;
+
+/// On Linux, the Windows-only import, function, method and block are
+/// dimmed, each from its attribute; the Linux code and what has no target
+/// stay as they are.
+#[test]
+fn code_for_other_platforms_is_dimmed() {
+    let module = parse_source("main.pep", PLATFORMS).unwrap();
+    let regions = pepper_sema::passes::platform::with_simulated_host("linux", "x86_64", || {
+        platforms::inactive_regions(PLATFORMS, &module)
+    });
+    let dimmed: Vec<&str> = regions.iter().map(|s| PLATFORMS[s.start..s.end].lines().next().unwrap()).collect();
+    // Not the constructor: it is compiled whatever its attributes.
+    assert!(dimmed.len() == 5 && dimmed.iter().all(|l| l.starts_with("[Target(OS(Windows))]")), "{:?}", regions);
+    let ends: Vec<&str> = regions.iter().map(|s| PLATFORMS[s.start..s.end].lines().last().unwrap().trim()).collect();
+    assert_eq!(ends, ["import \"win_only\"", "open_windows(): int { return 2; }", "close() {}", "}", "}"]);
+    let hints = pepper_sema::passes::platform::with_simulated_host("linux", "x86_64", || inactive_hints(PLATFORMS, &module));
+    assert!(hints.iter().all(|h| h.tags == Some(vec![DiagnosticTag::UNNECESSARY]) && h.message.contains("Linux x86_64")));
+}
