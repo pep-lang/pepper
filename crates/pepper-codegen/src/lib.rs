@@ -1089,6 +1089,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.structs.contains_key(name) || self.is_trait_name(name) || self.tuples.contains_key(name)
     }
 
+    /// `__is_pod<T>`: whether a value of sema type `name` is plain data,
+    /// which copying and dropping leave alone: not a reference, and not a
+    /// tuple holding one at any depth.
+    fn is_pod_name(&self, name: &str) -> bool {
+        let mut pending = vec![name.to_string()];
+        while let Some(name) = pending.pop() {
+            if let Some(elements) = self.tuples.get(&name) {
+                pending.extend(elements.iter().cloned());
+            } else if self.is_reference_name(&name) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// The LLVM type a reference of sema type `name` is stored as: a pointer
     /// for a struct, `[2 x ptr]` for a trait value, the elements for a tuple.
     fn reference_value_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
@@ -3380,9 +3395,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Err(format!("unknown type in sizeof: {}", name))
                 }
             }
-            Expression::IsPod(_) => {
-                // __is_pod<T>: false for structs (the only corpus use).
-                Ok(self.context.bool_type().const_int(0, false).into())
+            Expression::IsPod(ty) => {
+                let pod = self.is_pod_name(&ty.to_string());
+                Ok(self.context.bool_type().const_int(pod as u64, false).into())
             }
             Expression::Allocate(ty) => {
                 // A zeroed object of the struct's ABI size, both head counts

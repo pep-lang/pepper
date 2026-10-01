@@ -365,16 +365,20 @@ export struct Array<T> {
 
     ## Removes every element, leaving the Array empty.
     ##
-    ## Runs in O(count). For a struct `T` each element's reference is
-    ## released. The capacity is kept, so refilling the Array does not
+    ## Runs in O(count) for a `T` holding references, each of which is
+    ## released, and in O(1) for a plain value `T` (`int`, `u8`, a tuple of
+    ## numbers). The capacity is kept, so refilling the Array does not
     ## reallocate. Always invalidates running iterators, even on an empty
     ## Array.
     clear() {
         _version = _version + 1;
-        ulong __i = 0;
-        while (__i < _size) {
-            _data[__i] = __default<T>();
-            __i = __i + 1;
+        # A plain value owns nothing, so its slots are left as they are.
+        if (!__is_pod<T>()) {
+            ulong __i = 0;
+            while (__i < _size) {
+                _data[__i] = __default<T>();
+                __i = __i + 1;
+            }
         }
         _size = 0;
     }

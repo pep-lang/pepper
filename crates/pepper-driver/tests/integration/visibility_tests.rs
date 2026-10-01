@@ -85,9 +85,11 @@ fn private_type_alias_is_rejected() {
 
 #[test]
 fn private_runtime_helper_is_rejected() {
-    // `dec` formats integers for the runtime's own printing; it is not API.
-    let err = compile("private_runtime", LIB, "main(): int { var s = dec(5); return 0; }").unwrap_err();
-    assert!(err.contains("'dec' is private to") && err.contains("internals.pep"), "{}", err);
+    // `_pep_check_sync_enabled` reads `PEP_CHECK_SYNC` for the runtime's own
+    // census; it is not API.
+    let source = "main(): int { var on = _pep_check_sync_enabled(); return 0; }";
+    let err = compile("private_runtime", LIB, source).unwrap_err();
+    assert!(err.contains("'_pep_check_sync_enabled' is private to") && err.contains("internals.pep"), "{}", err);
 }
 
 #[test]

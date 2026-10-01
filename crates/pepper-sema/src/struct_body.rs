@@ -21,14 +21,6 @@ fn call(function: &str, args: Vec<Expression>) -> Statement {
     })
 }
 
-fn str_lit(value: String) -> Expression {
-    Expression::StringLiteral {
-        value,
-        is_raw: true,
-        loc: Loc::NONE,
-    }
-}
-
 fn var_def(name: &str, ty: TypeName, default: Option<Expression>, hidden: bool) -> VariableDef {
     VariableDef {
         name: name.to_string(),
@@ -147,67 +139,31 @@ pub fn apply_synthesized(st: &mut StructDef) {
         );
     }
 
-    let struct_name = st.name.clone();
     // A `[Shared]` struct (or a function type) steps its counts atomically,
     // so references to it can be copied and dropped on several threads at
     // once; every other struct uses plain increments.
     let atomic = st.atomic_counts();
 
-    // __acquire body: null-check, ++__refcount, trace calls. Codegen
-    // acquires on a struct-reference store whenever the new occupant differs
-    // from the old one (including nulls from zero-initialized slots), so the
-    // guard mirrors __release's. The traces print the count the step
-    // produced rather than re-reading a field another thread may be
-    // changing.
+    // __acquire body: null-check, ++__refcount. Codegen acquires on a
+    // struct-reference store whenever the new occupant differs from the old
+    // one (including nulls from zero-initialized slots), so the guard
+    // mirrors __release's.
     if let Some(body) = &mut st.acquire.body {
-        body.items = vec![
-            null_guard(),
-            count_local(CountField::Strong, true, atomic),
-            call(
-                "_pep_trace_ptr",
-                vec![
-                    Expression::ThisRef,
-                    str_lit(format!("acquire: {}", struct_name)),
-                ],
-            ),
-            call(
-                "_pep_trace_int",
-                vec![
-                    count_ref(),
-                    str_lit(format!("  refcount: {}", struct_name)),
-                ],
-            ),
-        ];
+        body.items = vec![null_guard(), Statement::Expression(count_step(CountField::Strong, true, atomic))];
     }
 
-    // __release body: null-check, atomic decrement, trace calls, dtor at zero.
+    // __release body: null-check, decrement, dtor at zero. The decrement's
+    // result is tested rather than re-reading a field another thread may be
+    // changing.
     if let Some(body) = &mut st.release.body {
         body.items = vec![
             // NOTE: release gets called blindly on the lhs of any assignment.
             // The lhs can be a null-initialized ref.
             null_guard(),
             count_local(CountField::Strong, false, atomic),
-            call(
-                "_pep_trace_ptr",
-                vec![
-                    Expression::ThisRef,
-                    str_lit(format!("release: {}", struct_name)),
-                ],
-            ),
-            call(
-                "_pep_trace_int",
-                vec![
-                    count_ref(),
-                    str_lit(format!("  refcount: {}", struct_name)),
-                ],
-            ),
             if_block(
                 is_zero(count_ref()),
                 vec![
-                    call(
-                        "_pep_trace_ptr",
-                        vec![Expression::ThisRef, str_lit(format!("dtor: {}", struct_name))],
-                    ),
                     // The strong references' weak reference is still held
                     // while the destructor runs, so a weak reference
                     // released inside it (a field pointing back at the
@@ -303,10 +259,6 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
                 }),
                 false,
             ))),
-            call(
-                "_pep_trace_ptr",
-                vec![Expression::ThisRef, str_lit(format!("ctor: {}", struct_name))],
-            ),
         ];
 
         // Field initializations. A field with an explicit default is assigned it;

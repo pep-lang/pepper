@@ -68,15 +68,6 @@ _pep_new_live_allocs_slot(): __ptr<long> {
 
 const _pep_live_allocs_slot: __ptr<long> = _pep_new_live_allocs_slot();
 
-# `getenv` needs a NUL-terminated C string; a Pepper `String` buffer is not
-# guaranteed to be, so build the name in a helper (its c_str() is safe).
-_pep_trace_enabled(): bool {
-    var name = "PEP_TRACE";
-    return getenv(name.c_str()) != __null;
-}
-
-const _pep_trace_on = _pep_trace_enabled();
-
 # `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
 # Mutex checks at each unlock that nothing outside the locked value refers
 # into it (`_pep_check_sync` in copy.pep). It lives here because module
@@ -169,120 +160,6 @@ export _pep_panic(message: __ptr<char>) {
     # the message just printed.
     fflush(__null);
     abort();
-}
-
-# ── Formatting helpers (fixed-width, so no string-length measurement needed) ─
-hex(v: ulong): __ptr<char> {
-    var buf = _pep_malloc(17);
-    var i = 0;
-    while (i < 16) {
-        var d = (v >> ((15 - i) * 4)) & 0xF;
-        buf[i] = (d < 10 ? ('0' + d) : ('A' - 10 + d));
-        i = i + 1;
-    }
-    buf[16] = 0;
-    return buf;
-}
-
-dec(v: long): __ptr<char> {
-    var buf = _pep_malloc(24);
-    var n = 0;
-    var neg = false;
-    # The magnitude as a ulong, so the most negative long negates too.
-    ulong magnitude = v as ulong;
-    if (v < 0) {
-        neg = true;
-        magnitude = 0 - magnitude;
-    }
-    if (magnitude == 0) {
-        buf[n] = '0';
-        n = n + 1;
-    }
-    while (magnitude > 0) {
-        buf[n] = ('0' + (magnitude % 10));
-        n = n + 1;
-        magnitude = magnitude / 10;
-    }
-    if (neg) {
-        buf[n] = '-';
-        n = n + 1;
-    }
-    # Digits were produced least-significant first: reverse in place by
-    # swapping pairs (copying buf[n-1-i] over buf[i] for every i mirrors the
-    # second half onto the first instead).
-    var i = 0;
-    while (i < n / 2) {
-        var t = buf[i];
-        buf[i] = buf[n - 1 - i];
-        buf[n - 1 - i] = t;
-        i = i + 1;
-    }
-    buf[n] = 0;
-    return buf;
-}
-
-# ── Trace (gated by PEP_TRACE) ───────────────────────────────────────────────
-# Each line is "name: value" in a zeroed 512-byte buffer (so it stays
-# NUL-terminated); the name is capped to leave room for the value.
-
-# Write "name: " at the start of `buf`; returns the length written.
-_pep_trace_prefix(buf: __ptr<char>, name: __ptr<char>): ulong {
-    var n = 0;
-    if (name != __null) {
-        var nl = _pep_c_strlen(name);
-        if (nl > 400) {
-            nl = 400;
-        }
-        memcpy(buf, name, nl);
-        n = nl;
-    }
-    buf[n] = ':';
-    buf[n + 1] = ' ';
-    return n + 2;
-}
-
-# Copy the NUL-terminated `text` to `buf` at `n`, then free `text`; returns
-# the new length.
-_pep_trace_append(buf: __ptr<char>, n: ulong, text: __ptr<char>): ulong {
-    var i = 0;
-    while (text[i] != 0) {
-        buf[n + i] = text[i];
-        i = i + 1;
-    }
-    _pep_free(text);
-    return n + i;
-}
-
-_pep_trace_emit(buf: __ptr<char>) {
-    puts(buf);
-    _pep_free(buf);
-}
-
-# Debugging aid for compiler work: prints `name: ` and the address `ptr` as
-# 16 hex digits when `PEP_TRACE` is set (read once at program start). The
-# synthesized constructor, `__acquire` and `__release` call it; it is not
-# part of the language's API.
-export _pep_trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
-    if (_pep_trace_on) {
-        var buf = _pep_malloc(512);
-        var n = _pep_trace_prefix(buf, name);
-        var address = hex(ptr as ulong);
-        _pep_trace_append(buf, n, address);
-        _pep_trace_emit(buf);
-    }
-}
-
-# Debugging aid for compiler work: prints `name: ` and `value` in decimal
-# when `PEP_TRACE` is set. The synthesized `__acquire` and `__release` call
-# it with the new reference count.
-export _pep_trace_int(value: long, name: __ptr<char>) {
-    if (_pep_trace_on) {
-        var buf = _pep_malloc(512);
-        var n = _pep_trace_prefix(buf, name);
-        var text = dec(value);
-        _pep_trace_append(buf, n, text);
-        _pep_trace_emit(buf);
-    }
 }
 
 # ── Swap two `stride`-byte slots of a buffer (a struct reference is one

@@ -831,7 +831,8 @@ How the language lowers:
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.
 - **Intrinsic nodes** in `codegen_expr_unlocated`: `SizeOf`, `Default` (zero
-  or null), `IsPod`, `RefCount` (an atomic load), `CountStep` (an
+  or null), `IsPod` (true unless the type is a reference or a tuple holding
+  one, `is_pod_name`), `RefCount` (an atomic load), `CountStep` (an
   `atomicrmw` on the head count at byte offset 0 or 4, monotonic up and
   acq_rel down, or a plain load/add/store), `FunctionPointer` (the LLVM
   function's address; a static method is `Owner.name`), `Address` (FNV-folds POD values),
@@ -1003,9 +1004,9 @@ pipeline too; the level is in `Cache::compiler` and so in every key and
 code hash. `--emit-llvm` optimizes the whole-program module the same way,
 and the JIT (`create_jit_engine`) optimizes at `CodeGenerator::opt_level`,
 which starts at `PEPPER_OPT_LEVEL`. Units are optimized separately: there is
-no LTO, so a call into another unit (the runtime's `_pep_trace_ptr`,
-`_pep_malloc`) stays a call, while `linkonce_odr` instantiations, compiled
-into each unit that calls them, inline.
+no LTO, so a call into another unit (the runtime's `_pep_malloc`) stays a
+call, while `linkonce_odr` instantiations, compiled into each unit that
+calls them, inline.
 
 It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as
@@ -1213,9 +1214,7 @@ census adds them to the root's tally. The flag `_PEP_CHECK_SYNC_ON` is read
 once, in `internals.pep` (module constants initialize file by file, and
 that file's allocation counter must exist before any `String` is built).
 
-Set `PEP_TRACE` to make `_pep_trace_ptr` and
-`_pep_trace_int` (internal runtime helpers, not part of the language's API)
-print every constructor, acquire, release, and destructor with the new count. `_pep_live_allocs()` counts live
+`_pep_live_allocs()` counts live
 allocations (an atomic counter, since threads allocate concurrently);
 leak-census tests (`crates/pepper-driver/tests/integration/shared_ptr_semantics_tests.rs`)
 read it through the JIT. The counter lives in a runtime global, and every
@@ -1277,7 +1276,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, the `PEP_TRACE` helpers `_pep_trace_ptr`/`_pep_trace_int`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
@@ -1308,8 +1307,7 @@ diagnostics"). The mechanics:
 - **Lowered by name.** Interpolated strings and `String.format` call
   `_pep_interpolate` and `_pep_format*`. A name the compiler synthesizes must be exported:
   linking mangles private names per file. Every constructor calls `_pep_malloc`, and `__release`
-  calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `_pep_trace_ptr`
-  and `_pep_trace_int`. Compiler-generated checks (null function and trait
+  calls `_pep_free` once the weak count reaches 0. Compiler-generated checks (null function and trait
   values) call `_pep_assert`, which takes a raw `char*`.
   Codegen calls these by name after visibility has run, so they
   need not be exported.

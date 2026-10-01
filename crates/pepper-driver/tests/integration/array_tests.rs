@@ -550,6 +550,35 @@ test(): int {
     );
 }
 
+/// A tuple holding a reference is not plain data (`__is_pod`), so `clear`
+/// still releases the references inside its elements.
+#[test]
+fn refcount_clear_releases_references_in_tuples() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Tally {
+    int alive;
+    construct(this.alive = 1) {}
+}
+test(): int {
+    var t = Tally();
+    var a = Array<(int, Tally)>();
+    a.append((1, t));
+    if (__refcount<Tally>(t) != 2) { return -1; }
+    a.clear();
+    if (__refcount<Tally>(t) != 1) { return -2; }
+    var plain = Array<(int, long)>();
+    plain.append((1, 2));
+    plain.clear();
+    if (!plain.empty()) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
 #[test]
 fn refcount_truncate_releases_tail_only() {
     assert_eq!(

@@ -37,11 +37,6 @@ fn jit(source: &str) -> i32 {
 
 /// Compile and link to a real executable, run it, and return (success, stdout).
 fn run_binary(name: &str, source: &str) -> (bool, String) {
-    run_binary_with_env(name, source, &[])
-}
-
-/// [`run_binary`] with extra environment variables for the child.
-fn run_binary_with_env(name: &str, source: &str, env: &[(&str, &str)]) -> (bool, String) {
     std::env::set_current_dir(repo_root()).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_audit_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -55,7 +50,7 @@ fn run_binary_with_env(name: &str, source: &str, env: &[(&str, &str)]) -> (bool,
         out_path.to_string_lossy().into_owned(),
     ]);
     pepper_driver::run(options).expect("compile + link");
-    let output = Command::new(&out_path).envs(env.iter().copied()).output().expect("spawn linked binary");
+    let output = Command::new(&out_path).output().expect("spawn linked binary");
     // Windows' C runtime writes text-mode stdout with CRLF line endings.
     (output.status.success(), String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
 }
@@ -430,36 +425,22 @@ test(): int {
 }
 
 #[test]
-fn trace_and_print_free_their_buffers() {
-    // The most negative long traces in full: its magnitude does not fit a
-    // long.
-    let (ok, out) = run_binary_with_env(
-        "trace_leaks",
+fn print_frees_its_buffers() {
+    let (ok, out) = run_binary(
+        "print_leaks",
         r#"
 main(): int {
-    var answer = "answer";
-    var nothing = "nothing";
     var before = _pep_live_allocs();
-    _pep_trace_int(-42, answer.c_str());
-    _pep_trace_ptr(__null, nothing.c_str());
-    _pep_trace_int(-9223372036854775807 - 1, nothing.c_str());
     print($"{7}");
     print($"{0.5}");
     print($"{_pep_live_allocs() - before}");
     return 0;
 }
 "#,
-        &[("PEP_TRACE", "1")],
     );
     assert!(ok);
-    // Refcount tracing adds its own lines (String constructors, ...).
     let lines: Vec<&str> = out.lines().collect();
-    let line = |prefix: &str| *lines.iter().find(|l| l.starts_with(prefix)).unwrap_or_else(|| panic!("no {prefix} line in {out}"));
-    assert_eq!(line("answer: "), "answer: -42");
-    assert_eq!(line("nothing: "), "nothing: 0000000000000000");
-    assert!(lines.contains(&"nothing: -9223372036854775808"), "{out}");
-    let printed: Vec<&str> = lines.iter().copied().filter(|l| !l.contains(": ")).collect();
-    assert_eq!(printed, ["7", "0.5", "0"]);
+    assert_eq!(lines, ["7", "0.5", "0"]);
 }
 
 #[test]
