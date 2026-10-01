@@ -9,3 +9,4 @@ path = "src/lib.rs"
 [dependencies]
 itertools.workspace = true
 winnow.workspace = true
+serde = { version = "1", features = ["derive"] }

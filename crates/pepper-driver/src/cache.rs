@@ -17,6 +17,14 @@
 //!   in their place;
 //! - `<unit>.lock`: an empty file that writers and readers lock.
 //!
+//! And one file per source file, whatever its unit (phase 2c):
+//!
+//! - `parsed/<hash of its path>.pepi`: its syntax tree, `postcard`-encoded
+//!   after a 32-byte stamp (a hash of the compiler and the file's text), so
+//!   an unchanged file is not parsed again (see [`ParseCache`]). Written
+//!   through a temporary file and a rename, without a lock: every writer of
+//!   one stamp writes the same tree, and a reader checks the stamp.
+//!
 //! **Locking.** A compiler holds an exclusive OS lock on `<unit>.lock`
 //! while it checks the record and, on a miss, generates the unit and writes
 //! the object and the record. Each file is written under a temporary name and renamed into
@@ -30,6 +38,7 @@
 //! another, so two compilers cannot deadlock.
 
 use inkwell::module::Module;
+use pepper_sema::program::ParseCache;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -195,6 +204,22 @@ impl Cache {
         &self.compiler
     }
 
+    /// Where the syntax tree of the source file at `source` is kept.
+    fn parsed_path(&self, source: &Path) -> PathBuf {
+        let key = pepper_files::imports::path_key(source);
+        self.dir.join("parsed").join(format!("{}.pepi", &blake3::hash(key.as_bytes()).to_hex()[..32]))
+    }
+
+    /// What a kept tree is stamped with: this compiler and the text parsed.
+    fn parsed_stamp(&self, text: &str) -> blake3::Hash {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"pepper pepi 1\0");
+        hasher.update(self.compiler.as_bytes());
+        hasher.update(&[0]);
+        hasher.update(text.as_bytes());
+        hasher.finalize()
+    }
+
     fn path(&self, unit: &str, extension: &str) -> PathBuf {
         self.dir.join(format!("{}.{}", unit, extension))
     }
@@ -236,6 +261,29 @@ pub struct UnitRequest<'a> {
     pub summaries: &'a str,
     /// Its files' interface hashes, by namespace, stored on a miss.
     pub interfaces: &'a [(String, String)],
+}
+
+impl ParseCache for Cache {
+    fn get(&self, path: &Path, source: &str) -> Option<pepper_parser::ast::Module> {
+        let bytes = std::fs::read(self.parsed_path(path)).ok()?;
+        let (stamp, tree) = bytes.split_at_checked(32)?;
+        if stamp != self.parsed_stamp(source).as_bytes() {
+            return None;
+        }
+        postcard::from_bytes(tree).ok()
+    }
+
+    fn put(&self, path: &Path, source: &str, module: &pepper_parser::ast::Module) {
+        let Ok(tree) = postcard::to_stdvec(module) else { return };
+        let mut bytes = self.parsed_stamp(source).as_bytes().to_vec();
+        bytes.extend(tree);
+        let at = self.parsed_path(path);
+        // A cache that cannot be written only costs the next compile a parse.
+        if let Some(parent) = at.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = write_atomically(&at, &bytes);
+    }
 }
 
 /// The lines of a unit's `<unit>.summaries`: each function's link summary

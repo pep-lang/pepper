@@ -253,7 +253,8 @@ and the runtime as one) becomes its own object, and `.pep/cache/` keeps them:
 a file whose sources did not change, and whose imports' declarations did
 not change, is not compiled again (its bodies are not even checked), and one
 whose generated code did not change is not emitted again. Editing a function
-body recompiles only that file: the files importing it are reused. Delete
+body recompiles only that file: the files importing it are reused. A file
+whose text did not change is not even parsed again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
 `PEPPER_CACHE_DIR`.
 

@@ -304,12 +304,25 @@ pub struct Setup<'a> {
     /// Load the discovered runtime as the prelude.
     pub runtime: bool,
     pub mode: Mode,
+    /// Syntax trees kept from earlier compiles, used in place of parsing.
+    pub parsed: Option<&'a dyn ParseCache>,
 }
 
 impl Default for Setup<'_> {
     fn default() -> Self {
-        Setup { import_dirs: &[], forced_imports: &[], runtime: true, mode: Mode::Strict }
+        Setup { import_dirs: &[], forced_imports: &[], runtime: true, mode: Mode::Strict, parsed: None }
     }
+}
+
+/// Syntax trees kept between compiles (the build cache's `.pepi` files), so
+/// a file whose text has not changed is not parsed again.
+pub trait ParseCache {
+    /// The tree `source`, the text of the file at `path`, parses to, if one
+    /// was kept for exactly that text.
+    fn get(&self, path: &Path, source: &str) -> Option<pepper_parser::ast::Module>;
+    /// Keep the tree `source` parsed to. Only a tree without warnings is
+    /// kept, since its warnings are not.
+    fn put(&self, path: &Path, source: &str, module: &pepper_parser::ast::Module);
 }
 
 /// Load the program rooted at `root` as the compiler, the language server,
@@ -350,13 +363,19 @@ pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
         prelude.push(path);
     }
     prelude.extend(runtime_sources);
-    load(root, &prelude, &search_paths, setup.mode)
+    load_with(root, &prelude, &search_paths, setup.mode, setup.parsed)
 }
 
 /// Load `root`, the `prelude` files, and everything their imports reach,
 /// resolving module imports against `search_paths`; then link. The root is
 /// `files[0]`, followed by the files it reaches, then the prelude.
 pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mode) -> Result<Program, String> {
+    load_with(root, prelude, search_paths, mode, None)
+}
+
+/// [`load`], taking each file's syntax tree from `parsed` when it has one
+/// for the file's text.
+pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mode, parsed: Option<&dyn ParseCache>) -> Result<Program, String> {
     let mut files: Vec<ProgramFile> = vec![];
     let mut index: HashMap<String, usize> = HashMap::new();
     // Resolved import paths per file, mapped to indices once all are loaded.
@@ -400,8 +419,14 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
         } else {
             break;
         };
-        let module = match parse_source(&name, &source) {
-            Ok(m) => m,
+        let kept = parsed.and_then(|cache| cache.get(&path, &source));
+        let module = match kept.map_or_else(|| parse_source(&name, &source).map(|m| (m, true)), |m| Ok((m, false))) {
+            Ok((m, fresh)) => {
+                if let Some(cache) = parsed.filter(|_| fresh && m.warnings.is_empty()) {
+                    cache.put(&path, &source, &m);
+                }
+                m
+            }
             Err(e) if mode == Mode::Strict || files.is_empty() => return Err(e),
             Err(e) => {
                 failed.insert(key, e);

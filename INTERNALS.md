@@ -989,12 +989,12 @@ MSVC's link.exe writes unresolved symbols to stdout.
 
 ### 4.3 Build cache (`driver/src/cache.rs`, `codegen/src/partition.rs`)
 
-Phases 1, 2a, 2b and the early cutoff of 2c of
-`design-notes/build-cache/build-cache-proposal.md`: sema still runs over the
-whole program, but codegen and object emission run per **compilation unit**,
-and a unit whose sources and inputs' interfaces are unchanged takes its
-object from `.pep/cache` without generating any code, and sema skips its
-non-generic bodies.
+Phases 1, 2a, 2b and 2c of `design-notes/build-cache/build-cache-proposal.md`:
+sema still runs over the whole program, but codegen and object emission run
+per **compilation unit**, and a unit whose sources and inputs' interfaces are
+unchanged takes its object from `.pep/cache` without generating any code,
+and sema skips its non-generic bodies; a file whose text is unchanged is not
+parsed.
 
 - **Units** (`Program::units`, `sema/src/program.rs`): the runtime's
   top-level files (prelude files outside any module) are the unit
@@ -1122,8 +1122,20 @@ non-generic bodies.
   requires every other unit's code from it to match
   (`Cache::check_code`, `<unit>.trial.ll` on a mismatch).
   `--no-verify-cache` overrides the variable.
-- **Not yet** (phases 2c and 3): interface files (`.pepi`) that let a hit
-  unit skip parsing.
+- **Syntax trees** (`.pepi`, phase 2c): `program::load_with` takes a
+  `ParseCache` (`Setup::parsed`), which the driver backs with the cache
+  (`impl ParseCache for Cache`): `parsed/<hash of the path>.pepi` holds a
+  file's syntax tree, `postcard`-encoded (serde derives on the AST) after a
+  stamp hashing the compiler and the file's text. A file whose stamp matches
+  is loaded without parsing, whatever its unit; any other is parsed and its
+  tree written, unless the parser warned (warnings are not serialized). A
+  damaged or stale file is simply parsed again. As built, a `.pepi` holds
+  the whole tree per file, not per unit with its declarations only as the
+  proposal sketched: bodies are skipped later, in sema (phase 2b), where
+  their link summaries are known, and a per-file tree also spares parsing
+  the unchanged files of a unit that misses.
+- **Not yet** (phase 3): compiling units on separate threads through sema,
+  and the language server and test harnesses reusing the runtime in memory.
 
 ---
 

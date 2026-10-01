@@ -26,10 +26,13 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// Load and link the program rooted at `entry_source` with the options'
 /// search paths, forced imports and runtime.
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
+    // Files whose text is unchanged come from the build cache's syntax trees.
+    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root)).transpose()?;
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &options.forced_imports,
         runtime: !options.no_runtime,
+        parsed: cache.as_ref().map(|c| c as &dyn program::ParseCache),
         ..Setup::default()
     };
     program::load_program(Root::from_file(entry_source)?, &setup)

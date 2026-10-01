@@ -347,6 +347,27 @@ fn a_skipped_body_keeps_its_recorded_link_summary() {
 }
 
 #[test]
+fn syntax_trees_are_kept_and_a_damaged_one_is_parsed_again() {
+    let dir = scratch("parsed");
+    let cache = dir.join("cache");
+    build("tutorial-hello", &cache, &dir.join("a"));
+    let parsed: Vec<PathBuf> = std::fs::read_dir(cache.join("v1"))
+        .unwrap()
+        .flatten()
+        .flat_map(|target| std::fs::read_dir(target.path().join("parsed")).unwrap().flatten().map(|e| e.path()))
+        .collect();
+    assert!(parsed.len() > 10, "one tree per file: {:?}", parsed);
+    for tree in &parsed {
+        std::fs::write(tree, b"not a tree").unwrap();
+    }
+    // Damaged trees are parsed again (and replaced); the build is unchanged.
+    let again = build("tutorial-hello", &cache, &dir.join("b"));
+    assert_eq!(outcome(&again, "docs/examples/tutorial_hello"), Some(Outcome::Hit), "{:?}", outcomes(&again));
+    assert!(parsed.iter().all(|tree| std::fs::metadata(tree).unwrap().len() > 32));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_function_whose_body_is_skipped_is_still_a_value() {
     // lib's bodies are skipped once it is a hit, but `twice` is still
     // defined (in lib's cached object), so main can pass it as a value,

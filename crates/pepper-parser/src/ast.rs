@@ -5,7 +5,7 @@ use itertools::join;
 
 /// A position in a source file, 0-based line and column (column is in
 /// characters).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Position {
     pub line: usize,
     pub col: usize,
@@ -13,7 +13,7 @@ pub struct Position {
 
 /// A byte-offset range within one source file. `start` is inclusive, `end`
 /// exclusive. Offsets are valid for the source the node was parsed from.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -87,7 +87,7 @@ impl Span {
 
 // ── Literals ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Literal {
     String(String),
     Integer(i64),
@@ -100,7 +100,7 @@ pub enum Literal {
 
 // ── Type names ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeName {
     pub name: String,
     pub generic_types: Vec<TypeName>,
@@ -178,7 +178,7 @@ impl Display for TypeName {
 /// A single attribute: `[expr]`, where `expr` is exactly one attribute — a
 /// bare symbol (`[Export]`) or a call (`[Align(8)]`). Platform selection is
 /// `Target(OS(...) && Arch(...))`; boolean logic lives only inside it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Attribute {
     pub body: Expression,
     /// Span covering the whole `[...]` bracket group.
@@ -187,7 +187,7 @@ pub struct Attribute {
 
 // ── Expressions ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Expression {
     Literal { value: Literal, span: Span },
     SymbolRef { id: String, span: Span },
@@ -264,7 +264,7 @@ pub enum Expression {
 }
 
 /// A `match` in expression position: each arm is `patterns => value`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchExpression {
     pub value: Expression,
     pub arms: Vec<MatchValueArm>,
@@ -276,7 +276,7 @@ pub struct MatchExpression {
 }
 
 /// One arm of a `match` expression: its patterns and the value they select.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchValueArm {
     pub patterns: Vec<Pattern>,
     pub value: Expression,
@@ -285,7 +285,7 @@ pub struct MatchValueArm {
 
 /// A closure literal. Parameters and the return type written without a type
 /// are `auto`; sema infers them from where the closure is used.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClosureLiteral {
     pub parameters: Vec<VariableDecl>,
     /// The type after the parameter list (`(x): int => ...`), else `auto`.
@@ -349,7 +349,7 @@ impl From<bool> for Literal {
 
 // ── Declarations ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VariableDecl {
     /// Attributes preceding the declaration (`[Name(args)]`).
     pub attributes: Vec<Attribute>,
@@ -366,7 +366,7 @@ pub struct VariableDecl {
     pub is_exported: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionDecl {
     pub name: String,
     /// Span of the function name token.
@@ -393,7 +393,7 @@ pub struct FunctionDecl {
 /// A generic type parameter, optionally with constraints and a default
 /// (`TError=Error` in `Result<TValue, TError=Error>`, `T: Shape & Named =
 /// Square`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GenericParam {
     pub name: String,
     /// Span of the name token.
@@ -409,7 +409,7 @@ pub struct GenericParam {
     pub is_argument: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StructDecl {
     pub name: String,
     /// Span of the struct name token.
@@ -435,7 +435,7 @@ pub struct StructDecl {
 }
 
 /// What an `enum` declaration adds to a [`StructDecl`]: its cases.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnumBody {
     /// The integer type after `:` (`enum Kind: u8`); `None` for the default.
     pub representation: Option<TypeName>,
@@ -444,7 +444,7 @@ pub struct EnumBody {
 }
 
 /// One case of an `enum`: `Name`, `Name = value`, or `Name(field: Type, ...)`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnumCase {
     pub name: String,
     pub name_span: Span,
@@ -458,7 +458,7 @@ pub struct EnumCase {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TraitDecl {
     /// Attributes preceding the `trait` keyword.
     pub attributes: Vec<Attribute>,
@@ -474,7 +474,7 @@ pub struct TraitDecl {
 
 /// A type alias: `type Name<P1, P2=Default> = TargetType;`. The target may be
 /// generic; the alias's own parameters are substituted into it at each use.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasDecl {
     /// Attributes preceding the `type` keyword.
     pub attributes: Vec<Attribute>,
@@ -489,7 +489,7 @@ pub struct TypeAliasDecl {
     pub is_exported: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExtendDecl {
     /// Attributes preceding the `extend` keyword.
     pub attributes: Vec<Attribute>,
@@ -508,7 +508,7 @@ pub struct ExtendDecl {
     pub is_exported: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Declaration {
     Variable(VariableDecl),
     Function(FunctionDecl),
@@ -580,7 +580,7 @@ impl Declaration {
 
 // ── Blocks & statements ───────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub statements: Vec<Statement>,
     /// Span covering the braces, widened to the first attribute when present.
@@ -589,7 +589,7 @@ pub struct Block {
     pub attributes: Vec<Attribute>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Branch {
     pub condition: Expression,
     pub if_block: Block,
@@ -597,7 +597,7 @@ pub struct Branch {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct While {
     pub condition: Expression,
     pub block: Block,
@@ -607,7 +607,7 @@ pub struct While {
 /// `for (var x in expr) { ... }`: iterate `expr` via the iterator protocol
 /// (`iterate()`, or `next()` + `current()`). The binding is a `var` or typed
 /// declaration with no default value.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct For {
     /// The loop variable. With a `pattern` it has an empty name.
     pub binding: VariableDecl,
@@ -623,7 +623,7 @@ pub struct For {
 /// `x` is bound to `scope.enter()`; a null struct result skips the body and
 /// runs `else_block` instead. `binding` carries no default value: the scope
 /// expression is `scope`. Without a binding the result is held unnamed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct With {
     pub binding: Option<VariableDecl>,
     pub scope: Expression,
@@ -634,7 +634,7 @@ pub struct With {
 
 /// `var (a, b) = e;` or `const (a, _: int) = e;`: declares one local per
 /// element of the tuple `e`. A binding named `_` skips its element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Destructure {
     /// One per element, in order: the name (`_` to skip), its span, and its
     /// type (`auto` when not written).
@@ -644,7 +644,7 @@ pub struct Destructure {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DestructureBinding {
     pub name: String,
     pub name_span: Span,
@@ -680,23 +680,23 @@ impl Display for DestructureBinding {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ReturnStatement {
     /// None for a bare `return;`.
     pub expr: Option<Expression>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LoopBreakKind { Break, Continue }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoopBreak {
     pub kind: LoopBreakKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Statement {
     Expression(Expression),
     Block(Block),
@@ -712,7 +712,7 @@ pub enum Statement {
 }
 
 /// `match (value) { pattern, ... => { ... } ... else => { ... } }`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Match {
     pub value: Expression,
     pub arms: Vec<MatchArm>,
@@ -724,7 +724,7 @@ pub struct Match {
 }
 
 /// One arm of a `match`: its patterns and the block they select.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchArm {
     pub patterns: Vec<Pattern>,
     pub body: Block,
@@ -738,7 +738,7 @@ pub struct MatchArm {
 /// Inside a tuple pattern, a bare name (`y`) is a case when the element is an
 /// enum with a case of that name, and otherwise binds the element; `_`
 /// matches anything.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Pattern {
     /// The literal of a literal pattern; `None` for a case pattern.
     pub literal: Option<Expression>,
@@ -814,7 +814,7 @@ impl Statement {
 // ── Module ────────────────────────────────────────────────────────────────────
 
 /// One `symbol` or `symbol as name` entry of `import [...] from source`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImportedSymbol {
     pub name: String,
     pub name_span: Span,
@@ -844,7 +844,7 @@ impl ImportedSymbol {
 /// resolved like an import, but binds no name in its own file; it publishes
 /// the source's exports (all of them for `*`, else the listed ones) to the
 /// file's importers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Import {
     /// The module name, or the file path as written without `.pep`.
     pub name: String,
@@ -911,7 +911,7 @@ impl Import {
 /// `export symbol as name;` — re-exports `symbol` (declared in this file, or
 /// imported: `sym`, `m.sym`) to importers under `name`, or under its own
 /// (last) name without `as`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportAlias {
     /// The exported symbol as written, possibly qualified (`m.sym`).
     pub symbol: String,
@@ -930,13 +930,15 @@ impl ExportAlias {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Module {
     pub imports: Vec<Import>,
     pub exports: Vec<ExportAlias>,
     pub declarations: Vec<Declaration>,
     /// Warnings the parser found, such as deprecated syntax. Their locations
     /// carry the default `FileId`; the loader remaps them to the file's.
+    /// Not serialized: the build cache stores only trees without warnings.
+    #[serde(skip)]
     pub warnings: Vec<crate::diagnostic::Diagnostic>,
 }
 
