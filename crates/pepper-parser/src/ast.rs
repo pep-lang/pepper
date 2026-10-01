@@ -422,6 +422,9 @@ pub struct StructDecl {
     pub constructors: Vec<FunctionDecl>,
     /// `destruct { ... }` destructor body
     pub destructor: Option<Block>,
+    /// The `destruct` keyword, when there is a destructor.
+    #[serde(default)]
+    pub destruct_span: Option<Span>,
     pub span: Span,
     /// Attributes preceding the struct (`[Name(args)]`).
     pub attributes: Vec<Attribute>,

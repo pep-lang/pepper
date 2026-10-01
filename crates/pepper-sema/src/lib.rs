@@ -3,6 +3,7 @@ pub mod builder;
 pub mod checked;
 pub mod deprecation;
 pub mod enums;
+pub mod value_structs;
 pub mod value_types;
 pub mod interface;
 pub mod member_lookup;

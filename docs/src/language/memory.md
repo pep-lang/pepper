@@ -13,7 +13,8 @@ behaves exactly like a `std::shared_ptr<T>` passed by value.
 
 Numbers, `bool`, and the other primitive types are plain values: assigning
 one copies it, as in C. So is a [tuple](tuples.md), whose elements are
-copied the way each element would be on its own.
+copied the way each element would be on its own, and so is a struct marked
+[`[Value]`](value-structs.md), such as `Optional<T>`.
 
 Everything else, including your own structs, `String`, `Array`, `HashMap`, and
 [function values](function-types.md), is a *reference* to an object on the

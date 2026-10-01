@@ -98,8 +98,9 @@ pub(crate) fn zero_for(ty: &TypeName) -> Expression {
     if let Some(default) = crate::enums::default_expression(ty) {
         return default;
     }
-    // A tuple is a value: its zero holds a zero of each element.
-    if ty.is_tuple() {
+    // A tuple or a value struct is a value: its zero holds a zero of each
+    // element.
+    if ty.is_tuple() || crate::value_structs::is_value(&ty.to_string()) {
         Expression::Default(ty.clone())
     } else if ty.is_pointer() || ty.is_struct() {
         Expression::PointerLiteral
@@ -113,6 +114,13 @@ pub(crate) fn zero_for(ty: &TypeName) -> Expression {
 /// Fill in the refcount field + synthesized method bodies (the `StructDef`
 /// constructor part of `Struct.cpp:99-149`).
 pub fn apply_synthesized(st: &mut StructDef) {
+    // A value struct has no object: no counts, and codegen steps its
+    // reference fields' counts itself, as for a tuple.
+    if st.is_value() {
+        st.acquire.body = None;
+        st.release.body = None;
+        return;
+    }
     // Head field for the refcount. Default 0 (port of `Struct.cpp:108-109`,
     // `IntegerLiteral(0)`): a freshly constructed object carries NO refs —
     // its first reference is taken by the receiver's init/param-entry
@@ -238,7 +246,17 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         // Create the allocation for `this`; the `__alloc_size` literal value is
         // filled in at codegen time. The `__` prefix keeps it from shadowing a
         // constructor parameter the user named `size`.
-        let mut items: Vec<Statement> = vec![
+        let mut items: Vec<Statement> = if st.is_value() {
+            // A value is built in place: `this` is the storage the
+            // constructor returns, starting as the zero value.
+            vec![Statement::Declaration(Declaration::Variable(var_def(
+                "this",
+                st.ty.clone(),
+                Some(Expression::Default(st.ty.clone())),
+                false,
+            )))]
+        } else {
+            vec![
             Statement::Declaration(Declaration::Variable(var_def(
                 "__alloc_size",
                 TypeName::new("u64"),
@@ -259,7 +277,8 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
                 }),
                 false,
             ))),
-        ];
+            ]
+        };
 
         // Field initializations. A field with an explicit default is assigned it;
         // every other field is zero-initialized (null reference / 0), matching
@@ -334,6 +353,10 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
     // The destructor does not free the object: `__release` does, once no
     // weak reference remains (see apply_synthesized).
 
+    // A value struct has no object to count or destroy.
+    if st.is_value() {
+        return Ok(());
+    }
     // Append synthesized methods in order: release, acquire, dtor.
     let release = st.release.clone();
     let acquire = st.acquire.clone();
@@ -365,6 +388,7 @@ pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     if let Some(error) = crate::errors::take() {
         return Err(error);
     }
+    crate::value_structs::install(module);
     for st in module.structs.iter_mut().filter(|st| !module.checked.has_struct(&st.name)) {
         apply_synthesized(st);
         let loc = st.loc;

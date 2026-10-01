@@ -925,6 +925,11 @@ pub struct StructDef {
 /// The attribute that makes a struct shareable between threads.
 pub const SHARED_ATTRIBUTE: &str = "Shared";
 
+/// The attribute that makes a struct a value: stored inline in whatever
+/// holds it and copied like a tuple, with no object or counts of its own
+/// (see `crate::value_structs`).
+pub const VALUE_ATTRIBUTE: &str = "Value";
+
 /// A value converted by an `[Implicit]` constructor: `to(value)` where the
 /// value was a `from`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -952,6 +957,12 @@ impl StructDef {
     /// threads, so its reference counts are atomic.
     pub fn is_shared(&self) -> bool {
         has_attribute(&self.attributes, SHARED_ATTRIBUTE)
+    }
+
+    /// Declared `[Value]`: stored inline and copied like a tuple (see
+    /// `crate::value_structs`).
+    pub fn is_value(&self) -> bool {
+        has_attribute(&self.attributes, VALUE_ATTRIBUTE)
     }
 
     /// The type an `[Implicit]` constructor converts from: its first

@@ -1575,6 +1575,30 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
     })
 }
 
+/// A `[Value]` struct has no object: nothing destroys it, and it is
+/// thread-safe exactly when its fields are, so `destruct` and `[Shared]`
+/// do not apply to it.
+fn check_value_attributes(decl: &ast::StructDecl) -> Result<(), Diagnostic> {
+    if !has_attribute(&decl.attributes, VALUE_ATTRIBUTE) {
+        return Ok(());
+    }
+    if let Some(span) = decl.destruct_span {
+        return Err(Diagnostic::error(format!("value struct '{}' cannot have a destructor", decl.name)).at(loc(span)));
+    }
+    let shared = decl
+        .attributes
+        .iter()
+        .find(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == SHARED_ATTRIBUTE));
+    if let Some(shared) = shared {
+        return Err(Diagnostic::error(format!(
+            "'[Shared]' does not apply to value struct '{}': it is thread-safe when its fields are",
+            decl.name
+        ))
+        .at(loc(shared.span)));
+    }
+    Ok(())
+}
+
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
 fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
@@ -1584,6 +1608,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         reject_deprecation(&body.attributes, "a destructor")?;
         reject_implicit(&body.attributes)?;
     }
+    check_value_attributes(decl)?;
     let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
     let base_name = decl.name.clone();
     let ty = if generic_params.is_empty() {

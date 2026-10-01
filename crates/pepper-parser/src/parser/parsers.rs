@@ -3986,6 +3986,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     let mut methods = vec![];
     let mut constructors = vec![];
     let mut destructor = None;
+    let mut destruct_span = None;
 
     loop {
         ws(input)?;
@@ -4063,6 +4064,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             *input = &input[8..];
             ws(input)?;
             destructor = Some(block(input, m_attrs)?);
+            destruct_span = Some(keyword_span);
             ws(input)?;
             continue;
         }
@@ -4106,7 +4108,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructors, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructors, destructor, destruct_span, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
 }
 
 /// `enum Name[<T, ...>] [: IntegerType] { Case, Case = value, Case(x: T), ... methods }`.
@@ -4237,6 +4239,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         methods,
         constructors: vec![],
         destructor: None,
+        destruct_span: None,
         span: Span { start: decl_start, end: pos(input) },
         attributes: attrs,
         is_exported: false,

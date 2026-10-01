@@ -94,6 +94,10 @@ pub struct CodeGenerator<'ctx> {
     /// Tuple type names in registration order: an element tuple comes before
     /// the tuples that hold it.
     tuple_order: Vec<String>,
+    /// Value structs (`[Value]`), by name: their field types in order. A
+    /// value struct is held by value like a tuple, and its layout has no
+    /// header (see `pepper_sema::value_structs`).
+    values: HashMap<String, Vec<String>>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     /// free-function name → return-type sema string (for receiver typing of
@@ -197,6 +201,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             traits: HashMap::new(),
             tuples: HashMap::new(),
             tuple_order: Vec::new(),
+            values: HashMap::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
@@ -314,6 +319,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Enum types are stored as their integer types (see `pepper_sema::enums`).
         pepper_sema::enums::install(&module.enums);
         pepper_sema::enums::install_methods(module);
+        pepper_sema::value_structs::install(module);
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
@@ -339,7 +345,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
                 continue;
             }
-            self.types.ensure_opaque(&st.name);
+            if st.is_value() {
+                self.types.ensure_value_opaque(&st.name);
+            } else {
+                self.types.ensure_opaque(&st.name);
+            }
         }
         // Trait types are values of their own layout; a field may hold one.
         for &idx in &traits {
@@ -390,6 +400,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         for name in self.tuple_order.clone() {
             self.emit_tuple_refcount_thunk(&name, "__acquire")?;
             self.emit_tuple_refcount_thunk(&name, "__release")?;
+        }
+        for &idx in &structs {
+            let name = &module.structs[idx].name;
+            if self.values.contains_key(name) {
+                self.emit_tuple_refcount_thunk(name, "__acquire")?;
+                self.emit_tuple_refcount_thunk(name, "__release")?;
+            }
         }
 
         // File-scope globals: LLVM globals + (if any initializer needs it) a
@@ -833,6 +850,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         self.types.register_struct(st, &field_types);
         let llvm_type = self.types.struct_type(&st.name).expect("registered");
+        if st.is_value() {
+            self.values.insert(st.name.clone(), st.field_members.iter().map(|f| f.ty.to_string()).collect());
+        }
 
         // ABI size is measured after all bodies are set (see `generate`),
         // because a field may name a struct declared later in the module.
@@ -888,8 +908,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&struct_name)
                     .ok_or_else(|| format!("unknown this type {}", struct_name))?;
+                // A value struct's `this` is the address of its storage.
                 let this_ptr_ty = match this_ty {
-                    ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => BasicTypeEnum::PointerType(
+                    ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) || st.is_value() => BasicTypeEnum::PointerType(
                         self.context.ptr_type(inkwell::AddressSpace::default()),
                     ),
                     other => other,
@@ -1188,13 +1209,25 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.structs.contains_key(name) || self.is_trait_name(name) || self.tuples.contains_key(name)
     }
 
+    /// The element types of a value aggregate: a tuple's elements, or a
+    /// value struct's fields. Both are held by value and have no identity.
+    fn aggregate_elements(&self, name: &str) -> Option<&Vec<String>> {
+        self.tuples.get(name).or_else(|| self.values.get(name))
+    }
+
+    /// Whether `name` is a tuple or a value struct (see
+    /// [`Self::aggregate_elements`]).
+    fn is_aggregate(&self, name: &str) -> bool {
+        self.aggregate_elements(name).is_some()
+    }
+
     /// `__is_pod<T>`: whether a value of sema type `name` is plain data,
     /// which copying and dropping leave alone: not a reference, and not a
     /// tuple holding one at any depth.
     fn is_pod_name(&self, name: &str) -> bool {
         let mut pending = vec![name.to_string()];
         while let Some(name) = pending.pop() {
-            if let Some(elements) = self.tuples.get(&name) {
+            if let Some(elements) = self.tuples.get(&name).or_else(|| self.values.get(&name)) {
                 pending.extend(elements.iter().cloned());
             } else if self.is_reference_name(&name) {
                 return false;
@@ -1208,7 +1241,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn reference_value_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
         match self.types.get(name) {
             Some(ty @ BasicTypeEnum::ArrayType(_)) if self.types.is_trait(name) => ty,
-            Some(ty @ BasicTypeEnum::StructType(_)) if self.tuples.contains_key(name) => ty,
+            Some(ty @ BasicTypeEnum::StructType(_)) if self.tuples.contains_key(name) || self.values.contains_key(name) => ty,
             _ => self
                 .context
                 .ptr_type(inkwell::AddressSpace::default())
@@ -1288,7 +1321,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
         let value = thunk.get_nth_param(0).expect("tuple").into_struct_value();
-        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        // A value struct's fields are its elements.
+        let elements = self.tuples.get(tuple).or_else(|| self.values.get(tuple)).cloned().unwrap_or_default();
         for (index, element) in elements.iter().enumerate() {
             if !self.is_reference_name(element) {
                 continue;
@@ -1368,7 +1402,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         l: BasicValueEnum<'ctx>,
         r: BasicValueEnum<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let elements = self.aggregate_elements(tuple).cloned().unwrap_or_default();
         let mut all = self.context.bool_type().const_int(1, false);
         for (index, element) in elements.iter().enumerate() {
             let a = self
@@ -1394,10 +1428,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         a: BasicValueEnum<'ctx>,
         b: BasicValueEnum<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        if self.tuples.contains_key(ty) {
+        let method = format!("{}.==", ty);
+        // A value struct without its own `==` compares field by field.
+        if self.tuples.contains_key(ty) || (self.values.contains_key(ty) && !self.functions.contains_key(&method)) {
             return self.tuple_equal(ty, a, b);
         }
-        let method = format!("{}.==", ty);
         if self.functions.contains_key(&method) {
             let result = self.call_function(&method, vec![a, b])?;
             return Ok(llvm_ops::as_bool(self.context, &self.builder, result));
@@ -1432,16 +1467,17 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// program's `hash<E>` when there is one (`hash<String>` by content),
     /// else by identity for references and by value otherwise.
     fn tuple_hash(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let elements = self.aggregate_elements(tuple).cloned().unwrap_or_default();
         let mut h = self.context.i64_type().const_int(0xcbf29ce484222325, false);
         for (index, element) in elements.iter().enumerate() {
             let item = self
                 .builder
                 .build_extract_value(value.into_struct_value(), index as u32, "element")
                 .map_err(|e| e.to_string())?;
-            let element_hash = if self.tuples.contains_key(element) {
+            let own_hash = self.functions.contains_key(&format!("hash<{}>", element));
+            let element_hash = if self.tuples.contains_key(element) || (self.values.contains_key(element) && !own_hash) {
                 self.tuple_hash(element, item)?
-            } else if self.functions.contains_key(&format!("hash<{}>", element)) {
+            } else if own_hash {
                 self.call_function(&format!("hash<{}>", element), vec![item])?.into_int_value()
             } else {
                 let item = match item {
@@ -1770,7 +1806,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ty_name
             ));
         }
-        if self.tuples.contains_key(ty_name) {
+        if self.is_aggregate(ty_name) {
             return Err(format!(
                 "atomic operations on tuple type '{}' are not supported",
                 pepper_sema::passes::gather_generics::parse_type_string(ty_name).display()
@@ -2445,8 +2481,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         // The scope owns the slot until exit (null occupants release to nothing).
         // The ctor's `this` is excluded: the ctor's `return this` acquires at
         // the return site, so the result leaves with rc == 1 — releasing `this`
-        // here would destroy a live object.
-        if is_struct_ref && var.name != "this" {
+        // here would destroy a live object. A value struct's ctor `this` is
+        // an ordinary local: `return this` copies it, so it releases at exit.
+        if is_struct_ref && (var.name != "this" || self.values.contains_key(&var.ty.to_string())) {
             self.track_scope_local(&var.name, &var.ty.to_string(), alloca);
         }
         Ok(())
@@ -3116,6 +3153,53 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Release an owned rvalue temporary (`T.__release`), a no-op for empty
     /// type names.
+    /// In a value struct's method, where `this` refers: the storage whose
+    /// address the `this` parameter holds. `None` elsewhere, and in a value
+    /// struct's constructor, whose `this` is a local holding the value.
+    fn value_this(&mut self) -> Result<Option<Address<'ctx>>, String> {
+        let Some(local) = self.frame.find_local("this") else { return Ok(None) };
+        if !self.values.contains_key(&*local.ty) || !matches!(local.llvm_ty, Some(BasicTypeEnum::PointerType(_))) {
+            return Ok(None);
+        }
+        let local = local.clone();
+        let ty = self.types.get(&local.ty).ok_or_else(|| format!("unknown type {}", local.ty))?;
+        let ptr = local.load(&self.builder).ok_or_else(|| "load this failed".to_string())?.into_pointer_value();
+        Ok(Some(Address::with_llvm_ty("this", &local.ty, ty, ptr)))
+    }
+
+    /// Whether `expr` names storage a value struct method may change in
+    /// place: a variable, `this`, or a field of one or of an object.
+    fn is_value_place(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::SymbolRef { id, .. } => self.frame.find_local(id).is_some() || self.global_addrs.contains_key(id),
+            Expression::ThisRef => true,
+            Expression::MemberRef { lhs, .. } => {
+                let owner = self.struct_name_of(lhs).unwrap_or_default();
+                if self.values.contains_key(&owner) {
+                    self.is_value_place(lhs)
+                } else {
+                    // A field of an object is the object's storage.
+                    !self.tuples.contains_key(&owner)
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// The address of the value struct `expr` refers to, for a method's
+    /// `this`: the storage of a place, else a hidden temporary holding the
+    /// value, whose address is also returned so the caller can release an
+    /// owned one as the method left it.
+    fn value_address(&mut self, expr: &Expression) -> Result<(PointerValue<'ctx>, Option<PointerValue<'ctx>>), String> {
+        if self.is_value_place(expr) {
+            return Ok((self.codegen_lvalue(expr)?.ptr, None));
+        }
+        let value = self.codegen_expr(expr)?;
+        let slot = self.entry_alloca(value.get_type(), "value")?;
+        self.builder.build_store(slot, value).map_err(|e| e.to_string())?;
+        Ok((slot, Some(slot)))
+    }
+
     fn release_temp(&mut self, ty: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
         if !ty.is_empty() {
             self.release_ref(ty, val)?;
@@ -3399,7 +3483,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let field_ty = self.types.get(&field_ty_name);
         let value_ty = match field_ty {
-            Some(ty @ BasicTypeEnum::StructType(_)) if self.tuples.contains_key(&field_ty_name) => ty,
+            Some(ty @ BasicTypeEnum::StructType(_)) if self.is_aggregate(&field_ty_name) => ty,
             Some(BasicTypeEnum::StructType(_)) => {
                 BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
             }
@@ -3430,10 +3514,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         source: &Expression,
     ) -> Result<(), String> {
         let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
-        // A tuple has no identity to compare: acquiring its new elements
-        // before releasing the old ones makes self-assignment safe, as
-        // `std::tuple`'s element-wise `operator=` is.
-        if self.tuples.contains_key(ty_name) {
+        // A tuple or a value struct has no identity to compare: acquiring
+        // its new elements before releasing the old ones makes
+        // self-assignment safe, as `std::tuple`'s element-wise `operator=`
+        // is.
+        if self.is_aggregate(ty_name) {
             self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
             self.store_before_release(gep, value_ty, new_val, ty_name)?;
             self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
@@ -3544,6 +3629,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| format!("load failed {}", id))
             }
             Expression::ThisRef => {
+                if let Some(storage) = self.value_this()? {
+                    // A copy of the value `this` refers to.
+                    let ty = self.types.get(&storage.ty).ok_or_else(|| format!("unknown type {}", storage.ty))?;
+                    return self.builder.build_load(ty, storage.ptr, "this").map_err(|e| e.to_string());
+                }
                 let addr = self
                     .frame
                     .find_local("this")
@@ -3568,6 +3658,28 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.deferred_temps.push((tuple, ty));
                 }
                 Ok(element)
+            }
+            Expression::MemberRef { lhs, name, .. }
+                if self.struct_name_of(lhs).is_some_and(|t| self.values.contains_key(&t)) && !self.is_value_place(lhs) =>
+            {
+                // A field of a value that is no place (`f().end`): extract
+                // it, as a tuple element is.
+                let struct_name = self.struct_name_of(lhs).unwrap_or_default();
+                let index = self
+                    .structs
+                    .get(&struct_name)
+                    .and_then(|d| d.fields.iter().position(|(n, _)| n == name))
+                    .ok_or_else(|| format!("no member named '{}' in '{}'", name, struct_name))?;
+                let lhs_temp = self.owned_temp_type(lhs);
+                let value = self.codegen_expr(lhs)?;
+                let field = self
+                    .builder
+                    .build_extract_value(value.into_struct_value(), index as u32, name)
+                    .map_err(|e| e.to_string())?;
+                if let Some(ty) = lhs_temp {
+                    self.deferred_temps.push((value, ty));
+                }
+                Ok(field)
             }
             Expression::MemberRef { lhs, name, .. } => {
                 // Load lhs (this pointer), then StructGEP (Struct.cpp:60-70).
@@ -3662,7 +3774,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::SizeOf(ty) => {
                 let name = ty.to_string();
-                if self.structs.contains_key(&name) {
+                if self.structs.contains_key(&name) && !self.values.contains_key(&name) {
                     // Struct elements are stored as pointers, so a struct's
                     // slot (and its `sizeof`) is exactly pointer-sized,
                     // independent of the struct's own ABI size (matches
@@ -3717,7 +3829,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                         BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                        BasicTypeEnum::StructType(st) if st.get_name().is_none() => st.const_zero().into(),
+                        BasicTypeEnum::StructType(st) if !types::is_object(&st.into()) => st.const_zero().into(),
                         BasicTypeEnum::StructType(_) => self
                             .context
                             .ptr_type(inkwell::AddressSpace::default())
@@ -3756,7 +3868,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // A trait value reads its object's head, which every struct
                 // lays out first: index it as a bare u32.
                 let struct_ty: BasicTypeEnum<'ctx> = match self.types.get(&ty.to_string()) {
-                    Some(BasicTypeEnum::StructType(sct)) if sct.get_name().is_some() => sct.into(),
+                    Some(BasicTypeEnum::StructType(sct)) if types::is_object(&sct.into()) => sct.into(),
                     Some(BasicTypeEnum::ArrayType(_)) if self.is_trait_name(&ty.to_string()) => {
                         self.context.i32_type().into()
                     }
@@ -3804,7 +3916,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let lowered = self.types.get(&ty.to_string());
                 let is_reference = lowered.is_some_and(|t| types::is_object(&t))
                     || self.is_trait_name(&ty.to_string());
-                if self.tuples.contains_key(&ty.to_string()) {
+                if self.tuples.contains_key(&ty.to_string()) || self.values.contains_key(&ty.to_string()) {
                     let arg_temp = self.owned_temp_type(arg);
                     let val = self.codegen_expr(arg)?;
                     let h = self.tuple_hash(&ty.to_string(), val)?;
@@ -4233,7 +4345,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![];
                 let mut arg_names: Vec<String> = vec![];
                 let mut this_val_opt: Option<BasicValueEnum<'ctx>> = None;
-                if !is_static {
+                // A temporary holding a value struct receiver.
+                let mut this_slot: Option<PointerValue<'ctx>> = None;
+                // A value struct's refcount thunks take the value itself.
+                let thunk = method == "__acquire" || method == "__release";
+                if !is_static && !thunk && self.values.contains_key(&struct_name) {
+                    // A value struct's `this` is its storage's address.
+                    let (address, temporary) = self.value_address(this)?;
+                    this_slot = temporary;
+                    arg_vals.push(address.into());
+                    arg_names.push(String::new());
+                } else if !is_static {
                     let this_val = self.codegen_expr(this)?;
                     this_val_opt = Some(this_val);
                     arg_vals.push(this_val);
@@ -4261,8 +4383,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                     arg_vals.push(v);
                 }
                 let result = self.call_function_typed(&mangled, arg_vals, &arg_names)?;
-                if let (Some(ty), Some(this_val)) = (this_temp, this_val_opt) {
+                if let (Some(ty), Some(this_val)) = (this_temp.clone(), this_val_opt) {
                     self.release_temp(&ty, this_val)?;
+                }
+                // An owned value receiver is released as the method left it.
+                if let (Some(ty), Some(slot)) = (this_temp, this_slot) {
+                    let llvm = self.types.get(&ty).ok_or_else(|| format!("unknown type {}", ty))?;
+                    let value = self.builder.build_load(llvm, slot, "receiver").map_err(|e| e.to_string())?;
+                    self.deferred_temps.push((value, ty));
                 }
                 for (temp, ty) in owned_arg_temps {
                     self.release_temp(&ty, temp)?;
@@ -4408,7 +4536,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicTypeEnum::IntType(it) => it.const_zero().into(),
                     BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                     BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                    BasicTypeEnum::StructType(st) if st.get_name().is_none() => st.const_zero().into(),
+                    BasicTypeEnum::StructType(st) if !types::is_object(&st.into()) => st.const_zero().into(),
                     BasicTypeEnum::StructType(_) => self
                         .context
                         .ptr_type(inkwell::AddressSpace::default())
@@ -4614,7 +4742,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let ty = self.value_sema_type(value).ok_or_else(|| "cannot move a value of unknown type".to_string())?;
         let address = self.codegen_lvalue(value)?;
         let slot_ty: BasicTypeEnum<'ctx> = match self.types.get(&ty) {
-            Some(BasicTypeEnum::StructType(_)) if !self.tuples.contains_key(&ty) => {
+            Some(BasicTypeEnum::StructType(_)) if !self.is_aggregate(&ty) => {
                 self.context.ptr_type(inkwell::AddressSpace::default()).into()
             }
             Some(other) => other,
@@ -5398,7 +5526,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let rhs_val = self.codegen_expr(rhs)?;
         // Tuples compare element-wise (`===` too: a tuple has no identity).
         if let (BasicValueEnum::StructValue(_), Some(tuple)) =
-            (lhs_val, self.value_sema_type(lhs).filter(|t| self.tuples.contains_key(t)))
+            (lhs_val, self.value_sema_type(lhs).filter(|t| self.is_aggregate(t)))
         {
             let same = self.tuple_equal(&tuple, lhs_val, rhs_val)?;
             let result = match op {
@@ -5507,11 +5635,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .or_else(|| self.global_addrs.get(id))
                 .cloned()
                 .ok_or_else(|| format!("unknown lvalue {}", id)),
-            Expression::ThisRef => self
-                .frame
-                .find_local("this")
-                .cloned()
-                .ok_or_else(|| "no this".to_string()),
+            Expression::ThisRef => match self.value_this()? {
+                Some(storage) => Ok(storage),
+                None => self.frame.find_local("this").cloned().ok_or_else(|| "no this".to_string()),
+            },
             Expression::MemberRef { lhs, .. } if self.struct_name_of(lhs).is_some_and(|t| self.tuples.contains_key(&t)) => {
                 Err("tuple elements are immutable".to_string())
             }
@@ -6001,11 +6128,11 @@ fn llvm_fn_type<'ctx>(
         BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, varargs),
         // Struct-typed returns are pointers (C++ ref semantics: functions
         // return `this` as a pointer).
-        BasicTypeEnum::StructType(sct) if sct.get_name().is_some() => sct
+        BasicTypeEnum::StructType(sct) if types::is_object(&sct.into()) => sct
             .get_context()
             .ptr_type(inkwell::AddressSpace::default())
             .fn_type(&param_meta, varargs),
-        // A tuple returns its elements by value.
+        // A tuple or a value struct returns its fields by value.
         BasicTypeEnum::StructType(sct) => sct.fn_type(&param_meta, varargs),
         BasicTypeEnum::VectorType(vt) => vt.fn_type(&param_meta, varargs),
         BasicTypeEnum::ScalableVectorType(vt) => vt.fn_type(&param_meta, varargs),

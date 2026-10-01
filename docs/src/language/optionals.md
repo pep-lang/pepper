@@ -59,6 +59,13 @@ such as `int` or `ulong`. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 [Memory and reference counting](memory.md)).
 
+An optional is a [value struct](value-structs.md): it lives inline in the
+variable, field or array element that holds it, so creating one allocates
+nothing, and copying one gives an independent optional. It is never null,
+and has no identity: compare two optionals with `==`, which compares
+whether each is Some and, if both are, their values; `===` on an optional
+is an error.
+
 ## Optionals in the standard library
 
 Standard library lookups that can come up empty return an optional rather

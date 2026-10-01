@@ -25,8 +25,12 @@ pub struct Types<'ctx> {
 /// values reference through a pointer: a named struct. A tuple is an
 /// unnamed (literal) struct, which values hold directly.
 pub fn is_object(ty: &BasicTypeEnum<'_>) -> bool {
-    matches!(ty, BasicTypeEnum::StructType(st) if st.get_name().is_some())
+    matches!(ty, BasicTypeEnum::StructType(st) if st.get_name().is_some_and(|n| !n.to_bytes().starts_with(VALUE_PREFIX.as_bytes())))
 }
+
+/// What a value struct's LLVM name starts with (`value.Span`): it is named
+/// for readable IR, but held by value like a tuple, not as an object.
+const VALUE_PREFIX: &str = "value.";
 
 /// Integral-type aliases (same set as sema `TypeName::IntegralTypes`).
 fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum<'ctx>> {
@@ -129,6 +133,17 @@ impl<'ctx> Types<'ctx> {
             return *st;
         }
         let struct_ty = self.context.opaque_struct_type(name);
+        self.struct_types.insert(name.to_string(), struct_ty);
+        struct_ty
+    }
+
+    /// [`Types::ensure_opaque`] for a value struct, whose LLVM name marks it
+    /// as no object (see [`is_object`]).
+    pub fn ensure_value_opaque(&mut self, name: &str) -> StructType<'ctx> {
+        if let Some(st) = self.struct_types.get(name) {
+            return *st;
+        }
+        let struct_ty = self.context.opaque_struct_type(&format!("{}{}", VALUE_PREFIX, name));
         self.struct_types.insert(name.to_string(), struct_ty);
         struct_ty
     }

@@ -7,7 +7,7 @@ Source: `runtime/optional.pep`
 ## Optional
 
 ```pepper
-struct Optional<T>
+[Value] struct Optional<T>
 ```
 
 A value of type `T` that may be absent: either Some, holding a `T`, or
@@ -24,6 +24,11 @@ optional type that is not given a value starts as None.
 Build one with the static `some` or `none` functions, or `Optional<T>()`
 for None, and test it with `is_some()` or `is_none()`, or as a condition
 by itself (`if (found)`).
+
+An optional is a [value struct](../language/value-structs.md): it is
+stored inline in whatever holds it, with no allocation, and copying one
+gives an independent optional. It is never null, and has no identity, so
+compare optionals with `==`, not `===`.
 
 **Type parameters**
 - `T` — the type of the value a Some optional holds

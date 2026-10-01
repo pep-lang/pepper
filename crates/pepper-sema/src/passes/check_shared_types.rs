@@ -11,7 +11,8 @@
 //! - of a thread-safe type: a primitive, a raw pointer to a thread-safe type
 //!   (`__ptr<void>` included: what raw memory holds is the code's own
 //!   responsibility), a `shared` function type, a `[Shared]` struct, a
-//!   weak reference to one, or a tuple of thread-safe types.
+//!   weak reference to one, or a tuple or value struct (`[Value]`) of
+//!   thread-safe types.
 //!
 //! Every other struct is not thread-safe, and neither is a plain function
 //! type (`(P...) => R`): its counts are plain and a closure of that type may
@@ -36,19 +37,33 @@ fn unsafe_part(ty: &TypeName, module: &Module) -> Option<TypeName> {
 }
 
 /// The names of the structs whose references are thread-safe: `[Shared]`
-/// structs and `shared` function types.
+/// structs and `shared` function types, and the value structs (`[Value]`)
+/// whose fields all are, as a tuple's elements are.
 pub(crate) struct ThreadSafeStructs(std::collections::HashSet<String>);
 
 impl ThreadSafeStructs {
     pub(crate) fn of(module: &Module) -> Self {
-        ThreadSafeStructs(
+        let mut safe = ThreadSafeStructs(
             module
                 .structs
                 .iter()
                 .filter(|st| st.is_shared() || st.ty.is_shared_function_type())
                 .map(|st| st.name.clone())
                 .collect(),
-        )
+        );
+        // A value struct holding another counts once that one does.
+        let values: Vec<&StructDef> = module.structs.iter().filter(|st| st.is_value() && !(st.ty.is_generic() && st.name == st.ty.name)).collect();
+        loop {
+            let found: Vec<String> = values
+                .iter()
+                .filter(|st| !safe.0.contains(&st.name) && st.field_members.iter().all(|f| unsafe_part_in(&f.ty, &safe).is_none()))
+                .map(|st| st.name.clone())
+                .collect();
+            if found.is_empty() {
+                return safe;
+            }
+            safe.0.extend(found);
+        }
     }
 }
 

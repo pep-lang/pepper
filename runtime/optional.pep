@@ -21,6 +21,11 @@ import "internals";
 ## for None, and test it with `is_some()` or `is_none()`, or as a condition
 ## by itself (`if (found)`).
 ##
+## An optional is a [value struct](../language/value-structs.md): it is
+## stored inline in whatever holds it, with no allocation, and copying one
+## gives an independent optional. It is never null, and has no identity, so
+## compare optionals with `==`, not `===`.
+##
 ## @typeParam T the type of the value a Some optional holds
 ## @example
 ##     find_even(values: Array<int>): int? {
@@ -38,6 +43,7 @@ import "internals";
 ##         if (!found) { return 1; }
 ##         return found.value() - 4;   # 0
 ##     }
+[Value]
 export struct Optional<T> {
     # Whether `_value` holds the value.
     bool _has_value;

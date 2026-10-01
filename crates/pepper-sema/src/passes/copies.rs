@@ -65,6 +65,10 @@ const COPIES: &str = "Copies";
 /// The synthesized method that copies a struct.
 const COPY_METHOD: &str = "_pep_copy";
 
+/// The synthesized method that copies a value struct (`[Value]`): a copy
+/// of the value whose fields that are not thread-safe are copied in turn.
+const COPY_VALUE_METHOD: &str = "_pep_copy_value";
+
 /// The synthesized method that points a copy's weak fields at copies.
 const FIX_WEAK_METHOD: &str = "_pep_fix_weak";
 
@@ -73,7 +77,7 @@ const FIX_WEAK_METHOD: &str = "_pep_fix_weak";
 /// generator shares it between units like an instantiation, which keeps a
 /// unit's object (a runtime unit's included) independent of the program.
 pub fn is_synthesized_method(name: &str) -> bool {
-    name == COPY_METHOD || name == FIX_WEAK_METHOD
+    name == COPY_METHOD || name == FIX_WEAK_METHOD || name == COPY_VALUE_METHOD
 }
 
 /// Why a type cannot be copied.
@@ -399,6 +403,33 @@ fn copy_methods(st: &StructDef, safe: &ThreadSafeStructs, copyable: bool) -> Vec
     methods
 }
 
+/// The method that copies a value of value struct `ty`: its own `copy`
+/// when `copyable`, else the synthesized one. `None` when `ty` is no value
+/// struct.
+fn value_copy_method(module: &Module, ty: &TypeName, copyable: bool) -> Option<&'static str> {
+    struct_named(module, ty).filter(|st| st.is_value())?;
+    Some(if copyable { "copy" } else { COPY_VALUE_METHOD })
+}
+
+/// The `_pep_copy_value` method of value struct `st`: a copy of `this`
+/// whose fields that are not thread-safe hold copies. A weak field keeps
+/// its target, which no copy of the value can point at.
+fn copy_value_method(st: &StructDef, safe: &ThreadSafeStructs) -> FunctionDef {
+    let this_ty = TypeName::new(&st.name);
+    let copies = || symbol("copies", copies_type());
+    let made = || symbol("__made", this_ty.clone());
+    let mut items = vec![Statement::Declaration(Declaration::Variable(variable("__made", this_ty.clone(), Some(Expression::ThisRef), Kind::Variable)))];
+    for field in &st.field_members {
+        if unsafe_part_in(&field.ty, safe).is_none() || field.ty.weak_target().is_some() {
+            continue;
+        }
+        let original = member(Expression::ThisRef, &field.name);
+        items.push(assign(member(made(), &field.name), method_call(copies(), &format!("copy<{}>", field.ty), vec![original])));
+    }
+    items.push(Statement::Return(ReturnStatement { expr: Some(made()), loc: Loc::NONE }));
+    method(st, COPY_VALUE_METHOD, this_ty, items)
+}
+
 // ── The pass ─────────────────────────────────────────────────────────────────
 
 /// The `T` of a `__copy<T>(value, copies)` call.
@@ -469,7 +500,10 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
                 if !needed.iter().any(|(n, _)| *n == name) {
                     needed.push((name, copyable));
                 }
-                Lowering::Object
+                match value_copy_method(module, ty, copyable) {
+                    Some(method) => Lowering::Value(method),
+                    None => Lowering::Object,
+                }
             }
             Plan::Tuple => match first_blocker(module, &safe, ty) {
                 Some((_, blocker)) => Lowering::Fail(format!("cannot copy '{}', which {}", ty.display(), blocker.what())),
@@ -482,10 +516,17 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
     let mut added = false;
     for (name, copyable) in needed {
         let Some(index) = module.structs.iter().position(|st| st.name == name) else { continue };
-        if module.structs[index].method_members.iter().any(|m| m.name == COPY_METHOD) {
+        if module.structs[index].method_members.iter().any(|m| m.name == COPY_METHOD || m.name == COPY_VALUE_METHOD) {
             continue;
         }
-        let methods = copy_methods(&module.structs[index], &safe, copyable);
+        let methods = if module.structs[index].is_value() {
+            if copyable {
+                continue;
+            }
+            vec![copy_value_method(&module.structs[index], &safe)]
+        } else {
+            copy_methods(&module.structs[index], &safe, copyable)
+        };
         module.structs[index].method_members.extend(methods);
         added = true;
     }
@@ -500,6 +541,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             *e = match lowering {
                 Lowering::Same => value,
                 Lowering::Object => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_object<{}>", ty), args: vec![value], loc },
+                Lowering::Value(method) => Expression::MethodCall { this: Box::new(value), method: method.to_string(), args: vec![copies], loc },
                 Lowering::Tuple(parts) => copy_tuple(&ty, parts, value, &copies, loc),
                 Lowering::Fail(message) => Expression::FunctionCall {
                     function: format!("_pep_copy_failed<{}>", ty),
@@ -568,6 +610,9 @@ fn lower_censuses(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
 enum Lowering {
     Same,
     Object,
+    /// A value struct, through this method of the value: its `copy` when
+    /// it implements `Copyable<T>`, else the synthesized one.
+    Value(&'static str),
     /// A new tuple of each element's copy.
     Tuple(Vec<Part>),
     /// A panic with this message: nothing the program asks for copies a `T`.
@@ -580,6 +625,9 @@ enum Part {
     Same,
     /// A struct, through `copies._copy_object<T>`.
     Object(TypeName),
+    /// A value struct, through this method of the element (see
+    /// [`Lowering::Value`]).
+    Value(&'static str),
     /// A nested tuple, element by element.
     Tuple(TypeName, Vec<Part>),
 }
@@ -595,7 +643,10 @@ fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed:
                 if !needed.iter().any(|(n, _)| *n == name) {
                     needed.push((name, copyable));
                 }
-                Part::Object(element.clone())
+                match value_copy_method(module, element, copyable) {
+                    Some(method) => Part::Value(method),
+                    None => Part::Object(element.clone()),
+                }
             }
             Plan::Tuple => Part::Tuple(element.clone(), tuple_parts(module, safe, element, needed)),
             Plan::Same | Plan::Blocked(_) => Part::Same,
@@ -619,6 +670,7 @@ fn copy_tuple(ty: &TypeName, parts: &[Part], value: Expression, copies: &Express
                     args: vec![element],
                     loc,
                 },
+                Part::Value(method) => Expression::MethodCall { this: Box::new(element), method: method.to_string(), args: vec![copies.clone()], loc },
                 Part::Tuple(t, inner) => copy_tuple(t, inner, element, copies, loc),
             }
         })

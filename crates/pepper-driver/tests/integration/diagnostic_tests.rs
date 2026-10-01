@@ -3820,6 +3820,183 @@ fn value_type_literal_argument_of_a_method() {
     );
 }
 
+// Value structs (`[Value]`): what needs an object, and changes a copy would lose.
+
+#[test]
+fn value_struct_compared_for_identity() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    var b = Span();\n    return a === b ? 1 : 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_compared_for_identity", source),
+        "main.pep:16:14: error: 'Span' is a value struct and has no identity; use '==' to compare values\n\
+         \x20  16 |     return a === b ? 1 : 0;\n\
+         \x20     |              ^~~~~"
+    );
+}
+
+#[test]
+fn value_struct_compared_with_null() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    return a == __null ? 1 : 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_compared_with_null", source),
+        "main.pep:15:14: error: value struct 'Span' cannot be null\n\
+         \x20  15 |     return a == __null ? 1 : 0;\n\
+         \x20     |              ^~~~~~~~~"
+    );
+}
+
+#[test]
+fn value_struct_held_weakly() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var w: __weak<Span>;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_held_weakly", source),
+        "main.pep:14:12: error: '__weak' needs a reference type; 'Span' is a value struct\n\
+         \x20  14 |     var w: __weak<Span>;\n\
+         \x20     |            ^~~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn value_struct_refcount() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    return __refcount(a);\n}\n";
+    assert_eq!(
+        error_of("value_struct_refcount", source),
+        "main.pep:15:23: error: 'Span' is a value struct and has no object\n\
+         \x20  15 |     return __refcount(a);\n\
+         \x20     |                       ^"
+    );
+}
+
+#[test]
+fn value_struct_contains_itself() {
+    let source = "[Value]\nstruct A {\n    var b: B;\n}\n\n[Value]\nstruct B {\n    var a: A;\n}\n\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_contains_itself", source),
+        "main.pep:3:12: error: value struct 'A' contains itself through field 'b'\n\
+         \x20   3 |     var b: B;\n\
+         \x20     |            ^\n\
+         main.pep:8:12: note: which holds field 'a' of type 'A'\n\
+         \x20   8 |     var a: A;\n\
+         \x20     |            ^"
+    );
+}
+
+#[test]
+fn value_struct_destructor() {
+    let source = "[Value]\nstruct S {\n    var x: int;\n\n    destruct {}\n}\n\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_destructor", source),
+        "main.pep:5:5: error: value struct 'S' cannot have a destructor\n\
+         \x20   5 |     destruct {}\n\
+         \x20     |     ^~~~~~~~"
+    );
+}
+
+#[test]
+fn value_struct_shared() {
+    let source = "[Value]\n[Shared]\nstruct S {\n    const x: int;\n}\n\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_shared", source),
+        "main.pep:2:1: error: '[Shared]' does not apply to value struct 'S': it is thread-safe when its fields are\n\
+         \x20   2 | [Shared]\n\
+         \x20     | ^~~~~~~~"
+    );
+}
+
+#[test]
+fn value_struct_passed_to_c() {
+    let source = "[Value]\nstruct S {\n    var x: int;\n}\n\nextern int f(S s);\n\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_passed_to_c", source),
+        "main.pep:6:14: error: value struct 'S' cannot be passed to C; pass a pointer\n\
+         \x20   6 | extern int f(S s);\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
+fn value_struct_temporary_field_assigned() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var spans = Array<Span>();\n    spans.append(Span());\n    spans[0].end = 3;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_temporary_field_assigned", source),
+        "main.pep:16:14: error: cannot assign to field 'end' of a temporary 'Span'\n\
+         \x20  16 |     spans[0].end = 3;\n\
+         \x20     |              ^~~\n\
+         main.pep:16:5: note: '[]' returns a copy; store it in a variable, change it, and assign it back\n\
+         \x20  16 |     spans[0].end = 3;\n\
+         \x20     |     ^~~~~~~~"
+    );
+}
+
+#[test]
+fn value_struct_const_field_assigned() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.end = 3;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_const_field_assigned", source),
+        "main.pep:15:7: error: cannot assign to field 'end' of const variable 's'\n\
+         \x20  15 |     s.end = 3;\n\
+         \x20     |       ^~~\n\
+         main.pep:14:11: note: 's' declared const here\n\
+         \x20  14 |     const s = Span(1, 2);\n\
+         \x20     |           ^"
+    );
+}
+
+#[test]
+fn value_struct_mutating_method_on_temporary() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmake(): Span {\n    return Span(1, 2);\n}\n\nmain(): int {\n    make().grow(1);\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_mutating_method_on_temporary", source),
+        "main.pep:18:12: error: cannot call mutating method 'grow' on a temporary 'Span'\n\
+         \x20  18 |     make().grow(1);\n\
+         \x20     |            ^~~~\n\
+         main.pep:18:5: note: 'make' returns a copy; store it in a variable, change it, and assign it back\n\
+         \x20  18 |     make().grow(1);\n\
+         \x20     |     ^~~~\n\
+         main.pep:9:9: note: 'grow' changes 'this' here\n\
+         \x20   9 |         end = end + by;\n\
+         \x20     |         ^~~"
+    );
+}
+
+#[test]
+fn value_struct_mutating_method_on_const() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.grow(1);\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_mutating_method_on_const", source),
+        "main.pep:15:7: error: cannot call mutating method 'grow' on const variable 's'\n\
+         \x20  15 |     s.grow(1);\n\
+         \x20     |       ^~~~\n\
+         main.pep:14:11: note: 's' declared const here\n\
+         \x20  14 |     const s = Span(1, 2);\n\
+         \x20     |           ^\n\
+         main.pep:9:9: note: 'grow' changes 'this' here\n\
+         \x20   9 |         end = end + by;\n\
+         \x20     |         ^~~"
+    );
+}
+
+#[test]
+fn value_struct_this_changed_in_closure() {
+    let source = "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    later(): () => void {\n        return () => { end = 5; };\n    }\n}\n\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_struct_this_changed_in_closure", source),
+        "main.pep:7:24: error: cannot change 'this' in a closure: the closure holds a copy of 'Span'\n\
+         \x20   7 |         return () => { end = 5; };\n\
+         \x20     |                        ^~~"
+    );
+}
+
+#[test]
+fn value_struct_converted_to_trait() {
+    let source = "trait Sized {\n    length(): int;\n}\n\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    length(): int {\n        return end - start;\n    }\n}\n\nextend Span with Sized {}\n\nmeasure(s: Sized): int {\n    return s.length();\n}\n\nmain(): int {\n    var a = Span(1, 4);\n    return measure(a) - 3;\n}\n";
+    assert_eq!(
+        error_of("value_struct_converted_to_trait", source),
+        "main.pep:25:20: error: value struct 'Span' cannot be converted to trait 'Sized' yet\n\
+         \x20  25 |     return measure(a) - 3;\n\
+         \x20     |                    ^"
+    );
+}
+
 /// A generic whose instance asks for a larger instance of itself (#236).
 #[test]
 fn a_generic_that_asks_for_a_larger_instance_of_itself_stops_at_the_depth_limit() {

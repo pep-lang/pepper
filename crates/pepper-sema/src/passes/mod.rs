@@ -183,6 +183,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // once every type is final.
     step!(shared_functions::shared_functions(module));
     step!(synthesize_function_types(module));
+    // How value structs are used: identity, `const`, changes to copies.
+    step!(crate::value_structs::check(module));
     // Struct values flowing into trait-typed slots, once every type is final.
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
