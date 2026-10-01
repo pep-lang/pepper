@@ -18,6 +18,17 @@
 //!   in their place;
 //! - `<unit>.lock`: an empty file that writers and readers lock.
 //!
+//! And per program, under `programs/`, named by its root file's namespace:
+//!
+//! - `<program>.o`: its program object (`__program`);
+//! - `<program>.json`: its record,
+//!   `{"key": "<hex>", "libraries": "<a>;<b>", "link": "<hex>", "output": "<hex>"}`:
+//!   the program's key ([`crate::keys::Keys::program_key`]), its `[Link]`
+//!   libraries, and the inputs and output hash of its last link. When every
+//!   unit is a hit and the record's key matches, the driver skips sema and
+//!   code generation; when the link's inputs and the output file are also
+//!   unchanged, it skips the link too.
+//!
 //! And one file per source file, whatever its unit (phase 2c):
 //!
 //! - `parsed/<hash of its path>.pepi`, beside the `O<n>` directories (one
@@ -112,6 +123,56 @@ impl Cache {
         }
         drop(lock);
         Ok(reused)
+    }
+
+    /// The program `name`'s record, when it has the key `key` and its object
+    /// is there: its object is put at `out` (under the program's lock), and
+    /// its record returned.
+    pub fn program(&self, name: &str, key: &str, out: &Path) -> Result<Option<ProgramRecord>, String> {
+        let unit = format!("programs/{}", name);
+        let Some(record) = self.program_record(name).filter(|r| r.key == key) else { return Ok(None) };
+        let lock = self.lock_file(&unit)?;
+        lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", unit, e))?;
+        let object = self.path(&unit, "o");
+        let found = object.is_file() && self.program_record(name).is_some_and(|r| r.key == key);
+        if found {
+            place(&object, out)?;
+        }
+        drop(lock);
+        Ok(found.then_some(record))
+    }
+
+    /// Store the program `name`'s object (at `object`) and record.
+    pub fn store_program(&self, name: &str, record: &ProgramRecord, object: &Path) -> Result<(), String> {
+        let unit = format!("programs/{}", name);
+        let lock = self.lock_file(&unit)?;
+        lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", unit, e))?;
+        let stored = self.path(&unit, "o");
+        let temporary = temporary_path(&stored);
+        std::fs::copy(object, &temporary).map_err(|e| format!("cannot write {}: {}", temporary.display(), e))?;
+        std::fs::rename(&temporary, &stored).map_err(|e| format!("cannot write {}: {}", stored.display(), e))?;
+        write_atomically(&self.path(&unit, "json"), record.to_json().as_bytes())?;
+        drop(lock);
+        Ok(())
+    }
+
+    /// Record that the program `name`, with the key `key`, was last linked
+    /// from the inputs hashed as `link` into a file hashed as `output`.
+    pub fn record_link(&self, name: &str, key: &str, link: &str, output: &str) -> Result<(), String> {
+        let unit = format!("programs/{}", name);
+        let lock = self.lock_file(&unit)?;
+        lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", unit, e))?;
+        if let Some(mut record) = self.program_record(name).filter(|r| r.key == key) {
+            record.link = link.to_string();
+            record.output = output.to_string();
+            write_atomically(&self.path(&unit, "json"), record.to_json().as_bytes())?;
+        }
+        drop(lock);
+        Ok(())
+    }
+
+    fn program_record(&self, name: &str) -> Option<ProgramRecord> {
+        ProgramRecord::parse(&std::fs::read_to_string(self.path(&format!("programs/{}", name), "json")).ok()?)
     }
 
     /// The interface hashes of the unit `name`'s files, by namespace, when
@@ -372,6 +433,41 @@ impl Record {
     }
 }
 
+/// A program's record, `programs/<program>.json`.
+#[derive(Debug, Clone, Default)]
+pub struct ProgramRecord {
+    /// The program's key ([`crate::keys::Keys::program_key`]).
+    pub key: String,
+    /// Its `[Link]` libraries, in order.
+    pub libraries: Vec<String>,
+    /// The hash of its last link's inputs (objects, libraries, output
+    /// path), and of the file that link wrote; empty before a link.
+    pub link: String,
+    pub output: String,
+}
+
+impl ProgramRecord {
+    fn to_json(&self) -> String {
+        format!(
+            "{{\"key\": \"{}\", \"libraries\": \"{}\", \"link\": \"{}\", \"output\": \"{}\"}}\n",
+            self.key,
+            self.libraries.join(";"),
+            self.link,
+            self.output
+        )
+    }
+
+    fn parse(text: &str) -> Option<ProgramRecord> {
+        let libraries = json_string(text, "libraries")?;
+        Some(ProgramRecord {
+            key: json_string(text, "key")?.to_string(),
+            libraries: libraries.split(';').filter(|l| !l.is_empty()).map(str::to_string).collect(),
+            link: json_string(text, "link").unwrap_or_default().to_string(),
+            output: json_string(text, "output").unwrap_or_default().to_string(),
+        })
+    }
+}
+
 /// `<namespace>=<hash>;...`, as a record holds interface hashes. Neither a
 /// namespace (a path) nor a hash has `=`, `;` or `"`.
 fn encode_interfaces(interfaces: &[(String, String)]) -> String {
@@ -450,6 +546,19 @@ fn compiler_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::Record;
+
+    #[test]
+    fn program_records_round_trip() {
+        let record = super::ProgramRecord {
+            key: "ab12".to_string(),
+            libraries: vec!["ssl".to_string(), "crypto".to_string()],
+            link: "cd34".to_string(),
+            output: "ef56".to_string(),
+        };
+        let read = super::ProgramRecord::parse(&record.to_json()).unwrap();
+        assert_eq!((read.key, read.libraries, read.link, read.output), (record.key, record.libraries, record.link, record.output));
+        assert!(super::ProgramRecord::parse("{\"key\": \"ab12\", \"libraries\": \"\"}").unwrap().libraries.is_empty());
+    }
 
     #[test]
     fn records_round_trip() {

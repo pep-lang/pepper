@@ -1157,6 +1157,16 @@ parsed.
   requires every other unit's code from it to match
   (`Cache::check_code`, `<unit>.trial.ll` on a mismatch).
   `--no-verify-cache` overrides the variable.
+- **Unchanged programs** (`programs/<root namespace>.json` and `.o`): when
+  `compiler::reused` finds every unit reused, it computes the program's key
+  (`Keys::program_key`: every unit's key and the initialization order) and,
+  when the program's record matches, puts its program object in place
+  (`Cache::program`): `compile_for_objects` returns without running sema
+  (`ForObjects::cached`), and `run` links the reused objects with the
+  recorded `[Link]` libraries. The record also holds the last link's inputs
+  (`link_key`: objects by content, libraries, output path) and the output's
+  hash (`Cache::record_link`); when both still match, the link is skipped
+  too. `run` stores the record after every build with a cache.
 - **Syntax trees** (`.pepi`, phase 2c): `program::load_with` takes a
   `ParseCache` (`Setup::parsed`), which the driver backs with the cache
   (`impl ParseCache for Cache`): `parsed/<hash of the path>.pepi` holds a
@@ -1478,7 +1488,10 @@ diagnostics"). The mechanics:
     edit, since a name's meaning depends on its expression) and the answer's ranges in the document back
     (`range_to_new`). A name inside the edit, or with no passed analysis
     yet, is answered from the current text's parse and linked program
-    (`Analysis::program`, milliseconds) with no sema model. Code actions
+    (`Analysis::program`, milliseconds) with no sema model.
+    `Analysis::program` loads through `PARSED`, a process-wide in-memory
+    `ParseCache` (by path and text), so only files that changed are parsed
+    again; the runtime's never are. Code actions
     use the current text's sema only once it has run. A hover from an
     analysis older than the current text ends with a note saying so
     (a declaration edited since may read differently), and says when the
@@ -1488,8 +1501,9 @@ diagnostics"). The mechanics:
 - Each background analysis runs these checks (`PepperLsp::diagnostics`):
   1. `parse_source_diag` on the buffer (precise parse errors).
   2. Otherwise, `Analysis::program` → `load_program(Root { unsaved text },
-     Setup { mode: Lenient })`, then `sema_model_of` (build every file, run
-     the platform filters, `struct_body::apply`, and `transform_pass`
+     Setup { mode: Lenient, parsed: PARSED })`, then `sema_model_of` (build
+     every file, run the platform filters, `struct_body::apply`, and
+     `transform_pass`
      **under `catch_unwind`**), then `visibility_diagnostics`.
      Unresolved-module imports are downgraded to warnings because the
      editor does not know the compile's `-I` directories.

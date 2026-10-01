@@ -69,6 +69,27 @@ impl<'p> Keys<'p> {
         Keys { program, units, inputs, unit_of_file, component, source_hashes, exact_positions: false }
     }
 
+    /// The key of the whole program, given every unit's key: what its
+    /// program object (`__program`, which runs each file's initializer in
+    /// initialization order) and link libraries follow from.
+    pub fn program_key(&self, compiler: &str, unit_keys: &[String]) -> String {
+        let mut hasher = blake3::Hasher::new();
+        let mut field = |bytes: &[u8]| {
+            hasher.update(&(bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        };
+        field(b"pepper program key 1");
+        field(compiler.as_bytes());
+        for (unit, key) in self.units.iter().zip(unit_keys) {
+            field(unit.name.as_bytes());
+            field(key.as_bytes());
+        }
+        for file in self.program.initialization_order() {
+            field(self.program.files[file].namespace.as_bytes());
+        }
+        hasher.finalize().to_hex().to_string()
+    }
+
     /// Whether `unit`'s key reads `file` by its interface hash.
     pub fn reads_interface(&self, unit: usize, file: usize) -> bool {
         !self.exact_positions && self.component[self.unit_of_file[file]] != self.component[unit]

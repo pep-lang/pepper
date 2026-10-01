@@ -466,3 +466,38 @@ fn a_function_whose_body_is_skipped_is_still_a_value() {
     assert!(!has_body(&edited, "twice"), "lib's bodies are skipped");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_unchanged_program_skips_sema_and_the_link() {
+    let dir = scratch("unchanged");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    let entry = project.join("main.pep");
+    write(&project, &[("main.pep", "main(): int { return 0; }\n")]);
+    std::env::set_current_dir(repo_root()).unwrap();
+    let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
+    let options = || {
+        pepper_driver::Options::parse_from([
+            "pepper".to_string(),
+            entry.to_string_lossy().into_owned(),
+            "-o".to_string(),
+            exe.to_string_lossy().into_owned(),
+            "--cache".to_string(),
+            cache.to_string_lossy().into_owned(),
+            "--build".to_string(),
+            dir.join("build").to_string_lossy().into_owned(),
+            "--no-verify-cache".to_string(),
+        ])
+    };
+    pepper_driver::run(options()).unwrap();
+    let linked = std::fs::metadata(&exe).unwrap().modified().unwrap();
+    // Nothing changed: sema does not run, and the executable is not linked again.
+    let units = pepper_driver::units_dir(&dir.join("build"), "main");
+    assert!(pepper_driver::compiler::compile_for_objects(&options(), &units).unwrap().cached.is_some());
+    pepper_driver::run(options()).unwrap();
+    assert_eq!(std::fs::metadata(&exe).unwrap().modified().unwrap(), linked);
+    // An edit checks and links again.
+    write(&project, &[("main.pep", "main(): int { return 1 - 1; }\n")]);
+    assert!(pepper_driver::compiler::compile_for_objects(&options(), &units).unwrap().cached.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}

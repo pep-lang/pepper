@@ -256,7 +256,8 @@ a file whose sources did not change, and whose imports' declarations did
 not change, is not compiled again (its bodies are not even checked), and one
 whose generated code did not change is not emitted again. Editing a function
 body recompiles only that file: the files importing it are reused. A file
-whose text did not change is not even parsed again. Delete
+whose text did not change is not even parsed again, and when nothing changed
+the compiler checks nothing and does not link again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
 `PEPPER_CACHE_DIR`. The optimization level is part of every object's key, so
 switching between `-O0` and `-O2` never reuses the other level's objects.

@@ -14,9 +14,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::SystemTime;
 
+use pepper_parser::ast;
 use pepper_parser::diagnostic as diag;
 use tower_lsp::lsp_types::{Range, Url};
 
@@ -41,6 +42,23 @@ pub struct Analysis {
     /// The background analysis has finished with it, whatever it found.
     checked: std::sync::atomic::AtomicBool,
 }
+
+/// Syntax trees of the files the server loaded, by path, with the text each
+/// was parsed from: an analysis loads its program again, but parses only
+/// the files that changed (the runtime's never do).
+pub struct Parsed(pub Mutex<HashMap<PathBuf, (String, ast::Module)>>);
+
+impl pepper_sema::program::ParseCache for Parsed {
+    fn get(&self, path: &Path, source: &str) -> Option<ast::Module> {
+        self.0.lock().unwrap().get(path).filter(|(text, _)| text == source).map(|(_, tree)| tree.clone())
+    }
+
+    fn put(&self, path: &Path, source: &str, module: &ast::Module) {
+        self.0.lock().unwrap().insert(path.to_path_buf(), (source.to_string(), module.clone()));
+    }
+}
+
+static PARSED: LazyLock<Parsed> = LazyLock::new(|| Parsed(Mutex::new(HashMap::new())));
 
 /// `f()` with `Target(...)` evaluated for `os` (and the build target's
 /// architecture).
@@ -147,7 +165,11 @@ impl Analysis {
             .get_or_init(|| as_target(self.os(), || {
                 let path = self.uri.to_file_path().map_err(|_| "not a file uri".to_string())?;
                 let root = pepper_sema::program::Root { name: self.uri.to_string(), source: self.text.clone(), path };
-                let setup = pepper_sema::program::Setup { mode: pepper_sema::program::Mode::Lenient, ..Default::default() };
+                let setup = pepper_sema::program::Setup {
+                    mode: pepper_sema::program::Mode::Lenient,
+                    parsed: Some(&*PARSED),
+                    ..Default::default()
+                };
                 // File times come from a coarser clock than `now`, up to
                 // tens of milliseconds behind: start the window earlier.
                 let started = SystemTime::now() - std::time::Duration::from_millis(100);

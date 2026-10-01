@@ -1272,6 +1272,18 @@ fn code_for_other_platforms_is_dimmed() {
     assert!(hints.iter().all(|h| h.tags == Some(vec![DiagnosticTag::UNNECESSARY]) && h.message.contains("Linux x86_64")));
 }
 
+#[test]
+fn a_kept_syntax_tree_is_reused_only_for_the_same_text() {
+    use pepper_sema::program::ParseCache;
+    let parsed = analysis::Parsed(std::sync::Mutex::new(HashMap::new()));
+    let path = std::path::Path::new("kept.pep");
+    let tree = parse_source("kept.pep", "main(): int { return 0; }").unwrap();
+    parsed.put(path, "main(): int { return 0; }", &tree);
+    assert!(parsed.get(path, "main(): int { return 0; }").is_some());
+    assert!(parsed.get(path, "main(): int { return 1; }").is_none());
+    assert!(parsed.get(std::path::Path::new("other.pep"), "main(): int { return 0; }").is_none());
+}
+
 const LINUX_ONLY: &str = r#"struct Socket { var handle: int; }
 [Target(OS(Linux))]
 open_socket(): Socket { return Socket(); }

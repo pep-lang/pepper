@@ -80,13 +80,13 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
 
     let build_dir = options.effective_build_dir();
-    let compiler::ForObjects { module: sema_module, program, trial, interfaces } = if options.emit_llvm {
-        compiler::compile_program(&options).map(|(module, program)| compiler::ForObjects { module, program, trial: None, interfaces: vec![] })?
+    let compiler::ForObjects { module: sema_module, program, trial, interfaces, cached } = if options.emit_llvm {
+        compiler::compile_program(&options)
+            .map(|(module, program)| compiler::ForObjects { module, program, trial: None, interfaces: vec![], cached: None })?
     } else {
         compiler::compile_for_objects(&options, &units_dir(&build_dir, &module_name))?
     };
     let mut timer = StageTimer::new(options.tracing("time"));
-    let link_libraries = link_libraries(&sema_module);
     let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
 
@@ -111,19 +111,50 @@ pub fn run(options: Options) -> Result<i32, String> {
     // Full pipeline: one object per unit (from the build cache when the
     // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
-    let built = objects(&options, &sema_module, trial.as_ref(), &interfaces, &program, &build_dir, &module_name)?;
-    if options.tracing("cache") {
-        for object in &built {
-            let outcome = match object.outcome {
-                Some(cache::Outcome::Hit) => "hit",
-                Some(cache::Outcome::SameCode) => "hit (same code)",
-                Some(cache::Outcome::Miss) => "miss",
-                None => continue,
-            };
-            eprintln!("cache: {} {}", object.unit, outcome);
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()?;
+    let program_name = program.files[0].namespace.clone();
+    let (objects, link_libraries, program_key) = match cached {
+        // Every unit and the program came from the cache: sema did not run.
+        Some(record) => {
+            let mut objects: Vec<PathBuf> =
+                program.units().iter().map(|u| units_dir(&build_dir, &module_name).join(format!("{}.o", u.name))).collect();
+            objects.push(build_dir.join(format!("{}.o", module_name)));
+            if options.tracing("cache") {
+                for unit in program.units() {
+                    eprintln!("cache: {} hit", unit.name);
+                }
+                eprintln!("cache: program hit");
+            }
+            (objects, record.libraries.clone(), Some(record))
         }
-    }
-    let objects: Vec<PathBuf> = built.into_iter().map(|o| o.path).collect();
+        None => {
+            let built = objects(&options, &sema_module, trial.as_ref(), &interfaces, &program, &build_dir, &module_name)?;
+            if options.tracing("cache") {
+                for object in &built {
+                    let outcome = match object.outcome {
+                        Some(cache::Outcome::Hit) => "hit",
+                        Some(cache::Outcome::SameCode) => "hit (same code)",
+                        Some(cache::Outcome::Miss) => "miss",
+                        None => continue,
+                    };
+                    eprintln!("cache: {} {}", object.unit, outcome);
+                }
+            }
+            let libraries = link_libraries(&sema_module);
+            // The next build can skip sema when nothing changes.
+            let keys: Option<Vec<String>> = built.iter().filter(|o| o.unit != "__program").map(|o| o.key.clone()).collect();
+            let record = match (&cache, keys) {
+                (Some(cache), Some(keys)) => {
+                    let key = keys::Keys::new(&program).program_key(cache.compiler(), &keys);
+                    let record = cache::ProgramRecord { key, libraries: libraries.clone(), ..Default::default() };
+                    cache.store_program(&program_name, &record, &build_dir.join(format!("{}.o", module_name)))?;
+                    Some(record)
+                }
+                _ => None,
+            };
+            (built.into_iter().map(|o| o.path).collect(), libraries, record)
+        }
+    };
     timer.stage("codegen and emission");
 
     // Discover runtime libs for linking.
@@ -145,10 +176,49 @@ pub fn run(options: Options) -> Result<i32, String> {
 
     // With `-g` on Windows, the runtime's visualizers go into the `.pdb`.
     let natvis = runtime_dirs.first().map(|dir| dir.join("debuggers").join("pepper.natvis")).filter(|path| options.emit_debug && cfg!(windows) && path.is_file());
-    linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref())?;
+    // An unchanged program linked into an unchanged file needs no link.
+    let link = link_key(&objects, &out_path, &libraries, &library_dirs);
+    let unchanged = program_key.as_ref().is_some_and(|record| {
+        !record.output.is_empty() && record.link == link && output_hash(&out_path).is_some_and(|h| h == record.output)
+    });
+    if !unchanged {
+        linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref())?;
+        if let (Some(cache), Some(record), Some(output)) = (&cache, &program_key, output_hash(&out_path)) {
+            cache.record_link(&program_name, &record.key, &link, &output)?;
+        }
+    } else if options.tracing("cache") {
+        eprintln!("cache: link skipped");
+    }
     timer.stage("link");
 
     Ok(0)
+}
+
+/// The hash of a link's inputs: the objects (by path and contents), the
+/// libraries, and where it writes.
+fn link_key(objects: &[PathBuf], output: &std::path::Path, libraries: &[String], library_dirs: &[PathBuf]) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"pepper link 1\0");
+    for object in objects {
+        hasher.update(object.to_string_lossy().as_bytes());
+        hasher.update(&[0]);
+        hasher.update(blake3::hash(&std::fs::read(object).unwrap_or_default()).as_bytes());
+    }
+    for library in libraries {
+        hasher.update(library.as_bytes());
+        hasher.update(&[0]);
+    }
+    for dir in library_dirs {
+        hasher.update(dir.to_string_lossy().as_bytes());
+        hasher.update(&[0]);
+    }
+    hasher.update(output.to_string_lossy().as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
+/// The hash of the file at `path`, if it can be read.
+fn output_hash(path: &std::path::Path) -> Option<String> {
+    std::fs::read(path).ok().map(|bytes| blake3::hash(&bytes).to_hex().to_string())
 }
 
 /// An object [`objects`] built.
@@ -162,6 +232,9 @@ pub struct UnitObject {
     /// How the build cache supplied it; `None` when it was not looked up
     /// (the program module, or `--no-cache`).
     pub outcome: Option<cache::Outcome>,
+    /// The unit's cache key; `None` for the program module, or without a
+    /// cache.
+    pub key: Option<String>,
 }
 
 /// Emit `program` (whose merged, checked module is `module`) as one object
@@ -251,7 +324,7 @@ pub fn objects(
     // Register the backend once, before the threads use it.
     default_target_machine()?;
     let outcomes = parallel(&jobs, |job| compile_unit(&setup, job))?;
-    Ok(jobs.into_iter().zip(outcomes).map(|(job, outcome)| UnitObject { unit: job.name, path: job.object, outcome }).collect())
+    Ok(jobs.into_iter().zip(outcomes).map(|(job, outcome)| UnitObject { unit: job.name, path: job.object, outcome, key: job.key }).collect())
 }
 
 /// Where [`objects`] puts the unit objects of the program `name`.

@@ -119,7 +119,7 @@ without being compiled or checked again, as long as what its imports declare
 did not change either: editing a function's body recompiles that file alone,
 while changing a signature also recompiles the files that import it. A file
 that compiled with warnings is checked again, so its warnings print on every
-build. Deleting `.pep/cache/` is always safe.
+build. When nothing changed, nothing is checked or linked again. Deleting `.pep/cache/` is always safe.
 
 ## When something is wrong
 
