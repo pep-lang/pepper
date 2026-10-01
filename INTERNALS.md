@@ -1334,6 +1334,10 @@ diagnostics"). The mechanics:
   with `static_type::of`, and returns the field's or method's location.
   `expr_at` starts a binary expression at its left operand (`expr_start`),
   since the parser's span for it starts at the operator.
+  Hover types a local whose type is inferred (`var w = f()`) from the sema
+  model (`member_lookup::local_type`, by its name's location; also on the
+  name where it is declared), and a field reached through any owner by
+  `member_lookup::field_type`.
 - **Implicit conversions.** `convert_to_traits` records each conversion it
   inserts whose value has a location in `Module::conversions` (string
   literals carry their `Loc` for this, and the `String` constructor call

@@ -279,6 +279,12 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
             }
         } else if s.start <= offset && offset < s.end {
             match stmt {
+                // The name being declared, under the cursor.
+                ast::Statement::Declaration(ast::Declaration::Variable(v))
+                    if v.name_span.start <= offset && offset <= v.name_span.end =>
+                {
+                    out.push(Symbol { name: v.name.clone(), name_span: v.name_span, ty: variable_type(v) });
+                }
                 ast::Statement::Block(b) => collect_locals_upto(b, offset, out),
                 ast::Statement::Branch(br) => {
                     if br.if_block.span.start <= offset && offset < br.if_block.span.end {
@@ -749,6 +755,17 @@ fn find_sema_struct<'a>(module: &'a SemaModule, name: &str) -> Option<&'a Struct
 
 fn struct_member_type(st: &StructDef, name: &str) -> Option<String> {
     st.field_members.iter().find(|f| f.name == name).map(|f| f.ty.to_string())
+}
+
+/// A symbol's type: as written, or as sema inferred it for a local
+/// (`var worker = _async_worker()`); `unknown` when neither says.
+fn symbol_type(sema: Option<&SemaModule>, s: &Symbol) -> String {
+    if !s.ty.is_empty() && s.ty != "unknown" {
+        return s.ty.clone();
+    }
+    sema.and_then(|m| pepper_sema::member_lookup::local_type(m, FileId(0), s.name_span.start))
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn is_this(expr: &ast::Expression) -> bool {
@@ -1434,6 +1451,15 @@ impl PepperLsp {
         {
             return Some(Hover { contents: md(overload_hover(program, function, others)), range: None });
         }
+        // A local's name where it is declared (`var worker = ...`).
+        if let Some((body, _)) = body_at(&ast, offset)
+            && let Some(local) = locals_at(body, offset)
+                .into_iter()
+                .find(|s| s.name_span.start <= offset && offset <= s.name_span.end)
+        {
+            let head = format!("`{}` — `{}`", local.name, symbol_type(sema, &local));
+            return Some(Hover { contents: md(head), range: None });
+        }
         let expr = find_expr(&ast, offset)?;
 
         let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
@@ -1453,6 +1479,7 @@ impl PepperLsp {
             let local = locals.iter().chain(&struct_members).any(|s| s.name == id);
             if local { None } else { program.and_then(|p| declaration_doc(p, id)) }
         };
+        let symbol_type = |s: &Symbol| symbol_type(sema, s);
         // Docs of member `name` of `lhs`: its type when the hover can tell
         // (`this`, a typed variable, a type name for a static call).
         let member_docs = |lhs: &ast::Expression, name: &str| {
@@ -1461,10 +1488,14 @@ impl PepperLsp {
                 ast::Expression::SymbolRef { id, .. } if id == "this" => enclosing_struct.map(|s| s.name.clone()),
                 ast::Expression::SymbolRef { id, .. } => {
                     match locals.iter().rev().chain(&struct_members).chain(&globals).find(|s| s.name == *id) {
-                        Some(symbol) => type_base_name(&symbol.ty),
+                        Some(symbol) => type_base_name(&symbol_type(symbol)),
                         None => Some(id.clone()),
                     }
                 }
+                // A field's field (`worker.core.state`): the inner field's type.
+                ast::Expression::MemberAccess { name_span, .. } => sema
+                    .and_then(|m| pepper_sema::member_lookup::field_type(m, FileId(0), name_span.start))
+                    .and_then(|t| type_base_name(&t.to_string())),
                 ast::Expression::FunctionCall { function, .. } => match &**function {
                     ast::Expression::SymbolRef { id, .. } => Some(id.clone()),
                     ast::Expression::TypeLiteral(t) => Some(t.name.clone()),
@@ -1488,10 +1519,10 @@ impl PepperLsp {
                 Some(Hover { contents: md(format!("`{}` — `{}`", value, ty)), range: None })
             }
             ast::Expression::SymbolRef { id, .. } => {
-                let rendered = locals.iter().find(|s| s.name == *id)
+                let rendered = locals.iter().rev().find(|s| s.name == *id)
                     .or_else(|| struct_members.iter().find(|s| s.name == *id))
                     .or_else(|| globals.iter().find(|s| s.name == *id))
-                    .map(|s| s.ty.clone())
+                    .map(symbol_type)
                     .or_else(|| {
                         // Cross-file: look up in the sema model.
                         sema.and_then(|m| {
@@ -1527,11 +1558,14 @@ Returns a fresh value: it shares nothing with the arguments.");
                 } else if let Some(case) = sema.and_then(|m| enum_case_of(m, lhs, name)).or_else(|| enum_case_in(&ast, lhs, name)) {
                     case
                 } else {
-                    sema
-                        .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
+                    // The field of the owner's type; failing that, any
+                    // struct's field of that name.
+                    sema.and_then(|m| pepper_sema::member_lookup::field_type(m, FileId(0), offset))
+                        .map(|t| t.to_string())
+                        .or_else(|| sema.and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name))))
                         .unwrap_or_else(|| "unknown".to_string())
                 };
-                Some(Hover { contents: md(with_doc(format!("`.`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
+                Some(Hover { contents: md(with_doc(format!("`.{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
             }
             ast::Expression::FunctionCall { function, .. } => match &**function {
                 ast::Expression::SymbolRef { id, .. } => {
@@ -1545,7 +1579,7 @@ Returns a fresh value: it shares nothing with the arguments.");
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .or_else(|| sema.and_then(|m| enum_method_signature(m, name)))
                         .unwrap_or_else(|| "unknown".to_string());
-                    Some(Hover { contents: md(with_doc(format!(".`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
+                    Some(Hover { contents: md(with_doc(format!("`.{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
                 }
                 _ => None,
             },

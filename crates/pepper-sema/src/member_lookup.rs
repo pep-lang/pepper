@@ -5,14 +5,45 @@
 
 use pepper_parser::diagnostic::{FileId, Loc, Sources};
 
-use crate::model::{Expression, FunctionDef, Module};
+use crate::model::{Block, Declaration, Expression, FunctionDef, Module, Statement, VariableDef};
 use crate::static_type::{self, StructTable};
 use crate::type_name::TypeName;
+
+/// What a member access names.
+pub enum Member<'m> {
+    Field(&'m VariableDef),
+    Method(&'m FunctionDef),
+}
+
+impl Member<'_> {
+    /// Where the member is declared.
+    pub fn loc(&self) -> Loc {
+        match self {
+            Member::Field(f) => f.loc,
+            Member::Method(m) => m.loc,
+        }
+    }
+}
 
 /// The declaration of the member whose name, in file `file`, covers
 /// `offset`: a field's or a method's location. `None` when no member access
 /// is there, or its owner's type is not a struct the model knows.
 pub fn member_declaration(module: &Module, file: FileId, offset: usize) -> Option<Loc> {
+    Some(member_at(module, file, offset)?.loc())
+}
+
+/// The type of the field whose name, in file `file`, covers `offset` in a
+/// member access (`core` in `worker.core`), as the owner's type has it.
+pub fn field_type(module: &Module, file: FileId, offset: usize) -> Option<&TypeName> {
+    match member_at(module, file, offset)? {
+        Member::Field(f) => Some(&f.ty),
+        Member::Method(_) => None,
+    }
+}
+
+/// The member whose name, in file `file`, covers `offset` (see
+/// [`member_declaration`]).
+pub fn member_at(module: &Module, file: FileId, offset: usize) -> Option<Member<'_>> {
     // The innermost member name at `offset`, with the struct whose code it
     // is in (what `this` means there).
     let source = module.sources.get(file).map(|(_, text)| text);
@@ -66,15 +97,35 @@ pub fn member_declaration(module: &Module, file: FileId, offset: usize) -> Optio
         .iter()
         .find(|s| s.ty.to_string() == pointee)
         .or_else(|| module.structs.iter().find(|s| s.name == base))?;
-    let field = st.field_members.iter().find(|f| f.name == name).map(|f| f.loc);
+    let field = st.field_members.iter().find(|f| f.name == name).map(Member::Field);
     let method = || {
         st.method_members
             .iter()
             .chain(&st.generic_methods)
             .find(|m| m.name == name || crate::passes::overloads::set_name(&m.name) == name)
-            .map(|m| m.loc)
+            .map(Member::Method)
     };
     // A captured local is a field of its closure's struct, declared where
     // it is used: not a member the source declares.
-    field.or_else(method).filter(|loc| !loc.is_none() && *loc != used && !st.name.starts_with("__closure"))
+    field.or_else(method).filter(|m| !m.loc().is_none() && m.loc() != used && !st.name.starts_with("__closure"))
+}
+
+/// The type sema gave the local declared at `name` (the location of its
+/// name) in file `file`: what `var worker = _async_worker()` infers. `None`
+/// when no checked code declares a local there. In generic code, the first
+/// specialization's type stands for all of them.
+pub fn local_type(module: &Module, file: FileId, name: usize) -> Option<&TypeName> {
+    fn find<'m>(block: &'m Block, file: FileId, name: usize) -> Option<&'m TypeName> {
+        block.items.iter().find_map(|statement| match statement {
+            Statement::Declaration(Declaration::Variable(v)) => {
+                (v.loc.file == file && v.loc.span.start == name && !v.ty.is_auto() && !v.ty.is_empty()).then_some(&v.ty)
+            }
+            Statement::Block(b) => find(b, file, name),
+            Statement::Branch(b) => find(&b.if_block, file, name).or_else(|| b.else_block.as_ref().and_then(|e| find(e, file, name))),
+            Statement::While(w) => find(&w.block, file, name),
+            _ => None,
+        })
+    }
+    let structs = module.structs.iter().flat_map(|st| st.constructors.iter().chain([&st.destructor]).chain(&st.method_members));
+    module.functions.iter().chain(structs).find_map(|f| f.body.as_ref().and_then(|b| find(b, file, name)))
 }

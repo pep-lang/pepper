@@ -942,3 +942,35 @@ fn definition_inside_a_synthesized_call_is_the_name() {
     let used = byte_to_lsp_pos(&text, captured);
     assert!(found.as_ref().is_none_or(|l| l[0].range.start != used), "{:?}", found);
 }
+
+const INFERRED: &str = r#"struct Core {
+    ## Whether the task finished.
+    var finished: bool;
+}
+struct Worker {
+    ## The task's shared state.
+    var core: Core;
+}
+worker_of(): Worker { return Worker(); }
+main(): int {
+    var worker = worker_of();
+    var done = worker.core.finished;
+    return 0;
+}
+"#;
+
+/// A local whose type sema inferred hovers with that type, and so do the
+/// fields reached through it (`worker.core.finished`), with their docs.
+#[test]
+fn hover_on_an_inferred_local_and_its_fields() {
+    let (uri, text, program) = load("inferred_hover", INFERRED, "main.pep");
+    let worker = hover(&uri, &text, &program, at(&text, "worker.core", 0, 0));
+    assert!(worker.contains("`worker` — `Worker`"), "{}", worker);
+    let core = hover(&uri, &text, &program, at(&text, "core.finished", 0, 0));
+    assert!(core.contains("`Core`") && core.contains("shared state"), "{}", core);
+    let finished = hover(&uri, &text, &program, at(&text, "finished;", 0, 0));
+    assert!(finished.contains("`bool`") && finished.contains("task finished"), "{}", finished);
+    let done = hover(&uri, &text, &program, at(&text, "done", 0, 0));
+    assert!(done.contains("`bool`"), "{}", done);
+}
+
