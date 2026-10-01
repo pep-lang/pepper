@@ -204,6 +204,33 @@ test(): int {
 }
 
 #[test]
+fn ptr_arithmetic_strides_by_pointer_and_float_elements() {
+    // `p + n` advances `n` elements: a pointer element is 8 bytes and a
+    // double 8, a float 4. Pointer and float elements used to stride by one
+    // byte and four bytes, so `slot + 1` on a `__ptr<__ptr<void>>` (an out
+    // parameter pair for CreatePipe) wrote across the first slot.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    __ptr<__ptr<void>> slots = _pep_malloc(16);
+    __ptr<double> d = _pep_malloc(16);
+    __ptr<float> f = _pep_malloc(16);
+    var r = ((slots + 1) as long - slots as long) as int;
+    r = r * 100 + ((d + 1) as long - d as long) as int;
+    r = r * 100 + ((f + 1) as long - f as long) as int;
+    _pep_free(slots);
+    _pep_free(d);
+    _pep_free(f);
+    return r;
+}
+"#
+        ),
+        80804
+    );
+}
+
+#[test]
 fn ptr_compares_with_pointer_and_integer_operands() {
     // `==`/`!=` with a pointer on either side and a pointer or an integer on
     // the other compare addresses. A pointer on the left of an integer used

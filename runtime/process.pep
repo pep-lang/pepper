@@ -1,4 +1,5 @@
-## The running program: its command-line arguments and how it ends.
+## The running program's arguments and exit, kept for the deprecated
+## prelude `arguments()` and `exit()`; the `process` module has them now.
 
 [Target(OS(Linux))]
 extern void* fopen(char* path, char* mode);
@@ -17,57 +18,40 @@ extern void* __p___argv();
 extern void _Exit(int status);
 extern int fflush(void* stream);
 
-## Returns the program's command-line arguments.
+## Deprecated: use `process.arguments` instead.
 ##
-## Element 0 is the program as it was started (usually its path), and the
-## arguments typed after it follow in order, as the shell passed them: a
-## quoted argument with spaces is one element. Each call builds a new array.
-##
-## On Windows the arguments are in the process's ANSI code page, so text
-## outside it is not preserved.
-##
-## `main` receives the same array when it is declared
-## `main(args: String[]): int`; `arguments()` reads it anywhere else.
+## Returns the program's command-line arguments, as `process.arguments()`
+## does.
 ##
 ## @returns the program name followed by its arguments
-## @example
-##     verbose(): bool {
-##         for (var argument in arguments()) {
-##             if (argument == "-v") {
-##                 return true;
-##             }
-##         }
-##         return false;
-##     }
+[Deprecated("use 'process.arguments' instead (import process)")]
 export arguments(): Array<String> {
     return _arguments();
 }
 
 # The arguments a `main(args: String[])` receives: the compiler's
 # synthesized `main()` calls this (sema's `passes::entry_point`), under a
-# name a program's own `arguments` cannot shadow.
+# name a program's own `arguments` cannot shadow. `process.arguments()`
+# calls it too.
 export _pep_arguments(): Array<String> {
     return _arguments();
 }
 
-## Ends the program at once with status `code`.
+## Deprecated: use `process.exit` instead.
 ##
-## Flushes standard output and every other C output stream first, so text
-## printed so far is not lost. Nothing else runs: locals are not released,
-## destructors do not run, and other threads stop where they are. Returning
-## from `main` is the usual way to end; `exit` is for ending from deep inside
-## a call.
+## Ends the program at once with status `code`, as `process.exit(code)`
+## does.
 ##
 ## @param code the exit status: 0 for success, anything else for failure
-##   (only its low 8 bits reach a POSIX parent)
-## @example
-##     if (arguments().count() < 2) {
-##         print("usage: tool FILE");
-##         exit(2);
-##     }
+[Deprecated("use 'process.exit' instead (import process)")]
 export exit(code: int) {
-    # C `_Exit`, not `exit`: this function takes the name, and flushing
-    # here does what `exit` would before it ends the process.
+    _pep_exit(code);
+}
+
+# Ends the program: `process.exit` and the deprecated `exit`.
+export _pep_exit(code: int) {
+    # C `_Exit`, not `exit`: Pepper's `exit` takes the name, and flushing
+    # here does what C's `exit` would before it ends the process.
     fflush(__null);
     _Exit(code);
 }

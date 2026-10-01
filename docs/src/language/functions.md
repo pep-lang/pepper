@@ -198,10 +198,11 @@ order. Declare the parameter only when the program reads it, as a Windows
 console program declares `argc`/`argv` only when it needs them. Any other
 parameter list on `main` is an error, and so is declaring both forms.
 
-Elsewhere, `arguments()` returns the same array, so code outside `main` can
-read the arguments without having them passed down. `exit(code)` ends the
-program at once with status `code`, from anywhere, after flushing what was
-printed.
+Elsewhere, `process.arguments()` returns the same array, so code outside
+`main` can read the arguments without having them passed down.
+`process.exit(code)` ends the program at once with status `code`, from
+anywhere, after flushing what was printed. Both are in the
+[`process` module](processes.md), so the file needs `import process`.
 
 ```pepper
 {{#include ../../examples/functions-arguments.pep}}
@@ -210,7 +211,7 @@ printed.
 `exit` skips everything that would run on the way out of `main`: locals are
 not released and destructors do not run. Prefer returning from `main`, and
 keep `exit` for ending from deep inside a call. See
-[Arguments and exit](../reference/process.md).
+[Processes](processes.md).
 
 ## Functions as values
 

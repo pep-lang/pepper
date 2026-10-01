@@ -58,7 +58,7 @@ closures, modules (with `export * from` re-exports), `Result`-based error handli
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, and command-line arguments (`main(args: String[])`). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, command-line arguments (`main(args: String[])`), and starting child processes. That is enough to write real
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:

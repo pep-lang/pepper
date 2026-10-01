@@ -93,3 +93,12 @@ export _io_socket_send_all;
 export _io_sys_code_write_zero;
 export _io_in_task;
 export _io_text_copy;
+
+# For the process module only: error text and Windows UTF-16 conversion.
+export _io_sys_error_message;
+[Target(OS(Windows))]
+export _io_win_wide;
+[Target(OS(Windows))]
+export _io_win_narrow;
+[Target(OS(Windows))]
+export _io_win_wide_len;

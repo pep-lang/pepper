@@ -16,7 +16,7 @@ use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_do
 /// A file not named here is listed after these, titled by its path.
 const PAGES: &[(&str, &str)] = &[
     ("internals.pep", "Built-in functions"),
-    ("process.pep", "Arguments and exit"),
+    ("process.pep", "Arguments and exit (deprecated)"),
     ("string.pep", "String"),
     ("array.pep", "Array"),
     ("hash.pep", "HashMap and HashSet"),
@@ -39,6 +39,10 @@ const PAGES: &[(&str, &str)] = &[
     ("async/cpus.pep", "Processor counts"),
     ("async/task.pep", "Tasks"),
     ("async/driver.pep", "I/O backends"),
+    ("process/module.pep", "The process module"),
+    ("process/command.pep", "Command"),
+    ("process/child.pep", "Child"),
+    ("process/current.pep", "The running process"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

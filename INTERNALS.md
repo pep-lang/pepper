@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pepper-docgen`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; `runtime/io/` is an importable module. |
+| `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: standalone files plus one `tests/<Feature.Case>/test.pep` per folder, and `tests/parser_corpus.rs` (the root package's only test). |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), and `install-vscode-extension.ps1`. |
@@ -1271,13 +1271,14 @@ diagnostics"). The mechanics:
 | `math/` | The `math` module (`import math`): `parse.pep` (`parse_int`, deprecated: a wrapper over `long.parse`). The home for numeric functions beyond the operators. |
 | `tls/` | The `tls` module (`import tls`): `stream.pep` (`TlsConnector`, `TlsAcceptor`, `TlsStream`) over a `_tls_sys_*` layer in `openssl.pep` (Linux, macOS) and `schannel.pep` (Windows: SSPI over buffers, checking the server's certificate itself with `CertVerifyCertificateChainPolicy`, and importing a server's PKCS #8 key into the user's key storage provider under a per-process name that freeing the context deletes). `openssl.pep` loads libssl with `dlopen` on first use (`_OpenSsl`, a `[Shared]` table of C function pointers behind a `Lazy`), so programs link nothing extra and Homebrew's OpenSSL needs no search path. Each connection's bytes go through a custom BIO whose callbacks call `io._io_sys_socket_receive`/`_send`: those wait (parking a task) when the socket would block, so OpenSSL never sees `SSL_ERROR_WANT_*`, and an io error a callback meets is kept in the session block and returned instead of OpenSSL's report. |
 | `http/` | The `http` module (`import http`): `message.pep` (`Headers`, `Request`, `Response`), `client.pep` (`Client`: parses the URL with `Uri`, opens a `TcpStream` and, for `https://`, a `TlsStream`, sends one request with `Connection: close` and reads the response), `server.pep` (`Server.serve`: `spawn_on_each_worker` accept loops on a `SharedTcpListener`, one `spawn_local` task per connection, keep-alive, `100-continue`, 400/413/431 refusals) and `wire.pep` (`_HttpConnection`, plain or TLS; `_HttpReader`, a buffered reader of lines and byte runs; header, Content-Length, chunked and read-to-close body parsing; a field line that is not UTF-8, such as Latin-1 obs-text, is read with U+FFFD in place of those bytes). |
+| `process/` | The `process` module (`import process`): `command.pep` (`Command`, `Stream`, `Output`; `run()` reads standard output in the calling task and standard error on its own thread), `child.pep` (`Child`, `ExitStatus`; `wait()` runs the blocking wait through `run_blocking`, encoding the status in one `long`), `current.pep` (`arguments`, `exit`, `id`, `executable_path`, working directory), over a `_process_sys_*` layer in `sys_posix.pep` (`posix_spawnp` with file actions; close-on-exec pipes; macOS adds `POSIX_SPAWN_CLOEXEC_DEFAULT`; `environ` through `dlsym` on Linux, since an extern cannot name a variable) and `sys_windows.pep` (`CreateProcessW` with the C runtime's argument quoting and a UTF-16 environment block; the child's inheritable handles exist only under `_process_spawn_lock`). `arguments` and `exit` are declared as `_process_arguments`/`_process_exit` and re-exported under their names, because the deprecated prelude functions in `runtime/process.pep` still hold those names until per-module export namespaces (#244). |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
 
 - **Loading.** Every top-level `runtime/*.pep` is a prelude file. Its
   `export`s are visible in every program without an import. `runtime/io` is
   found as a module because the runtime directory is on the search path.
 - **Naming convention for internals.** Names prefixed `_pep_` (core),
-  `_io_` (io module) and `_async_` (async module) are internals. They are `export`ed so other runtime
+  `_io_` (io module), `_async_` (async module) and `_process_` (process module) are internals. They are `export`ed so other runtime
   files can use them. They are exempt from the documentation standard, and
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).

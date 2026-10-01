@@ -5722,13 +5722,19 @@ fn apply_op<'ctx>(
                     // The declared result type is authoritative when the lhs
                     // type did not resolve (a malloc'd buffer is `void*` with
                     // no element), so a `void* + n` advances n bytes.
-                    let element_ty = match (ptr_elem, ptr_elem_name, ty_name) {
-                        (Some(BasicTypeEnum::IntType(it)), _, _) => it,
-                        (_, Some("void"), _) => context.i8_type(),
+                    let element_ty: BasicTypeEnum = match (ptr_elem, ptr_elem_name, ty_name) {
+                        (Some(it @ BasicTypeEnum::IntType(_)), _, _)
+                        | (Some(it @ BasicTypeEnum::FloatType(_)), _, _)
+                        | (Some(it @ BasicTypeEnum::PointerType(_)), _, _) => it,
+                        (_, Some("void"), _) => context.i8_type().into(),
+                        // A pointer to pointers (`void**`) strides by a pointer.
+                        (_, Some(name), _) if name.ends_with('*') => {
+                            context.ptr_type(inkwell::AddressSpace::default()).into()
+                        }
                         // A declared pointer result whose element type did not
                         // resolve (`void*` from a malloc'd buffer): stride by byte.
-                        (_, _, r) if r.ends_with('*') => context.i8_type(),
-                        _ => context.i32_type(),
+                        (_, _, r) if r.ends_with('*') => context.i8_type().into(),
+                        _ => context.i32_type().into(),
                     };
                     let advanced = unsafe {
                         builder
