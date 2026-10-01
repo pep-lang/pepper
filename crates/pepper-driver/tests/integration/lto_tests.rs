@@ -67,7 +67,8 @@ fn lto_units_are_cached_bitcode() {
     let lto = build(&["-O2"]);
     assert!(lto.iter().all(|o| o.path.extension().is_some_and(|e| e == "bc")), "{:?}", lto);
     let bitcode = std::fs::read(&lto.iter().find(|o| o.unit == "main").unwrap().path).unwrap();
-    assert!(bitcode.starts_with(b"BC\xC0\xDE"), "the unit's file is not bitcode");
+    // On Apple targets LLVM wraps bitcode in a header of its own.
+    assert!(bitcode.starts_with(b"BC\xC0\xDE") || bitcode.starts_with(b"\xDE\xC0\x17\x0B"), "the unit's file is not bitcode");
     let objects = build(&["-O2", "--lto=off"]);
     assert!(objects.iter().all(|o| o.path.extension().is_some_and(|e| e == "o")), "{:?}", objects);
     // Switching back reuses the bitcode.
