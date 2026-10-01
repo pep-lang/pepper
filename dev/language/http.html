@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b178e930.js";
+            window.path_to_searchindex_js = "../searchindex-407fd0c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f75ba97a.js"></script>
+        <script src="../toc-6e3ed46d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -231,8 +231,8 @@ main(): int {
 <ul>
 <li>A <code>Request</code> has a <code>method</code>, a <code>url</code>, <code>headers</code> and a body. For a client
 the <code>url</code> is absolute (<code>https://example.com/items?page=2</code>); a server
-handler gets the request target (<code>/items?page=2</code>), and <code>path()</code> and
-<code>query()</code> split it at the <code>?</code>.</li>
+handler gets the request target (<code>/items?page=2</code>). <code>uri()</code> parses either
+as a <a href="#urls"><code>Uri</code></a>, and <code>path()</code> and <code>query()</code> return its parts.</li>
 <li>A <code>Response</code> has a <code>status</code>, a <code>reason</code>, <code>headers</code> and a body.
 <code>is_success()</code> tests for a 2xx status.</li>
 <li><code>Headers</code> maps each field name to its values. Names ignore case (they are
@@ -244,6 +244,34 @@ returns them all, and <code>names()</code> lists the fields in no defined order.
 they chain. <code>body()</code> returns the bytes, for any body including binary
 ones; <code>text()</code> decodes them as UTF-8, replacing invalid bytes with U+FFFD.</li>
 </ul>
+<h2 id="urls"><a class="header" href="#urls">URLs</a></h2>
+<p><code>Uri</code> (in the prelude, so no import is needed) parses any URI reference
+following RFC 3986: an absolute URI with any scheme (<code>https:</code>, <code>mailto:</code>,
+<code>file:</code>) or a relative reference such as a request target. It splits the
+text into <code>scheme</code>, <code>user_info</code>, <code>host</code>, <code>port</code>, <code>path</code>, <code>query</code> and
+<code>fragment</code>; the parts that can be missing are optionals. Components keep
+their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
+<pre><code class="language-pepper">main(): int {
+    # Any scheme parses; the scheme is lowercased and nothing else changes.
+    var uri = Uri.parse("HTTPS://user@example.com:8443/caf%C3%A9?page=2#top").value();
+    assert(uri.scheme == "https" &amp;&amp; uri.host.value() == "example.com", "scheme and host");
+    assert(uri.port.value() == 8443 &amp;&amp; uri.user_info.value() == "user", "port and user information");
+    assert(uri.path == "/caf%C3%A9" &amp;&amp; uri.query.value() == "page=2", "path and query keep their escapes");
+    assert(Uri.decode(uri.path).value() == "/café", "decoded path");
+    assert(uri.path_and_query() == "/caf%C3%A9?page=2", "what an HTTP request line names");
+
+    # Missing parts are None: a mailto URI has no authority.
+    var mail = Uri.parse("mailto:someone@example.com").value();
+    assert(mail.host.is_none() &amp;&amp; mail.path == "someone@example.com", "no authority");
+
+    # A relative reference has no scheme, like a request target on a server.
+    var target = Uri.parse("/items?page=2").value();
+    assert(!target.is_absolute() &amp;&amp; target.path == "/items", "relative");
+
+    assert(Uri.parse("http://example.com/a b").is_err(), "a space must be percent-encoded");
+    return 0;
+}
+</code></pre>
 <h2 id="client"><a class="header" href="#client">Client</a></h2>
 <ul>
 <li><code>Client()</code> trusts the system’s root certificates for <code>https://</code> URLs.
@@ -282,8 +310,9 @@ reason phrase when <code>reason</code> is empty (<code>reason_phrase(status)</co
 supported yet.</li>
 </ul>
 <p>The reference pages for <a href="../reference/http-message.html">messages</a>, the
-<a href="../reference/http-client.html">client</a> and the
-<a href="../reference/http-server.html">server</a> document every method.</p>
+<a href="../reference/http-client.html">client</a>, the
+<a href="../reference/http-server.html">server</a> and <a href="../reference/uri.html"><code>Uri</code></a>
+document every method.</p>
 
                     </main>
 

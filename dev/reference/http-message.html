@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b178e930.js";
+            window.path_to_searchindex_js = "../searchindex-407fd0c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f75ba97a.js"></script>
+        <script src="../toc-6e3ed46d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -373,21 +373,33 @@ server handler, the request target (<code>/path?query</code>).</p>
 <ul>
 <li>this request</li>
 </ul>
+<h4 id="uri"><a class="header" href="#uri">uri</a></h4>
+<pre><code class="language-pepper">uri(): Result&lt;Uri&gt;
+</code></pre>
+<p>Parses <code>url</code> as a URI reference: an absolute URL for a request a
+client sends, or the target (<code>/items?page=2</code>) for one a server
+received.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
+</ul>
 <h4 id="path"><a class="header" href="#path">path</a></h4>
 <pre><code class="language-pepper">path(): String
 </code></pre>
-<p>Returns the path: the target up to any <code>?</code>.</p>
+<p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
+is empty.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the path, such as <code>/items</code></li>
+<li>the path, such as <code>/items</code>, or an empty string when <code>url</code> is not a valid URI reference</li>
 </ul>
 <h4 id="query"><a class="header" href="#query">query</a></h4>
 <pre><code class="language-pepper">query(): String
 </code></pre>
-<p>Returns the query: the target after the first <code>?</code>.</p>
+<p>Returns the query of <code>url</code>: the text after <code>?</code>, with its
+percent-escapes (see <code>Uri.decode</code>).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the query without the <code>?</code>, or an empty string for none</li>
+<li>the query without the <code>?</code>, or an empty string for none or when <code>url</code> is not a valid URI reference</li>
 </ul>
 <h4 id="body"><a class="header" href="#body">body</a></h4>
 <pre><code class="language-pepper">body(): u8[]

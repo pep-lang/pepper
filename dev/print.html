@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b178e930.js";
+            window.path_to_searchindex_js = "searchindex-407fd0c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f75ba97a.js"></script>
+        <script src="toc-6e3ed46d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -9580,8 +9580,8 @@ main(): int {
 <ul>
 <li>A <code>Request</code> has a <code>method</code>, a <code>url</code>, <code>headers</code> and a body. For a client
 the <code>url</code> is absolute (<code>https://example.com/items?page=2</code>); a server
-handler gets the request target (<code>/items?page=2</code>), and <code>path()</code> and
-<code>query()</code> split it at the <code>?</code>.</li>
+handler gets the request target (<code>/items?page=2</code>). <code>uri()</code> parses either
+as a <a href="#urls"><code>Uri</code></a>, and <code>path()</code> and <code>query()</code> return its parts.</li>
 <li>A <code>Response</code> has a <code>status</code>, a <code>reason</code>, <code>headers</code> and a body.
 <code>is_success()</code> tests for a 2xx status.</li>
 <li><code>Headers</code> maps each field name to its values. Names ignore case (they are
@@ -9593,6 +9593,34 @@ returns them all, and <code>names()</code> lists the fields in no defined order.
 they chain. <code>body()</code> returns the bytes, for any body including binary
 ones; <code>text()</code> decodes them as UTF-8, replacing invalid bytes with U+FFFD.</li>
 </ul>
+<h2 id="urls"><a class="header" href="#urls">URLs</a></h2>
+<p><code>Uri</code> (in the prelude, so no import is needed) parses any URI reference
+following RFC 3986: an absolute URI with any scheme (<code>https:</code>, <code>mailto:</code>,
+<code>file:</code>) or a relative reference such as a request target. It splits the
+text into <code>scheme</code>, <code>user_info</code>, <code>host</code>, <code>port</code>, <code>path</code>, <code>query</code> and
+<code>fragment</code>; the parts that can be missing are optionals. Components keep
+their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
+<pre><code class="language-pepper">main(): int {
+    # Any scheme parses; the scheme is lowercased and nothing else changes.
+    var uri = Uri.parse("HTTPS://user@example.com:8443/caf%C3%A9?page=2#top").value();
+    assert(uri.scheme == "https" &amp;&amp; uri.host.value() == "example.com", "scheme and host");
+    assert(uri.port.value() == 8443 &amp;&amp; uri.user_info.value() == "user", "port and user information");
+    assert(uri.path == "/caf%C3%A9" &amp;&amp; uri.query.value() == "page=2", "path and query keep their escapes");
+    assert(Uri.decode(uri.path).value() == "/café", "decoded path");
+    assert(uri.path_and_query() == "/caf%C3%A9?page=2", "what an HTTP request line names");
+
+    # Missing parts are None: a mailto URI has no authority.
+    var mail = Uri.parse("mailto:someone@example.com").value();
+    assert(mail.host.is_none() &amp;&amp; mail.path == "someone@example.com", "no authority");
+
+    # A relative reference has no scheme, like a request target on a server.
+    var target = Uri.parse("/items?page=2").value();
+    assert(!target.is_absolute() &amp;&amp; target.path == "/items", "relative");
+
+    assert(Uri.parse("http://example.com/a b").is_err(), "a space must be percent-encoded");
+    return 0;
+}
+</code></pre>
 <h2 id="client"><a class="header" href="#client">Client</a></h2>
 <ul>
 <li><code>Client()</code> trusts the system’s root certificates for <code>https://</code> URLs.
@@ -9631,8 +9659,9 @@ reason phrase when <code>reason</code> is empty (<code>reason_phrase(status)</co
 supported yet.</li>
 </ul>
 <p>The reference pages for <a href="#httpmessagepep">messages</a>, the
-<a href="#httpclientpep">client</a> and the
-<a href="#httpserverpep">server</a> document every method.</p>
+<a href="#httpclientpep">client</a>, the
+<a href="#httpserverpep">server</a> and <a href="#uripep"><code>Uri</code></a>
+document every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -19619,21 +19648,33 @@ server handler, the request target (<code>/path?query</code>).</p>
 <ul>
 <li>this request</li>
 </ul>
+<h4 id="uri"><a class="header" href="#uri">uri</a></h4>
+<pre><code class="language-pepper">uri(): Result&lt;Uri&gt;
+</code></pre>
+<p>Parses <code>url</code> as a URI reference: an absolute URL for a request a
+client sends, or the target (<code>/items?page=2</code>) for one a server
+received.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
+</ul>
 <h4 id="path-5"><a class="header" href="#path-5">path</a></h4>
 <pre><code class="language-pepper">path(): String
 </code></pre>
-<p>Returns the path: the target up to any <code>?</code>.</p>
+<p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
+is empty.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the path, such as <code>/items</code></li>
+<li>the path, such as <code>/items</code>, or an empty string when <code>url</code> is not a valid URI reference</li>
 </ul>
 <h4 id="query"><a class="header" href="#query">query</a></h4>
 <pre><code class="language-pepper">query(): String
 </code></pre>
-<p>Returns the query: the target after the first <code>?</code>.</p>
+<p>Returns the query of <code>url</code>: the text after <code>?</code>, with its
+percent-escapes (see <code>Uri.decode</code>).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the query without the <code>?</code>, or an empty string for none</li>
+<li>the query without the <code>?</code>, or an empty string for none or when <code>url</code> is not a valid URI reference</li>
 </ul>
 <h4 id="body"><a class="header" href="#body">body</a></h4>
 <pre><code class="language-pepper">body(): u8[]
@@ -20525,6 +20566,150 @@ Closing a closed stream does nothing.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing the socket fails</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/uri.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="uripep"><a class="header" href="#uripep">uri.pep</a></h1>
+<p>URI references (RFC 3986): parse any URI, such as <code>https://example.com/a?b#c</code>,
+<code>mailto:someone@example.com</code> or <code>/items?page=2</code>, into its parts.</p>
+<p>Source: <code>runtime/uri.pep</code></p>
+<h2 id="uri-1"><a class="header" href="#uri-1">Uri</a></h2>
+<pre><code class="language-pepper">struct Uri
+</code></pre>
+<p>A URI reference split into its RFC 3986 components: scheme, authority
+(user information, host and port), path, query and fragment.</p>
+<p><code>Uri.parse</code> accepts any scheme, and a reference with no scheme (a
+relative reference, such as <code>/items?page=2</code>, which is what an HTTP
+server sees as a request’s target). The components keep their
+percent-escapes as written; <code>Uri.decode</code> turns an escaped component into
+text. The scheme is lowercased, since schemes are case-insensitive;
+nothing else is changed. <code>to_string()</code> puts the parts back together.</p>
+<p>A component that can be absent is optional, so an empty one (<code>http://h/?</code>
+has an empty query) differs from a missing one (<code>http://h/</code> has none).</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var uri = Uri.parse("HTTPS://user@example.com:8443/a%20b?x=1#top").value();
+    assert(uri.scheme == "https", "the scheme is lowercased");
+    assert(uri.user_info.value() == "user", "user information");
+    assert(uri.host.value() == "example.com", "host");
+    assert(uri.port.value() == 8443, "port");
+    assert(uri.path == "/a%20b", "the path keeps its escapes");
+    assert(Uri.decode(uri.path).value() == "/a b", "decoded");
+    assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
+</code></pre>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
+<pre><code class="language-pepper">var scheme: String
+</code></pre>
+<p>The scheme, lowercased, such as <code>https</code>; empty for a relative reference.</p>
+<h4 id="user_info"><a class="header" href="#user_info">user_info</a></h4>
+<pre><code class="language-pepper">var user_info: String?
+</code></pre>
+<p>The user information before <code>@</code> in the authority, if any.</p>
+<h4 id="host"><a class="header" href="#host">host</a></h4>
+<pre><code class="language-pepper">var host: String?
+</code></pre>
+<p>The host, without the brackets of an IPv6 address; None when the URI
+has no authority (no <code>//</code>), and empty for one such as <code>file:///tmp</code>.</p>
+<h4 id="port-1"><a class="header" href="#port-1">port</a></h4>
+<pre><code class="language-pepper">var port: u16?
+</code></pre>
+<p>The port after the host, if the authority gives one.</p>
+<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
+<pre><code class="language-pepper">var path: String
+</code></pre>
+<p>The path, possibly empty, with its percent-escapes.</p>
+<h4 id="query-1"><a class="header" href="#query-1">query</a></h4>
+<pre><code class="language-pepper">var query: String?
+</code></pre>
+<p>The query after <code>?</code>, without the <code>?</code>, if any.</p>
+<h4 id="fragment"><a class="header" href="#fragment">fragment</a></h4>
+<pre><code class="language-pepper">var fragment: String?
+</code></pre>
+<p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty relative reference: no scheme, no authority, and an
+empty path.</p>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
+</code></pre>
+<p>Parses <code>text</code> as a URI reference: an absolute URI with any scheme,
+or a relative reference.</p>
+<p>Characters outside printable ASCII (spaces, controls, and every
+non-ASCII byte) must be percent-encoded, and each <code>%</code> must be
+followed by two hexadecimal digits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the URI reference</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the parsed URI, or an error saying what is wrong: an invalid scheme, a character that must be encoded, a bad escape, an IPv6 host with no <code>]</code>, or a port that is not a number from 0 to 65535</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var mail = Uri.parse("mailto:someone@example.com").value();
+    assert(mail.scheme == "mailto" &amp;&amp; mail.host.is_none(), "no authority");
+    assert(mail.path == "someone@example.com", "the path holds the address");
+    assert(Uri.parse("a b").is_err(), "a space must be encoded");
+</code></pre>
+<h4 id="decode"><a class="header" href="#decode">decode</a></h4>
+<pre><code class="language-pepper">static decode(text: String): Result&lt;String&gt;
+</code></pre>
+<p>Returns <code>text</code> with each percent-escape (<code>%20</code>) replaced by the byte
+it stands for, decoded as UTF-8. A <code>+</code> is kept as it is; a query that
+uses <code>+</code> for a space needs that replaced first.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — a component with percent-escapes, such as <code>path</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the decoded text, where each byte sequence that is not valid UTF-8 becomes U+FFFD, the replacement character, or an error when a <code>%</code> is not followed by two hexadecimal digits</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
+    assert(Uri.decode("100%").is_err(), "a lone '%'");
+</code></pre>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
+<pre><code class="language-pepper">is_absolute(): bool
+</code></pre>
+<p>Returns whether this URI has a scheme (an absolute URI rather than a
+relative reference).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>scheme</code> is not empty</li>
+</ul>
+<h4 id="authority"><a class="header" href="#authority">authority</a></h4>
+<pre><code class="language-pepper">authority(): String?
+</code></pre>
+<p>Returns the authority as it appears after <code>//</code>: user information,
+host (in brackets when it is an IPv6 address) and port.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the authority, such as <code>user@example.com:8443</code>, or None when <code>host</code> is None</li>
+</ul>
+<h4 id="path_and_query"><a class="header" href="#path_and_query">path_and_query</a></h4>
+<pre><code class="language-pepper">path_and_query(): String
+</code></pre>
+<p>Returns the path and query, as an HTTP request line names its target:
+the path (<code>/</code> when it is empty), then <code>?</code> and the query if there is
+one. The fragment is left out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the path and query, such as <code>/items?page=2</code></li>
+</ul>
+<h4 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the URI as text, putting its components back together. For a
+parsed URI this is the text it was parsed from, except that the
+scheme is lowercased.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the URI reference as a String</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
