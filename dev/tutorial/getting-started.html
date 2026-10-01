@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dfa9cd26.js";
+            window.path_to_searchindex_js = "../searchindex-1146054d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -349,6 +349,10 @@ install.</p>
 the editor shows the call it stands for as an inlay hint (<code>Path(</code> before
 <code>"notes.txt"</code> and <code>)</code> after), and hovering the value says so. The
 <code>pepper.inlayHints.implicitConversions</code> setting turns the hints off.</li>
+<li>Hover and go to definition also work where the compiler has not checked
+the code yet: in a generic function or method nothing calls, on a
+<code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
+the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
 built yourself (<code>cargo build --release -p pepper-lsp</code> builds
 <code>target/release/pepper-lsp</code>). The server restarts whenever that file
