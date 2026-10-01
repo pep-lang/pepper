@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7403bc30.js";
+            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -266,7 +266,8 @@ main(): int {
 <li><code>TcpListener.bind(address)</code> listens on a local address. Port 0 lets the
 system pick a free port, and <code>local_address()</code> says which one it picked.
 <code>accept()</code> waits for the next connection and returns the stream and the
-peer’s address as a <a href="tuples.html">tuple</a>.</li>
+peer’s address as a <a href="tuples.html">tuple</a>. <code>for (var connection in listener.incoming())</code> accepts one connection per step, yielding an
+<code>IoResult&lt;TcpStream&gt;</code> (see <a href="iteration.html#reading-files-and-directories">Iteration</a>).</li>
 <li><code>TcpStream.connect(address)</code> connects to an address.
 <code>TcpStream.connect_host(host, port)</code> resolves a name and tries each of its
 addresses in turn.</li>

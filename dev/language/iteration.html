@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7403bc30.js";
+            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -563,6 +563,12 @@ line counts even without a line ending. A read error, or a line that is not
 valid UTF-8, is yielded as an error and ends the lines.</li>
 <li><strong>An error ends the sequence</strong>: after an <code>Err</code> element, <code>next()</code> returns
 <code>false</code>.</li>
+<li><strong><code>listener.incoming()</code></strong> accepts connections on a
+<a href="networking.html"><code>TcpListener</code></a>, yielding each one as an
+<code>IoResult&lt;TcpStream&gt;</code>. It is the exception to the rule above: a failed
+accept is yielded and the loop goes on, since the next connection may
+succeed. It ends only once the listener is closed, so a server loop
+<code>break</code>s or <code>return</code>s when it is done.</li>
 <li><strong>Leaving early cleans up.</strong> The listing is closed when the loop ends,
 including by <code>break</code> or <code>return</code>, because the iterator is released then.</li>
 </ul>

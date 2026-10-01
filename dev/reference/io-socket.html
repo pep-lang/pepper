@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7403bc30.js";
+            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -254,6 +254,32 @@ fails. Use <code>TcpListener.bind</code> to get an open one.</p>
 <ul>
 <li>the connected stream and the peer’s address; an error when the listener is closed, or another platform error</li>
 </ul>
+<h4 id="incoming"><a class="header" href="#incoming">incoming</a></h4>
+<pre><code class="language-pepper">incoming(): Incoming
+</code></pre>
+<p>Returns an iterator that accepts connections one at a time, for a
+<code>for</code> loop over incoming streams.</p>
+<p>Each step waits in <code>accept()</code> and yields the connected stream, or the
+error <code>accept()</code> returned; an error does not end the iteration, so a
+server can log it and keep going, or <code>break</code>. The iteration ends once
+the listener is closed. Use <code>accept()</code> instead when the peer’s address
+is needed.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>Incoming</code> positioned before the first connection</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+    for (var connection in listener.incoming()) {
+        if (connection.is_err()) {
+            print(connection.error().message);
+            continue;
+        }
+        connection.value().write_all("hello");
+    }
+</code></pre>
 <h4 id="local_address"><a class="header" href="#local_address">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
 </code></pre>
@@ -271,6 +297,45 @@ Connections already accepted stay open.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="incoming-1"><a class="header" href="#incoming-1">Incoming</a></h2>
+<pre><code class="language-pepper">struct Incoming
+</code></pre>
+<p>The iterator <code>TcpListener.incoming()</code> returns: each connection the
+listener accepts, as an <code>IoResult&lt;TcpStream&gt;</code>.</p>
+<p><code>next()</code> waits for the next connection; an accept error is yielded as an
+item rather than ending the iteration. The iteration ends once the
+listener is closed. The iterator holds a reference to the listener, so
+the listener stays open while the iterator lives.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="incoming-2"><a class="header" href="#incoming-2">Incoming()</a></h4>
+<pre><code class="language-pepper">construct(listener: TcpListener)
+</code></pre>
+<p>Makes an iterator over the connections <code>listener</code> accepts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>listener</code> — the listener to accept on</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="next"><a class="header" href="#next">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Waits for the next connection.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true with the connection or the accept error as the current item; false once the listener is closed</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Returns the item the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the accepted stream, or the error accepting it</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called or returned false (“Incoming.current() without a connection”)</li>
 </ul>
 <h2 id="sharedtcplistener"><a class="header" href="#sharedtcplistener">SharedTcpListener</a></h2>
 <pre><code class="language-pepper">[Shared] struct SharedTcpListener
@@ -309,7 +374,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="sharedtcplistener-1"><a class="header" href="#sharedtcplistener-1">SharedTcpListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -332,7 +397,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
 <ul>
 <li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
 </code></pre>
@@ -383,7 +448,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -437,7 +502,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -623,7 +688,7 @@ Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body fo
 <code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.</p>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="sockettransfer-1"><a class="header" href="#sockettransfer-1">SocketTransfer()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -654,7 +719,7 @@ largest datagram expected (at most 65507 bytes over IPv4).</p>
     var (n, from) = socket.receive_from(buffer, 65507).value();
     socket.send_to(buffer, from);   # echo it back
 </code></pre>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="udpsocket-1"><a class="header" href="#udpsocket-1">UdpSocket()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -673,7 +738,7 @@ fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
 <ul>
 <li>the bound socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, or another platform error</li>
 </ul>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="is_open-2"><a class="header" href="#is_open-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
