@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3cf94704.js";
+            window.path_to_searchindex_js = "searchindex-9e11e52e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-06f18f27.js"></script>
+        <script src="toc-68ad39d4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, command-line arguments (<code>main(args: String[])</code>), and starting child processes. That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>), and starting child processes. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -1860,6 +1860,165 @@ the replacement character.</li>
 <code>text()</code> with <code>decode_lossy</code>.</li>
 </ul>
 <p>The <a href="#textmodulepep">reference</a> lists every function.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="regular-expressions"><a class="header" href="#regular-expressions">Regular expressions</a></h1>
+<p>The <code>regex</code> module finds patterns in text: test whether text matches,
+find each match and its capture groups, and replace or split by a pattern.</p>
+<pre><code class="language-pepper"># Regular expressions: match, capture, iterate, replace and split.
+import regex;
+
+main(): int {
+    # Compile once, reuse. Backslashes are doubled inside a string literal.
+    var date = regex.Regex("(?&lt;year&gt;\\d{4})-(\\d{2})-(\\d{2})");
+    assert(date.is_match("due 2026-10-01"), "a date somewhere");
+
+    # The first match, with its groups. Positions are byte offsets.
+    var found = date.find("due 2026-10-01").value();
+    assert(found.text() == "2026-10-01" &amp;&amp; found.start() == 4, "where");
+    assert(found.group(2).value() == "10", "a numbered group");
+    assert(found.group("year").value() == "2026", "a named group");
+
+    # Every match, left to right.
+    var total = 0;
+    for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
+        total += int.parse(number.text()).value();
+    }
+    assert(total == 356, "1 + 22 + 333");
+
+    # Replace with group references, and split.
+    var swapped = regex.Regex("(\\w+)@(\\w+)").replace_all("ann@home bob@work", "$2:$1");
+    assert(swapped == "home:ann work:bob", "groups swapped");
+    var parts = regex.Regex("\\s*,\\s*").split("a , b,c");
+    assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
+
+    # Flags go inside the pattern: (?i) ignores case.
+    assert(regex.Regex("(?i)^hello").is_match("HeLLo there"), "any case");
+
+    # An invalid pattern from outside the program: parse reports it.
+    var bad = regex.Regex.parse("(unclosed");
+    assert(bad.is_err(), "missing ')'");
+    return 0;
+}
+</code></pre>
+<h2 id="compiling-a-pattern"><a class="header" href="#compiling-a-pattern">Compiling a pattern</a></h2>
+<ul>
+<li><code>regex.Regex(pattern)</code> compiles a pattern and panics when it is invalid.
+Use it for patterns written in the program.</li>
+<li><code>regex.Regex.parse(pattern)</code> returns a <code>Result&lt;Regex&gt;</code> instead, whose
+error names the problem and its byte offset:
+<code>invalid regex '(a': missing ')' at offset 0</code>. Use it for patterns that
+come from input.</li>
+<li>Compile once and reuse the <code>Regex</code>; compiling costs more than a search.</li>
+<li><code>Regex.escape(text)</code> escapes every character with a meaning in a
+pattern, so the result matches <code>text</code> literally.</li>
+</ul>
+<p>A pattern is a <code>String</code>, so each backslash is doubled in a string literal:
+<code>"\\d+"</code> is the pattern <code>\d+</code>.</p>
+<h2 id="searching"><a class="header" href="#searching">Searching</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td><code>is_match(text)</code></td><td>whether there is a match anywhere; the fastest test</td></tr>
+<tr><td><code>find(text)</code></td><td>the leftmost <code>Match</code>, or none</td></tr>
+<tr><td><code>find_at(text, start)</code></td><td>the leftmost match starting at or after byte <code>start</code></td></tr>
+<tr><td><code>find_all(text)</code></td><td>an iterator over every match, left to right, without overlaps</td></tr>
+<tr><td><code>replace(text, replacement)</code></td><td><code>text</code> with the first match replaced</td></tr>
+<tr><td><code>replace_all(text, replacement)</code></td><td><code>text</code> with every match replaced</td></tr>
+<tr><td><code>split(text)</code></td><td>the pieces of <code>text</code> between matches</td></tr>
+</tbody>
+</table>
+</div>
+<p>A <code>Match</code> has <code>text()</code>, <code>start()</code> and <code>end()</code> (byte offsets, as <code>String.find</code>
+returns, for use with <code>substr_bytes</code>), and <code>group(index)</code> or <code>group(name)</code>,
+which give the group’s text or none when the group did not take part (as
+<code>(a)</code> in <code>(a)|b</code> matching <code>b</code>). Group 0 is the whole match; groups are
+numbered by their opening <code>(</code>. <code>group_range(index)</code> gives a group’s offsets.</p>
+<p>Matching is leftmost-first, as in Perl: the match that starts earliest wins,
+and among those, a greedy repetition prefers more and alternation prefers
+its earlier branch (<code>a|ab</code> finds <code>a</code> in <code>ab</code>).</p>
+<p><code>find_all</code> skips an empty match that comes right after the previous match,
+so <code>a*</code> finds <code>a</code> twice in <code>aba</code>, not also an empty match between them.</p>
+<p>In a replacement, <code>$1</code> or <code>${1}</code> stands for group 1, <code>${name}</code> for a named
+group, <code>$0</code> for the whole match and <code>$$</code> for a <code>$</code>. A group that did not take
+part gives empty text. Use braces when a digit or letter follows:
+<code>${1}0</code>, not <code>$10</code>.</p>
+<h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
+<p>The syntax is RE2’s, the one Go’s <code>regexp</code> and Rust’s <code>regex</code> crate use.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Syntax</th><th>Matches</th></tr>
+</thead>
+<tbody>
+<tr><td><code>.</code></td><td>any code point except a newline (any at all with <code>(?s)</code>)</td></tr>
+<tr><td><code>[abc]</code>, <code>[a-z]</code>, <code>[^a-z]</code></td><td>a code point in, or not in, the set</td></tr>
+<tr><td><code>[[:alpha:]]</code>, <code>[[:^digit:]]</code></td><td>a POSIX class: <code>alnum</code>, <code>alpha</code>, <code>ascii</code>, <code>blank</code>, <code>cntrl</code>, <code>digit</code>, <code>graph</code>, <code>lower</code>, <code>print</code>, <code>punct</code>, <code>space</code>, <code>upper</code>, <code>word</code>, <code>xdigit</code></td></tr>
+<tr><td><code>\d</code>, <code>\w</code>, <code>\s</code></td><td>an ASCII digit, word character (<code>[0-9A-Za-z_]</code>), or space (<code>[\t\n\f\r ]</code>)</td></tr>
+<tr><td><code>\D</code>, <code>\W</code>, <code>\S</code></td><td>anything else</td></tr>
+<tr><td><code>\n</code>, <code>\t</code>, <code>\r</code>, <code>\f</code>, <code>\v</code>, <code>\a</code></td><td>a control character</td></tr>
+<tr><td><code>\x41</code>, <code>\x{1F642}</code></td><td>the code point with that hexadecimal value</td></tr>
+<tr><td><code>\.</code>, <code>\*</code>, <code>\\</code>, …</td><td>the punctuation character itself</td></tr>
+<tr><td><code>x*</code>, <code>x+</code>, <code>x?</code></td><td>zero or more, one or more, zero or one</td></tr>
+<tr><td><code>x{n}</code>, <code>x{n,}</code>, <code>x{n,m}</code></td><td>exactly <code>n</code>, at least <code>n</code>, from <code>n</code> to <code>m</code> (at most 1000)</td></tr>
+<tr><td><code>x*?</code>, <code>x+?</code>, <code>x??</code>, <code>x{n,m}?</code></td><td>the same, preferring fewer (lazy)</td></tr>
+<tr><td><code>xy</code>, <code>x|y</code></td><td><code>x</code> then <code>y</code>; <code>x</code> or <code>y</code></td></tr>
+<tr><td><code>(x)</code></td><td>a capture group</td></tr>
+<tr><td><code>(?&lt;name&gt;x)</code>, <code>(?P&lt;name&gt;x)</code></td><td>a named capture group</td></tr>
+<tr><td><code>(?:x)</code></td><td>a group that does not capture</td></tr>
+<tr><td><code>^</code>, <code>$</code></td><td>the start and end of the text (of a line with <code>(?m)</code>)</td></tr>
+<tr><td><code>\A</code>, <code>\z</code></td><td>the start and end of the text, always</td></tr>
+<tr><td><code>\b</code>, <code>\B</code></td><td>an ASCII word boundary, and anything else</td></tr>
+</tbody>
+</table>
+</div>
+<p>Flags go in the pattern: <code>(?i)</code> makes the rest of the enclosing group
+case-insensitive, <code>(?i:x)</code> only <code>x</code>, and <code>(?-i)</code> turns a flag off.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Flag</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i</code></td><td>case-insensitive (ASCII letters)</td></tr>
+<tr><td><code>m</code></td><td>multi-line: <code>^</code> and <code>$</code> also match at line breaks</td></tr>
+<tr><td><code>s</code></td><td><code>.</code> also matches a newline</td></tr>
+<tr><td><code>U</code></td><td>swap greedy and lazy: <code>x*</code> is lazy and <code>x*?</code> greedy</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="text"><a class="header" href="#text">Text</a></h2>
+<ul>
+<li>A pattern works on code points: <code>.</code> and <code>[^a]</code> match one whole code
+point, such as <code>é</code> or <code>🙂</code>, never part of one.</li>
+<li><code>\d</code>, <code>\w</code>, <code>\s</code>, <code>\b</code>, the POSIX classes and case-insensitive matching
+are ASCII-only: <code>\w</code> does not match <code>é</code>.</li>
+<li>Positions are byte offsets, like <code>String.find</code> and <code>substr_bytes</code>, not the
+code point positions of <code>substr</code>.</li>
+</ul>
+<h2 id="linear-time"><a class="header" href="#linear-time">Linear time</a></h2>
+<p>Matching never backtracks. The engine (a Pike VM, as in RE2) steps every
+possible match through the text together, so a search takes time
+proportional to the size of the text times the size of the pattern,
+whatever both are. A pattern such as <code>(a*)*b</code>, which takes exponential
+time in a backtracking engine, is safe on untrusted input.</p>
+<p>The price is two features that need backtracking. A pattern that uses one
+fails to compile:</p>
+<ul>
+<li><strong>Backreferences</strong> (<code>\1</code>): <code>backreferences are not supported</code></li>
+<li><strong>Lookaround</strong> (<code>(?=x)</code>, <code>(?!x)</code>, <code>(?&lt;=x)</code>, <code>(?&lt;!x)</code>):
+<code>lookaround is not supported</code></li>
+</ul>
+<p>Groups nest at most 250 deep, and a pattern whose compiled program would
+exceed 100,000 instructions (from large counted repetitions such as
+<code>(a{1000}){1000}</code>) is rejected.</p>
+<h2 id="threads"><a class="header" href="#threads">Threads</a></h2>
+<p>A <code>Regex</code> does not change after it is compiled, but it is not <code>[Shared]</code>
+yet, so it stays on the thread that made it. Compile one on each thread
+that needs it.</p>
+<p>The <a href="#regexmodulepep">reference</a> lists every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -23024,7 +23183,7 @@ binary body. The array is the body itself, not a copy.</p>
 <ul>
 <li>the body; empty for none</li>
 </ul>
-<h4 id="text"><a class="header" href="#text">text</a></h4>
+<h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
 <p>Returns the body as text, decoded as UTF-8. For a binary body, call
@@ -23105,7 +23264,7 @@ binary body. The array is the body itself, not a copy.</p>
 <ul>
 <li>the body; empty for none</li>
 </ul>
-<h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
+<h4 id="text-1-1"><a class="header" href="#text-1-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
 <p>Returns the body as text, decoded as UTF-8. For a binary body, call
@@ -24306,6 +24465,427 @@ reached.</p>
 <ul>
 <li>true if <code>start</code> is past the end of the range</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/regex/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="regexmodulepep"><a class="header" href="#regexmodulepep">regex/module.pep</a></h1>
+<p>Regular expressions: test whether text matches a pattern, find the
+matches and their capture groups, and replace or split by a pattern.</p>
+<p>Bring it in with <code>import regex</code>. The syntax is RE2’s, and matching takes
+time linear in the size of the text whatever the pattern.</p>
+<ul>
+<li><a href="#regexregexpep">Regex and Match</a>: <code>Regex</code>, <code>Match</code>, <code>Matches</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    main(): int {
+        var word = regex.Regex("\\b(\\w)(\\w*)\\b");
+        assert(word.replace_all("hello big world", "${1}.") == "h. b. w.", "initials");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/regex/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/regex/regex.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="regexregexpep"><a class="header" href="#regexregexpep">regex/regex.pep</a></h1>
+<p>Regex, Match and the iterator over every match.</p>
+<p>Source: <code>runtime/regex/regex.pep</code></p>
+<h2 id="regex"><a class="header" href="#regex">Regex</a></h2>
+<pre><code class="language-pepper">struct Regex
+</code></pre>
+<p>A compiled regular expression: compile a pattern once, then test, find,
+replace or split text with it.</p>
+<p>The syntax is RE2’s, the one Go and Rust’s <code>regex</code> use. Matching runs in
+time linear in the text whatever the pattern, because the engine never
+backtracks; in return there are no backreferences (<code>\1</code>) and no
+lookaround (<code>(?=...)</code>), and a pattern using them fails to compile.</p>
+<ul>
+<li><strong>Positions</strong> (<code>Match.start()</code>, <code>Match.end()</code>, <code>find_at</code>) are byte
+offsets, like <code>String.find</code>, so they work with <code>substr_bytes</code>.</li>
+<li><strong><code>.</code></strong> and a negated class (<code>[^a]</code>) match one code point, never part
+of one.</li>
+<li><strong><code>\d</code>, <code>\w</code>, <code>\s</code>, <code>\b</code></strong> and case-insensitive matching are ASCII-only.</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    main(): int {
+        var date = regex.Regex("(\\d{4})-(\\d{2})-(\\d{2})");
+        var found = date.find("due 2026-10-01").value();
+        assert(found.group(1).value() == "2026", "the year");
+        assert(found.start() == 4, "a byte offset");
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h4 id="regex-1"><a class="header" href="#regex-1">Regex()</a></h4>
+<pre><code class="language-pepper">construct(pattern: String)
+</code></pre>
+<p>Compiles <code>pattern</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the regular expression</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pattern</code> is not a valid regular expression; use <code>parse</code> for a pattern that may be invalid, such as one from user input</li>
+</ul>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
+<pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
+</code></pre>
+<p>Compiles <code>pattern</code>, or reports why it is invalid.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the regular expression</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the compiled expression, or an error naming the problem and its byte offset in <code>pattern</code>, such as <code>invalid regex '(a': missing ')' at offset 0</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    assert(regex.Regex.parse("[a-z]+").is_ok(), "valid");
+    assert(regex.Regex.parse("(a").is_err(), "unclosed group");
+</code></pre>
+<h4 id="escape"><a class="header" href="#escape">escape</a></h4>
+<pre><code class="language-pepper">static escape(text: String): String
+</code></pre>
+<p>Returns <code>text</code> with every character that has a meaning in a pattern
+escaped, so the result matches <code>text</code> literally.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to match</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a pattern that matches exactly <code>text</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
+</code></pre>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
+<pre><code class="language-pepper">pattern(): String
+</code></pre>
+<p>Returns the pattern this expression was compiled from.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pattern text</li>
+</ul>
+<h4 id="group_count"><a class="header" href="#group_count">group_count</a></h4>
+<pre><code class="language-pepper">group_count(): ulong
+</code></pre>
+<p>Returns the number of capture groups in the pattern, not counting the
+whole match.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of <code>(...)</code> groups, named ones included</li>
+</ul>
+<h4 id="is_match"><a class="header" href="#is_match">is_match</a></h4>
+<pre><code class="language-pepper">is_match(text: String): bool
+</code></pre>
+<p>Returns whether the expression matches anywhere in <code>text</code>. Faster
+than <code>find</code>, since it stops at the first match it sees.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a match</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
+</code></pre>
+<h4 id="find-2"><a class="header" href="#find-2">find</a></h4>
+<pre><code class="language-pepper">find(text: String): Match?
+</code></pre>
+<p>Returns the leftmost match in <code>text</code>, or none. Among matches that
+start at the same place, a greedy repetition prefers the longer one
+and alternation the earlier branch, as in Perl.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first match, or none</li>
+</ul>
+<h4 id="find_at"><a class="header" href="#find_at">find_at</a></h4>
+<pre><code class="language-pepper">find_at(text: String, start: ulong): Match?
+</code></pre>
+<p>Returns the leftmost match in <code>text</code> that starts at or after byte
+offset <code>start</code>, or none. Assertions still see the text before <code>start</code>:
+<code>^</code> does not match at <code>start</code> unless it begins a line, and <code>\b</code> looks
+at the character before it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+<li><code>start</code> — the byte offset to search from, at most <code>text.size()</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first match from <code>start</code>, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>start</code> is greater than <code>text.size()</code></li>
+</ul>
+<h4 id="find_all"><a class="header" href="#find_all">find_all</a></h4>
+<pre><code class="language-pepper">find_all(text: String): Matches
+</code></pre>
+<p>Returns an iterator over the matches in <code>text</code>, left to right and
+without overlaps. An empty match right after the previous match is
+skipped, so <code>a*</code> finds <code>a</code> twice in <code>"aba"</code>, not also between them.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator over the matches</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    var total = 0;
+    for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
+        total += number.text().size();   # 1, then 2, then 3
+    }
+</code></pre>
+<h4 id="replace-2"><a class="header" href="#replace-2">replace</a></h4>
+<pre><code class="language-pepper">replace(text: String, replacement: String): String
+</code></pre>
+<p>Returns <code>text</code> with the first match replaced by <code>replacement</code>, or a
+copy of <code>text</code> when nothing matches.</p>
+<p>In <code>replacement</code>, <code>$1</code> or <code>${1}</code> stands for group 1’s text (empty when
+the group did not take part), <code>${name}</code> for a named group’s, <code>$0</code> for
+the whole match, and <code>$$</code> for a <code>$</code>. A <code>$</code> followed by anything else
+is kept as it is.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+<li><code>replacement</code> — the text to put in place of the match</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>replacement</code> names a group the pattern does not have</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    var swapped = regex.Regex("(\\w+) (\\w+)").replace("hello world", "$2 $1");
+    assert(swapped == "world hello", "groups swapped");
+</code></pre>
+<h4 id="replace_all"><a class="header" href="#replace_all">replace_all</a></h4>
+<pre><code class="language-pepper">replace_all(text: String, replacement: String): String
+</code></pre>
+<p>Returns <code>text</code> with every match, as <code>find_all</code> finds them, replaced by
+<code>replacement</code>, which may name groups as in <code>replace</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to search</li>
+<li><code>replacement</code> — the text to put in place of each match</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>replacement</code> names a group the pattern does not have</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
+    assert(squeezed == "a b c", "runs of space replaced");
+</code></pre>
+<h4 id="split-1"><a class="header" href="#split-1">split</a></h4>
+<pre><code class="language-pepper">split(text: String): String[]
+</code></pre>
+<p>Splits <code>text</code> at each match, as <code>find_all</code> finds them, and returns the
+pieces between them. A match at the start or end gives an empty first
+or last piece, and text with no match gives one piece, the whole text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to split</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pieces, at least one</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import regex;
+
+    var parts = regex.Regex(",\\s*").split("a, b,c");
+    assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
+</code></pre>
+<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pattern text</li>
+</ul>
+<h2 id="match-2"><a class="header" href="#match-2">Match</a></h2>
+<pre><code class="language-pepper">struct Match
+</code></pre>
+<p>One match of a <code>Regex</code>: where it is in the text, and what each capture
+group matched.</p>
+<p>Positions are byte offsets into the searched text. Group 0 is the whole
+match; groups are numbered from 1 by their opening <code>(</code>, named ones
+included.</p>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
+<pre><code class="language-pepper">construct(text: String, slots: long[], names: String[])
+</code></pre>
+<p>Creates a match over <code>text</code> from its capture slots. Matches come from
+<code>Regex</code>; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the searched text</li>
+<li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
+<li><code>names</code> — the name of each group by index, “” when unnamed</li>
+</ul>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
+<pre><code class="language-pepper">text(): String
+</code></pre>
+<p>Returns the matched text.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text of the whole match</li>
+</ul>
+<h4 id="start-2"><a class="header" href="#start-2">start</a></h4>
+<pre><code class="language-pepper">start(): ulong
+</code></pre>
+<p>Returns the byte offset where the match starts.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset of the match’s first byte</li>
+</ul>
+<h4 id="end-2"><a class="header" href="#end-2">end</a></h4>
+<pre><code class="language-pepper">end(): ulong
+</code></pre>
+<p>Returns the byte offset just past the end of the match.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset after the match’s last byte; equal to <code>start()</code> for an empty match</li>
+</ul>
+<h4 id="group_count-1"><a class="header" href="#group_count-1">group_count</a></h4>
+<pre><code class="language-pepper">group_count(): ulong
+</code></pre>
+<p>Returns the number of capture groups, not counting the whole match.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of groups in the pattern</li>
+</ul>
+<h4 id="group"><a class="header" href="#group">group</a></h4>
+<pre><code class="language-pepper">group(index: ulong): String?
+</code></pre>
+<p>Returns the text that group <code>index</code> matched, or none when the group
+did not take part in the match (as in <code>(a)|b</code> matching <code>b</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the group number; 0 is the whole match</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the group’s text, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is greater than <code>group_count()</code></li>
+</ul>
+<h4 id="group-1"><a class="header" href="#group-1">group</a></h4>
+<pre><code class="language-pepper">group(name: String): String?
+</code></pre>
+<p>Returns the text that the group named <code>name</code> (<code>(?&lt;name&gt;...)</code> or
+<code>(?P&lt;name&gt;...)</code>) matched, or none when it did not take part.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the group’s name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the group’s text, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the pattern has no group named <code>name</code></li>
+</ul>
+<h4 id="group_range"><a class="header" href="#group_range">group_range</a></h4>
+<pre><code class="language-pepper">group_range(index: ulong): (ulong, ulong)?
+</code></pre>
+<p>Returns the byte offsets where group <code>index</code> starts and ends, or none
+when it did not take part.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the group number; 0 is the whole match</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the start and end offsets, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is greater than <code>group_count()</code></li>
+</ul>
+<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the matched text.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text of the whole match</li>
+</ul>
+<h2 id="matches"><a class="header" href="#matches">Matches</a></h2>
+<pre><code class="language-pepper">struct Matches
+</code></pre>
+<p>An iterator over the matches of a <code>Regex</code> in a text, from
+<code>Regex.find_all</code>: left to right, without overlaps.</p>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
+<pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
+</code></pre>
+<p>Creates an iterator over the matches of <code>program</code> in <code>text</code>. Use
+<code>Regex.find_all</code>; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>program</code> — the compiled pattern</li>
+<li><code>text</code> — the text to search</li>
+</ul>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next match.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is another match, false once they are exhausted</li>
+</ul>
+<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
+<pre><code class="language-pepper">current(): Match
+</code></pre>
+<p>Returns the match the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current match</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> has not returned true</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/ascii.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="textasciipep"><a class="header" href="#textasciipep">text/ascii.pep</a></h1>
 <p>ASCII, the first 128 code points, one byte each.</p>
@@ -24321,7 +24901,7 @@ points below 128 have an ASCII byte.</p>
     assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -24427,7 +25007,7 @@ is written, and one read is kept as part of the text.</p>
     assert(bytes.count() == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -24484,7 +25064,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
     var bytes = text.Utf8.encode("hi");
     assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
+<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -24609,7 +25189,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -24618,7 +25198,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
+<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -24627,7 +25207,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -24697,7 +25277,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -24721,7 +25301,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -24761,7 +25341,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -24772,7 +25352,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -24942,14 +25522,14 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
-<h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
+<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
+<h4 id="parse-11"><a class="header" href="#parse-11">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
 <p>Parses <code>text</code> as a URI reference: an absolute URI with any scheme,
@@ -24989,7 +25569,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
@@ -25018,7 +25598,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
+<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a
