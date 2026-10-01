@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
+            window.path_to_searchindex_js = "../searchindex-9c009f99.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-92b0d50d.js"></script>
+        <script src="../toc-e2586fcc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -286,8 +286,8 @@ type that follows the iterator protocol:</p>
 (<code>for (int score in scores)</code>, <code>for (var score: int in scores)</code>), and the
 parentheses are optional. <a href="iteration.html">Iteration</a> covers the protocol behind
 <code>for</code> and how to make your own types iterable.</p>
-<p>Pepper has no counting <code>for (init; condition; step)</code> loop and no range syntax.
-To count, use a <code>while</code> loop with a counter.</p>
+<p>Pepper has no C-style <code>for (init; condition; step)</code> loop. To count, loop over
+a <a href="iteration.html#looping-over-a-range">range</a>: <code>for (var i in 0..count)</code>.</p>
 <h2 id="with"><a class="header" href="#with"><code>with</code></a></h2>
 <p><code>with</code> enters a scope object for the length of a block and binds what it
 hands out. The object cleans up when it is destroyed, on every way out of the

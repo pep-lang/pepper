@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-00c090a8.js";
+            window.path_to_searchindex_js = "searchindex-9c009f99.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-92b0d50d.js"></script>
+        <script src="toc-e2586fcc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -696,7 +696,8 @@ that is not there gives the default value of <code>V</code> (0 for numbers) with
 adding it; use <code>contains</code> to tell the two apart.
 <a href="#hashset"><code>HashSet&lt;K&gt;</code></a> keeps each key once.</li>
 <li><code>for (var x in collection)</code> visits each element of an array, or each
-character of a string, in order. See <a href="#iteration">Iteration</a>.</li>
+character of a string, in order, and <code>for (var i in 0..n)</code> counts from 0
+to <code>n - 1</code>. See <a href="#iteration">Iteration</a>.</li>
 </ul>
 <h2 id="handling-errors-with-result"><a class="header" href="#handling-errors-with-result">Handling errors with Result</a></h2>
 <p>Pepper has no exceptions. A function that can fail returns a
@@ -2031,8 +2032,8 @@ type that follows the iterator protocol:</p>
 (<code>for (int score in scores)</code>, <code>for (var score: int in scores)</code>), and the
 parentheses are optional. <a href="#iteration">Iteration</a> covers the protocol behind
 <code>for</code> and how to make your own types iterable.</p>
-<p>Pepper has no counting <code>for (init; condition; step)</code> loop and no range syntax.
-To count, use a <code>while</code> loop with a counter.</p>
+<p>Pepper has no C-style <code>for (init; condition; step)</code> loop. To count, loop over
+a <a href="#looping-over-a-range">range</a>: <code>for (var i in 0..count)</code>.</p>
 <h2 id="with"><a class="header" href="#with"><code>with</code></a></h2>
 <p><code>with</code> enters a scope object for the length of a block and binds what it
 hands out. The object cleans up when it is destroyed, on every way out of the
@@ -6636,8 +6637,8 @@ type instead.</li>
 <h1 id="iteration"><a class="header" href="#iteration">Iteration</a></h1>
 <p>A <code>for</code> loop visits each element of a collection in turn. You can loop over an
 <a href="#array"><code>Array</code></a>, over the code points of a
-<a href="#string"><code>String</code></a>, and over any type of your own that follows
-the iterator protocol.</p>
+<a href="#string"><code>String</code></a>, over a range of numbers (<code>0..count</code>),
+and over any type of your own that follows the iterator protocol.</p>
 <h2 id="looping-over-an-array"><a class="header" href="#looping-over-an-array">Looping over an array</a></h2>
 <p><code>for (var x in source) { ... }</code> runs the body once per element, with <code>x</code> bound
 to the element:</p>
@@ -6767,6 +6768,78 @@ a single code point, the same value that indexing gives you (<code>word[i]</code
     return 0;
 }
 </code></pre>
+<h2 id="looping-over-a-range"><a class="header" href="#looping-over-a-range">Looping over a range</a></h2>
+<p><code>a..b</code> is the numbers from <code>a</code> up to, but not including, <code>b</code>, and <code>a..&gt;b</code>
+includes <code>b</code>. Looping over one is how you count:</p>
+<pre><code class="language-pepper">main(): int {
+    # `a..b` counts from a up to, but not including, b.
+    var total = 0;
+    for (var i in 0..5) {
+        total += i;
+    }
+    assert(total == 10, "0 + 1 + 2 + 3 + 4");
+
+    # `a..&gt;b` includes b.
+    var product = 1;
+    for (var i in 1..&gt;5) {
+        product *= i;
+    }
+    assert(product == 120, "5 factorial");
+
+    # The bounds give the type: count() is a ulong, so i is too.
+    var names = ["Ada", "Grace", "Edsger"];
+    ulong letters = 0;
+    for (var i in 0..names.count()) {
+        letters += names[i].size();
+    }
+    assert(letters == 14, "letters in every name");
+
+    # A range that starts past its end is empty.
+    for (var i in 3..1) {
+        assert(false, "never runs");
+    }
+
+    # A range is a value: test membership, or use the iterator adapters.
+    var digits = 0..10;
+    assert(digits.contains(9) &amp;&amp; !digits.contains(10), "half-open");
+    var evens = 0;
+    for (var even in (1..&gt;10).filter((n) =&gt; n % 2 == 0)) {
+        evens += even;
+    }
+    assert(evens == 30, "2 + 4 + 6 + 8 + 10");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>The bounds give the type.</strong> A range’s element type is inferred from its
+bounds like a generic call’s type argument, so <code>0..names.count()</code> counts in
+<code>ulong</code>. The bounds must be integers; anything else is an error at the
+operator:</p>
+<pre><code class="language-text">main.pep:2:22: error: range bounds must be integers, not 'String'
+    2 |     for (var c in "a".."z") {
+      |                      ^~
+</code></pre>
+</li>
+<li>
+<p><strong>Precedence.</strong> A range binds more loosely than arithmetic and shifts, and
+more tightly than comparisons, so <code>0..n + 1</code> is <code>0..(n + 1)</code>. Two range
+operators in a row (<code>1..2..3</code>) are an error; add parentheses. <code>...</code> is
+not a range operator.</p>
+</li>
+<li>
+<p><strong>An empty range runs no iterations.</strong> A range whose start is past its end
+(<code>3..1</code>, <code>5..&gt;4</code>) is empty, and <code>a..a</code> is too. A closed range ending at
+its type’s largest value (<code>250..&gt;top</code> with a <code>byte</code> <code>top</code> of 255) stops
+there without overflowing.</p>
+</li>
+<li>
+<p><strong>A range is a value</strong>, a <a href="#rangepep"><code>Range&lt;T&gt;</code></a>. It has
+<code>contains(x)</code> and <code>is_empty()</code>, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
+<a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>. Looping over one allocates
+nothing; the optimizer turns it into a plain counting loop.</p>
+</li>
+</ul>
 <h2 id="the-iterator-protocol"><a class="header" href="#the-iterator-protocol">The iterator protocol</a></h2>
 <p>The <code>for</code> loop is not tied to <code>Array</code> and <code>String</code>. It works with any type
 that has the right methods, described by two traits in the runtime
@@ -23103,6 +23176,111 @@ hexadecimal are accepted.</p>
 <pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
     assert(double.parse("1.5.2").is_none(), "not a number");
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/range.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="rangepep"><a class="header" href="#rangepep">range.pep</a></h1>
+<p>Ranges of numbers: <code>a..b</code> and <code>a..&gt;b</code>.</p>
+<p><code>a..b</code> (half-open) holds <code>a</code> up to but not including <code>b</code>; <code>a..&gt;b</code>
+(closed) includes <code>b</code>. Both make a <code>Range&lt;T&gt;</code>, a value that a <code>for</code> loop
+steps through without allocating:</p>
+<pre><code>for (var i in 0..count) { ... }   # 0, 1, ..., count - 1
+for (var i in 1..&gt;10) { ... }     # 1, 2, ..., 10
+</code></pre>
+<p>Source: <code>runtime/range.pep</code></p>
+<h2 id="range"><a class="header" href="#range">Range</a></h2>
+<pre><code class="language-pepper">[Value] struct Range&lt;T&gt;
+</code></pre>
+<p>A run of consecutive numbers, from <code>start</code> up to <code>end</code>, as <code>a..b</code> and
+<code>a..&gt;b</code> make it.</p>
+<p>A range is an iterator: <code>next()</code> steps from <code>start</code> up by one, and a
+<code>for</code> loop over a range is a counting loop. A range whose <code>start</code> is past
+its end yields nothing. A closed range ending at the largest value of its
+type (<code>0..&gt;255</code> as <code>byte</code>) stops there without overflowing.</p>
+<p>Ranges are <a href="#value-structs">value structs</a>: copying one
+copies its position, and looping over a range stored in a variable
+advances that variable.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the number type, inferred from the bounds (<code>0..n</code> with a <code>ulong</code> <code>n</code> is a <code>Range&lt;ulong&gt;</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var total = 0;
+    for (var i in 1..&gt;4) {
+        total += i;   # 1 + 2 + 3 + 4
+    }
+    var r = 0..10;
+    assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
+</code></pre>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="start-1"><a class="header" href="#start-1">start</a></h4>
+<pre><code class="language-pepper">T start
+</code></pre>
+<p>The first number of the range.</p>
+<h4 id="end-1"><a class="header" href="#end-1">end</a></h4>
+<pre><code class="language-pepper">T end
+</code></pre>
+<p>The bound the range stops at: the last number when <code>inclusive</code>, else one past it.</p>
+<h4 id="inclusive"><a class="header" href="#inclusive">inclusive</a></h4>
+<pre><code class="language-pepper">bool inclusive
+</code></pre>
+<p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
+<pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
+</code></pre>
+<p>Makes the range from <code>start</code> to <code>end</code>, as <code>start..end</code> (or
+<code>start..&gt;end</code> when <code>inclusive</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the first number</li>
+<li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
+<li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
+</ul>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next number: <code>start</code> on the first call, then one
+more each time.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current number, false once past the end</li>
+</ul>
+<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the number the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current number</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called (“Range.current() before next()”)</li>
+<li>if <code>next()</code> already returned false (“Range.current() past the end”)</li>
+</ul>
+<h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
+<pre><code class="language-pepper">contains(value: T): bool
+</code></pre>
+<p>Returns whether <code>value</code> lies in the range, whatever the iteration has
+reached.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if <code>start &lt;= value</code> and <code>value</code> is before <code>end</code> (or equal to it, for a closed range)</li>
+</ul>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">is_empty(): bool
+</code></pre>
+<p>Returns whether the range holds no numbers, whatever the iteration has
+reached.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if <code>start</code> is past the end of the range</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/ascii.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="textasciipep"><a class="header" href="#textasciipep">text/ascii.pep</a></h1>
 <p>ASCII, the first 128 code points, one byte each.</p>
@@ -23406,7 +23584,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -23424,7 +23602,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -23709,7 +23887,7 @@ has an empty query) differs from a missing one (<code>http://h/</code> has none)
     assert(Uri.decode(uri.path).value() == "/a b", "decoded");
     assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -23739,7 +23917,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23786,7 +23964,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
