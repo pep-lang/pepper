@@ -107,19 +107,18 @@ export struct _IocpDriver {
     # Room for `_IOCP_CAPACITY` OVERLAPPED_ENTRY records of 32 bytes.
     var _entries: __ptr<u8>;
     # The request in flight for reading and for writing on each socket.
-    # (Blocks are kept as addresses: a map of pointers does not compile yet.)
-    var _reading: HashMap<ulong, ulong>;
-    var _writing: HashMap<ulong, ulong>;
-    # Every request block not yet dequeued, by address.
-    var _pending: HashMap<ulong, bool>;
+    var _reading: HashMap<ulong, __ptr<u8>>;
+    var _writing: HashMap<ulong, __ptr<u8>>;
+    # Every request block not yet dequeued.
+    var _pending: HashSet<__ptr<u8>>;
 
     construct(port: __ptr<void>, afd: __ptr<void>) {
         this._port = port;
         this._afd = afd;
         this._entries = _pep_malloc((_IOCP_CAPACITY * 32) as ulong);
-        this._reading = HashMap<ulong, ulong>();
-        this._writing = HashMap<ulong, ulong>();
-        this._pending = HashMap<ulong, bool>();
+        this._reading = HashMap<ulong, __ptr<u8>>();
+        this._writing = HashMap<ulong, __ptr<u8>>();
+        this._pending = HashSet<__ptr<u8>>();
     }
 
     # A new driver, or none when the system cannot make one.
@@ -138,8 +137,7 @@ export struct _IocpDriver {
 
     # Handles one dequeued request block.
     _complete(block: __ptr<u8>, ready_sockets: Array<(handle: ulong, interest: int)>) {
-        var key = block as ulong;
-        this._pending.remove(key);
+        this._pending.remove(block);
         __ptr<ulong> words = block;
         var handle = words[6];
         var asked = words[7] as int;
@@ -194,8 +192,8 @@ extend _IocpDriver with _Driver {
             _pep_free(block);
             return false;
         }
-        requests.insert(key, block as ulong);
-        this._pending.insert(block as ulong, true);
+        requests.insert(key, block);
+        this._pending.insert(block);
         return true;
     }
 
@@ -214,11 +212,11 @@ extend _IocpDriver with _Driver {
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
         if (this._reading.contains(key)) {
-            _async_iocp_block(this._reading.get(key))[8] = 1;
+            (this._reading.get(key) as __ptr<ulong>)[8] = 1;
             this._reading.remove(key);
         }
         if (this._writing.contains(key)) {
-            _async_iocp_block(this._writing.get(key))[8] = 1;
+            (this._writing.get(key) as __ptr<ulong>)[8] = 1;
             this._writing.remove(key);
         }
     }
@@ -236,9 +234,8 @@ extend _IocpDriver with _Driver {
     _close() {
         # Cancel what is still in flight and wait for the cancellations, so
         # the kernel is done with every block before it is freed.
-        for (var entry in this._pending) {
-            var (address, unused) = entry;
-            _async_iocp_cancel(this._afd, _async_iocp_block(address) as __ptr<u8>);
+        for (var block in this._pending) {
+            _async_iocp_cancel(this._afd, block);
         }
         var drained = Array<(handle: ulong, interest: int)>();
         var rounds = 0;
@@ -252,7 +249,7 @@ extend _IocpDriver with _Driver {
     }
 }
 
-# The request block at `address`.
+# The pointer at `address`: an integer cannot be cast to a pointer.
 _async_iocp_block(address: ulong): __ptr<ulong> {
     __ptr<ulong> slot = _pep_malloc(8);
     slot[0] = address;

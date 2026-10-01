@@ -543,3 +543,69 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn pointer_values_and_keys() {
+    // `HashMap<ulong, __ptr<u8>>` once failed codegen with "storing a value
+    // of LLVM type 'i32' into 'return value'" in `Array<__ptr<u8>>`'s
+    // indexer: the specialization's body depended on which sema round
+    // created it. Canonical specialization (#296) fixed it; the IOCP driver
+    // had kept addresses as `ulong` to work around it.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Blocks<T> {
+    var _by_key: HashMap<ulong, __ptr<T>>;
+    construct() {
+        this._by_key = HashMap<ulong, __ptr<T>>();
+    }
+    put(key: ulong, block: __ptr<T>) {
+        this._by_key.insert(key, block);
+    }
+    take(key: ulong): __ptr<T> {
+        return this._by_key.get(key);
+    }
+}
+build(): int {
+    var m = HashMap<ulong, __ptr<u8>>();
+    var pending = HashSet<__ptr<u8>>();
+    var i = 0;
+    while (i < 20) {
+        __ptr<u8> block = _pep_malloc(8);
+        block[0] = i as u8;
+        m.insert(i as ulong, block);
+        pending.insert(block);
+        i = i + 1;
+    }
+    __ptr<u8> missing = m.get(99);
+    if (missing != __null) { return -1; }
+    if (m.get(7)[0] != 7) { return -2; }
+    if (!pending.contains(m.get(7))) { return -3; }
+    var sum = 0;
+    for (var entry in m) {
+        var (key, block) = entry;
+        if (block[0] as ulong != key) { return -4; }
+        sum = sum + block[0] as int;
+    }
+    if (sum != 190) { return -5; }
+    var blocks = Blocks<u8>();
+    blocks.put(3, m.get(3));
+    if (blocks.take(3)[0] != 3) { return -6; }
+    for (var block in pending) {
+        _pep_free(block);
+    }
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # The maps' tables are freed when build's scope exits; the blocks were
+    # freed by hand.
+    if (_pep_live_allocs() != before) { return -7; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
