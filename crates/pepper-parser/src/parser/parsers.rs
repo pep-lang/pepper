@@ -1589,8 +1589,8 @@ fn numeric_constant(input: &mut &str) -> Result<Literal> {
         if c.is_ascii_digit() { *input = &input[1..]; } else { break; }
     }
 
-    // fraction
-    let has_frac = input.starts_with('.');
+    // fraction (`1..5` and `1..>5` are ranges, not `1.` followed by `.5`)
+    let has_frac = input.starts_with('.') && !input.starts_with("..");
     if has_frac {
         *input = &input[1..];
         while let Some(c) = input.chars().next() {
@@ -1971,11 +1971,13 @@ fn postfix(input: &mut &str) -> Result<Expression> {
         let before = *input;
         ws(input)?;
         // Each suffix wraps the expression so far in a new node.
-        if input.starts_with(['.', '[', '(']) || input.starts_with("++") || input.starts_with("--") {
+        // `..` and `..>` after an operand are range operators (see `range`).
+        let member = input.starts_with('.') && !input.starts_with("..");
+        if member || input.starts_with(['[', '(']) || input.starts_with("++") || input.starts_with("--") {
             height += 1;
             reach_height(pos(input), height)?;
         }
-        if input.starts_with('.') {
+        if member {
             *input = &input[1..];
             ws(input)?;
             // `t.0`: a tuple element. Only digits, so `t.0.1` is two accesses.
@@ -2211,10 +2213,42 @@ fn relational(input: &mut &str) -> Result<Expression> {
     })
 }
 
+/// `a..b` (half-open: up to but not including `b`) or `a..>b` (closed:
+/// including `b`), between the shift and `is` levels, so `0..n + 1` is
+/// `0..(n + 1)` and a range compares as a whole. Not associative: `a..b..c`
+/// is an error. `...` stays C's variadic marker and is not a range.
+fn range(input: &mut &str) -> Result<Expression> {
+    let lhs = shift(input)?;
+    let before = *input;
+    ws(input)?;
+    let op = if input.starts_with("..>") {
+        "..>"
+    } else if input.starts_with("..") && !input.starts_with("...") {
+        ".."
+    } else {
+        *input = before;
+        return Ok(lhs);
+    };
+    let start = pos(input);
+    *input = &input[op.len()..];
+    ws(input)?;
+    let rhs = nested(input, shift).inspect_err(|_| expected(input, "expression"))?;
+    let mut probe = *input;
+    ws(&mut probe)?;
+    if probe.starts_with("..") {
+        let length = if probe.starts_with("..>") { 3 } else { 2 };
+        return Err(error_at(
+            Span { start: pos(&probe), end: pos(&probe) + length },
+            "adjacent range operators are not allowed; add parentheses".to_string(),
+        ));
+    }
+    Ok(Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } })
+}
+
 /// `value is Pattern`. `is` is a keyword only here, after a value and before
 /// a pattern, so it stays usable as a name (`token.is(text)`).
 fn is_test(input: &mut &str) -> Result<Expression> {
-    let value = shift(input)?;
+    let value = range(input)?;
     let mut rest = *input;
     ws(&mut rest)?;
     let keyword_start = pos(&rest);
@@ -5310,6 +5344,39 @@ mod tests {
             Expression::Binary { op, .. } => assert_eq!(op, "="),
             other => panic!("expected =, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_range_operators() {
+        // A range binds looser than arithmetic and shifts, tighter than comparisons.
+        for (src, op) in [("0..n", ".."), ("1..>10", "..>"), ("a .. b + 1", ".."), ("x.y..>z.w", "..>"), ("1..2", "..")] {
+            match parse_expr(src) {
+                Expression::Binary { op: found, rhs, .. } => {
+                    assert_eq!(found, op, "for src={src}");
+                    if src.contains('+') {
+                        assert!(matches!(*rhs, Expression::Binary { ref op, .. } if op == "+"), "for src={src}");
+                    }
+                }
+                other => panic!("expected {op} for {src}, got {other:?}"),
+            }
+        }
+        match parse_expr("0..n == r") {
+            Expression::Binary { op, lhs, .. } => {
+                assert_eq!(op, "==");
+                assert!(matches!(*lhs, Expression::Binary { ref op, .. } if op == ".."));
+            }
+            other => panic!("expected ==, got {other:?}"),
+        }
+        // `1.5` is still a float, and `t.0` a tuple element.
+        assert!(matches!(parse_expr("1.5"), Expression::Literal { value: Literal::Float(_), .. }));
+        assert!(matches!(parse_expr("t.0"), Expression::MemberAccess { .. }));
+    }
+
+    #[test]
+    fn test_adjacent_range_operators_are_an_error() {
+        let error = crate::parser::parse_source_diag("f(): int {\n    var r = 1..2..3;\n    return 0;\n}\n").expect_err("chained ranges");
+        assert_eq!(error.message, "adjacent range operators are not allowed; add parentheses");
+        assert_eq!(error.loc.expect("located").span.start, 27);
     }
 
     #[test]

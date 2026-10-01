@@ -1322,6 +1322,10 @@ export struct Formatter {
     _binary(item: syntax.Node): Doc {
         var op = item.child(1).leaf.text;
         int level = precedence(op);
+        if (op == ".." or op == "..>") {
+            # A range reads as one unit: `0..count`.
+            return concat().add(_expression(item.child(0))).add(_leaf(item.child(1))).add(_expression(item.child(2)));
+        }
         if (level == 0) {
             var result = concat().add(_expression(item.child(0))).add(text(" ")).add(_leaf(item.child(1)));
             return result.add(text(" ")).add(_expression(item.child(2)));

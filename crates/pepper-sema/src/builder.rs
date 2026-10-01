@@ -327,6 +327,15 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             ty: type_name_from(ty),
             loc: loc(*span),
         }),
+        // `a..b` is `_range(a, b, false)` and `a..>b` is `_range(a, b, true)`
+        // (runtime/range.pep): a `Range<T>` value, its `T` inferred from the
+        // bounds like any generic call.
+        ast::Expression::Binary { lhs, op, rhs, span } if op == ".." || op == "..>" => Ok(Expression::FunctionCall {
+            function: crate::passes::ranges::RANGE_FUNCTION.to_string(),
+            args: vec![expression(lhs)?, expression(rhs)?, Expression::BoolLiteral(op == "..>")],
+            // Located at the operator, which a binary expression's span starts at.
+            loc: loc(ast::Span { start: span.start, end: span.start + op.len() }),
+        }),
         ast::Expression::Binary { lhs, op, rhs, span } => Ok(Expression::Binary {
             op: binary_op(op)
                 .ok_or_else(|| Diagnostic::error(format!("unsupported binary operator '{}'", op)).at(loc(*span)))?,

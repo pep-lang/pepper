@@ -9,6 +9,7 @@ pub mod entry_point;
 pub mod resolve_literals;
 pub mod resolve_type_aliases;
 pub mod overloads;
+pub mod ranges;
 pub mod convert_string_literals;
 pub mod gather_generics;
 pub mod constraints;
@@ -101,6 +102,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
 
     step!(specialize_structs(module));
     step!(specialize_functions(module));
+    // `a..b` over a non-integer, before the runtime's `Range<T>` fails inside.
+    step!(ranges::check_ranges(module));
     step!(generic_methods::specialize_methods(module));
     step!(synthesize_function_types(module));
     step!(convert_intrinsics(module));
@@ -124,6 +127,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         step!(constraints::check_specializations(module));
         step!(specialize_structs(module));
         step!(specialize_functions(module));
+        step!(ranges::check_ranges(module));
         // A generic method call on a value whose type the round just
         // specialized (`c.map(f)` with `c: Box<long>`) is typed, and its type
         // arguments inferred, only now.

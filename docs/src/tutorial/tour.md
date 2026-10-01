@@ -82,7 +82,8 @@ not need to import them:
   adding it; use `contains` to tell the two apart.
   [`HashSet<K>`](../reference/hash.md#hashset) keeps each key once.
 - `for (var x in collection)` visits each element of an array, or each
-  character of a string, in order. See [Iteration](../language/iteration.md).
+  character of a string, in order, and `for (var i in 0..n)` counts from 0
+  to `n - 1`. See [Iteration](../language/iteration.md).
 
 ## Handling errors with Result
 

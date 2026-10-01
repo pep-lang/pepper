@@ -53,6 +53,8 @@ punctuation_table(): String[] {
         "!==",
         "<<=",
         "...",
+        "..>",
+        "..",
         "==",
         "!=",
         "<=",
@@ -277,7 +279,8 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 while (i < size and is_digit(data[i])) {
                     i += 1;
                 }
-                if (i < size and data[i] == '.') {
+                # `1..5` and `1..>5` are ranges, not `1.` and a `.`.
+                if (i < size and data[i] == '.' and !(i + 1 < size and data[i + 1] == '.')) {
                     i += 1;
                     while (i < size and is_digit(data[i])) {
                         i += 1;

@@ -2,8 +2,8 @@
 
 A `for` loop visits each element of a collection in turn. You can loop over an
 [`Array`](../reference/array.md), over the code points of a
-[`String`](../reference/string.md), and over any type of your own that follows
-the iterator protocol.
+[`String`](../reference/string.md), over a range of numbers (`0..count`),
+and over any type of your own that follows the iterator protocol.
 
 ## Looping over an array
 
@@ -38,6 +38,39 @@ a single code point, the same value that indexing gives you (`word[i]`):
 ```pepper
 {{#include ../../examples/iteration-strings.pep}}
 ```
+
+## Looping over a range
+
+`a..b` is the numbers from `a` up to, but not including, `b`, and `a..>b`
+includes `b`. Looping over one is how you count:
+
+```pepper
+{{#include ../../examples/iteration-ranges.pep}}
+```
+
+- **The bounds give the type.** A range's element type is inferred from its
+  bounds like a generic call's type argument, so `0..names.count()` counts in
+  `ulong`. The bounds must be integers; anything else is an error at the
+  operator:
+
+  ```text
+  main.pep:2:22: error: range bounds must be integers, not 'String'
+      2 |     for (var c in "a".."z") {
+        |                      ^~
+  ```
+
+- **Precedence.** A range binds more loosely than arithmetic and shifts, and
+  more tightly than comparisons, so `0..n + 1` is `0..(n + 1)`. Two range
+  operators in a row (`1..2..3`) are an error; add parentheses. `...` is
+  not a range operator.
+- **An empty range runs no iterations.** A range whose start is past its end
+  (`3..1`, `5..>4`) is empty, and `a..a` is too. A closed range ending at
+  its type's largest value (`250..>top` with a `byte` `top` of 255) stops
+  there without overflowing.
+- **A range is a value**, a [`Range<T>`](../reference/range.md). It has
+  `contains(x)` and `is_empty()`, and it is an `Iterator<T>`, so it has the
+  [adapters](#adapters) `map` and `filter`. Looping over one allocates
+  nothing; the optimizer turns it into a plain counting loop.
 
 ## The iterator protocol
 

@@ -460,3 +460,86 @@ test(): int {
 "#,
     );
 }
+
+#[test]
+fn half_open_and_closed_ranges() {
+    assert_runs_clean(
+        r#"
+test(): int {
+    var total = 0;
+    for (var i in 0..5) {
+        total += i;            # 0 + 1 + 2 + 3 + 4
+    }
+    for (var i in 1..>3) {
+        total += i * 100;      # 100 + 200 + 300
+    }
+    for (var i in 5..5) {
+        return 1;
+    }
+    for (var i in 5..>4) {
+        return 2;
+    }
+    return total - 610;
+}"#,
+    );
+}
+
+#[test]
+fn range_type_follows_its_bounds() {
+    assert_runs_clean(
+        r#"
+test(): int {
+    var nums = [10, 20, 30];
+    var total = 0;
+    for (var i in 0..nums.count()) {   # Range<ulong>
+        total += nums[i];
+    }
+    ulong last = 0;
+    for (var i in 0..nums.count()) {
+        last = i;
+    }
+    byte count = 0;
+    byte top = 255;
+    for (var b in 250..>top) {          # stops at 255 without overflowing
+        count += 1;
+    }
+    return total - 60 + (last as int) - 2 + (count as int) - 6;
+}"#,
+    );
+}
+
+#[test]
+fn range_is_a_value_with_contains_and_adapters() {
+    assert_runs_clean(
+        r#"
+test(): int {
+    var r = 2..5;
+    if (!r.contains(2) || !r.contains(4) || r.contains(5) || r.contains(1)) {
+        return 1;
+    }
+    if (!(2..>5).contains(5) || r.is_empty() || !(3..3).is_empty()) {
+        return 2;
+    }
+    r.next();                  # the loop below resumes where this left off
+    var rest = 0;
+    for (var i in r) {
+        rest += i;             # 3 + 4
+    }
+    var squares = 0;
+    for (var s in (1..>3).map((x) => x * x)) {
+        squares += s;          # 1 + 4 + 9
+    }
+    return rest - 7 + squares - 14;
+}"#,
+    );
+}
+
+#[test]
+fn range_current_out_of_turn_panics() {
+    let (ok, stdout) = run_binary(
+        "range_current",
+        "main(): int {\n    var r = 0..1;\n    return r.current();\n}\n",
+    );
+    assert!(!ok, "expected a panic");
+    assert!(stdout.contains("Range.current() before next()"), "stdout: {stdout:?}");
+}

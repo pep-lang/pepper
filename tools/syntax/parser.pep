@@ -607,11 +607,25 @@ struct Parser {
         return _prefix_increment();
     }
 
+    # `a..b` or `a..>b`, between the shift and `is` levels as in the
+    # compiler's `range`. Not associative.
+    _range(): Node {
+        var lhs = _binary_level(7);
+        if (_failed or !(_at("..>") or _at(".."))) {
+            return lhs;
+        }
+        var node = Node(NodeKind.Binary);
+        node.add(lhs);
+        _take(node);
+        node.add(_binary_level(7));
+        return node;
+    }
+
     # `value is Pattern`, between the relational and shift levels as in the
     # compiler's `is_test`. `is` is a keyword only here, so it stays usable
     # as a name.
     _is_test(): Node {
-        var value = _binary_level(7);
+        var value = _range();
         if (_failed or !_at_word("is")) {
             return value;
         }

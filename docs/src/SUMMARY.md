@@ -98,6 +98,7 @@
   - [math/module.pep](reference/math-module.md)
     - [math/parse.pep](reference/math-parse.md)
   - [number.pep](reference/number.md)
+  - [range.pep](reference/range.md)
     - [text/ascii.pep](reference/text-ascii.md)
   - [text/module.pep](reference/text-module.md)
     - [text/utf16.pep](reference/text-utf16.md)

@@ -86,8 +86,8 @@ The loop variable can be declared with `var` or a type
 parentheses are optional. [Iteration](iteration.md) covers the protocol behind
 `for` and how to make your own types iterable.
 
-Pepper has no counting `for (init; condition; step)` loop and no range syntax.
-To count, use a `while` loop with a counter.
+Pepper has no C-style `for (init; condition; step)` loop. To count, loop over
+a [range](iteration.md#looping-over-a-range): `for (var i in 0..count)`.
 
 ## `with`
 

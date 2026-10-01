@@ -4017,3 +4017,13 @@ fn a_generic_that_asks_for_a_larger_instance_of_itself_stops_at_the_depth_limit(
     assert_eq!(lines[2], "      |                ^~~~~~~~~~~~~", "{error}");
     assert_eq!(lines[3], "main.pep:6:13: note: asked for by 'main' here", "{error}");
 }
+
+#[test]
+fn range_of_a_non_integer() {
+    assert_eq!(
+        error_of("range_of_a_non_integer", "main(): int {\n    for (var c in \"a\"..\"z\") {\n    }\n    return 0;\n}\n"),
+        "main.pep:2:22: error: range bounds must be integers, not 'String'\n\
+         \x20   2 |     for (var c in \"a\"..\"z\") {\n\
+         \x20     |                      ^~"
+    );
+}
