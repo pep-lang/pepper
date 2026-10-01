@@ -544,3 +544,23 @@ fn a_program_loads_the_runtime_another_program_checked() {
     assert_eq!(std::fs::metadata(&stored[0]).unwrap().modified().unwrap(), written, "the runtime was checked again");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Every trait's vtable has the slot `copy` of a trait value calls, so a
+/// cached unit that converts a struct to a trait stays valid when another
+/// unit starts copying values of that trait.
+#[test]
+fn a_cached_vtable_serves_a_new_copy_of_its_trait() {
+    let dir = scratch("trait_copy");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    let shapes = "export trait Shape {\n    area(): int;\n}\n\nexport struct Square {\n    int side;\n    construct(side: int = 0) { this.side = side; }\n}\n\nextend Square with Shape {\n    area(): int { return side * side; }\n}\n\nexport make(side: int): Shape {\n    return Square(side);\n}\n";
+    write(&project, &[("shapes.pep", shapes), ("main.pep", "import \"shapes\";\nmain(): int { return make(3).area() - 9; }\n")]);
+    let entry = project.join("main.pep");
+    build_entry(&entry, &cache, &dir.join("a"));
+    write(&project, &[("main.pep", "import \"shapes\";\nmain(): int {\n    var c = copy(make(3));\n    return c.area() - 9;\n}\n")]);
+    // Verifying fails if the cached `shapes` object's vtable differs from
+    // the one this program needs.
+    let copied = build_entry(&entry, &cache, &dir.join("b"));
+    assert_eq!(outcome(&copied, "shapes"), Some(Outcome::Hit), "{:?}", outcomes(&copied));
+    let _ = std::fs::remove_dir_all(&dir);
+}

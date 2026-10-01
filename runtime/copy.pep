@@ -7,10 +7,11 @@
 # thread-safe `T`, and for a struct to `_copy_object<T>`, which calls the
 # struct's `_pep_copy` method. The compiler synthesizes `_pep_copy`: it forwards to
 # the struct's own `copy(Copies)` when it implements `Copyable<T>`, and
-# otherwise copies field by field without running a constructor. Anything
-# else (a struct with a destructor or a raw pointer field, a plain function
-# value, a trait value) is a compile error at the code that asked for the
-# copy.
+# otherwise copies field by field without running a constructor. A trait
+# value goes to `_copy_trait<T>`, which calls the struct's
+# `_pep_copy_trait` through the vtable. Anything else (a struct with a
+# destructor or a raw pointer field, a plain function value) is a compile
+# error at the code that asked for the copy.
 #
 # `_made` maps each original object's address to its copy's. Every copy stays
 # alive until `copy` returns: it is referenced from the copy of the object
@@ -33,14 +34,18 @@ import "hash";
 ## unless it implements `Copyable<T>`. A struct with a destructor or a raw
 ## pointer field must implement `Copyable<T>` to be copied, since copying
 ## its fields would share what it owns; `String`, `Array`, `HashMap` and
-## `HashSet` do. Copying such a struct that does not, a plain function value
-## or a trait value is a compile error.
+## `HashSet` do. Copying such a struct that does not, or a plain function
+## value, is a compile error.
+##
+## A trait value is copied by copying the struct behind it, which is known
+## only at run time: when that struct cannot be copied, `copy` panics.
 ##
 ## Runs in O(size of the value) and allocates each copied object.
 ##
 ## @typeParam T the type of the value
 ## @param value the value to copy
 ## @returns a copy that shares no non-thread-safe object with `value`; `value` itself when `T` is thread-safe
+## @panics if `value` reaches a trait value holding a struct that cannot be copied
 ## @example
 ##     var names = Array<String>();
 ##     names.append("ada");
@@ -222,6 +227,16 @@ export struct Copies {
         T found = slot[0];
         _cell[0] = 0;
         return found;
+    }
+
+    # The copy of trait value `value`: null for null, else the copy of the
+    # struct behind it, made by that struct's `_pep_copy_trait` method (which
+    # the compiler adds to the trait and to each struct that declares it).
+    _copy_trait<T>(value: T): T {
+        if (value === __null) {
+            return value;
+        }
+        return value._pep_copy_trait(this);
     }
 
     # A weak reference to the copy of `original`'s target, or a null one

@@ -11,6 +11,14 @@
 //!   otherwise calls `value._pep_copy(copies)`. This pass gives `T` that
 //!   `_pep_copy` method: `return this.copy(copies);` when `T` implements
 //!   `Copyable<T>`, else a field-by-field copy (below);
+//! - a trait type `T` becomes `copies._copy_trait<T>(value)`, which returns
+//!   null for null and otherwise calls `value._pep_copy_trait(copies)`
+//!   through the vtable. This pass adds that member to the trait, and gives
+//!   every struct that declares the trait (at any type arguments)
+//!   `_pep_copy_trait(copies): S { return copies.copy<S>(this); }`, so the
+//!   struct behind the value is copied as a copy of `S` would be, sharing
+//!   included. A struct that cannot be copied gets one that panics, naming
+//!   what blocks it: what a trait value holds is known only at run time;
 //! - anything else is a "cannot copy" error.
 //!
 //! A struct is **trivially copyable** when it has no destructor, no raw
@@ -72,12 +80,16 @@ const COPY_VALUE_METHOD: &str = "_pep_copy_value";
 /// The synthesized method that points a copy's weak fields at copies.
 const FIX_WEAK_METHOD: &str = "_pep_fix_weak";
 
+/// The synthesized trait member that copies the struct behind a trait value,
+/// and each implementing struct's method for it.
+pub const COPY_TRAIT_METHOD: &str = "_pep_copy_trait";
+
 /// Whether `name` is a method this pass synthesizes on demand. A program
 /// gets one only for the types it copies, so no file owns it: the code
 /// generator shares it between units like an instantiation, which keeps a
 /// unit's object (a runtime unit's included) independent of the program.
 pub fn is_synthesized_method(name: &str) -> bool {
-    name == COPY_METHOD || name == FIX_WEAK_METHOD || name == COPY_VALUE_METHOD
+    name == COPY_METHOD || name == FIX_WEAK_METHOD || name == COPY_VALUE_METHOD || name == COPY_TRAIT_METHOD
 }
 
 /// Why a type cannot be copied.
@@ -91,8 +103,6 @@ enum Blocker {
     NotCopyable { ty: TypeName, why: String, loc: Loc },
     /// A plain function value, which may capture anything.
     PlainFunction(TypeName),
-    /// A trait value (copying through the vtable is not supported yet).
-    Trait(TypeName),
     /// A raw pointer.
     RawPointer(TypeName),
     /// A weak reference outside a struct field.
@@ -103,7 +113,7 @@ impl Blocker {
     fn ty(&self) -> &TypeName {
         match self {
             Blocker::Destructor { ty, .. } | Blocker::RawPointerField { ty, .. } | Blocker::NotCopyable { ty, .. } => ty,
-            Blocker::PlainFunction(ty) | Blocker::Trait(ty) | Blocker::RawPointer(ty) | Blocker::Weak(ty) => ty,
+            Blocker::PlainFunction(ty) | Blocker::RawPointer(ty) | Blocker::Weak(ty) => ty,
         }
     }
 
@@ -113,7 +123,6 @@ impl Blocker {
             Blocker::Destructor { .. } | Blocker::RawPointerField { .. } => "is not trivially copyable",
             Blocker::NotCopyable { .. } => "cannot be copied",
             Blocker::PlainFunction(_) => "is a plain function value",
-            Blocker::Trait(_) => "is a trait value",
             Blocker::RawPointer(_) => "is a raw pointer",
             Blocker::Weak(_) => "is a weak reference",
         }
@@ -130,6 +139,9 @@ enum Plan {
     /// A tuple with an element that is not thread-safe: a new tuple of each
     /// element's copy.
     Tuple,
+    /// A trait value: the struct behind it, through the vtable. Whether that
+    /// struct can be copied is known only at run time.
+    Trait,
     Blocked(Blocker),
 }
 
@@ -223,8 +235,8 @@ fn plan(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Plan {
     if is_raw_pointer(ty) {
         return Plan::Blocked(Blocker::RawPointer(ty.clone()));
     }
-    if module.traits.iter().any(|t| t.name == ty.name) {
-        return Plan::Blocked(Blocker::Trait(ty.clone()));
+    if crate::traits::is_trait_type(&module.traits, ty) {
+        return Plan::Trait;
     }
     if ty.is_tuple() {
         return Plan::Tuple;
@@ -281,7 +293,7 @@ fn first_blocker(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Op
             return None;
         }
         let copyable = match plan(module, safe, ty) {
-            Plan::Same => return None,
+            Plan::Same | Plan::Trait => return None,
             Plan::Blocked(blocker) => return Some(blocker),
             Plan::Object { copyable } => copyable,
             Plan::Tuple => false,
@@ -457,7 +469,7 @@ fn compiled_functions(module: &mut Module) -> Vec<&mut FunctionDef> {
 fn requests(module: &mut Module) -> Vec<(TypeName, Loc)> {
     let mut found: Vec<(TypeName, Loc)> = vec![];
     for function in compiled_functions(module) {
-        if is_copy_method(function) || function.name == COPY_METHOD || function.name == COPY_VALUE_METHOD {
+        if is_copy_method(function) || function.name == COPY_METHOD || function.name == COPY_VALUE_METHOD || function.name == COPY_TRAIT_METHOD {
             continue;
         }
         for (ty, loc) in copy_calls(function) {
@@ -481,12 +493,13 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
         }
     }
     let censuses_added = lower_censuses(module, &safe);
+    let traits_added = add_trait_copies(module, &safe);
     let mut calls: Vec<(TypeName, Loc)> = vec![];
     for function in compiled_functions(module) {
         collect_calls(function, &mut calls);
     }
     if calls.is_empty() {
-        return censuses_added;
+        return censuses_added || traits_added;
     }
     // What each `__copy<T>` becomes: the value, a `_copy_object<T>` call, or
     // a panic.
@@ -509,11 +522,12 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
                 Some((_, blocker)) => Lowering::Fail(format!("cannot copy '{}', which {}", ty.display(), blocker.what())),
                 None => Lowering::Tuple(tuple_parts(module, &safe, ty, &mut needed)),
             },
+            Plan::Trait => Lowering::Trait,
             Plan::Blocked(blocker) => Lowering::Fail(format!("cannot copy '{}', which {}", ty.display(), blocker.what())),
         };
         lowered.push((ty.clone(), lowering));
     }
-    let mut added = false;
+    let mut added = traits_added;
     for (name, copyable) in needed {
         let Some(index) = module.structs.iter().position(|st| st.name == name) else { continue };
         if module.structs[index].method_members.iter().any(|m| m.name == COPY_METHOD || m.name == COPY_VALUE_METHOD) {
@@ -543,6 +557,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
                 Lowering::Object => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_object<{}>", ty), args: vec![value], loc },
                 Lowering::Value(method) => Expression::MethodCall { this: Box::new(value), method: method.to_string(), args: vec![copies], loc },
                 Lowering::Tuple(parts) => copy_tuple(&ty, parts, value, &copies, loc),
+                Lowering::Trait => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_trait<{}>", ty), args: vec![value], loc },
                 Lowering::Fail(message) => Expression::FunctionCall {
                     function: format!("_pep_copy_failed<{}>", ty),
                     args: vec![Expression::StringLiteral { value: message.clone(), is_raw: true, loc: Loc::NONE }],
@@ -581,7 +596,7 @@ fn lower_censuses(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
     let checked: Vec<(TypeName, bool)> = types
         .into_iter()
         .map(|ty| {
-            let can = !matches!(plan(module, safe, &ty), Plan::Same) && first_blocker(module, safe, &ty).is_none();
+            let can = !matches!(plan(module, safe, &ty), Plan::Same | Plan::Trait) && first_blocker(module, safe, &ty).is_none();
             (ty, can)
         })
         .collect();
@@ -615,6 +630,8 @@ enum Lowering {
     Value(&'static str),
     /// A new tuple of each element's copy.
     Tuple(Vec<Part>),
+    /// A trait value, through `copies._copy_trait<T>`.
+    Trait,
     /// A panic with this message: nothing the program asks for copies a `T`.
     Fail(String),
 }
@@ -630,6 +647,9 @@ enum Part {
     Value(&'static str),
     /// A nested tuple, element by element.
     Tuple(TypeName, Vec<Part>),
+    /// A trait value, through `copies.copy<T>`, which lowers to
+    /// `_copy_trait<T>`.
+    Trait(TypeName),
 }
 
 /// How to copy each element of tuple `ty`, whose elements can all be
@@ -649,6 +669,7 @@ fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed:
                 }
             }
             Plan::Tuple => Part::Tuple(element.clone(), tuple_parts(module, safe, element, needed)),
+            Plan::Trait => Part::Trait(element.clone()),
             Plan::Same | Plan::Blocked(_) => Part::Same,
         })
         .collect()
@@ -672,6 +693,7 @@ fn copy_tuple(ty: &TypeName, parts: &[Part], value: Expression, copies: &Express
                 },
                 Part::Value(method) => Expression::MethodCall { this: Box::new(element), method: method.to_string(), args: vec![copies.clone()], loc },
                 Part::Tuple(t, inner) => copy_tuple(t, inner, element, copies, loc),
+                Part::Trait(t) => Expression::MethodCall { this: Box::new(copies.clone()), method: format!("copy<{}>", t), args: vec![element], loc },
             }
         })
         .collect();
@@ -686,6 +708,90 @@ fn collect_calls(function: &mut FunctionDef, calls: &mut Vec<(TypeName, Loc)>) {
             calls.push((ty, e.loc()));
         }
     });
+}
+
+/// Make every trait copyable through its values: give each trait a
+/// `_pep_copy_trait(copies): Tr` member, and each concrete struct that
+/// declares a trait the method that fills that vtable slot. Every trait gets
+/// the slot, copied or not, so a vtable depends only on the trait's and the
+/// struct's declarations: a unit's cached object stays valid when another
+/// unit starts copying the trait. A struct specialized later gets its
+/// method on a later round. Returns whether it added anything.
+fn add_trait_copies(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
+    let mut added = false;
+    for def in module.traits.iter_mut() {
+        if !def.methods.iter().any(|m| m.name == COPY_TRAIT_METHOD) {
+            def.methods.push(trait_copy_member(def));
+            added = true;
+        }
+    }
+    let wanting: Vec<usize> = (0..module.structs.len())
+        .filter(|&i| {
+            let st = &module.structs[i];
+            !(st.name == st.ty.name && st.ty.is_generic())
+                && st.traits.iter().any(|t| crate::traits::is_trait_type(&module.traits, t))
+                && !st.method_members.iter().any(|m| m.name == COPY_TRAIT_METHOD)
+        })
+        .collect();
+    for index in wanting {
+        let this_ty = TypeName::new(&module.structs[index].name);
+        // A struct that cannot be copied panics, naming what blocks it.
+        let isolated = has_attribute(&module.structs[index].attributes, crate::passes::check_confinement::ISOLATED_ATTRIBUTE);
+        let blocker = if isolated {
+            // A guard never leaves its `with` block, so a copy of one would
+            // be a second lock.
+            Some((vec![], Blocker::NotCopyable { ty: this_ty.clone(), why: String::new(), loc: Loc::NONE }))
+        } else {
+            first_blocker(module, safe, &this_ty)
+        };
+        let copied = match blocker {
+            None => method_call(symbol("copies", copies_type()), &format!("copy<{}>", this_ty), vec![Expression::ThisRef]),
+            Some((path, blocker)) => {
+                let message = if path.is_empty() {
+                    format!("cannot copy the '{}' behind a trait value, which {}", this_ty.display(), blocker.what())
+                } else {
+                    format!(
+                        "cannot copy the '{}' behind a trait value because it contains '{}', which {}",
+                        this_ty.display(),
+                        blocker.ty().display(),
+                        blocker.what()
+                    )
+                };
+                Expression::FunctionCall {
+                    function: format!("_pep_copy_failed<{}>", this_ty),
+                    args: vec![Expression::StringLiteral { value: message, is_raw: true, loc: Loc::NONE }],
+                    loc: Loc::NONE,
+                }
+            }
+        };
+        let body = vec![Statement::Return(ReturnStatement { expr: Some(copied), loc: Loc::NONE })];
+        let st = &mut module.structs[index];
+        let copy = method(st, COPY_TRAIT_METHOD, this_ty, body);
+        st.method_members.push(copy);
+        added = true;
+    }
+    added
+}
+
+/// The trait member `_pep_copy_trait(copies: Copies): Tr<T, ...>` of `def`,
+/// which returns the trait type itself at the trait's own parameters.
+fn trait_copy_member(def: &TraitDef) -> FunctionDef {
+    let ty = TypeName::with_args(&def.name, def.generic_params.iter().map(|p| TypeName::new(&p.name)).collect());
+    FunctionDef {
+        name: COPY_TRAIT_METHOD.to_string(),
+        ty,
+        generic_params: vec![],
+        parameters: vec![variable("copies", copies_type(), None, Kind::Param)],
+        body: None,
+        parent: None,
+        is_static: false,
+        is_indexer: false,
+        is_generic_func: false,
+        attributes: vec![],
+        loc: def.loc,
+        trait_default: None,
+        owner: Loc::NONE,
+    }
 }
 
 // ── The error ────────────────────────────────────────────────────────────────
@@ -822,12 +928,6 @@ fn cannot_copy(module: &Module, root: &TypeName, fallback: Loc, path: Vec<Hop>, 
                     "a plain function value may capture values that are not thread-safe; declare the type '{}' to pass it by reference",
                     ty.with_sharing(true).display()
                 ),
-                None,
-            );
-        }
-        Blocker::Trait(ty) => {
-            return diagnostic.with_note(
-                format!("copying a trait value is not supported yet; copy the struct before converting it to '{}'", ty.display()),
                 None,
             );
         }

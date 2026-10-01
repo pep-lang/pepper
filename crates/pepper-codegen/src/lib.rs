@@ -1794,6 +1794,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .iter()
                 .map(|(name, params, ret)| (implementer(name, params), Some(ret.clone()))),
         );
+        // Declared before its entries: an entry's covariant adapter can
+        // convert to this same trait (`_pep_copy_trait` returns the struct),
+        // and must find this vtable rather than make a second one.
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let global = self.module.add_global(ptr_type.array_type(members.len() as u32), None, &global_name);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_constant(true);
         let mut entries: Vec<PointerValue<'ctx>> = vec![];
         let boxed = self.values.contains_key(from);
         for (member, declared) in &members {
@@ -1824,11 +1831,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             entries.push(function.as_global_value().as_pointer_value());
         }
-        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let init = ptr_type.const_array(&entries);
-        let global = self.module.add_global(init.get_type(), None, &global_name);
-        global.set_linkage(inkwell::module::Linkage::Private);
-        global.set_constant(true);
         global.set_initializer(&init);
         Ok(global.as_pointer_value())
     }

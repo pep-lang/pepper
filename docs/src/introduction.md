@@ -85,8 +85,7 @@ Some that you will meet quickly:
   waits on several channels at once, and a `Mutex` holds any struct, with
   the compiler keeping each locked value apart from the rest of the program
   (see
-  [threads](language/threads.md#what-a-lock-body-may-do)). A trait value
-  cannot be copied yet.
+  [threads](language/threads.md#what-a-lock-body-may-do)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.

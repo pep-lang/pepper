@@ -202,6 +202,9 @@ calling a method on it runs that struct's own method:
   [Iteration](iteration.md#writing-your-own-iterator).
 - `==` and `!=` on trait values compare identity: they are equal when they
   refer to the same object.
+- **`copy` copies the struct behind a trait value** and returns it as the
+  same trait type (see [Copying trait values](memory.md#copying-trait-values)).
+  It panics when that struct cannot be copied.
 
 What traits do not do yet:
 

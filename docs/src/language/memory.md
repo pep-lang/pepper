@@ -201,8 +201,27 @@ note: implement 'Copyable<Handle>' to say how to copy it:
 
 Some types cannot be copied at all: an `io.File` owns an operating-system
 handle, so the error says to send its path instead. A plain function value
-cannot be copied, because it may capture anything; declare it `shared`. A
-trait value cannot be copied yet.
+cannot be copied, because it may capture anything; declare it `shared`.
+
+### Copying trait values
+
+`copy` of a [trait value](traits-and-extensions.md#traits-as-types) copies
+the struct behind it, as `copy` of that struct would, and returns the copy
+as the same trait type. Sharing works across the boundary: a struct reached
+twice, through a trait value or directly, is copied once.
+
+```pepper
+{{#include ../../examples/memory-copy-traits.pep}}
+```
+
+Which struct a trait value holds is known only when the program runs, so
+the compiler cannot check that it can be copied. Copying a trait value that
+holds a struct that cannot be copied (one with a destructor and no
+`Copyable<T>`, an `io.File`, a `MutexGuard`) panics:
+
+```text
+cannot copy the 'Owner' behind a trait value, which is not trivially copyable
+```
 
 ## Handing a reference over with move
 

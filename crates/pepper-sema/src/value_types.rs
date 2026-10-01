@@ -79,6 +79,11 @@ pub fn lower_extensions(module: &mut Module) {
                 def.generic_params.iter().map(|p| p.name.clone()).zip(trait_name.sub_types.iter().cloned()).collect();
             map.push(("this".to_string(), TypeName::new(&key)));
             for required in &def.methods {
+                // Only trait values are copied through this member, and a
+                // value type is never one.
+                if required.name == crate::passes::copies::COPY_TRAIT_METHOD {
+                    continue;
+                }
                 let set = set_name(&required.name);
                 let declared = |ty: &TypeName| {
                     let mut ty = ty.clone();

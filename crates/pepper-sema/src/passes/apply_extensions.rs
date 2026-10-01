@@ -59,6 +59,10 @@ fn conform(
         .collect();
     type_map.push(("this".to_string(), st.ty.clone()));
     for required in &def.methods {
+        // `copies` gives every struct that declares a trait this member.
+        if required.name == crate::passes::copies::COPY_TRAIT_METHOD {
+            continue;
+        }
         if required.is_generic_func && st.generic_methods.iter().any(|m| m.name == required.name) {
             continue;
         }

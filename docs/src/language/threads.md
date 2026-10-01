@@ -559,8 +559,6 @@ The [Once reference](../reference/async-once.md) has the details.
   declared outside the block: such a variable is an outside value, whatever
   it holds, so it needs `copy`, or `move` when it holds the only reference
   (`list.append(move(job))`).
-- `copy` cannot copy a trait value yet, so sending a trait value that the
-  sender keeps using is an error; send `move(x)` or a new value instead.
 - There is no reader-writer lock, and no barrier or semaphore. A Mutex is
   not re-entrant.
 - A `Select` only receives: it cannot wait to send to a full channel. The

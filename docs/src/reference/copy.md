@@ -28,8 +28,11 @@ A struct is copied field by field, without running its constructor,
 unless it implements `Copyable<T>`. A struct with a destructor or a raw
 pointer field must implement `Copyable<T>` to be copied, since copying
 its fields would share what it owns; `String`, `Array`, `HashMap` and
-`HashSet` do. Copying such a struct that does not, a plain function value
-or a trait value is a compile error.
+`HashSet` do. Copying such a struct that does not, or a plain function
+value, is a compile error.
+
+A trait value is copied by copying the struct behind it, which is known
+only at run time: when that struct cannot be copied, `copy` panics.
 
 Runs in O(size of the value) and allocates each copied object.
 
@@ -41,6 +44,9 @@ Runs in O(size of the value) and allocates each copied object.
 
 **Returns**
 - a copy that shares no non-thread-safe object with `value`; `value` itself when `T` is thread-safe
+
+**Panics**
+- if `value` reaches a trait value holding a struct that cannot be copied
 
 **Example**
 ```pepper

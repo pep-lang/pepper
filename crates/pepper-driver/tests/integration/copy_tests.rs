@@ -280,3 +280,174 @@ test(): int {
 }"#,
     );
 }
+
+/// Structs behind trait values, for the trait-value tests.
+const SHAPES: &str = r#"
+trait Shape {
+    area(): int;
+    grow();
+}
+
+struct Square {
+    int side;
+    String name;
+    construct(side: int = 0) {
+        this.side = side;
+        name = "square";
+    }
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+    grow() {
+        side = side + 1;
+        name.append("+");
+    }
+}
+
+struct Holder {
+    Shape first;
+    Shape second;
+    Square direct;
+}
+"#;
+
+#[test]
+fn trait_values_copy_the_struct_behind_them() {
+    assert_runs(&format!(
+        r#"{SHAPES}
+test(): int {{
+    Shape s = Square(3);
+    var c = copy(s);
+    c.grow();
+    if (s.area() != 9) {{ return 1; }}
+    if (c.area() != 16) {{ return 2; }}
+    Shape none = __null;
+    if (copy(none) != __null) {{ return 3; }}
+    var shapes = Array<Shape>();
+    shapes.append(Square(5));
+    var copied = copy(shapes);
+    copied[0].grow();
+    if (shapes[0].area() != 25 || copied[0].area() != 36) {{ return 4; }}
+    var pair = copy((s, 7));
+    pair.0.grow();
+    if (s.area() != 9 || pair.0.area() != 16) {{ return 5; }}
+    return 0;
+}}"#
+    ));
+}
+
+#[test]
+fn an_object_behind_several_references_stays_shared_in_the_copy() {
+    assert_runs(&format!(
+        r#"{SHAPES}
+test(): int {{
+    var square = Square(2);
+    var holder = Holder();
+    holder.first = square;
+    holder.second = square;
+    holder.direct = square;
+    var c = copy(holder);
+    c.first.grow();
+    if (c.second.area() != 9) {{ return 1; }}
+    if (c.direct.side != 3 || c.direct.name != "square+") {{ return 2; }}
+    if (square.side != 2 || square.name != "square") {{ return 3; }}
+    return 0;
+}}"#
+    ));
+}
+
+#[test]
+fn generic_traits_value_structs_and_shared_structs_copy_through_trait_values() {
+    assert_runs(
+        r#"
+trait Getter<T> {
+    get(): T;
+}
+
+struct Box<T> {
+    T value;
+    Getter<T> next;
+    construct(value: T) { this.value = value; }
+}
+
+extend Box<T> with Getter<T> {
+    get(): T { return value; }
+}
+
+[Value]
+struct Point {
+    int x;
+    String label;
+    construct(this.x = 0, this.label = "") {}
+}
+
+extend Point with Getter<int> {
+    get(): int { return x; }
+}
+
+[Shared]
+struct Fixed {
+    const n: int;
+    construct(this.n = 0) {}
+}
+
+extend Fixed with Getter<int> {
+    get(): int { return n; }
+}
+
+same(a: Getter<int>, b: Getter<int>): bool {
+    return a == b;
+}
+
+test(): int {
+    var b = Box<int>(4);
+    b.next = Box<int>(5);
+    Getter<int> g = b;
+    var c = copy(g);
+    if (c.get() != 4 || same(c, g)) { return 1; }
+    Getter<String> text = Box<String>("hi");
+    if (copy(text).get() != "hi") { return 2; }
+    Getter<int> p = Point(7, "p");
+    if (copy(p).get() != 7) { return 3; }
+    # A thread-safe struct is shared, not copied.
+    Getter<int> f = Fixed(9);
+    if (!same(copy(f), f)) { return 4; }
+    return 0;
+}"#,
+    );
+}
+
+/// What a trait value holds is known only at run time, so copying one that
+/// holds a struct that cannot be copied panics.
+#[test]
+fn copying_a_trait_value_holding_an_uncopyable_struct_panics() {
+    let source = r#"
+trait Shape {
+    area(): int;
+}
+
+struct Owner {
+    int n;
+    construct() {}
+    destruct {
+        n = 0;
+    }
+}
+
+extend Owner with Shape {
+    area(): int { return 1; }
+}
+
+main(): int {
+    Shape s = Owner();
+    var c = copy(s);
+    return 0;
+}
+"#;
+    let exe = crate::io_tests::build("copy_trait_uncopyable", source).expect("compile");
+    let output = crate::support::run_program(&mut std::process::Command::new(&exe), source).expect("spawn");
+    assert_ne!(output.status.code(), Some(0));
+    let printed = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(printed.contains("cannot copy the 'Owner' behind a trait value, which is not trivially copyable"), "{printed}");
+}

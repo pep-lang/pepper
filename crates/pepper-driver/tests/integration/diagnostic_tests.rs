@@ -783,21 +783,6 @@ fn cannot_copy_through_a_value_enum() {
 }
 
 #[test]
-fn cannot_copy_a_trait_value_yet() {
-    assert_eq!(
-        error_of(
-            "cannot_copy_trait",
-            "trait Shape {\n    int area();\n}\n\nmain(): int {\n    var shapes = Array<Shape>();\n    var c = copy(shapes);\n    return 0;\n}\n"
-        ),
-        "main.pep:7:13: error: cannot copy 'Array<Shape>' because it contains 'Shape', which is a trait value\n\
-         \x20   7 |     var c = copy(shapes);\n\
-         \x20     |             ^~~~\n\
-         note: 'Array<Shape>' copies its values of type 'Shape'\n\
-         note: copying a trait value is not supported yet; copy the struct before converting it to 'Shape'"
-    );
-}
-
-#[test]
 fn cannot_copy_a_plain_function_value() {
     assert_eq!(
         error_of(
