@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
+            window.path_to_searchindex_js = "../searchindex-3a2d0d81.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-28ac1f49.js"></script>
+        <script src="../toc-06f18f27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -804,7 +804,9 @@ main(): int {
 <p>A call whose type argument matches an override, such as <code>describe&lt;int&gt;(7)</code>,
 uses the override; every other call uses the generic version. The standard
 library uses this to give <a href="../reference/hash.html"><code>hash&lt;String&gt;</code></a> a
-content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity.</p>
+content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity; a
+struct keyed by its content overrides <code>hash&lt;T&gt;</code> the same way (see
+<a href="hashing.html">Hashing and equality</a>).</p>
 <p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
 a struct, such as <code>describe&lt;Point&gt;</code>. It may be declared in any file that can
 see both the generic function and the struct: here <code>main.pep</code> overrides

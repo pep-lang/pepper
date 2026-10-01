@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
+            window.path_to_searchindex_js = "../searchindex-3a2d0d81.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-28ac1f49.js"></script>
+        <script src="../toc-06f18f27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,18 +187,27 @@
 <h2 id="hash"><a class="header" href="#hash">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;T&gt;(value: T): u64
 </code></pre>
-<p>Returns a 64-bit FNV-1a hash of <code>value</code>, the hash <code>HashMap</code> and <code>HashSet</code>
-use for their keys.</p>
+<p>Returns a 64-bit hash of <code>value</code>, the hash <code>HashMap</code> and <code>HashSet</code> use for
+their keys.</p>
 <ul>
-<li>POD types (integers, floats, pointers, <code>bool</code>) fold the value’s own
-bytes, so equal values hash equally.</li>
-<li>Struct types hash by identity: the object’s address, folded through
-FNV-1a so that aligned addresses spread across buckets. Two distinct
-objects with equal fields therefore hash differently and are distinct
-keys. A null reference hashes to the FNV-1a offset basis.</li>
+<li>POD types (integers, floats, pointers, <code>bool</code>) mix the value’s own
+bits, so equal values hash equally.</li>
+<li>Struct types hash by identity: the object’s address, mixed so that
+aligned addresses spread across buckets. Two distinct objects with
+equal fields therefore hash differently and are distinct keys. A null
+reference hashes to the FNV-1a offset basis (0xcbf29ce484222325).</li>
+</ul>
+<p>Every input bit reaches the low bits of the result, which a power-of-two
+table masks with. The hash is not keyed, so it does not resist inputs
+chosen to collide.</p>
+<ul>
 <li><code>String</code> hashes by content through the concrete <code>hash&lt;String&gt;</code>
 override, so equal strings at different addresses collide.</li>
 </ul>
+<p>A struct whose keys should match by content instead declares an <code>==</code>
+operator and overrides this function for itself, hashing the fields <code>==</code>
+compares: <code>hash&lt;Point&gt;(value: Point): u64</code>. Keys that are <code>==</code> must hash
+equally (see the “Hashing and equality” chapter of the book).</p>
 <p>The result is deterministic within and across runs of a program for POD
 values and strings; for other struct types it depends on where the object
 was allocated. Reading the address does no refcount work, and a temporary
@@ -226,11 +235,12 @@ argument is released afterwards.</p>
 <h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;String&gt;(value: String): u64
 </code></pre>
-<p>Returns a 64-bit FNV-1a hash of a String’s bytes, so equal strings hash
-equally wherever they are stored. Keeps equal <code>String</code> keys of a
-<code>HashMap</code> or <code>HashSet</code> in one bucket.</p>
-<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) in O(size). An
-empty String hashes to the FNV-1a offset basis.</p>
+<p>Returns a 64-bit hash of a String’s bytes, so equal strings hash equally
+wherever they are stored. Keeps equal <code>String</code> keys of a <code>HashMap</code> or
+<code>HashSet</code> in one bucket.</p>
+<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) 8 bytes
+at a time, in O(size). An empty String hashes to the FNV-1a offset basis
+(0xcbf29ce484222325).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the String to hash; it must not be a null reference</li>
@@ -248,15 +258,17 @@ empty String hashes to the FNV-1a offset basis.</p>
 <p>A hash table that maps keys of type <code>K</code> to values of type <code>V</code>.</p>
 <p>Keys are hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code>: POD keys by value,
 <code>String</code> keys by content, and other struct keys by identity (two distinct
-objects with equal fields are different keys). Any type can be a key.</p>
+objects with equal fields are different keys) unless the struct declares
+an <code>==</code> operator and a matching <code>hash&lt;K&gt;</code> override. Any type can be a key.</p>
 <p>The map holds one reference to each stored key and value. It acquires
 them when they are stored and releases them when they are overwritten,
 removed, cleared, or when the map is destroyed.</p>
-<p>Lookups, inserts, and removals take expected O(1) time. The table doubles
-before an insert of a new key would fill half of it (live entries plus
-removed-slot tombstones), so it never shrinks, and churn (many inserts and
-removals of different keys) can keep growing it even while <code>count()</code>
-stays small.</p>
+<p>Lookups, inserts, and removals take expected O(1) time. Before an insert
+of a new key would fill half the table (live entries plus removed-slot
+tombstones), the table is rebuilt: at double the size, or at the same size
+when tombstones make up at least half of that load, so churn (many
+inserts and removals of different keys) does not keep growing it. It
+never shrinks.</p>
 <p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples, in no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -485,13 +497,17 @@ makes the iterator’s next <code>next()</code> or <code>current()</code> panic.
 <code>HashMap</code> but without values.</p>
 <p>Elements are hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code>: POD elements
 by value, <code>String</code> elements by content, and other struct elements by
-identity (two distinct objects with equal fields are both members). The
+identity (two distinct objects with equal fields are both members)
+unless the struct declares an <code>==</code> operator and a matching <code>hash&lt;K&gt;</code>
+override. The
 set holds one reference to each member. It acquires the reference on
 insert and releases it on remove, on <code>clear</code>, or when the set is
 destroyed.</p>
-<p>Membership tests, inserts, and removals take expected O(1) time. The
-table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. <code>iterate()</code> visits the
+<p>Membership tests, inserts, and removals take expected O(1) time. Before
+an insert of a new element would fill half the table (members plus
+tombstones), the table is rebuilt: at double the size, or at the same
+size when tombstones make up at least half of that load. It never
+shrinks. <code>iterate()</code> visits the
 members, in no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>

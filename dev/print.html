@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6b2d7e3c.js";
+            window.path_to_searchindex_js = "searchindex-3a2d0d81.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-28ac1f49.js"></script>
+        <script src="toc-06f18f27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -4336,7 +4336,9 @@ can be any type. These binary operators can be defined:</p>
 <code>+(int)</code>), and <code>a + b</code> picks by <code>b</code>’s type, as for any
 <a href="#methods-and-operators">overloaded</a> method.</li>
 <li>Each operator is its own method, with one exception: when a struct defines
-<code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. <code>+=</code> is not rewritten to
+<code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. A struct that defines <code>==</code>
+and is used as a <code>HashMap</code> or <code>HashSet</code> key also needs a matching
+<code>hash&lt;T&gt;</code> (see <a href="#hashing-and-equality">Hashing and equality</a>). <code>+=</code> is not rewritten to
 <code>a = a + b</code>; define each one you want to use.</li>
 <li>Comparison operators must return <code>bool</code>; any other return type is an error
 (<code>comparison operator '==' must return 'bool', not 'String'</code>). Logical
@@ -4602,7 +4604,8 @@ and for changing a <code>const</code> variable’s value. A <a href="#function-t
 made in a method holds a copy of <code>this</code>, so it cannot change <code>this</code> either.</p>
 <h2 id="comparing-and-hashing"><a class="header" href="#comparing-and-hashing">Comparing and hashing</a></h2>
 <p><code>==</code> and <code>!=</code> compare two values field by field, and <code>hash</code> combines the
-fields’ hashes, unless the struct declares its own <code>==</code> or <code>hash</code>. A value
+fields’ hashes, unless the struct declares its own <code>==</code> or <code>hash</code> (declare
+both together; see <a href="#hashing-and-equality">Hashing and equality</a>). A value
 has no identity, so <code>===</code> and <code>!==</code> are errors on it, and it is never null:
 comparing one with <code>__null</code> is an error too.</p>
 <h2 id="what-a-value-struct-cannot-do"><a class="header" href="#what-a-value-struct-cannot-do">What a value struct cannot do</a></h2>
@@ -4638,6 +4641,190 @@ any trait value.</p>
 side by side, so it is as large as all of them together; the cases do not
 share storage yet.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="hashing-and-equality"><a class="header" href="#hashing-and-equality">Hashing and equality</a></h1>
+<p><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> find a key by hashing it with <code>hash&lt;K&gt;</code>
+and comparing it with <code>==</code>. What those two mean for a type decides which keys
+count as the same.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key type</th><th><code>==</code></th><th><code>hash&lt;K&gt;</code></th></tr>
+</thead>
+<tbody>
+<tr><td>Numbers, <code>bool</code>, <code>char</code>, pointers</td><td>the value</td><td>the value’s bits</td></tr>
+<tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
+<tr><td>A tuple</td><td>element by element</td><td>the elements’ hashes, combined</td></tr>
+<tr><td>A <a href="#value-structs">value struct</a></td><td>field by field</td><td>the fields’ hashes, combined</td></tr>
+<tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object’s address</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="struct-keys-use-identity-by-default"><a class="header" href="#struct-keys-use-identity-by-default">Struct keys use identity by default</a></h2>
+<p>A struct is a <a href="#values-and-references">reference</a>. Unless it says
+otherwise, two references are the same key only when they refer to the same
+object. Another object with equal fields is a different key:</p>
+<pre><code class="language-pepper">struct Point {
+    int x;
+    int y;
+
+    construct(this.x = 0, this.y = 0) {}
+}
+
+main(): int {
+    var origin = Point(0, 0);
+    var visits = HashMap&lt;Point, int&gt;();
+    visits[origin] = 1;
+
+    # A struct key is found by identity: the same object finds its entry...
+    assert(visits.contains(origin), "the stored object");
+
+    # ...but another object with equal fields is a different key.
+    assert(!visits.contains(Point(0, 0)), "an equal but distinct object");
+    return 0;
+}
+</code></pre>
+<p>Identity is right for objects that stand for one thing: a connection, a
+node in a graph, a task. It is wrong for a struct that describes a value,
+such as a point or a record looked up by its fields.</p>
+<h2 id="keying-a-struct-by-its-content"><a class="header" href="#keying-a-struct-by-its-content">Keying a struct by its content</a></h2>
+<p>Give the struct both halves of the pair:</p>
+<ul>
+<li>an <code>==</code> <a href="#operators-1">operator</a> that says when two keys are the
+same, and</li>
+<li>an override of <code>hash&lt;T&gt;</code> for the struct (see
+<a href="#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a>),
+<code>hash&lt;Point&gt;(value: Point): u64</code>.</li>
+</ul>
+<pre><code class="language-pepper">struct Point {
+    int x;
+    int y;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    # Two points are equal when their coordinates are...
+    ==(other: Point): bool {
+        return x == other.x and y == other.y;
+    }
+}
+
+# ...so equal points must hash equally: hash the same fields `==` compares.
+# A tuple hashes each element in turn, which combines them.
+hash&lt;Point&gt;(value: Point): u64 {
+    return hash&lt;(int, int)&gt;((value.x, value.y));
+}
+
+struct Person {
+    String name;
+    int id;
+    # Not part of the identity: two records for the same person may differ.
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+
+    ==(other: Person): bool {
+        return id == other.id and name == other.name;
+    }
+}
+
+# A String field hashes by its content, through hash&lt;String&gt;.
+hash&lt;Person&gt;(value: Person): u64 {
+    return hash&lt;(String, int)&gt;((value.name, value.id));
+}
+
+main(): int {
+    var visits = HashMap&lt;Point, int&gt;();
+    visits[Point(1, 2)] = 1;
+    visits[Point(1, 2)] = visits[Point(1, 2)] + 1;   # the same key
+    assert(visits.count() == 1, "one entry");
+    assert(visits[Point(1, 2)] == 2, "found by content");
+    assert(Point(1, 2) != Point(2, 1), "!= is the negation of ==");
+
+    HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
+    assert(people.count() == 1, "equal people are one member");
+    assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
+    assert(!people.contains(Person("Ada", 2)), "a different id");
+    return 0;
+}
+</code></pre>
+<p>The two must agree: <strong>keys that are <code>==</code> must have the same hash.</strong> The
+simplest way to keep that promise is to hash exactly the fields that <code>==</code>
+compares, by hashing a tuple of them: <code>hash&lt;(int, int)&gt;((value.x, value.y))</code>. A tuple’s hash combines its elements’ hashes, and each element
+uses its own type’s <code>hash</code>, so a <code>String</code> field contributes its content.
+Unequal keys may share a hash. That costs speed, not correctness.</p>
+<p>With <code>==</code> declared, <code>!=</code> is its negation, as for any struct.</p>
+<p>Keep these rules in mind:</p>
+<ul>
+<li>
+<p><strong>Declare both or neither.</strong> With <code>==</code> but no <code>hash&lt;T&gt;</code>, two equal keys
+usually hash differently, so a lookup would miss an entry that is there.
+With <code>hash&lt;T&gt;</code> but no <code>==</code>, keys would still compare by identity, so an
+equal object would never find another’s entry. Either is a compile error
+when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</p>
+<pre><code class="language-text">main.pep:5:5: error: 'Point' declares '==' but no 'hash&lt;Point&gt;', so as a HashMap or HashSet key, equal values will not find each other
+    5 |     ==(other: Point): bool {
+      |     ^~
+note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares
+</code></pre>
+<p>The runtime’s own structs are not checked. An <code>Array</code> key’s <code>==</code> compares
+elements but its hash is its address, so find it with the same <code>Array</code>
+object, not an equal one.</p>
+</li>
+<li>
+<p><strong>Don’t change a key’s fields while it is in a map or set.</strong> The entry
+stays where its old hash put it, so lookups by its new or its old fields
+both miss it. Remove it, change it, then insert it again.</p>
+</li>
+<li>
+<p><strong>One override per program.</strong> <code>hash&lt;Point&gt;</code> replaces <code>hash&lt;T&gt;</code> for
+<code>Point</code> everywhere, including inside <code>HashMap</code>, so it may be declared in
+only one file. Declare it next to the struct.</p>
+</li>
+<li>
+<p>The hash is not keyed, so it does not resist keys chosen by an attacker to
+collide.</p>
+</li>
+</ul>
+<h2 id="value-structs-compare-and-hash-by-their-fields"><a class="header" href="#value-structs-compare-and-hash-by-their-fields">Value structs compare and hash by their fields</a></h2>
+<p>A <a href="#value-structs">value struct</a> has no identity, so <code>==</code> and <code>hash</code>
+already compare and hash it field by field. Declare your own pair only to
+change what counts as equal, here to ignore case:</p>
+<pre><code class="language-pepper"># A value struct compares and hashes by its fields with no code at all.
+[Value]
+struct Cell {
+    int row;
+    int column;
+
+    construct(this.row = 0, this.column = 0) {}
+}
+
+# A value struct may still declare its own pair, here to ignore case.
+[Value]
+struct Tag {
+    String text;
+
+    construct(this.text = "") {}
+
+    ==(other: Tag): bool {
+        return text.lower() == other.text.lower();
+    }
+}
+
+hash&lt;Tag&gt;(value: Tag): u64 {
+    return hash&lt;String&gt;(value.text.lower());
+}
+
+main(): int {
+    var board = HashMap&lt;Cell, String&gt;();
+    board[Cell(0, 0)] = "rook";
+    assert(board[Cell(0, 0)] == "rook", "fields decide");
+
+    var tags = HashSet&lt;Tag&gt;();
+    tags.insert(Tag("Pepper"));
+    assert(tags.contains(Tag("PEPPER")), "case is ignored");
+    return 0;
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
 <p>An <strong>enum</strong> is a type with a fixed set of named <strong>cases</strong>. A value of the
@@ -6153,7 +6340,9 @@ main(): int {
 <p>A call whose type argument matches an override, such as <code>describe&lt;int&gt;(7)</code>,
 uses the override; every other call uses the generic version. The standard
 library uses this to give <a href="#hashmap-and-hashset"><code>hash&lt;String&gt;</code></a> a
-content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity.</p>
+content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity; a
+struct keyed by its content overrides <code>hash&lt;T&gt;</code> the same way (see
+<a href="#hashing-and-equality">Hashing and equality</a>).</p>
 <p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
 a struct, such as <code>describe&lt;Point&gt;</code>. It may be declared in any file that can
 see both the generic function and the struct: here <code>main.pep</code> overrides
@@ -14710,18 +14899,27 @@ returning false.</p>
 <h2 id="hash"><a class="header" href="#hash">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;T&gt;(value: T): u64
 </code></pre>
-<p>Returns a 64-bit FNV-1a hash of <code>value</code>, the hash <code>HashMap</code> and <code>HashSet</code>
-use for their keys.</p>
+<p>Returns a 64-bit hash of <code>value</code>, the hash <code>HashMap</code> and <code>HashSet</code> use for
+their keys.</p>
 <ul>
-<li>POD types (integers, floats, pointers, <code>bool</code>) fold the value’s own
-bytes, so equal values hash equally.</li>
-<li>Struct types hash by identity: the object’s address, folded through
-FNV-1a so that aligned addresses spread across buckets. Two distinct
-objects with equal fields therefore hash differently and are distinct
-keys. A null reference hashes to the FNV-1a offset basis.</li>
+<li>POD types (integers, floats, pointers, <code>bool</code>) mix the value’s own
+bits, so equal values hash equally.</li>
+<li>Struct types hash by identity: the object’s address, mixed so that
+aligned addresses spread across buckets. Two distinct objects with
+equal fields therefore hash differently and are distinct keys. A null
+reference hashes to the FNV-1a offset basis (0xcbf29ce484222325).</li>
+</ul>
+<p>Every input bit reaches the low bits of the result, which a power-of-two
+table masks with. The hash is not keyed, so it does not resist inputs
+chosen to collide.</p>
+<ul>
 <li><code>String</code> hashes by content through the concrete <code>hash&lt;String&gt;</code>
 override, so equal strings at different addresses collide.</li>
 </ul>
+<p>A struct whose keys should match by content instead declares an <code>==</code>
+operator and overrides this function for itself, hashing the fields <code>==</code>
+compares: <code>hash&lt;Point&gt;(value: Point): u64</code>. Keys that are <code>==</code> must hash
+equally (see the “Hashing and equality” chapter of the book).</p>
 <p>The result is deterministic within and across runs of a program for POD
 values and strings; for other struct types it depends on where the object
 was allocated. Reading the address does no refcount work, and a temporary
@@ -14749,11 +14947,12 @@ argument is released afterwards.</p>
 <h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;String&gt;(value: String): u64
 </code></pre>
-<p>Returns a 64-bit FNV-1a hash of a String’s bytes, so equal strings hash
-equally wherever they are stored. Keeps equal <code>String</code> keys of a
-<code>HashMap</code> or <code>HashSet</code> in one bucket.</p>
-<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) in O(size). An
-empty String hashes to the FNV-1a offset basis.</p>
+<p>Returns a 64-bit hash of a String’s bytes, so equal strings hash equally
+wherever they are stored. Keeps equal <code>String</code> keys of a <code>HashMap</code> or
+<code>HashSet</code> in one bucket.</p>
+<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) 8 bytes
+at a time, in O(size). An empty String hashes to the FNV-1a offset basis
+(0xcbf29ce484222325).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the String to hash; it must not be a null reference</li>
@@ -14771,15 +14970,17 @@ empty String hashes to the FNV-1a offset basis.</p>
 <p>A hash table that maps keys of type <code>K</code> to values of type <code>V</code>.</p>
 <p>Keys are hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code>: POD keys by value,
 <code>String</code> keys by content, and other struct keys by identity (two distinct
-objects with equal fields are different keys). Any type can be a key.</p>
+objects with equal fields are different keys) unless the struct declares
+an <code>==</code> operator and a matching <code>hash&lt;K&gt;</code> override. Any type can be a key.</p>
 <p>The map holds one reference to each stored key and value. It acquires
 them when they are stored and releases them when they are overwritten,
 removed, cleared, or when the map is destroyed.</p>
-<p>Lookups, inserts, and removals take expected O(1) time. The table doubles
-before an insert of a new key would fill half of it (live entries plus
-removed-slot tombstones), so it never shrinks, and churn (many inserts and
-removals of different keys) can keep growing it even while <code>count()</code>
-stays small.</p>
+<p>Lookups, inserts, and removals take expected O(1) time. Before an insert
+of a new key would fill half the table (live entries plus removed-slot
+tombstones), the table is rebuilt: at double the size, or at the same size
+when tombstones make up at least half of that load, so churn (many
+inserts and removals of different keys) does not keep growing it. It
+never shrinks.</p>
 <p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples, in no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -15008,13 +15209,17 @@ makes the iterator’s next <code>next()</code> or <code>current()</code> panic.
 <code>HashMap</code> but without values.</p>
 <p>Elements are hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code>: POD elements
 by value, <code>String</code> elements by content, and other struct elements by
-identity (two distinct objects with equal fields are both members). The
+identity (two distinct objects with equal fields are both members)
+unless the struct declares an <code>==</code> operator and a matching <code>hash&lt;K&gt;</code>
+override. The
 set holds one reference to each member. It acquires the reference on
 insert and releases it on remove, on <code>clear</code>, or when the set is
 destroyed.</p>
-<p>Membership tests, inserts, and removals take expected O(1) time. The
-table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. <code>iterate()</code> visits the
+<p>Membership tests, inserts, and removals take expected O(1) time. Before
+an insert of a new element would fill half the table (members plus
+tombstones), the table is rebuilt: at double the size, or at the same
+size when tombstones make up at least half of that load. It never
+shrinks. <code>iterate()</code> visits the
 members, in no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>
