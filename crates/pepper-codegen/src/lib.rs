@@ -402,21 +402,28 @@ impl<'ctx> CodeGenerator<'ctx> {
         for &idx in &traits {
             self.instantiate_trait(&module.trait_types[idx])?;
         }
-        for name in self.tuple_order.clone() {
-            self.emit_tuple_refcount_thunk(&name, "__acquire")?;
-            self.emit_tuple_refcount_thunk(&name, "__release")?;
-        }
+        // Value structs' thunks are declared before any thunk body calls
+        // them: a tuple (or a value struct) can hold a value struct, such as
+        // `(int, Optional<Box>)`.
+        let mut value_thunks = vec![];
         for &idx in &structs {
             let name = &module.structs[idx].name;
             if self.values.contains_key(name) {
                 for member in ["__acquire", "__release"] {
                     let thunk = self.declare_tuple_refcount_thunk(name, member)?;
-                    if self.unit.is_some() {
-                        self.pending_value_thunks.push((name.clone(), member));
-                    } else {
-                        self.define_tuple_refcount_thunk(name, thunk)?;
-                    }
+                    value_thunks.push((name.clone(), member, thunk));
                 }
+            }
+        }
+        for name in self.tuple_order.clone() {
+            self.emit_tuple_refcount_thunk(&name, "__acquire")?;
+            self.emit_tuple_refcount_thunk(&name, "__release")?;
+        }
+        for (name, member, thunk) in value_thunks {
+            if self.unit.is_some() {
+                self.pending_value_thunks.push((name, member));
+            } else {
+                self.define_tuple_refcount_thunk(&name, thunk)?;
             }
         }
 

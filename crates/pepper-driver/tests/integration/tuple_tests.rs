@@ -636,3 +636,28 @@ test(): int {
 "#;
     assert_eq!(run(src), 0);
 }
+
+#[test]
+fn tuple_holding_a_value_enum() {
+    // A tuple element that is a value struct (here `Optional` and `Result`,
+    // value enums) is copied and released through the value's own thunks.
+    let src = r#"
+struct Box {
+    int v;
+    construct(this.v = 0) {}
+}
+
+pair(): (int, Optional<Box>) {
+    return (1, Optional<Box>.some(Box(4)));
+}
+
+test(): int {
+    var t = pair();
+    var u = t;
+    var r = (2, Result<int, String>.ok(5));
+    var nested = Result<Box?, String>.ok(Optional<Box>.some(Box(6)));
+    return t.0 + u.1.value().v + r.1.value() + nested.value().value().v;
+}
+"#;
+    assert_eq!(crate::support::jit_census(src), (16, 0));
+}

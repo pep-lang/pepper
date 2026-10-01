@@ -1370,7 +1370,9 @@ counts of its own, one reference held per reference field. Design:
   `aggregate_elements` answers for tuples and values alike, so equality,
   hashing (`Address`), stores, moves and the field refcount paths share the
   tuple code. `__acquire`/`__release` are `emit_tuple_refcount_thunk`
-  thunks over the fields. A unit declares them all but defines only the
+  thunks over the fields, declared before any tuple thunk is emitted, since
+  a tuple or another value can hold a value (`(int, Optional<Box>)`). A
+  unit declares them all but defines only the
   ones its code calls (`pending_value_thunks`, in `codegen_unit`'s loop):
   the runtime's iterators are values, and a thunk for every instantiation
   in the program would make a unit's code depend on the rest of it.
