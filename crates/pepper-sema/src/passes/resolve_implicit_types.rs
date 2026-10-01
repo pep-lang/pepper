@@ -538,6 +538,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::Weak(op, ty, _) => op.result(ty),
         Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) | Expression::Default(ty) => ty.clone(),
         Expression::IsPod(_) => TypeName::bool_(),
+        Expression::SizeOf(_) => TypeName::new("u64"),
         Expression::AtomicStore(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),

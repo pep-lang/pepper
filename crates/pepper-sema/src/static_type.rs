@@ -293,6 +293,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::Cast { ty, .. } => Some(ty.clone()),
         Expression::Default(ty) => Some(ty.clone()),
         Expression::IsPod(_) => Some(TypeName::bool_()),
+        Expression::SizeOf(_) => Some(TypeName::new("u64")),
         Expression::FunctionRef { ty, .. } => Some(ty.clone()),
         Expression::MakeClosure { ty, .. } if !ty.contains_auto() => Some(ty.clone()),
         Expression::ToTrait { to, .. } => Some(to.clone()),

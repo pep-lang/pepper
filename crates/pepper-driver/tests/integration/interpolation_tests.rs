@@ -448,3 +448,33 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn sizeof_interpolates_as_a_ulong() {
+    // #338: `sizeof<T>()` had no type for inference, so the generic
+    // `_pep_interpolate<T>` (and any generic call) could not infer `T`.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Span {
+    var a: int = 0;
+    var b: int = 0;
+}
+
+pick<T>(value: T): T {
+    return value;
+}
+
+test(): int {
+    ulong s = sizeof<Span>();
+    if (!($"{sizeof<Span>()}" == $"{s}")) { return -1; }
+    if (!($"{sizeof<int>()}" == "4")) { return -2; }
+    if (!($"{sizeof<ulong>():>3}" == "  8")) { return -3; }
+    ulong picked = pick(sizeof<short>());
+    if (picked != 2) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
