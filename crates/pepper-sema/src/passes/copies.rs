@@ -457,7 +457,7 @@ fn compiled_functions(module: &mut Module) -> Vec<&mut FunctionDef> {
 fn requests(module: &mut Module) -> Vec<(TypeName, Loc)> {
     let mut found: Vec<(TypeName, Loc)> = vec![];
     for function in compiled_functions(module) {
-        if is_copy_method(function) || function.name == COPY_METHOD {
+        if is_copy_method(function) || function.name == COPY_METHOD || function.name == COPY_VALUE_METHOD {
             continue;
         }
         for (ty, loc) in copy_calls(function) {

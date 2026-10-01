@@ -772,6 +772,17 @@ fn cannot_copy_a_runtime_type_that_forbids_it() {
 }
 
 #[test]
+fn cannot_copy_through_a_value_enum() {
+    // Reported at the copy the program asks for, not at the enum's
+    // synthesized copy (which has no location).
+    let error = error_of(
+        "cannot_copy_through_optional",
+        "[NotCopyable(\"owns a resource\")]\nstruct Handle {\n    int id;\n}\n\nmain(): int {\n    var handles = Array<Optional<Handle>>();\n    var copied = copy(handles);\n    return 0;\n}\n",
+    );
+    assert!(error.starts_with("main.pep:8:18: error: cannot copy 'Array<Optional<Handle>>'"), "{error}");
+}
+
+#[test]
 fn cannot_copy_a_trait_value_yet() {
     assert_eq!(
         error_of(

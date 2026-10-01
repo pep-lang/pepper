@@ -256,3 +256,27 @@ test(): int {
 }"#,
     );
 }
+
+/// A value enum holding a struct that cannot be copied compiles when nothing
+/// copies it: `Array.copy` reaches the enum's synthesized copy, which is not
+/// a request of the program.
+#[test]
+fn a_value_enum_of_an_uncopyable_struct_compiles_when_not_copied() {
+    assert_runs(
+        r#"
+[NotCopyable("owns a resource")]
+struct Handle {
+    int id;
+}
+
+test(): int {
+    var handles = Array<Optional<Handle>>();
+    var h = Handle();
+    h.id = 3;
+    handles.append(Optional<Handle>.some(h));
+    handles.append(Optional<Handle>.none());
+    if (handles.count() != 2 || handles[0].value().id != 3 || handles[1].is_some()) { return 1; }
+    return 0;
+}"#,
+    );
+}
