@@ -88,6 +88,7 @@
     - [io/unix.pep](reference/io-unix.md)
   - [math/module.pep](reference/math-module.md)
     - [math/parse.pep](reference/math-parse.md)
+  - [number.pep](reference/number.md)
   - [tls/module.pep](reference/tls-module.md)
     - [tls/stream.pep](reference/tls-stream.md)
   - [uri.pep](reference/uri.md)

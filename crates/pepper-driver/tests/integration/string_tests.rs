@@ -434,29 +434,44 @@ test(): int {
 }
 
 #[test]
-fn math_parse_int() {
+fn long_parse() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    if (long.parse("-42").value() != -42) { return -1; }
+    if (long.parse("+7").value() != 7) { return -2; }
+    if (long.parse("ff", 16).value() != 255) { return -3; }
+    if (long.parse("FF", 16).value() != 255) { return -4; }
+    if (long.parse("101", 2).value() != 5) { return -5; }
+    if (long.parse("z", 36).value() != 35) { return -6; }
+    if (long.parse("12x").is_some()) { return -7; }
+    if (long.parse("").is_some()) { return -8; }
+    if (long.parse("-").is_some()) { return -9; }
+    if (long.parse(" 1").is_some()) { return -10; }
+    if (long.parse("2", 2).is_some()) { return -11; }
+    if (long.parse("9223372036854775807").value() != 9223372036854775807) { return -12; }
+    if (long.parse("9223372036854775808").is_some()) { return -13; }
+    if (long.parse("-9223372036854775808").value() != -9223372036854775807 - 1) { return -14; }
+    if (long.parse("-9223372036854775809").is_some()) { return -15; }
+    if (long.parse("99999999999999999999999").is_some()) { return -16; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn math_parse_int_is_deprecated_but_still_parses() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 import math;
 
 test(): int {
-    if (math.parse_int("-42").value() != -42) { return -1; }
-    if (math.parse_int("+7").value() != 7) { return -2; }
-    if (math.parse_int("ff", 16).value() != 255) { return -3; }
-    if (math.parse_int("FF", 16).value() != 255) { return -4; }
-    if (math.parse_int("101", 2).value() != 5) { return -5; }
-    if (math.parse_int("z", 36).value() != 35) { return -6; }
-    if (math.parse_int("12x").is_some()) { return -7; }
-    if (math.parse_int("").is_some()) { return -8; }
-    if (math.parse_int("-").is_some()) { return -9; }
-    if (math.parse_int(" 1").is_some()) { return -10; }
-    if (math.parse_int("2", 2).is_some()) { return -11; }
-    if (math.parse_int("9223372036854775807").value() != 9223372036854775807) { return -12; }
-    if (math.parse_int("9223372036854775808").is_some()) { return -13; }
-    if (math.parse_int("-9223372036854775808").value() != -9223372036854775807 - 1) { return -14; }
-    if (math.parse_int("-9223372036854775809").is_some()) { return -15; }
-    if (math.parse_int("99999999999999999999999").is_some()) { return -16; }
+    if (math.parse_int("ff", 16).value() != 255) { return -1; }
+    if (math.parse_int("12x").is_some()) { return -2; }
     return 0;
 }"#
         ),

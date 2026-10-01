@@ -9,13 +9,14 @@ Source: `runtime/math/parse.pep`
 ## parse_int
 
 ```pepper
-parse_int(text: String, base: int = 10): long?
+[Deprecated("use 'long.parse' instead")] parse_int(text: String, base: int = 10): long?
 ```
 
+Deprecated: use `long.parse` instead, which every program has without an
+import (each number type has a static `parse`).
+
 Parses `text` as an integer written in `base`: an optional `+` or `-`,
-then one or more digits, and nothing else. Digits past 9 are the
-letters, either case (`"ff"` in base 16 is 255). No spaces, prefixes
-(`0x`) or separators are accepted.
+then one or more digits, and nothing else.
 
 **Parameters**
 - `text` — the text to parse
@@ -26,13 +27,3 @@ letters, either case (`"ff"` in base 16 is 255). No spaces, prefixes
 
 **Panics**
 - if `base` is less than 2 or greater than 36
-
-**Example**
-```pepper
-    import math;
-
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(!math.parse_int("12x").is_some(), "not a number");
-    assert(!math.parse_int("9223372036854775808").is_some(), "too big");
-```

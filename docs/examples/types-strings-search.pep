@@ -1,5 +1,4 @@
-# Searching, splitting, joining and replacing text, and reading numbers.
-import math;
+# Searching, splitting, joining and replacing text.
 
 main(): int {
     # find takes a byte offset to start from; rfind finds the last match.
@@ -20,10 +19,5 @@ main(): int {
     # join puts the separator between the parts; replace swaps every match.
     assert(" | ".join(fields) == "name |  | age", "joined");
     assert("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n", "line endings");
-
-    # math.parse_int reads an integer, in any base from 2 to 36.
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(math.parse_int("4 2").is_none(), "not an integer");
     return 0;
 }

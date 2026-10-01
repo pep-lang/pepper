@@ -55,6 +55,20 @@ Comparisons follow IEEE 754, as in C: against NaN (`0.0 / 0.0`), `==`, `<`,
 `<=`, `>` and `>=` are false and `!=` is true, so `x != x` is true only for a
 NaN. As a condition, a float is true unless it equals zero, NaN included.
 
+### Reading numbers from text
+
+Every number type has a static `parse` that reads one from a `String`:
+`int.parse("42")` gives an `int?` (see [optionals](optionals.md)), empty when
+the text is not a number of that type: not digits, or too big or too small for
+it. The integer types take a base from 2 to 36 as a second argument (`"ff"` in
+base 16 is 255), and `float` and `double` read decimal notation (`"2.5"`,
+`".5"`, `"1e-3"`). Neither accepts spaces, a `0x` prefix, `inf` or `nan`. Each
+spelling of a type is the same type, so `i32.parse` is `int.parse`:
+
+```pepper
+{{#include ../../examples/types-numbers-parse.pep}}
+```
+
 ### Booleans
 
 `bool` holds `true` or `false`. Comparisons and the logical operators produce a
@@ -125,9 +139,9 @@ text built so far on every append:
 To search and take text apart, `find(needle, from)` starts at a byte offset
 and `rfind` finds the last match, `split(separator)` cuts at every separator
 and `split_once` at the first (giving an optional pair), `separator.join(parts)`
-puts the parts back together, and `replace(from, to)` swaps every match. To
-read a number, `math.parse_int(text, base)` (after `import math`) gives an
-optional `long`, empty when the text is not an integer:
+puts the parts back together, and `replace(from, to)` swaps every match
+(to read a number from text, see
+[Reading numbers from text](#reading-numbers-from-text)):
 
 ```pepper
 {{#include ../../examples/types-strings-search.pep}}
