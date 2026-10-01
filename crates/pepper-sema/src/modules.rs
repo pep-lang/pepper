@@ -123,6 +123,74 @@ struct Bindings {
     unresolved_whole_file: bool,
 }
 
+/// Overload sets that span several files of one module. Each file's
+/// functions of a name keep the name linking gives them; where one binding
+/// (an import, a re-export) would take a name from two files of the same
+/// module and both denote free functions, it takes a *union* instead: a name
+/// of its own (`f@geo/a#set1`) that sema resolves as one overload set of
+/// every member (`Module::overload_unions`). Anything else that binds one
+/// name twice is ambiguous, as before: two modules' sets never merge, and
+/// neither do functions of different names (`export size as area`).
+#[derive(Default)]
+struct Unions {
+    /// Each free function a file of a (non-prelude) module declares, by the
+    /// name it takes in the merged program: the folder of its module.
+    functions: HashMap<String, std::path::PathBuf>,
+    /// Each union's parts, sorted, -> its name.
+    by_parts: HashMap<Vec<String>, String>,
+    /// Each union's name -> its parts: the names of the functions or
+    /// single-file sets it joins.
+    parts: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl Unions {
+    fn of(files: &[ProgramFile], own: &[Own], overrides: &Overrides) -> Unions {
+        let mut functions = HashMap::new();
+        for (i, f) in files.iter().enumerate() {
+            let Some(root) = f.module_root.as_ref().filter(|_| !f.prelude && !f.prelude_part) else { continue };
+            for d in named_decls(&f.module) {
+                if let Declaration::Function(func) = d
+                    && !func.external
+                    && !overrides.is(func, i)
+                    && let Some(name) = own[i].get(&func.name)
+                {
+                    functions.insert(name.clone(), root.clone());
+                }
+            }
+        }
+        Unions { functions, ..Unions::default() }
+    }
+
+    /// The one name a binding takes for both `a` and `b` (each a function,
+    /// a single-file set, or a union): their union, when every part is a
+    /// free function of one module's files declared under the same name;
+    /// else `None`.
+    fn merge(&mut self, a: &str, b: &str) -> Option<String> {
+        let expand = |name: &str| self.parts.get(name).cloned().unwrap_or_else(|| vec![name.to_string()]);
+        let mut parts = expand(a);
+        parts.extend(expand(b));
+        parts.sort();
+        parts.dedup();
+        // One module's functions, all declared under one name: a re-export
+        // that renames (`export size as area`) still collides.
+        let root = self.functions.get(&parts[0])?;
+        let name = namespace::demangle_name(&parts[0]);
+        if !parts.iter().all(|p| self.functions.get(p) == Some(root) && namespace::demangle_name(p) == name) {
+            return None;
+        }
+        if let [only] = parts.as_slice() {
+            return Some(only.clone());
+        }
+        if let Some(name) = self.by_parts.get(&parts) {
+            return Some(name.clone());
+        }
+        let name = format!("{}#set{}", parts[0], self.parts.len() + 1);
+        self.by_parts.insert(parts.clone(), name.clone());
+        self.parts.insert(name.clone(), parts);
+        Some(name)
+    }
+}
+
 /// A function's parameter types as written, with its generic parameters
 /// named by position: `describe<T>(T)` and `describe<Point>(Point)` have one
 /// shape.
@@ -456,11 +524,12 @@ fn own_names(files: &[ProgramFile], overrides: &Overrides) -> Vec<Own> {
 
 /// Bind every file's imports and re-exports and rewrite imported spellings
 /// in place. Returns each file's scope and every linking error.
-pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
+pub fn link(files: &mut [ProgramFile]) -> Linked {
     let n = files.len();
     let names: Vec<String> = files.iter().map(|f| f.name.clone()).collect();
     let overrides = Overrides::of(files);
     let own = own_names(files, &overrides);
+    let mut unions = Unions::of(files, &own, &overrides);
 
     // Every type the program declares: in `extend Box<X>`, a declared `X`
     // specializes rather than introducing a parameter.
@@ -566,11 +635,11 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             }
             if inputs_changed {
                 let mut errs = vec![];
-                let b = bind_imports(i, files, &exports, &own[i], &mut errs);
+                let b = bind_imports(i, files, &exports, &own[i], &mut unions, &mut errs);
                 bound.insert(i, (b, errs));
             }
             let mut errs = vec![];
-            let table = resolve_reexports(i, files, &direct[i], &own[i], &overrides, &bound[&i].0, &exports, &prelude, &mut errs);
+            let table = resolve_reexports(i, files, &direct[i], &own[i], &overrides, &bound[&i].0, &exports, &prelude, &mut unions, &mut errs);
             resolve_errors.insert(i, errs);
             if table != exports[i] {
                 next.push((i, table));
@@ -652,9 +721,9 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             bindings.push(b);
             continue;
         }
-        let b = bind_imports(i, files, &exports, &own[i], &mut errors);
+        let b = bind_imports(i, files, &exports, &own[i], &mut unions, &mut errors);
         if is_reexporting[i] {
-            resolve_reexports(i, files, &direct[i], &own[i], &overrides, &b, &exports, &prelude, &mut errors);
+            resolve_reexports(i, files, &direct[i], &own[i], &overrides, &b, &exports, &prelude, &mut unions, &mut errors);
         }
         bindings.push(b);
     }
@@ -748,7 +817,19 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     }
     errors.sort_by_key(|e| (e.file, e.span.start));
     errors.dedup();
-    (scopes, errors)
+    Linked { scopes, errors, overload_unions: unions.parts }
+}
+
+/// What [`link`] returns.
+pub struct Linked {
+    /// Each file's scope, for the visibility check.
+    pub scopes: Vec<FileScope>,
+    /// Every linking error.
+    pub errors: Vec<ModuleError>,
+    /// The overload sets that span files of one module: each union's name
+    /// -> the names of the functions or single-file sets it joins (see
+    /// [`Unions`]).
+    pub overload_unions: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 /// Per file, the other files whose exported extensions it may use (see
@@ -813,6 +894,7 @@ fn resolve_reexports(
     bindings: &Bindings,
     exports: &[HashMap<String, String>],
     prelude: &HashMap<String, String>,
+    unions: &mut Unions,
     errors: &mut Vec<ModuleError>,
 ) -> HashMap<String, String> {
     let mut out = direct.clone();
@@ -832,13 +914,18 @@ fn resolve_reexports(
         .collect();
     let mut publish = |out: &mut HashMap<String, String>, name: &str, canonical: &str, span: Span, errors: &mut Vec<ModuleError>| {
         match out.get(name) {
-            Some(existing) if existing != canonical => errors.push(ModuleError {
-                note: origins.get(name).map(|&at| (at, "also exported here".to_string())),
-                unresolved: false,
-                file: i,
-                span,
-                message: format!("'{}' is exported twice by {}", name, describe_file(&files[i])),
-            }),
+            Some(existing) if existing != canonical => match unions.merge(existing, canonical) {
+                Some(union) => {
+                    out.insert(name.to_string(), union);
+                }
+                None => errors.push(ModuleError {
+                    note: origins.get(name).map(|&at| (at, "also exported here".to_string())),
+                    unresolved: false,
+                    file: i,
+                    span,
+                    message: format!("'{}' is exported twice by {}", name, describe_file(&files[i])),
+                }),
+            },
             Some(_) => {}
             None => {
                 out.insert(name.to_string(), canonical.to_string());
@@ -892,12 +979,17 @@ fn resolve_reexports(
             Ok(canonical) => {
                 let name = ea.exported_name().to_string();
                 match out.get(&name) {
-                    Some(existing) if *existing != canonical => errors.push(ModuleError { note: None,
-                        unresolved: false,
-                        file: i,
-                        span: ea.span,
-                        message: format!("'{}' is exported twice, as '{}' and '{}'", name, existing, canonical),
-                    }),
+                    Some(existing) if *existing != canonical => match unions.merge(existing, &canonical) {
+                        Some(union) => {
+                            out.insert(name, union);
+                        }
+                        None => errors.push(ModuleError { note: None,
+                            unresolved: false,
+                            file: i,
+                            span: ea.span,
+                            message: format!("'{}' is exported twice, as '{}' and '{}'", name, existing, canonical),
+                        }),
+                    },
                     _ => {
                         out.insert(name, canonical);
                     }
@@ -1010,6 +1102,7 @@ fn bind_imports(
     files: &[ProgramFile],
     exports: &[HashMap<String, String>],
     own: &Own,
+    unions: &mut Unions,
     errors: &mut Vec<ModuleError>,
 ) -> Bindings {
     let mut b = Bindings::default();
@@ -1061,14 +1154,16 @@ fn bind_imports(
             }
             continue;
         }
-        // The merge is order-independent: equal keeps, different -> None.
+        // The merge is order-independent: equal keeps, functions of one
+        // module's files join a union, anything else different -> None.
         for (name, c) in &exports[target] {
             if own.contains_key(name) {
                 continue;
             }
             match b.unqualified.get(name) {
                 Some(Some(existing)) if existing != c => {
-                    b.unqualified.insert(name.clone(), None);
+                    let union = unions.merge(existing, c);
+                    b.unqualified.insert(name.clone(), union);
                 }
                 Some(_) => {}
                 None => {
@@ -1102,14 +1197,18 @@ fn bind_imports(
                 });
                 continue;
             }
-            match explicit.get(local) {
-                Some(existing) if existing != c => errors.push(ModuleError { note: None,
+            let c = match explicit.get(local) {
+                Some(existing) if existing != c => unions.merge(existing, c),
+                _ => Some(c.clone()),
+            };
+            match c {
+                None => errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: s.span,
                     message: format!("'{}' is already imported as a different symbol", local),
                 }),
-                _ => {
+                Some(c) => {
                     explicit.insert(local.to_string(), c.clone());
                     b.unqualified.insert(local.to_string(), Some(c.clone()));
                 }

@@ -214,7 +214,11 @@ with no extension, and `module_name()` is the output's stem.
   functions hide). The
   visibility check applies the same override rule (`Decl::is_override`).
   A file's overloads of a name take one name whatever their visibility, so
-  an import binds the whole set; sema hides a mixed set's private members
+  an import binds the whole set. Where an import or re-export would bind
+  one name to functions of two files of one module, it binds a union
+  instead (`Unions::merge`, a name like `f@geo/a#set1`); `link` returns
+  them (`Linked::overload_unions`, carried to `Module::overload_unions`),
+  and `name_overloads` records each as a set of every member; sema hides a mixed set's private members
   (`Module::private_functions`) from calls in other files
   (`Overloads::set`, by the call's location).
   Codegen gives every mangled declaration internal linkage

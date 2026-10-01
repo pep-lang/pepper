@@ -9,7 +9,8 @@ best:
 ```
 
 The functions of one name in one file are an **overload set**, and each is a
-member of it. [Methods](#methods-and-operators) of one name in a struct are a
+member of it; the files of one [module](modules.md#modules) may share a
+set. [Methods](#methods-and-operators) of one name in a struct are a
 set too, and so are its static methods, its operators, its
 [constructors](#constructors), and the methods its
 [extensions](#extensions-and-traits) add.
@@ -31,8 +32,36 @@ set too, and so are its static methods, its operators, its
 
   Two functions with the same parameter types and the same return type are
   a `redefinition of 'f'`.
-- **One file, one set.** A file's own functions hide an imported function of
-  the same name, as before; overloads do not merge across files.
+- **A file's own functions hide imported ones.** A file's functions of a
+  name hide an imported function of that name, as before: a file cannot add
+  members to an imported set.
+- **Files of one module share a set.** When an import or a re-export takes
+  one name from two files of the same module, and both are functions
+  declared under that name, it takes their union: one set of every member. Here `shapes/module.pep`
+  re-exports `area` from two files:
+
+  ```pepper
+  {{#include ../../examples/overloading-modules/shapes/module.pep}}
+  ```
+
+  ```pepper
+  {{#include ../../examples/overloading-modules/shapes/square.pep}}
+  ```
+
+  ```pepper
+  {{#include ../../examples/overloading-modules/shapes/rect.pep}}
+  ```
+
+  ```pepper
+  {{#include ../../examples/overloading-modules/main.pep}}
+  ```
+
+  A file of the module that imports both files (`import "square";` and
+  `import "rect";`, or an import list naming `area` from each) sees the
+  same set. Members from different files must still differ in their
+  parameters (`redefinition of 'area'`). Names that are not all functions,
+  such as two structs `Point`, and a renaming re-export
+  (`export size as area` beside an `area`) are still `exported twice`.
 - **Members may differ in visibility.** Exported members are what other
   files see; a private member is a candidate only for calls in its own
   file. Here `shapes.pep` exports `area(int)` and keeps the two-argument
@@ -63,10 +92,10 @@ set too, and so are its static methods, its operators, its
   whole set. A re-export (`export area;`, `export * from "shapes"`) passes
   on the exported members too; a set whose members are all private is
   re-exported whole.
-- **Two imports of one name are ambiguous.** When two imported files or
-  modules each export a set named `parse`, an unqualified `parse(…)` is an
-  error (`'parse' is ambiguous: more than one import provides it`), even
-  when their parameters differ: the sets do not merge. A qualifier
+- **Two modules' sets do not merge.** When two imported modules, or two
+  files outside any module, each export a set named `parse`, an
+  unqualified `parse(…)` is an error (`'parse' is ambiguous: more than one
+  import provides it`), even when their parameters differ. A qualifier
   (`a.parse`) or an import list (`import [parse] from "b"`) picks one.
 - **`extern` functions do not overload**: a C function has one symbol. Wrap
   it in a Pepper function to give it company.
@@ -268,5 +297,6 @@ An expected type that matches no member is `address of overloaded function
 
 - **Unary operators** cannot be declared at all yet.
 - **`extern` functions** do not overload.
-- **Overloads across files** do not merge: a file's own functions of a name
-  hide an imported set of that name.
+- **Overloads across modules** do not merge: two modules' sets of one name
+  are ambiguous where both are imported, and a file's own functions of a
+  name hide an imported set of that name.

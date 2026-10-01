@@ -23,6 +23,10 @@
 //!   final: no viable member, an ambiguous call, an overloaded name with no
 //!   function type to pick a member by.
 //!
+//! A set may span several files of one module: linking binds a name it
+//! takes from two such files to a union (`Module::overload_unions`), which
+//! `name_overloads` records as one more set of the members it joins.
+//!
 //! A set's members may differ in visibility: a private member of a set with
 //! exported members is a candidate only for calls and values in its own
 //! file (`Overloads::set`), so other files see the exported members alone.
@@ -176,7 +180,46 @@ pub fn name_overloads(module: &mut Module) {
         }
         module.overload_sets.insert(name, names);
     }
+    if !name_unions(module) {
+        return;
+    }
     attach_overrides(module);
+}
+
+/// Record each set that spans files of one module (`Module::overload_unions`)
+/// with the members of every set or function it joins, after checking that
+/// no two of those members take the same parameters. Returns false after
+/// reporting an error.
+fn name_unions(module: &mut Module) -> bool {
+    for (union, parts) in module.overload_unions.clone() {
+        let members: Vec<usize> = parts
+            .iter()
+            .flat_map(|part| module.overload_sets.get(part).cloned().unwrap_or_else(|| vec![part.clone()]))
+            .filter_map(|member| module.functions.iter().position(|f| f.name == member))
+            .collect();
+        for (j, &later) in members.iter().enumerate() {
+            let function = &module.functions[later];
+            let key = parameter_key(function);
+            let Some(&earlier) = members[..j].iter().find(|&&i| parameter_key(&module.functions[i]) == key) else {
+                continue;
+            };
+            let previous = &module.functions[earlier];
+            let diagnostic = if return_key(previous) == return_key(function) {
+                Diagnostic::error(format!("redefinition of '{}'", demangle_name(&function.name)))
+                    .at(function.loc)
+                    .with_note("previous definition is here", Some(previous.loc))
+            } else {
+                Diagnostic::error("functions that differ only in their return type cannot be overloaded")
+                    .at(function.loc)
+                    .with_note("previous declaration is here", Some(previous.loc))
+            };
+            crate::errors::report(diagnostic);
+            return false;
+        }
+        let names = members.iter().map(|&i| module.functions[i].name.clone()).collect();
+        module.overload_sets.insert(union, names);
+    }
+    true
 }
 
 /// Only prelude files (a forced import, then the runtime) may export the

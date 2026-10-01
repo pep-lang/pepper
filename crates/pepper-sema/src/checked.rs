@@ -133,7 +133,12 @@ pub fn run_passes(module: &mut Module) -> Result<(), Diagnostic> {
 /// An empty module for `program`: its files' sources and namespaces, and
 /// its extension scopes.
 fn empty(program: &Program) -> Module {
-    let mut module = Module { linked: true, extension_scopes: program.extension_scopes(), ..Module::default() };
+    let mut module = Module {
+        linked: true,
+        extension_scopes: program.extension_scopes(),
+        overload_unions: program.overload_unions.clone(),
+        ..Module::default()
+    };
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
         module.namespaces.push(file.namespace.clone());
@@ -239,6 +244,7 @@ pub fn on_checked_runtime(program: &Program, in_runtime: &[bool], build: Build, 
     module.sources = fresh.sources;
     module.namespaces = fresh.namespaces;
     module.extension_scopes = fresh.extension_scopes;
+    module.overload_unions = fresh.overload_unions;
     module.type_aliases = runtime.aliases.clone();
     module.recorded_summaries = runtime.summaries.clone();
     let mut order: Vec<usize> = (0..program.files.len()).filter(|&i| !in_runtime[i]).collect();

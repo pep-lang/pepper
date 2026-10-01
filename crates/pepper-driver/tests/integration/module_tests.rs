@@ -2216,3 +2216,71 @@ fn overload_sets_of_one_name_from_two_modules_are_ambiguous() {
     ];
     assert_eq!(run("overload_two_modules_qualified", &files), 24);
 }
+
+/// `geo`'s `area` overloads live in two files of the module.
+const SPLIT_AREA: &[(&str, &str)] = &[
+    (
+        "geo/module.pep",
+        "export * from \"square\";\nexport * from \"rect\";\nexport [total] from \"sum\";\nexport [listed] from \"list\";\n",
+    ),
+    ("geo/square.pep", "export area(side: int): int { return side * side; }\n"),
+    ("geo/rect.pep", "export area(width: int, height: int): int { return width * height; }\n"),
+    (
+        "geo/sum.pep",
+        "import \"square\";\nimport \"rect\";\nexport total(): int { return area(2) * 10 + area(2, 3); }\n",
+    ),
+    (
+        "geo/list.pep",
+        "import [area] from \"square\";\nimport [area] from \"rect\";\nexport listed(): int { return area(1) + area(1, 2); }\n",
+    ),
+];
+
+#[test]
+fn a_set_spans_the_files_of_one_module() {
+    let mut files = SPLIT_AREA.to_vec();
+    files.push(("main.pep", "import geo;\ntest(): int { return geo.area(3) * 1000 + geo.area(2, 3) * 100 + geo.total() + geo.listed(); }"));
+    assert_eq!(run("overload_set_spans_module", &files), 9649);
+
+    // An import list binds the whole set too, and so does a function value.
+    let mut files = SPLIT_AREA.to_vec();
+    files.push((
+        "main.pep",
+        "import [area as size] from geo;\ntest(): int {\n    var f: (int, int) => int = size;\n    return size(4) + f(1, 2);\n}",
+    ));
+    assert_eq!(run("overload_set_spans_module_list", &files), 18);
+}
+
+#[test]
+fn a_set_across_module_files_rejects_a_repeated_member() {
+    let files = [
+        ("geo/module.pep", "export * from \"square\";\nexport * from \"rect\";\n"),
+        ("geo/square.pep", "export area(side: int): int { return side * side; }\n"),
+        ("geo/rect.pep", "export area(width: int): int { return width; }\n"),
+        ("main.pep", "import geo;\ntest(): int { return geo.area(3); }"),
+    ];
+    let err = error("overload_set_spans_module_repeat", &files);
+    assert!(err.contains(".pep:1:8: error: redefinition of 'area'"), "{}", err);
+    assert!(err.contains(".pep:1:8: note: previous definition is here"), "{}", err);
+}
+
+#[test]
+fn only_functions_join_across_module_files() {
+    let files = [
+        ("geo/module.pep", "export * from \"a\";\nexport * from \"b\";\n"),
+        ("geo/a.pep", "export struct Point { var x: int; }\n"),
+        ("geo/b.pep", "export struct Point { var y: int; }\n"),
+        ("main.pep", "import geo;\ntest(): int { return 0; }"),
+    ];
+    let err = error("overload_set_spans_module_types", &files);
+    assert!(err.contains("error: 'Point' is exported twice by module 'geo'"), "{}", err);
+
+    // A function and a module variable of one name do not join either.
+    let files = [
+        ("geo/module.pep", "export * from \"a\";\nexport * from \"b\";\n"),
+        ("geo/a.pep", "export area(side: int): int { return side; }\n"),
+        ("geo/b.pep", "export const area = 3;\n"),
+        ("main.pep", "import geo;\ntest(): int { return 0; }"),
+    ];
+    let err = error("overload_set_spans_module_variable", &files);
+    assert!(err.contains("error: 'area' is exported twice by module 'geo'"), "{}", err);
+}

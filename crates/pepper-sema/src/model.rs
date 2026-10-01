@@ -1183,6 +1183,10 @@ pub struct Module {
     /// its members' names (`scale$1`, `scale$2`) in declaration order.
     /// Filled by `overloads::name_overloads`.
     pub overload_sets: std::collections::BTreeMap<String, Vec<String>>,
+    /// Overload sets that span files of one module, from linking: each
+    /// union's name, as calls spell it, -> the functions or single-file sets
+    /// it joins. `overloads::name_overloads` adds each to `overload_sets`.
+    pub overload_unions: std::collections::BTreeMap<String, Vec<String>>,
     /// Overloaded methods: struct name → set name (`get`, `+`) → its
     /// members' names (`get$1`, `get$2`). A specialization's methods keep
     /// their base's member names. Filled by `overloads::name_overloads`.

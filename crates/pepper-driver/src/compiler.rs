@@ -46,6 +46,7 @@ pub fn merge(program: &Program) -> Result<SemaModule, String> {
         warnings: program.warnings(),
         linked: true,
         extension_scopes: program.extension_scopes(),
+        overload_unions: program.overload_unions.clone(),
         ..SemaModule::default()
     };
     for file in &program.files {

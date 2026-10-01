@@ -58,6 +58,9 @@ pub struct Program {
     /// Files the load found but could not read or parse, and so left out
     /// (lenient mode only): an editor watches them for a fix.
     pub failed: Vec<PathBuf>,
+    /// The overload sets that span files of one module, from linking: each
+    /// union's name -> the functions or single-file sets it joins.
+    pub overload_unions: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl Program {
@@ -584,10 +587,10 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
             f.namespace = format!("{}#{}", base, n);
         }
     }
-    let (scopes, link_errors) = link(&mut files);
-    errors.extend(link_errors);
+    let linked = link(&mut files);
+    errors.extend(linked.errors);
     errors.sort_by_key(|e| (e.file, e.span.start));
-    Ok(Program { files, scopes, errors, failed: failed_paths })
+    Ok(Program { files, scopes: linked.scopes, errors, failed: failed_paths, overload_unions: linked.overload_unions })
 }
 
 fn describe_paths(paths: &[PathBuf]) -> String {
