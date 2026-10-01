@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
+            window.path_to_searchindex_js = "../searchindex-16197d7a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -284,6 +284,63 @@ operator <code>!!</code> (see <a href="structs.html#truth-tests-and-conditions">
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 <a href="memory.html">Memory and reference counting</a>).</p>
+<h2 id="optionals-in-the-standard-library"><a class="header" href="#optionals-in-the-standard-library">Optionals in the standard library</a></h2>
+<p>Standard library lookups that can come up empty return an optional rather
+than a sentinel value:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>API</th><th>Returns</th><th>None when</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Array&lt;T&gt;.find(item)</code></td><td><code>ulong?</code></td><td>no element equals <code>item</code></td></tr>
+<tr><td><code>io.Path.parent()</code></td><td><code>Path?</code></td><td>the path is a root (<code>/</code>, <code>C:\</code>), a bare name with no root (<code>a</code>, <code>.</code>, <code>..</code>), or empty</td></tr>
+<tr><td><code>io.Path.file_name()</code></td><td><code>String?</code></td><td>the path is a root or empty, or its last component is <code>.</code> or <code>..</code></td></tr>
+<tr><td><code>io.Path.file_stem()</code></td><td><code>String?</code></td><td>there is no file name</td></tr>
+<tr><td><code>io.Path.extension()</code></td><td><code>String?</code></td><td>there is no file name, or the name has no dot after its first character (<code>Makefile</code>, <code>.bashrc</code>); <code>foo.</code> has the empty extension <code>""</code></td></tr>
+<tr><td><code>io.Path.dot_index(name)</code></td><td><code>ulong?</code></td><td><code>name</code> has no dot after its first character</td></tr>
+<tr><td><code>http.Headers.get(name)</code></td><td><code>String?</code></td><td>no field has that name</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># Standard library lookups that may come up empty return an optional.
+import io;
+
+main(): int {
+    # Array.find returns `ulong?`: the index, or none.
+    var names = ["ada", "grace", "linus"];
+    var at = names.find("grace");
+    assert(at.value() == 1, "grace is at index 1");
+    assert(names.find("ken").is_none(), "ken is not in the array");
+
+    # Path.parent, file_name, file_stem and extension return `Path?` or
+    # `String?`: none when the path has no such part.
+    var path = io.Path("docs").join("guide.md");
+    assert(path.file_name().value() == "guide.md", "file name");
+    assert(path.file_stem().value() == "guide", "stem");
+    assert(path.extension().value() == "md", "extension");
+    assert(path.parent().value() == io.Path("docs"), "parent");
+
+    assert(io.Path("/").parent().is_none(), "a root has no parent");
+    assert(io.Path("notes").parent().is_none(), "nor does a bare name");
+    assert(io.Path("a/..").file_name().is_none(), "'..' is not a file name");
+    assert(io.Path("Makefile").extension().is_none(), "no dot, no extension");
+
+    # value_or supplies a default when none is an expected outcome.
+    var ext = io.Path("Makefile").extension().value_or("txt");
+    assert(ext == "txt", "fallback extension");
+    return 0;
+}
+</code></pre>
+<p><strong>Breaking change.</strong> <code>Array.find</code> used to return a <code>long</code> that was <code>-1</code> for
+“not found”, and the <code>Path</code> methods above returned an empty <code>Path</code> or
+<code>String</code> (or <code>name.size()</code> for <code>dot_index</code>). Code written against the old
+API must test the optional instead: <code>a.find(x) &gt;= 0</code> becomes
+<code>a.find(x).is_some()</code>, <code>p.parent().is_empty()</code> becomes
+<code>p.parent().is_none()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
+A comparison such as <code>a.find(x) == -1</code> still compiles but compares the
+optional object rather than an index, so search for these and rewrite them.
+<code>String.find</code> is unchanged and still returns <code>-1</code>.</p>
 <h2 id="optional-or-result"><a class="header" href="#optional-or-result">Optional or Result</a></h2>
 <p>An <code>Optional&lt;T&gt;</code> says only that a value is missing. When the caller needs to
 know <em>why</em>, return a <a href="results.html"><code>Result</code></a> instead, whose Err carries an
@@ -295,9 +352,9 @@ error.</p>
 on it yet. <code>Optional</code> will become an <a href="enums.html">enum</a> with <code>None</code> and
 <code>Some(value)</code> cases, as enum cases can now carry values; its methods stay
 the same.</li>
-<li>The runtime’s own APIs still use null references or default values for
-“missing” (a <code>HashMap</code> returns the default value for a missing key, for
-example).</li>
+<li>Some runtime APIs still use null references, default values or sentinels
+for “missing”: a <code>HashMap</code> returns the default value for a missing key,
+and <code>String.find</code> returns <code>-1</code>, for example.</li>
 </ul>
 
                     </main>

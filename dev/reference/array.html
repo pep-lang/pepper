@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
+            window.path_to_searchindex_js = "../searchindex-16197d7a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -559,23 +559,29 @@ there are two or more elements.</p>
     numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
 </code></pre>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
-<pre><code class="language-pepper">find(item: T): long
+<pre><code class="language-pepper">find(item: T): ulong?
 </code></pre>
-<p>Returns the position of the first element equal to <code>item</code>.</p>
+<p>Returns the position of the first element equal to <code>item</code>, or none
+when no element matches.</p>
 <p>Runs in O(count), scanning from the front. Elements are compared with
 <code>==</code>: when <code>T</code> declares an <code>==</code> operator (as <code>String</code> does) that
 operator decides; for any other struct <code>T</code> it compares references, so
 only the very same object matches.</p>
+<p>Breaking change: <code>find</code> used to return a <code>long</code> that was <code>-1</code> when
+nothing matched. It now returns <code>ulong?</code>: test it with <code>is_some()</code> (or
+as a condition) and read the index with <code>value()</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>item</code> — the value to look for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the index of the first match, or -1 when no element matches</li>
+<li>the index of the first match, or none when no element matches (always none for an empty Array)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var i = a.find(9);   # -1 if a holds no 9
+<pre><code class="language-pepper">    var a = [3, 9, 4];
+    var i = a.find(9);         # i.value() == 1
+    var missing = a.find(7);   # missing.is_none() == true
 </code></pre>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">contains(item: T): bool

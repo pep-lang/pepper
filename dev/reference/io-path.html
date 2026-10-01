@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f72572f9.js";
+            window.path_to_searchindex_js = "../searchindex-16197d7a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8fc0870b.js"></script>
@@ -192,8 +192,12 @@
 <p>Every method except <code>exists</code>, <code>is_file</code>, <code>is_dir</code>, <code>metadata</code>,
 <code>symlink_metadata</code> and <code>canonicalize</code> is pure text manipulation: it never
 touches the file system, so <code>..</code> is not resolved against symlinks and
-nothing needs to exist. “No path” is the empty Path (there is no
-Option): <code>parent()</code> of a root, for example, is <code>Path("")</code>.</p>
+nothing needs to exist. A part that may be missing comes back as an
+optional, as in Rust: <code>parent()</code> of a root is none.</p>
+<p>Breaking change: <code>parent()</code>, <code>file_name()</code>, <code>file_stem()</code>, <code>extension()</code>
+and <code>dot_index()</code> used to return an empty Path or String (or
+<code>name.size()</code>) for “none”; they now return <code>Path?</code>, <code>String?</code> and
+<code>ulong?</code>.</p>
 <p>Separators: on POSIX only <code>/</code> separates components (<code>\</code> is an ordinary
 byte of a name). On Windows both <code>/</code> and <code>\</code> separate, and a path may
 start with a prefix: a drive (<code>C:</code>) or a UNC share (<code>\\server\share</code>).
@@ -205,9 +209,9 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 <pre><code class="language-pepper">    import io;
 
     var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
-    var name = p.file_name();                       # "guide.md"
-    var ext = p.extension();                        # "md"
-    var dir = p.parent();                           # io.Path("docs")
+    var name = p.file_name().value();               # "guide.md"
+    var ext = p.extension().value_or("");           # "md"
+    var dir = p.parent();                           # some io.Path("docs")
     if (p.is_file()) {
         print(p.to_string());
     }
@@ -242,18 +246,20 @@ takes a <code>Path</code> also accepts text.</p>
 <li><code>"/"</code> on POSIX, <code>"\"</code> on Windows (where <code>/</code> is also accepted as a separator on input)</li>
 </ul>
 <h4 id="dot_index"><a class="header" href="#dot_index">dot_index</a></h4>
-<pre><code class="language-pepper">static dot_index(name: String): ulong
+<pre><code class="language-pepper">static dot_index(name: String): ulong?
 </code></pre>
 <p>Returns the byte offset of the dot that starts the extension in the
 file name <code>name</code>: the last <code>.</code> that is not the first byte. A leading
 dot (<code>.bashrc</code>) starts the name, not an extension.</p>
+<p>Breaking change: this used to return <code>name.size()</code> for “no
+extension”; it now returns none.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — a file name (one component, as <code>file_name()</code> returns)</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
+<li>the index of the extension’s dot, or none when the name has no such dot (<code>noext</code>, <code>.bashrc</code>, the empty name)</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
@@ -267,9 +273,8 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
 <pre><code class="language-pepper">is_empty(): bool
 </code></pre>
-<p>Returns whether the path has no text at all. The empty path means “no
-path”: it is what <code>parent()</code> returns for a root or a bare name, and
-file-system operations on it fail.</p>
+<p>Returns whether the path has no text at all. File-system operations
+on the empty path fail.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the path’s text is <code>""</code></li>
@@ -358,7 +363,7 @@ as <code>\x</code> and <code>C:x</code>. On POSIX it equals <code>is_absolute()<
 <li>true when the path has a root separator or a prefix</li>
 </ul>
 <h4 id="parent"><a class="header" href="#parent">parent</a></h4>
-<pre><code class="language-pepper">parent(): Path
+<pre><code class="language-pepper">parent(): Path?
 </code></pre>
 <p>Returns the path without its last component. Pure text: <code>..</code> is not
 resolved, so the parent of <code>a/..</code> is <code>a</code>.</p>
@@ -366,50 +371,59 @@ resolved, so the parent of <code>a/..</code> is <code>a</code>.</p>
 dropped (<code>a/b/</code> and <code>a//b</code> both give <code>a</code>). The parent of a top-level
 name keeps the root and prefix (<code>/a</code> gives <code>/</code>, <code>C:\x</code> gives <code>C:\</code>,
 <code>C:x</code> gives <code>C:</code>).</p>
+<p>Breaking change: this used to return the empty path for “no parent”;
+it now returns none.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the parent path, or the empty path for a root (<code>/</code>, <code>C:\</code>), a bare name (<code>a</code>, <code>.</code>, <code>..</code>), or the empty path</li>
+<li>the parent path, or none for a root (<code>/</code>, <code>C:\</code>, a bare prefix such as <code>C:</code>), a bare name with no root (<code>a</code>, <code>.</code>, <code>..</code>), or the empty path</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var p = io.Path("/a/b/c.txt").parent();   # "/a/b"
-    var root = io.Path("/a").parent();        # "/"
-    var none = io.Path("/").parent();         # "" (empty)
+    var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+    var root = io.Path("/a").parent().value();        # "/"
+    var none = io.Path("/").parent();                 # none
 </code></pre>
 <h4 id="file_name"><a class="header" href="#file_name">file_name</a></h4>
-<pre><code class="language-pepper">file_name(): String
+<pre><code class="language-pepper">file_name(): String?
 </code></pre>
 <p>Returns the last component of the path, ignoring trailing separators
 (<code>a/b/</code> gives <code>b</code>).</p>
+<p>Breaking change: this used to return <code>""</code> for “no file name”; it now
+returns none.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the last component, or <code>""</code> for a root, the empty path, or a path whose last component is <code>.</code> or <code>..</code></li>
+<li>the last component, or none for a root (<code>/</code>, <code>C:\</code>), the empty path, or a path whose last component is <code>.</code> or <code>..</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var name = io.Path("/a/b/c.txt").file_name();   # "c.txt"
-    var none = io.Path("a/..").file_name();         # ""
+    var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+    var none = io.Path("a/..").file_name();                 # none
 </code></pre>
 <h4 id="file_stem"><a class="header" href="#file_stem">file_stem</a></h4>
-<pre><code class="language-pepper">file_stem(): String
+<pre><code class="language-pepper">file_stem(): String?
 </code></pre>
 <p>Returns the file name without its extension: everything before the
 last dot, unless that dot is the first character.</p>
+<p>Breaking change: this used to return <code>""</code> for “no file name”; it now
+returns none.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the stem (<code>c.tar</code> for <code>c.tar.gz</code>, <code>.bashrc</code> for <code>.bashrc</code>, <code>foo</code> for <code>foo.</code>), or <code>""</code> when there is no file name (see <code>file_name()</code>)</li>
+<li>the stem (<code>c.tar</code> for <code>c.tar.gz</code>, <code>.bashrc</code> for <code>.bashrc</code>, <code>foo</code> for <code>foo.</code>, <code>noext</code> for <code>noext</code>), or none when there is no file name (see <code>file_name()</code>)</li>
 </ul>
 <h4 id="extension"><a class="header" href="#extension">extension</a></h4>
-<pre><code class="language-pepper">extension(): String
+<pre><code class="language-pepper">extension(): String?
 </code></pre>
 <p>Returns the file name’s extension, without its dot: the text after
 the last dot, unless that dot is the first character. Only the file
 name counts; a dot in a directory name (<code>a.b/c</code>) is not an extension.</p>
+<p>Breaking change: this used to return <code>""</code> for “no extension”; it now
+returns none. As in Rust, a name ending in a dot (<code>foo.</code>) has the
+empty extension, which is not none.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the extension (<code>gz</code> for <code>c.tar.gz</code>), or <code>""</code> when there is none (<code>noext</code>, <code>.bashrc</code>, <code>foo.</code>) or no file name</li>
+<li>the extension (<code>gz</code> for <code>c.tar.gz</code>, <code>""</code> for <code>foo.</code>), or none when the file name has no dot after its first character (<code>noext</code>, <code>.bashrc</code>) or there is no file name</li>
 </ul>
 <h4 id="with_extension"><a class="header" href="#with_extension">with_extension</a></h4>
 <pre><code class="language-pepper">with_extension(ext: String): Path
