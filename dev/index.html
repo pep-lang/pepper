@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f7a48b3c.js";
+            window.path_to_searchindex_js = "searchindex-23e1a76c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24be83d2.js"></script>
@@ -252,7 +252,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 trait members can be <a href="language/overloading.html">overloaded</a>.</li>
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
 wherever the generic is used and, inside the generic, against what the
-traits declare (see <a href="language/generics.html#constraints">constraints</a>).</li>
+traits declare (see <a href="language/generics.html#constraints">constraints</a>).
+Numbers, <code>bool</code> and enums can declare traits too, for constraints, but
+are never trait values.</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>

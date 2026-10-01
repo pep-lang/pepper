@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a48b3c.js";
+            window.path_to_searchindex_js = "../searchindex-23e1a76c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24be83d2.js"></script>
@@ -481,8 +481,11 @@ value of the trait type (see
 <li>it is a type parameter constrained by that trait: inside
 <code>wrap&lt;T: Shape&gt;</code>, <code>Gallery&lt;String, T&gt;</code> is allowed.</li>
 </ul>
-<p>Numbers, <code>bool</code>, enums, pointers, tuples and function types conform to no
-trait.</p>
+<p>A number type, <code>char</code>, <code>bool</code> or an enum whose cases carry no values
+conforms when it declares the trait the same way (<code>extend int with Shape</code>;
+see <a href="traits-and-extensions.html#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>),
+for constraints only: it never becomes a trait value. Pointers, tuples and
+function types conform to no trait.</p>
 <h3 id="the-shared-constraint"><a class="header" href="#the-shared-constraint">The <code>Shared</code> constraint</a></h3>
 <p><code>T: Shared</code> is built in: it requires a type that is safe to share between
 threads, by the same rule as a field of a <code>[Shared]</code> struct. The types that

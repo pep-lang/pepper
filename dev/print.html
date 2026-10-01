@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f7a48b3c.js";
+            window.path_to_searchindex_js = "searchindex-23e1a76c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24be83d2.js"></script>
@@ -250,7 +250,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 trait members can be <a href="#overloading-1">overloaded</a>.</li>
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
 wherever the generic is used and, inside the generic, against what the
-traits declare (see <a href="#constraints">constraints</a>).</li>
+traits declare (see <a href="#constraints">constraints</a>).
+Numbers, <code>bool</code> and enums can declare traits too, for constraints, but
+are never trait values.</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
@@ -4482,7 +4484,11 @@ main(): int {
 </code></pre>
 <p>For an enum whose cases carry nothing, <code>this</code> is passed by value, like an
 <code>int</code>: a method cannot change the value it was called on. Return a new case
-instead, as <code>next()</code> does. For an enum whose cases carry values, <code>this</code> is
+instead, as <code>next()</code> does. Such an enum can also declare a trait with
+<code>extend Light with Describe { ... }</code>, which makes it meet the constraint
+<code>T: Describe</code> (see
+<a href="#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
+it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
 the object, as in a struct’s method; its values still cannot change.</p>
 <h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
 <p>Every enum has these methods without declaring them, and cannot declare
@@ -5396,8 +5402,11 @@ value of the trait type (see
 <li>it is a type parameter constrained by that trait: inside
 <code>wrap&lt;T: Shape&gt;</code>, <code>Gallery&lt;String, T&gt;</code> is allowed.</li>
 </ul>
-<p>Numbers, <code>bool</code>, enums, pointers, tuples and function types conform to no
-trait.</p>
+<p>A number type, <code>char</code>, <code>bool</code> or an enum whose cases carry no values
+conforms when it declares the trait the same way (<code>extend int with Shape</code>;
+see <a href="#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>),
+for constraints only: it never becomes a trait value. Pointers, tuples and
+function types conform to no trait.</p>
 <h3 id="the-shared-constraint"><a class="header" href="#the-shared-constraint">The <code>Shared</code> constraint</a></h3>
 <p><code>T: Shared</code> is built in: it requires a type that is safe to share between
 threads, by the same rule as a field of a <code>[Shared]</code> struct. The types that
@@ -6069,6 +6078,90 @@ trait’s methods calls it on <code>this</code>, and any other bare name means w
 means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through <code>this</code> explicitly only for the trait’s own methods.</p>
+<h3 id="numbers-bool-and-enums"><a class="header" href="#numbers-bool-and-enums">Numbers, <code>bool</code> and enums</a></h3>
+<p>A number type (<code>int</code>, <code>long</code>, <code>byte</code>, <code>char</code>, <code>float</code>, <code>double</code> and the
+rest), <code>bool</code>, or an enum whose cases carry no values can declare a trait
+too, with an extension written the same way. Inside its methods, <code>this</code> is
+the value:</p>
+<pre><code class="language-pepper">trait Describe {
+    describe(): String;
+    # A default method works for value types too.
+    shout(): String { return describe() + "!"; }
+}
+
+trait Zero {
+    static zero(): this;
+}
+
+# A number type conforms like a struct; `this` is the value.
+extend int with Describe {
+    describe(): String { return this &lt; 0 ? "negative" : "non-negative"; }
+}
+
+extend int with Zero {
+    static zero(): int { return 0; }
+}
+
+enum Light {
+    Red,
+    Green,
+}
+
+# An enum whose cases carry no values can conform too.
+extend Light with Describe {
+    describe(): String { return this == Light.Red ? "stop" : "go"; }
+}
+
+# Each call is resolved for the type argument: no trait value is made.
+describe_all&lt;T: Describe&gt;(items: Array&lt;T&gt;): String {
+    var text = "";
+    for (var item in items) {
+        text = text + item.describe() + " ";
+    }
+    return text;
+}
+
+zero_of&lt;T: Zero&gt;(): T { return T.zero(); }
+
+main(): int {
+    var numbers = Array&lt;int&gt;();
+    numbers.append(-1);
+    numbers.append(2);
+    assert(describe_all(numbers) == "negative non-negative ", "numbers");
+    assert(Light.Green.shout() == "go!", "enum");
+    assert((5).describe() == "non-negative", "a call on a value");
+    assert(zero_of&lt;int&gt;() == 0, "a static member through T");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The type then meets the constraint <code>T: Describe</code> (see
+<a href="#constraints">constraints</a>), and its methods can be called on
+a value (<code>x.describe()</code>) or, for a static one, on the type (<code>int.zero()</code>,
+or <code>T.zero()</code> in a generic). Each call goes straight to the method: there
+is no object and no vtable.</p>
+</li>
+<li>
+<p>It is never a trait value. A number or such an enum cannot be stored in a
+<code>Describe</code> variable, passed as one, or added to an <code>Array&lt;Describe&gt;</code>:</p>
+<pre><code class="language-text">main.pep:7:15: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
+    7 | main(): int { Doubled d = 3; return 0; }
+      |               ^~~~~~~
+main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the constraint, not a trait value
+    4 | extend int with Doubled {
+      |        ^~~
+</code></pre>
+</li>
+<li>
+<p>An extension of a number type may also add methods without a trait
+(<code>extend int { ... }</code>). An enum declares its methods inside the enum, so
+an extension of one must name a trait.</p>
+</li>
+<li>
+<p>The spellings of one type are one type: <code>extend int</code> is also <code>extend i32</code>.</p>
+</li>
+</ul>
 <h3 id="traits-as-types"><a class="header" href="#traits-as-types">Traits as types</a></h3>
 <p>A trait’s name is also a type. A variable, parameter, field, return value, or
 collection element of type <code>Shape</code> holds any struct that declares <code>Shape</code>, and

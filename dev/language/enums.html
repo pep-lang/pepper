@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7a48b3c.js";
+            window.path_to_searchindex_js = "../searchindex-23e1a76c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24be83d2.js"></script>
@@ -412,7 +412,11 @@ main(): int {
 </code></pre>
 <p>For an enum whose cases carry nothing, <code>this</code> is passed by value, like an
 <code>int</code>: a method cannot change the value it was called on. Return a new case
-instead, as <code>next()</code> does. For an enum whose cases carry values, <code>this</code> is
+instead, as <code>next()</code> does. Such an enum can also declare a trait with
+<code>extend Light with Describe { ... }</code>, which makes it meet the constraint
+<code>T: Describe</code> (see
+<a href="traits-and-extensions.html#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
+it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
 the object, as in a struct’s method; its values still cannot change.</p>
 <h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
 <p>Every enum has these methods without declaring them, and cannot declare
