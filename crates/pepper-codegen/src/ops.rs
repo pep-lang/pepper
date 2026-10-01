@@ -316,7 +316,9 @@ pub fn float_binary<'ctx>(
     Some(v)
 }
 
-/// Float comparison (returns i1).
+/// Float comparison (returns i1), as IEEE 754 and C define it: every
+/// comparison but `!=` is ordered (false when either side is NaN), and `!=`,
+/// the negation of `==`, is unordered (true when either side is NaN).
 pub fn float_compare<'ctx>(
     builder: &Builder<'ctx>,
     op: pepper_sema::model::BinaryOp,
@@ -326,7 +328,7 @@ pub fn float_compare<'ctx>(
     use pepper_sema::model::BinaryOp::*;
     let pred = match op {
         Equal => inkwell::FloatPredicate::OEQ,
-        NotEqual => inkwell::FloatPredicate::ONE,
+        NotEqual => inkwell::FloatPredicate::UNE,
         Less => inkwell::FloatPredicate::OLT,
         LessEqual => inkwell::FloatPredicate::OLE,
         Greater => inkwell::FloatPredicate::OGT,
@@ -374,8 +376,9 @@ pub fn as_bool<'ctx>(context: &'ctx Context, builder: &Builder<'ctx>, value: Bas
                     .unwrap_or(v)
             }
         }
+        // A float is true unless it equals zero, so NaN is true, as in C.
         BasicValueEnum::FloatValue(v) => builder
-            .build_float_compare(inkwell::FloatPredicate::ONE, v, v.get_type().const_zero(), "fbool")
+            .build_float_compare(inkwell::FloatPredicate::UNE, v, v.get_type().const_zero(), "fbool")
             .expect("float compare"),
         BasicValueEnum::PointerValue(p) => {
             // Pointer truthiness: ptr != null via ptrtoint compare.

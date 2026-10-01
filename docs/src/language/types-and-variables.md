@@ -51,6 +51,10 @@ main.pep:2:13: error: integer literal is too large to be represented in a 64-bit
 aliases). A literal with a decimal point or an exponent, such as `0.25` or `1e3`,
 is a `double`.
 
+Comparisons follow IEEE 754, as in C: against NaN (`0.0 / 0.0`), `==`, `<`,
+`<=`, `>` and `>=` are false and `!=` is true, so `x != x` is true only for a
+NaN. As a condition, a float is true unless it equals zero, NaN included.
+
 ### Booleans
 
 `bool` holds `true` or `false`. Comparisons and the logical operators produce a

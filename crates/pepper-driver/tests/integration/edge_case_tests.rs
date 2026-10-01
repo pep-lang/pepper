@@ -1644,3 +1644,31 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn float_comparisons_with_nan_follow_ieee_754() {
+    // `!=` is the negation of `==` (unordered: true when either side is
+    // NaN), while `==`, `<`, `<=`, `>`, `>=` are false against NaN. A NaN
+    // is true as a condition, as in C.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    double zero = 0.0;
+    var n = zero / zero;
+    float f = n;
+    if (!(n != n)) { return 1; }
+    if (!(n != 1.0)) { return 2; }
+    if (n == n) { return 3; }
+    if (n < 1.0 || n <= 1.0 || n > 1.0 || n >= 1.0) { return 4; }
+    if (!(f != f)) { return 5; }
+    if (f == f) { return 6; }
+    if (!n) { return 7; }
+    if (!(1.0 != 2.0) || 1.0 != 1.0) { return 8; }
+    return 0;
+}
+"#
+        ),
+        0
+    );
+}
