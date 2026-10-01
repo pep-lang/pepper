@@ -4,11 +4,8 @@
 //! signature checks that keep a mismatched function out of a typed slot.
 
 use pepper_codegen::CodeGenerator;
-use pepper_sema::model::Module as SemaModule;
-
-fn sema(source: &str) -> Result<SemaModule, String> {
-    pepper_driver::compiler::compile_with_runtime("test.pep", source)
-}
+use crate::support::compile_error;
+use crate::support::sema;
 
 /// Compile + JIT `test()` and return (result, net live-allocation delta).
 fn run(source: &str) -> (i32, i64) {
@@ -23,13 +20,6 @@ fn run(source: &str) -> (i32, i64) {
     let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
     let after = unsafe { live_allocs.call() };
     (result, after - before)
-}
-
-fn compile_error(source: &str) -> String {
-    match sema(source) {
-        Ok(_) => panic!("expected a compile error for:\n{}", source),
-        Err(e) => e,
-    }
 }
 
 const FUNCTIONS: &str = r#"

@@ -51,6 +51,23 @@ the author.
 - Lead with the answer; no pleasantries.
 - Prefer bulleted lists to prose.
 
+## Reuse helpers; never copy them
+
+Before writing a helper, look for one that already does the job, and when a
+second place needs a helper, move it somewhere both can share rather than
+pasting a copy. Copies drift: an audit once found 20 identical copies of one
+test helper, and near-copies that had quietly diverged.
+
+- **Rust integration tests** (`crates/pepper-driver/tests/integration/`):
+  shared helpers live in `support/mod.rs` (`compile_jit_with_runtime`,
+  `jit_census`, `sema`, `compile_error`, `repo_root`, `parallel_map`, ...).
+  Import them (`use crate::support::jit_census;`); a helper a second test
+  file needs moves there.
+- **Pepper code** (`runtime/`, `tools/`, examples): use the runtime's API
+  (`String.find`, `split`, `replace`, interpolation, `math.parse_int`, ...)
+  instead of a hand-rolled byte loop, and add a missing function to the
+  runtime rather than writing a private one in each caller.
+
 ## Pass non-trivial strings to CLI tools through files, never inline
 
 Any string longer than a few plain words — commit messages, PR bodies, review

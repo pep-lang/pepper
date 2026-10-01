@@ -12,10 +12,7 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 use crate::support;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// Builds pep-fmt once per test process and returns the executable.
 fn pep_fmt() -> &'static Path {

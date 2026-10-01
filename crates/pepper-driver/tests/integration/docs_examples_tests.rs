@@ -9,10 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::support;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// (name, entry point) of every example.
 fn examples() -> Vec<(String, PathBuf)> {

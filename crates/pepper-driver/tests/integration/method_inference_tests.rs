@@ -5,14 +5,7 @@
 //! fix a method body only saw its own struct's table, so such locals fell
 //! back to `i32`, and a method `read` typed as the extern `read`.
 
-use pepper_codegen::CodeGenerator;
-
-fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
-}
+use crate::support::compile_jit_with_runtime;
 
 #[test]
 fn locals_from_other_structs_in_a_method() {

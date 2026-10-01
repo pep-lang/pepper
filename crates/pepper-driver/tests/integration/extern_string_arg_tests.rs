@@ -8,23 +8,7 @@
 //! `String("hello")` passes the literal to the constructor's `__ptr<char>`,
 //! which once copied one byte of the String object instead.
 
-use pepper_codegen::CodeGenerator;
-
-/// Compile + JIT; return (entry result, net live-allocation delta).
-fn compile_jit_census(source: &str) -> (i32, i64) {
-    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    let ee = generator.jit_engine(&mut module).expect("jit");
-    let live_allocs = unsafe {
-        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs")
-            .expect("_pep_live_allocs")
-    };
-    let before = unsafe { live_allocs.call() };
-    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
-    let after = unsafe { live_allocs.call() };
-    (result, after - before)
-}
+use crate::support::jit_census as compile_jit_census;
 
 #[test]
 fn literal_to_extern_is_a_c_string() {

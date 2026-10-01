@@ -3,11 +3,7 @@
 
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
-use std::path::PathBuf;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// Compile `source` as `main.pep` (with the runtime) through codegen and
 /// return the rendered error, with the temp directory stripped from paths.

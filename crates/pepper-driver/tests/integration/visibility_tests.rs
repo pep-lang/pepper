@@ -4,16 +4,7 @@
 //! public surface is exported.
 
 use clap::Parser;
-use std::path::PathBuf;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
+use crate::support::repo_root;
 
 /// Write `lib.pep` and `main.pep` (which imports lib) to a fresh directory
 /// and run sema over them, with the runtime.

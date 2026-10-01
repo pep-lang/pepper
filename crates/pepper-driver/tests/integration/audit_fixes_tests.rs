@@ -4,12 +4,8 @@
 
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
-use std::path::PathBuf;
 use std::process::Command;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// Compile with the runtime and JIT `test()`, or return the compile error.
 fn try_jit(source: &str) -> Result<i32, String> {

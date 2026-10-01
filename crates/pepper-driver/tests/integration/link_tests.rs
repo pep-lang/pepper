@@ -8,15 +8,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::Command;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
+use crate::support::repo_root;
 
 #[test]
 fn link_attribute_reaches_linker() {

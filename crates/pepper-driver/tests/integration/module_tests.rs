@@ -12,10 +12,7 @@
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
 use std::path::PathBuf;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// Write `files` (path, text) under a fresh directory named for `test`, then
 /// compile `main.pep` there.

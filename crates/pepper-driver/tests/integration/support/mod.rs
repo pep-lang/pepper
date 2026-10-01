@@ -1,7 +1,12 @@
 //! Helpers shared by the integration tests. A module that needs one
-//! declares `use crate::support;`.
+//! declares `use crate::support;` or imports it by name. A helper a second
+//! test file needs moves here; it is never copied into that file.
 
+use std::path::PathBuf;
 use std::process::{Command, Output};
+
+use pepper_codegen::CodeGenerator;
+use pepper_sema::model::Module as SemaModule;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -61,4 +66,52 @@ pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -
     });
     results.sort_by_key(|(i, _)| *i);
     results.into_iter().map(|(_, r)| r).collect()
+}
+
+/// The repository root, two levels above this crate.
+pub fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
+}
+
+/// `source` compiled with the runtime as `test.pep`, or the rendered error.
+pub fn sema(source: &str) -> Result<SemaModule, String> {
+    pepper_driver::compiler::compile_with_runtime("test.pep", source)
+}
+
+/// The rendered error `source` fails to compile with.
+///
+/// Panics if `source` compiles.
+pub fn compile_error(source: &str) -> String {
+    match sema(source) {
+        Ok(_) => panic!("expected a compile error for:
+{}", source),
+        Err(e) => e,
+    }
+}
+
+/// Compiles `source` with the runtime and JIT-runs its `test` function,
+/// returning what it returns.
+pub fn compile_jit_with_runtime(source: &str) -> i32 {
+    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
+{}", e));
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.jit_execute(&mut module, "test").expect("jit")
+}
+
+/// Like [`compile_jit_with_runtime`], also returning the net change in live
+/// runtime allocations across the call: 0 when nothing leaked.
+pub fn jit_census(source: &str) -> (i32, i64) {
+    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
+{}", e));
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    let ee = generator.jit_engine(&mut module).expect("jit");
+    let live_allocs = unsafe {
+        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs").expect("_pep_live_allocs")
+    };
+    let before = unsafe { live_allocs.call() };
+    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
+    let after = unsafe { live_allocs.call() };
+    (result, after - before)
 }

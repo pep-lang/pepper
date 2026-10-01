@@ -6,40 +6,14 @@
 //! arguments, and the shared_ptr lifetime of arguments to a resolved call;
 //! then methods, operators, extension methods and traits.
 
-use pepper_codegen::CodeGenerator;
-use pepper_sema::model::Module as SemaModule;
-
-fn sema(source: &str) -> Result<SemaModule, String> {
-    pepper_driver::compiler::compile_with_runtime("test.pep", source)
-}
-
-/// Compile + JIT `test()` and return (result, net live-allocation delta).
-fn run(source: &str) -> (i32, i64) {
-    let mut module = sema(source).expect("compile");
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    let ee = generator.jit_engine(&mut module).expect("jit");
-    let live_allocs = unsafe {
-        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs")
-            .expect("_pep_live_allocs")
-    };
-    let before = unsafe { live_allocs.call() };
-    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
-    let after = unsafe { live_allocs.call() };
-    (result, after - before)
-}
+use crate::support::jit_census as run;
+use crate::support::compile_error;
+use crate::support::sema;
 
 fn value(source: &str) -> i32 {
     let (result, leaked) = run(source);
     assert_eq!(leaked, 0, "leaked allocations");
     result
-}
-
-fn compile_error(source: &str) -> String {
-    match sema(source) {
-        Ok(_) => panic!("expected a compile error for:\n{}", source),
-        Err(e) => e,
-    }
 }
 
 #[test]

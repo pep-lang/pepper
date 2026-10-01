@@ -3,14 +3,7 @@
 //! operation the runtime and tests relied on with `T*`, spelled `__ptr<T>`,
 //! end-to-end through the JIT.
 
-use pepper_codegen::CodeGenerator;
-
-fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
-}
+use crate::support::compile_jit_with_runtime;
 
 #[test]
 fn ptr_param_arithmetic_index_and_extern_arg() {

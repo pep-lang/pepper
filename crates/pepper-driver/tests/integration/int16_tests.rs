@@ -4,17 +4,11 @@
 //! struct fields, generics, extern (C `short`) calls, and `print`.
 //! The exhaustive operator matrix lives in `arithmetic_c_semantics_tests.rs`.
 
-use pepper_codegen::CodeGenerator;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::Command;
-
-fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
-}
+use crate::support::compile_jit_with_runtime;
+use crate::support::repo_root;
 
 /// Run a `test(): int` program whose checks `return <case index>` on failure.
 fn assert_cases(source: &str) {
@@ -306,10 +300,6 @@ test(): int {
     return 0;
 }"#,
     );
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
 
 /// Compile `source` to a native binary via the driver and return its path.

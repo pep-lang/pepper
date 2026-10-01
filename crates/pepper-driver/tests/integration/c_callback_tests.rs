@@ -3,27 +3,7 @@
 //! stored, returned and called through, with the leak census. Threads
 //! sharing one are in `async_tests.rs`.
 
-use pepper_codegen::CodeGenerator;
-use pepper_sema::model::Module as SemaModule;
-
-fn sema(source: &str) -> Result<SemaModule, String> {
-    pepper_driver::compiler::compile_with_runtime("test.pep", source)
-}
-
-/// Compile + JIT `test()` and return (result, net live-allocation delta).
-fn run(source: &str) -> (i32, i64) {
-    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:\n{}", e));
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    let ee = generator.jit_engine(&mut module).expect("jit");
-    let live_allocs = unsafe {
-        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs").expect("_pep_live_allocs")
-    };
-    let before = unsafe { live_allocs.call() };
-    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
-    let after = unsafe { live_allocs.call() };
-    (result, after - before)
-}
+use crate::support::jit_census as run;
 
 const QSORT: &str = r#"
 extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) => int compare);
