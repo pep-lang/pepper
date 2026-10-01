@@ -255,7 +255,7 @@ of your own that takes over its argument uses `[Move]`.
 | Code | What happens to references |
 |---|---|
 | `var b = a;` | `b` takes a new reference to `a`'s object. |
-| `b = c;` | `b` takes a reference to `c`'s object, then releases its old one. |
+| `b = c;` | `b` takes a reference to `c`'s object and holds it, then releases its old one. A destructor that runs then and reads `b` finds `c`'s object. |
 | `f(a)` | The parameter takes a reference for the duration of the call. |
 | `return a;` | The caller receives a reference to `a`'s object. |
 | `a.method()` | No change: `this` refers to `a`'s object. |

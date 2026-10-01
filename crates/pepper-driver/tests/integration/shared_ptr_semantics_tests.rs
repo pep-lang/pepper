@@ -1036,3 +1036,60 @@ test(): int {
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "locking, replace and dropping a confined Mutex must net zero");
 }
+
+// ── assignment stores before it releases ─────────────────────────────────────
+
+/// `slot = value` is `shared_ptr::operator=`: the slot holds the new value
+/// before the old one is released, so a destructor that reads the slot
+/// (through a reference its object keeps to the slot's owner) finds the new
+/// value, never the object being destroyed. Releasing first made the
+/// destructor copy a dead object and crash.
+#[test]
+fn a_destructor_reading_the_reassigned_slot_sees_the_new_value() {
+    let (result, leaked) = crate::support::jit_census(
+        r#"
+struct Holder {
+    var child: Child;
+    var items: Array<Child>;
+    var seen: int;
+    construct() { this.items = Array<Child>(); }
+}
+struct Child {
+    var owner: Holder;
+    var id: int;
+    construct(o: Holder, i: int) {
+        this.owner = o;
+        this.id = i;
+    }
+    destruct {
+        # Copy whatever the owner's slots hold now: a copy of this object
+        # would be released again when `now` goes out of scope.
+        var now = owner.child;
+        if (now !== __default<Child>()) {
+            owner.seen = owner.seen * 10 + now.id;
+        }
+        if (owner.items.count() > 0) {
+            var first = owner.items[0];
+            if (first !== __default<Child>()) {
+                owner.seen = owner.seen * 10 + first.id;
+            }
+        }
+    }
+}
+test(): int {
+    var h = Holder();
+    h.child = Child(h, 1);
+    h.child = Child(h, 2);
+    if (h.seen != 2) { return -1; }
+    h.items.append(Child(h, 3));
+    h.items[0] = Child(h, 4);
+    if (h.seen != 2 * 100 + 2 * 10 + 4) { return -2; }
+    # Break the cycles so everything is freed.
+    h.child = __default<Child>();
+    h.items.clear();
+    return 0;
+}"#,
+    );
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}

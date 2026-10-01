@@ -3109,10 +3109,13 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// Store a struct-reference value into an existing reference slot: the
     /// same shared_ptr `operator=` rule, one code path for every source kind.
     /// Same pointer as the current occupant (self-assignment in any form) →
-    /// no-op; otherwise acquire the new occupant before releasing the old
-    /// one, so a genuine store cannot destroy its own value mid-statement.
-    /// Both methods null-guard themselves, so zero-initialized slots are
-    /// safe. `value_ty` is the slot's LLVM pointee type (pointer for struct
+    /// no-op; otherwise acquire the new occupant, store it, and only then
+    /// release the old one, so a genuine store cannot destroy its own value
+    /// mid-statement, and a destructor the release runs that reads the slot
+    /// finds the new occupant, never the object being destroyed (as C++'s
+    /// `shared_ptr::operator=` does). The caller's own store after this
+    /// stores the same value again. Both methods null-guard themselves, so
+    /// zero-initialized slots are safe. `value_ty` is the slot's LLVM pointee type (pointer for struct
     /// references); `source` is kept for the caller's diagnostics.
     #[allow(unused_variables)]
     fn store_refcount_ops(
@@ -3129,6 +3132,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // `std::tuple`'s element-wise `operator=` is.
         if self.tuples.contains_key(ty_name) {
             self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
+            self.store_before_release(gep, value_ty, new_val, ty_name)?;
             self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
             return Ok(());
         }
@@ -3156,11 +3160,27 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
         self.builder.position_at_end(ops_block);
         self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
+        self.store_before_release(gep, value_ty, new_val, ty_name)?;
         self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
         self.builder
             .build_unconditional_branch(cont_block)
             .map_err(|e| e.to_string())?;
         self.builder.position_at_end(cont_block);
+        Ok(())
+    }
+
+    /// Store `new_val` into the reference slot `gep` (of LLVM type
+    /// `value_ty`, Pepper type `ty_name`) before its old occupant is
+    /// released (see [`Self::store_refcount_ops`]).
+    fn store_before_release(
+        &mut self,
+        gep: PointerValue<'ctx>,
+        value_ty: BasicTypeEnum<'ctx>,
+        new_val: BasicValueEnum<'ctx>,
+        ty_name: &str,
+    ) -> Result<(), String> {
+        address::check_store_type(value_ty, new_val, "reference slot", ty_name)?;
+        self.builder.build_store(gep, new_val).map_err(|e| e.to_string())?;
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
