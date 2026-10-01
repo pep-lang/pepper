@@ -34,6 +34,13 @@ pub struct Options {
     #[arg(short = 'O', value_name = "LEVEL", value_parser = clap::value_parser!(u8).range(0..=3))]
     pub opt_level: Option<u8>,
 
+    /// Link-time optimization: `full` optimizes the whole program as one
+    /// module after linking every file's code, so calls between files (into
+    /// the runtime, for one) inline; `off` optimizes each file alone. The
+    /// default is `full` at `-O2` and `-O3`, and `off` below.
+    #[arg(long = "lto", value_name = "MODE", value_parser = ["full", "off"])]
+    pub lto: Option<String>,
+
     /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
@@ -104,6 +111,20 @@ impl Options {
             Some(n) => pepper_codegen::target::OptLevel::from_number(n).ok_or_else(|| format!("invalid optimization level '-O{}'", n)),
             None => Ok(pepper_codegen::target::OptLevel::from_env()?.unwrap_or_default()),
         }
+    }
+
+    /// How units are compiled: the `-O` level, and link-time optimization
+    /// (`--lto`, on by default at `-O2` and `-O3`; an error at `-O0`).
+    pub fn effective_build(&self) -> Result<crate::cache::Build, String> {
+        use pepper_codegen::target::OptLevel;
+        let opt_level = self.effective_opt_level()?;
+        let lto = match self.lto.as_deref() {
+            Some("full") if opt_level == OptLevel::O0 => return Err("'--lto=full' needs optimization: add '-O'".to_string()),
+            Some("full") => true,
+            Some(_) => false,
+            None => matches!(opt_level, OptLevel::O2 | OptLevel::O3),
+        };
+        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug })
     }
 
     /// Port of `Options::defaults`: build dir = $CWD/.pep/build, forced

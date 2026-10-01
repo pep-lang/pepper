@@ -1031,10 +1031,24 @@ hash is of the unoptimized module and a "same code" unit skips the
 pipeline too; the level is in `Cache::compiler` and so in every key and
 code hash. `--emit-llvm` optimizes the whole-program module the same way,
 and the JIT (`create_jit_engine`) optimizes at `CodeGenerator::opt_level`,
-which starts at `PEPPER_OPT_LEVEL`. Units are optimized separately: there is
-no LTO, so a call into another unit (the runtime's `_pep_malloc`) stays a
-call, while `linkonce_odr` instantiations, compiled into each unit that
-calls them, inline.
+which starts at `PEPPER_OPT_LEVEL`.
+
+**Link-time optimization** (`driver/src/lto.rs`). Units optimized alone
+cannot inline a call into another unit (user code into the runtime's
+`_pep_malloc` or `String.__acquire`). `Options::effective_build` turns LTO
+on at `-O2` and `-O3` unless `--lto=off` (`--lto=full` turns it on at
+`-O1`; at `-O0` it is an error), as `cache::Build { opt_level, lto }`. With
+it, `cache::emit` runs `Pipeline::PreLink` (`lto-pre-link<On>`) and writes
+the unit's bitcode (`<unit>.bc`) where the object would go, cached like
+one; then `run` hands every unit's bitcode to `lto::optimize`, which links
+them into one module (`link_in_module`), makes every definition but
+`main` internal and drops its comdat (`internalize`: nothing outside the
+program calls Pepper code by name), runs `Pipeline::Link`
+(`lto<On>`) over the whole program, and writes `<build>/<module>.lto.o`,
+the only object the system linker sees. No linker plugin or `lld` is
+involved, so it works wherever the compiler does. The LTO mode is part of
+the cache's directory name and compiler identity (`O2-lto`, or `O2-lto-g` with `-g`). The JIT does
+not use LTO: it compiles the whole program as one module already.
 
 It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as

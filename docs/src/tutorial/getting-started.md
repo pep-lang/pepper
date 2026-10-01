@@ -163,7 +163,8 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `--import <name>` | Load a module into every file of the program, like the standard library. |
 | `--build <dir>` | Write intermediate files to `<dir>` instead of `.pep/build/`. |
 | `-g` | Emit debug info for gdb, lldb, Visual Studio and WinDbg (a `.pdb` on Windows). See [debugging](../tools/debugging.md). |
-| `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `PEPPER_OPT_LEVEL` (`0` to `3`) when set. |
+| `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `PEPPER_OPT_LEVEL` (`0` to `3`) when set. At `-O2` and `-O3` the whole program is also optimized together once every file is compiled. |
+| `--lto=off` | At `-O2` and `-O3`, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. `--lto=full` turns it on at `-O1`. |
 | `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`, optimized at the `-O` level. |
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |

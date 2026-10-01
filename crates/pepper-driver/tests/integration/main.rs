@@ -43,6 +43,7 @@ mod io_tests;
 mod iterator_tests;
 mod link_tests;
 mod loop_scope_tests;
+mod lto_tests;
 mod method_inference_tests;
 mod module_tests;
 mod multidim_index_tests;

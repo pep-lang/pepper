@@ -25,7 +25,7 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// search paths, forced imports and runtime.
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     // Files whose text is unchanged come from the build cache's syntax trees.
-    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_build()?)).transpose()?;
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &options.forced_imports,
@@ -194,7 +194,7 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
 /// The build cache, where checked runtimes are kept; none with
 /// `--no-cache`.
 fn runtime_store(options: &Options) -> Result<Option<crate::cache::Cache>, String> {
-    options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()
+    options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_build()?)).transpose()
 }
 
 /// `program` merged into one module, ready for [`run_passes`]: on its
@@ -241,7 +241,8 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
     let Some(root) = options.effective_cache_dir() else {
         return Ok(Reused::default());
     };
-    let cache = crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)?;
+    let build = options.effective_build()?;
+    let cache = crate::cache::Cache::open(&root, build)?;
     let n = program.files.len();
     let mut reused = Reused { files: vec![false; n], summaries: HashMap::new(), interfaces: vec![None; n], program: None };
     let mut unit_keys: Vec<Option<String>> = vec![None; program.units().len()];
@@ -266,7 +267,7 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
                     reused.interfaces[file] = Some(hash);
                 }
             }
-            let Some(summaries) = cache.reuse(&unit.name, &key, &units_dir.join(format!("{}.o", unit.name)))? else { continue };
+            let Some(summaries) = cache.reuse(&unit.name, &key, &units_dir.join(format!("{}.{}", unit.name, build.extension())))? else { continue };
             for &file in &unit.files {
                 reused.files[file] = true;
             }
@@ -282,7 +283,7 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
     if every && let Some(unit_keys) = unit_keys.into_iter().collect::<Option<Vec<String>>>() {
         let key = keys.program_key(cache.compiler(), &unit_keys);
         let name = &program.files[0].namespace;
-        reused.program = cache.program(name, &key, &units_dir.with_extension("o"))?;
+        reused.program = cache.program(name, &key, &units_dir.with_extension(build.extension()))?;
     }
     // Only the reused units' interfaces are kept: sema checks the others'
     // bodies, and `objects` hashes their interfaces from those.

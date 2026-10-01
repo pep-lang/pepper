@@ -4,6 +4,7 @@
 pub mod cache;
 pub mod compiler;
 pub mod keys;
+pub mod lto;
 pub mod linker;
 pub mod options;
 /// Import resolution, now in `pepper-files` (shared with the LSP server).
@@ -111,14 +112,15 @@ pub fn run(options: Options) -> Result<i32, String> {
     // Full pipeline: one object per unit (from the build cache when the
     // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()?;
+    let build = options.effective_build()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build)).transpose()?;
     let program_name = program.files[0].namespace.clone();
-    let (objects, link_libraries, program_key) = match cached {
+    let (mut objects, link_libraries, program_key) = match cached {
         // Every unit and the program came from the cache: sema did not run.
         Some(record) => {
             let mut objects: Vec<PathBuf> =
-                program.units().iter().map(|u| units_dir(&build_dir, &module_name).join(format!("{}.o", u.name))).collect();
-            objects.push(build_dir.join(format!("{}.o", module_name)));
+                program.units().iter().map(|u| units_dir(&build_dir, &module_name).join(format!("{}.{}", u.name, build.extension()))).collect();
+            objects.push(build_dir.join(format!("{}.{}", module_name, build.extension())));
             if options.tracing("cache") {
                 for unit in program.units() {
                     eprintln!("cache: {} hit", unit.name);
@@ -147,7 +149,7 @@ pub fn run(options: Options) -> Result<i32, String> {
                 (Some(cache), Some(keys)) => {
                     let key = keys::Keys::new(&program).program_key(cache.compiler(), &keys);
                     let record = cache::ProgramRecord { key, libraries: libraries.clone(), ..Default::default() };
-                    cache.store_program(&program_name, &record, &build_dir.join(format!("{}.o", module_name)))?;
+                    cache.store_program(&program_name, &record, &build_dir.join(format!("{}.{}", module_name, build.extension())))?;
                     Some(record)
                 }
                 _ => None,
@@ -156,6 +158,12 @@ pub fn run(options: Options) -> Result<i32, String> {
         }
     };
     timer.stage("codegen and emission");
+    if build.lto {
+        let object = build_dir.join(format!("{}.lto.o", module_name));
+        lto::optimize(&objects, &object, build.opt_level)?;
+        objects = vec![object];
+        timer.stage("link-time optimization");
+    }
 
     // Discover runtime libs for linking.
     let (_sources, runtime_libs, runtime_dirs) = runtime::discover();
@@ -260,8 +268,8 @@ pub fn objects(
     let mut keys = keys::Keys::new(program);
     keys.exact_positions = options.emit_debug;
     let units = &keys.units;
-    let opt_level = options.effective_opt_level()?;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, opt_level, options.emit_debug)).transpose()?;
+    let build = options.effective_build()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build)).transpose()?;
     let interfaces = match cache {
         Some(_) => file_interfaces(module, program, interfaces)?,
         None => vec![],
@@ -286,7 +294,7 @@ pub fn objects(
             UnitJob {
                 unit: Some(i),
                 name: u.name.clone(),
-                object: build_units.join(format!("{}.o", u.name)),
+                object: build_units.join(format!("{}.{}", u.name, build.extension())),
                 key,
                 inputs: is_input,
                 interfaces: match cache {
@@ -302,7 +310,7 @@ pub fn objects(
     jobs.push(UnitJob {
         unit: None,
         name: "__program".to_string(),
-        object: build_dir.join(format!("{}.o", name)),
+        object: build_dir.join(format!("{}.{}", name, build.extension())),
         key: None,
         inputs: vec![],
         interfaces: vec![],
@@ -318,7 +326,7 @@ pub fn objects(
         unit_of_file: keys.unit_of_file.clone(),
         cache: cache.as_ref(),
         verify: options.verifying_cache(),
-        opt_level,
+        build,
         debug: options.emit_debug,
     };
     // Register the backend once, before the threads use it.
@@ -401,7 +409,7 @@ struct UnitSetup<'a> {
     /// matches the cached object's.
     verify: bool,
     /// The level objects are optimized at (`-O`).
-    opt_level: pepper_codegen::target::OptLevel,
+    build: cache::Build,
     /// Emit debug info (`-g`).
     debug: bool,
 }
@@ -417,7 +425,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
         let mut generator = CodeGenerator::new(ctx, &job.name);
         generator.file_namespaces = setup.namespaces.to_vec();
         generator.debug_info = setup.debug;
-        generator.opt_level = setup.opt_level;
+        generator.opt_level = setup.build.opt_level;
         generator.unit = Some(pepper_codegen::partition::UnitFilter {
             unit_of_file: setup.unit_of_file.clone(),
             unit: job.unit,
@@ -457,7 +465,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
             }
             Ok(Some(outcome))
         }
-        _ => cache::emit(&generate()?, &job.object, setup.opt_level).map(|_| None),
+        _ => cache::emit(&generate()?, &job.object, setup.build).map(|_| None),
     }
 }
 

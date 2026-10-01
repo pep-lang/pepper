@@ -1,0 +1,61 @@
+//! Link-time optimization (`--lto=full`, the default at `-O2` and `-O3`;
+//! see INTERNALS.md §4.1).
+//!
+//! Each unit is optimized alone, so a call into another unit (user code
+//! calling the runtime's `_pep_malloc`, or `String.__acquire`) stays a
+//! call. With LTO, each unit is kept as bitcode that LLVM's pre-link
+//! pipeline has run over (`cache::emit`, cached like an object), and this
+//! links every unit into one module, makes every symbol but `main` internal
+//! to it, runs the link-time pipeline over the whole program, and emits one
+//! object. The program then links with the system linker as usual: no
+//! linker plugin is involved, so it works on every platform the compiler
+//! does.
+
+use inkwell::context::Context;
+use inkwell::module::{Linkage, Module};
+use inkwell::values::{AsValueRef, GlobalValue};
+use pepper_codegen::target::{OptLevel, Pipeline};
+use std::path::{Path, PathBuf};
+
+/// Link the units' bitcode files `bitcode` into one module, optimize it as
+/// a whole at `opt_level`, and write it to `object`.
+pub fn optimize(bitcode: &[PathBuf], object: &Path, opt_level: OptLevel) -> Result<(), String> {
+    let context = Context::create();
+    let read = |path: &PathBuf| {
+        Module::parse_bitcode_from_path(path, &context).map_err(|e| format!("cannot read {}: {}", path.display(), e.to_string()))
+    };
+    let mut paths = bitcode.iter();
+    let first = paths.next().ok_or_else(|| "nothing to link".to_string())?;
+    let program = read(first)?;
+    for path in paths {
+        program
+            .link_in_module(read(path)?)
+            .map_err(|e| format!("cannot link {}: {}", path.display(), e.to_string()))?;
+    }
+    internalize(&program);
+    pepper_codegen::target::optimize_with(&program, opt_level, Pipeline::Link)?;
+    program.verify().map_err(|e| format!("the linked program does not verify: {}", e.to_string()))?;
+    pepper_codegen::target::host_machine_at(opt_level)?
+        .write_to_file(&program, inkwell::targets::FileType::Object, object)
+        .map_err(|e| format!("cannot write {}: {}", object.display(), e))
+}
+
+/// Make every definition but `main` internal: nothing outside the program
+/// calls Pepper code by name, so the optimizer may inline, specialize or
+/// drop any of it. A definition leaves its comdat, which only told the
+/// linker to keep one copy of it.
+fn internalize(program: &Module<'_>) {
+    let mut values: Vec<GlobalValue<'_>> = program.get_functions().map(|f| f.as_global_value()).collect();
+    values.extend(program.get_globals());
+    for value in values {
+        let name = value.get_name().to_string_lossy();
+        if value.is_declaration() || name == "main" || name.starts_with("llvm.") {
+            continue;
+        }
+        if matches!(value.get_linkage(), Linkage::Appending) {
+            continue;
+        }
+        unsafe { inkwell::llvm_sys::comdat::LLVMSetComdat(value.as_value_ref(), std::ptr::null_mut()) };
+        value.set_linkage(Linkage::Internal);
+    }
+}

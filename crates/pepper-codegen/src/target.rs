@@ -130,11 +130,34 @@ impl OptLevel {
     }
 }
 
+/// Which of LLVM's pipelines for a level to run: the ordinary one, or the
+/// two halves of link-time optimization (clang's `-flto`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pipeline {
+    /// `default<On>`: a unit compiled to its object.
+    Default,
+    /// `lto-pre-link<On>`: a unit kept as bitcode for link-time optimization.
+    PreLink,
+    /// `lto<On>`: the whole program, once every unit is linked into it.
+    Link,
+}
+
 /// Run `level`'s pipeline over `module` (nothing at `-O0`).
 pub fn optimize(module: &inkwell::module::Module<'_>, level: OptLevel) -> Result<(), String> {
-    let Some(pipeline) = level.pipeline() else {
+    optimize_with(module, level, Pipeline::Default)
+}
+
+/// Run `level`'s `pipeline` over `module` (nothing at `-O0`).
+pub fn optimize_with(module: &inkwell::module::Module<'_>, level: OptLevel, pipeline: Pipeline) -> Result<(), String> {
+    let Some(default) = level.pipeline() else {
         return Ok(());
     };
+    let pipeline = match pipeline {
+        Pipeline::Default => default.to_string(),
+        Pipeline::PreLink => default.replace("default<", "lto-pre-link<"),
+        Pipeline::Link => default.replace("default<", "lto<"),
+    };
+    let pipeline = pipeline.as_str();
     let machine = host_machine_at(level)?;
     module
         .run_passes(pipeline, &machine, inkwell::passes::PassBuilderOptions::create())

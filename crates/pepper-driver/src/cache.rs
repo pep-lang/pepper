@@ -70,12 +70,35 @@ use std::path::{Path, PathBuf};
 /// Cache format version: a new format ignores old directories.
 const VERSION: &str = "v1";
 
+/// How the units of a build are compiled: the `-O` level, and whether each
+/// unit is kept as bitcode for link-time optimization (see [`crate::lto`])
+/// rather than as an object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Build {
+    pub opt_level: OptLevel,
+    pub lto: bool,
+    /// Debug info (`-g`).
+    pub debug: bool,
+}
+
+impl Build {
+    /// The extension of a unit's file: `bc` with LTO, else `o`.
+    pub fn extension(self) -> &'static str {
+        if self.lto { "bc" } else { "o" }
+    }
+
+    /// How the options appear in the cache: `O2`, `O2-lto`, `O2-lto-g`.
+    fn name(self) -> String {
+        format!("O{}{}{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" })
+    }
+}
+
 /// An open build cache: the directory for this compiler's target.
 pub struct Cache {
     dir: PathBuf,
     compiler: String,
-    /// The level objects are optimized at; part of [`Cache::compiler`].
-    opt_level: OptLevel,
+    /// How units are compiled; part of [`Cache::compiler`].
+    build: Build,
     /// Where syntax trees are kept, and the compiler they are stamped with:
     /// shared by every `-O` level, since parsing does not depend on it.
     parsed_dir: PathBuf,
@@ -87,16 +110,15 @@ pub struct Cache {
 
 impl Cache {
     /// The cache under `root` for the host target, created if missing, for
-    /// objects optimized at `opt_level`, with debug info when `debug`.
-    pub fn open(root: &Path, opt_level: OptLevel, debug: bool) -> Result<Cache, String> {
+    /// units compiled as `build` says.
+    pub fn open(root: &Path, build: Build) -> Result<Cache, String> {
         let machine = crate::default_target_machine()?;
         let triple = machine.get_triple().as_str().to_string_lossy().into_owned();
-        // A directory per level and `-g`, so switching between `-O0` and
-        // `-O2 -g` builds keeps each one's objects (a unit has one record
-        // per directory).
-        let options = format!("O{}{}", opt_level.number(), if debug { "-g" } else { "" });
+        // A directory per level and LTO mode, so switching between `-O0` and
+        // `-O2` builds keeps both levels' objects (a unit has one record per
+        // directory).
         let target = root.join(VERSION).join(triple);
-        let dir = target.join(&options);
+        let dir = target.join(build.name());
         std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
         let tag = root.join("CACHEDIR.TAG");
         if !tag.exists() {
@@ -110,8 +132,8 @@ impl Cache {
         // every key and code hash: an object built with others never hits,
         // nor counts as the same code. Parsing depends on neither.
         let parser = compiler_id();
-        let compiler = format!("{} -{}", parser, options);
-        Ok(Cache { dir, compiler, opt_level, parsed_dir: target.join("parsed"), parser, runtime_dir: target.join("runtime") })
+        let compiler = format!("{} -{}", parser, build.name());
+        Ok(Cache { dir, compiler, build, parsed_dir: target.join("parsed"), parser, runtime_dir: target.join("runtime") })
     }
 
     /// Reuse the unit `name` before sema, so sema may skip its bodies
@@ -128,7 +150,7 @@ impl Cache {
         }
         let lock = self.lock_file(name)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", name, e))?;
-        let object = self.path(name, "o");
+        let object = self.path(name, self.build.extension());
         let mut reused = None;
         if object.is_file() && self.record(name).is_some_and(|r| r.key == key && !r.warned) {
             place(&object, out)?;
@@ -146,7 +168,7 @@ impl Cache {
         let Some(record) = self.program_record(name).filter(|r| r.key == key) else { return Ok(None) };
         let lock = self.lock_file(&unit)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", unit, e))?;
-        let object = self.path(&unit, "o");
+        let object = self.path(&unit, self.build.extension());
         let found = object.is_file() && self.program_record(name).is_some_and(|r| r.key == key);
         if found {
             place(&object, out)?;
@@ -160,7 +182,7 @@ impl Cache {
         let unit = format!("programs/{}", name);
         let lock = self.lock_file(&unit)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", unit, e))?;
-        let stored = self.path(&unit, "o");
+        let stored = self.path(&unit, self.build.extension());
         let temporary = temporary_path(&stored);
         std::fs::copy(object, &temporary).map_err(|e| format!("cannot write {}: {}", temporary.display(), e))?;
         std::fs::rename(&temporary, &stored).map_err(|e| format!("cannot write {}: {}", stored.display(), e))?;
@@ -215,7 +237,7 @@ impl Cache {
         let lock = self.lock_file(name)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", name, e))?;
         let record = self.record(name);
-        let object = self.path(name, "o");
+        let object = self.path(name, self.build.extension());
         let present = object.is_file();
         let (outcome, code) = if present && let Some(record) = record.as_ref().filter(|r| r.key == key) {
             if verify {
@@ -253,7 +275,7 @@ impl Cache {
             }
             if !same_code {
                 let temporary = temporary_path(&object);
-                emit(&module, &temporary, self.opt_level)?;
+                emit(&module, &temporary, self.build)?;
                 std::fs::rename(&temporary, &object).map_err(|e| format!("cannot write {}: {}", object.display(), e))?;
             }
             write_atomically(&self.path(name, "summaries"), summaries.as_bytes())?;
@@ -537,15 +559,24 @@ fn json_string<'a>(record: &'a str, field: &str) -> Option<&'a str> {
     Some(&rest[..rest.find('"')?])
 }
 
-/// Write an object file for `module` at `path`, optimized at `opt_level`
-/// first. The cache hashes a unit's code before this, so a unit whose code
-/// did not change is not optimized again.
-pub fn emit(module: &Module<'_>, path: &Path, opt_level: OptLevel) -> Result<(), String> {
+/// Write `module` at `path` as `build` says: optimized at its level, then
+/// an object, or with LTO bitcode that only the link-time half of the
+/// pipeline has yet to run over (see [`crate::lto`]). The cache hashes a
+/// unit's code before this, so a unit whose code did not change is not
+/// optimized again.
+pub fn emit(module: &Module<'_>, path: &Path, build: Build) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
     }
-    pepper_codegen::target::optimize(module, opt_level)?;
-    pepper_codegen::target::host_machine_at(opt_level)?
+    if build.lto {
+        pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::PreLink)?;
+        return match module.write_bitcode_to_path(path) {
+            true => Ok(()),
+            false => Err(format!("cannot write {}", path.display())),
+        };
+    }
+    pepper_codegen::target::optimize(module, build.opt_level)?;
+    pepper_codegen::target::host_machine_at(build.opt_level)?
         .write_to_file(module, inkwell::targets::FileType::Object, path)
         .map_err(|e| format!("obj emission failed: {}", e))
 }
