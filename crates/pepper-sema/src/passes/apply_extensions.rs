@@ -84,6 +84,10 @@ fn conform(
                 method.trait_default = Some(def.methods.iter().map(|m| set_name(&m.name).to_string()).collect());
                 method.owner = ext.loc;
                 substitute(&mut method.ty, &type_map);
+                // `put_all<I: Iterator<T>>` of `Sink<int>`: `I: Iterator<int>`.
+                for bound in method.generic_params.iter_mut().flat_map(|p| &mut p.bounds) {
+                    substitute(&mut bound.ty, &type_map);
+                }
                 for param in &mut method.parameters {
                     substitute(&mut param.ty, &type_map);
                 }

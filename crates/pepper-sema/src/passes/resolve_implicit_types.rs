@@ -852,7 +852,14 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
         // `x.map(f)` calling a generic method: `x.map<U>(f)`.
         // Typing the receiver is costly: first rule out a method no struct
         // declares generic.
-        if method.contains('<') || !scopes.tables.generic_method_names.contains(method.as_str()) {
+        // `x.count_all<int>(it)` writing only the leading type arguments:
+        // the rest from the arguments, as for a free function.
+        // An operator method (`<`) is never generic.
+        if !method.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+            return;
+        }
+        let written = crate::passes::gather_generics::parse_type_string(method);
+        if !scopes.tables.generic_method_names.contains(written.name.as_str()) {
             return;
         }
         let owner = type_of_expr(this, scopes, current);
@@ -861,16 +868,23 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
         }
         let key = owner.to_string();
         let Some(methods) = scopes.tables.generic_methods.get(key.trim_end_matches('*')) else { return };
-        let Some((_, signature)) = methods.iter().find(|(n, _)| n == method) else { return };
+        let Some((_, signature)) = methods.iter().find(|(n, _)| *n == written.name) else { return };
         let types = argument_types(args, scopes, current);
-        if let Some(type_args) = signature.infer(&types) {
-            *method = crate::passes::type_arguments::specialization(method, type_args);
+        let type_args = if method.contains('<') { signature.complete(&written.sub_types, &types) } else { signature.infer(&types) };
+        if let Some(type_args) = type_args {
+            *method = crate::passes::type_arguments::specialization(&written.name, type_args);
         }
         return;
     }
     let Expression::FunctionCall { function, args, .. } = e else { return };
+    if function.contains('<') {
+        if function.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+            complete_type_arguments(function, args, scopes, current);
+        }
+        return;
+    }
     let Some(signature) = scopes.tables.generic_functions.get(function.as_str()) else { return };
-    if function.contains('<') || scopes.value_callee(function, current).is_some() {
+    if scopes.value_callee(function, current).is_some() {
         return;
     }
     // Inside a method, a bare call may be one of the struct's methods,
@@ -881,6 +895,21 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     let types = argument_types(args, scopes, current);
     if let Some(type_args) = signature.infer(&types) {
         *function = crate::passes::type_arguments::specialization(function, type_args);
+    }
+}
+
+/// A call that writes only the leading type arguments, `count_all<int>(it)`
+/// for `count_all<T, I>`, takes the rest from its arguments (or their
+/// defaults): `count_all<int, ArrayIterator<int>>(it)`.
+fn complete_type_arguments(function: &mut String, args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) {
+    let written = crate::passes::gather_generics::parse_type_string(function);
+    let Some(signature) = scopes.tables.generic_functions.get(written.name.as_str()) else { return };
+    if written.sub_types.len() >= signature.params.len() || scopes.value_callee(&written.name, current).is_some() {
+        return;
+    }
+    let types = argument_types(args, scopes, current);
+    if let Some(type_args) = signature.complete(&written.sub_types, &types) {
+        *function = crate::passes::type_arguments::specialization(&written.name, type_args);
     }
 }
 

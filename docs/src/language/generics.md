@@ -44,9 +44,11 @@ A free function takes type parameters the same way:
 ```
 
 Pepper infers the type arguments from the arguments, so `larger(3, 9)` calls
-`larger<int>`. You can always write them out, `larger<float>(2.5, 1.5)`, and
-must when the arguments do not determine every type parameter, for example one
-that appears only in the return type:
+`larger<int>`. You can always write them out, `larger<float>(2.5, 1.5)`, or
+write only the leading ones and let the arguments give the rest:
+`pick<int>(1, "x")` for `pick<T, U>(a: T, b: U)`. You must write them when the
+arguments do not determine every type parameter, for example one that appears
+only in the return type:
 
 ```text
 main.pep:4:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)
@@ -162,6 +164,17 @@ it is not thread-safe (`'String' is not declared [Shared]`). In a
 constraint, `Shared` always means this built-in, so a trait cannot be
 named `Shared`. A generic that passes its own `T` to one of these (say
 `run_blocking<T>`) needs `T: Shared` too.
+
+A constraint can name another type parameter of the same declaration:
+`count_all<T, I: Iterator<T>>(source: I)`. Inference reads it too: the
+argument gives `I`, and the `Iterator<...>` that `I` declares gives `T`. A
+trait's default method may name the trait's own parameters
+(`put_all<I: Iterator<T>>` in `trait Sink<T>`), which take the arguments of
+the conformance (`extend Sum with Sink<int>`).
+
+```pepper
+{{#include ../../examples/generics-constraint-inference.pep}}
+```
 
 The compiler checks every use: a type argument you write, one it infers from
 a call, a default, and a

@@ -35,6 +35,12 @@ pub fn specialize_functions(module: &mut Module) {
                 type_map.push((param.name.clone(), arg));
             }
         }
+        // `count_all<int>(it)` for `count_all<T, I>`: the rest come from the
+        // arguments (`resolve_implicit_types`), or `check_type_arguments`
+        // reports the call.
+        if type_map.len() < base.generic_params.len() {
+            continue;
+        }
         let mut specialized = base.clone();
         // The instance's declared return type is the base's, with the
         // generic arguments substituted (`hash<T>` → `u64`).

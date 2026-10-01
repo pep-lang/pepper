@@ -229,3 +229,78 @@ test(): int { var b = Box<int>(1); return b.show(true) * 100 + b.plain(); }
     assert_eq!(result, 1507);
     assert_eq!(leaked, 0);
 }
+
+#[test]
+fn bound_naming_another_type_parameter() {
+    // #331: `I: Iterator<T>` binds `T` from `I`'s argument, written type
+    // arguments may stop early (`count_all<int>(...)`), and a trait default
+    // method's bound takes the trait's argument.
+    let src = r#"
+count_all<T, I: Iterator<T>>(source: I): int {
+    var n = 0;
+    while (source.next()) {
+        n += 1;
+    }
+    return n;
+}
+
+first<T, I: Iterator<T>>(source: I): T {
+    source.next();
+    return source.current();
+}
+
+pick<T, U>(a: T, b: U): T { return a; }
+
+struct Counter<T, I: Iterator<T>> {
+    var source: I;
+    construct(s: I) { source = s; }
+    total(): int { return count_all<T, I>(source); }
+}
+
+struct Tally {
+    count_all<T, I: Iterator<T>>(source: I): int {
+        var n = 0;
+        while (source.next()) {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+trait Sink<T> {
+    put(x: T);
+    put_all<I: Iterator<T>>(source: I) {
+        while (source.next()) {
+            put(source.current());
+        }
+    }
+}
+
+struct Sum {
+    var total = 0;
+    put(x: int) { total += x; }
+}
+
+extend Sum with Sink<int> {}
+
+test(): int {
+    var numbers = Array<int>();
+    numbers.append(3);
+    numbers.append(4);
+    var words = Array<String>();
+    words.append("hello");
+    var counter = Counter<int, ArrayIterator<int>>(numbers.iterate());
+    var tally = Tally();
+    var sum = Sum();
+    sum.put_all(numbers.iterate());
+    return count_all(numbers.iterate())
+        + count_all<int>(numbers.iterate()) * 10
+        + (first(words.iterate()).size() as int) * 100
+        + pick<int>(1, "x") * 1000
+        + counter.total() * 10000
+        + (tally.count_all(numbers.iterate()) + tally.count_all<int>(numbers.iterate())) * 100000
+        + sum.total * 1000000;
+}
+"#;
+    assert_eq!(run(src), (7_421_522, 0));
+}

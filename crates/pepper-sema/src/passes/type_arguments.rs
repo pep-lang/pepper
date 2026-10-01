@@ -97,7 +97,27 @@ impl GenericSignature {
                 self.unify(pattern, actual, &mut bindings);
             }
         }
+        self.bind_through_bounds(&mut bindings);
         bindings
+    }
+
+    /// Bind the parameters a bound names from the bound parameter's type
+    /// argument: in `<T, I: Iterator<T>>`, `I = ArrayIterator<int>` declares
+    /// `Iterator<int>`, so `T = int`. Repeats until nothing new binds, since
+    /// one bound can bind the parameter another bound needs.
+    fn bind_through_bounds(&self, bindings: &mut HashMap<String, TypeName>) {
+        loop {
+            let before = bindings.len();
+            for param in &self.params {
+                let Some(actual) = bindings.get(&param.name).cloned() else { continue };
+                for bound in &param.bounds {
+                    self.unify(&bound.ty, &actual, bindings);
+                }
+            }
+            if bindings.len() == before {
+                break;
+            }
+        }
     }
 
     /// The type arguments for a call with `arguments`, when every generic
@@ -111,6 +131,33 @@ impl GenericSignature {
             .iter()
             .map(|p| bindings.get(&p.name).cloned().or_else(|| p.default.clone()))
             .collect()
+    }
+
+    /// The type arguments for a call that writes only the leading ones
+    /// (`count_all<int>(it)` for `count_all<T, I>`): the written ones, then
+    /// each missing one from its default, else from the arguments. `None`
+    /// when every one is written, or one stays unbound.
+    pub fn complete(&self, written: &[TypeName], arguments: &[Option<TypeName>]) -> Option<Vec<TypeName>> {
+        if written.len() >= self.params.len() || self.params[written.len()..].iter().all(|p| p.default.is_some()) {
+            return None;
+        }
+        if arguments.len() < self.required || arguments.len() > self.parameter_types.len() {
+            return None;
+        }
+        let mut bindings: HashMap<String, TypeName> =
+            self.params.iter().map(|p| p.name.clone()).zip(written.iter().cloned()).collect();
+        for p in &self.params[written.len()..] {
+            if let Some(default) = &p.default {
+                bindings.insert(p.name.clone(), default.clone());
+            }
+        }
+        for (pattern, actual) in self.parameter_types.iter().zip(arguments) {
+            if let Some(actual) = actual {
+                self.unify(pattern, actual, &mut bindings);
+            }
+        }
+        self.bind_through_bounds(&mut bindings);
+        self.params.iter().map(|p| bindings.get(&p.name).cloned()).collect()
     }
 
     /// Parameter `index`'s type with the known bindings substituted and every
@@ -177,6 +224,28 @@ pub fn check_type_arguments(module: &Module) {
             // `resolve_resolvables` reports it as undeclared instead.
             let undeclared = args.iter().any(|a| matches!(a, Expression::SymbolRef { ty, .. } if ty.is_empty() || ty.is_auto()));
             if undeclared {
+                return;
+            }
+            // `count_all<int>(it)` for `count_all<T, I>` whose arguments did
+            // not give the rest.
+            let written = crate::passes::gather_generics::parse_type_string(function);
+            if function.starts_with(|c: char| c.is_alphabetic() || c == '_')
+                && let Some(base) = generics.get(written.name.as_str())
+                && !written.sub_types.is_empty()
+                && let Some(missing) = base.generic_params.get(written.sub_types.len()..)
+                && let Some(unbound) = missing.iter().find(|p| p.default.is_none())
+            {
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "cannot infer the type argument '{}' of '{}' from its arguments; write it: {}<{}>(...)",
+                        unbound.name,
+                        written.name,
+                        written.name,
+                        base.generic_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")
+                    ))
+                    .at(*loc)
+                    .with_note("declared here", Some(base.loc)),
+                );
                 return;
             }
             if let Some(base) = generics.get(function.as_str()) {

@@ -1692,6 +1692,21 @@ fn type_arguments_not_inferred() {
 }
 
 #[test]
+fn written_type_arguments_too_few() {
+    // #331: the arguments give no 'U', so the call is reported, not the
+    // half-specialized function.
+    assert_eq!(
+        error_of("written_type_arguments_too_few", "make<T, U>(a: T): int { return 0; }\nmain(): int {\n    return make<int>(1);\n}\n"),
+        "main.pep:3:12: error: cannot infer the type argument 'U' of 'make' from its arguments; write it: make<T, U>(...)\n\
+         \x20   3 |     return make<int>(1);\n\
+         \x20     |            ^~~~~~~~~\n\
+         main.pep:1:1: note: declared here\n\
+         \x20   1 | make<T, U>(a: T): int { return 0; }\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
 fn shared_closure_captures_not_thread_safe() {
     // At the capture's first use in the closure, with a note at the
     // captured variable.

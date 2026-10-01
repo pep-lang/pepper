@@ -72,6 +72,11 @@ pub fn specialize_methods(module: &mut Module) -> bool {
         }
         let spec = crate::passes::gather_generics::parse_type_string(&method);
         let Some(base) = st.generic_methods.iter().find(|m| m.name == spec.name) else { continue };
+        // `s.count_all<int>(it)` for `count_all<T, I>`: the rest come from
+        // the arguments (`resolve_implicit_types`) first.
+        if base.generic_params[spec.sub_types.len().min(base.generic_params.len())..].iter().any(|p| p.default.is_none()) {
+            continue;
+        }
         if constrained {
             let conformance = conformance.get_or_init(|| crate::passes::constraints::Conformance::of(module));
             if let Some(error) = conformance.check_call(module, base, &spec, loc, &args) {

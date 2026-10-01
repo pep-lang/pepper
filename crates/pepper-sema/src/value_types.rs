@@ -111,6 +111,9 @@ pub fn lower_extensions(module: &mut Module) {
                 // The trait's default, for this type.
                 let mut copy = required.clone();
                 replace_map(&mut copy.ty, &map);
+                for bound in copy.generic_params.iter_mut().flat_map(|p| &mut p.bounds) {
+                    replace_map(&mut bound.ty, &map);
+                }
                 for p in &mut copy.parameters {
                     replace_map(&mut p.ty, &map);
                 }
