@@ -96,6 +96,8 @@ pub fn run(options: Options) -> Result<i32, String> {
         let ctx = inkwell::context::Context::create();
         let mut generator = CodeGenerator::new(&ctx, &module_name);
         generator.file_namespaces = namespaces;
+        generator.debug_info = options.emit_debug;
+        generator.opt_level = options.effective_opt_level()?;
         generator.generate(&sema_module).map_err(|d| sema_module.sources.render(&d))?;
         timer.stage("codegen");
         pepper_codegen::target::optimize(&generator.module, options.effective_opt_level()?)?;
@@ -125,7 +127,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     timer.stage("codegen and emission");
 
     // Discover runtime libs for linking.
-    let (_sources, runtime_libs, _dirs) = runtime::discover();
+    let (_sources, runtime_libs, runtime_dirs) = runtime::discover();
     let mut libraries: Vec<String> = options.libraries.clone();
     let mut library_dirs: Vec<PathBuf> = vec![];
     for lib in &runtime_libs {
@@ -141,7 +143,9 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
     libraries.extend(link_libraries);
 
-    linker::link(&objects, &out_path, &libraries, &library_dirs)?;
+    // With `-g` on Windows, the runtime's visualizers go into the `.pdb`.
+    let natvis = runtime_dirs.first().map(|dir| dir.join("debuggers").join("pepper.natvis")).filter(|path| options.emit_debug && cfg!(windows) && path.is_file());
+    linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref())?;
     timer.stage("link");
 
     Ok(0)
@@ -180,10 +184,11 @@ pub fn objects(
     build_dir: &std::path::Path,
     name: &str,
 ) -> Result<Vec<UnitObject>, String> {
-    let keys = keys::Keys::new(program);
+    let mut keys = keys::Keys::new(program);
+    keys.exact_positions = options.emit_debug;
     let units = &keys.units;
     let opt_level = options.effective_opt_level()?;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, opt_level)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, opt_level, options.emit_debug)).transpose()?;
     let interfaces = match cache {
         Some(_) => file_interfaces(module, program, interfaces)?,
         None => vec![],
@@ -241,6 +246,7 @@ pub fn objects(
         cache: cache.as_ref(),
         verify: options.verifying_cache(),
         opt_level,
+        debug: options.emit_debug,
     };
     // Register the backend once, before the threads use it.
     default_target_machine()?;
@@ -323,6 +329,8 @@ struct UnitSetup<'a> {
     verify: bool,
     /// The level objects are optimized at (`-O`).
     opt_level: pepper_codegen::target::OptLevel,
+    /// Emit debug info (`-g`).
+    debug: bool,
 }
 
 /// Put one unit's object at `job.object`: from the cache when the unit's
@@ -335,6 +343,8 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
     let generate_in = |ctx, module: &pepper_sema::model::Module| -> Result<_, String> {
         let mut generator = CodeGenerator::new(ctx, &job.name);
         generator.file_namespaces = setup.namespaces.to_vec();
+        generator.debug_info = setup.debug;
+        generator.opt_level = setup.opt_level;
         generator.unit = Some(pepper_codegen::partition::UnitFilter {
             unit_of_file: setup.unit_of_file.clone(),
             unit: job.unit,

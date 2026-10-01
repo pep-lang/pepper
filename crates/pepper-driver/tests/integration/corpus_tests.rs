@@ -84,7 +84,7 @@ fn compile_and_run(name: &str, entry: &Path) -> Result<std::process::ExitStatus,
     // link path instead of a hand-rolled duplicate of it. `[Link("name")]`
     // attributes on surviving externs add their libraries, same as the CLI.
     let libraries = pepper_driver::link_libraries(&merged);
-    pepper_driver::linker::link(&[obj_path], &out_path, &libraries, &[])?;
+    pepper_driver::linker::link(&[obj_path], &out_path, &libraries, &[], false, None)?;
 
     std::process::Command::new(&out_path)
         .status()

@@ -27,7 +27,7 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// search paths, forced imports and runtime.
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     // Files whose text is unchanged come from the build cache's syntax trees.
-    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)).transpose()?;
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &options.forced_imports,
@@ -202,11 +202,12 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
     let Some(root) = options.effective_cache_dir() else {
         return Ok(Reused::default());
     };
-    let cache = crate::cache::Cache::open(&root, options.effective_opt_level()?)?;
+    let cache = crate::cache::Cache::open(&root, options.effective_opt_level()?, options.emit_debug)?;
     let n = program.files.len();
     let mut reused = Reused { files: vec![false; n], summaries: HashMap::new(), interfaces: vec![None; n] };
     let file_of: HashMap<&str, usize> = program.files.iter().enumerate().map(|(i, f)| (f.namespace.as_str(), i)).collect();
-    let keys = crate::keys::Keys::new(program);
+    let mut keys = crate::keys::Keys::new(program);
+    keys.exact_positions = options.emit_debug;
     let mut resolved = vec![false; keys.units.len()];
     let mut progress = true;
     while std::mem::take(&mut progress) {

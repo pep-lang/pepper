@@ -218,6 +218,38 @@ fn an_edit_rebuilds_only_its_unit_and_the_units_whose_inputs_changed() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// With `-g` a unit's code holds the line numbers of every file it
+/// compiles code from (a generic instantiated in it), so a moved
+/// declaration in an import is not early-cutoff: the importer misses, and
+/// verifying finds no stale line numbers.
+#[test]
+fn with_g_a_moved_declaration_rebuilds_its_importers() {
+    let dir = scratch("debug");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    write(
+        &project,
+        &[
+            ("lib.pep", "export twice<T>(x: T): T { return x + x; }
+"),
+            ("main.pep", "import \"lib\";
+main(): int { return twice<int>(3) - 6; }
+"),
+        ],
+    );
+    let entry = project.join("main.pep");
+    let debug = |build: &str| compile_entry_with(&entry, &cache, &dir.join(build), true, &["-g"]).1;
+    debug("a");
+    write(&project, &[("lib.pep", "# Doubling.
+
+export twice<T>(x: T): T { return x + x; }
+")]);
+    let moved = debug("b");
+    assert_eq!(outcome(&moved, "main"), Some(Outcome::Miss), "{:?}", outcomes(&moved));
+    assert_eq!(outcome(&moved, "prelude"), Some(Outcome::Hit), "{:?}", outcomes(&moved));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_comment_edit_reuses_the_object() {
     let dir = scratch("comment");

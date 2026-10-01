@@ -1,5 +1,5 @@
 //! The build cache: one object per compilation unit under
-//! `.pep/cache/v1/<target>/O<n>/` (a directory per `-O` level), reused
+//! `.pep/cache/v1/<target>/O<n>[-g]/` (a directory per `-O` level and `-g`), reused
 //! without generating code when the unit's sources and inputs are
 //! unchanged, or without emitting it when its LLVM bitcode is (build cache
 //! phases 1, 2a and 2b; see INTERNALS.md §4.3).
@@ -63,14 +63,16 @@ pub struct Cache {
 
 impl Cache {
     /// The cache under `root` for the host target, created if missing, for
-    /// objects optimized at `opt_level`.
-    pub fn open(root: &Path, opt_level: OptLevel) -> Result<Cache, String> {
+    /// objects optimized at `opt_level`, with debug info when `debug`.
+    pub fn open(root: &Path, opt_level: OptLevel, debug: bool) -> Result<Cache, String> {
         let machine = crate::default_target_machine()?;
         let triple = machine.get_triple().as_str().to_string_lossy().into_owned();
-        // A directory per level, so switching between `-O0` and `-O2` builds
-        // keeps both levels' objects (a unit has one record per directory).
+        // A directory per level and `-g`, so switching between `-O0` and
+        // `-O2 -g` builds keeps each one's objects (a unit has one record
+        // per directory).
+        let options = format!("O{}{}", opt_level.number(), if debug { "-g" } else { "" });
         let target = root.join(VERSION).join(triple);
-        let dir = target.join(format!("O{}", opt_level.number()));
+        let dir = target.join(&options);
         std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
         let tag = root.join("CACHEDIR.TAG");
         if !tag.exists() {
@@ -80,11 +82,11 @@ impl Cache {
                 b"Signature: 8a477f597d28d172789f06886806bc55\n# The Pepper build cache (.pep/cache). It can be deleted.\n",
             );
         }
-        // The level is part of the compiler's identity, so it is in every
-        // key and code hash: an object built at another level never hits,
-        // nor counts as the same code.
+        // The options are part of the compiler's identity, so they are in
+        // every key and code hash: an object built with others never hits,
+        // nor counts as the same code. Parsing depends on neither.
         let parser = compiler_id();
-        let compiler = format!("{} -O{}", parser, opt_level.number());
+        let compiler = format!("{} -{}", parser, options);
         Ok(Cache { dir, compiler, opt_level, parsed_dir: target.join("parsed"), parser })
     }
 

@@ -29,6 +29,10 @@ pub struct Keys<'p> {
     /// text.
     component: Vec<usize>,
     source_hashes: Vec<blake3::Hash>,
+    /// Hash every input by its text (no early cutoff): with `-g` a unit's
+    /// code holds the line numbers of every file it instantiates code
+    /// from, which interface hashes leave out.
+    pub exact_positions: bool,
 }
 
 impl<'p> Keys<'p> {
@@ -62,12 +66,12 @@ impl<'p> Keys<'p> {
         }
         let component = (0..n).map(|u| (0..n).find(|&v| reaches[u][v] && reaches[v][u]).unwrap_or(u)).collect();
         let source_hashes = program.files.iter().map(|f| blake3::hash(f.source.as_bytes())).collect();
-        Keys { program, units, inputs, unit_of_file, component, source_hashes }
+        Keys { program, units, inputs, unit_of_file, component, source_hashes, exact_positions: false }
     }
 
     /// Whether `unit`'s key reads `file` by its interface hash.
     pub fn reads_interface(&self, unit: usize, file: usize) -> bool {
-        self.component[self.unit_of_file[file]] != self.component[unit]
+        !self.exact_positions && self.component[self.unit_of_file[file]] != self.component[unit]
     }
 
     /// The key of unit `unit` (a hash of the compiler, the unit's files and

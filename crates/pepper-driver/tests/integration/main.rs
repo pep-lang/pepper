@@ -24,6 +24,7 @@ mod collection_literal_tests;
 mod compile_tests;
 mod copy_tests;
 mod corpus_tests;
+mod debug_info_tests;
 mod determinism_tests;
 mod diagnostic_tests;
 mod docs_examples_tests;

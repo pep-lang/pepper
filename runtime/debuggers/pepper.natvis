@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Visualizers for Pepper's runtime types, for Visual Studio and WinDbg. A
+  program built with `-g` on Windows carries this file in its .pdb: the
+  compiler links with /NATVIS.
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="String">
+    <DisplayString Condition="_data == 0">""</DisplayString>
+    <DisplayString>{_data,[_size]s8}</DisplayString>
+    <StringView>_data,[_size]s8</StringView>
+    <Expand>
+      <Item Name="[size]">_size</Item>
+      <Item Name="[length]">_length</Item>
+      <Item Name="[ref count]">__refcount</Item>
+      <Item Name="[weak count]">__weakcount</Item>
+    </Expand>
+  </Type>
+  <Type Name="Array&lt;*&gt;">
+    <DisplayString>{{ count={_size} }}</DisplayString>
+    <Expand>
+      <Item Name="[count]">_size</Item>
+      <Item Name="[capacity]">_capacity</Item>
+      <Item Name="[ref count]">__refcount</Item>
+      <Item Name="[weak count]">__weakcount</Item>
+      <ArrayItems>
+        <Size>_size</Size>
+        <ValuePointer>_data</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="Optional&lt;*&gt;">
+    <DisplayString Condition="!_has_value">none</DisplayString>
+    <DisplayString>some({_value})</DisplayString>
+    <Expand>
+      <Item Name="[ref count]">__refcount</Item>
+      <Item Name="[weak count]">__weakcount</Item>
+      <Item Name="value" Condition="_has_value">_value</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>

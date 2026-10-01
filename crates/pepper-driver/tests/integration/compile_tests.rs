@@ -197,7 +197,7 @@ main(): int {
 
     // Link through the driver's own linker so this test exercises the real
     // link path instead of a hand-rolled duplicate of it.
-    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[]).expect("link");
+    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[], false, None).expect("link");
 
     let run = std::process::Command::new(&out_path).status().unwrap();
     assert!(run.success(), "spawned binary failed");

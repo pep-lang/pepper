@@ -4,6 +4,8 @@
 
 pub mod address;
 pub mod context;
+pub mod debug;
+mod debug_types;
 #[cfg(windows)]
 mod jit_memory;
 pub mod ops;
@@ -39,6 +41,9 @@ pub struct StructDesc<'ctx> {
     pub static_methods: std::collections::HashSet<String>,
     /// field name → sema type string.
     pub fields: Vec<(String, String)>,
+    /// Where the struct and each field are declared, for debug info.
+    pub loc: Loc,
+    pub field_locs: Vec<Loc>,
     /// method name → return-type sema string.
     pub method_returns: HashMap<String, String>,
     /// method name → parameter sema type strings, for finding the member of
@@ -150,6 +155,16 @@ pub struct CodeGenerator<'ctx> {
     /// driver optimizes objects itself. Starts at `PEPPER_OPT_LEVEL`, else
     /// `-O0`.
     pub opt_level: target::OptLevel,
+    /// Emit debug info (`-g`; see [`debug`]).
+    pub debug_info: bool,
+    debug: Option<debug::DebugInfo<'ctx>>,
+    /// The location instructions are stamped with now, when debug info is
+    /// on (see [`Self::enter_location`]).
+    debug_location: Option<inkwell::debug_info::DILocation<'ctx>>,
+    /// The struct whose methods are being compiled: where a synthesized
+    /// method (`__acquire`, a constructor's prologue) is declared for the
+    /// debugger.
+    debug_struct_loc: Loc,
 }
 /// Stands in, under the JIT, for a C function the process cannot resolve.
 extern "C" fn unresolved_c_function() {
@@ -166,6 +181,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         // compiler-rt helpers MCJIT cannot resolve.
         let machine = crate::target::host_machine().expect("host target machine");
         module.set_data_layout(&machine.get_target_data().get_data_layout());
+        // CodeView names the CPU from the module's triple.
+        module.set_triple(&machine.get_triple());
         CodeGenerator {
             context,
             module,
@@ -194,6 +211,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             file_namespaces: Vec::new(),
             unit: None,
             opt_level: target::OptLevel::from_env().ok().flatten().unwrap_or_default(),
+            debug_info: false,
+            debug: None,
+            debug_location: None,
+            debug_struct_loc: Loc::NONE,
         }
     }
 
@@ -232,6 +253,57 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
+        if self.debug_info {
+            let unit_name = self.debug_unit_name(module);
+            let optimized = self.opt_level != target::OptLevel::O0;
+            let mut debug = debug::DebugInfo::new(&self.module, &module.sources, &unit_name, optimized);
+            for e in module.enums.iter().filter(|e| e.cases.iter().all(|c| c.payload.is_empty())) {
+                let cases = e.cases.iter().map(|c| (c.name.clone(), c.value)).collect();
+                debug.enums.insert(e.name.clone(), (e.loc, e.representation.to_string(), cases));
+            }
+            self.debug = Some(debug);
+        }
+        self.generate_items(module)
+    }
+
+    /// The name of the module's compile unit: the unit's first source file,
+    /// else the module's name.
+    fn debug_unit_name(&self, module: &SemaModule) -> String {
+        use pepper_parser::diagnostic::Sources;
+        let file = self.unit.as_ref().and_then(|filter| {
+            let unit = filter.unit?;
+            filter.unit_of_file.iter().position(|&u| u == unit)
+        });
+        file.and_then(|f| module.sources.get(pepper_parser::diagnostic::FileId(f as u32)))
+            .map(|(name, _)| name.to_string())
+            .unwrap_or_else(|| self.module.get_name().to_string_lossy().into_owned())
+    }
+
+    /// Stamp the instructions emitted from here on with `loc`'s location,
+    /// when debug info is on and `loc` is known; returns the location to
+    /// restore with [`Self::leave_location`].
+    fn enter_location(&mut self, loc: Loc) -> Option<inkwell::debug_info::DILocation<'ctx>> {
+        let saved = self.debug_location;
+        if let Some(location) = self.debug.as_ref().and_then(|d| d.location(self.context, loc)) {
+            self.builder.set_current_debug_location(location);
+            self.debug_location = Some(location);
+        }
+        saved
+    }
+
+    /// Restore the location [`Self::enter_location`] replaced.
+    fn leave_location(&mut self, saved: Option<inkwell::debug_info::DILocation<'ctx>>) {
+        if self.debug.is_none() || self.debug_location == saved {
+            return;
+        }
+        match saved {
+            Some(location) => self.builder.set_current_debug_location(location),
+            None => self.builder.unset_current_debug_location(),
+        }
+        self.debug_location = saved;
+    }
+
+    fn generate_items(&mut self, module: &SemaModule) -> Result<(), String> {
         // Enum types are stored as their integer types (see `pepper_sema::enums`).
         pepper_sema::enums::install(&module.enums);
         pepper_sema::enums::install_methods(module);
@@ -330,6 +402,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let function = module.functions[idx].clone();
                 self.codegen_function(&function)?;
             }
+        }
+        if let Some(debug) = &self.debug {
+            if self.unit.as_ref().is_none_or(|filter| filter.unit.is_none()) {
+                debug.embed_gdb_printers(&self.module);
+            }
+            debug.finish(&self.module);
         }
         self.module
             .verify()
@@ -500,6 +578,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             // Another unit's global is only declared here.
             if self.owners.get(&var.name).is_some_and(|&file| !self.owns(file)) {
                 unsafe { inkwell::llvm_sys::core::LLVMSetInitializer(global.as_value_ref(), std::ptr::null_mut()) };
+            } else if let Some(ty) = self.debug_type(&ty_string) {
+                let name = pepper_parser::namespace::demangle_name(&var.name);
+                if let Some(debug) = self.debug.as_mut() {
+                    debug.declare_global(self.context, global, name, ty, var.loc);
+                }
             }
         }
 
@@ -757,6 +840,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .iter()
                 .map(|f| (f.name.clone(), f.ty.to_string()))
                 .collect(),
+            loc: st.loc,
+            field_locs: st.field_members.iter().map(|f| f.loc).collect(),
             method_returns: HashMap::new(),
             method_params: HashMap::new(),
             inline_counts: standard_counts(st).then(|| st.atomic_counts()),
@@ -1728,6 +1813,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
+        self.debug_struct_loc = st.loc;
+        let result = self.codegen_struct_members(st);
+        self.debug_struct_loc = Loc::NONE;
+        result
+    }
+
+    fn codegen_struct_members(&mut self, st: &StructDef) -> Result<(), String> {
         // The ctors live in module.structs[i].constructors, not
         // module.functions — they were instantiated in the instantiation pass.
         for ctor in self.patched_ctors(st) {
@@ -1747,7 +1839,19 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Function codegen (port of FunctionGen.cpp:22-61 + Function.cpp:61-76)
 
     fn codegen_function(&mut self, function: &FunctionDef) -> Result<(), String> {
+        if let (Some(debug), Some(fn_value)) = (self.debug.as_mut(), self.functions.get(&function.name)) {
+            let name = pepper_parser::namespace::demangle_name(&function.name);
+            let declared = if function.loc.is_none() { self.debug_struct_loc } else { function.loc };
+            debug.begin_function(*fn_value, name, declared, function.loc.is_none());
+        }
+        // The prologue (parameter slots, the parameters' acquires) is left
+        // unstamped, as clang leaves it (`DebugInfo::finish` puts its calls on
+        // line 0): a debugger ends the prologue at the first instruction with
+        // a line, the first statement's, after the parameters are stored.
         let result = self.codegen_function_unlocated(function);
+        if let Some(debug) = self.debug.as_mut() {
+            debug.end_function();
+        }
         self.locate(&result, function.loc);
         result
     }
@@ -1869,10 +1973,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Ok((name.clone(), alloca, arg, ty_string.clone(), ty))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
-        for (name, alloca, arg, ty_name, ty) in &param_allocas {
+        for (number, (name, alloca, arg, ty_name, ty)) in param_allocas.iter().enumerate() {
             self.builder
                 .build_store(*alloca, *arg)
                 .map_err(|e| e.to_string())?;
+            let declared = function.parameters.iter().find(|p| p.name == *name).map_or(function.loc, |p| p.loc);
+            self.debug_declare(*alloca, name, ty_name, declared, Some(number as u32 + 1));
             self.frame
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
             // Pass-by-value struct parameter: a copy arrives (acquire), and
@@ -1940,6 +2046,32 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// A block nested in a function: its own lexical scope for the debugger.
+    fn codegen_scoped_block(&mut self, block: &Block) -> Result<(), String> {
+        if let Some(debug) = self.debug.as_mut() {
+            let first = block.items.iter().map(statement_loc).find(|loc| !loc.is_none()).unwrap_or(Loc::NONE);
+            debug.push_block(first);
+        }
+        let result = self.codegen_block(block);
+        if let Some(debug) = self.debug.as_mut() {
+            debug.pop_block();
+        }
+        result
+    }
+
+    /// Declare a variable for the debugger (see [`debug::DebugInfo::declare`]),
+    /// when debug info is on and describes its type; compiler-made names
+    /// (`__iterator`) are left out.
+    fn debug_declare(&mut self, storage: PointerValue<'ctx>, name: &str, ty: &str, loc: Loc, argument: Option<u32>) {
+        if self.debug.is_none() || (name.starts_with("__") && argument.is_none()) {
+            return;
+        }
+        let (Some(ty), Some(block)) = (self.debug_type(ty), self.builder.get_insert_block()) else { return };
+        if let Some(debug) = self.debug.as_mut() {
+            debug.declare(self.context, storage, name, ty, loc, argument, block);
+        }
+    }
+
     /// A nested `{ ... }` statement gets its own basic block so a `return`
     /// inside it terminates only the block's path (mirroring
     /// `codegen_branch`). Two exit shapes:
@@ -1963,7 +2095,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.exited = false;
         self.scopes.push(Vec::new());
         let locals = self.frame.locals.len();
-        self.codegen_block(inner)?;
+        self.codegen_scoped_block(inner)?;
         // Its names go out of scope with it (an outer `x` it shadowed is
         // visible again).
         self.frame.locals.truncate(locals);
@@ -1999,7 +2131,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         Ok(())
     }
+    /// Compile a statement, stamping what it emits, including the releases
+    /// after it, with its location (see [`Self::enter_location`]).
     fn codegen_statement(&mut self, stmt: &Statement) -> Result<(), String> {
+        let saved = self.enter_location(statement_loc(stmt));
+        let result = self.codegen_statement_unlocated(stmt);
+        self.leave_location(saved);
+        result
+    }
+
+    fn codegen_statement_unlocated(&mut self, stmt: &Statement) -> Result<(), String> {
         // Dead code after a `return`/`break`/`continue` in this region: the
         // insert point sits past a terminator (or in a dead block), so skip
         // emitting it — landing instructions after a terminator is invalid IR.
@@ -2124,7 +2265,9 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_var_def(&mut self, var: &VariableDef) -> Result<(), String> {
+        let saved = self.enter_location(var.loc);
         let result = self.codegen_var_def_unlocated(var);
+        self.leave_location(saved);
         self.locate(&result, var.loc);
         result
     }
@@ -2159,6 +2302,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             })?
         };
         let alloca = self.entry_alloca(ty, &var.name)?;
+        if !var.hidden {
+            self.debug_declare(alloca, &var.name, &var.ty.to_string(), var.loc, None);
+        }
         if let Some(default) = &var.default {
             let value = self.codegen_expr(default)?;
             // Copying an existing struct reference into a fresh slot acquires
@@ -2359,7 +2505,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.exited = false;
         self.builder.position_at_end(then_block);
         let locals = self.frame.locals.len();
-        self.codegen_block(&branch.if_block)?;
+        self.codegen_scoped_block(&branch.if_block)?;
         self.frame.locals.truncate(locals);
         let then_end = self.builder.get_insert_block().expect("insert block");
         // Pop the arm scope for stack balance. A `return` inside already
@@ -2378,7 +2524,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.scopes.push(Vec::new());
             self.frame.exited = false;
             self.builder.position_at_end(else_b);
-            self.codegen_block(branch.else_block.as_ref().expect("else block"))?;
+            self.codegen_scoped_block(branch.else_block.as_ref().expect("else block"))?;
             self.frame.locals.truncate(locals);
             let else_end = self.builder.get_insert_block().expect("insert block");
             let scope = self.scopes.pop().unwrap_or_default();
@@ -2435,7 +2581,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.loop_base_depth = Some(base_depth);
         self.frame.exited = false;
         let locals = self.frame.locals.len();
-        self.codegen_block(&wh.block)?;
+        self.codegen_scoped_block(&wh.block)?;
         self.frame.locals.truncate(locals);
         // A `return` inside already drained all scopes; pop the (now empty)
         // body scope so the stack stays balanced.
@@ -3333,7 +3479,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let saved = self.enter_location(expr.loc());
         let result = self.codegen_expr_unlocated(expr);
+        self.leave_location(saved);
         self.locate(&result, expr.loc());
         result
     }
@@ -6062,6 +6210,20 @@ fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
 fn set_private_linkage(value: inkwell::values::GlobalValue<'_>, name: &str) {
     if name.contains(pepper_sema::namespace::SEPARATOR) {
         value.set_linkage(inkwell::module::Linkage::Internal);
+    }
+}
+
+/// Where a statement is, for debug locations: its expression, returned
+/// value, condition or declared name; [`Loc::NONE`] for a block or a
+/// `break`.
+fn statement_loc(stmt: &Statement) -> Loc {
+    match stmt {
+        Statement::Expression(expr) => expr.loc(),
+        Statement::Return(ret) => ret.loc,
+        Statement::Branch(branch) => branch.condition.loc(),
+        Statement::While(wh) => wh.condition.loc(),
+        Statement::Declaration(Declaration::Variable(var)) => var.loc,
+        Statement::Declaration(_) | Statement::Block(_) | Statement::LoopBreak(_) => Loc::NONE,
     }
 }
 

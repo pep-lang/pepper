@@ -8,6 +8,7 @@ path = "src/lib.rs"
 
 [dependencies]
 pepper-sema = { path = "../pepper-sema" }
+pepper-parser = { path = "../pepper-parser" }
 
 # `target-all` (inkwell's default) emits initializers for every LLVM target,
 # including ones a given LLVM build omits, which fails at link time with

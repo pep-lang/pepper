@@ -224,6 +224,7 @@ cargo run -- tests/hello.pep --emit-llvm    # emit IR to .pep/build/hello.ll
 cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
+cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
@@ -270,6 +271,17 @@ and for the JIT the tests run, so the whole suite can run optimized:
 ```bash
 PEPPER_OPT_LEVEL=2 cargo test --workspace
 ```
+
+`-g` emits debug info: DWARF 4 on Linux and macOS, CodeView on Windows,
+where the linker writes `<output>.pdb` beside the executable. Break on a
+`file:line`, step, print a backtrace and inspect variables in gdb
+(`gdb ./hello`), lldb (`lldb ./hello`, or `lldb-dap` in VS Code), or Visual
+Studio and WinDbg (open the `.exe`). Formatters in `runtime/debuggers/` show
+`String`, `Array` and `Optional` naturally: gdb loads them from the program
+(`gdb -iex "add-auto-load-safe-path ." ./hello`), Visual Studio from the
+`.pdb`, and lldb with `command script import runtime/debuggers/lldb_formatters.py`.
+The book's [Debugging](docs/src/tools/debugging.md) chapter walks through a
+session.
 
 The compiler needs the standard library in `runtime/`. It uses the directory
 named by `PEPPER_RUNTIME` when that is set, and otherwise searches near the

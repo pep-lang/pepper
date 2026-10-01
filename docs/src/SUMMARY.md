@@ -48,6 +48,7 @@
 # Tools
 
 - [Formatting with pep-fmt](tools/pep-fmt.md)
+- [Debugging](tools/debugging.md)
 
 # Standard library reference
 

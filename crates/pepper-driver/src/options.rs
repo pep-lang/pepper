@@ -38,7 +38,8 @@ pub struct Options {
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
 
-    /// Emit debug info (parsed; DI port deferred).
+    /// Emit debug info: DWARF on Linux and macOS, CodeView and a `.pdb` on
+    /// Windows.
     #[arg(short = 'g', long = "emit-debug")]
     pub emit_debug: bool,
 

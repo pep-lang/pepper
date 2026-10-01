@@ -106,7 +106,8 @@ The CLI produces an executable and never runs it. Tests usually stop after
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
 and build, sema passes, codegen and emission, link), and `-T cache`, which
 prints how the cache supplied each unit's object (`hit`, `hit (same code)`
-or `miss`). `-g`, `-v`, and the
+or `miss`). `-g` emits debug info (see
+[4.4](#44-debug-info-codegensrcdebugrs-debug_typesrs)). `-v` and the
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `output_path()` defaults to `<cwd>/<entry stem>`
 with no extension, and `module_name()` is the output's stem.
@@ -1173,6 +1174,77 @@ parsed.
 
 ---
 
+### 4.4 Debug info (`codegen/src/debug.rs`, `debug_types.rs`)
+
+`-g` sets `CodeGenerator::debug_info`; `generate_module` then creates a
+`debug::DebugInfo`, one compile unit per LLVM module (a unit's first file,
+else the module's name), with the module flags `Debug Info Version` and
+`Dwarf Version` 4 (`CodeView` on Windows; DWARF 5's per-object
+`.debug_names`, which the C API cannot turn off, is concatenated by GNU ld
+into one gdb rejects). Modules carry the host triple, which CodeView needs.
+
+- **Subprograms.** `codegen_function` calls `begin_function`, which gives
+  the function a `DISubprogram` named as written (`demangle_name`), with
+  no linkage name (a debugger would show the linker spelling,
+  `partition::symbol_name`, instead). A method with no location (the
+  synthesized `__acquire`, a constructor) is artificial and placed at its
+  struct (`debug_struct_loc`).
+- **Locations.** `enter_location`/`leave_location` stamp what
+  `codegen_statement`, `codegen_var_def` and `codegen_expr` emit with
+  their node's `Loc` and restore the outer one afterwards, so
+  compiler-inserted code (acquires, the releases after a statement) is
+  attributed to the statement that caused it. `statement_loc` gives a
+  statement's location.
+- **Scopes and variables.** `codegen_scoped_block` (a nested block, an
+  `if` or `else` arm, a loop body) pushes a `DILexicalBlock` at its first
+  statement. `debug_declare` declares each parameter (numbered from 1,
+  `this` artificial) and each local that is not hidden or `__`-named, with
+  a debug record (`LLVMDIBuilderInsertDeclareRecordAtEnd`; inkwell's
+  wrapper expects an instruction) on LLVM 19 and later. Module-scope
+  variables get a `DIGlobalVariableExpression` (`declare_global`).
+- **Types** (`debug_types.rs`, `CodeGenerator::debug_type`): numbers under
+  their written names (`written`), raw pointers, a plain enum as an
+  enumeration, a tuple as a structure of `0`, `1`, ..., a trait value as
+  `object` and `vtable`, and a struct reference as a pointer to a
+  structure with every field, the count head included. Struct types are
+  built from a work stack after the structs their fields name; a reference
+  back to a struct or tuple still being built (`DebugInfo::building`) is a
+  forward declaration, which debuggers resolve by name.
+- **`DebugInfo::finish`**, before the module is verified, gives every other
+  defined function (thunks, initializers) an artificial subprogram, moves
+  to line 0 every instruction without a location in its own function's
+  scope (codegen emits a thunk in the middle of a caller, and LLVM requires
+  a location on every call in a function with a subprogram), adds
+  `uwtable` to every definition so debuggers can unwind through it, and
+  finalizes the builder.
+- **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
+  chains itself, and `docs_examples_tests` builds every example at
+  `-O2 -g`, so the verifier checks them.
+- **Cache.** `-g` is part of `Cache::compiler` and the cache directory
+  (`O<n>-g`). It also sets `Keys::exact_positions`, which hashes every
+  input by its text: a unit's code holds the line numbers of the generics
+  it instantiates from other files, which interface hashes leave out.
+- **Linking.** `linker::link` passes `-g` to clang, which on Windows asks
+  link.exe for a `.pdb` (with `/INCREMENTAL:NO`, so nothing else appears
+  beside the output).
+
+- **Formatters** for `String`, `Array` and `Optional` live in
+  `runtime/debuggers/`. `DebugInfo::embed_gdb_printers` puts
+  `gdb_printers.py` (`include_str!`) in the program module's
+  `.debug_gdb_scripts` section on Linux, as an inline script (kind 4),
+  kept by `llvm.used`; `run` links `pepper.natvis` into the `.pdb` with
+  `/NATVIS` on Windows; `lldb_formatters.py` is imported by hand. Each
+  matches the struct and a reference to it, by name, and shows the head
+  counts first as `[ref count]` and `[weak count]`.
+
+- **JIT.** A `CodeGenerator` with `debug_info` set JITs a module with
+  debug info; MCJIT hands every object it loads to LLVM's GDB JIT
+  interface (`__jit_debug_descriptor`), which gdb and lldb read
+  (`jit_code_with_debug_info_runs_and_is_registered`).
+
+Not done yet (issue #218): enums with payloads as variant parts, which the
+LLVM C API cannot create.
+
 ## 5. Reference counting: where the shared_ptr model is implemented
 
 The model is defined in AGENTS.md ("Reference counting is
@@ -1902,5 +1974,5 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   (`errors::report`).
 - **Specialization fixpoint is capped at 16 rounds.** A type that nests
   itself through generics stops there instead of looping forever.
-- **Unused CLI flags**: `-g`, `-v`, and `-T` channels other than `time`; `--MSVC` returns an
+- **Unused CLI flags**: `-v`, and `-T` channels other than `time`; `--MSVC` returns an
   error. Only the first source file is compiled.

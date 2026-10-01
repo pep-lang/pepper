@@ -32,21 +32,23 @@ fn examples() -> Vec<(String, PathBuf)> {
     out
 }
 
-/// Compile, link and run `entry`: Err with the compile error or the
-/// program's output when it fails.
-fn run(name: &str, entry: &Path) -> Result<(), String> {
-    let build = std::env::temp_dir().join(format!("pepper_docs_example_{}_{}", name, std::process::id()));
+/// Compile (with the options `extra`), link and run `entry`: Err with the
+/// compile error or the program's output when it fails.
+fn run(name: &str, entry: &Path, extra: &[&str]) -> Result<(), String> {
+    let build = std::env::temp_dir().join(format!("pepper_docs_example_{}{}_{}", name, extra.concat(), std::process::id()));
     let _ = std::fs::remove_dir_all(&build);
     std::fs::create_dir_all(&build).unwrap();
     let out = build.join(if cfg!(windows) { "main.exe" } else { "main" });
-    let options = pepper_driver::Options::parse_from([
+    let mut args = vec![
         "pepper".to_string(),
         entry.to_string_lossy().into_owned(),
         "-o".to_string(),
         out.to_string_lossy().into_owned(),
         "--build".to_string(),
         build.join("obj").to_string_lossy().into_owned(),
-    ]);
+    ];
+    args.extend(extra.iter().map(|a| a.to_string()));
+    let options = pepper_driver::Options::parse_from(args);
     let code = pepper_driver::run(options).map_err(|e| format!("compile failed:\n{}", e))?;
     if code != 0 {
         return Err(format!("the compiler exited with {}", code));
@@ -66,6 +68,18 @@ fn run(name: &str, entry: &Path) -> Result<(), String> {
 
 #[test]
 fn documentation_examples_compile_and_run() {
+    run_examples(&[]);
+}
+
+/// Every example again, optimized and with debug info: LLVM's verifier
+/// checks the debug info of each unit, including the inlined-at chains
+/// optimization creates.
+#[test]
+fn documentation_examples_compile_and_run_optimized_with_debug_info() {
+    run_examples(&["-O2", "-g"]);
+}
+
+fn run_examples(extra: &[&str]) {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     // `PEPPER_DOCS_EXAMPLE=structs` runs only the examples whose name
@@ -74,7 +88,7 @@ fn documentation_examples_compile_and_run() {
     let examples: Vec<_> = examples().into_iter().filter(|(name, _)| name.starts_with(&only)).collect();
     assert!(!examples.is_empty(), "no examples in docs/examples");
     let failures: Vec<String> =
-        support::parallel_map(&examples, |(name, entry)| run(name, entry).err().map(|e| format!("docs/examples/{}: {}", name, e)))
+        support::parallel_map(&examples, |(name, entry)| run(name, entry, extra).err().map(|e| format!("docs/examples/{}: {}", name, e)))
             .into_iter()
             .flatten()
             .collect();

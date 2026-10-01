@@ -61,16 +61,35 @@ fn default_system_libraries() -> &'static [&'static str] {
     }
 }
 
-/// Link obj files into an executable.
+/// Link obj files into an executable; with `debug`, keep their debug info
+/// (on Windows, clang then has the linker write `<output>.pdb`, with the
+/// visualizers in `natvis`).
 pub fn link(
     objects: &[PathBuf],
     output: &Path,
     libraries: &[String],
     library_dirs: &[PathBuf],
+    debug: bool,
+    natvis: Option<&Path>,
 ) -> Result<(), String> {
     let driver = link_driver();
 
     let mut args: Vec<String> = vec!["-o".to_string(), output.to_string_lossy().into_owned()];
+    if debug {
+        args.push("-g".to_string());
+        if cfg!(windows) {
+            // `-g` makes link.exe link incrementally, which announces a full
+            // link on every fresh build and leaves a `.ilk` beside the output.
+            args.extend(["-Xlinker".to_string(), "/INCREMENTAL:NO".to_string()]);
+        }
+        if let Some(natvis) = natvis {
+            // link.exe records the path as given; a canonical path's `\?\`
+            // prefix would show in the PDB.
+            let natvis = natvis.to_string_lossy();
+            let natvis = natvis.strip_prefix(r"\?\").unwrap_or(&natvis);
+            args.extend(["-Xlinker".to_string(), format!("/NATVIS:{}", natvis)]);
+        }
+    }
     for obj in objects {
         args.push(obj.to_string_lossy().into_owned());
     }
