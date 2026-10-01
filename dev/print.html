@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-32115d7f.js";
+            window.path_to_searchindex_js = "searchindex-67b8fefb.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3d52046.js"></script>
+        <script src="toc-19664f2f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, command-line arguments (<code>main(args: String[])</code>), and starting child processes. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -2268,15 +2268,18 @@ the program as it was started, and the arguments typed after it follow in
 order. Declare the parameter only when the program reads it, as a Windows
 console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
 parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
-<p>Elsewhere, <code>arguments()</code> returns the same array, so code outside <code>main</code> can
-read the arguments without having them passed down. <code>exit(code)</code> ends the
-program at once with status <code>code</code>, from anywhere, after flushing what was
-printed.</p>
-<pre><code class="language-pepper"># args holds the program name, then each command-line argument.
+<p>Elsewhere, <code>process.arguments()</code> returns the same array, so code outside
+<code>main</code> can read the arguments without having them passed down.
+<code>process.exit(code)</code> ends the program at once with status <code>code</code>, from
+anywhere, after flushing what was printed. Both are in the
+<a href="#processes"><code>process</code> module</a>, so the file needs <code>import process</code>.</p>
+<pre><code class="language-pepper">import process;
+
+# args holds the program name, then each command-line argument.
 main(args: String[]): int {
     if (args.count() &gt; 2) {
         print("usage: greet [NAME]");
-        exit(2);  # ends the program here, with status 2
+        process.exit(2);  # ends the program here, with status 2
     }
     var name = "world";
     if (args.count() == 2) {
@@ -2289,7 +2292,7 @@ main(args: String[]): int {
 <p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
 not released and destructors do not run. Prefer returning from <code>main</code>, and
 keep <code>exit</code> for ending from deep inside a call. See
-<a href="#arguments-and-exit">Arguments and exit</a>.</p>
+<a href="#processes">Processes</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as
@@ -10080,6 +10083,164 @@ supported yet.</li>
 <a href="#httpserverpep">server</a> and <a href="#uripep"><code>Uri</code></a>
 document every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="processes"><a class="header" href="#processes">Processes</a></h1>
+<p>The <code>process</code> module starts other programs and holds what belongs to the
+running one: its arguments, its exit, its id, its executable, and its working
+directory. Bring it in with <code>import process</code>.</p>
+<h2 id="running-a-program"><a class="header" href="#running-a-program">Running a program</a></h2>
+<p><code>Command</code> describes a program to start. Its setters return the same
+<code>Command</code>, so they chain. <code>run()</code> starts the program, waits for it to end,
+and returns an <code>Output</code>: the <code>status</code> it ended with, and the text it wrote to
+<code>stdout</code> and <code>stderr</code>.</p>
+<pre><code class="language-pepper">import io;
+import process;
+
+# Runs a copy of this program as a child, so the example needs no other
+# program on any system: the child's first argument says what to do.
+main(args: String[]): int {
+    if (args.count() &gt; 1) {
+        io.File.stdout().write_all("hello from " + args[1]);
+        io.File.stderr().write_all("a warning");
+        return 3;
+    }
+
+    var self = process.executable_path().value().to_string();
+    var output = process.Command(self).argument("the child").run().value();
+    assert(output.stdout == "hello from the child", "standard output is collected");
+    assert(output.stderr == "a warning", "and so is standard error");
+    assert(!output.status.success(), "the child failed");
+    assert(output.status.code().value() == 3, "with exit code 3");
+
+    # A program that is not found fails to start.
+    var missing = process.Command("no-such-program").run();
+    assert(missing.is_err() &amp;&amp; missing.error().is_not_found(), "not found");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The program is found the way a shell finds it. A bare name is searched for
+on the <code>PATH</code> (on Windows, also next to the running program and in the
+system directories, with <code>.exe</code> added when the name has no extension).
+Anything with a path separator is a path.</li>
+<li>Each <code>argument</code> reaches the program as one argument, whatever it holds. No
+shell splits it or expands <code>*</code> or <code>$NAME</code>. On Windows, where a program
+receives a single command line, each argument is quoted so that the C
+runtime splits it back out as it was.</li>
+<li><code>run()</code> collects standard output and error, both at once, so a child that
+fills one pipe while the parent reads the other does not stall. Standard
+input is the null device unless it was set. The output is decoded as UTF-8,
+with each invalid byte sequence replaced by U+FFFD; read a child’s binary
+output from a pipe with <code>spawn()</code> instead.</li>
+<li>A program that cannot be started is an error (<code>is_not_found()</code> when it does
+not exist). A program that runs and fails is a successful result whose
+<code>status</code> says so.</li>
+</ul>
+<h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
+<p><code>ExitStatus.success()</code> is true for exit code 0. <code>code()</code> returns the exit
+code, and <code>signal()</code> the POSIX signal that ended the process (such as 9 for
+<code>SIGKILL</code>). Each is an optional: a process killed by a signal has no exit
+code, and a process that exited has no signal. Windows has no signals, so
+there every process has a code; a POSIX parent sees only the low 8 bits of
+it.</p>
+<h2 id="talking-to-a-child"><a class="header" href="#talking-to-a-child">Talking to a child</a></h2>
+<p><code>spawn()</code> starts the program and returns a <code>Child</code> at once. Each of the three
+standard streams is <code>Stream.Inherit</code> (shared with the parent, the default),
+<code>Stream.Pipe</code> (connected to the parent), or <code>Stream.Null</code>. A piped stream is
+an <code>io.File</code> from <code>child.stdin()</code>, <code>child.stdout()</code> or <code>child.stderr()</code>, so
+the <a href="#file">file</a> read and write methods apply.</p>
+<pre><code class="language-pepper">import io;
+import process;
+
+main(args: String[]): int {
+    if (args.count() &gt; 1) {
+        # The child: read standard input to the end, and write it back in
+        # capitals.
+        var text = io.File.stdin().read_string().value();
+        io.File.stdout().write_all(text.upper());
+        return 0;
+    }
+
+    var self = process.executable_path().value().to_string();
+    var child = process.Command(self)
+        .argument("upper")
+        .stdin(process.Stream.Pipe)
+        .stdout(process.Stream.Pipe)
+        .spawn()
+        .value();
+    child.stdin().write_all("pear and apple");
+    child.stdin().close();  # the child reads to the end, so end it
+    var shouted = child.stdout().read_string().value();
+    var status = child.wait().value();
+    assert(shouted == "PEAR AND APPLE", "the child's output");
+    assert(status.success(), "the child succeeded");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Close a piped standard input when you are done writing, or a child that
+reads to the end never finishes. <code>wait()</code> closes it too, before waiting.</li>
+<li>Read piped output before waiting. A child that fills a pipe stops until the
+parent reads it, so waiting first can wait forever.</li>
+<li><code>wait()</code> returns the exit status, and again on later calls. <code>try_wait()</code>
+returns none while the child runs. <code>kill()</code> ends the child at once
+(<code>SIGKILL</code>, or <code>TerminateProcess</code> on Windows); wait for it afterwards.</li>
+<li>Wait for every child. On POSIX a child that ended stays in the process
+table until it is waited for. Releasing a <code>Child</code> neither waits for it nor
+kills it.</li>
+</ul>
+<p>In a <a href="#tasks">task</a>, <code>run()</code>, <code>wait()</code> and reads from a pipe park the task
+rather than block its worker, so other tasks keep running.</p>
+<h2 id="environment-and-working-directory"><a class="header" href="#environment-and-working-directory">Environment and working directory</a></h2>
+<p>A child inherits the parent’s environment. <code>environment(name, value)</code> sets a
+variable for the child, <code>remove_environment(name)</code> leaves one out, and
+<code>clear_environment()</code> starts from an empty environment. On Windows, names
+ignore case. <code>working_directory(path)</code> starts the child in another
+directory.</p>
+<pre><code class="language-pepper">import io;
+import process;
+
+extern char* getenv(char* name);
+
+main(args: String[]): int {
+    if (args.count() &gt; 1) {
+        var name = "GREETING";
+        var value = getenv(name.c_str());
+        io.File.stdout().write_all(value == __null ? "unset" : String(value));
+        return 0;
+    }
+
+    var self = process.executable_path().value().to_string();
+    var greeted = process.Command(self).argument("child").environment("GREETING", "hello").run().value();
+    assert(greeted.stdout == "hello", "the child sees the variable");
+
+    var cleared = process.Command(self).argument("child").clear_environment().run().value();
+    assert(cleared.stdout == "unset", "an empty environment");
+
+    # The child starts in another directory; the parent's stays as it was.
+    var before = process.working_directory().value();
+    var elsewhere = process.Command(self).argument("child").working_directory(io.Directory.temp()).run();
+    assert(elsewhere.is_ok(), "started in the temporary directory");
+    assert(process.working_directory().value() == before, "unchanged");
+    return 0;
+}
+</code></pre>
+<h2 id="the-running-process"><a class="header" href="#the-running-process">The running process</a></h2>
+<ul>
+<li><code>process.arguments()</code> returns the program’s command-line arguments, the
+same array <code>main(args: String[])</code> receives (see
+<a href="#command-line-arguments-and-exit">Functions</a>).</li>
+<li><code>process.exit(code)</code> ends the program at once with status <code>code</code>.</li>
+<li><code>process.id()</code> is the process’s id.</li>
+<li><code>process.executable_path()</code> is the absolute path of the running program’s
+executable, so a tool can find files installed next to it.</li>
+<li><code>process.working_directory()</code> and <code>process.change_working_directory(path)</code>
+read and change the directory relative paths are resolved against, as
+<code>io.Directory.current()</code> and <code>io.Directory.set_current(path)</code> do.</li>
+</ul>
+<p><code>arguments()</code> and <code>exit()</code> without <code>import process</code> still work, but are
+deprecated and warn.</p>
+<p>See the <a href="#the-process-module">process module reference</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -10873,6 +11034,7 @@ the code it replaces:</p>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
 <tr><td><code>io.File.write_string(String)</code></td><td><code>io.File.write_all(String)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
+<tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
@@ -11638,53 +11800,30 @@ picks this overload, so it allocates nothing.</p>
 <pre><code class="language-pepper">    panic("unreachable");
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="arguments-and-exit"><a class="header" href="#arguments-and-exit">Arguments and exit</a></h1>
-<p>The running program: its command-line arguments and how it ends.</p>
+<h1 id="arguments-and-exit-deprecated"><a class="header" href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a></h1>
+<p>The running program’s arguments and exit, kept for the deprecated
+prelude <code>arguments()</code> and <code>exit()</code>; the <code>process</code> module has them now.</p>
 <p>Source: <code>runtime/process.pep</code></p>
 <h2 id="arguments"><a class="header" href="#arguments">arguments</a></h2>
-<pre><code class="language-pepper">arguments(): Array&lt;String&gt;
+<pre><code class="language-pepper">[Deprecated("use 'process.arguments' instead (import process)")] arguments(): Array&lt;String&gt;
 </code></pre>
-<p>Returns the program’s command-line arguments.</p>
-<p>Element 0 is the program as it was started (usually its path), and the
-arguments typed after it follow in order, as the shell passed them: a
-quoted argument with spaces is one element. Each call builds a new array.</p>
-<p>On Windows the arguments are in the process’s ANSI code page, so text
-outside it is not preserved.</p>
-<p><code>main</code> receives the same array when it is declared
-<code>main(args: String[]): int</code>; <code>arguments()</code> reads it anywhere else.</p>
+<p>Deprecated: use <code>process.arguments</code> instead.</p>
+<p>Returns the program’s command-line arguments, as <code>process.arguments()</code>
+does.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the program name followed by its arguments</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    verbose(): bool {
-        for (var argument in arguments()) {
-            if (argument == "-v") {
-                return true;
-            }
-        }
-        return false;
-    }
-</code></pre>
 <h2 id="exit"><a class="header" href="#exit">exit</a></h2>
-<pre><code class="language-pepper">exit(code: int)
+<pre><code class="language-pepper">[Deprecated("use 'process.exit' instead (import process)")] exit(code: int)
 </code></pre>
-<p>Ends the program at once with status <code>code</code>.</p>
-<p>Flushes standard output and every other C output stream first, so text
-printed so far is not lost. Nothing else runs: locals are not released,
-destructors do not run, and other threads stop where they are. Returning
-from <code>main</code> is the usual way to end; <code>exit</code> is for ending from deep inside
-a call.</p>
+<p>Deprecated: use <code>process.exit</code> instead.</p>
+<p>Ends the program at once with status <code>code</code>, as <code>process.exit(code)</code>
+does.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>code</code> — the exit status: 0 for success, anything else for failure (only its low 8 bits reach a POSIX parent)</li>
+<li><code>code</code> — the exit status: 0 for success, anything else for failure</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (arguments().count() &lt; 2) {
-        print("usage: tool FILE");
-        exit(2);
-    }
-</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/string.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="string"><a class="header" href="#string">String</a></h1>
 <p>Source: <code>runtime/string.pep</code></p>
@@ -18946,6 +19085,525 @@ profiles and hardened kernels often refuse it.</p>
 <p><code>poll()</code> (<code>WSAPoll</code> on Windows): available everywhere, but each wait
 passes every waiting socket to the system, so it suits few
 connections. The reference the others are tested against.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-process-module"><a class="header" href="#the-process-module">The process module</a></h1>
+<p>Child processes, and what belongs to the running one, modeled on Rust’s
+<code>std::process</code>.</p>
+<p><code>process</code> is a module: bring it in with <code>import process</code> (and write
+<code>process.Command</code>) or import names directly with
+<code>import [Command, Stream] from process</code>. <code>arguments()</code> and <code>exit()</code> stay
+in the prelude, and the module passes them on as well.</p>
+<ul>
+<li><a href="#command">Command</a>: <code>Command</code> describes a program to start;
+<code>run()</code> waits for it and collects its output, <code>spawn()</code> starts it and
+returns a <code>Child</code></li>
+<li><a href="#child">Child</a>: a running child process, its piped streams,
+and its <code>ExitStatus</code></li>
+<li><a href="#the-running-process-1">The running process</a>: <code>id()</code> and
+<code>executable_path()</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import process;
+
+    main(): int {
+        var output = process.Command("git").argument("--version").run();
+        if (output.is_err()) {
+            print("git is not installed");
+            return 1;
+        }
+        print(output.value().stdout);
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/process/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/command.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="command"><a class="header" href="#command">Command</a></h1>
+<p>Starting a program: <code>Command</code> names it and its arguments, environment,
+working directory and standard streams; <code>spawn()</code> starts it and <code>run()</code>
+also waits for it and collects what it wrote.</p>
+<p>Source: <code>runtime/process/command.pep</code></p>
+<h2 id="stream"><a class="header" href="#stream">Stream</a></h2>
+<pre><code class="language-pepper">enum Stream
+</code></pre>
+<p>Where a child’s standard input, output or error goes (see
+<code>Command.stdin</code>, <code>Command.stdout</code> and <code>Command.stderr</code>).</p>
+<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h4 id="inherit"><a class="header" href="#inherit">Inherit</a></h4>
+<pre><code class="language-pepper">Inherit
+</code></pre>
+<p>The child shares the parent’s stream: it reads the parent’s input,
+or writes where the parent writes.</p>
+<h4 id="pipe"><a class="header" href="#pipe">Pipe</a></h4>
+<pre><code class="language-pepper">Pipe
+</code></pre>
+<p>A pipe connects the stream to the parent, which reaches it through
+<code>Child.stdin()</code>, <code>Child.stdout()</code> or <code>Child.stderr()</code>.</p>
+<h4 id="null"><a class="header" href="#null">Null</a></h4>
+<pre><code class="language-pepper">Null
+</code></pre>
+<p>The stream is the null device: reading it finds the end at once, and
+what is written to it is thrown away.</p>
+<h2 id="output"><a class="header" href="#output">Output</a></h2>
+<pre><code class="language-pepper">struct Output
+</code></pre>
+<p>What a program <code>Command.run()</code> waited for left behind: how it ended and
+what it wrote.</p>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h4 id="status"><a class="header" href="#status">status</a></h4>
+<pre><code class="language-pepper">var status: ExitStatus
+</code></pre>
+<p>How the program ended.</p>
+<h4 id="stdout-1"><a class="header" href="#stdout-1">stdout</a></h4>
+<pre><code class="language-pepper">var stdout: String
+</code></pre>
+<p>Everything the program wrote to standard output, decoded as UTF-8
+(each byte sequence that is not valid UTF-8 becomes U+FFFD); empty
+when standard output was not piped.</p>
+<h4 id="stderr-1"><a class="header" href="#stderr-1">stderr</a></h4>
+<pre><code class="language-pepper">var stderr: String
+</code></pre>
+<p>Everything the program wrote to standard error, decoded the same
+way; empty when standard error was not piped.</p>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h4 id="output-1"><a class="header" href="#output-1">Output()</a></h4>
+<pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
+</code></pre>
+<p>Creates an Output from its parts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>status</code> — how the program ended</li>
+<li><code>stdout</code> — what it wrote to standard output</li>
+<li><code>stderr</code> — what it wrote to standard error</li>
+</ul>
+<h2 id="command-1"><a class="header" href="#command-1">Command</a></h2>
+<pre><code class="language-pepper">struct Command
+</code></pre>
+<p>Describes a program to start: the program, its arguments, its
+environment, its working directory, and where its standard streams go.</p>
+<p>A builder in the style of Rust’s <code>std::process::Command</code>: each setter
+stores its value and returns this same Command, so calls chain, and one
+Command can start the program any number of times.</p>
+<p>The program is found the way a shell finds it: a name with no path
+separator is searched for on the <code>PATH</code> (on Windows, also in the
+directory of the running program and the system directories, and <code>.exe</code>
+is added when the name has no extension); anything else is a path,
+relative to the parent’s current directory.</p>
+<p>The child inherits the parent’s environment, changed by <code>environment</code>,
+<code>remove_environment</code> and <code>clear_environment</code>. By default it also
+inherits the parent’s current directory and its three standard streams;
+<code>run()</code> instead pipes standard output and error, and gives standard
+input the null device, unless they were set.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import process;
+
+    main(): int {
+        var output = process.Command("clang").arguments(["--version"]).run().value();
+        if (!output.status.success()) {
+            print(output.stderr);
+            return 1;
+        }
+        return 0;
+    }
+</code></pre>
+<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
+<h4 id="program"><a class="header" href="#program">program</a></h4>
+<pre><code class="language-pepper">var program: String
+</code></pre>
+<p>The program to start, as given to the constructor.</p>
+<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h4 id="command-2"><a class="header" href="#command-2">Command()</a></h4>
+<pre><code class="language-pepper">construct(program: String)
+</code></pre>
+<p>Creates a Command that starts <code>program</code> with no arguments, the
+parent’s environment and current directory, and inherited streams.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
+</ul>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h4 id="argument"><a class="header" href="#argument">argument</a></h4>
+<pre><code class="language-pepper">argument(value: String): Command
+</code></pre>
+<p>Adds one argument after those already added. It reaches the program
+as one element of its arguments, whatever it holds: no shell splits
+or expands it. On Windows, where a program receives one command line,
+it is quoted so that the C runtime splits it back out as it was.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the argument</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="arguments-1"><a class="header" href="#arguments-1">arguments</a></h4>
+<pre><code class="language-pepper">arguments(values: Array&lt;String&gt;): Command
+</code></pre>
+<p>Adds each of <code>values</code> as an argument, in order.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>values</code> — the arguments</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="environment"><a class="header" href="#environment">environment</a></h4>
+<pre><code class="language-pepper">environment(name: String, value: String): Command
+</code></pre>
+<p>Sets the environment variable <code>name</code> to <code>value</code> for the child,
+replacing any value it would inherit. On Windows, names are compared
+without regard to case.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable’s name</li>
+<li><code>value</code> — its value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="remove_environment"><a class="header" href="#remove_environment">remove_environment</a></h4>
+<pre><code class="language-pepper">remove_environment(name: String): Command
+</code></pre>
+<p>Leaves the environment variable <code>name</code> out of the child’s
+environment, including a value an earlier <code>environment</code> set.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable’s name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="clear_environment"><a class="header" href="#clear_environment">clear_environment</a></h4>
+<pre><code class="language-pepper">clear_environment(): Command
+</code></pre>
+<p>Starts the child with an empty environment, dropping every variable
+the parent has and every change made so far; later calls to
+<code>environment</code> add to it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="working_directory"><a class="header" href="#working_directory">working_directory</a></h4>
+<pre><code class="language-pepper">working_directory(path: io.Path): Command
+</code></pre>
+<p>Starts the child in <code>path</code> instead of the parent’s current directory.
+A relative program path is still resolved against the parent’s
+current directory.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the child’s current directory</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="stdin-1"><a class="header" href="#stdin-1">stdin</a></h4>
+<pre><code class="language-pepper">stdin(stream: Stream): Command
+</code></pre>
+<p>Sets where the child’s standard input comes from.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — <code>Stream.Inherit</code>, <code>Stream.Pipe</code> or <code>Stream.Null</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="stdout-1-1"><a class="header" href="#stdout-1-1">stdout</a></h4>
+<pre><code class="language-pepper">stdout(stream: Stream): Command
+</code></pre>
+<p>Sets where the child’s standard output goes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — <code>Stream.Inherit</code>, <code>Stream.Pipe</code> or <code>Stream.Null</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="stderr-1-1"><a class="header" href="#stderr-1-1">stderr</a></h4>
+<pre><code class="language-pepper">stderr(stream: Stream): Command
+</code></pre>
+<p>Sets where the child’s standard error goes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — <code>Stream.Inherit</code>, <code>Stream.Pipe</code> or <code>Stream.Null</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this Command</li>
+</ul>
+<h4 id="spawn-2"><a class="header" href="#spawn-2">spawn</a></h4>
+<pre><code class="language-pepper">spawn(): io.IoResult&lt;Child&gt;
+</code></pre>
+<p>Starts the program and returns at once, without waiting for it.</p>
+<p>Each stream that was not set is inherited. A piped stream is reached
+through the Child; close a piped standard input when done writing, or
+a child that reads to the end never finishes. Wait for the child with
+<code>Child.wait()</code>: a child that is never waited for stays in the process
+table until the parent ends.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the running child; an error when the program cannot be started: <code>is_not_found()</code> when it is not found, <code>is_permission_denied()</code> when it is not executable, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var child = process.Command("sort").stdin(process.Stream.Pipe).stdout(process.Stream.Pipe).spawn().value();
+    child.stdin().write_all("pear\napple\n");
+    child.stdin().close();
+    var sorted = child.stdout().read_string().value();   # "apple\npear\n"
+    child.wait();
+</code></pre>
+<h4 id="run-1"><a class="header" href="#run-1">run</a></h4>
+<pre><code class="language-pepper">run(): io.IoResult&lt;Output&gt;
+</code></pre>
+<p>Starts the program, waits for it to end, and returns how it ended
+with what it wrote.</p>
+<p>Standard output and error are piped and collected unless they were
+set, and standard input is the null device unless it was set. Both
+outputs are read at once, so a child that fills one pipe while the
+parent reads the other does not stall. In a task, the reads and the
+wait park the task rather than blocking its worker.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the exit status and output; an error when the program cannot be started (as for <code>spawn()</code>) or its output cannot be read</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var output = process.Command("echo").argument("hello").run().value();
+    assert(output.status.success(), "echo succeeds");
+    assert(output.stdout == "hello\n", "and prints its argument");
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/child.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="child"><a class="header" href="#child">Child</a></h1>
+<p>A running child process (<code>Child</code>), the pipes to it, and how it ended
+(<code>ExitStatus</code>).</p>
+<p>Source: <code>runtime/process/child.pep</code></p>
+<h2 id="exitstatus"><a class="header" href="#exitstatus">ExitStatus</a></h2>
+<pre><code class="language-pepper">struct ExitStatus
+</code></pre>
+<p>How a child process ended: with an exit code, or (on POSIX) killed by a
+signal.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var status = process.Command("false").run().value().status;
+    assert(!status.success(), "false fails");
+    assert(status.code().value() == 1, "with code 1");
+</code></pre>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
+<pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
+</code></pre>
+<p>Creates an ExitStatus.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>code</code> — the exit code, when the process exited</li>
+<li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
+</ul>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h4 id="success"><a class="header" href="#success">success</a></h4>
+<pre><code class="language-pepper">success(): bool
+</code></pre>
+<p>Returns whether the process exited with code 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for exit code 0</li>
+</ul>
+<h4 id="code-1"><a class="header" href="#code-1">code</a></h4>
+<pre><code class="language-pepper">code(): int?
+</code></pre>
+<p>Returns the exit code: the value the process passed to <code>exit</code> or
+returned from <code>main</code>. On POSIX only its low 8 bits reach the parent,
+so it is from 0 to 255; on Windows it is the whole 32-bit code (an
+unhandled exception gives an <code>NTSTATUS</code> such as <code>0xC0000005</code>, a
+negative number here).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the exit code, or none when a signal ended the process</li>
+</ul>
+<h4 id="signal"><a class="header" href="#signal">signal</a></h4>
+<pre><code class="language-pepper">signal(): int?
+</code></pre>
+<p>Returns the signal that ended the process (POSIX only; a Windows
+process always has an exit code).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the signal number, such as 9 for <code>SIGKILL</code>, or none when the process exited</li>
+</ul>
+<h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns how the process ended as text.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>exit code N</code> or <code>signal N</code></li>
+</ul>
+<h2 id="child-1"><a class="header" href="#child-1">Child</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns a child process handle and cannot be copied")] struct Child
+</code></pre>
+<p>A child process started by <code>Command.spawn()</code>: its id, the pipes to the
+streams that were piped, and its exit status once it ends.</p>
+<p>Wait for every child with <code>wait()</code> (or until <code>try_wait()</code> returns a
+status): on POSIX a child that ended but was never waited for stays in
+the process table until the parent ends. Releasing the last reference to
+a Child neither waits for it nor kills it; the process runs on.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import process;
+
+    main(): int {
+        var child = process.Command("sleep").argument("10").spawn().value();
+        child.kill();
+        var status = child.wait().value();
+        assert(!status.success(), "killed");
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h4 id="child-2"><a class="header" href="#child-2">Child()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a Child that stands for no process: <code>id()</code> is 0, its streams
+are closed, and <code>wait()</code>, <code>try_wait()</code> and <code>kill()</code> fail. Use
+<code>Command.spawn()</code> to start one.</p>
+<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
+<pre><code class="language-pepper">id(): ulong
+</code></pre>
+<p>Returns the child’s process id, as the operating system knows it.
+After the child has been waited for, the system may give the id to a
+new process.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the process id</li>
+</ul>
+<h4 id="stdin-2"><a class="header" href="#stdin-2">stdin</a></h4>
+<pre><code class="language-pepper">stdin(): io.File
+</code></pre>
+<p>Returns the pipe to the child’s standard input, for writing. Close it
+when done (<code>close()</code>), so that a child reading to the end sees the
+end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pipe, or a closed File when standard input was not <code>Stream.Pipe</code></li>
+</ul>
+<h4 id="stdout-2"><a class="header" href="#stdout-2">stdout</a></h4>
+<pre><code class="language-pepper">stdout(): io.File
+</code></pre>
+<p>Returns the pipe from the child’s standard output, for reading. A read
+returns 0 once the child has ended (or closed its standard output) and
+everything it wrote has been read.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pipe, or a closed File when standard output was not <code>Stream.Pipe</code></li>
+</ul>
+<h4 id="stderr-2"><a class="header" href="#stderr-2">stderr</a></h4>
+<pre><code class="language-pepper">stderr(): io.File
+</code></pre>
+<p>Returns the pipe from the child’s standard error, for reading.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the pipe, or a closed File when standard error was not <code>Stream.Pipe</code></li>
+</ul>
+<h4 id="wait"><a class="header" href="#wait">wait</a></h4>
+<pre><code class="language-pepper">wait(): io.IoResult&lt;ExitStatus&gt;
+</code></pre>
+<p>Waits for the child to end and returns how it ended. Standard input,
+when piped, is closed first, so a child reading it to the end can
+finish. Waiting again returns the same status.</p>
+<p>In a task, the wait parks the task (it runs on a <code>run_blocking</code>
+thread) rather than blocking its worker. Read piped output before
+waiting: a child stalls when a pipe it writes to is full.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the exit status, or an error from the system</li>
+</ul>
+<h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
+<pre><code class="language-pepper">try_wait(): io.IoResult&lt;ExitStatus?&gt;
+</code></pre>
+<p>Returns how the child ended if it has, without waiting.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the exit status, or none while the child runs; or an error from the system</li>
+</ul>
+<h4 id="kill"><a class="header" href="#kill">kill</a></h4>
+<pre><code class="language-pepper">kill(): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Ends the child at once: <code>SIGKILL</code> on POSIX, <code>TerminateProcess</code> (with
+exit code 1) on Windows. The child still has to be waited for. Killing
+a child that has already been waited for does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>Ok, or an error from the system</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/current.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-running-process-1"><a class="header" href="#the-running-process-1">The running process</a></h1>
+<p>The running process: its arguments, id, executable and working
+directory, and how it ends.</p>
+<p>Two functions are listed only here, since the module exports them under
+names the deprecated prelude functions still hold:</p>
+<ul>
+<li><code>arguments(): Array&lt;String&gt;</code> returns the program’s command-line
+arguments: element 0 is the program as it was started, and the
+arguments typed after it follow in order. <code>main</code> receives the same array
+when it is declared <code>main(args: String[]): int</code>. On Windows they are in
+the process’s ANSI code page.</li>
+<li><code>exit(code: int)</code> ends the program at once with status <code>code</code> (only its
+low 8 bits reach a POSIX parent), after flushing standard output and the
+other C output streams. Nothing else runs: locals are not released and
+destructors do not run.</li>
+</ul>
+<p>Source: <code>runtime/process/current.pep</code></p>
+<h2 id="id-2"><a class="header" href="#id-2">id</a></h2>
+<pre><code class="language-pepper">id(): ulong
+</code></pre>
+<p>Returns the running process’s id, as the operating system knows it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the process id (<code>getpid</code> on POSIX, <code>GetCurrentProcessId</code> on Windows)</li>
+</ul>
+<h2 id="executable_path"><a class="header" href="#executable_path">executable_path</a></h2>
+<pre><code class="language-pepper">executable_path(): io.IoResult&lt;io.Path&gt;
+</code></pre>
+<p>Returns the path of the running program’s executable file, as an
+absolute path with symbolic links resolved (on Linux the target of
+<code>/proc/self/exe</code>; on macOS <code>_NSGetExecutablePath</code>, resolved; on Windows
+<code>GetModuleFileNameW</code>). A tool installed alongside others finds them
+next to it with <code>executable_path().value().parent()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the executable’s path, or an error when the system cannot report it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import process;
+
+    main(): int {
+        var path = process.executable_path().value();
+        print(path.to_string());
+        return 0;
+    }
+</code></pre>
+<h2 id="working_directory-1"><a class="header" href="#working_directory-1">working_directory</a></h2>
+<pre><code class="language-pepper">working_directory(): io.IoResult&lt;io.Path&gt;
+</code></pre>
+<p>Returns the process’s current directory, against which relative paths
+are resolved. The same as <code>io.Directory.current()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current directory as an absolute path; an error when it cannot be determined, such as <code>is_not_found()</code> on POSIX when the directory has been removed</li>
+</ul>
+<h2 id="change_working_directory"><a class="header" href="#change_working_directory">change_working_directory</a></h2>
+<pre><code class="language-pepper">change_working_directory(path: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Changes the process’s current directory. This affects the whole
+process, every thread included. The same as <code>io.Directory.set_current</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the new current directory; a relative path is resolved against the old one</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing, <code>is_not_a_directory()</code> when it is a file, or <code>is_permission_denied()</code></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -18998,7 +19656,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -19015,7 +19673,7 @@ threads.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -19146,7 +19804,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -19156,7 +19814,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
 <h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -19233,7 +19891,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -19252,7 +19910,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -19359,13 +20017,13 @@ with the confinement rule (see <code>Mutex</code>).</p>
         totals.requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
@@ -19380,7 +20038,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -19458,7 +20116,7 @@ does the same.</p>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
 <h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
-<h4 id="wait"><a class="header" href="#wait">wait</a></h4>
+<h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
 <p>Unlocks the Mutex, sleeps until another thread calls <code>notify_one()</code> or
@@ -19577,7 +20235,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19586,7 +20244,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -19648,7 +20306,7 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -19662,7 +20320,7 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
 <h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -19740,12 +20398,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -19763,7 +20421,7 @@ those <code>wait()</code> returns.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    select.receive(lines, (line: String): Event =&gt; Event.Line(line));
 </code></pre>
-<h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
+<h4 id="wait-2"><a class="header" href="#wait-2">wait</a></h4>
 <pre><code class="language-pepper">wait(): Result&lt;E&gt;
 </code></pre>
 <p>Takes the next value any of the channels receives, waiting until one
@@ -19784,7 +20442,7 @@ arrives.</p>
 <ul>
 <li>the value, turned into an <code>E</code>; or an error if the time ran out, once every channel is closed and empty, or when the task’s wait was cancelled</li>
 </ul>
-<h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
+<h4 id="try_wait-1"><a class="header" href="#try_wait-1">try_wait</a></h4>
 <pre><code class="language-pepper">try_wait(): Result&lt;E&gt;
 </code></pre>
 <p>Takes a value if any channel has one waiting, without waiting.</p>
@@ -19853,7 +20511,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19862,7 +20520,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -19934,7 +20592,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -19944,7 +20602,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -20068,7 +20726,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -20092,12 +20750,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -20181,7 +20839,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -20242,12 +20900,12 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
 <pre><code class="language-pepper">count(): ulong
 </code></pre>
@@ -20366,7 +21024,7 @@ full.</p>
 <pre><code class="language-pepper">    var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
     request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -20381,7 +21039,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -20391,7 +21049,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -20477,8 +21135,8 @@ server adds <code>Content-Length</code> itself.</p>
         return response;
     }
 </code></pre>
-<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
-<h4 id="status"><a class="header" href="#status">status</a></h4>
+<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h4 id="status-1"><a class="header" href="#status-1">status</a></h4>
 <pre><code class="language-pepper">var status: int
 </code></pre>
 <p>The status code, such as 200 or 404.</p>
@@ -20626,7 +21284,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -20664,7 +21322,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -20740,7 +21398,7 @@ on Windows).</p>
         stream.write_string("hello");
     }
 </code></pre>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -20759,7 +21417,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -20827,7 +21485,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -20850,7 +21508,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -21394,7 +22052,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_string("ping");
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -21412,7 +22070,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -21482,7 +22140,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -21506,7 +22164,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -21676,7 +22334,7 @@ has an empty query) differs from a missing one (<code>http://h/</code> has none)
     assert(Uri.decode(uri.path).value() == "/a b", "decoded");
     assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -21706,7 +22364,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -21753,7 +22411,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
@@ -21782,7 +22440,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
+<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a

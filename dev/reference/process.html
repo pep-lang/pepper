@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Arguments and exit - The Pepper Programming Language</title>
+        <title>Arguments and exit (deprecated) - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
+            window.path_to_searchindex_js = "../searchindex-67b8fefb.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d3d52046.js"></script>
+        <script src="../toc-19664f2f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,53 +182,30 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="arguments-and-exit"><a class="header" href="#arguments-and-exit">Arguments and exit</a></h1>
-<p>The running program: its command-line arguments and how it ends.</p>
+<h1 id="arguments-and-exit-deprecated"><a class="header" href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a></h1>
+<p>The running program’s arguments and exit, kept for the deprecated
+prelude <code>arguments()</code> and <code>exit()</code>; the <code>process</code> module has them now.</p>
 <p>Source: <code>runtime/process.pep</code></p>
 <h2 id="arguments"><a class="header" href="#arguments">arguments</a></h2>
-<pre><code class="language-pepper">arguments(): Array&lt;String&gt;
+<pre><code class="language-pepper">[Deprecated("use 'process.arguments' instead (import process)")] arguments(): Array&lt;String&gt;
 </code></pre>
-<p>Returns the program’s command-line arguments.</p>
-<p>Element 0 is the program as it was started (usually its path), and the
-arguments typed after it follow in order, as the shell passed them: a
-quoted argument with spaces is one element. Each call builds a new array.</p>
-<p>On Windows the arguments are in the process’s ANSI code page, so text
-outside it is not preserved.</p>
-<p><code>main</code> receives the same array when it is declared
-<code>main(args: String[]): int</code>; <code>arguments()</code> reads it anywhere else.</p>
+<p>Deprecated: use <code>process.arguments</code> instead.</p>
+<p>Returns the program’s command-line arguments, as <code>process.arguments()</code>
+does.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the program name followed by its arguments</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    verbose(): bool {
-        for (var argument in arguments()) {
-            if (argument == "-v") {
-                return true;
-            }
-        }
-        return false;
-    }
-</code></pre>
 <h2 id="exit"><a class="header" href="#exit">exit</a></h2>
-<pre><code class="language-pepper">exit(code: int)
+<pre><code class="language-pepper">[Deprecated("use 'process.exit' instead (import process)")] exit(code: int)
 </code></pre>
-<p>Ends the program at once with status <code>code</code>.</p>
-<p>Flushes standard output and every other C output stream first, so text
-printed so far is not lost. Nothing else runs: locals are not released,
-destructors do not run, and other threads stop where they are. Returning
-from <code>main</code> is the usual way to end; <code>exit</code> is for ending from deep inside
-a call.</p>
+<p>Deprecated: use <code>process.exit</code> instead.</p>
+<p>Ends the program at once with status <code>code</code>, as <code>process.exit(code)</code>
+does.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>code</code> — the exit status: 0 for success, anything else for failure (only its low 8 bits reach a POSIX parent)</li>
+<li><code>code</code> — the exit status: 0 for success, anything else for failure</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (arguments().count() &lt; 2) {
-        print("usage: tool FILE");
-        exit(2);
-    }
-</code></pre>
 
                     </main>
 

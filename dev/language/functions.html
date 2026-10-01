@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
+            window.path_to_searchindex_js = "../searchindex-67b8fefb.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d3d52046.js"></script>
+        <script src="../toc-19664f2f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -412,15 +412,18 @@ the program as it was started, and the arguments typed after it follow in
 order. Declare the parameter only when the program reads it, as a Windows
 console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
 parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
-<p>Elsewhere, <code>arguments()</code> returns the same array, so code outside <code>main</code> can
-read the arguments without having them passed down. <code>exit(code)</code> ends the
-program at once with status <code>code</code>, from anywhere, after flushing what was
-printed.</p>
-<pre><code class="language-pepper"># args holds the program name, then each command-line argument.
+<p>Elsewhere, <code>process.arguments()</code> returns the same array, so code outside
+<code>main</code> can read the arguments without having them passed down.
+<code>process.exit(code)</code> ends the program at once with status <code>code</code>, from
+anywhere, after flushing what was printed. Both are in the
+<a href="processes.html"><code>process</code> module</a>, so the file needs <code>import process</code>.</p>
+<pre><code class="language-pepper">import process;
+
+# args holds the program name, then each command-line argument.
 main(args: String[]): int {
     if (args.count() &gt; 2) {
         print("usage: greet [NAME]");
-        exit(2);  # ends the program here, with status 2
+        process.exit(2);  # ends the program here, with status 2
     }
     var name = "world";
     if (args.count() == 2) {
@@ -433,7 +436,7 @@ main(args: String[]): int {
 <p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
 not released and destructors do not run. Prefer returning from <code>main</code>, and
 keep <code>exit</code> for ending from deep inside a call. See
-<a href="../reference/process.html">Arguments and exit</a>.</p>
+<a href="processes.html">Processes</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as
