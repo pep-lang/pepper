@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
+            window.path_to_searchindex_js = "../searchindex-38403ca9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -202,8 +202,10 @@ an object outside the copied value becomes null.</p>
 unless it implements <code>Copyable&lt;T&gt;</code>. A struct with a destructor or a raw
 pointer field must implement <code>Copyable&lt;T&gt;</code> to be copied, since copying
 its fields would share what it owns; <code>String</code>, <code>Array</code>, <code>HashMap</code> and
-<code>HashSet</code> do. Copying such a struct that does not, a plain function value
-or a trait value is a compile error.</p>
+<code>HashSet</code> do. Copying such a struct that does not, or a plain function
+value, is a compile error.</p>
+<p>A trait value is copied by copying the struct behind it, which is known
+only at run time: when that struct cannot be copied, <code>copy</code> panics.</p>
 <p>Runs in O(size of the value) and allocates each copied object.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -216,6 +218,10 @@ or a trait value is a compile error.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a copy that shares no non-thread-safe object with <code>value</code>; <code>value</code> itself when <code>T</code> is thread-safe</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>value</code> reaches a trait value holding a struct that cannot be copied</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var names = Array&lt;String&gt;();

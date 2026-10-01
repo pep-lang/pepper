@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
+            window.path_to_searchindex_js = "../searchindex-38403ca9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -598,6 +598,11 @@ struct that declares that trait, as <code>iterate()</code> does in
 <li>
 <p><code>==</code> and <code>!=</code> on trait values compare identity: they are equal when they
 refer to the same object.</p>
+</li>
+<li>
+<p><strong><code>copy</code> copies the struct behind a trait value</strong> and returns it as the
+same trait type (see <a href="memory.html#copying-trait-values">Copying trait values</a>).
+It panics when that struct cannot be copied.</p>
 </li>
 </ul>
 <p>What traits do not do yet:</p>

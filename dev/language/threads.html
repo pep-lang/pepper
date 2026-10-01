@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
+            window.path_to_searchindex_js = "../searchindex-38403ca9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -1221,8 +1221,6 @@ must be thread-safe, since every thread gets the same value.</li>
 declared outside the block: such a variable is an outside value, whatever
 it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the only reference
 (<code>list.append(move(job))</code>).</li>
-<li><code>copy</code> cannot copy a trait value yet, so sending a trait value that the
-sender keeps using is an error; send <code>move(x)</code> or a new value instead.</li>
 <li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
 not re-entrant.</li>
 <li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The

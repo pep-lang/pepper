@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ed22a71e.js";
+            window.path_to_searchindex_js = "searchindex-38403ca9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-68ad39d4.js"></script>
@@ -261,8 +261,7 @@ copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <c
 waits on several channels at once, and a <code>Mutex</code> holds any struct, with
 the compiler keeping each locked value apart from the rest of the program
 (see
-<a href="language/threads.html#what-a-lock-body-may-do">threads</a>). A trait value
-cannot be copied yet.</li>
+<a href="language/threads.html#what-a-lock-body-may-do">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="language/memory.html#weak-references">weak reference</a> on one side.</li>

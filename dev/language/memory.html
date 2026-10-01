@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
+            window.path_to_searchindex_js = "../searchindex-38403ca9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -540,8 +540,66 @@ note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
 </code></pre>
 <p>Some types cannot be copied at all: an <code>io.File</code> owns an operating-system
 handle, so the error says to send its path instead. A plain function value
-cannot be copied, because it may capture anything; declare it <code>shared</code>. A
-trait value cannot be copied yet.</p>
+cannot be copied, because it may capture anything; declare it <code>shared</code>.</p>
+<h3 id="copying-trait-values"><a class="header" href="#copying-trait-values">Copying trait values</a></h3>
+<p><code>copy</code> of a <a href="traits-and-extensions.html#traits-as-types">trait value</a> copies
+the struct behind it, as <code>copy</code> of that struct would, and returns the copy
+as the same trait type. Sharing works across the boundary: a struct reached
+twice, through a trait value or directly, is copied once.</p>
+<pre><code class="language-pepper"># `copy` of a trait value copies the struct behind it, whichever it is.
+trait Shape {
+    area(): int;
+    grow();
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+    grow() { side = side + 1; }
+}
+
+struct Rect {
+    var width: int = 1;
+    var height: int = 1;
+    construct(this.width = 1, this.height = 1) {}
+}
+
+extend Rect with Shape {
+    area(): int { return width * height; }
+    grow() { width = width + 1; }
+}
+
+main(): int {
+    var shapes = Array&lt;Shape&gt;();
+    var square = Square(2);
+    shapes.append(square);
+    shapes.append(Rect(2, 3));
+    shapes.append(square);
+
+    var copied = copy(shapes);
+    for (var shape in copied) {
+        shape.grow();
+    }
+    assert(shapes[0].area() == 4, "the original Square is unchanged");
+    assert(shapes[1].area() == 6, "the original Rect is unchanged");
+
+    # The Square appears twice, so its copy is one object, grown twice.
+    assert(copied[0] == copied[2], "one copy of the shared Square");
+    assert(copied[0].area() == 16, "the copied Square grew twice");
+    assert(copied[1].area() == 9, "the copied Rect grew once");
+    return 0;
+}
+</code></pre>
+<p>Which struct a trait value holds is known only when the program runs, so
+the compiler cannot check that it can be copied. Copying a trait value that
+holds a struct that cannot be copied (one with a destructor and no
+<code>Copyable&lt;T&gt;</code>, an <code>io.File</code>, a <code>MutexGuard</code>) panics:</p>
+<pre><code class="language-text">cannot copy the 'Owner' behind a trait value, which is not trivially copyable
+</code></pre>
 <h2 id="handing-a-reference-over-with-move"><a class="header" href="#handing-a-reference-over-with-move">Handing a reference over with move</a></h2>
 <p><code>move(x)</code> gives up <code>x</code>’s reference: the call returns the same object, and
 <code>x</code> is left null. Nothing is copied and no count changes. It is how a value
