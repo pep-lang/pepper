@@ -117,9 +117,9 @@ pub fn member_at(module: &Module, file: FileId, offset: usize) -> Option<Member<
     field.or_else(method).filter(|m| !m.loc().is_none() && m.loc() != used && !st.name.starts_with("__closure"))
 }
 
-/// The type sema gave the local or module-scope variable declared at `name`
-/// (the location of its name) in file `file`: what `var worker =
-/// _async_worker()` infers. `None` when no checked code declares one there. In generic code, the first
+/// The type sema gave the local, closure parameter or module-scope variable
+/// declared at `name` (the location of its name) in file `file`: what `var
+/// worker = _async_worker()` infers. `None` when no checked code declares one there. In generic code, the first
 /// specialization's type stands for all of them.
 pub fn local_type(module: &Module, file: FileId, name: usize) -> Option<&TypeName> {
     fn find<'m>(block: &'m Block, file: FileId, name: usize) -> Option<&'m TypeName> {
@@ -139,5 +139,12 @@ pub fn local_type(module: &Module, file: FileId, name: usize) -> Option<&TypeNam
         return Some(&global.ty);
     }
     let structs = module.structs.iter().flat_map(|st| st.constructors.iter().chain([&st.destructor]).chain(&st.method_members));
-    module.functions.iter().chain(structs).find_map(|f| f.body.as_ref().and_then(|b| find(b, file, name)))
+    let functions = || module.functions.iter().chain(structs.clone());
+    functions().find_map(|f| f.body.as_ref().and_then(|b| find(b, file, name))).or_else(|| {
+        // A parameter whose type sema inferred: a closure's (`(a, b) => ...`),
+        // which becomes a parameter of its struct's method.
+        functions().flat_map(|f| &f.parameters).find_map(|p| {
+            (p.loc.file == file && p.loc.span.start == name && !p.ty.is_auto() && !p.ty.is_empty()).then_some(&p.ty)
+        })
+    })
 }

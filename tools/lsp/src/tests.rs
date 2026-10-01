@@ -1329,3 +1329,181 @@ qux(): int { return baz() + bar() + 2; }
         assert_eq!(analysis::Analysis::new(uri.clone(), text.clone(), 0).os(), "windows");
     });
 }
+
+const MATCHED_SHAPES: &str = r#"enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+enum List {
+    Empty,
+    Cons(head: int, tail: List),
+}
+
+area(s: Shape): int {
+    return match (s) {
+        Circle(r) => 3 * r * r,
+        Rect(w, h) => w * h,
+        Point => 0,
+    };
+}
+
+sum(list: List): int {
+    var total = 0;
+    var rest = list;
+    while (rest is Cons(head, tail)) {
+        total += head;
+        rest = tail;
+    }
+    return total;
+}
+"#;
+
+/// A pattern's case goes to the case and hovers with the values it carries;
+/// a name the pattern binds has the type of its value, where it is bound and
+/// where it is used.
+#[test]
+fn match_patterns_and_their_bindings() {
+    let (uri, text, program) = load("match_patterns", MATCHED_SHAPES, "main.pep");
+    let circle = at(&text, "Circle(r)", 0, 0);
+    let h = hover(&uri, &text, &program, circle);
+    assert!(h.starts_with("`Circle` — `Shape.Circle(radius: int)`"), "{}", h);
+    assert!(definition(&uri, &text, &program, circle).1.starts_with("Circle(radius"));
+    // The binding where it is bound, and where it is used.
+    for offset in [at(&text, "Circle(r)", 0, 7), at(&text, "r * r", 0, 0), at(&text, "* r,", 0, 2)] {
+        let h = hover(&uri, &text, &program, offset);
+        assert!(h.starts_with("`r` — `int`"), "{}", h);
+        assert!(definition(&uri, &text, &program, offset).1.starts_with("r) =>"));
+    }
+    assert!(hover(&uri, &text, &program, at(&text, "w * h", 0, 0)).starts_with("`w` — `int`"));
+    assert!(definition(&uri, &text, &program, at(&text, "Point =>", 0, 0)).1.starts_with("Point,"));
+    // An `is` test's case and bindings, and their uses in its block.
+    assert!(definition(&uri, &text, &program, at(&text, "Cons(head, tail)", 0, 0)).1.starts_with("Cons(head: int"));
+    assert!(hover(&uri, &text, &program, at(&text, "tail))", 0, 0)).starts_with("`tail` — `List`"));
+    assert!(hover(&uri, &text, &program, at(&text, "= tail;", 0, 2)).starts_with("`tail` — `List`"));
+    assert!(definition(&uri, &text, &program, at(&text, "+= head", 0, 3)).1.starts_with("head, tail)"));
+}
+
+/// The values an enum case carries hover where they are declared, and their
+/// types go to their declarations.
+#[test]
+fn enum_case_values_where_they_are_declared() {
+    let (uri, text, program) = load("enum_case_values", MATCHED_SHAPES, "main.pep");
+    let h = hover(&uri, &text, &program, at(&text, "radius", 0, 0));
+    assert!(h.starts_with("`radius` — `int`"), "{}", h);
+    assert!(definition(&uri, &text, &program, at(&text, "height", 0, 0)).1.starts_with("height: int"));
+    assert!(definition(&uri, &text, &program, at(&text, "tail: List", 0, 6)).1.starts_with("List {"));
+}
+
+const UNINSTANTIATED: &str = r#"struct Box<T> {
+    var value: T;
+    construct(value: T) { this.value = value; }
+    get(): T { return value; }
+    static make(value: T): Box<T> { return Box<T>(value); }
+}
+
+struct Holder {
+    var sizes: Array<int>;
+    construct() { sizes = Array<int>(); }
+
+    # Nothing calls this, so sema never checks its body.
+    first<T>(box: Box<T>): T {
+        var copy = Box<T>.make(box.get());
+        var inner = copy.get();
+        var count = sizes.count();
+        var (a, b) = (count, inner);
+        return copy.get<T>();
+    }
+}
+"#;
+
+/// In a generic body nothing instantiates, locals are typed from their
+/// initializers and members are found by those types: a static call on a
+/// generic type, a method's result, a runtime type's method, destructuring,
+/// and a type argument written in a call.
+#[test]
+fn a_generic_body_nothing_instantiates() {
+    let (uri, text, program) = load("uninstantiated", UNINSTANTIATED, "main.pep");
+    let h = hover(&uri, &text, &program, at(&text, "var copy", 0, 4));
+    assert!(h.starts_with("`copy` — `Box<T>`"), "{}", h);
+    let make = at(&text, ".make(box", 0, 1);
+    let h = hover(&uri, &text, &program, make);
+    assert!(h.starts_with("`make` — `static make(value: T): Box<T>`"), "{}", h);
+    assert!(definition(&uri, &text, &program, make).1.starts_with("make(value"));
+    assert!(hover(&uri, &text, &program, at(&text, "inner", 0, 0)).starts_with("`inner` — `T`"));
+    assert!(definition(&uri, &text, &program, at(&text, "copy.get()", 0, 5)).1.starts_with("get(): T"));
+    // A member of a runtime type.
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "sizes.count", 0, 6));
+    assert_eq!(file, "runtime/array.pep");
+    assert!(rest.starts_with("count()"), "{}", rest);
+    assert!(hover(&uri, &text, &program, at(&text, "count = ", 0, 0)).starts_with("`count` — `ulong`"));
+    assert!(hover(&uri, &text, &program, at(&text, "var (a, b)", 0, 8)).starts_with("`b` — `T`"));
+    // The type argument of a call.
+    let t = at(&text, "get<T>", 0, 4);
+    assert!(hover(&uri, &text, &program, t).starts_with("`T` — `type parameter`"));
+    assert!(definition(&uri, &text, &program, t).1.starts_with("T>(box"));
+}
+
+/// A tuple's labels hover and go to where the tuple type writes them.
+#[test]
+fn tuple_labels() {
+    let main = r#"position(): (line: int, column: int) {
+    return (line: 3, column: 7);
+}
+test(): int {
+    var p = position();
+    return p.column;
+}
+"#;
+    let (uri, text, program) = load("tuple_labels", main, "main.pep");
+    let column = at(&text, "p.column", 0, 2);
+    assert!(hover(&uri, &text, &program, column).starts_with("`.column` — `int`"));
+    assert!(definition(&uri, &text, &program, column).1.starts_with("column: int)"));
+    assert!(hover(&uri, &text, &program, at(&text, "line: 3", 0, 0)).starts_with("`line` — `int`"));
+}
+/// `String.format`, which the parser lowers, and names reached in a trait's
+/// default method and through an extension's bounds.
+#[test]
+fn lowered_calls_trait_defaults_and_bounds() {
+    let main = r#"trait Named {
+    name(): String;
+    shout(): String { return name() + "!"; }
+}
+struct Box<T> {
+    var item: T;
+    construct(item: T) { this.item = item; }
+}
+extend Box<T: Named> {
+    label(): String { return item.name(); }
+}
+test(): String {
+    var a = 2;
+    return String.format("{1} {0}", a, "x");
+}
+"#;
+    let (uri, text, program) = load("lowered_calls", main, "main.pep");
+    assert!(definition(&uri, &text, &program, at(&text, "name() +", 0, 0)).1.starts_with("name(): String;"));
+    assert!(definition(&uri, &text, &program, at(&text, "item.name", 0, 5)).1.starts_with("name(): String;"));
+    let format = at(&text, "format(", 0, 0);
+    assert!(hover(&uri, &text, &program, format).starts_with("`format` — `static format("));
+    assert_eq!(definition(&uri, &text, &program, at(&text, "String.format", 0, 0)).0, "runtime/string.pep");
+    let h = hover(&uri, &text, &program, at(&text, ", a,", 0, 2));
+    assert!(h.starts_with("`a` — `int`"), "{}", h);
+}
+
+/// A closure parameter named like the receiver of the call it is passed to
+/// types from the callee, without typing itself again.
+#[test]
+fn a_closure_parameter_shadowing_its_receiver() {
+    let main = r#"struct Node {
+    visit(f: (Node) => void) { f(this); }
+}
+walk<T>(node: Node) {
+    node.visit((node) => { var inner = node; });
+}
+"#;
+    let (uri, text, program) = load("closure_shadowing", main, "main.pep");
+    let h = hover(&uri, &text, &program, at(&text, "(node) =>", 0, 1));
+    assert!(h.starts_with("`node` — `Node`"), "{}", h);
+}

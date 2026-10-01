@@ -38,6 +38,27 @@ fn declaration(program: &Program, name: &str) -> Option<Target> {
     })
 }
 
+/// The top-level declaration `name` denotes (see [`declaration`]).
+pub fn declaration_named(program: &Program, name: &str) -> Option<Target> {
+    declaration(program, name)
+}
+
+/// The declaration `name` in the module the qualifier `q` imports, exported
+/// or not: the runtime's files reach each other's `_`-prefixed helpers
+/// (`io._IO_READABLE`).
+fn module_member(program: &Program, doc: &ast::Module, q: &str, name: &str) -> Option<Target> {
+    let Target::File(index) = qualifier_import(program, doc, q)? else {
+        return None;
+    };
+    let root = program.files[index].module_root.as_ref();
+    program.files.iter().enumerate().filter(|(i, f)| *i == index || (root.is_some() && f.module_root.as_ref() == root)).find_map(
+        |(file, f)| {
+            let symbol = collect_globals(&f.module).into_iter().find(|s| pepper_parser::namespace::demangle_name(&s.name) == name)?;
+            Some(Target::Declaration { file, symbol })
+        },
+    )
+}
+
 /// The file the document's (`program.files[0]`) import `index` resolved to.
 fn imported_file(program: &Program, index: usize) -> Option<Target> {
     program.files[0].imports.get(index).copied().flatten().map(Target::File)
@@ -67,6 +88,14 @@ pub fn in_imports(program: &Program, doc: &ast::Module, offset: usize) -> Option
         }
         if contains(imp.name_span, offset) {
             return Some((imp.name.clone(), imported_file(program, index)?));
+        }
+        // The alias of `import "util" as u`.
+        if let Some(alias) = &imp.alias
+            && let Some(written) = program.files[0].source.get(imp.name_span.end..imp.span.end)
+            && let Some(at) = written.rfind(alias.as_str())
+            && contains(Span { start: imp.name_span.end + at, end: imp.name_span.end + at + alias.len() }, offset)
+        {
+            return Some((alias.clone(), imported_file(program, index)?));
         }
         for s in imp.symbols.iter().flatten() {
             if contains(s.span, offset) {
@@ -116,7 +145,7 @@ pub fn in_expression(
         // struct member, recorded under the same span start as `p`.
         ast::Expression::MemberAccess { lhs, name, span, .. } => match &**lhs {
             ast::Expression::SymbolRef { id, .. } if !is_local(id) && qualifier_import(program, doc, id).is_some() => {
-                Some((name.clone(), linked(program, *span)?))
+                Some((name.clone(), linked(program, *span).or_else(|| module_member(program, doc, id, name))?))
             }
             _ => None,
         },
@@ -174,6 +203,12 @@ fn in_declaration(decl: &ast::Declaration, offset: usize) -> Option<&ast::TypeNa
         ast::Declaration::Function(f) => in_function(f, offset),
         ast::Declaration::Struct(s) => in_generics(&s.generic_params, offset)
             .or_else(|| s.fields.iter().find_map(|f| in_variable(f, offset)))
+            .or_else(|| {
+                let e = s.enumeration.as_ref()?;
+                e.representation.as_ref().and_then(|r| in_type_name(r, offset)).or_else(|| {
+                    e.cases.iter().flat_map(|c| c.payload.iter().flatten()).find_map(|v| in_variable(v, offset))
+                })
+            })
             .or_else(|| s.constructors.iter().find_map(|c| in_function(c, offset)))
             .or_else(|| s.destructor.as_ref().and_then(|d| in_block(d, offset)))
             .or_else(|| s.methods.iter().find_map(|m| in_function(m, offset))),
@@ -209,7 +244,13 @@ fn in_block(block: &ast::Block, offset: usize) -> Option<&ast::TypeName> {
 }
 
 fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> {
-    if !contains(stmt.span(), offset) {
+    // An expression statement's span is its expression's: an assignment's
+    // starts at its `=`.
+    let span = match stmt {
+        ast::Statement::Expression(e) => Span { start: crate::expr_start(e), end: e.span().end },
+        _ => stmt.span(),
+    };
+    if !contains(span, offset) {
         return None;
     }
     match stmt {
@@ -254,7 +295,8 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
 }
 
 fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::TypeName> {
-    if !contains(expr.span(), offset) {
+    // A binary expression's span starts at its operator.
+    if !contains(Span { start: crate::expr_start(expr), end: expr.span().end }, offset) {
         return None;
     }
     match expr {

@@ -9,6 +9,7 @@
 
 mod analysis;
 mod imports;
+mod infer;
 mod platforms;
 #[cfg(test)]
 mod tests;
@@ -178,6 +179,11 @@ fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
     out
 }
 
+/// A variable declaration as a symbol.
+fn variable_symbol(v: &ast::VariableDecl) -> Symbol {
+    Symbol { name: v.name.clone(), name_span: v.name_span, ty: variable_type(v) }
+}
+
 /// Rendered type of a variable declaration; `__auto` locals are inferred
 /// from a literal initializer when one is present.
 fn variable_type(v: &ast::VariableDecl) -> String {
@@ -195,6 +201,9 @@ fn variable_type(v: &ast::VariableDecl) -> String {
             },
             _ => "unknown".to_string(),
         };
+    }
+    if v.type_name.name == "__auto" {
+        return "unknown".to_string();
     }
     type_string(&v.type_name)
 }
@@ -383,6 +392,12 @@ fn function_at(module: &ast::Module, offset: usize) -> Option<(&ast::FunctionDec
                     return Some((f, None));
                 }
             }
+            // A trait's method with a default body.
+            ast::Declaration::Trait(t) => {
+                if let Some(f) = t.methods.iter().find(inside) {
+                    return Some((f, None));
+                }
+            }
             _ => {}
         }
     }
@@ -428,9 +443,15 @@ fn declared_at(module: &ast::Module, offset: usize) -> Option<(Symbol, Option<St
         .map(|s| (s, None))
         .or_else(|| {
             module.declarations.iter().find_map(|d| match d {
-                ast::Declaration::Struct(s) => {
-                    collect_struct_members(s).into_iter().find(at).map(|m| (m, Some(s.name.clone())))
-                }
+                ast::Declaration::Struct(s) => collect_struct_members(s)
+                    .into_iter()
+                    .find(at)
+                    // A value an enum case carries (`Circle(radius: int)`).
+                    .or_else(|| {
+                        let cases = s.enumeration.iter().flat_map(|e| &e.cases);
+                        cases.flat_map(|c| c.payload.iter().flatten()).find(|v| at(&variable_symbol(v))).map(variable_symbol)
+                    })
+                    .map(|m| (m, Some(s.name.clone()))),
                 ast::Declaration::Trait(t) => methods(&t.name, &t.methods),
                 ast::Declaration::Extend(e) => methods(&e.target.name, &e.methods),
                 _ => None,
@@ -439,6 +460,88 @@ fn declared_at(module: &ast::Module, offset: usize) -> Option<(Symbol, Option<St
         .or_else(|| scope_locals(module, offset).into_iter().find(at).map(|s| (s, None)))
         .or_else(|| parameter_at(module, offset).map(|s| (s, None)))
         .or_else(|| generic_param_at(module, offset, |p| p.name_span.start <= offset && offset <= p.name_span.end))
+        .or_else(|| variable_at(module, offset).map(|s| (s, None)))
+}
+
+/// The variable declared anywhere whose name is at `offset`: a parameter of
+/// a closure in a default value, say.
+fn variable_at(module: &ast::Module, offset: usize) -> Option<Symbol> {
+    let mut found = None;
+    infer::each(module, |item| {
+        if let infer::Item::Variable(v) = item
+            && v.name_span.start <= offset
+            && offset <= v.name_span.end
+        {
+            found = Some(variable_symbol(v));
+        }
+    });
+    found
+}
+
+/// Where the document first declares `label` of a tuple whose labels are
+/// `labels`: in a tuple type, else a labeled tuple value.
+fn label_declared(module: &ast::Module, text: &str, labels: &[String], label: &str) -> Option<Span> {
+    let mut types: Vec<&ast::TypeName> = vec![];
+    let mut values: Vec<Span> = vec![];
+    let mut functions: Vec<&ast::FunctionDecl> = vec![];
+    for d in &module.declarations {
+        match d {
+            ast::Declaration::Function(f) => functions.push(f),
+            ast::Declaration::Struct(s) => functions.extend(s.methods.iter().chain(&s.constructors)),
+            ast::Declaration::Extend(e) => functions.extend(&e.methods),
+            ast::Declaration::Trait(t) => functions.extend(&t.methods),
+            _ => {}
+        }
+    }
+    types.extend(functions.iter().map(|f| &f.return_type));
+    infer::each(module, |item| match item {
+        infer::Item::Variable(v) => types.push(&v.type_name),
+        infer::Item::Expression(ast::Expression::Tuple { labels: written, .. })
+            if written.iter().map(|(l, _)| l).eq(labels.iter()) =>
+        {
+            values.extend(written.iter().filter(|(l, _)| l == label).map(|(_, s)| *s));
+        }
+        _ => {}
+    });
+    // A type's labels have no spans: find the label and its `:` in its text.
+    let in_type = types.iter().filter(|t| t.name == ast::TUPLE_TYPE && t.labels == labels).find_map(|t| {
+        let written = text.get(t.span.start..t.span.end)?;
+        let part = |c: char| c.is_ascii_alphanumeric() || c == '_';
+        written.match_indices(label).find_map(|(i, _)| {
+            let before = written[..i].chars().next_back();
+            let after = &written[i + label.len()..];
+            (before.is_none_or(|c| !part(c)) && after.trim_start().starts_with(':'))
+                .then(|| Span { start: t.span.start + i, end: t.span.start + i + label.len() })
+        })
+    });
+    in_type.or_else(|| values.into_iter().min_by_key(|s| s.start))
+}
+
+/// A tuple's label where it is written at `offset`: in a tuple type
+/// (`(line: int, column: int)`) or a labeled tuple (`(line: 3, column:
+/// 7)`). Its name and span, and the element's type in a type or its value
+/// in a tuple.
+fn label_at<'a>(module: &'a ast::Module, text: &str, offset: usize) -> Option<(String, Span, Result<infer::Ty, &'a ast::Expression>)> {
+    let mut found = None;
+    infer::each(module, |item| {
+        if let infer::Item::Expression(ast::Expression::Tuple { elements, labels, .. }) = item
+            && let Some(i) = labels.iter().position(|(_, s)| s.start <= offset && offset <= s.end)
+            && let Some(element) = elements.get(i)
+        {
+            found = Some((labels[i].0.clone(), labels[i].1, Err(element)));
+        }
+    });
+    if found.is_some() {
+        return found;
+    }
+    let ty = imports::type_at(module, offset).filter(|t| t.name == ast::TUPLE_TYPE && !t.labels.is_empty())?;
+    let Span { start, end } = word_at(text, offset)?;
+    // A label is followed by its `:`.
+    if !text[end..].trim_start().starts_with(':') {
+        return None;
+    }
+    let i = ty.labels.iter().position(|l| *l == text[start..end])?;
+    Some((ty.labels[i].clone(), Span { start, end }, Ok(infer::Ty::from_ast(ty.generic_types.get(i)?))))
 }
 
 /// The parameter whose name is at `offset` in any function's signature,
@@ -476,7 +579,10 @@ fn generic_param_at(
                 scopes.push(&s.generic_params);
                 scopes.extend(s.methods.iter().filter(|m| inside(m.span)).map(|m| m.generic_params.as_slice()));
             }
-            ast::Declaration::Trait(t) if inside(t.span) => scopes.push(&t.generic_params),
+            ast::Declaration::Trait(t) if inside(t.span) => {
+                scopes.push(&t.generic_params);
+                scopes.extend(t.methods.iter().filter(|m| inside(m.span)).map(|m| m.generic_params.as_slice()));
+            }
             ast::Declaration::Extend(e) if inside(e.span) => {
                 scopes.extend(e.methods.iter().filter(|m| inside(m.span)).map(|m| m.generic_params.as_slice()));
             }
@@ -538,12 +644,69 @@ fn generic_param_used(module: &ast::Module, program: Option<&Program>, offset: u
     })
 }
 
+/// The type argument written in a member's name at `offset` (`T` of
+/// `copies.copy<T>(x)`): the parser keeps those in the member's name, after
+/// its name's span.
+fn type_argument_at(module: &ast::Module, text: &str, offset: usize) -> Option<String> {
+    let mut found = None;
+    infer::each(module, |item| {
+        if let infer::Item::Expression(ast::Expression::MemberAccess { name, name_span, .. }) = item
+            && name.contains('<')
+            && name_span.end <= offset
+            && text.get(name_span.end..offset).is_some_and(|between| between.trim_start().starts_with('<'))
+        {
+            // Inside the brackets: as many `<` before `offset` as `>`.
+            let between = &text[name_span.end..offset];
+            if !between.contains(['(', ')']) && between.matches('<').count() > between.matches('>').count() {
+                found = Some(());
+            }
+        }
+    });
+    found?;
+    word_at(text, offset).map(|s| text[s.start..s.end].to_string())
+}
+
+/// The span of the identifier around `offset` in `text`.
+fn word_at(text: &str, offset: usize) -> Option<Span> {
+    let part = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let start = text.get(..offset)?.rfind(|c: char| !part(c)).map_or(0, |i| i + 1);
+    let end = text[offset..].find(|c: char| !part(c)).map_or(text.len(), |i| offset + i);
+    (end > start).then_some(Span { start, end })
+}
+
+/// Which name of a `String.format(...)` call is at `offset`, `String` or
+/// `format`: the parser lowers the call, so neither is in the tree.
+fn string_format_at(text: &str, offset: usize) -> Option<&'static str> {
+    let Span { start, end } = word_at(text, offset)?;
+    let call_follows = |after: &str| after.trim_start().starts_with('(');
+    match &text[start..end] {
+        "String" => {
+            let after = text[end..].trim_start().strip_prefix('.')?.trim_start().strip_prefix("format")?;
+            call_follows(after).then_some("String")
+        }
+        "format" => {
+            let before = text[..start].trim_end().strip_suffix('.')?.trim_end();
+            (before.ends_with("String") && call_follows(&text[end..])).then_some("format")
+        }
+        _ => None,
+    }
+}
+
+/// Whether `module` has a name (a reference or a member's name) at `offset`.
+fn names_at(module: &ast::Module, offset: usize) -> bool {
+    match find_expr(module, offset) {
+        Some(ast::Expression::SymbolRef { span, .. }) => span.start <= offset && offset < span.end,
+        Some(ast::Expression::MemberAccess { name_span, .. }) => name_span.start <= offset && offset < name_span.end,
+        _ => false,
+    }
+}
+
 /// Where enum `owner`'s case `name` is declared: the program file and the
 /// case's name.
 fn enum_case_declared(program: &Program, owner: &str, name: &str) -> Option<(usize, Span)> {
     program.files.iter().enumerate().find_map(|(i, f)| {
         f.module.declarations.iter().find_map(|d| match d {
-            ast::Declaration::Struct(s) if s.name == owner => {
+            ast::Declaration::Struct(s) if s.name == owner || (i == 0 && demangle_name(&s.name) == owner) => {
                 let case = s.enumeration.as_ref()?.cases.iter().find(|c| c.name == name)?;
                 Some((i, case.name_span))
             }
@@ -558,7 +721,9 @@ fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
     let Some((f, _)) = function_at(module, offset) else {
         // A destructor has no parameters.
         if let Some((body, _)) = body_at(module, offset) {
-            return locals_at(body, offset);
+            let mut out = locals_at(body, offset);
+            push_match_bindings(body, offset, &mut out);
+            return out;
         }
         // A closure in a module-scope variable's initializer.
         let mut out = vec![];
@@ -582,8 +747,24 @@ fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
         if let Some(c) = closure_in_block(body, offset) {
             push_closure_locals(c, offset, &mut out);
         }
+        push_match_bindings(body, offset, &mut out);
     }
     out
+}
+
+/// The names a `match` expression's arm binds (`Circle(r) => 3 * r * r`),
+/// for each arm in `block` whose value contains `offset`.
+fn push_match_bindings(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>) {
+    infer::each_in_block(block, |item| {
+        if let infer::Item::Expression(ast::Expression::Match(m)) = item {
+            for arm in m.arms.iter().filter(|a| expr_start(&a.value) <= offset && offset < a.value.span().end) {
+                // Not the hidden names `String.format`'s lowering binds.
+                for (name, name_span) in arm.patterns.iter().flat_map(|p| p.bound_names()).filter(|(n, _)| !n.starts_with("_pep_")) {
+                    out.push(Symbol { name, name_span, ty: String::new() });
+                }
+            }
+        }
+    });
 }
 
 /// The locals inside closure `c` at `offset`: its parameters, what its body
@@ -640,6 +821,9 @@ fn closure_in_expression(expr: &ast::Expression, offset: usize) -> Option<&ast::
         ast::Expression::FunctionCall { function, arguments, .. } => std::iter::once(&**function).chain(arguments).collect(),
         ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => elements.iter().collect(),
         ast::Expression::MapLiteral { entries, .. } => entries.iter().flat_map(|(k, v)| [k, v]).collect(),
+        ast::Expression::Match(m) => {
+            std::iter::once(&m.value).chain(m.arms.iter().map(|a| &a.value)).chain(m.else_arm.as_ref().map(|(_, v)| v)).collect()
+        }
         _ => vec![],
     };
     children.into_iter().find_map(|e| closure_in_expression(e, offset))
@@ -677,6 +861,10 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
         ast::Expression::Binary { lhs, rhs, .. } => expr_at(lhs, offset).or_else(|| expr_at(rhs, offset)),
         ast::Expression::Unary { operand, .. } => expr_at(operand, offset),
         ast::Expression::Is { value, .. } => expr_at(value, offset).or(Some(expr)),
+        ast::Expression::Match(m) => expr_at(&m.value, offset)
+            .or_else(|| m.arms.iter().find_map(|a| expr_at(&a.value, offset)))
+            .or_else(|| m.else_arm.as_ref().and_then(|(_, v)| expr_at(v, offset)))
+            .or(Some(expr)),
         ast::Expression::Closure(c) => find_expr_in_block(&c.body, offset).or(Some(expr)),
         ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => {
             elements.iter().find_map(|e| expr_at(e, offset)).or(Some(expr))
@@ -716,8 +904,35 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
 
 /// The innermost expression containing `offset` anywhere in the module.
 fn find_expr<'a>(module: &'a ast::Module, offset: usize) -> Option<&'a ast::Expression> {
+    let found = find_expr_in_module(module, offset);
+    let names_offset = |e: &ast::Expression| match e {
+        ast::Expression::SymbolRef { span, .. } => span.start <= offset && offset < span.end,
+        ast::Expression::MemberAccess { name_span, .. } => name_span.start <= offset && offset < name_span.end,
+        _ => false,
+    };
+    if found.is_some_and(names_offset) {
+        return found;
+    }
+    // Sugar the parser lowers (`String.format`'s arguments) can sit outside
+    // the spans of the expressions made for it: the name itself.
+    let mut name = None;
+    infer::each(module, |item| {
+        if let infer::Item::Expression(e) = item
+            && names_offset(e)
+        {
+            name = Some(e);
+        }
+    });
+    name.or(found)
+}
+
+fn find_expr_in_module<'a>(module: &'a ast::Module, offset: usize) -> Option<&'a ast::Expression> {
     if let Some((body, _)) = body_at(module, offset) {
-        return find_expr_in_block(body, offset);
+        return find_expr_in_block(body, offset).or_else(|| {
+            // A parameter's default value (`construct(this.op = square)`).
+            let (f, _) = function_at(module, offset)?;
+            f.parameters.iter().filter_map(|p| p.default_value.as_ref()).find_map(|e| expr_at(e, offset))
+        });
     }
     // A module-scope variable's initializer.
     module.declarations.iter().find_map(|d| match d {
@@ -1100,7 +1315,8 @@ fn symbol_type(sema: Option<&SemaModule>, s: &Symbol) -> String {
         return s.ty.clone();
     }
     sema.and_then(|m| pepper_sema::member_lookup::local_type(m, FileId(0), s.name_span.start))
-        .map(|t| t.to_string())
+        // Tuple and function types as written: `(int, int)`.
+        .map(|t| infer::Ty::parse(&t.to_string()).map_or_else(|| t.to_string(), |t| t.to_string()))
         .unwrap_or_else(|| "unknown".to_string())
 }
 
@@ -1194,6 +1410,40 @@ fn member_doc_in(
         [(_, source, start)] => Some(pepper_parser::doc::doc_comment_before(source, *start)?.to_markdown()),
         _ => None,
     }
+}
+
+/// What hover shows for `print`, which no file declares.
+const PRINT_HOVER: &str = "`print` — built-in function\n\nPrints each argument on a line of its own.";
+
+/// What hover shows for a member the syntax found ([`infer::Found`]): a
+/// field's type, a method's signature or a case, with its doc comment.
+fn found_hover(program: Option<&Program>, text: &str, found: &infer::Found) -> String {
+    let (name, start) = match &found.kind {
+        infer::Kind::Field(v) => (format!(".{}", v.name), v.attributes.iter().map(|a| a.span.start).chain([v.span.start]).min()),
+        infer::Kind::Method(f) => (
+            demangle_name(&f.name).to_string(),
+            f.attributes.iter().map(|a| a.span.start).chain([f.span.start, f.name_span.start]).min(),
+        ),
+        infer::Kind::Case(c) => (c.name.clone(), Some(c.span.start)),
+        infer::Kind::EnumMethod(_, method) => (method.to_string(), None),
+        infer::Kind::Element(label, _) => return format!("`.{}` — `{}`", label, found.describe()),
+    };
+    let source = match found.file {
+        0 => Some(text),
+        file => program.and_then(|p| p.files.get(file)).map(|f| f.source.as_str()),
+    };
+    let doc = source.zip(start).and_then(|(source, start)| Some(pepper_parser::doc::doc_comment_before(source, start)?.to_markdown()));
+    with_doc(format!("`{}` — `{}`", name, found.describe()), doc)
+}
+
+/// Where `span` of program file `file` is: the document `uri` (`text`) for
+/// file 0.
+fn file_location(uri: &Url, text: &str, program: Option<&Program>, file: usize, span: Span) -> Option<Location> {
+    if file == 0 {
+        return Some(Location::new(uri.clone(), span_to_range(text, span)));
+    }
+    let f = program?.files.get(file)?;
+    Some(Location::new(Url::from_file_path(&f.name).ok()?, span_to_range(&f.source, span)))
 }
 
 /// The struct name of a rendered type: `Array<int>` and `int[]` are
@@ -1731,9 +1981,18 @@ impl PepperLsp {
                 sema.and_then(|m| enum_case_named(m, owner, &pattern.case)).unwrap_or_else(|| format!("{}.{}", owner, pattern.case));
             return Some(Hover { contents: md(format!("`{}` — `{}`", pattern.case, rendered)), range: None });
         }
+        let typer = infer::Typer::new(&ast, program, sema);
         let imported = |(spelled, target): (String, imports::Target)| {
             let program = program?;
             let value = match target {
+                // A module-scope variable another file initializes.
+                imports::Target::Declaration { file, mut symbol } if symbol.ty == "unknown" => {
+                    if let Some(ty) = typer.global_type(file, symbol.name_span) {
+                        symbol.ty = ty.to_string();
+                    }
+                    let from = if file == 0 { String::new() } else { format!("\n\nfrom `{}`", file_label(&program.files[file].name)) };
+                    with_doc(format!("`{}` — `{}`{}", spelled, symbol.ty, from), declaration_doc_at(program, file, symbol.name_span))
+                }
                 imports::Target::Declaration { file, symbol } if file == 0 => {
                     with_doc(format!("`{}` — `{}`", spelled, symbol.ty), declaration_doc_at(program, file, symbol.name_span))
                 }
@@ -1761,9 +2020,10 @@ impl PepperLsp {
         // parameter, with its doc comment.
         // A built-in type (`int`, `u8`), which no file declares.
         if let Some(ty) = imports::type_at(&ast, offset)
-            && pepper_sema::type_name::INTEGRAL_TYPES.contains(ty.name.as_str())
+            && let name = ty.name.trim_end_matches(['*', '[', ']'])
+            && pepper_sema::type_name::INTEGRAL_TYPES.contains(name)
         {
-            return Some(Hover { contents: md(format!("`{}` — built-in type", ty.name)), range: None });
+            return Some(Hover { contents: md(format!("`{}` — built-in type", name)), range: None });
         }
         // The built-in constraint `T: Shared`, which no file declares.
         if let Some(ty) = imports::type_at(&ast, offset)
@@ -1776,13 +2036,59 @@ impl PepperLsp {
         if let Some(symbol) = generic_param_used(&ast, program, offset).or_else(|| tuple_label_at(&ast, text, offset)) {
             return Some(Hover { contents: md(format!("`{}` — `{}`", symbol.name, symbol.ty)), range: None });
         }
+        // A case a pattern names, or a name it binds.
+        match typer.pattern_at(offset) {
+            Some(infer::PatternHit::Case(found)) => {
+                return Some(Hover { contents: md(found_hover(program, text, &found)), range: None });
+            }
+            Some(infer::PatternHit::Binding { name, ty, .. }) => {
+                let ty = ty.map_or_else(|| "unknown".to_string(), |t| t.to_string());
+                return Some(Hover { contents: md(format!("`{}` — `{}`", name, ty)), range: None });
+            }
+            None => {}
+        }
+        if let Some((label, _, ty)) = label_at(&ast, text, offset) {
+            let ty = match ty {
+                Ok(ty) => Some(ty),
+                Err(value) => typer.type_of(value, offset),
+            };
+            let ty = ty.map_or_else(|| "unknown".to_string(), |t| t.to_string());
+            return Some(Hover { contents: md(format!("`{}` — `{}`", label, ty)), range: None });
+        }
         if let Some((symbol, owner)) = declared_at(&ast, offset) {
             let doc = program.and_then(|p| match &owner {
                 Some(owner) => member_doc(p, Some(owner), &symbol.name),
                 None => declaration_doc_at(p, 0, symbol.name_span),
             });
-            let head = format!("`{}` — `{}`", symbol.name, symbol_type(sema, &symbol));
+            let mut ty = symbol_type(sema, &symbol);
+            if ty == "unknown"
+                && let Some(t) = typer.local_type_of(&symbol)
+            {
+                ty = t.to_string();
+            }
+            let head = format!("`{}` — `{}`", symbol.name, ty);
             return Some(Hover { contents: md(with_doc(head, doc)), range: None });
+        }
+        // A type argument in a member's name (`T` of `copies.copy<T>(x)`).
+        if let Some(name) = type_argument_at(&ast, text, offset) {
+            if let Some((symbol, _)) = generic_param_at(&ast, offset, |p| p.name == name) {
+                return Some(Hover { contents: md(format!("`{}` — `{}`", symbol.name, symbol.ty)), range: None });
+            }
+            if let Some(program) = program
+                && let Some(target) = imports::declaration_named(program, &name)
+            {
+                return imported((name, target));
+            }
+        }
+        // `String.format(...)`, which the parser lowers.
+        if let Some(name) = string_format_at(text, offset)
+            && !names_at(&ast, offset)
+        {
+            if name == "format" {
+                let value = "`format` — `static format(format: String, values...): String`\n\nBuilt in: the format string with each `{index}` replaced by that value, formatted as in an interpolated string.";
+                return Some(Hover { contents: md(value.to_string()), range: None });
+            }
+            return imported(("String".to_string(), imports::declaration_named(program?, "String")?));
         }
         let expr = find_expr(&ast, offset)?;
 
@@ -1846,6 +2152,16 @@ impl PepperLsp {
                 Some(Hover { contents: md(format!("`{}` — `{}`", value, ty)), range: None })
             }
             ast::Expression::SymbolRef { id, .. } => {
+                // A type named as a value: the owner of a static call
+                // (`i8.parse(...)`, `T.parse(...)`).
+                if typer.named_type(expr, offset).is_some() {
+                    if pepper_sema::type_name::INTEGRAL_TYPES.contains(id.as_str()) {
+                        return Some(Hover { contents: md(format!("`{}` — built-in type", id)), range: None });
+                    }
+                    if let Some((symbol, _)) = generic_param_at(&ast, offset, |p| p.name == *id) {
+                        return Some(Hover { contents: md(format!("`{}` — `{}`", symbol.name, symbol.ty)), range: None });
+                    }
+                }
                 // A bare member of `this` the document cannot see (in an
                 // extension's method), by the type sema gave `this`.
                 if !locals.iter().chain(&struct_members).any(|s| s.name == *id)
@@ -1875,7 +2191,18 @@ impl PepperLsp {
                                 .or_else(|| m.externs.iter().find(|e| e.name == *id).map(|_| "extern function".to_string()))
                         })
                     })
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .filter(|t| t != "unknown")
+                    .or_else(|| typer.symbol_type(id, offset).map(|t| t.to_string()));
+                // A method of `this` sema did not check (in generic code).
+                if rendered.is_none()
+                    && let Some(found) = typer.bare_member(id, offset)
+                {
+                    return Some(Hover { contents: md(found_hover(program, text, &found)), range: None });
+                }
+                if rendered.is_none() && id == "print" {
+                    return Some(Hover { contents: md(PRINT_HOVER.to_string()), range: None });
+                }
+                let rendered = rendered.unwrap_or_else(|| "unknown".to_string());
                 let mut head = format!("`{}` — `{}`", id, rendered);
                 // A function whose result shares nothing with its inputs
                 // may cross a lock or go to a `[Move]` parameter.
@@ -1908,14 +2235,21 @@ Returns a fresh value: it shares nothing with the arguments.");
                         })
                         // In an extension's method, by the extended type.
                         .or_else(|| sema.and_then(|m| pepper_sema::member_lookup::field_type(m, FileId(0), offset)).map(|t| t.to_string()))
+                        .or_else(|| typer.member_access(lhs, name, offset).map(|f| f.describe()))
                         .unwrap_or_else(|| "unknown".to_string())
                 } else if let Some(case) = sema.and_then(|m| enum_case_of(m, lhs, name)).or_else(|| enum_case_in(&ast, lhs, name)) {
                     case
                 } else {
-                    // The field of the owner's type; failing that, any
-                    // struct's field of that name.
+                    // The field of the owner's type, as sema or the syntax
+                    // types the owner; failing that, any struct's field of
+                    // that name.
+                    let typed = typer.member_access(lhs, name, offset);
+                    if let Some(found) = typed.as_ref().filter(|f| matches!(f.kind, infer::Kind::Method(_))) {
+                        return Some(Hover { contents: md(found_hover(program, text, found)), range: None });
+                    }
                     sema.and_then(|m| pepper_sema::member_lookup::field_type(m, FileId(0), offset))
                         .map(|t| t.to_string())
+                        .or_else(|| typed.map(|f| f.describe()))
                         .or_else(|| sema.and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name))))
                         .unwrap_or_else(|| "unknown".to_string())
                 };
@@ -1925,7 +2259,15 @@ Returns a fresh value: it shares nothing with the arguments.");
                 ast::Expression::SymbolRef { id, .. } => {
                     let rendered = globals.iter().find(|s| s.name == *id).map(|s| s.ty.clone())
                         .or_else(|| sema.and_then(|m| m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())))
-                        .unwrap_or_else(|| "unknown".to_string());
+                        // A local or field holding a function.
+                        .or_else(|| typer.symbol_type(id, offset).map(|t| t.to_string()));
+                    // A method of `this` sema did not check (in generic code).
+                    if rendered.is_none()
+                        && let Some(found) = typer.bare_member(id, offset)
+                    {
+                        return Some(Hover { contents: md(found_hover(program, text, &found)), range: None });
+                    }
+                    let rendered = rendered.unwrap_or_else(|| "unknown".to_string());
                     Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
                 }
                 ast::Expression::MemberAccess { lhs, name, .. } => {
@@ -1935,6 +2277,11 @@ Returns a fresh value: it shares nothing with the arguments.");
                             sema.and_then(|s| pepper_sema::member_lookup::member_at(s, FileId(0), offset))
                     {
                         return Some(Hover { contents: md(overload_hover(program, m, 0)), range: None });
+                    }
+                    // The member as the syntax types the owner (in generic
+                    // code sema did not check, or a static call).
+                    if let Some(found) = typer.member_access(lhs, name, offset) {
+                        return Some(Hover { contents: md(found_hover(program, text, &found)), range: None });
                     }
                     let rendered = sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
@@ -2008,6 +2355,40 @@ Returns a fresh value: it shares nothing with the arguments.");
             let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
             return Some(vec![Location::new(target_uri, span_to_range(&f.source, function.loc.span))]);
         }
+        let typer = infer::Typer::new(&ast, program, sema);
+        // A case a pattern names goes to the case; a name it binds, to itself.
+        match typer.pattern_at(offset) {
+            Some(infer::PatternHit::Case(found)) => {
+                return file_location(uri, text, program, found.file, found.name_span()?).map(|l| vec![l]);
+            }
+            Some(infer::PatternHit::Binding { span, .. }) => {
+                return Some(vec![Location::new(uri.clone(), span_to_range(text, span))]);
+            }
+            None => {}
+        }
+        // `String.format(...)`, which the parser lowers: both names go to
+        // `String`.
+        if string_format_at(text, offset).is_some()
+            && !names_at(&ast, offset)
+            && let Some(program) = program
+        {
+            return imported(("String".to_string(), imports::declaration_named(program, "String")?));
+        }
+        // A tuple's label where it is written.
+        if let Some((_, span, _)) = label_at(&ast, text, offset) {
+            return Some(vec![Location::new(uri.clone(), span_to_range(text, span))]);
+        }
+        // A type argument in a member's name (`T` of `copies.copy<T>(x)`).
+        if let Some(name) = type_argument_at(&ast, text, offset) {
+            if let Some((symbol, _)) = generic_param_at(&ast, offset, |p| p.name == name) {
+                return Some(vec![Location::new(uri.clone(), span_to_range(text, symbol.name_span))]);
+            }
+            if let Some(program) = program
+                && let Some(target) = imports::declaration_named(program, &name)
+            {
+                return imported((name, target));
+            }
+        }
         // A name where it is declared goes to itself; a generic parameter
         // used as a type, to the parameter.
         if let Some((symbol, _)) = declared_at(&ast, offset)
@@ -2067,17 +2448,38 @@ Returns a fresh value: it shares nothing with the arguments.");
                 .or_else(|| struct_members.iter().find(|s| s.name == *id))
                 .or_else(|| globals.iter().find(|s| s.name == *id))
                 .map(|s| s.name_span),
-            ast::Expression::MemberAccess { name, .. } => {
-                if is_this(expr) {
-                    enclosing_struct?.fields.iter().find(|f| f.name == *name).map(|f| f.name_span)
-                } else {
-                    None
-                }
+            ast::Expression::MemberAccess { name, .. } if is_this(expr) => {
+                enclosing_struct.and_then(|s| s.fields.iter().find(|f| f.name == *name)).map(|f| f.name_span)
+            }
+            _ => None,
+        };
+        if let Some(span) = target_span {
+            return Some(vec![Location::new(uri.clone(), span_to_range(text, span))]);
+        }
+        // A type parameter named as a value (`T.parse(...)`).
+        if let ast::Expression::SymbolRef { id, .. } = expr
+            && typer.named_type(expr, offset).is_some()
+            && let Some((symbol, _)) = generic_param_at(&ast, offset, |p| p.name == *id)
+        {
+            return Some(vec![Location::new(uri.clone(), span_to_range(text, symbol.name_span))]);
+        }
+        // What the syntax finds where sema has no answer: a member of an
+        // owner it types (in generic code sema did not check, or a static
+        // call), or a member of `this` named bare.
+        let found = match expr {
+            ast::Expression::SymbolRef { id, .. } => typer.bare_member(id, offset),
+            ast::Expression::MemberAccess { lhs, name, name_span, .. } if name_span.start <= offset => {
+                typer.member_access(lhs, name, offset)
             }
             _ => None,
         }?;
-
-        Some(vec![Location::new(uri.clone(), span_to_range(text, target_span))])
+        // A tuple's label: where the document writes a tuple type or value
+        // with the owner's labels.
+        if let infer::Kind::Element(label, _) = &found.kind {
+            let span = label_declared(&ast, text, &typer.member_owner_labels(expr, offset)?, label)?;
+            return Some(vec![Location::new(uri.clone(), span_to_range(text, span))]);
+        }
+        file_location(uri, text, program, found.file, found.name_span()?).map(|l| vec![l])
     }
 
     /// Document symbols for `uri`.

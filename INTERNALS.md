@@ -1464,6 +1464,31 @@ diagnostics"). The mechanics:
   constructors, extension methods) and what its body declares before the
   cursor. An expression statement starts at its expression's start
   (`expr_start`), since an assignment's span starts at its `=`.
+- **Code sema leaves untyped** (`tools/lsp/src/infer.rs`, `Typer`). Sema
+  checks only the specializations of generic code, so the body of a generic
+  nothing instantiates has no types in the model (`runtime/copy.pep`,
+  `async/mutex.pep` opened on their own), and patterns have no node of
+  their own. Where the model has no answer, hover and definition type the
+  syntax: a name from its declaration, else sema's inferred type
+  (`member_lookup::local_type`, closure parameters included), else its
+  initializer (constructor and call results, fields, ternaries, elements of
+  an array or of what `iterate()` yields, destructuring, a closure
+  parameter's place in the function type its callee or variable gives it),
+  and a member from the declarations of every program file (`member`: the
+  struct or enum, its extensions, the traits those add, a type parameter's
+  bounds, a tuple's labels) with the owner's type arguments bound to the
+  declaration's parameters. `pattern_at` answers a pattern's case (`Circle`
+  of `Circle(r) =>`, from the matched value's type, else the one enum with
+  that case) and the names it binds, typed by the case's values; the arms
+  of `match` expressions bind their names in `scope_locals`
+  (`push_match_bindings`). Its walk over a module (`each`) keeps an explicit
+  stack, and typing gives up past `MAX_DEPTH` steps. Also answered from the
+  syntax: a type argument written in a call (`copy<T>(x)`, which the parser
+  keeps in the member's name, `type_argument_at`), a tuple's labels
+  (`label_at`, `label_declared`), enum built-ins (`name`, `from_value`, at
+  the enum's name), `String.format` (lowered by the parser,
+  `string_format_at`), `print`, and names the parser's sugar places outside
+  their parents' spans (`find_expr` falls back to the name itself).
 - **Implicit conversions.** `convert_to_traits` records each conversion it
   inserts whose value has a location in `Module::conversions` (string
   literals carry their `Loc` for this, and the `String` constructor call
@@ -1497,7 +1522,9 @@ diagnostics"). The mechanics:
   A file whose every name resolves belongs in the clean list.
 - Declarations answer too: hovering or going to the definition of a name
   where it is declared (`declared_at`: top-level declarations, members,
-  enum cases, locals, parameters of any signature, generic parameters)
+  enum cases and the values they carry, locals, parameters of any
+  signature, generic parameters, any variable such as a closure's parameter
+  in a default value)
   shows or goes to itself; a type name anywhere goes to its declaration in
   any file (`imports::named_type`); a call of a function another file
   declares goes there (`imports::in_expression`); locals inside closures

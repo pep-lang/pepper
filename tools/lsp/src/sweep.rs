@@ -21,10 +21,11 @@ fn names(text: &str) -> Vec<(usize, &str)> {
                     i += 1;
                 }
             }
-            // A string or a character, escapes included.
+            // A string, which may span lines, or a character, escapes
+            // included.
             quote @ (b'"' | b'\'') => {
                 i += 1;
-                while i < bytes.len() && bytes[i] != quote && bytes[i] != b'\n' {
+                while i < bytes.len() && bytes[i] != quote && (quote == b'"' || bytes[i] != b'\n') {
                     i += if bytes[i] == b'\\' { 2 } else { 1 };
                 }
                 i += 1;
@@ -50,7 +51,7 @@ const BUILT_IN: &[&str] = &[
     "this", "null", "auto", "void", "bool", "byte", "char", "short", "ushort", "int", "uint", "long", "ulong",
     "float", "double", "sbyte", "__ptr", "__weak", "__null", "sizeof", "assert", "panic", "as", "with",
     "break", "continue", "not", "async", "await", "yield", "type", "extend", "with", "__default",
-    "__function_pointer", "__weak_from", "__weak_upgrade", "__move", "__unreachable", "_",
+    "__function_pointer", "__weak_from", "__weak_upgrade", "__move", "__unreachable", "_", "print",
 ];
 
 /// The line of `text` around `offset`, trimmed, with the name marked.
@@ -130,7 +131,9 @@ fn sweep_file(path: &std::path::Path, report: &mut Report) {
 
 /// Files where every name resolves today, in each kind of code: the runtime
 /// (structs, generics, closures, extensions, trait-typed fields, other
-/// files' helpers) and examples. Any name in them that stops resolving fails
+/// files' helpers, generic bodies nothing instantiates) and examples
+/// (patterns, enum methods, constrained generics, lowered calls, tuple
+/// labels). Any name in them that stops resolving fails
 /// this test, with the sweep's line for it.
 const CLEAN: &[&str] = &[
     "runtime/async/task.pep",
@@ -141,12 +144,20 @@ const CLEAN: &[&str] = &[
     "runtime/scoped.pep",
     "runtime/weak.pep",
     "runtime/io/directory.pep",
+    "runtime/async/mutex.pep",
+    "runtime/async/channel.pep",
+    "runtime/result.pep",
     "docs/examples/atomics-patterns.pep",
     "docs/examples/c-callbacks.pep",
     "docs/examples/collection-literals.pep",
     "docs/examples/generics-structs.pep",
     "docs/examples/iteration-arrays.pep",
     "docs/examples/memory-sharing.pep",
+    "docs/examples/enums-match-values.pep",
+    "docs/examples/enums-methods.pep",
+    "docs/examples/generics-constrained-bodies.pep",
+    "docs/examples/interpolation-string-format.pep",
+    "docs/examples/tuples-labels.pep",
 ];
 
 #[test]

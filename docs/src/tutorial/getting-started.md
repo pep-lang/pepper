@@ -196,6 +196,10 @@ A few things are useful once it is installed:
   the editor shows the call it stands for as an inlay hint (`Path(` before
   `"notes.txt"` and `)` after), and hovering the value says so. The
   `pepper.inlayHints.implicitConversions` setting turns the hints off.
+- Hover and go to definition also work where the compiler has not checked
+  the code yet: in a generic function or method nothing calls, on a
+  `match` arm's case and the names it binds (`Circle(r) => ...`), and on
+  the values an enum case declares.
 - The `pepper.lspPath` setting points the extension at a language server you
   built yourself (`cargo build --release -p pepper-lsp` builds
   `target/release/pepper-lsp`). The server restarts whenever that file
