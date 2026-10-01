@@ -204,6 +204,10 @@ struct _TaskCore {
     # it: a stand-in (`_proxy`) that never runs, and finishes when the
     # other worker reports the task finished.
     var _shared: _SharedTask?;
+    # The `_cancelled` flag of `_shared`, or null. `_is_cancelled` reads it
+    # on every socket wait; reading it from `_shared` would copy the
+    # `[Shared]` task out of the optional, two atomic count steps.
+    var _shared_cancelled: Atomic<int>;
     var _proxy: bool;
     # A stand-in's step when its task finishes: takes the result.
     var _on_complete: () => void;
@@ -232,11 +236,9 @@ struct _TaskCore {
     # Whether the task was cancelled, here or (for a task from `spawn`) on
     # another worker.
     _is_cancelled(): bool {
-        if (!this._cancelled) {
-            if (this._shared is Some(shared)) {
-                if (shared._cancelled.load() != 0) {
-                    this._cancelled = true;
-                }
+        if (!this._cancelled && this._shared_cancelled !== __null) {
+            if (this._shared_cancelled.load() != 0) {
+                this._cancelled = true;
             }
         }
         return this._cancelled;
@@ -395,6 +397,7 @@ struct _Worker {
             shared._body();
         });
         core._shared = Optional<_SharedTask>.some(shared);
+        core._shared_cancelled = shared._cancelled;
         this._remote.insert(core._id, core);
         shared._runner_id.store(core._id);
         shared._runner_worker.store(this._index + 1);
@@ -1328,6 +1331,7 @@ export spawn<T: Shared>(body: shared () => T): Task<T> {
 _async_push(worker: _Worker, proxy: _TaskCore, run: shared () => void, worker_plus_one: ulong) {
     var shared = _SharedTask(run, worker._index, proxy._id);
     proxy._shared = Optional<_SharedTask>.some(shared);
+    proxy._shared_cancelled = shared._cancelled;
     if (worker_plus_one == 0) {
         worker._runtime._push(shared);
     } else {
