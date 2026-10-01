@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-38403ca9.js";
+            window.path_to_searchindex_js = "searchindex-f9c9cf2c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-68ad39d4.js"></script>
+        <script src="toc-778b03c5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>), and starting child processes. That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -11462,17 +11462,15 @@ rather than block its worker, so other tasks keep running.</p>
 variable for the child, <code>remove_environment(name)</code> leaves one out, and
 <code>clear_environment()</code> starts from an empty environment. On Windows, names
 ignore case. <code>working_directory(path)</code> starts the child in another
-directory.</p>
+directory. The running process reads its own environment with
+<code>os.environment(name)</code> (see <a href="#the-operating-system">The operating system</a>).</p>
 <pre><code class="language-pepper">import io;
+import os;
 import process;
-
-extern char* getenv(char* name);
 
 main(args: String[]): int {
     if (args.count() &gt; 1) {
-        var name = "GREETING";
-        var value = getenv(name.c_str());
-        io.File.stdout().write_all(value == __null ? "unset" : String(value));
+        io.File.stdout().write_all(os.environment("GREETING").value_or("unset"));
         return 0;
     }
 
@@ -11507,6 +11505,142 @@ read and change the directory relative paths are resolved against, as
 <p><code>arguments()</code> and <code>exit()</code> without <code>import process</code> still work, but are
 deprecated and warn.</p>
 <p>See the <a href="#the-process-module">process module reference</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-operating-system"><a class="header" href="#the-operating-system">The operating system</a></h1>
+<p>The <code>os</code> module reads what the operating system provides beyond the
+running process: environment variables, clocks, and facts about the
+machine and the user. Bring it in with <code>import os</code>. The full API is in the
+<a href="#the-os-module">reference</a>.</p>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<p><code>os.environment(name)</code> returns a variable’s value as a <code>String?</code>: none when
+it is not set, and an empty String when it is set to nothing.
+<code>os.environment_variables()</code> returns them all as a <code>HashMap&lt;String, String&gt;</code>
+from name to value.</p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    # An optional: none when the variable is not set.
+    var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
+    assert(!runtime.empty(), "a fallback when unset");
+    assert(os.environment("PEPPER_SURELY_NOT_SET").is_none(), "unset");
+
+    var count = 0;
+    for (var (name, value) in os.environment_variables()) {
+        if (name.starts_with("PEPPER_")) {
+            print($"{name}={value}");
+        }
+        count = count + 1;
+    }
+    assert(count &gt; 0, "a process has an environment");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>On Windows, names ignore case (<code>Path</code> finds <code>PATH</code>), and values are read
+as UTF-16, so text outside the ANSI code page survives.</li>
+<li>On POSIX a value is whatever bytes the parent passed; one that is not
+valid UTF-8 is returned as it is.</li>
+<li><code>os</code> only reads the environment. Changing the running process’s own
+environment is not thread-safe on POSIX (<code>setenv</code> races with every other
+thread’s <code>getenv</code>), so there is no <code>set_environment</code>. Give a child a
+different environment with <code>process.Command</code>’s <code>environment</code>,
+<code>remove_environment</code> and <code>clear_environment</code> instead (see
+<a href="#environment-and-working-directory">Processes</a>).</li>
+</ul>
+<h2 id="time"><a class="header" href="#time">Time</a></h2>
+<p>Three value types cover time. Each is a <a href="#value-structs">value struct</a>:
+copied, compared with <code>==</code>, <code>&lt;</code> and the other comparisons, and never
+allocated.</p>
+<ul>
+<li><code>Duration</code> is a span of time in nanoseconds, never negative. Make one
+with <code>from_seconds</code>, <code>from_milliseconds</code>, <code>from_microseconds</code> or
+<code>from_nanoseconds</code>, read it back with <code>seconds()</code>, <code>milliseconds()</code> and
+the others (rounded down), and add, subtract, multiply or divide it.
+Printing one shows it in the largest unit it reaches: <code>2.5s</code>, <code>15ms</code>,
+<code>40ns</code>.</li>
+<li><code>Instant</code> reads a monotonic clock, for measuring how long something
+takes. It only moves forward, whatever the system’s date is set to.
+<code>later - earlier</code> is the <code>Duration</code> between two instants, and
+<code>start.elapsed()</code> the time since one.</li>
+<li><code>SystemTime</code> reads the wall clock: nanoseconds since the Unix epoch
+(1970-01-01 00:00:00 UTC). <code>unix_seconds()</code> is what file systems and most
+protocols record. Since the wall clock can be set back,
+<code>duration_since(earlier)</code> is an optional: none when <code>earlier</code> is later.</li>
+</ul>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    # Measure with the monotonic clock: subtracting two instants gives a
+    # Duration.
+    var start = os.Instant.now();
+    var total = 0;
+    for (var i in 0..100000) {
+        total = total + i;
+    }
+    var elapsed = os.Instant.now() - start;
+    print($"summed in {elapsed}");   # such as "1.234ms"
+
+    var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
+    assert(timeout.milliseconds() == 2500, "whole milliseconds");
+    assert(timeout.to_string() == "2.5s", "the largest unit it reaches");
+    assert(elapsed &lt; timeout, "durations compare");
+
+    # The wall clock counts from the Unix epoch.
+    var now = os.SystemTime.now();
+    assert(now.unix_seconds() &gt; 1700000000, "after November 2023");
+    var tomorrow = now + os.Duration.from_seconds(86400);
+    assert(tomorrow.duration_since(now).value() == os.Duration.from_seconds(86400), "a day later");
+    assert(now.duration_since(tomorrow).is_none(), "no negative durations");
+    return 0;
+}
+</code></pre>
+<p>Subtracting a longer <code>Duration</code>, or a later <code>Instant</code>, panics: neither can
+be negative.</p>
+<h2 id="the-machine-and-the-user"><a class="header" href="#the-machine-and-the-user">The machine and the user</a></h2>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    print($"{os.system_name()} {os.system_version()} on {os.architecture()}");
+    print($"host {os.hostname()}: {os.logical_cpus()} logical processors, {os.physical_cpus()} cores");
+    print($"{os.total_memory() / 1048576} MiB of memory in {os.page_size()}-byte pages");
+
+    var user = os.user_name().value_or("unknown");
+    var home = os.home_directory();
+    print($"user {user}, home {home.is_some() ? home.value().to_string() : "unknown"}");
+    print($"temporary files go in {os.temp_directory()}");
+
+    var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
+    assert(executable.starts_with("tool"), "picked a name");
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Returns</th></tr>
+</thead>
+<tbody>
+<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code> or <code>Windows</code></td></tr>
+<tr><td><code>system_name()</code></td><td>the same as text: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code></td></tr>
+<tr><td><code>system_version()</code></td><td>the kernel release on Linux, the product version on macOS (<code>14.5</code>), <code>major.minor.build</code> on Windows</td></tr>
+<tr><td><code>architecture()</code></td><td><code>"x64"</code> or <code>"aarch64"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
+<tr><td><code>hostname()</code></td><td>the machine’s host name</td></tr>
+<tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>’s</td></tr>
+<tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory and the virtual memory page size, in bytes</td></tr>
+<tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
+<tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database’s entry, or none</td></tr>
+<tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
+<ul>
+<li>Dates, time zones, and formatting a <code>SystemTime</code> as a date are not
+supported yet.</li>
+<li><code>async.sleep</code> and <code>async.timeout</code> still take milliseconds, not a
+<code>Duration</code>.</li>
+<li><code>total_memory()</code> does not take a container’s memory limit into account.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -12481,7 +12615,7 @@ out of range or a failed <code>assert</code>. These are not compiler errors: the
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
-<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
+<h2 id="current-limitations-2"><a class="header" href="#current-limitations-2">Current limitations</a></h2>
 <p>The type check does not compare the type arguments of generic structs yet, so
 <code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
 resulting program has undefined behavior.</p>
@@ -21746,6 +21880,880 @@ process, every thread included. The same as <code>io.Directory.set_current</code
 <ul>
 <li>an Ok result; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing, <code>is_not_a_directory()</code> when it is a file, or <code>is_permission_denied()</code></li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-os-module"><a class="header" href="#the-os-module">The os module</a></h1>
+<p>What the operating system provides beyond the running process:
+environment variables, clocks and time, and the machine and user.</p>
+<p><code>os</code> is a module: bring it in with <code>import os</code> (and write
+<code>os.environment("HOME")</code>) or import names directly with
+<code>import [Instant, Duration] from os</code>.</p>
+<ul>
+<li><a href="#environment-1">Environment</a>: <code>environment(name)</code> and
+<code>environment_variables()</code>, read-only</li>
+<li><a href="#time-1">Time</a>: <code>Duration</code>, <code>Instant</code> (a monotonic clock, for
+measuring) and <code>SystemTime</code> (the wall clock)</li>
+<li><a href="#machine">Machine</a>: <code>system_os()</code>, <code>system_name()</code>, <code>system_version()</code>,
+<code>architecture()</code>, <code>hostname()</code>, processor counts, <code>total_memory()</code>,
+<code>page_size()</code></li>
+<li><a href="#user">User</a>: <code>user_name()</code>, <code>home_directory()</code>,
+<code>temp_directory()</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var start = os.Instant.now();
+        var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
+        print($"runtime at {runtime} on {os.hostname()}");
+        print($"took {os.Instant.now() - start}");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/os/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/environment.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="environment-1"><a class="header" href="#environment-1">Environment</a></h1>
+<p>The running process’s environment variables.</p>
+<p><code>os</code> only reads them. Changing the process’s own environment is not
+thread-safe on POSIX (<code>setenv</code> races with every <code>getenv</code>), so a child
+process gets a different environment through <code>process.Command</code>’s
+<code>environment</code>, <code>remove_environment</code> and <code>clear_environment</code> instead.</p>
+<p>Source: <code>runtime/os/environment.pep</code></p>
+<h2 id="environment-1-1"><a class="header" href="#environment-1-1">environment</a></h2>
+<pre><code class="language-pepper">environment(name: String): String?
+</code></pre>
+<p>Returns the value of the environment variable <code>name</code>, or none when it is
+not set.</p>
+<p>A variable set to the empty string is some empty String, not none. On
+Windows names are not case-sensitive (<code>Path</code> finds <code>PATH</code>), and values
+are read as UTF-16 and converted to UTF-8, so text outside the ANSI code
+page survives.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable’s name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its value, or none when it is not set</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var home = os.environment("HOME");
+        if (home) {
+            print(home.value());
+        }
+        return 0;
+    }
+</code></pre>
+<h2 id="environment_variables"><a class="header" href="#environment_variables">environment_variables</a></h2>
+<pre><code class="language-pepper">environment_variables(): HashMap&lt;String, String&gt;
+</code></pre>
+<p>Returns every environment variable of the running process, by name.</p>
+<p>The map has no order. On Windows it includes the variables whose names
+start with <code>=</code>, such as <code>=C:</code>, which <code>cmd.exe</code> uses for each drive’s
+current directory; its keys keep the case the system reports, so look a
+name up with <code>environment(name)</code> to ignore case. When a POSIX
+environment holds one name twice, the first value wins, as <code>getenv</code>
+returns it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new map from each variable’s name to its value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        for (var (name, value) in os.environment_variables()) {
+            print($"{name}={value}");
+        }
+        return 0;
+    }
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/time.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="time-1"><a class="header" href="#time-1">Time</a></h1>
+<p>Clocks and spans of time: <code>Duration</code>, <code>Instant</code> for measuring, and
+<code>SystemTime</code> for the wall clock.</p>
+<p>Source: <code>runtime/os/time.pep</code></p>
+<h2 id="duration"><a class="header" href="#duration">Duration</a></h2>
+<pre><code class="language-pepper">[Value] struct Duration
+</code></pre>
+<p>A span of time, counted in nanoseconds, like Rust’s
+<code>std::time::Duration</code>. It is never negative and reaches about 584 years.</p>
+<p>Make one with <code>from_seconds</code>, <code>from_milliseconds</code>, <code>from_microseconds</code> or
+<code>from_nanoseconds</code>, or by subtracting two <code>Instant</code>s. A value struct: it
+is copied, compared with <code>==</code>, and allocates nothing.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
+        print(timeout.milliseconds());   # 2500
+        print(timeout);                  # 2.5s
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a zero-length duration.</p>
+<h3 id="static-methods-12"><a class="header" href="#static-methods-12">Static methods</a></h3>
+<h4 id="from_nanoseconds"><a class="header" href="#from_nanoseconds">from_nanoseconds</a></h4>
+<pre><code class="language-pepper">static from_nanoseconds(nanoseconds: ulong): Duration
+</code></pre>
+<p>Returns a duration of <code>nanoseconds</code> nanoseconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nanoseconds</code> — the length in nanoseconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the duration</li>
+</ul>
+<h4 id="from_microseconds"><a class="header" href="#from_microseconds">from_microseconds</a></h4>
+<pre><code class="language-pepper">static from_microseconds(microseconds: ulong): Duration
+</code></pre>
+<p>Returns a duration of <code>microseconds</code> microseconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>microseconds</code> — the length in microseconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the duration</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the duration does not fit in a <code>ulong</code> of nanoseconds</li>
+</ul>
+<h4 id="from_milliseconds"><a class="header" href="#from_milliseconds">from_milliseconds</a></h4>
+<pre><code class="language-pepper">static from_milliseconds(milliseconds: ulong): Duration
+</code></pre>
+<p>Returns a duration of <code>milliseconds</code> milliseconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the length in milliseconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the duration</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the duration does not fit in a <code>ulong</code> of nanoseconds</li>
+</ul>
+<h4 id="from_seconds"><a class="header" href="#from_seconds">from_seconds</a></h4>
+<pre><code class="language-pepper">static from_seconds(seconds: ulong): Duration
+</code></pre>
+<p>Returns a duration of <code>seconds</code> seconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seconds</code> — the length in seconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the duration</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the duration does not fit in a <code>ulong</code> of nanoseconds (about 584 years)</li>
+</ul>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h4 id="nanoseconds"><a class="header" href="#nanoseconds">nanoseconds</a></h4>
+<pre><code class="language-pepper">nanoseconds(): ulong
+</code></pre>
+<p>Returns the whole number of nanoseconds in this duration.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in nanoseconds</li>
+</ul>
+<h4 id="microseconds"><a class="header" href="#microseconds">microseconds</a></h4>
+<pre><code class="language-pepper">microseconds(): ulong
+</code></pre>
+<p>Returns the whole number of microseconds in this duration, rounded
+down.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in microseconds</li>
+</ul>
+<h4 id="milliseconds"><a class="header" href="#milliseconds">milliseconds</a></h4>
+<pre><code class="language-pepper">milliseconds(): ulong
+</code></pre>
+<p>Returns the whole number of milliseconds in this duration, rounded
+down.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in milliseconds</li>
+</ul>
+<h4 id="seconds"><a class="header" href="#seconds">seconds</a></h4>
+<pre><code class="language-pepper">seconds(): ulong
+</code></pre>
+<p>Returns the whole number of seconds in this duration, rounded down.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in seconds</li>
+</ul>
+<h4 id="seconds_fraction"><a class="header" href="#seconds_fraction">seconds_fraction</a></h4>
+<pre><code class="language-pepper">seconds_fraction(): double
+</code></pre>
+<p>Returns this duration in seconds, with the fraction.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in seconds, as a <code>double</code></li>
+</ul>
+<h4 id="is_zero"><a class="header" href="#is_zero">is_zero</a></h4>
+<pre><code class="language-pepper">is_zero(): bool
+</code></pre>
+<p>Returns whether this duration is zero.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a zero-length duration</li>
+</ul>
+<h4 id="operator--14"><a class="header" href="#operator--14">operator +</a></h4>
+<pre><code class="language-pepper">+(other: Duration): Duration
+</code></pre>
+<p>Returns the sum of two durations.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the longer duration</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the sum does not fit in a <code>ulong</code> of nanoseconds</li>
+</ul>
+<h4 id="operator--"><a class="header" href="#operator--">operator -</a></h4>
+<pre><code class="language-pepper">-(other: Duration): Duration
+</code></pre>
+<p>Returns this duration less <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to take away</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>other</code> is longer than this duration: a duration is never negative</li>
+</ul>
+<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator *</a></h4>
+<pre><code class="language-pepper">*(times: ulong): Duration
+</code></pre>
+<p>Returns this duration <code>times</code> times over.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>times</code> — the factor</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the product does not fit in a <code>ulong</code> of nanoseconds</li>
+</ul>
+<h4 id="operator--2-4"><a class="header" href="#operator--2-4">operator /</a></h4>
+<pre><code class="language-pepper">/(parts: ulong): Duration
+</code></pre>
+<p>Returns this duration split into <code>parts</code> equal parts, rounded down to
+a whole nanosecond.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>parts</code> — the divisor</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the quotient</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>parts</code> is zero</li>
+</ul>
+<h4 id="operator--3-4"><a class="header" href="#operator--3-4">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: Duration): bool
+</code></pre>
+<p>Returns whether this duration is shorter than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is shorter</li>
+</ul>
+<h4 id="operator--4-2"><a class="header" href="#operator--4-2">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: Duration): bool
+</code></pre>
+<p>Returns whether this duration is shorter than or as long as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not longer</li>
+</ul>
+<h4 id="operator--5-2"><a class="header" href="#operator--5-2">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: Duration): bool
+</code></pre>
+<p>Returns whether this duration is longer than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is longer</li>
+</ul>
+<h4 id="operator--6-1"><a class="header" href="#operator--6-1">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: Duration): bool
+</code></pre>
+<p>Returns whether this duration is longer than or as long as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the duration to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not shorter</li>
+</ul>
+<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns this duration as text in the largest unit it reaches, with
+the fraction it needs and no trailing zeros: <code>2.5s</code>, <code>15ms</code>,
+<code>1.25µs</code>, <code>40ns</code>, <code>0s</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the duration as text</li>
+</ul>
+<h2 id="instant"><a class="header" href="#instant">Instant</a></h2>
+<pre><code class="language-pepper">[Value] struct Instant
+</code></pre>
+<p>A moment on a monotonic clock, for measuring how long something takes,
+like Rust’s <code>std::time::Instant</code>.</p>
+<p>The clock only moves forward: setting the system’s date and time does
+not change it. Its readings mean nothing by themselves, only the
+<code>Duration</code> between two of them, and they cannot be compared across
+processes or reboots. Use <code>SystemTime</code> for the date and time.</p>
+<p>The clock is <code>CLOCK_MONOTONIC</code> on Linux and macOS and
+<code>QueryPerformanceCounter</code> on Windows, read to the nanosecond.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var start = os.Instant.now();
+        var total = 0;
+        for (var i in 0..1000000) {
+            total = total + i;
+        }
+        var elapsed = os.Instant.now() - start;
+        print($"summed in {elapsed.milliseconds()} ms");
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h4 id="instant-1"><a class="header" href="#instant-1">Instant()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes the instant the clock started from; use <code>now()</code> to read the
+clock.</p>
+<h3 id="static-methods-1-3"><a class="header" href="#static-methods-1-3">Static methods</a></h3>
+<h4 id="now"><a class="header" href="#now">now</a></h4>
+<pre><code class="language-pepper">static now(): Instant
+</code></pre>
+<p>Reads the monotonic clock.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current moment</li>
+</ul>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h4 id="elapsed"><a class="header" href="#elapsed">elapsed</a></h4>
+<pre><code class="language-pepper">elapsed(): Duration
+</code></pre>
+<p>Returns how long ago this instant was: <code>Instant.now() - this</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time since this instant</li>
+</ul>
+<h4 id="operator---1"><a class="header" href="#operator---1">operator -</a></h4>
+<pre><code class="language-pepper">-(earlier: Instant): Duration
+</code></pre>
+<p>Returns the time from <code>earlier</code> to this instant.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>earlier</code> — an instant no later than this one</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time between them</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>earlier</code> is later than this instant</li>
+</ul>
+<h4 id="operator--7-1"><a class="header" href="#operator--7-1">operator +</a></h4>
+<pre><code class="language-pepper">+(duration: Duration): Instant
+</code></pre>
+<p>Returns the instant <code>duration</code> after this one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move forward</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the later instant</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result does not fit the clock</li>
+</ul>
+<h4 id="operator---2"><a class="header" href="#operator---2">operator -</a></h4>
+<pre><code class="language-pepper">-(duration: Duration): Instant
+</code></pre>
+<p>Returns the instant <code>duration</code> before this one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move back</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the earlier instant</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is before the clock’s start</li>
+</ul>
+<h4 id="operator--8-1"><a class="header" href="#operator--8-1">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: Instant): bool
+</code></pre>
+<p>Returns whether this instant is earlier than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--9-1"><a class="header" href="#operator--9-1">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: Instant): bool
+</code></pre>
+<p>Returns whether this instant is earlier than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--10-1"><a class="header" href="#operator--10-1">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: Instant): bool
+</code></pre>
+<p>Returns whether this instant is later than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--11-1"><a class="header" href="#operator--11-1">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: Instant): bool
+</code></pre>
+<p>Returns whether this instant is later than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<h2 id="systemtime"><a class="header" href="#systemtime">SystemTime</a></h2>
+<pre><code class="language-pepper">[Value] struct SystemTime
+</code></pre>
+<p>A date and time on the system’s wall clock, counted in nanoseconds from
+the Unix epoch (1970-01-01 00:00:00 UTC), like Rust’s
+<code>std::time::SystemTime</code>. It reaches from the year 1677 to 2262.</p>
+<p>The wall clock can jump, backwards too, when the system’s time is set,
+so measure how long something takes with <code>Instant</code> instead. Dates, time
+zones and formatting are not part of <code>os</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var now = os.SystemTime.now();
+        print($"{now.unix_seconds()} seconds since 1970");
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
+<h4 id="systemtime-1"><a class="header" href="#systemtime-1">SystemTime()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes the Unix epoch, 1970-01-01 00:00:00 UTC.</p>
+<h3 id="static-methods-2-2"><a class="header" href="#static-methods-2-2">Static methods</a></h3>
+<h4 id="now-1"><a class="header" href="#now-1">now</a></h4>
+<pre><code class="language-pepper">static now(): SystemTime
+</code></pre>
+<p>Reads the wall clock.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current date and time</li>
+</ul>
+<h4 id="from_unix_nanoseconds"><a class="header" href="#from_unix_nanoseconds">from_unix_nanoseconds</a></h4>
+<pre><code class="language-pepper">static from_unix_nanoseconds(nanoseconds: long): SystemTime
+</code></pre>
+<p>Returns the time <code>nanoseconds</code> nanoseconds after the Unix epoch.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nanoseconds</code> — nanoseconds since the epoch; negative for earlier times</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time</li>
+</ul>
+<h4 id="from_unix_seconds"><a class="header" href="#from_unix_seconds">from_unix_seconds</a></h4>
+<pre><code class="language-pepper">static from_unix_seconds(seconds: long): SystemTime
+</code></pre>
+<p>Returns the time <code>seconds</code> seconds after the Unix epoch, as file
+systems and most protocols record it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seconds</code> — seconds since the epoch; negative for earlier times</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the time is outside the years 1677 to 2262</li>
+</ul>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h4 id="unix_nanoseconds"><a class="header" href="#unix_nanoseconds">unix_nanoseconds</a></h4>
+<pre><code class="language-pepper">unix_nanoseconds(): long
+</code></pre>
+<p>Returns the nanoseconds from the Unix epoch to this time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>nanoseconds since the epoch; negative for earlier times</li>
+</ul>
+<h4 id="unix_milliseconds"><a class="header" href="#unix_milliseconds">unix_milliseconds</a></h4>
+<pre><code class="language-pepper">unix_milliseconds(): long
+</code></pre>
+<p>Returns the milliseconds from the Unix epoch to this time, rounded
+down (towards the past).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>milliseconds since the epoch; negative for earlier times</li>
+</ul>
+<h4 id="unix_seconds"><a class="header" href="#unix_seconds">unix_seconds</a></h4>
+<pre><code class="language-pepper">unix_seconds(): long
+</code></pre>
+<p>Returns the seconds from the Unix epoch to this time, rounded down
+(towards the past).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>seconds since the epoch; negative for earlier times</li>
+</ul>
+<h4 id="duration_since"><a class="header" href="#duration_since">duration_since</a></h4>
+<pre><code class="language-pepper">duration_since(earlier: SystemTime): Duration?
+</code></pre>
+<p>Returns the time from <code>earlier</code> to this time, or none when <code>earlier</code>
+is later: the wall clock can be set back between two readings.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>earlier</code> — the time to measure from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time between them, or none when <code>earlier</code> is later</li>
+</ul>
+<h4 id="elapsed-1"><a class="header" href="#elapsed-1">elapsed</a></h4>
+<pre><code class="language-pepper">elapsed(): Duration?
+</code></pre>
+<p>Returns how long ago this time was on the wall clock, or none when it
+is in the future.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time since this one, or none when it is later than now</li>
+</ul>
+<h4 id="operator--12-1"><a class="header" href="#operator--12-1">operator +</a></h4>
+<pre><code class="language-pepper">+(duration: Duration): SystemTime
+</code></pre>
+<p>Returns the time <code>duration</code> after this one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move forward</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the later time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is after the year 2262</li>
+</ul>
+<h4 id="operator---3"><a class="header" href="#operator---3">operator -</a></h4>
+<pre><code class="language-pepper">-(duration: Duration): SystemTime
+</code></pre>
+<p>Returns the time <code>duration</code> before this one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move back</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the earlier time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is before the year 1677</li>
+</ul>
+<h4 id="operator--13-1"><a class="header" href="#operator--13-1">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: SystemTime): bool
+</code></pre>
+<p>Returns whether this time is earlier than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--14-1"><a class="header" href="#operator--14-1">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: SystemTime): bool
+</code></pre>
+<p>Returns whether this time is earlier than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--15"><a class="header" href="#operator--15">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: SystemTime): bool
+</code></pre>
+<p>Returns whether this time is later than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--16"><a class="header" href="#operator--16">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: SystemTime): bool
+</code></pre>
+<p>Returns whether this time is later than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/machine.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="machine"><a class="header" href="#machine">Machine</a></h1>
+<p>The machine the program runs on: its operating system, processor,
+memory and name.</p>
+<p>Source: <code>runtime/os/machine.pep</code></p>
+<h2 id="operatingsystem"><a class="header" href="#operatingsystem">OperatingSystem</a></h2>
+<pre><code class="language-pepper">enum OperatingSystem
+</code></pre>
+<p>An operating system Pepper runs on, with the names <code>[Target(OS(...))]</code>
+uses.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>system_os</code></li>
+</ul>
+<h3 id="cases-6"><a class="header" href="#cases-6">Cases</a></h3>
+<h4 id="linux"><a class="header" href="#linux">Linux</a></h4>
+<pre><code class="language-pepper">Linux
+</code></pre>
+<p>Linux.</p>
+<h4 id="mac"><a class="header" href="#mac">Mac</a></h4>
+<pre><code class="language-pepper">Mac
+</code></pre>
+<p>macOS.</p>
+<h4 id="windows"><a class="header" href="#windows">Windows</a></h4>
+<pre><code class="language-pepper">Windows
+</code></pre>
+<p>Windows.</p>
+<h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
+<pre><code class="language-pepper">system_os(): OperatingSystem
+</code></pre>
+<p>Returns the operating system the program was built for.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the operating system</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
+        print(executable);
+        return 0;
+    }
+</code></pre>
+<h2 id="system_name"><a class="header" href="#system_name">system_name</a></h2>
+<pre><code class="language-pepper">system_name(): String
+</code></pre>
+<p>Returns the name of the operating system the program was built for, in
+lowercase: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code>, for printing and for
+file and directory names.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the operating system’s name</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>system_os</code></li>
+</ul>
+<h2 id="system_version"><a class="header" href="#system_version">system_version</a></h2>
+<pre><code class="language-pepper">system_version(): String
+</code></pre>
+<p>Returns the operating system’s version: the kernel release on Linux
+(<code>uname -r</code>, such as <code>6.8.0-45-generic</code>), the product version on macOS
+(<code>sw_vers -productVersion</code>, such as <code>14.5</code>), and the major, minor and
+build numbers on Windows (such as <code>10.0.22631</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the version, or an empty String when the system does not report it</li>
+</ul>
+<h2 id="architecture"><a class="header" href="#architecture">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(x64))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
+<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture’s name</li>
+</ul>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(aarch64))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
+<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture’s name</li>
+</ul>
+<h2 id="hostname"><a class="header" href="#hostname">hostname</a></h2>
+<pre><code class="language-pepper">hostname(): String
+</code></pre>
+<p>Returns the machine’s host name, as <code>hostname</code> prints it (on Windows its
+DNS host name).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the host name, or an empty String when the system does not report it</li>
+</ul>
+<h2 id="logical_cpus-1"><a class="header" href="#logical_cpus-1">logical_cpus</a></h2>
+<pre><code class="language-pepper">logical_cpus(): ulong
+</code></pre>
+<p>Returns the number of logical processors: every hardware thread, so a
+core with hyperthreading counts two or more times. The same as
+<code>async.logical_cpus()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of logical processors, at least 1</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>physical_cpus</code></li>
+</ul>
+<h2 id="physical_cpus-1"><a class="header" href="#physical_cpus-1">physical_cpus</a></h2>
+<pre><code class="language-pepper">physical_cpus(): ulong
+</code></pre>
+<p>Returns the number of physical processor cores: hardware threads that
+share a core count once. The same as <code>async.physical_cpus()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of physical cores, at least 1 and at most <code>logical_cpus()</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>logical_cpus</code></li>
+</ul>
+<h2 id="total_memory"><a class="header" href="#total_memory">total_memory</a></h2>
+<pre><code class="language-pepper">total_memory(): ulong
+</code></pre>
+<p>Returns the machine’s physical memory in bytes. Inside a virtual
+machine this is what the guest sees; a container’s memory limit is not
+taken into account.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the total physical memory in bytes, or 0 when the system does not report it</li>
+</ul>
+<h2 id="page_size"><a class="header" href="#page_size">page_size</a></h2>
+<pre><code class="language-pepper">page_size(): ulong
+</code></pre>
+<p>Returns the size of a page of virtual memory in bytes: the unit the
+operating system maps memory in, usually 4096 (16384 on Apple silicon).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the page size in bytes</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/user.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="user"><a class="header" href="#user">User</a></h1>
+<p>The user the program runs as: their name and directories.</p>
+<p>Source: <code>runtime/os/user.pep</code></p>
+<h2 id="user_name"><a class="header" href="#user_name">user_name</a></h2>
+<pre><code class="language-pepper">user_name(): String?
+</code></pre>
+<p>Returns the name of the user the program runs as: on POSIX the login
+name of the effective user id (from the user database, else <code>USER</code>),
+and on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the user name, or none when it cannot be found</li>
+</ul>
+<h2 id="home_directory"><a class="header" href="#home_directory">home_directory</a></h2>
+<pre><code class="language-pepper">home_directory(): io.Path?
+</code></pre>
+<p>Returns the user’s home directory: on POSIX <code>HOME</code>, or the user
+database’s entry when <code>HOME</code> is unset or empty; on Windows
+<code>USERPROFILE</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the home directory, or none when it cannot be found</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import os;
+
+    main(): int {
+        var home = os.home_directory();
+        if (home) {
+            print(home.value().join(".config").to_string());
+        }
+        return 0;
+    }
+</code></pre>
+<h2 id="temp_directory"><a class="header" href="#temp_directory">temp_directory</a></h2>
+<pre><code class="language-pepper">temp_directory(): io.Path
+</code></pre>
+<p>Returns the directory for temporary files: <code>TMPDIR</code> or <code>/tmp</code> on POSIX,
+<code>GetTempPathW</code> on Windows. The same as <code>io.Directory.temp()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the temporary directory</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -21798,7 +22806,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -21815,7 +22823,7 @@ threads.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -21946,7 +22954,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -21956,7 +22964,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -22033,7 +23041,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -22052,7 +23060,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -22165,7 +23173,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
@@ -22180,7 +23188,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -22243,7 +23251,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
+<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -22257,7 +23265,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
 <h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -22377,7 +23385,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22386,7 +23394,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -22448,7 +23456,7 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
+<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -22462,7 +23470,7 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
 <h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -22540,12 +23548,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -22653,7 +23661,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22662,7 +23670,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -22734,7 +23742,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -22744,7 +23752,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -22874,7 +23882,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -22898,12 +23906,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -22987,7 +23995,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -23048,12 +24056,12 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
 <pre><code class="language-pepper">count(): ulong
 </code></pre>
@@ -23132,7 +24140,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--14"><a class="header" href="#operator--14">operator []</a></h4>
+<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
@@ -23146,7 +24154,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator []</a></h4>
+<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -23187,7 +24195,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -23197,7 +24205,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -23297,7 +24305,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -23306,7 +24314,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -23432,7 +24440,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -23443,7 +24451,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-12"><a class="header" href="#static-methods-12">Static methods</a></h3>
+<h3 id="static-methods-13"><a class="header" href="#static-methods-13">Static methods</a></h3>
 <h4 id="bind-3"><a class="header" href="#bind-3">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -23470,7 +24478,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -23534,7 +24542,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -23621,7 +24629,7 @@ of a value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -23705,7 +24713,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -23714,7 +24722,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>source</code> — the open stream to read</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
 <h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -23745,7 +24753,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>Reader.chunks</code></li>
 </ul>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="chunks-2"><a class="header" href="#chunks-2">Chunks()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader, size: ulong)
 </code></pre>
@@ -23817,13 +24825,13 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed listener: <code>is_open()</code> is false and every operation
 fails. Use <code>UnixListener.bind</code> to get an open one.</p>
-<h3 id="static-methods-13"><a class="header" href="#static-methods-13">Static methods</a></h3>
+<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(path: Path): IoResult&lt;UnixListener&gt;
 </code></pre>
@@ -23836,7 +24844,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -23904,7 +24912,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -23913,7 +24921,7 @@ goes. The socket file stays.</p>
 <ul>
 <li><code>handle</code> — the listening socket, or an invalid handle for none</li>
 </ul>
-<h3 id="static-methods-1-3"><a class="header" href="#static-methods-1-3">Static methods</a></h3>
+<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
 <h4 id="bind-1-1"><a class="header" href="#bind-1-1">bind</a></h4>
 <pre><code class="language-pepper">static bind(path: Path): IoResult&lt;SharedUnixListener&gt;
 </code></pre>
@@ -23927,7 +24935,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -23966,14 +24974,14 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed stream: <code>is_open()</code> is false and every operation
 fails. Use <code>UnixStream.connect</code> or <code>UnixListener.accept</code> to get an
 open one.</p>
-<h3 id="static-methods-2-2"><a class="header" href="#static-methods-2-2">Static methods</a></h3>
+<h3 id="static-methods-2-3"><a class="header" href="#static-methods-2-3">Static methods</a></h3>
 <h4 id="connect-2"><a class="header" href="#connect-2">connect</a></h4>
 <pre><code class="language-pepper">static connect(path: Path): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -24000,7 +25008,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
 <h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -24172,7 +25180,7 @@ type, so <code>i32.parse</code> is <code>int.parse</code>.</p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
 <pre><code class="language-pepper">extend char
 </code></pre>
-<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
 <h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): char?
 </code></pre>
@@ -24199,7 +25207,7 @@ are accepted.</p>
 <h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
 <pre><code class="language-pepper">extend byte
 </code></pre>
-<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
+<h3 id="static-methods-1-5"><a class="header" href="#static-methods-1-5">Static methods</a></h3>
 <h4 id="parse-1-1"><a class="header" href="#parse-1-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): byte?
 </code></pre>
@@ -24226,7 +25234,7 @@ accepted.</p>
 <h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
 <pre><code class="language-pepper">extend short
 </code></pre>
-<h3 id="static-methods-2-3"><a class="header" href="#static-methods-2-3">Static methods</a></h3>
+<h3 id="static-methods-2-4"><a class="header" href="#static-methods-2-4">Static methods</a></h3>
 <h4 id="parse-2-1"><a class="header" href="#parse-2-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): short?
 </code></pre>
@@ -24483,7 +25491,7 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -24495,7 +25503,7 @@ advances that variable.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24615,7 +25623,7 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
 <h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
@@ -24652,7 +25660,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -24816,7 +25824,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
     var parts = regex.Regex(",\\s*").split("a, b,c");
     assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
+<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -24832,7 +25840,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -24844,7 +25852,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -24941,7 +25949,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -24952,7 +25960,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24988,7 +25996,7 @@ points below 128 have an ASCII byte.</p>
     assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -25094,7 +26102,7 @@ is written, and one read is kept as part of the text.</p>
     assert(bytes.count() == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
+<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -25151,7 +26159,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
     var bytes = text.Utf8.encode("hi");
     assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
+<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -25276,7 +26284,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -25285,7 +26293,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
+<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -25294,7 +26302,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -25364,7 +26372,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
+<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -25373,7 +26381,7 @@ one.</p>
 <ul>
 <li><code>context</code> — the platform’s server context, or null for none</li>
 </ul>
-<h3 id="static-methods-1-5"><a class="header" href="#static-methods-1-5">Static methods</a></h3>
+<h3 id="static-methods-1-6"><a class="header" href="#static-methods-1-6">Static methods</a></h3>
 <h4 id="create-1-1"><a class="header" href="#create-1-1">create</a></h4>
 <pre><code class="language-pepper">static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;TlsAcceptor&gt;
 </code></pre>
@@ -25388,7 +26396,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -25428,7 +26436,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -25439,7 +26447,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
+<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -25609,13 +26617,13 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
+<h3 id="static-methods-21"><a class="header" href="#static-methods-21">Static methods</a></h3>
 <h4 id="parse-11"><a class="header" href="#parse-11">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
@@ -25656,7 +26664,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
@@ -25685,7 +26693,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
+<h4 id="to_string-27"><a class="header" href="#to_string-27">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a
