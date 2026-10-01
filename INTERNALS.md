@@ -1590,7 +1590,8 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     cached), `cargo build --workspace --locked`, `cargo test --workspace
     --locked`, and `pepper-docgen -- check`.
   - `test-linux` (**`pepper-linux`**) and `test-macos` (**`pepper-macos`**)
-    run the suite against the default LLVM. Drafts run only `test-linux`.
+    run the suite against the default LLVM. Draft PRs run no job at all
+    until marked ready for review.
   - `changes` runs first and diffs the PR against its base. When only prose
     changed (`*.md` other than `docs/src/SUMMARY.md` and
     `docs/src/reference/`, or `.agents/`/`.claude/`), every other job is

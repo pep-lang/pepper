@@ -16,8 +16,10 @@
 # llvm@20). The Linux runner has LLVM 18-20 preinstalled and may
 # `sudo apt-get` to add others; the Mac adds other majors with brew.
 #
-# Draft PRs get only `test-linux`, as a quick check; `test` and `test-macos`
-# are skipped until the PR is marked ready for review, which starts a full run.
+# Draft PRs run nothing: every job is skipped (a skipped job reports success,
+# so the required `test` check does not block) until the PR is marked ready
+# for review, which starts a full run. The runners share the maintainer's
+# machine, so draft pushes would otherwise queue behind and slow ready PRs.
 # A PR that changes only prose skips every job (see `changes`).
 #
 # Pushes to main do not run CI: main must be up to date before a PR merges, so
@@ -67,6 +69,8 @@ jobs:
   # `if` reports success, so the required `test` check still passes.
   # docs/examples/ is code: docs_examples_tests compiles and runs it.
   changes:
+    # Skipping this skips every job below, so a draft PR runs nothing.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: pepper-linux
     timeout-minutes: 5
     outputs:
@@ -102,7 +106,7 @@ jobs:
   test:
     runs-on: pepper-windows
     needs: changes
-    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: needs.changes.outputs.code == 'true'
     # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
     # seconds. 45 leaves room for a slow download without hanging forever.
     timeout-minutes: 45
@@ -181,7 +185,7 @@ jobs:
   test-macos:
     runs-on: pepper-macos
     needs: changes
-    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: needs.changes.outputs.code == 'true'
     timeout-minutes: 30
 
     steps:
@@ -205,9 +209,8 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-  # The suite on Linux against the default LLVM. Not required, and the only
-  # job a draft PR runs, as a quick check. The other LLVM majors run before a
-  # release, in llvm-versions.yml, not on every PR.
+  # The suite on Linux against the default LLVM. Not required. The other LLVM
+  # majors run before a release, in llvm-versions.yml, not on every PR.
   test-linux:
     runs-on: pepper-linux
     needs: changes
