@@ -163,6 +163,19 @@ Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with `spawn_local` can share
 it, and each spawned task makes its own.
 
+### Waiting on several sockets
+
+To wait on whichever of several sockets is ready first, give each socket a
+task that reads it and sends what it read to a channel, and wait on the
+channels with a [`Select`](threads.md#waiting-on-several-channels-with-select).
+Closing a channel when its socket closes lets the select stop waiting on it.
+Tasks are cheap, so this costs little, and the reading code stays the
+ordinary blocking-style loop:
+
+```pepper
+{{#include ../../examples/tasks-select-sockets.pep}}
+```
+
 ### Files
 
 `File.read`, `write` and `write_all` in a task park the task until the
