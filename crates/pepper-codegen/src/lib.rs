@@ -547,7 +547,19 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// binary's .init_array does it at process start).
     fn emit_globals(&mut self, module: &SemaModule) -> Result<(), String> {
         let mut non_const: Vec<(String, Expression, u32)> = vec![];
-        for var in &module.globals {
+        // A unit declares its globals by file namespace, not in the
+        // program's initialization order, so its module (and cache key)
+        // does not depend on the program around it: a unit of several files
+        // (an import cycle such as io and async) would otherwise list them
+        // in the order the program happened to load the files. Each file's
+        // globals stay consecutive and in their own order. The program
+        // module keeps initialization order: it calls the files' initializers.
+        let mut order: Vec<usize> = (0..module.globals.len()).collect();
+        if self.unit.as_ref().is_some_and(|filter| filter.unit.is_some()) {
+            let namespace = |i: usize| self.file_namespaces.get(module.globals[i].loc.file.0 as usize).map(String::as_str);
+            order.sort_by(|&a, &b| namespace(a).cmp(&namespace(b)));
+        }
+        for var in order.iter().map(|&i| &module.globals[i]) {
             let ty_string = var.ty.to_string();
             let llvm_ty: BasicTypeEnum<'ctx> = if self.is_reference_name(&ty_string) {
                 // Struct-typed globals hold POINTERS (C++ ref semantics);

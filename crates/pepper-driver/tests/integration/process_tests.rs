@@ -3,32 +3,13 @@
 //! `arguments()` and `exit()` (runtime/process.pep) still work.
 
 use crate::support;
-use clap::Parser;
-use std::process::{Command, Output};
+use crate::support::stdout_of;
+use std::process::Output;
 
-/// Compile and link `source` to an executable, then run it with `arguments`.
 fn run_with(name: &str, source: &str, arguments: &[&str]) -> Output {
-    let dir = std::env::temp_dir().join(format!("pepper_process_{name}_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let src_path = dir.join(format!("{name}.pep"));
-    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
-    std::fs::write(&src_path, source).unwrap();
-    let options = pepper_driver::Options::parse_from(vec![
-        "pepper".to_string(),
-        src_path.to_string_lossy().into_owned(),
-        "-o".to_string(),
-        out_path.to_string_lossy().into_owned(),
-    ]);
-    pepper_driver::run(options).expect("compile + link");
-    let output = support::run_program(Command::new(&out_path).args(arguments), source).expect("spawn linked binary");
-    let _ = std::fs::remove_dir_all(&dir);
-    output
-}
-
-fn stdout_of(output: &Output) -> String {
-    // Windows' C runtime writes text-mode stdout with CRLF line endings (and
-    // a child's CRLF printed again by its parent gains another CR).
-    String::from_utf8_lossy(&output.stdout).replace('\r', "")
+    support::run_linked(&format!("process_{name}"), source, |command| {
+        command.args(arguments);
+    })
 }
 
 #[test]

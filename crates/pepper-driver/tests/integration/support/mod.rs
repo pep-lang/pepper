@@ -26,6 +26,37 @@ pub fn run_program(command: &mut Command, source: &str) -> std::io::Result<Outpu
     command.output()
 }
 
+/// Compiles and links `source` to an executable named after `name`, runs
+/// it with the arguments and environment `configure` sets, and returns its
+/// output.
+pub fn run_linked(name: &str, source: &str, configure: impl FnOnce(&mut Command)) -> Output {
+    use clap::Parser;
+    let dir = std::env::temp_dir().join(format!("pepper_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src_path = dir.join(format!("{name}.pep"));
+    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+    std::fs::write(&src_path, source).unwrap();
+    let options = pepper_driver::Options::parse_from(vec![
+        "pepper".to_string(),
+        src_path.to_string_lossy().into_owned(),
+        "-o".to_string(),
+        out_path.to_string_lossy().into_owned(),
+    ]);
+    pepper_driver::run(options).expect("compile + link");
+    let mut command = Command::new(&out_path);
+    configure(&mut command);
+    let output = run_program(&mut command, source).expect("spawn linked binary");
+    let _ = std::fs::remove_dir_all(&dir);
+    output
+}
+
+/// A program's standard output as text. Windows' C runtime writes text-mode
+/// stdout with CRLF line endings (and a child's CRLF printed again by its
+/// parent gains another CR), so carriage returns are dropped.
+pub fn stdout_of(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).replace('\r', "")
+}
+
 /// Calls `f` on every item, spread over one thread per logical CPU, and
 /// returns the results in item order.
 ///

@@ -54,10 +54,6 @@ extern uint GetCurrentProcessId();
 [Target(OS(Windows))]
 extern uint GetModuleFileNameW(void* module, ushort* buffer, uint size);
 [Target(OS(Windows))]
-extern ushort* GetEnvironmentStringsW();
-[Target(OS(Windows))]
-extern int FreeEnvironmentStringsW(ushort* block);
-[Target(OS(Windows))]
 extern uint GetLastError();
 [Target(OS(Windows))]
 extern void memcpy(void* destination, void* source, ulong size);
@@ -76,24 +72,6 @@ struct _SpawnLock {
 # Held while a spawn has inheritable handles open.
 [Target(OS(Windows))]
 const _process_spawn_lock = async.Mutex<_SpawnLock>(_SpawnLock());
-
-[Target(OS(Windows))]
-export _process_sys_environment(): Array<String> {
-    var entries = Array<String>();
-    var block = GetEnvironmentStringsW();
-    if (block == __null) {
-        return entries;
-    }
-    # NAME=VALUE strings, each NUL-terminated, then an empty one.
-    var start = 0;
-    while (block[start] != 0) {
-        var length = io._io_win_wide_len(block + start);
-        entries.append(io._io_win_narrow(block + start, length));
-        start = start + length + 1;
-    }
-    FreeEnvironmentStringsW(block);
-    return entries;
-}
 
 [Target(OS(Windows))]
 export _process_sys_names_ignore_case(): bool {

@@ -73,7 +73,8 @@ A child inherits the parent's environment. `environment(name, value)` sets a
 variable for the child, `remove_environment(name)` leaves one out, and
 `clear_environment()` starts from an empty environment. On Windows, names
 ignore case. `working_directory(path)` starts the child in another
-directory.
+directory. The running process reads its own environment with
+`os.environment(name)` (see [The operating system](os.md)).
 
 ```pepper
 {{#include ../../examples/processes-environment.pep}}

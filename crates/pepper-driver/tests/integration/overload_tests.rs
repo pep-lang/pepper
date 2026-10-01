@@ -330,6 +330,33 @@ test(): int {
 }
 
 #[test]
+fn an_overloaded_operator_types_a_variable_by_the_member_it_picks() {
+    // `var` takes the chosen member's return type, not the left operand's,
+    // as for `os.Instant`: `Instant - Instant` is a Duration.
+    let source = r#"
+struct Span {
+    var length: int;
+    construct(length: int) { this.length = length; }
+}
+struct Moment {
+    var at: int;
+    construct(at: int) { this.at = at; }
+    -(earlier: Moment): Span { return Span(at - earlier.at); }
+    -(span: Span): Moment { return Moment(at - span.length); }
+}
+test(): int {
+    var start = Moment(3);
+    var span = Moment(10) - start;
+    var before = start - span;
+    Span check = span;
+    Moment check_moment = before;
+    return span.length * 10 + before.at + 4;
+}
+"#;
+    assert_eq!(value(source), 70);
+}
+
+#[test]
 fn generic_struct_methods_overload_per_specialization() {
     let source = r#"
 struct Holder<T> {

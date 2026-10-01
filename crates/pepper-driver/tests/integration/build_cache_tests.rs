@@ -158,6 +158,22 @@ fn a_module_unit_is_the_same_whichever_program_built_it_first() {
 }
 
 #[test]
+fn a_unit_of_several_files_lists_its_globals_whichever_program_built_it() {
+    // io and async import each other, so they are one unit. `os` imports
+    // async before io, so a program that imports os loads io's files later,
+    // and the unit's globals once followed that load order: the second
+    // build's verification failed.
+    for (first, second) in [("iteration-streams", "os-environment"), ("os-environment", "iteration-streams")] {
+        let dir = scratch(&format!("cycle_unit_{}", first.replace('-', "_")));
+        let cache = dir.join("cache");
+        build(first, &cache, &dir.join("a"));
+        let objects = build(second, &cache, &dir.join("b"));
+        assert_eq!(outcome(&objects, "async/channel"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
 fn a_record_that_does_not_match_is_a_miss() {
     let dir = scratch("stale");
     let cache = dir.join("cache");

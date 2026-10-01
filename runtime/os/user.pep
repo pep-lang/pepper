@@ -1,0 +1,55 @@
+## The user the program runs as: their name and directories.
+
+import io;
+import "environment";
+import "sys_posix";
+import "sys_windows";
+
+## Returns the name of the user the program runs as: on POSIX the login
+## name of the effective user id (from the user database, else `USER`),
+## and on Windows `GetUserNameW`'s answer (else `USERNAME`).
+##
+## @returns the user name, or none when it cannot be found
+export user_name(): String? {
+    return _os_sys_user_name();
+}
+
+## Returns the user's home directory: on POSIX `HOME`, or the user
+## database's entry when `HOME` is unset or empty; on Windows
+## `USERPROFILE`.
+##
+## @returns the home directory, or none when it cannot be found
+## @example
+##     import os;
+##
+##     main(): int {
+##         var home = os.home_directory();
+##         if (home) {
+##             print(home.value().join(".config").to_string());
+##         }
+##         return 0;
+##     }
+export home_directory(): io.Path? {
+    var path = _os_sys_home_directory();
+    if (path.is_none() || path.value().empty()) {
+        return Optional<io.Path>.none();
+    }
+    return Optional<io.Path>.some(io.Path(path.value()));
+}
+
+## Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX,
+## `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
+##
+## @returns the temporary directory
+export temp_directory(): io.Path {
+    return io.Directory.temp();
+}
+
+# A variable's value when it is set and not empty.
+export _os_nonempty_environment(name: String): String? {
+    var value = environment(name);
+    if (value.is_some() && value.value().empty()) {
+        return Optional<String>.none();
+    }
+    return value;
+}

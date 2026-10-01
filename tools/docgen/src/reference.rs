@@ -44,6 +44,11 @@ const PAGES: &[(&str, &str)] = &[
     ("process/command.pep", "Command"),
     ("process/child.pep", "Child"),
     ("process/current.pep", "The running process"),
+    ("os/module.pep", "The os module"),
+    ("os/environment.pep", "Environment"),
+    ("os/time.pep", "Time"),
+    ("os/machine.pep", "Machine"),
+    ("os/user.pep", "User"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

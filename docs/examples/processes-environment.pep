@@ -1,13 +1,10 @@
 import io;
+import os;
 import process;
-
-extern char* getenv(char* name);
 
 main(args: String[]): int {
     if (args.count() > 1) {
-        var name = "GREETING";
-        var value = getenv(name.c_str());
-        io.File.stdout().write_all(value == __null ? "unset" : String(value));
+        io.File.stdout().write_all(os.environment("GREETING").value_or("unset"));
         return 0;
     }
 

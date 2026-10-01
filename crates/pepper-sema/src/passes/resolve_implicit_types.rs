@@ -397,7 +397,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // until `resolve_operators` turns an overloaded one into a call.
         Expression::Unary { op: UnaryOp::LogicalNot, .. } => TypeName::bool_(),
         Expression::Unary { operand, .. } => type_of_expr(operand, scopes, current_struct),
-        Expression::Binary { op, lhs, rhs, .. } => {
+        Expression::Binary { op, lhs, rhs, loc } => {
             // Assignment resolves to the lhs type; comparisons to bool.
             if op.is_assignment() {
                 type_of_expr(lhs, scopes, current_struct)
@@ -422,6 +422,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 let lhs_ty = type_of_expr(lhs, scopes, current_struct);
                 if lhs_ty.is_empty() || lhs_ty.is_auto() {
                     TypeName::auto()
+                } else if scopes.overloads.is_method_set(&lhs_ty, &op.op_name()) {
+                    // An overloaded operator (`-(Instant)` and `-(Duration)`)
+                    // has the type of the member `rhs` selects, once it does.
+                    select_method_overload(&lhs_ty, &op.op_name(), std::slice::from_ref(&**rhs), *loc, scopes, current_struct)
+                        .map(|c| c.ret)
+                        .unwrap_or_else(TypeName::auto)
                 } else if let Some(ret) = scopes.method_return(&lhs_ty, &op.op_name()) {
                     // An operator overload (`a + b` → `a.+(b)`) has its
                     // method's return type.

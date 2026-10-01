@@ -9,6 +9,7 @@
 # POSIX_SPAWN_CLOEXEC_DEFAULT closes every other descriptor in the child.
 
 import io;
+import os;
 import "child";
 import "command";
 
@@ -48,10 +49,6 @@ extern int kill(int pid, int signal);
 extern int getpid();
 [Target(OS(Linux))]
 extern long readlink(char* path, char* buffer, ulong size);
-[Target(OS(Linux))]
-extern void* dlsym(void* handle, char* name);
-[Target(OS(Mac))]
-extern void* _NSGetEnviron();
 [Target(OS(Mac))]
 extern int _NSGetExecutablePath(char* buffer, uint* size);
 [Target(OS(Mac))]
@@ -67,40 +64,6 @@ export type _ProcessHandle = int;
 # systems (80 and 336 bytes on glibc, a pointer on macOS).
 [Target(!OS(Windows))]
 const _PROCESS_SPAWN_STATE_SIZE: ulong = 512;
-
-# The `environ` array: NAME=VALUE strings, null-terminated.
-[Target(OS(Linux))]
-_process_environ(): __ptr<__ptr<char>> {
-    # `environ` is a variable, which an extern cannot name; dlsym finds it
-    # (RTLD_DEFAULT is null on glibc).
-    var name = "environ";
-    __ptr<__ptr<__ptr<char>>> slot = dlsym(__null, name.c_str());
-    if (slot == __null) {
-        return __null;
-    }
-    return slot[0];
-}
-
-[Target(OS(Mac))]
-_process_environ(): __ptr<__ptr<char>> {
-    __ptr<__ptr<__ptr<char>>> slot = _NSGetEnviron();
-    return slot[0];
-}
-
-[Target(!OS(Windows))]
-export _process_sys_environment(): Array<String> {
-    var entries = Array<String>();
-    var values = _process_environ();
-    if (values == __null) {
-        return entries;
-    }
-    ulong index = 0;
-    while (values[index] != __null) {
-        entries.append(String(values[index]));
-        index = index + 1;
-    }
-    return entries;
-}
 
 [Target(!OS(Windows))]
 export _process_sys_names_ignore_case(): bool {
@@ -283,7 +246,7 @@ export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stder
     }
     var argv = _process_c_strings(argument_values);
     var environment_values = Array<String>();
-    __ptr<__ptr<char>> envp = _process_environ();
+    __ptr<__ptr<char>> envp = os._os_environ();
     var built_environment = command._changes_environment();
     if (built_environment) {
         environment_values = command._environment_entries();

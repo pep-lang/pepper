@@ -4,6 +4,7 @@
 
 import async;
 import io;
+import os;
 import "child";
 import "sys_posix";
 import "sys_windows";
@@ -265,7 +266,7 @@ export struct Command {
     _environment_entries(): Array<String> {
         var entries = Array<String>();
         if (!_clear_environment) {
-            entries = _process_sys_environment();
+            entries = os._os_environment_entries();
         }
         var index: ulong = 0;
         while (index < _environment_names.count()) {
