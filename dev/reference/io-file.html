@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2586fcc.js"></script>
+        <script src="../toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -893,28 +893,6 @@ failure <code>buf</code> keeps its previous contents.</p>
         }
     }
 </code></pre>
-<h4 id="lines"><a class="header" href="#lines">lines</a></h4>
-<pre><code class="language-pepper">lines(): Lines
-</code></pre>
-<p>Returns an iterator over the rest of the file’s lines, read as it
-goes, so a <code>for</code> loop handles a large file without reading it all.</p>
-<p>Each element is an <code>IoResult&lt;String&gt;</code>: a line without its line ending
-(<code>\n</code>, or <code>\r\n</code>). The last line counts even without a final line
-ending, and a file that ends with one has no empty line after it. A
-read error, or a line that is not valid UTF-8 (<code>is_invalid_input()</code>),
-is yielded as an error and ends the lines. Reading starts at the
-current position and moves it in 64 KiB chunks, so the position after
-the loop is not the end of the last line returned.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>a new <code>Lines</code> positioned before the first line</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    for (var line in f.lines()) {
-        print(line.value());
-    }
-</code></pre>
 <h4 id="read_all"><a class="header" href="#read_all">read_all</a></h4>
 <pre><code class="language-pepper">read_all(): IoResult&lt;u8[]&gt;
 </code></pre>
@@ -1168,53 +1146,6 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
         return 1;
     }
 </code></pre>
-<h2 id="lines-1"><a class="header" href="#lines-1">Lines</a></h2>
-<pre><code class="language-pepper">struct Lines
-</code></pre>
-<p>The iterator <code>File.lines()</code> returns: the lines of a file, read in chunks
-as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>.</p>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>File.lines</code></li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    var it = f.lines();
-    while (it.next()) {
-        var line = it.current();
-    }
-</code></pre>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
-<h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
-<pre><code class="language-pepper">construct(file: File)
-</code></pre>
-<p>Makes an iterator over the lines of <code>file</code>, from its current position.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>file</code> — the open file to read</li>
-</ul>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
-<h4 id="next"><a class="header" href="#next">next</a></h4>
-<pre><code class="language-pepper">next(): bool
-</code></pre>
-<p>Reads the next line.</p>
-<p>Once it returns false it keeps returning false.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true if there is a current element (a line, or the error that ends the lines), false at the end of the file</li>
-</ul>
-<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
-<pre><code class="language-pepper">current(): IoResult&lt;String&gt;
-</code></pre>
-<p>Returns the element the last successful <code>next()</code> moved to.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current line, or the error that ended the lines</li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if <code>next()</code> was never called, or already returned false (“Lines.current() without a line”)</li>
-</ul>
 
                     </main>
 

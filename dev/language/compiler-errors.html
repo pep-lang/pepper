@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2586fcc.js"></script>
+        <script src="../toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -304,6 +304,7 @@ the code it replaces:</p>
 <tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
+<tr><td><code>io.Print</code> trait</td><td><code>io.Writer</code> (which also needs <code>write(data)</code>)</td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
 <tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>

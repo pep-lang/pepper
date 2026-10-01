@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2586fcc.js"></script>
+        <script src="../toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -557,10 +557,14 @@ one entry at a time (<code>Directory.iterate()</code> returns a <code>DirectoryI
 without building an array the way <code>dir.entries()</code> does. Each element is an
 <code>IoResult&lt;DirEntry&gt;</code>. A directory that cannot be read yields one error and
 then ends.</li>
-<li><strong><code>file.lines()</code></strong> yields each line of an open <code>File</code> from its current
-position, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code> or <code>\r\n</code>. The last
-line counts even without a line ending. A read error, or a line that is not
-valid UTF-8, is yielded as an error and ends the lines.</li>
+<li><strong><code>lines()</code></strong> yields each line of an open <code>File</code>, or of any other
+<a href="networking.html#reading-and-writing-any-stream"><code>io.Reader</code></a> such as a
+socket, from what it reads next, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code>
+or <code>\r\n</code>. The last line counts even without a line ending. A read error,
+or a line that is not valid UTF-8, is yielded as an error and ends the
+lines.</li>
+<li><strong><code>chunks(size)</code></strong> yields the rest of a <code>Reader</code> in arrays of at most
+<code>size</code> bytes, one <code>read</code> each, as <code>IoResult&lt;u8[]&gt;</code>s.</li>
 <li><strong>An error ends the sequence</strong>: after an <code>Err</code> element, <code>next()</code> returns
 <code>false</code>.</li>
 <li><strong><code>listener.incoming()</code></strong> accepts connections on a

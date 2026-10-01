@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e2586fcc.js"></script>
+        <script src="toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -7135,10 +7135,14 @@ one entry at a time (<code>Directory.iterate()</code> returns a <code>DirectoryI
 without building an array the way <code>dir.entries()</code> does. Each element is an
 <code>IoResult&lt;DirEntry&gt;</code>. A directory that cannot be read yields one error and
 then ends.</li>
-<li><strong><code>file.lines()</code></strong> yields each line of an open <code>File</code> from its current
-position, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code> or <code>\r\n</code>. The last
-line counts even without a line ending. A read error, or a line that is not
-valid UTF-8, is yielded as an error and ends the lines.</li>
+<li><strong><code>lines()</code></strong> yields each line of an open <code>File</code>, or of any other
+<a href="#reading-and-writing-any-stream"><code>io.Reader</code></a> such as a
+socket, from what it reads next, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code>
+or <code>\r\n</code>. The last line counts even without a line ending. A read error,
+or a line that is not valid UTF-8, is yielded as an error and ends the
+lines.</li>
+<li><strong><code>chunks(size)</code></strong> yields the rest of a <code>Reader</code> in arrays of at most
+<code>size</code> bytes, one <code>read</code> each, as <code>IoResult&lt;u8[]&gt;</code>s.</li>
 <li><strong>An error ends the sequence</strong>: after an <code>Err</code> element, <code>next()</code> returns
 <code>false</code>.</li>
 <li><strong><code>listener.incoming()</code></strong> accepts connections on a
@@ -10532,15 +10536,26 @@ them.</li>
 <li><code>local_address()</code> and <code>peer_address()</code> return the two ends of the
 connection.</li>
 </ul>
-<h2 id="printing-to-a-stream"><a class="header" href="#printing-to-a-stream">Printing to a stream</a></h2>
-<p>A <code>File</code>, a <code>TcpStream</code> and a <code>UnixStream</code> have the <code>io.Print</code> trait, which
-gives them <code>print(value)</code> and <code>print_line(value)</code>. They write the text that
-<code>to_string</code> makes of any value, as the global <code>print</code> does on standard
-output:</p>
+<h2 id="reading-and-writing-any-stream"><a class="header" href="#reading-and-writing-any-stream">Reading and writing any stream</a></h2>
+<p>A <code>File</code>, a <code>TcpStream</code>, a <code>UnixStream</code> and a <code>tls.TlsStream</code> have the
+<code>io.Reader</code> and <code>io.Writer</code> traits, so a function that takes an
+<code>io.Reader</code> (or <code>&lt;R: io.Reader&gt;</code>) reads from any of them:</p>
 <pre><code class="language-pepper">import io;
 
-# `print` and `print_line` write a value's text to a File or a socket, the
-# way the global `print` writes to standard output.
+# Any stream that is an io.Reader: a File, a socket, or a TLS stream.
+count_lines(source: io.Reader): int {
+    var count = 0;
+    for (var line in source.lines()) {
+        if (line.is_err()) {
+            break;
+        }
+        count += 1;
+    }
+    return count;
+}
+
+# `print` and `print_line` write a value's text to any io.Writer, the way the
+# global `print` writes to standard output.
 main(): int {
     var path = io.Directory.temp().join("networking-print.txt");
     var file = io.File.create(path).value();
@@ -10549,6 +10564,7 @@ main(): int {
     file.print_line((1, "two"));
     file.close();
     assert(io.File.read_to_string(path).value() == "total: 42\n(1, two)\n", "the file holds both lines");
+    assert(count_lines(io.File.open(path).value()) == 2, "a File is a Reader");
     io.File.remove(path);
 
     # The same calls work on a TcpStream (and a UnixStream).
@@ -10556,19 +10572,26 @@ main(): int {
     var client = io.TcpStream.connect(listener.local_address().value()).value();
     var (server, peer) = listener.accept().value();
     client.print_line($"hello from {client.local_address().value()}");
+    client.print_line("bye");
     client.shutdown_write();
-    var received = Array&lt;u8&gt;();
-    while (server.read(received, 4096).value() &gt; 0) {
-    }
-    assert(received[received.count() - 1] == '\n', "print_line ends the line");
+    assert(count_lines(server) == 2, "a TcpStream is a Reader");
     return 0;
 }
 </code></pre>
 <ul>
-<li><code>print</code> writes the text alone; <code>print_line</code> adds a <code>\n</code>.</li>
-<li>Both return an <code>IoResult&lt;void&gt;</code>, like <code>write_all</code>.</li>
-<li>Another type gets them by providing <code>write_all(data: u8[])</code> and declaring
-<code>extend MyStream with io.Print;</code>.</li>
+<li><strong><code>io.Reader</code></strong> needs <code>read(buffer, max)</code> and gives <code>lines()</code>, the
+stream’s lines as <code>IoResult&lt;String&gt;</code>s, and <code>chunks(size)</code>, its bytes in
+arrays of at most <code>size</code>, both read as a <code>for</code> loop asks for them (see
+<a href="#reading-files-and-directories">Iteration</a>).</li>
+<li><strong><code>io.Writer</code></strong> needs <code>write(data)</code> and <code>write_all(data: u8[])</code> and gives
+<code>print(value)</code> and <code>print_line(value)</code>. They write the text that
+<code>to_string</code> makes of any value, as the global <code>print</code> does on standard
+output; <code>print_line</code> adds a <code>\n</code>. Both return an <code>IoResult&lt;void&gt;</code>, like
+<code>write_all</code>.</li>
+<li>Another type gets them by providing those methods and declaring
+<code>extend MyStream with io.Reader;</code> or <code>extend MyStream with io.Writer;</code>.</li>
+<li><code>io.Print</code>, which gave only <code>print</code> and <code>print_line</code>, is deprecated: use
+<code>io.Writer</code>.</li>
 </ul>
 <h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
 <p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
@@ -11871,6 +11894,7 @@ the code it replaces:</p>
 <tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
+<tr><td><code>io.Print</code> trait</td><td><code>io.Writer</code> (which also needs <code>write(data)</code>)</td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
 <tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>
@@ -16175,7 +16199,8 @@ is used.</p>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>Incoming</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
 <li><a href="#iounixpep">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
-<li><a href="#print-2">Print</a>: <code>print</code> and <code>print_line</code> on files and sockets</li>
+<li><a href="#iostreampep">Streams</a>: the <code>Reader</code> and <code>Writer</code> traits, <code>lines()</code> and <code>chunks()</code></li>
+<li><a href="#print-2">Print</a>: deprecated; use <code>Writer</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>ErrorKind</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -17825,28 +17850,6 @@ failure <code>buf</code> keeps its previous contents.</p>
         }
     }
 </code></pre>
-<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
-<pre><code class="language-pepper">lines(): Lines
-</code></pre>
-<p>Returns an iterator over the rest of the file’s lines, read as it
-goes, so a <code>for</code> loop handles a large file without reading it all.</p>
-<p>Each element is an <code>IoResult&lt;String&gt;</code>: a line without its line ending
-(<code>\n</code>, or <code>\r\n</code>). The last line counts even without a final line
-ending, and a file that ends with one has no empty line after it. A
-read error, or a line that is not valid UTF-8 (<code>is_invalid_input()</code>),
-is yielded as an error and ends the lines. Reading starts at the
-current position and moves it in 64 KiB chunks, so the position after
-the loop is not the end of the last line returned.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>a new <code>Lines</code> positioned before the first line</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    for (var line in f.lines()) {
-        print(line.value());
-    }
-</code></pre>
 <h4 id="read_all"><a class="header" href="#read_all">read_all</a></h4>
 <pre><code class="language-pepper">read_all(): IoResult&lt;u8[]&gt;
 </code></pre>
@@ -18100,53 +18103,6 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
         return 1;
     }
 </code></pre>
-<h2 id="lines-1-1"><a class="header" href="#lines-1-1">Lines</a></h2>
-<pre><code class="language-pepper">struct Lines
-</code></pre>
-<p>The iterator <code>File.lines()</code> returns: the lines of a file, read in chunks
-as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>.</p>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>File.lines</code></li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    var it = f.lines();
-    while (it.next()) {
-        var line = it.current();
-    }
-</code></pre>
-<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
-<h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
-<pre><code class="language-pepper">construct(file: File)
-</code></pre>
-<p>Makes an iterator over the lines of <code>file</code>, from its current position.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>file</code> — the open file to read</li>
-</ul>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
-<pre><code class="language-pepper">next(): bool
-</code></pre>
-<p>Reads the next line.</p>
-<p>Once it returns false it keeps returning false.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true if there is a current element (a line, or the error that ends the lines), false at the end of the file</li>
-</ul>
-<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
-<pre><code class="language-pepper">current(): IoResult&lt;String&gt;
-</code></pre>
-<p>Returns the element the last successful <code>next()</code> moved to.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current line, or the error that ended the lines</li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if <code>next()</code> was never called, or already returned false (“Lines.current() without a line”)</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/directory.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="directory-1"><a class="header" href="#directory-1">Directory</a></h1>
 <p>Source: <code>runtime/io/directory.pep</code></p>
@@ -18496,8 +18452,8 @@ is opened until the first <code>next()</code>.</p>
 <ul>
 <li><code>path</code> — the directory to list</li>
 </ul>
-<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
-<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next entry, opening the listing on the first call.</p>
@@ -18506,7 +18462,7 @@ is opened until the first <code>next()</code>.</p>
 <ul>
 <li>true if there is a current element (an entry, or the error that ends the listing), false once the listing has ended</li>
 </ul>
-<h4 id="current-1-4"><a class="header" href="#current-1-4">current</a></h4>
+<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;DirEntry&gt;
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -19021,7 +18977,7 @@ the listener stays open while the iterator lives.</p>
 <li><code>listener</code> — the listener to accept on</li>
 </ul>
 <h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
-<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next connection.</p>
@@ -19101,7 +19057,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
 <ul>
 <li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
+<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
 <h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
 </code></pre>
@@ -19152,7 +19108,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
+<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19558,18 +19514,18 @@ chose when it was bound to port 0.</p>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/print.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="print-2"><a class="header" href="#print-2">Print</a></h1>
-<p><code>Print</code>: <code>print</code> and <code>print_line</code> for anything that writes bytes, such as
-a <code>File</code>, a <code>TcpStream</code> or a <code>UnixStream</code>.</p>
+<p><code>Print</code>, deprecated: <code>Writer</code> gives <code>print</code> and <code>print_line</code> to every
+stream.</p>
 <p>Source: <code>runtime/io/print.pep</code></p>
 <h2 id="print-1-1"><a class="header" href="#print-1-1">Print</a></h2>
-<pre><code class="language-pepper">trait Print
+<pre><code class="language-pepper">[Deprecated("use 'Writer' instead", "Writer")] trait Print
 </code></pre>
+<p>Deprecated: use <code>Writer</code> instead.</p>
 <p>A byte stream that values can be printed to, as the global <code>print</code> prints
 to standard output.</p>
 <p>A type has the trait by providing <code>write_all(data: u8[])</code>; it then gets
 <code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes of a
-value (the text <code>$"{value}"</code> would hold). <code>File</code>, <code>TcpStream</code> and
-<code>UnixStream</code> have it.</p>
+value (the text <code>$"{value}"</code> would hold).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
@@ -20464,7 +20420,7 @@ task can, since it stays on this thread.</p>
 <ul>
 <li>outside <code>run</code></li>
 </ul>
-<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
 <h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
@@ -20715,7 +20671,7 @@ so a long computation can stop early. False outside a task.</p>
 <code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
 and <code>sleep</code> returns early. Code that does not wait is never interrupted.
 Timeouts nest: an inner one cannot extend an outer one.</p>
-<h3 id="constructor-3-4"><a class="header" href="#constructor-3-4">Constructor</a></h3>
+<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
 <h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
 <pre><code class="language-pepper">construct(milliseconds: ulong)
 </code></pre>
@@ -21561,7 +21517,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
-<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -21861,7 +21817,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
 <h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -22904,7 +22860,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -23104,6 +23060,277 @@ on the worker that accepted it.</p>
 <ul>
 <li>the phrase, such as <code>Not Found</code> for 404; an empty string for a code without one</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/stream.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="iostreampep"><a class="header" href="#iostreampep">io/stream.pep</a></h1>
+<p><code>Reader</code> and <code>Writer</code>: the traits of byte streams, such as a <code>File</code>, a
+<code>TcpStream</code>, a <code>UnixStream</code> or a <code>tls.TlsStream</code>, so code can read from
+or write to any of them.</p>
+<p>Source: <code>runtime/io/stream.pep</code></p>
+<h2 id="reader"><a class="header" href="#reader">Reader</a></h2>
+<pre><code class="language-pepper">trait Reader
+</code></pre>
+<p>A stream of bytes that can be read: a <code>File</code>, <code>TcpStream</code>, <code>UnixStream</code>
+or <code>tls.TlsStream</code>, or any type with <code>read(buffer, max)</code>.</p>
+<p>A type has the trait by providing <code>read</code>; it then gets <code>lines()</code> and
+<code>chunks(size)</code>, which read the stream as a <code>for</code> loop asks for more.
+Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any stream.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    count_lines(source: io.Reader): int {
+        var count = 0;
+        for (var line in source.lines()) {
+            if (line.is_err()) {
+                break;
+            }
+            count += 1;
+        }
+        return count;
+    }
+</code></pre>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until some bytes are available, then appends up to <code>max</code> of
+them to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the stream; an error when the stream fails</li>
+</ul>
+<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
+<pre><code class="language-pepper">lines(): Lines
+</code></pre>
+<p>Returns an iterator over the rest of the stream’s lines, read as it
+goes, so a <code>for</code> loop handles a large file without reading it all.</p>
+<p>Each element is an <code>IoResult&lt;String&gt;</code>: a line without its line ending
+(<code>\n</code>, or <code>\r\n</code>). The last line counts even without a final line
+ending, and a stream that ends with one has no empty line after it. A
+read error, or a line that is not valid UTF-8 (<code>is_invalid_input()</code>),
+is yielded as an error and ends the lines. The stream is read in
+64 KiB chunks, so a file’s position after the loop is not the end of
+the last line returned.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>Lines</code> positioned before the first line</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
+    for (var line in f.lines()) {
+        print(line.value());
+    }
+</code></pre>
+<h4 id="chunks"><a class="header" href="#chunks">chunks</a></h4>
+<pre><code class="language-pepper">chunks(size: ulong): Chunks
+</code></pre>
+<p>Returns an iterator over the rest of the stream in chunks of at most
+<code>size</code> bytes, each read as the loop asks for it.</p>
+<p>Each element is an <code>IoResult&lt;u8[]&gt;</code>: a new array of what one <code>read</code>
+returned, which may be fewer than <code>size</code> bytes (a socket returns what
+has arrived). The iteration ends at the end of the stream; a read
+error is yielded and ends it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the most bytes in one chunk</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>Chunks</code> positioned before the first chunk</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 (“Reader.chunks() needs a size above 0”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var total = 0;
+    for (var chunk in stream.chunks(4096)) {
+        total += chunk.value().count();
+    }
+</code></pre>
+<h2 id="writer"><a class="header" href="#writer">Writer</a></h2>
+<pre><code class="language-pepper">trait Writer
+</code></pre>
+<p>A stream of bytes that can be written: a <code>File</code>, <code>TcpStream</code>,
+<code>UnixStream</code> or <code>tls.TlsStream</code>, or any type with <code>write</code> and
+<code>write_all</code>.</p>
+<p>A type has the trait by providing <code>write</code> and <code>write_all(data: u8[])</code>; it
+then gets <code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes
+of a value (the text <code>$"{value}"</code> would hold).</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    main(): int {
+        var path = io.Directory.temp().join("report.txt");
+        var file = io.File.create(path).value();
+        file.print("total: ");
+        file.print_line(42);
+        file.close();
+        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+        io.File.remove(path);
+        return 0;
+    }
+</code></pre>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Writes what the stream takes in one call, which may be less than all
+of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written; an error when the stream fails</li>
+</ul>
+<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the stream fails</li>
+</ul>
+<h4 id="print-3"><a class="header" href="#print-3">print</a></h4>
+<pre><code class="language-pepper">print&lt;T&gt;(value: T): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes the text of <code>value</code>, with no line break after it: a String as
+it is, anything else through <code>to_string</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the text is written; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    file.print("n = ");
+    file.print(3);   # the file now holds "n = 3"
+</code></pre>
+<h4 id="print_line-1"><a class="header" href="#print_line-1">print_line</a></h4>
+<pre><code class="language-pepper">print_line&lt;T&gt;(value: T): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes the text of <code>value</code> and a line break (<code>\n</code>), as the global
+<code>print</code> does on standard output.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the line is written; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    file.print_line($"total: {total}");
+    file.print_line((1, "two"));   # (1, two)
+</code></pre>
+<h2 id="lines-1-1"><a class="header" href="#lines-1-1">Lines</a></h2>
+<pre><code class="language-pepper">struct Lines
+</code></pre>
+<p>The iterator <code>Reader.lines()</code> returns: the lines of a stream, read in
+chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Reader.lines</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
+    var it = f.lines();
+    while (it.next()) {
+        var line = it.current();
+    }
+</code></pre>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
+<pre><code class="language-pepper">construct(source: Reader)
+</code></pre>
+<p>Makes an iterator over the lines of <code>source</code>, from what it reads next.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the open stream to read</li>
+</ul>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Reads the next line.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element (a line, or the error that ends the lines), false at the end of the stream</li>
+</ul>
+<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;String&gt;
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current line, or the error that ended the lines</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called, or already returned false (“Lines.current() without a line”)</li>
+</ul>
+<h2 id="chunks-1"><a class="header" href="#chunks-1">Chunks</a></h2>
+<pre><code class="language-pepper">struct Chunks
+</code></pre>
+<p>The iterator <code>Reader.chunks(size)</code> returns: the rest of a stream, one
+<code>read</code> of at most <code>size</code> bytes at a time, each as an <code>IoResult&lt;u8[]&gt;</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Reader.chunks</code></li>
+</ul>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h4 id="chunks-2"><a class="header" href="#chunks-2">Chunks()</a></h4>
+<pre><code class="language-pepper">construct(source: Reader, size: ulong)
+</code></pre>
+<p>Makes an iterator over <code>source</code> in chunks of at most <code>size</code> bytes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the open stream to read</li>
+<li><code>size</code> — the most bytes in one chunk</li>
+</ul>
+<h3 id="methods-3-5"><a class="header" href="#methods-3-5">Methods</a></h3>
+<h4 id="next-1-3"><a class="header" href="#next-1-3">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Reads the next chunk.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element (a chunk, or the error that ends the chunks), false at the end of the stream</li>
+</ul>
+<h4 id="current-1-4"><a class="header" href="#current-1-4">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current chunk, or the error that ended the chunks</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called, or already returned false (“Chunks.current() without a chunk”)</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/unix.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="iounixpep"><a class="header" href="#iounixpep">io/unix.pep</a></h1>
 <p>Unix domain sockets: <code>UnixListener</code> accepts connections on a path in the
@@ -23144,7 +23371,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23163,7 +23390,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -23231,7 +23458,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -23254,7 +23481,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -23336,7 +23563,7 @@ gets the connection.</p>
 <ul>
 <li>false after <code>close()</code> and for a <code>UnixStream()</code> never connected</li>
 </ul>
-<h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
+<h4 id="read-4"><a class="header" href="#read-4">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> bytes of it to
@@ -23363,7 +23590,7 @@ gets the connection.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the peer closes the connection first (“connection closed after n of count bytes”), or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
+<h4 id="write-4"><a class="header" href="#write-4">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Sends bytes from <code>data</code> with a single system call, waiting until the
@@ -23377,7 +23604,7 @@ system can take at least some of them. The send may be partial; use
 <ul>
 <li>the number of bytes sent, which may be less than <code>data.count()</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
 </ul>
-<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
+<h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.
@@ -23810,7 +24037,7 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -23822,7 +24049,7 @@ advances that variable.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -23833,7 +24060,7 @@ more each time.</p>
 <ul>
 <li>true if there is a current number, false once past the end</li>
 </ul>
-<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
+<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the number the last successful <code>next()</code> moved to.</p>
@@ -24171,7 +24398,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -24189,7 +24416,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -24259,7 +24486,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -24283,7 +24510,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -24343,7 +24570,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <ul>
 <li>false after <code>close()</code></li>
 </ul>
-<h4 id="read-4"><a class="header" href="#read-4">read</a></h4>
+<h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> decrypted bytes of
@@ -24370,7 +24597,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the connection ends first, or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-4"><a class="header" href="#write-4">write</a></h4>
+<h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Encrypts and sends bytes from <code>data</code>. The send may be partial; use
@@ -24383,7 +24610,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes sent; an error when the stream is closed, a TLS error, or an io error from the socket</li>
 </ul>
-<h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
+<h4 id="write_all-6"><a class="header" href="#write_all-6">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
@@ -24504,7 +24731,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -24551,7 +24778,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>

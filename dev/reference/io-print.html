@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2586fcc.js"></script>
+        <script src="../toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,18 +183,18 @@
                     <main>
                         <!-- Generated from runtime/io/print.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="print"><a class="header" href="#print">Print</a></h1>
-<p><code>Print</code>: <code>print</code> and <code>print_line</code> for anything that writes bytes, such as
-a <code>File</code>, a <code>TcpStream</code> or a <code>UnixStream</code>.</p>
+<p><code>Print</code>, deprecated: <code>Writer</code> gives <code>print</code> and <code>print_line</code> to every
+stream.</p>
 <p>Source: <code>runtime/io/print.pep</code></p>
 <h2 id="print-1"><a class="header" href="#print-1">Print</a></h2>
-<pre><code class="language-pepper">trait Print
+<pre><code class="language-pepper">[Deprecated("use 'Writer' instead", "Writer")] trait Print
 </code></pre>
+<p>Deprecated: use <code>Writer</code> instead.</p>
 <p>A byte stream that values can be printed to, as the global <code>print</code> prints
 to standard output.</p>
 <p>A type has the trait by providing <code>write_all(data: u8[])</code>; it then gets
 <code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes of a
-value (the text <code>$"{value}"</code> would hold). <code>File</code>, <code>TcpStream</code> and
-<code>UnixStream</code> have it.</p>
+value (the text <code>$"{value}"</code> would hold).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 

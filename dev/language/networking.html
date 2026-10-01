@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b8c6577.js";
+            window.path_to_searchindex_js = "../searchindex-6b2d7e3c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2586fcc.js"></script>
+        <script src="../toc-28ac1f49.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -285,15 +285,26 @@ them.</li>
 <li><code>local_address()</code> and <code>peer_address()</code> return the two ends of the
 connection.</li>
 </ul>
-<h2 id="printing-to-a-stream"><a class="header" href="#printing-to-a-stream">Printing to a stream</a></h2>
-<p>A <code>File</code>, a <code>TcpStream</code> and a <code>UnixStream</code> have the <code>io.Print</code> trait, which
-gives them <code>print(value)</code> and <code>print_line(value)</code>. They write the text that
-<code>to_string</code> makes of any value, as the global <code>print</code> does on standard
-output:</p>
+<h2 id="reading-and-writing-any-stream"><a class="header" href="#reading-and-writing-any-stream">Reading and writing any stream</a></h2>
+<p>A <code>File</code>, a <code>TcpStream</code>, a <code>UnixStream</code> and a <code>tls.TlsStream</code> have the
+<code>io.Reader</code> and <code>io.Writer</code> traits, so a function that takes an
+<code>io.Reader</code> (or <code>&lt;R: io.Reader&gt;</code>) reads from any of them:</p>
 <pre><code class="language-pepper">import io;
 
-# `print` and `print_line` write a value's text to a File or a socket, the
-# way the global `print` writes to standard output.
+# Any stream that is an io.Reader: a File, a socket, or a TLS stream.
+count_lines(source: io.Reader): int {
+    var count = 0;
+    for (var line in source.lines()) {
+        if (line.is_err()) {
+            break;
+        }
+        count += 1;
+    }
+    return count;
+}
+
+# `print` and `print_line` write a value's text to any io.Writer, the way the
+# global `print` writes to standard output.
 main(): int {
     var path = io.Directory.temp().join("networking-print.txt");
     var file = io.File.create(path).value();
@@ -302,6 +313,7 @@ main(): int {
     file.print_line((1, "two"));
     file.close();
     assert(io.File.read_to_string(path).value() == "total: 42\n(1, two)\n", "the file holds both lines");
+    assert(count_lines(io.File.open(path).value()) == 2, "a File is a Reader");
     io.File.remove(path);
 
     # The same calls work on a TcpStream (and a UnixStream).
@@ -309,19 +321,26 @@ main(): int {
     var client = io.TcpStream.connect(listener.local_address().value()).value();
     var (server, peer) = listener.accept().value();
     client.print_line($"hello from {client.local_address().value()}");
+    client.print_line("bye");
     client.shutdown_write();
-    var received = Array&lt;u8&gt;();
-    while (server.read(received, 4096).value() &gt; 0) {
-    }
-    assert(received[received.count() - 1] == '\n', "print_line ends the line");
+    assert(count_lines(server) == 2, "a TcpStream is a Reader");
     return 0;
 }
 </code></pre>
 <ul>
-<li><code>print</code> writes the text alone; <code>print_line</code> adds a <code>\n</code>.</li>
-<li>Both return an <code>IoResult&lt;void&gt;</code>, like <code>write_all</code>.</li>
-<li>Another type gets them by providing <code>write_all(data: u8[])</code> and declaring
-<code>extend MyStream with io.Print;</code>.</li>
+<li><strong><code>io.Reader</code></strong> needs <code>read(buffer, max)</code> and gives <code>lines()</code>, the
+stream’s lines as <code>IoResult&lt;String&gt;</code>s, and <code>chunks(size)</code>, its bytes in
+arrays of at most <code>size</code>, both read as a <code>for</code> loop asks for them (see
+<a href="iteration.html#reading-files-and-directories">Iteration</a>).</li>
+<li><strong><code>io.Writer</code></strong> needs <code>write(data)</code> and <code>write_all(data: u8[])</code> and gives
+<code>print(value)</code> and <code>print_line(value)</code>. They write the text that
+<code>to_string</code> makes of any value, as the global <code>print</code> does on standard
+output; <code>print_line</code> adds a <code>\n</code>. Both return an <code>IoResult&lt;void&gt;</code>, like
+<code>write_all</code>.</li>
+<li>Another type gets them by providing those methods and declaring
+<code>extend MyStream with io.Reader;</code> or <code>extend MyStream with io.Writer;</code>.</li>
+<li><code>io.Print</code>, which gave only <code>print</code> and <code>print_line</code>, is deprecated: use
+<code>io.Writer</code>.</li>
 </ul>
 <h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
 <p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
