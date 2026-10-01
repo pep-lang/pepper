@@ -212,9 +212,11 @@ with no extension, and `module_name()` is the output's stem.
   parameters (`parameter_shape`), or a generic whose type parameters all
   name structs the file sees (an override of a generic the file's own
   functions hide). The
-  visibility check applies the same override rule (`Decl::is_override`), and
-  requires one file's overloads of a name to be all exported or all private
-  (`MixedOverloads`), so an import binds the whole set.
+  visibility check applies the same override rule (`Decl::is_override`).
+  A file's overloads of a name take one name whatever their visibility, so
+  an import binds the whole set; sema hides a mixed set's private members
+  (`Module::private_functions`) from calls in other files
+  (`Overloads::set`, by the call's location).
   Codegen gives every mangled declaration internal linkage
   (`set_private_linkage`): no other object can name it, and ELF linkers
   read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged

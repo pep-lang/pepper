@@ -1191,6 +1191,10 @@ pub struct Module {
     /// members of a method overload set an extension adds to. Empty (every
     /// extension visible) unless the module was linked from a program.
     pub extension_scopes: ExtensionScopes,
+    /// The free functions declared without `export`, by location. A private
+    /// member of an overload set that also has exported members is a
+    /// candidate only for calls in its own file (see `overloads`).
+    pub private_functions: std::collections::HashSet<Loc>,
     /// Each call or function value that named an overload set: its callee's
     /// location and the member it resolved to, for the language server.
     pub call_targets: Vec<(Loc, String)>,
@@ -1357,6 +1361,7 @@ impl Module {
         self.traits.extend(other.traits);
         self.extensions.extend(other.extensions);
         self.functions.extend(other.functions);
+        self.private_functions.extend(other.private_functions);
         self.externs.extend(other.externs);
         self.globals.extend(other.globals);
         self.struct_specs.extend(other.struct_specs);

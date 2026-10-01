@@ -87,9 +87,6 @@ pub enum VisibilityErrorKind {
     /// An exported declaration of a non-prelude file whose name another file
     /// also declares: imports would resolve both to one of them.
     DuplicateExport,
-    /// An overload of a free function whose visibility differs from another
-    /// overload's in the same file: linking gives the whole set one name.
-    MixedOverloads,
 }
 
 /// A visibility violation.
@@ -146,9 +143,6 @@ impl VisibilityError {
                 "override '{}' is also declared in {}; a generic may be overridden for the same types in only one file",
                 self.name, other
             ),
-            VisibilityErrorKind::MixedOverloads => {
-                format!("overloads of '{}' must all be exported or all be private", self.name)
-            }
         }
     }
 
@@ -157,7 +151,6 @@ impl VisibilityError {
     pub fn to_diagnostic(&self, files: &[SourceFile]) -> Diagnostic {
         let note = match self.kind {
             VisibilityErrorKind::DuplicateOverride => "also declared here",
-            VisibilityErrorKind::MixedOverloads => "other overload declared here",
             _ => "declared here",
         };
         let declared_at = self
@@ -378,27 +371,6 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     declared_in: base.file,
                     declared_at: Some(base.span),
                     kind: VisibilityErrorKind::Private,
-                });
-            }
-        }
-    }
-    // One file's overloads of a name share one visibility.
-    for (i, file) in files.iter().enumerate() {
-        let mut first: HashMap<&str, &FunctionDecl> = HashMap::new();
-        let functions = file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)).filter_map(|d| match d {
-            Declaration::Function(f) if !f.external && !is_function_override(f) => Some(f),
-            _ => None,
-        });
-        for f in functions {
-            let earlier = first.entry(demangle_name(&f.name)).or_insert(f);
-            if earlier.is_exported != f.is_exported {
-                errors.push(VisibilityError {
-                    file: i,
-                    span: f.name_span,
-                    name: demangle_name(&f.name).to_string(),
-                    declared_in: i,
-                    declared_at: Some(earlier.name_span),
-                    kind: VisibilityErrorKind::MixedOverloads,
                 });
             }
         }

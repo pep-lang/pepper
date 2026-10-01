@@ -444,7 +444,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::FunctionCall { function, .. } if function.starts_with("__tuple<") => {
             crate::passes::gather_generics::parse_type_string(function)
         }
-        Expression::FunctionCall { function, args, .. } => {
+        Expression::FunctionCall { function, args, loc } => {
             // A call through a local, parameter or field of function type.
             if let Some((_, ty)) = scopes.value_callee(function, current_struct) {
                 return ty.function_return().cloned().unwrap_or_else(TypeName::auto);
@@ -463,7 +463,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             }
             // A call to an overloaded function has the type of the member
             // its arguments select, once they do.
-            if let Some(ret) = overload_return(function, args, scopes, current_struct) {
+            if let Some(ret) = overload_return(function, args, *loc, scopes, current_struct) {
                 return ret;
             }
             // A generic function called without type arguments has no type
@@ -906,6 +906,7 @@ fn overload_call<'f>(function: &'f str, scopes: &Scopes, current: Option<&TypeNa
 fn select_overload(
     function: &str,
     args: &[Expression],
+    at: Loc,
     scopes: &Scopes,
     current: Option<&TypeName>,
 ) -> Option<crate::passes::overloads::Choice> {
@@ -919,7 +920,7 @@ fn select_overload(
     if infos.iter().any(|i| i.ty.as_ref().is_some_and(mentions_unbound)) {
         return None;
     }
-    match scopes.overloads.select(base, explicit.as_deref(), &infos) {
+    match scopes.overloads.select(base, explicit.as_deref(), &infos, at) {
         crate::passes::overloads::Outcome::Chosen(choice) => Some(choice),
         _ => None,
     }
@@ -927,16 +928,16 @@ fn select_overload(
 
 /// The return type of a call to an overloaded function, when its arguments
 /// select a member.
-fn overload_return(function: &str, args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) -> Option<TypeName> {
+fn overload_return(function: &str, args: &[Expression], at: Loc, scopes: &Scopes, current: Option<&TypeName>) -> Option<TypeName> {
     overload_call(function, scopes, current)?;
-    Some(select_overload(function, args, scopes, current).map(|c| c.ret).unwrap_or_else(TypeName::auto))
+    Some(select_overload(function, args, at, scopes, current).map(|c| c.ret).unwrap_or_else(TypeName::auto))
 }
 
 /// Rewrite a call to an overloaded function to the member its arguments
 /// select (see `overloads`).
 fn resolve_overload(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
     let Expression::FunctionCall { function, args, loc } = e else { return };
-    let Some(choice) = select_overload(function, args, scopes, current) else { return };
+    let Some(choice) = select_overload(function, args, *loc, scopes, current) else { return };
     crate::passes::overloads::apply_choice(function, args, &choice);
     scopes.resolved.borrow_mut().push((*loc, choice.callee));
 }

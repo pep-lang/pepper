@@ -2160,3 +2160,59 @@ fn export_from_must_come_before_declarations() {
     let err = error("export_from_order", &files);
     assert!(err.contains("imports must come before all declarations"), "{}", err);
 }
+
+#[test]
+fn a_set_may_mix_exported_and_private_overloads() {
+    // util.pep's own code sees every member; main.pep sees only the exported
+    // one, so `scale(2.5)` there converts to `int`.
+    let files = [
+        (
+            "util.pep",
+            "export scale(x: int): int { return x * 2; }\n\
+             scale(x: double): double { return x * 3.0; }\n\
+             export scaled(x: double): double { return scale(x); }\n",
+        ),
+        (
+            "main.pep",
+            "import \"util\";\n\
+             test(): int {\n\
+             \x20   if (scaled(2.5) != 7.5) { return -1; }\n\
+             \x20   var f: (int) => int = scale;\n\
+             \x20   return scale(3) * 10 + f(1);\n\
+             }",
+        ),
+    ];
+    assert_eq!(run("overload_mixed_visibility", &files), 62);
+}
+
+#[test]
+fn a_mixed_set_keeps_its_private_members_from_a_re_export() {
+    let files = [
+        ("geo/module.pep", "export * from \"impl\";\n"),
+        ("geo/impl.pep", "export area(w: int): int { return w * w; }\narea(w: int, h: int): int { return w * h; }\n"),
+        ("main.pep", "import geo;\ntest(): int { return geo.area(2, 3); }"),
+    ];
+    let err = error("overload_mixed_reexport", &files);
+    assert!(err.contains("main.pep:2:22: error: no matching function for call to 'area'"), "{}", err);
+    assert!(err.contains("impl.pep:1:8: note: candidate function not viable: requires 1 argument, but 2 were provided"), "{}", err);
+    assert!(!err.contains("impl.pep:2"), "the private member is not a candidate: {}", err);
+}
+
+#[test]
+fn overload_sets_of_one_name_from_two_modules_are_ambiguous() {
+    let files = [
+        ("a.pep", "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n"),
+        ("b.pep", "export parse(x: String): int { return 3; }\nexport parse(x: double): int { return 4; }\n"),
+        ("main.pep", "import \"a\";\nimport \"b\";\ntest(): int { return parse(1); }"),
+    ];
+    let err = error("overload_two_modules_ambiguous", &files);
+    assert!(err.contains("'parse' is ambiguous: more than one import provides it"), "{}", err);
+
+    // A qualifier or an import list picks one module's set.
+    let files = [
+        ("a.pep", "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n"),
+        ("b.pep", "export parse(x: String): int { return 3; }\nexport parse(x: double): int { return 4; }\n"),
+        ("main.pep", "import \"a\" as a;\nimport [parse] from \"b\";\ntest(): int { return a.parse(true) * 10 + parse(1.5); }"),
+    ];
+    assert_eq!(run("overload_two_modules_qualified", &files), 24);
+}

@@ -23,6 +23,10 @@
 //!   final: no viable member, an ambiguous call, an overloaded name with no
 //!   function type to pick a member by.
 //!
+//! A set's members may differ in visibility: a private member of a set with
+//! exported members is a candidate only for calls and values in its own
+//! file (`Overloads::set`), so other files see the exported members alone.
+//!
 //! Ranking follows C++: each argument ranks against its parameter (0 exact,
 //! 1 promotion, 2 numeric conversion, 3 an `[Implicit]` constructor; among
 //! integer widenings, the narrower target ranks better), and the
@@ -502,6 +506,9 @@ pub struct Overloads {
     /// exported.
     extension_methods: HashMap<Loc, bool>,
     scopes: ExtensionScopes,
+    /// The private members of free-function sets that also have exported
+    /// members, by location: candidates only for calls in their own file.
+    hidden: HashSet<Loc>,
     /// Present when some generic parameter is constrained: a generic
     /// member whose arguments do not meet its constraints is not viable.
     conformance: Option<crate::passes::constraints::Conformance>,
@@ -612,6 +619,14 @@ impl Overloads {
                 (set.clone(), members.iter().filter_map(|m| functions.get(m.as_str())).map(|f| Member::of(f)).collect())
             })
             .collect();
+        // A set whose members are all private is reached only where linking
+        // let its name be seen (its file, or a re-export); one that mixes
+        // visibilities shows other files only its exported members.
+        let hidden = sets
+            .values()
+            .filter(|members| members.iter().any(|m| !module.private_functions.contains(&m.loc)))
+            .flat_map(|members| members.iter().map(|m| m.loc).filter(|l| module.private_functions.contains(l)))
+            .collect();
         let concrete = |st: &&StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
         let mut constructors = HashSet::new();
         for st in module.structs.iter().filter(concrete).filter(|st| st.constructors.len() > 1) {
@@ -649,6 +664,7 @@ impl Overloads {
             traits,
             extension_methods,
             scopes,
+            hidden,
             conformance,
         }
     }
@@ -681,18 +697,26 @@ impl Overloads {
         self.sets.is_empty() && self.methods.is_empty()
     }
 
-    /// The function types of a set's non-generic members.
-    pub fn member_types(&self, set: &str) -> Vec<TypeName> {
-        self.sets.get(set).map(|ms| ms.iter().filter(|m| m.generic.is_none()).map(Member::signature).collect()).unwrap_or_default()
+    /// The members of `set` that code at `at` can see: all of them, except
+    /// that the private members of a set with exported ones are seen only
+    /// in their own file. A synthesized location (`Loc::NONE`) sees all.
+    fn set(&self, set: &str, at: Loc) -> Option<impl Iterator<Item = &Member>> {
+        let visible = move |m: &&Member| at == Loc::NONE || m.loc.file == at.file || !self.hidden.contains(&m.loc);
+        Some(self.sets.get(set)?.iter().filter(visible))
     }
 
-    /// The member of `set` whose function type is exactly `expected`.
-    pub fn member_for(&self, set: &str, expected: &TypeName) -> Option<(String, TypeName)> {
+    /// The function types of the non-generic members of `set` visible at
+    /// `at`.
+    pub fn member_types(&self, set: &str, at: Loc) -> Vec<TypeName> {
+        self.set(set, at).map(|ms| ms.filter(|m| m.generic.is_none()).map(Member::signature).collect()).unwrap_or_default()
+    }
+
+    /// The member of `set` visible at `at` whose function type is exactly
+    /// `expected`.
+    pub fn member_for(&self, set: &str, expected: &TypeName, at: Loc) -> Option<(String, TypeName)> {
         let want = canonical(expected);
         let mut found = self
-            .sets
-            .get(set)?
-            .iter()
+            .set(set, at)?
             .filter(|m| m.generic.is_none())
             .filter(|m| canonical(&m.signature()) == want)
             .map(|m| (m.name.clone(), m.signature()));
@@ -700,10 +724,10 @@ impl Overloads {
         found.next().is_none().then_some(first)
     }
 
-    /// `candidate function` notes, one per member of `set`.
-    pub fn candidate_notes(&self, set: &str) -> Vec<(String, Loc)> {
+    /// `candidate function` notes, one per member of `set` visible at `at`.
+    pub fn candidate_notes(&self, set: &str, at: Loc) -> Vec<(String, Loc)> {
         let what = if self.constructors.contains(set) { "candidate constructor" } else { "candidate function" };
-        self.sets.get(set).map(|ms| ms.iter().map(|m| (what.to_string(), m.loc)).collect()).unwrap_or_default()
+        self.set(set, at).map(|ms| ms.map(|m| (what.to_string(), m.loc)).collect()).unwrap_or_default()
     }
 
     /// How well `arg` converts to a parameter of type `param`, or `None`
@@ -779,16 +803,14 @@ impl Overloads {
         None
     }
 
-    /// Resolve a call to `set` with `args`; `explicit` holds type arguments
-    /// the call spells (`f<int>(x)`).
-    pub fn select(&self, set: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
-        match self.sets.get(set) {
-            Some(members) if self.constructors.contains(set) => match self.select_in(members, demangle_name(set), explicit, args) {
-                Outcome::Failed(failure) => Outcome::Failed(constructor_failure(failure, set)),
-                outcome => outcome,
-            },
-            Some(members) => self.select_in(members, demangle_name(set), explicit, args),
-            None => Outcome::Pending,
+    /// Resolve a call from `at` to `set` with `args`; `explicit` holds type
+    /// arguments the call spells (`f<int>(x)`).
+    pub fn select(&self, set: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo], at: Loc) -> Outcome {
+        let Some(members) = self.set(set, at) else { return Outcome::Pending };
+        let members: Vec<Member> = members.cloned().collect();
+        match self.select_in(&members, demangle_name(set), explicit, args) {
+            Outcome::Failed(failure) if self.constructors.contains(set) => Outcome::Failed(constructor_failure(failure, set)),
+            outcome => outcome,
         }
     }
 
@@ -1114,7 +1136,7 @@ pub fn bind_function_values(module: &mut Module) -> bool {
         let Some(expected) = expected.filter(|t| t.is_function_type() && !t.contains_auto()) else { return };
         match expr {
             Expression::SymbolRef { id, ty, loc } if ty.contains_auto() && overloads.is_set(id) => {
-                if let Some(member) = overloads.member_for(id, expected) {
+                if let Some(member) = overloads.member_for(id, expected, *loc) {
                     bound.insert((id.clone(), *loc), member);
                 }
             }
@@ -1191,7 +1213,7 @@ pub fn check_overloads(module: &Module) {
                     .iter()
                     .map(|arg| arg_info(arg, &overloads, crate::static_type::of(arg, &table, current)))
                     .collect();
-                let failure = match overloads.select(base, explicit.as_deref(), &infos) {
+                let failure = match overloads.select(base, explicit.as_deref(), &infos, *loc) {
                     Outcome::Failed(failure) => failure,
                     Outcome::Pending | Outcome::Chosen(_) => {
                         let unknown = infos.iter().position(ArgInfo::unknown).unwrap_or(0);
@@ -1201,7 +1223,7 @@ pub fn check_overloads(module: &Module) {
                                 demangle_name(base),
                                 ordinal(unknown + 1)
                             ),
-                            notes: overloads.candidate_notes(base),
+                            notes: overloads.candidate_notes(base, *loc),
                         }
                     }
                 };
@@ -1277,11 +1299,11 @@ pub fn check_overloads(module: &Module) {
                     Diagnostic::error(format!("reference to overloaded function '{}' could not be resolved", name))
                 }
                 .at(*loc);
-                for (note, at) in overloads.candidate_notes(id) {
+                for (note, at) in overloads.candidate_notes(id, *loc) {
                     diagnostic = diagnostic.with_note(note, Some(at));
                 }
                 if let Some(var) = untyped_vars.get(loc) {
-                    let example = overloads.member_types(id).first().map(|t| t.display()).unwrap_or_else(|| "(...) => ...".to_string());
+                    let example = overloads.member_types(id, *loc).first().map(|t| t.display()).unwrap_or_else(|| "(...) => ...".to_string());
                     diagnostic = diagnostic
                         .with_note(format!("declare the type, for example 'var {}: {} = {};'", var, example, name), Some(*loc));
                 }
@@ -1312,8 +1334,8 @@ pub fn arg_info(arg: &Expression, overloads: &Overloads, ty: Option<TypeName>) -
         e if is_string_literal(e) => ArgKind::StringLiteral,
         Expression::PointerLiteral => ArgKind::Null,
         Expression::MakeClosure { ty, .. } if ty.contains_auto() => ArgKind::UntypedClosure(ty.function_params().len()),
-        Expression::SymbolRef { id, ty, .. } if ty.contains_auto() && overloads.is_set(id) => {
-            ArgKind::Overloaded(overloads.member_types(id))
+        Expression::SymbolRef { id, ty, loc } if ty.contains_auto() && overloads.is_set(id) => {
+            ArgKind::Overloaded(overloads.member_types(id, *loc))
         }
         _ => ArgKind::Plain,
     };

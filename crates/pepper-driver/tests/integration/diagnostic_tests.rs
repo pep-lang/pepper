@@ -1968,14 +1968,18 @@ fn overloaded_function_value_needs_a_type() {
 }
 
 #[test]
-fn overloads_share_one_visibility() {
+fn another_file_sees_only_a_set_s_exported_members() {
     let files = [("util.pep", "export scale(x: int): int { return x * 2; }\nscale(x: double): double { return x * 3.0; }\n")];
     assert_eq!(
-        error_of_files("overload_mixed_visibility", "import \"util\";\nmain(): int { return scale(2); }\n", &files),
-        "util.pep:2:1: error: overloads of 'scale' must all be exported or all be private\n\
-         \x20   2 | scale(x: double): double { return x * 3.0; }\n\
-         \x20     | ^~~~~\n\
-         util.pep:1:8: note: other overload declared here\n\
+        error_of_files(
+            "overload_mixed_visibility",
+            "import \"util\";\nmain(): int {\n    var f: (double) => double = scale;\n    return 0;\n}\n",
+            &files
+        ),
+        "main.pep:3:33: error: address of overloaded function 'scale' does not match required type '(double) => double'\n\
+         \x20   3 |     var f: (double) => double = scale;\n\
+         \x20     |                                 ^~~~~\n\
+         util.pep:1:8: note: candidate function\n\
          \x20   1 | export scale(x: int): int { return x * 2; }\n\
          \x20     |        ^~~~~"
     );

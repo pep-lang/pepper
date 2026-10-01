@@ -2154,6 +2154,9 @@ fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> 
                         loc: loc(f.name_span),
                     });
                 } else {
+                    if !f.is_exported {
+                        out.private_functions.insert(loc(f.name_span));
+                    }
                     out.functions.push(function_def(f, None)?);
                 }
             }

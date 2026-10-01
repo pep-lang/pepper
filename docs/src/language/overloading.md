@@ -33,20 +33,41 @@ set too, and so are its static methods, its operators, its
   a `redefinition of 'f'`.
 - **One file, one set.** A file's own functions hide an imported function of
   the same name, as before; overloads do not merge across files.
-- **One visibility per set.** The members are all exported or all private,
-  so a set is imported or hidden as a whole:
+- **Members may differ in visibility.** Exported members are what other
+  files see; a private member is a candidate only for calls in its own
+  file. Here `shapes.pep` exports `area(int)` and keeps the two-argument
+  form as a helper:
 
-  ```text
-  util.pep:2:1: error: overloads of 'scale' must all be exported or all be private
-      2 | scale(x: double): double { return x * 3.0; }
-        | ^~~~~
-  util.pep:1:8: note: other overload declared here
-      1 | export scale(x: int): int { return x * 2; }
-        |        ^~~~~
+  ```pepper
+  {{#include ../../examples/overloading-visibility/shapes.pep}}
   ```
 
-  Importing the name (`import [scale] from util`, or the whole file) brings
-  every member, and `import [scale as grow]` renames the whole set.
+  ```pepper
+  {{#include ../../examples/overloading-visibility/main.pep}}
+  ```
+
+  A call that only the private member fits is an error in another file,
+  and its notes list only the exported members:
+
+  ```text
+  main.pep:2:22: error: no matching function for call to 'area'
+      2 | main(): int { return area(2, 3); }
+        |                      ^~~~
+  shapes.pep:2:8: note: candidate function not viable: requires 1 argument, but 2 were provided
+      2 | export area(side: int): int {
+        |        ^~~~
+  ```
+
+  Importing the name (`import [area] from "shapes"`, or the whole file)
+  brings every exported member, and `import [area as size]` renames the
+  whole set. A re-export (`export area;`, `export * from "shapes"`) passes
+  on the exported members too; a set whose members are all private is
+  re-exported whole.
+- **Two imports of one name are ambiguous.** When two imported files or
+  modules each export a set named `parse`, an unqualified `parse(…)` is an
+  error (`'parse' is ambiguous: more than one import provides it`), even
+  when their parameters differ: the sets do not merge. A qualifier
+  (`a.parse`) or an import list (`import [parse] from "b"`) picks one.
 - **`extern` functions do not overload**: a C function has one symbol. Wrap
   it in a Pepper function to give it company.
 
