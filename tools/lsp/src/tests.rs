@@ -1271,3 +1271,61 @@ fn code_for_other_platforms_is_dimmed() {
     let hints = pepper_sema::passes::platform::with_simulated_host("linux", "x86_64", || inactive_hints(PLATFORMS, &module));
     assert!(hints.iter().all(|h| h.tags == Some(vec![DiagnosticTag::UNNECESSARY]) && h.message.contains("Linux x86_64")));
 }
+
+const LINUX_ONLY: &str = r#"struct Socket { var handle: int; }
+[Target(OS(Linux))]
+open_socket(): Socket { return Socket(); }
+[Target(OS(Linux))]
+handle_of(): int {
+    var socket = open_socket();
+    return socket.handle;
+}
+"#;
+
+/// A file of Linux-only code, opened while building for Windows, is
+/// analyzed as Linux, so its names have types; its code is still dimmed.
+#[test]
+fn a_file_for_another_os_is_analyzed_for_it() {
+    let (uri, text, _) = load("linux_only", LINUX_ONLY, "main.pep");
+    pepper_sema::passes::platform::with_simulated_host("windows", "x86_64", || {
+        let (service, _) = LspService::new(PepperLsp::new);
+        let documents = &service.inner().documents;
+        let analysis = documents.set(&uri, text.clone());
+        assert_eq!(analysis.os(), "linux");
+        analyze(documents, &analysis);
+        assert!(analysis.sema_model().is_some(), "{:?}", analysis.sema().map(|s| s.as_ref().err().map(|e| e.message.clone())));
+        let shown = service.inner().hover(&uri, at(&text, "socket.handle", 0, 0)).expect("a hover");
+        let HoverContents::Markup(shown) = shown.contents else { panic!() };
+        assert!(shown.value.contains("`socket` — `Socket`"), "{}", shown.value);
+        let module = parse_source("main.pep", &text).unwrap();
+        assert_eq!(inactive_hints(&text, &module).len(), 2, "dimmed for the build target");
+    });
+}
+
+/// A file with code for both the build target and another OS is analyzed
+/// for the build target, whose code the editor shows undimmed.
+#[test]
+fn a_file_with_code_for_the_build_target_is_analyzed_for_it() {
+    let both = format!("{}[Target(OS(Windows))]\nwindows_only(): int {{ return 1; }}\n", LINUX_ONLY);
+    let (uri, text, _) = load("both_os", &both, "main.pep");
+    pepper_sema::passes::platform::with_simulated_host("windows", "x86_64", || {
+        let analysis = analysis::Analysis::new(uri.clone(), text.clone(), 0);
+        assert_eq!(analysis.os(), "windows");
+    });
+}
+
+/// A mostly portable file with one function for another OS stays on the
+/// build target, so a call the build target rejects still shows its error.
+#[test]
+fn a_mostly_portable_file_stays_on_the_build_target() {
+    let mixed = "[Target(OS(Linux))]
+foo(): int { return 1; }
+bar(): int { return foo(); }
+baz(): int { return bar() + 1; }
+qux(): int { return baz() + bar() + 2; }
+";
+    let (uri, text, _) = load("mostly_portable", mixed, "main.pep");
+    pepper_sema::passes::platform::with_simulated_host("windows", "x86_64", || {
+        assert_eq!(analysis::Analysis::new(uri.clone(), text.clone(), 0).os(), "windows");
+    });
+}

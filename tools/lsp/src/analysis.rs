@@ -36,8 +36,57 @@ pub struct Analysis {
     /// is stale once one differs.
     read: OnceLock<Vec<(PathBuf, String, Option<SystemTime>)>>,
     sema: OnceLock<Option<Result<SemaModule, diag::Diagnostic>>>,
+    /// See [`Analysis::os`].
+    os: OnceLock<String>,
     /// The background analysis has finished with it, whatever it found.
     checked: std::sync::atomic::AtomicBool,
+}
+
+/// `f()` with `Target(...)` evaluated for `os` (and the build target's
+/// architecture).
+fn as_target<R>(os: &str, f: impl FnOnce() -> R) -> R {
+    use pepper_sema::passes::platform::{host_arch, host_os, with_simulated_host};
+    if os == host_os() { f() } else { with_simulated_host(os, &host_arch(), f) }
+}
+
+/// The OS to analyze `text` for: the build target's, unless its build
+/// leaves out most of the document and none of what it keeps is another
+/// OS's to drop, as for a file of Linux-only code on Windows; then the OS
+/// whose build leaves out the least of it. A mostly portable file stays on
+/// the build target, so the errors its build would report still show.
+fn target_os(text: &str) -> String {
+    use pepper_sema::passes::platform::{host_arch, host_os, with_simulated_host};
+    let host = host_os();
+    let Ok(module) = pepper_parser::parser::parse_source("document", text) else { return host };
+    let left_out = |os: &str| with_simulated_host(os, &host_arch(), || crate::platforms::inactive_regions(text, &module));
+    let at_host = left_out(&host);
+    if at_host.is_empty() {
+        return host;
+    }
+    let others: Vec<(&str, Vec<pepper_parser::ast::Span>)> =
+        ["windows", "linux", "macos"].into_iter().filter(|os| *os != host).map(|os| (os, left_out(os))).collect();
+    // Code the build target keeps and another OS drops is the build
+    // target's own: analyze for it.
+    let dropped_at_host = |s: &pepper_parser::ast::Span| at_host.iter().any(|h| h.start <= s.start && s.end <= h.end);
+    if others.iter().any(|(_, regions)| regions.iter().any(|s| !dropped_at_host(s))) {
+        return host;
+    }
+    // Code measured alike everywhere: trimmed lines, comments and blank
+    // lines aside.
+    let code_in = |part: &str| -> usize {
+        part.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::len).sum()
+    };
+    let bytes = |regions: &[pepper_parser::ast::Span]| regions.iter().map(|s| code_in(&text[s.start..s.end])).sum::<usize>();
+    let code = code_in(text);
+    if bytes(&at_host) * 2 <= code {
+        return host;
+    }
+    others
+        .iter()
+        .map(|(os, regions)| (bytes(regions), *os))
+        .filter(|(n, _)| *n < bytes(&at_host))
+        .min()
+        .map_or(host, |(_, os)| os.to_string())
 }
 
 /// When `path` was last modified; `None` when it cannot be read.
@@ -54,7 +103,7 @@ pub fn file_key(path: &Path) -> String {
 
 impl Analysis {
     pub fn new(uri: Url, text: String, generation: u64) -> Self {
-        Self { uri, text, generation, program: OnceLock::new(), read: OnceLock::new(), sema: OnceLock::new(), checked: Default::default() }
+        Self { uri, text, generation, program: OnceLock::new(), read: OnceLock::new(), sema: OnceLock::new(), os: OnceLock::new(), checked: Default::default() }
     }
 
     /// Whether every file the program read from disk, or failed to load, is
@@ -95,7 +144,7 @@ impl Analysis {
     /// in the document is returned.
     pub fn program(&self) -> Result<&Program, &String> {
         self.program
-            .get_or_init(|| {
+            .get_or_init(|| as_target(self.os(), || {
                 let path = self.uri.to_file_path().map_err(|_| "not a file uri".to_string())?;
                 let root = pepper_sema::program::Root { name: self.uri.to_string(), source: self.text.clone(), path };
                 let setup = pepper_sema::program::Setup { mode: pepper_sema::program::Mode::Lenient, ..Default::default() };
@@ -122,15 +171,23 @@ impl Analysis {
                     .collect();
                 let _ = self.read.set(read);
                 Ok(program)
-            })
+            }))
             .as_ref()
+    }
+
+    /// The OS the document is analyzed for: the build target's, unless more
+    /// of the document is code for another (a file of `[Target(OS(Linux))]`
+    /// declarations seen on Windows), so that its names resolve. What the
+    /// editor dims still follows the build target.
+    pub fn os(&self) -> &str {
+        self.os.get_or_init(|| target_os(&self.text))
     }
 
     /// The program's sema model, or its semantic error; `None` when the
     /// program did not load. Runs sema on first use, which takes seconds:
     /// only the background analysis calls this.
     pub fn sema(&self) -> Option<&Result<SemaModule, diag::Diagnostic>> {
-        self.sema.get_or_init(|| self.program().ok().map(sema_model_of)).as_ref()
+        self.sema.get_or_init(|| self.program().ok().map(|p| as_target(self.os(), || sema_model_of(p)))).as_ref()
     }
 
     /// Note that the background analysis has finished with it.

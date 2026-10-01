@@ -1759,6 +1759,12 @@ impl PepperLsp {
         }
         // A name where it is declared: a type, function, member, local or
         // parameter, with its doc comment.
+        // A built-in type (`int`, `u8`), which no file declares.
+        if let Some(ty) = imports::type_at(&ast, offset)
+            && pepper_sema::type_name::INTEGRAL_TYPES.contains(ty.name.as_str())
+        {
+            return Some(Hover { contents: md(format!("`{}` — built-in type", ty.name)), range: None });
+        }
         // The built-in constraint `T: Shared`, which no file declares.
         if let Some(ty) = imports::type_at(&ast, offset)
             && pepper_sema::passes::constraints::is_shared_bound(&pepper_sema::TypeName::new(&ty.name))
@@ -2447,7 +2453,10 @@ fn schedule_analysis(client: Client, documents: Arc<Documents>, analysis: Arc<An
             Some(Err(_)) => "found an error",
             None => "did not load",
         };
-        let took = format!("analyzed {} ({} files): {} in {} ms", file, files, outcome, start.elapsed().as_millis());
+        // A file analyzed for another OS than the build target's says so.
+        let os = analysis.os();
+        let as_os = if os == pepper_sema::passes::platform::host_os() { String::new() } else { format!(" as {}", os) };
+        let took = format!("analyzed {}{} ({} files): {} in {} ms", file, as_os, files, outcome, start.elapsed().as_millis());
         client.log_message(MessageType::LOG, took).await;
         // Hints come from the newest passed analysis: have the editor ask
         // again now there is one, when it says it can. In a task of its own,

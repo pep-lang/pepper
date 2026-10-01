@@ -7,7 +7,6 @@
 //! `PEPPER_SWEEP` limits it to the files whose path contains that text.
 
 use super::*;
-use pepper_sema::program::{Mode, Root, Setup, load_program};
 
 /// A name in `text` the sweep asks about: its offset and the name.
 fn names(text: &str) -> Vec<(usize, &str)> {
@@ -80,13 +79,13 @@ fn sweep_file(path: &std::path::Path, report: &mut Report) {
         return;
     };
     let uri = Url::from_file_path(path).unwrap();
-    let setup = Setup { mode: Mode::Lenient, ..Default::default() };
-    let Ok(program) = load_program(Root { name: uri.to_string(), source: text.clone(), path: path.to_path_buf() }, &setup)
-    else {
+    // As the server analyzes it: for the OS the file targets.
+    let analysis = analysis::Analysis::new(uri.clone(), text.clone(), 0);
+    let Ok(program) = analysis.program() else {
         report.unloaded.push(path.display().to_string());
         return;
     };
-    let sema = sema_model_of(&program).ok();
+    let sema = analysis.sema().and_then(|s| s.as_ref().ok());
     let label = path.to_string_lossy().replace('\\', "/");
     let label = label.rsplit_once("/runtime/").map(|(_, r)| format!("runtime/{r}")).unwrap_or(label);
     let line_of = |offset: usize| text[..offset].bytes().filter(|&b| b == b'\n').count() + 1;
@@ -112,7 +111,7 @@ fn sweep_file(path: &std::path::Path, report: &mut Report) {
         }
         report.names += 1;
         let at = format!("{}:{}: {}", label, line_of(offset), context(&text, offset, name));
-        let hover = guarded(|| PepperLsp::hover_at(&uri, &text, Some(&program), sema.as_ref(), offset)).flatten();
+        let hover = guarded(|| PepperLsp::hover_at(&uri, &text, Some(&program), sema, offset)).flatten();
         match hover.map(|h| h.contents) {
             None => report.hover_missing.push(at.clone()),
             Some(HoverContents::Markup(m)) if m.value.lines().next().is_some_and(|l| l.contains("unknown")) => {
@@ -120,9 +119,9 @@ fn sweep_file(path: &std::path::Path, report: &mut Report) {
             }
             _ => {}
         }
-        // A built-in constraint has a hover but no declaration.
-        if !declared(offset) && name != "Shared"
-            && guarded(|| PepperLsp::definition_at(&uri, &text, Some(&program), sema.as_ref(), offset)).flatten().is_none()
+        // A built-in type or constraint has a hover but no declaration.
+        if !declared(offset) && name != "Shared" && !pepper_sema::type_name::INTEGRAL_TYPES.contains(name)
+            && guarded(|| PepperLsp::definition_at(&uri, &text, Some(&program), sema, offset)).flatten().is_none()
         {
             report.definition_missing.push(at);
         }

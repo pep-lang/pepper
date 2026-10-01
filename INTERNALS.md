@@ -1432,7 +1432,13 @@ diagnostics"). The mechanics:
   host, mirroring it (constructors, destructors and fields are never
   dropped);
   `diagnostics` publishes each as a hint with the `Unnecessary` tag
-  (`inactive_hints`), which the editor dims.
+  (`inactive_hints`), which the editor dims. An `Analysis` loads and
+  checks its program for the build target's OS, unless that build leaves
+  out most of the document and keeps none of another OS's code; then for
+  the OS that leaves out the least of it (`Analysis::os`, `target_os`), under
+  `platform::with_simulated_host`, so a Linux-only file opened on Windows
+  resolves; the dimming still follows the build target, and the background
+  log names the OS when it differs.
 - `lsp_diagnostic` maps a `Diagnostic` to the document. A location in
   another file appears at the top of the document, prefixed with that
   file's name. Notes become `relatedInformation`.
