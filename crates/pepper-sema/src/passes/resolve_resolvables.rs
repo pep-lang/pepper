@@ -168,11 +168,10 @@ fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_m
                         name == function.split('<').next().unwrap_or(function)
                     });
             if !known_function && !known_extern && !known_struct {
-                // Builtins (`_pep_*`, `trace_*`, `print`) and unresolved
+                // Builtins (`_pep_*`, `trace_*`) and unresolved
                 // generic calls are deferred to later passes/codegen.
                 let builtin = function.starts_with("_pep_")
                     || function.starts_with("trace_")
-                    || function == "print"
                     || function == "String"
                     || function.contains('<');
                 if !builtin && report_missing {

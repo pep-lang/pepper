@@ -363,3 +363,95 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn floats_print_their_shortest_text() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    if (!(to_string(0.1) == "0.1")) { return -1; }
+    if (!(to_string(3.0) == "3.0")) { return -2; }
+    if (!(to_string(-2.5) == "-2.5")) { return -3; }
+    if (!(to_string(1.0e20) == "1e+20")) { return -4; }
+    if (!(to_string(1.0e15) == "1000000000000000.0")) { return -5; }
+    if (!(to_string(1.0e16) == "1e+16")) { return -6; }
+    if (!(to_string(0.0001) == "0.0001")) { return -7; }
+    if (!(to_string(0.00001) == "1e-05")) { return -8; }
+    if (!(to_string(1.0 / 3.0) == "0.3333333333333333")) { return -9; }
+    float third = 1.0 / 3.0;
+    if (!(to_string(third) == "0.33333334")) { return -10; }
+    if (!(to_string(0.0) == "0.0")) { return -11; }
+    if (!(to_string(-0.0) == "-0.0")) { return -12; }
+    var zero = 0.0;
+    if (!(to_string(1.0 / zero) == "inf")) { return -13; }
+    if (!(to_string(-1.0 / zero) == "-inf")) { return -14; }
+    if (!(to_string(zero / zero) == "nan")) { return -15; }
+    if (!(to_string(1.7976931348623157e308) == "1.7976931348623157e+308")) { return -16; }
+    if (!(to_string(5.0e-324) == "5e-324")) { return -17; }
+    var price = 4.5;
+    if (!($"{price} and {price * 2.0}" == "4.5 and 9.0")) { return -18; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn a_precision_rounds_a_float() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var pi = 3.14159265;
+    if (!($"{pi:.2}" == "3.14")) { return -1; }
+    if (!($"[{pi:8.3}]" == "[   3.142]")) { return -2; }
+    if (!($"[{pi:<8.1}]" == "[3.1     ]")) { return -3; }
+    if (!($"{pi:+.0}" == "+3")) { return -4; }
+    if (!($"{pi:08.2}" == "00003.14")) { return -5; }
+    if (!($"{-pi:08.2}" == "-0003.14")) { return -6; }
+    if (!($"{2.7:.0}" == "3")) { return -7; }
+    float f = 0.125;
+    if (!($"{f:.2}" == "0.12")) { return -8; }
+    if (!($"[{pi:>6}]" == "[3.14159265]")) { return -9; }
+    if (!($"[{1.5:>6}]" == "[   1.5]")) { return -10; }
+    if (!(String.format("{0:.1}|{0}", 0.25) == "0.2|0.25")) { return -11; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn tuples_convert_element_by_element() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Point {
+    var x: int = 0;
+    construct(this.x = 0) {}
+    to_string(): String { return $"P{x}"; }
+}
+
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var t = (1, "two");
+        if (!($"{t}" == "(1, two)")) { return -1; }
+        var nested = (1, (2.5, true));
+        if (!($"{nested}" == "(1, (2.5, true))")) { return -2; }
+        if (!(to_string((1, 2, 3, 4, 5, 6, 7, 8)) == "(1, 2, 3, 4, 5, 6, 7, 8)")) { return -3; }
+        var p = (Point(3), "a");
+        if (!($"{p:>10}" == "   (P3, a)")) { return -4; }
+        var labeled = (line: 3, column: 7);
+        if (!($"{labeled}" == "(3, 7)")) { return -5; }
+    }
+    if (_pep_live_allocs() != before) { return -6; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

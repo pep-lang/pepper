@@ -106,7 +106,9 @@ yields `(key, value)` tuples:
   and any other struct compares by identity (the same object).
 - A tuple can be a `HashMap` key or a `HashSet` member. Its hash combines the
   hashes of its elements, so equal tuples hash equally.
-- `print((1, "two"))` prints `(1, two)`.
+- `to_string((1, "two"))` is `(1, two)`, so a tuple of up to eight
+  values that each have a `to_string` can be
+  [interpolated](interpolation.md) and printed: `print($"{t}")`.
 - `copy(t)` (see [Copying a value](memory.md#copying-a-value-with-copy)) copies each element: a struct
   element as `copy` would copy it on its own, anything thread-safe as is.
 

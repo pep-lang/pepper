@@ -7,7 +7,6 @@ extern void memset(void* p, int c, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
 extern char* getenv(char* name);
 extern int puts(char* s);
-extern int putchar(int c);
 extern void abort();
 extern int fflush(void* stream);
 
@@ -189,18 +188,20 @@ dec(v: long): __ptr<char> {
     var buf = _pep_malloc(24);
     var n = 0;
     var neg = 0;
+    # The magnitude as a ulong, so the most negative long negates too.
+    ulong magnitude = v as ulong;
     if (v < 0) {
         neg = 1;
-        v = -v;
+        magnitude = 0 - magnitude;
     }
-    if (v == 0) {
+    if (magnitude == 0) {
         buf[n] = 48;
         n = n + 1;
     }
-    while (v > 0) {
-        buf[n] = ('0' + (v % 10));
+    while (magnitude > 0) {
+        buf[n] = ('0' + (magnitude % 10));
         n = n + 1;
-        v = v / 10;
+        magnitude = magnitude / 10;
     }
     if (neg == 1) {
         buf[n] = '-';
@@ -217,57 +218,6 @@ dec(v: long): __ptr<char> {
         i = i + 1;
     }
     buf[n] = 0;
-    return buf;
-}
-
-# `v` with six fraction digits, rounded to nearest (`0.5` → "0.500000").
-floatstr(v: double): __ptr<char> {
-    var buf = _pep_malloc(64);
-    var n = 0;
-    if (v != v) {
-        buf[0] = 110;
-        buf[1] = 97;
-        buf[2] = 110;
-        buf[3] = 0;  # "nan"
-        return buf;
-    }
-    if (v < 0.0) {
-        buf[n] = '-';
-        n = n + 1;
-        v = -v;
-    }
-    if (v > 9.0e18) {
-        buf[n] = 105;
-        buf[n + 1] = 110;
-        buf[n + 2] = 102;
-        buf[n + 3] = 0;  # "inf" (or too large for long)
-        return buf;
-    }
-    var ip = v as long;
-    var digits = ((v - (ip as double)) * 1000000.0 + 0.5) as long;
-    # Rounding can carry into the integer part (0.9999996 → 1.000000).
-    if (digits >= 1000000) {
-        ip = ip + 1;
-        digits = digits - 1000000;
-    }
-    var s = dec(ip);
-    var i = 0;
-    while (s[i] != 0) {
-        buf[n] = s[i];
-        n = n + 1;
-        i = i + 1;
-    }
-    _pep_free(s);
-    buf[n] = '.';
-    n = n + 1;
-    # Least-significant digit first, filling the six places from the right.
-    var k = 5;
-    while (k >= 0) {
-        buf[n + k] = ('0' + (digits % 10));
-        digits = digits / 10;
-        k = k - 1;
-    }
-    buf[n + 6] = 0;
     return buf;
 }
 
@@ -512,48 +462,4 @@ export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulon
         i = i + n;
     }
     return i;
-}
-
-# ── print backing (the `print` builtin lowers to these by name) ─────────────
-# Exported so they keep their names: a private name is mangled per file.
-export _pep_print(s: __ptr<char>) {
-    if (s != __null) {
-        puts(s);
-    }
-}
-
-export _pep_print_int(v: long) {
-    var s = dec(v);
-    puts(s);
-    _pep_free(s);
-}
-
-export _pep_print_float(v: double) {
-    var s = floatstr(v);
-    puts(s);
-    _pep_free(s);
-}
-
-# Without the newline, for printing a tuple on one line.
-export _pep_write(s: __ptr<char>) {
-    if (s == __null) {
-        return;
-    }
-    ulong i = 0;
-    while (s[i] != 0) {
-        putchar(s[i]);
-        i += 1;
-    }
-}
-
-export _pep_write_int(v: long) {
-    var s = dec(v);
-    _pep_write(s);
-    _pep_free(s);
-}
-
-export _pep_write_float(v: double) {
-    var s = floatstr(v);
-    _pep_write(s);
-    _pep_free(s);
 }

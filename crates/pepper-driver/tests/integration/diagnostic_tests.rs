@@ -2792,7 +2792,7 @@ fn interpolation_comment() {
 fn format_unexpected_character() {
     assert_eq!(
         error_of("format_unexpected_character", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:q}\");\n    return 0;\n}\n"),
-        "main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'\n\
+        "main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][.precision][type]'\n\
          \x20   5 |     print($\"{n:q}\");\n\
          \x20     |                ^"
     );
@@ -3072,6 +3072,56 @@ fn nested_too_deeply() {
         let caret = lines[2].find('^').unwrap();
         assert_eq!(lines[1].chars().nth(caret), Some(token), "{error}");
     }
+}
+
+#[test]
+fn print_of_a_value_with_no_text() {
+    assert_eq!(
+        error_of("print_no_text", "struct Foo {}\n\nmain(): int {\n    var f = Foo();\n    print(f);\n    return 0;\n}\n"),
+        "main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload\n\
+         \x20   5 |     print(f);\n\
+         \x20     |           ^"
+    );
+}
+
+#[test]
+fn print_format_unused_argument() {
+    assert_eq!(
+        error_of("print_format_unused_argument", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(\"{0}\", n, n + 1);\n    return 0;\n}\n"),
+        "main.pep:5:21: error: argument 1 of 'print' is not used by its format string\n\
+         \x20   5 |     print(\"{0}\", n, n + 1);\n\
+         \x20     |                     ^~~~~"
+    );
+}
+
+#[test]
+fn format_precision_on_an_integer() {
+    assert_eq!(
+        error_of("format_precision_on_an_integer", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:.2}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one\n\
+         \x20   5 |     print($\"{n:.2}\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn format_precision_with_an_integer_type() {
+    assert_eq!(
+        error_of("format_precision_with_an_integer_type", "struct Foo {}\n\nmain(): int {\n    var d = 1.5;\n    print($\"{d:.2x}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: a precision cannot be combined with the integer type 'x'\n\
+         \x20   5 |     print($\"{d:.2x}\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn format_precision_without_digits() {
+    assert_eq!(
+        error_of("format_precision_without_digits", "struct Foo {}\n\nmain(): int {\n    var d = 1.5;\n    print($\"{d:.}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: expected a precision after '.' in format specification\n\
+         \x20   5 |     print($\"{d:.}\");\n\
+         \x20     |                ^"
+    );
 }
 
 /// Explicit type argument: reported at the argument, with the constraint and the missing extension.

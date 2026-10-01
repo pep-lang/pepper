@@ -1052,6 +1052,262 @@ Returns `"true"` or `"false"`.
 ## to_string
 
 ```pepper
+to_string(value: double): String
+```
+
+Returns the shortest decimal text that reads back as exactly `value`,
+as Swift prints a `Double`.
+
+A whole number keeps a `.0` (`"3.0"`), so the text always reads as a
+floating-point number. Values from 1e-4 up to 1e16 print in decimal;
+others use an exponent (`"1e+16"`, `"1.5e-05"`). The special values are
+`"nan"`, `"inf"` and `"-inf"`. For a fixed number of fraction digits,
+interpolate with a precision instead: `$"{value:.2}"`.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"0.1"` or `"-2.5"`
+
+**Example**
+```pepper
+    assert(to_string(0.1) == "0.1", "shortest");
+    assert(to_string(3.0) == "3.0", "keeps the point");
+    assert(to_string(1.0e20) == "1e+20", "exponent");
+```
+
+## to_string
+
+```pepper
+to_string(value: float): String
+```
+
+Returns the shortest decimal text that reads back as exactly `value` as
+a `float`, laid out as `to_string(double)` lays it out.
+
+**Parameters**
+- `value` — the number to convert
+
+**Returns**
+- a new String such as `"0.1"`
+
+**Example**
+```pepper
+    float third = 1.0 / 3.0;
+    assert(to_string(third) == "0.33333334", "a float's digits");
+```
+
+## to_string
+
+```pepper
+to_string<A, B>(value: (A, B)): String
+```
+
+Returns the text of a pair, `"(1, x)"`: each element's `to_string`
+text, separated by `", "`, in parentheses. A String element is its text
+without quotes. Tuples of up to eight elements convert this way.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, two)"`
+
+**Example**
+```pepper
+    assert(to_string((1, "two")) == "(1, two)", "a pair");
+    var nested = (1, (2.5, true));
+    assert($"{nested}" == "(1, (2.5, true))", "nested");
+```
+
+## to_string
+
+```pepper
+to_string<A, B, C>(value: (A, B, C)): String
+```
+
+Returns the text of a three-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3)"`
+
+## to_string
+
+```pepper
+to_string<A, B, C, D>(value: (A, B, C, D)): String
+```
+
+Returns the text of a four-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+- `D` — the type of the fourth element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3, 4)"`
+
+## to_string
+
+```pepper
+to_string<A, B, C, D, E>(value: (A, B, C, D, E)): String
+```
+
+Returns the text of a five-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+- `D` — the type of the fourth element
+- `E` — the type of the fifth element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3, 4, 5)"`
+
+## to_string
+
+```pepper
+to_string<A, B, C, D, E, F>(value: (A, B, C, D, E, F)): String
+```
+
+Returns the text of a six-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+- `D` — the type of the fourth element
+- `E` — the type of the fifth element
+- `F` — the type of the sixth element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3, 4, 5, 6)"`
+
+## to_string
+
+```pepper
+to_string<A, B, C, D, E, F, G>(value: (A, B, C, D, E, F, G)): String
+```
+
+Returns the text of a seven-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+- `D` — the type of the fourth element
+- `E` — the type of the fifth element
+- `F` — the type of the sixth element
+- `G` — the type of the seventh element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3, 4, 5, 6, 7)"`
+
+## to_string
+
+```pepper
+to_string<A, B, C, D, E, F, G, H>(value: (A, B, C, D, E, F, G, H)): String
+```
+
+Returns the text of an eight-element tuple, as the pair overload does.
+
+**Type parameters**
+- `A` — the type of the first element
+- `B` — the type of the second element
+- `C` — the type of the third element
+- `D` — the type of the fourth element
+- `E` — the type of the fifth element
+- `F` — the type of the sixth element
+- `G` — the type of the seventh element
+- `H` — the type of the eighth element
+
+**Parameters**
+- `value` — the tuple to convert
+
+**Returns**
+- a new String such as `"(1, 2, 3, 4, 5, 6, 7, 8)"`
+
+## print
+
+```pepper
+print(text: String)
+```
+
+Writes `text` and a line break to standard output.
+
+Any other value prints through `print(value)`, which writes its
+`to_string` text. To combine values, interpolate them
+(`print($"total: {n}")`), or pass a format string and arguments, which
+prints what `String.format` makes of them (`print("{0} of {1}", a, b)`).
+A string with no arguments after it is printed as written, braces
+included.
+
+**Parameters**
+- `text` — the text to print
+
+**Example**
+```pepper
+    print("hello");
+    var n = 3;
+    print($"n = {n}");
+    print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+```
+
+## print
+
+```pepper
+print<T>(value: T)
+```
+
+Writes the text of `value` and a line break to standard output: what
+`$"{value}"` would make of it, through `to_string`. That covers numbers,
+`bool` (`true` or `false`), tuples, and any type with a `to_string()`
+method or a `to_string<T>` override; another type is a compile error at
+the argument.
+
+**Type parameters**
+- `T` — the type of `value`
+
+**Parameters**
+- `value` — the value to print
+
+**Example**
+```pepper
+    print(42);          # 42
+    print(0.5);         # 0.5
+    print((1, "two"));  # (1, two)
+```
+
+## to_string
+
+```pepper
 to_string<T>(value: T): String
 ```
 

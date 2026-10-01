@@ -34,7 +34,14 @@ by the text of its value:
 Each value is converted with `to_string(value)`, so it can be:
 
 - an integer of any size, signed or unsigned, which gives its decimal text;
+- a `float` or `double`, which gives the shortest decimal text that reads
+  back as the same number, as Swift prints one: `0.1`, `3.0` (a whole
+  number keeps its `.0`), `-2.5`, and an exponent outside 1e-4 to 1e16
+  (`1e+16`, `1.5e-05`); `nan`, `inf` and `-inf` for the special values;
 - a `bool`, which gives `true` or `false`;
+- a [tuple](tuples.md) of up to eight values that can each be
+  interpolated, which gives its elements' text in parentheses, `(1, two)`
+  (a `String` element without quotes);
 - a `String`, which is used as it is;
 - a value whose type has a `to_string(): String` method, such as a struct
   that implements the runtime's `ToString` trait, or a value of type
@@ -47,33 +54,39 @@ Each value is converted with `to_string(value)`, so it can be:
 {{#include ../../examples/interpolation-to-string.pep}}
 ```
 
+Numbers and tuples, with the [format specifications](#format-specifications)
+below:
+
+```pepper
+{{#include ../../examples/interpolation-numbers.pep}}
+```
+
 `String`, `StringBuilder` and `io.Path` implement `ToString`. An enum is
 interpolated through a `to_string()` method it declares (`return name();`
 gives the case's name).
 
-Floating-point numbers have no text conversion yet, so a `float` or `double`
-cannot be interpolated. A plain overload such as `to_string(p: Point)` is not
-used either: overloads of a name do not merge across files (see
+A plain overload such as `to_string(p: Point)` is not used: overloads of a name do not merge across files (see
 [overloading](overloading.md)), so the runtime cannot see yours. Write a
 `to_string<Point>` override or a method instead.
 
 ## Format specifications
 
 A `:` after the expression starts a format specification, which pads the
-value's text or writes an integer in another base. Its parts, all optional,
-come in this order:
+value's text, writes an integer in another base, or rounds a floating-point
+number to a number of digits. Its parts, all optional, come in this order:
 
 ```text
-{value:[[fill]align][+][0][width][type]}
+{value:[[fill]align][+][0][width][.precision][type]}
 ```
 
 | Part | Meaning |
 |------|---------|
-| `align` | `<` left, `^` centered (leaning left), `>` right. Without one, integers go to the right and everything else to the left. |
+| `align` | `<` left, `^` centered (leaning left), `>` right. Without one, numbers go to the right and everything else to the left. |
 | `fill` | The character the padding is made of, written before `align`; a space by default. It can be any character but `{`, `}`, `"`, `'` and `#`. |
 | `+` | Writes a `+` before a number that is not negative. |
 | `0` | Pads with zeros after the sign (`-0042`). It cannot be combined with `align`. |
 | `width` | The least number of characters the text takes; longer text is kept whole. |
+| `.precision` | For a `float` or `double`: the number of digits after the point, rounded to nearest, a tie to the even digit (`{pi:.2}` is `3.14`, `{0.125:.2}` is `0.12`; `.0` leaves no point). At most 100. |
 | `type` | `d` decimal, `x` and `X` hexadecimal (lower and upper case), `b` binary, `o` octal. |
 
 ```pepper
@@ -83,15 +96,16 @@ come in this order:
 - Padding (`fill`, `align` and `width`) works for any value that can be
   interpolated: it pads the value's `to_string` text, counting characters,
   not bytes.
-- `+`, `0` and a `type` need an integer (of any size, signed or unsigned).
-  Using one with any other value is an error at that character.
+- `+` and `0` need a number: an integer (of any size, signed or unsigned),
+  or a `float` or `double` given a precision (`{x:+08.2}`). A `type` needs
+  an integer, and a precision a `float` or `double`. Using one with any
+  other value is an error at that character, and a precision cannot be
+  combined with a `type`.
 - A negative number keeps its sign in every base: `{-42:x}` is `-2a`, not
   the bits of its two's complement.
 - The `:` that starts the specification is the one after the whole
   expression, so a ternary can be formatted as it is:
   `{n > 1 ? "many" : "one":>5}`.
-- There is no precision (`.2`) yet, since floating-point numbers have no
-  text conversion.
 
 ## Formatting by position: `String.format`
 
@@ -113,6 +127,9 @@ specification, and returns the text:
   (`"{0} is {0:x} in hex"`).
 - It is part of the compiler, not a function in the runtime: it cannot be
   stored in a variable or called through a function value.
+- [`print`](functions.md#printing-with-print) takes the same arguments:
+  `print("{0} of {1}", done, total)` prints what `String.format` makes of
+  them.
 
 ## Errors
 
@@ -159,12 +176,15 @@ A format specification's errors are reported at the character in it that
 is wrong:
 
 ```text
-main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'
+main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][.precision][type]'
     5 |     print($"{n:q}");
       |                ^
 main.pep:5:19: error: cannot format a value of type 'String' as an integer
     5 |     print($"{name:x}");
       |                   ^
+main.pep:6:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one
+    6 |     print($"{n:.2}");
+      |                ^
 ```
 
 `String.format` reports an index with no argument at the index, and an

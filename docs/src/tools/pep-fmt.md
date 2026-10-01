@@ -51,7 +51,7 @@ declaration or statement that owns it, and `else` goes between the braces:
 
 ```pepper
 if count > 0 {
-    print(count);
+    print($"{count}");
 } else {
     print("none");
 }

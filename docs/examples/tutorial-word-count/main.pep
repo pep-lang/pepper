@@ -23,8 +23,7 @@ main(): int {
     assert(result.is_ok(), "the file we just wrote can be read");
     var counter = result.value();
     for (var word in counter.order) {
-        print(word);
-        print(counter.count(word));
+        print($"{word}: {counter.count(word)}");
     }
     assert(counter.total == 11, "eleven words");
     assert(counter.count("the") == 3, "'the' appears three times");

@@ -318,10 +318,14 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
             Declaration::Function(f) => {
                 if is_public(&f.name) {
                     // A concrete override (`hash<String>` after `hash<T>`)
-                    // names types, not generic parameters.
+                    // names types, not generic parameters. It has as many
+                    // as the generic it overrides; an overload with a
+                    // different count (`to_string<A, B>` beside
+                    // `to_string<T>`) has parameters of its own.
                     let overrides = module.declarations.iter().any(|d| {
                         matches!(d, Declaration::Function(g) if g.name == f.name && !std::ptr::eq(g, f)
-                            && g.span.start < f.span.start && !g.generic_params.is_empty())
+                            && g.span.start < f.span.start && !g.generic_params.is_empty()
+                            && g.generic_params.len() == f.generic_params.len())
                     });
                     let generics: &[GenericParam] = if overrides { &[] } else { &f.generic_params };
                     checker.function(f, &f.name, doc, generics);

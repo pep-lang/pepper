@@ -24,7 +24,6 @@ pub mod convert_member_refs;
 pub mod resolve_operators;
 pub mod unary_operators;
 pub mod release_field_refs;
-pub mod convert_print_calls;
 pub mod platform;
 pub mod function_types;
 pub mod check_function_types;
@@ -56,7 +55,6 @@ use resolve_operators::resolve_operators;
 use resolve_resolvables::resolve_resolvables;
 use specialize_functions::specialize_functions;
 use specialize_structs::specialize_structs;
-use convert_print_calls::convert_print_calls;
 use function_types::synthesize_function_types;
 use lower_with_blocks::lower_with_blocks;
 
@@ -157,7 +155,6 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(overloads::check_overloads(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
     step!(unary_operators::check_conditions(module));
-    step!(convert_print_calls(module));
     step!(resolve_resolvables(module, true));
     // Destructurings, once the tuples they read are typed.
     step!(tuples::lower_destructures(module));

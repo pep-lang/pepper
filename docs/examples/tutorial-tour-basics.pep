@@ -46,6 +46,6 @@ main(): int {
     assert(describe(7) == "small", "7 is small");
 
     print(greet("Pepper"));
-    print(sum_to(100));
+    print($"{sum_to(100)}");
     return 0;
 }

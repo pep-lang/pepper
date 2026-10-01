@@ -57,7 +57,7 @@ Pepper source files end in `.pep`. Create a file named `hello.pep`:
 ```
 
 Every program starts at `main`, which takes no arguments and returns an `int`:
-the process's exit code, where 0 means success. `print` writes its argument to
+the process's exit code, where 0 means success. `print` writes a value's text to
 standard output, followed by a new line. Comments start with `#` and run to
 the end of the line.
 

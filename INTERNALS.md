@@ -190,7 +190,7 @@ with no extension, and `module_name()` is the output's stem.
   (`set_private_linkage`): no other object can name it, and ELF linkers
   read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged
   model resolves it, with no two files' private names alike. Runtime
-  functions the compiler calls by name (`_pep_malloc`, `_pep_print*`) must
+  functions the compiler calls by name (`_pep_malloc`, `_pep_format*`) must
   therefore be exported. For each file it records a
   `FileScope`: `imported` (span start → declaration, used by visibility),
   `named` (used by the LSP), and `extensions` (`visible_extensions`: the
@@ -309,14 +309,21 @@ with no extension, and `module_name()` is the output's stem.
   `convert_member_refs` would bind a bare call to) nor a file's own
   `to_string` functions (which hide the runtime's set) capture it.
   A `:` after the hole's expression starts a format specification
-  (`format_spec` → `FormatSpec`, `[[fill]align][+][0][width][type]`);
+  (`format_spec` → `FormatSpec`, `[[fill]align][+][0][width][.precision][type]`);
   `interpolation_call` lowers the value to `_pep_format(value, fill, align,
-  width)` (`FORMAT_FUNCTION`, at the braces) when it only pads, or to
+  width)` (`FORMAT_FUNCTION`, at the braces) when it only pads, to
+  `_pep_format_float(value, precision, plus, fill, align, width, zero)`
+  (`FORMAT_FLOAT_FUNCTION`, at the `.`) when it has a precision, or to
   `_pep_format_integer(value, base, upper, plus, fill, align, width, zero)`
   (`FORMAT_INTEGER_FUNCTION`, located at the specification's character that
   needs an integer) otherwise. `check_interpolations` reports a value with
-  no text conversion at the braces, and a non-integer given to
-  `_pep_format_integer` at that character. The text scanning (`{{`, `}}`,
+  no text conversion at the braces, a non-integer given to
+  `_pep_format_integer`, and a value other than a `float` or `double`
+  given to `_pep_format_float`, at that character. Floating-point text
+  (`_float_text`, `_pep_format_float`) comes from C's `snprintf` with
+  `%.Ne` / `%.Nf`; on Windows the UCRT defines `snprintf` inline, so
+  `_print_double` calls `__stdio_common_vsprintf` with a hand-built
+  `va_list`. The text scanning (`{{`, `}}`,
   a lone `}`, the closing quote) is `interpolation_parts`, shared with
   `String.format`.
 - **`String.format`** is an intrinsic: `primary_expression` tries
@@ -328,7 +335,12 @@ with no extension, and `module_name()` is the output's stem.
   string; otherwise it lowers to a `match` over a tuple of the arguments
   whose one arm binds `_pep_format_0`, `_pep_format_1`, ... (a lone
   argument is paired with `false`), so each is evaluated once, left to
-  right.
+  right. `print_format` gives `print` the same body (`format_arguments`)
+  when a string literal and a `,` follow `print (`, lowering
+  `print("{0}", x)` to `print(String.format("{0}", x))`; `print` itself is
+  the runtime's `print(text: String)`; `print<T>(value)` prints
+  `to_string(value)`, and `check_interpolations` reports a value with no
+  text at the argument, as it does for an interpolated one.
 - **Thread-local parser state** lives in `parsers.rs`: `SRC_LEN`, `MAX_POS`
   (the furthest offset any rule reached), `EXPECTATION` (what was expected
   at that furthest failure), `QUALIFIERS` (import qualifiers bound so far,
@@ -675,7 +687,7 @@ several passes run more than once on purpose.
 | then | `check_interpolations`, `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
-| final | `resolve_implicit_types`, `resolve_operators`, `unary_operators::check_conditions`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `check_conditions` reports a struct or trait value still in a boolean context, one whose type declares no `!!` (`'S' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'`, with a note at the declaration): a struct is never null-tested implicitly. Pointers, numbers, `bool` and function values (synthesized `__…` structs) keep codegen's `as_bool`. `convert_print_calls` turns a `String` argument of `print` into `arg._data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `resolve_implicit_types`, `resolve_operators`, `unary_operators::check_conditions`, `resolve_resolvables(true)`, `synthesize_function_types` | `check_conditions` reports a struct or trait value still in a boolean context, one whose type declares no `!!` (`'S' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'`, with a note at the declaration): a struct is never null-tested implicitly. Pointers, numbers, `bool` and function values (synthesized `__…` structs) keep codegen's `as_bool`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_type_arguments` (`type_arguments.rs`) | Reports a generic call whose type arguments the arguments did not determine (`cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)`, with a note at the declaration). |
 | final | `overloads::check_overloads` | Reports an overload call no member fits (`no matching function for call to 'f'`, a note per candidate saying why; for constructors `no matching constructor for initialization of 'P'`), one two members fit equally well (`call to 'f' is ambiguous`, `call to constructor of 'P' is ambiguous`), one whose argument type stayed unknown, and a set used as a value where no expected type picks a member (`cannot infer the type of 'g' from overloaded function 'f'`, `address of overloaded function 'f' does not match required type`). Method calls and method values (`overloaded method 'S.get'`) are checked the same way, by the receiver's `static_type` (a trait type's sets are its members). A method set's candidates at a call are the body methods plus the methods of extensions visible in the call's file (`Module::extension_scopes`, from each file's `FileScope::extensions`). Skips extensions' own copies of their methods (only the struct's copies are resolved) and generic bases, whose calls resolve in their specializations. |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
@@ -813,9 +825,7 @@ How the language lowers:
   promotions. Narrow integer arguments get `signext`/`zeroext`.
   `[LinkName("sym")]` changes the symbol (`ExternDef::link_name`). A string
   literal passed to an extern is passed as its raw NUL-terminated global.
-- **Builtins resolved by name in `codegen_call`**: `print`
-  (`codegen_print` → `_pep_print`, `_pep_print_int`, or `_pep_print_float`
-  by argument type), `release<T>(v)`,
+- **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.
 - **Intrinsic nodes** in `codegen_expr_unlocated`: `SizeOf`, `Default` (zero
@@ -961,13 +971,14 @@ reference held per reference element.
   takes element `k` without acquiring and clears it in the hidden tuple, so
   the binding holds the only reference, as a C++ structured binding would;
   `_` elements stay in the hidden tuple until its scope exits.
-- **Comparing, hashing, printing.** `codegen_binary` sends a tuple `==`/`!=`
+- **Comparing and hashing.** `codegen_binary` sends a tuple `==`/`!=`
   to `tuple_equal`, which compares element by element (`value_equal`: an
   element's own `==` when its type has one, else by value or identity).
   `Expression::Address` on a tuple (what `hash<T>` uses) is `tuple_hash`,
   which folds each element's `hash<E>` (or its bytes) with FNV-1a, so a tuple
-  is a `HashMap` key. `print` writes a tuple with `write_tuple` through the
-  runtime's `_pep_write*` helpers.
+  is a `HashMap` key. Its text comes from the runtime's `to_string<A, B, ...>`
+  overloads (runtime/string.pep), which overload resolution prefers to the
+  generic `to_string<T>` as more specialized.
 - **Generic bases.** A tuple naming a generic parameter (`(K, V)` inside
   `HashMap`) is skipped by `register_tuple`; only its specializations get a
   layout.
@@ -1244,7 +1255,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, the `PEP_TRACE` helpers `_pep_trace_ptr`/`_pep_trace_int`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), UTF-8 helpers, and `_pep_print*`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, the `PEP_TRACE` helpers `_pep_trace_ptr`/`_pep_trace_int`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
@@ -1270,13 +1281,13 @@ diagnostics"). The mechanics:
   files can use them. They are exempt from the documentation standard, and
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).
-- **Lowered by name.** `print` → `_pep_print`/`_pep_print_int`/
-  `_pep_print_float`. A name the compiler synthesizes must be exported:
+- **Lowered by name.** Interpolated strings and `String.format` call
+  `_pep_interpolate` and `_pep_format*`. A name the compiler synthesizes must be exported:
   linking mangles private names per file. Every constructor calls `_pep_malloc`, and `__release`
   calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `_pep_trace_ptr`
   and `_pep_trace_int`. Compiler-generated checks (null function and trait
   values) call `_pep_assert`, which takes a raw `char*`.
-  Codegen calls these by name after visibility has run, so `_pep_print*`
+  Codegen calls these by name after visibility has run, so they
   need not be exported.
 - **Intrinsics available to runtime code**: `__ptr<T>` (a raw pointer, the
   only pointer spelling allowed outside `extern`), `__null`, `sizeof(T)`,
@@ -1755,7 +1766,7 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   bare name). The LSP matches the document's own declarations by their
   demangled names before other files' (`find_sema_struct`,
   `declaration_doc`, `member_doc`). Code that synthesizes a reference by name
-  (`_pep_print_int`) can reach only a declaration that keeps its name, so
+  (`_pep_interpolate`) can reach only a declaration that keeps its name, so
   it must be exported. Exported names still share one namespace across
   modules. `SymbolTable` lets a later declaration overwrite an earlier one.
 - **Trait values are one level deep.** There are no supertraits, so one

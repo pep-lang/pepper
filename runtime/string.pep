@@ -2,6 +2,19 @@ import "internals";
 
 extern void memcpy(void* dest, void* src, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
+extern int puts(char* text);
+extern double strtod(char* text, char** end);
+
+# `snprintf` for one floating-point argument. The UCRT defines `snprintf`
+# inline in its headers, so on Windows the call goes to the function those
+# inline definitions call, with a `va_list` built by hand: on Windows every
+# variadic argument takes one 8-byte slot.
+[Target(OS(Windows))]
+extern int __stdio_common_vsprintf(
+    ulong options, char* buffer, ulong size, char* format, void* locale, void* arguments
+);
+[Target(!OS(Windows))]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
 
 ## A mutable, reference-counted string of UTF-8 text. String literals
 ## (`"text"`) are `String` values.
@@ -1026,6 +1039,289 @@ export to_string(value: bool): String {
     return "false";
 }
 
+# Writes `value` into the `size` bytes at `buffer` as the C `format` (one
+# conversion, such as `%.3e`) spells it.
+[Target(OS(Windows))]
+_print_double(buffer: __ptr<char>, size: ulong, format: String, value: double) {
+    var arguments = _pep_malloc(8) as __ptr<double>;
+    arguments[0] = value;
+    __stdio_common_vsprintf(0, buffer, size, format.c_str(), __null, arguments);
+    _pep_free(arguments);
+}
+
+[Target(!OS(Windows))]
+_print_double(buffer: __ptr<char>, size: ulong, format: String, value: double) {
+    snprintf(buffer, size, format.c_str(), value);
+}
+
+# The shortest decimal text that reads back as `value` (as a `float` when
+# `single`), laid out as Swift prints a number: `3.0`, `0.1`, `-2.5`, and
+# an exponent outside 1e-4 to 1e16 (`1e+16`, `1.5e-05`); `nan`, `inf` and
+# `-inf` for the special values.
+_float_text(value: double, single: bool): String {
+    if (value != value) {
+        return "nan";
+    }
+    if (value > 1.7976931348623157e308) {
+        return "inf";
+    }
+    if (value < -1.7976931348623157e308) {
+        return "-inf";
+    }
+    var most = 17;
+    if (single) {
+        most = 9;
+    }
+    # "-d.ddddddddddddddddde+ddd" and a terminator fit in 32 bytes.
+    var buffer = _pep_malloc(32) as __ptr<char>;
+    var precision = 1;
+    while (true) {
+        _print_double(buffer, 32, $"%.{precision - 1}e", value);
+        if (precision == most) {
+            break;
+        }
+        var back = strtod(buffer, __null);
+        if (single) {
+            if ((back as float) == (value as float)) {
+                break;
+            }
+        } else if (back == value) {
+            break;
+        }
+        precision = precision + 1;
+    }
+    # Split "-d.ddde+xx" into its sign, digits and exponent.
+    var negative = buffer[0] == '-';
+    ulong i = 0;
+    if (negative) {
+        i = 1;
+    }
+    var digits = StringBuilder();
+    while (buffer[i] != 'e') {
+        if (buffer[i] != '.') {
+            digits.append(String(buffer + i, 1, 1));
+        }
+        i = i + 1;
+    }
+    i = i + 1;
+    var exponent_negative = buffer[i] == '-';
+    i = i + 1;
+    long exponent = 0;
+    while (buffer[i] != 0) {
+        exponent = exponent * 10 + (buffer[i] - '0');
+        i = i + 1;
+    }
+    _pep_free(buffer);
+    if (exponent_negative) {
+        exponent = 0 - exponent;
+    }
+    var text = digits.to_string();
+    var count = text.size();
+    while (count > 1 && text.byte_at(count - 1) == '0') {
+        count = count - 1;
+    }
+    text = text.substr_bytes(0, count);
+    var sign = "";
+    if (negative) {
+        sign = "-";
+    }
+    if (exponent < -4 || exponent >= 16) {
+        var mantissa = text.substr_bytes(0, 1);
+        if (count > 1) {
+            mantissa = mantissa + "." + text.substr_bytes(1, count - 1);
+        }
+        var exponent_sign = "+";
+        var magnitude = exponent;
+        if (exponent < 0) {
+            exponent_sign = "-";
+            magnitude = 0 - exponent;
+        }
+        var exponent_text = to_string(magnitude);
+        if (magnitude < 10) {
+            exponent_text = "0" + exponent_text;
+        }
+        return sign + mantissa + "e" + exponent_sign + exponent_text;
+    }
+    if (exponent < 0) {
+        return sign + "0." + "0".repeat((0 - exponent - 1) as ulong) + text;
+    }
+    var whole = (exponent + 1) as ulong;
+    if (count <= whole) {
+        return sign + text + "0".repeat(whole - count) + ".0";
+    }
+    return sign + text.substr_bytes(0, whole) + "." + text.substr_bytes(whole, count - whole);
+}
+
+## Returns the shortest decimal text that reads back as exactly `value`,
+## as Swift prints a `Double`.
+##
+## A whole number keeps a `.0` (`"3.0"`), so the text always reads as a
+## floating-point number. Values from 1e-4 up to 1e16 print in decimal;
+## others use an exponent (`"1e+16"`, `"1.5e-05"`). The special values are
+## `"nan"`, `"inf"` and `"-inf"`. For a fixed number of fraction digits,
+## interpolate with a precision instead: `$"{value:.2}"`.
+##
+## @param value the number to convert
+## @returns a new String such as `"0.1"` or `"-2.5"`
+## @example
+##     assert(to_string(0.1) == "0.1", "shortest");
+##     assert(to_string(3.0) == "3.0", "keeps the point");
+##     assert(to_string(1.0e20) == "1e+20", "exponent");
+export to_string(value: double): String {
+    return _float_text(value, false);
+}
+
+## Returns the shortest decimal text that reads back as exactly `value` as
+## a `float`, laid out as `to_string(double)` lays it out.
+##
+## @param value the number to convert
+## @returns a new String such as `"0.1"`
+## @example
+##     float third = 1.0 / 3.0;
+##     assert(to_string(third) == "0.33333334", "a float's digits");
+export to_string(value: float): String {
+    return _float_text(value as double, true);
+}
+
+## Returns the text of a pair, `"(1, x)"`: each element's `to_string`
+## text, separated by `", "`, in parentheses. A String element is its text
+## without quotes. Tuples of up to eight elements convert this way.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, two)"`
+## @example
+##     assert(to_string((1, "two")) == "(1, two)", "a pair");
+##     var nested = (1, (2.5, true));
+##     assert($"{nested}" == "(1, (2.5, true))", "nested");
+export to_string<A, B>(value: (A, B)): String {
+    return "(" + to_string(value.0) + ", " + to_string(value.1) + ")";
+}
+
+## Returns the text of a three-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3)"`
+export to_string<A, B, C>(value: (A, B, C)): String {
+    return "(" + to_string(value.0) + ", " + to_string(value.1) + ", " + to_string(value.2) + ")";
+}
+
+## Returns the text of a four-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @typeParam D the type of the fourth element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3, 4)"`
+export to_string<A, B, C, D>(value: (A, B, C, D)): String {
+    var text = "(" + to_string(value.0) + ", " + to_string(value.1);
+    return text + ", " + to_string(value.2) + ", " + to_string(value.3) + ")";
+}
+
+## Returns the text of a five-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @typeParam D the type of the fourth element
+## @typeParam E the type of the fifth element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3, 4, 5)"`
+export to_string<A, B, C, D, E>(value: (A, B, C, D, E)): String {
+    var text = "(" + to_string(value.0) + ", " + to_string(value.1) + ", " + to_string(value.2);
+    return text + ", " + to_string(value.3) + ", " + to_string(value.4) + ")";
+}
+
+## Returns the text of a six-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @typeParam D the type of the fourth element
+## @typeParam E the type of the fifth element
+## @typeParam F the type of the sixth element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3, 4, 5, 6)"`
+export to_string<A, B, C, D, E, F>(value: (A, B, C, D, E, F)): String {
+    var text = "(" + to_string(value.0) + ", " + to_string(value.1) + ", " + to_string(value.2);
+    return text + ", " + to_string(value.3) + ", " + to_string(value.4) + ", " + to_string(value.5) + ")";
+}
+
+## Returns the text of a seven-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @typeParam D the type of the fourth element
+## @typeParam E the type of the fifth element
+## @typeParam F the type of the sixth element
+## @typeParam G the type of the seventh element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3, 4, 5, 6, 7)"`
+export to_string<A, B, C, D, E, F, G>(value: (A, B, C, D, E, F, G)): String {
+    var text = "(" + to_string(value.0) + ", " + to_string(value.1) + ", " + to_string(value.2);
+    text = text + ", " + to_string(value.3) + ", " + to_string(value.4) + ", " + to_string(value.5);
+    return text + ", " + to_string(value.6) + ")";
+}
+
+## Returns the text of an eight-element tuple, as the pair overload does.
+##
+## @typeParam A the type of the first element
+## @typeParam B the type of the second element
+## @typeParam C the type of the third element
+## @typeParam D the type of the fourth element
+## @typeParam E the type of the fifth element
+## @typeParam F the type of the sixth element
+## @typeParam G the type of the seventh element
+## @typeParam H the type of the eighth element
+## @param value the tuple to convert
+## @returns a new String such as `"(1, 2, 3, 4, 5, 6, 7, 8)"`
+export to_string<A, B, C, D, E, F, G, H>(value: (A, B, C, D, E, F, G, H)): String {
+    var text = "(" + to_string(value.0) + ", " + to_string(value.1) + ", " + to_string(value.2);
+    text = text + ", " + to_string(value.3) + ", " + to_string(value.4) + ", " + to_string(value.5);
+    return text + ", " + to_string(value.6) + ", " + to_string(value.7) + ")";
+}
+
+## Writes `text` and a line break to standard output.
+##
+## Any other value prints through `print(value)`, which writes its
+## `to_string` text. To combine values, interpolate them
+## (`print($"total: {n}")`), or pass a format string and arguments, which
+## prints what `String.format` makes of them (`print("{0} of {1}", a, b)`).
+## A string with no arguments after it is printed as written, braces
+## included.
+##
+## @param text the text to print
+## @example
+##     print("hello");
+##     var n = 3;
+##     print($"n = {n}");
+##     print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+export print(text: String) {
+    puts(text.c_str());
+}
+
+## Writes the text of `value` and a line break to standard output: what
+## `$"{value}"` would make of it, through `to_string`. That covers numbers,
+## `bool` (`true` or `false`), tuples, and any type with a `to_string()`
+## method or a `to_string<T>` override; another type is a compile error at
+## the argument.
+##
+## @typeParam T the type of `value`
+## @param value the value to print
+## @example
+##     print(42);          # 42
+##     print(0.5);         # 0.5
+##     print((1, "two"));  # (1, two)
+export print<T>(value: T) {
+    print(to_string(value));
+}
+
 ## Returns the text of `value` by calling its `to_string()` method: the
 ## overload for any type that is `ToString`.
 ##
@@ -1196,6 +1492,14 @@ _pep_default_align(value: byte): int {
     return _ALIGN_RIGHT;
 }
 
+_pep_default_align(value: double): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: float): int {
+    return _ALIGN_RIGHT;
+}
+
 _pep_default_align<T>(value: T): int {
     return _ALIGN_LEFT;
 }
@@ -1260,6 +1564,100 @@ export _pep_format_integer<T>(
         placed = _ALIGN_RIGHT;
     }
     return _pep_pad(_pep_radix(value, base, upper, plus), fill, placed, width, zero);
+}
+
+# `number` with `precision` fraction digits (at most 100), rounded half to
+# even. C libraries round a tie differently (the UCRT away from zero, glibc
+# to even), so the digits come from the exact decimal expansion, which 1075
+# fraction digits hold for every double, and are rounded here.
+_fixed_text(number: double, precision: ulong): String {
+    # 309 whole digits, a sign, a point and 1075 fraction digits.
+    var buffer = _pep_malloc(1400) as __ptr<char>;
+    _print_double(buffer, 1400, "%.1075f", number);
+    ulong point = 0;
+    while (buffer[point] != '.') {
+        point = point + 1;
+    }
+    # The digits kept end before `cut`, the first one dropped.
+    var cut = point + 1 + precision;
+    var up = false;
+    if (buffer[cut] > '5') {
+        up = true;
+    } else if (buffer[cut] == '5') {
+        var tie = true;
+        var i = cut + 1;
+        while (buffer[i] != 0) {
+            if (buffer[i] != '0') {
+                tie = false;
+                break;
+            }
+            i = i + 1;
+        }
+        var last = cut - 1;
+        if (precision == 0) {
+            last = point - 1;
+        }
+        up = !tie || (buffer[last] - '0') % 2 == 1;
+    }
+    var keep = cut;
+    if (precision == 0) {
+        keep = point;
+    }
+    var start: ulong = 0;
+    if (buffer[0] == '-') {
+        start = 1;
+    }
+    var carry = up;
+    var i = keep;
+    while (carry && i > start) {
+        i = i - 1;
+        if (buffer[i] == '.') {
+            continue;
+        }
+        if (buffer[i] == '9') {
+            buffer[i] = '0';
+        } else {
+            buffer[i] = (buffer[i] + 1) as char;
+            carry = false;
+        }
+    }
+    var digits = String(buffer + start, keep - start);
+    _pep_free(buffer);
+    if (carry) {
+        digits = "1" + digits;
+    }
+    if (start == 1) {
+        return "-" + digits;
+    }
+    return digits;
+}
+
+# The call an interpolated string makes for `{value:spec}` when the spec
+# has a precision (`{x:.2}`): `value` with `precision` fraction digits,
+# rounded half to even, then signed and padded as for an integer. Sema
+# reports any value that is not a `double` or a `float` at the spec's `.`.
+export _pep_format_float<T>(
+    value: T, precision: long, plus: bool, fill: String, align: int, width: ulong, zero: bool
+): String {
+    var number = value as double;
+    var text = "";
+    if (number != number) {
+        text = "nan";
+    } else if (number > 1.7976931348623157e308) {
+        text = "inf";
+    } else if (number < -1.7976931348623157e308) {
+        text = "-inf";
+    } else {
+        text = _fixed_text(number, precision as ulong);
+    }
+    if (plus && !text.starts_with("-")) {
+        text = "+" + text;
+    }
+    var placed = align;
+    if (placed == _ALIGN_DEFAULT) {
+        placed = _ALIGN_RIGHT;
+    }
+    return _pep_pad(text, fill, placed, width, zero);
 }
 
 ## Builds a String from many pieces without copying the text built so far

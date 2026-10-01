@@ -64,7 +64,12 @@ argument, the conversion has a rank, best first:
 | implicit constructor | a value to a struct whose [`[Implicit]` constructor](structs.md#implicit-conversions) takes it |
 
 One viable member is **better** than another when none of its arguments
-ranks worse and at least one ranks better, as in C++. The call picks the
+ranks worse and at least one ranks better, as in C++. Between two members
+whose arguments rank the same, a non-generic one is better than a generic
+one, and of two generic ones the **more specialized** is better: the one
+whose parameter types the other's could take but not the reverse. So
+`describe<A, B>(pair: (A, B))` takes a tuple argument over
+`describe<T>(value: T)`, which takes anything else. The call picks the
 member that is better than every other viable one. When there is none, the
 call is an error that lists the candidates:
 

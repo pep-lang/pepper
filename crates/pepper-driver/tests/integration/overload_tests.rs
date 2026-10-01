@@ -670,3 +670,44 @@ test(): int { return Point(1).x + Point(2.5).x; }
     assert!(warnings.contains("'Point' is deprecated: use 'Point(int)' instead"), "{}", warnings);
     assert!(warnings.contains("Point(2.5)"), "{}", warnings);
 }
+
+#[test]
+fn the_more_specialized_generic_member_wins() {
+    // `(A, B)` deduces into `T` but not the reverse, so a tuple argument
+    // picks the pair member; anything else can only take `T`. A
+    // non-generic member still beats both.
+    assert_eq!(
+        value(
+            r#"
+describe<T>(value: T): int { return 1; }
+describe<A, B>(pair: (A, B)): int { return 2; }
+describe<A>(items: A[]): int { return 3; }
+describe(value: int): int { return 4; }
+
+forward<T>(value: T): int { return describe(value); }
+
+test(): int {
+    if (describe((1, "x")) != 2) { return -1; }
+    if (describe("s") != 1) { return -2; }
+    if (describe(Array<int>()) != 3) { return -3; }
+    if (describe(7) != 4) { return -4; }
+    if (forward((1, 2)) != 2) { return -5; }
+    if (forward(true) != 1) { return -6; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn equally_specialized_generic_members_are_ambiguous() {
+    let error = compile_error(
+        r#"
+pick<A, B>(pair: (A, B)): int { return 1; }
+pick<A, B>(pair: (A, B), extra: int = 0): int { return 2; }
+
+test(): int { return pick((1, 2)); }"#,
+    );
+    assert!(error.contains("call to 'pick' is ambiguous"), "{}", error);
+}

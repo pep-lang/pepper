@@ -65,7 +65,7 @@ log_positive(n: int) {
     if n <= 0 {
         return;
     }
-    print(n);
+    print($"{n}");
 }
 ```
 
@@ -151,25 +151,35 @@ A function can take type parameters in angle brackets after its name, such as
 
 ## Printing with `print`
 
-`print` is a built-in function that writes its arguments to standard output,
-each on its own line. It accepts any number of arguments, and each one can be a
-`String`, an integer, a `bool` (printed as `1` or `0`), a floating-point
-number, or a [tuple](tuples.md) of these (printed as `(1, two)`).
+`print(value)` writes a value's text and a line break to standard output:
+what [interpolating](interpolation.md#which-values-can-be-interpolated) it,
+`$"{value}"`, would make. That covers a `String`, numbers, `bool` (`true` or
+`false`), tuples, and any type with a `to_string()`. To print several values
+on one line, interpolate them (`print($"total: {n}")`), or pass a format
+string and its arguments, which prints what
+[`String.format`](interpolation.md#formatting-by-position-stringformat) makes
+of them (`print("{0} of {1}", done, total)`).
 
 ```pepper
 {{#include ../../examples/functions-print.pep}}
 ```
 
-To print several values on one line, build a `String` first, with an
-[interpolated string](interpolation.md) (`print($"line {n}")`) or `+`
-(`print("line " + to_string(n))`).
+- With a string literal and **no other arguments**, the text prints as
+  written: its braces are not a format.
+- A value with no text form is an error at the argument:
+
+```text
+main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload
+    5 |     print(f);
+      |           ^
+```
 
 `print` buffers its output. Writing to standard output through
 `io.File.stdout()` flushes that buffer first, so text from the two comes out
 in the order the program wrote it, even when standard output is a pipe.
 
-A `float` or `double` prints with six digits after the decimal point, rounded:
-`print(0.5)` prints `0.500000`.
+A `float` or `double` prints its shortest exact text (`print(0.5)` prints
+`0.5`), and a tuple its elements in parentheses (`(1, two)`).
 
 For checks in your programs, the runtime also provides `assert(condition,
 message)`, which stops the program with `message` when `condition` is false, and

@@ -154,16 +154,16 @@ nothing() {
 }
 main() {
     var p = make();
-    print(p.x);
-    print(wide());
-    print(half() * 4.0);
+    print($"{p.x}");
+    print($"{wide()}");
+    print($"{half() * 4.0}");
     print(name());
     nothing();
 }
 "#,
     );
     assert!(ok);
-    assert_eq!(out, "3\n5000000000\n2.000000\nhi\nside effect\n");
+    assert_eq!(out, "3\n5000000000\n2.0\nhi\nside effect\n");
 }
 
 #[test]
@@ -175,7 +175,7 @@ skip<T>(value: T, early: bool) {
     if (early) {
         return;
     }
-    print(value);
+    print($"{value}");
 }
 first<T>(a: T, b: T) {
     return a;
@@ -183,7 +183,7 @@ first<T>(a: T, b: T) {
 main() {
     skip<int>(1, true);
     skip<String>("shown", false);
-    print(first<int>(7, 8));
+    print($"{first<int>(7, 8)}");
 }
 "#,
     );
@@ -244,19 +244,21 @@ fn float_printing() {
         "float_printing",
         r#"
 main(): int {
-    print(0.5);
-    print(1.25);
-    print(-2.75);
-    print(3.0);
-    print(0.9999996);
-    print(-0.001);
-    print(123456.000001);
+    print($"{0.5}");
+    print($"{1.25}");
+    print($"{-2.75}");
+    print($"{3.0}");
+    print($"{0.9999996}");
+    print($"{-0.001}");
+    print($"{123456.000001}");
+    print($"{0.9999996:.6}");
+    print($"{-0.001:.6}");
     return 0;
 }
 "#,
     );
     assert!(ok);
-    assert_eq!(out, "0.500000\n1.250000\n-2.750000\n3.000000\n1.000000\n-0.001000\n123456.000001\n");
+    assert_eq!(out, "0.5\n1.25\n-2.75\n3.0\n0.9999996\n-0.001\n123456.000001\n1.000000\n-0.001000\n");
 }
 
 #[test]
@@ -433,6 +435,8 @@ test(): int {
 
 #[test]
 fn trace_and_print_free_their_buffers() {
+    // The most negative long traces in full: its magnitude does not fit a
+    // long.
     let (ok, out) = run_binary_with_env(
         "trace_leaks",
         r#"
@@ -442,9 +446,10 @@ main(): int {
     var before = _pep_live_allocs();
     _pep_trace_int(-42, answer.c_str());
     _pep_trace_ptr(__null, nothing.c_str());
-    print(7);
-    print(0.5);
-    print(_pep_live_allocs() - before);
+    _pep_trace_int(-9223372036854775807 - 1, nothing.c_str());
+    print($"{7}");
+    print($"{0.5}");
+    print($"{_pep_live_allocs() - before}");
     return 0;
 }
 "#,
@@ -456,8 +461,9 @@ main(): int {
     let line = |prefix: &str| *lines.iter().find(|l| l.starts_with(prefix)).unwrap_or_else(|| panic!("no {prefix} line in {out}"));
     assert_eq!(line("answer: "), "answer: -42");
     assert_eq!(line("nothing: "), "nothing: 0000000000000000");
+    assert!(lines.contains(&"nothing: -9223372036854775808"), "{out}");
     let printed: Vec<&str> = lines.iter().copied().filter(|l| !l.contains(": ")).collect();
-    assert_eq!(printed, ["7", "0.500000", "0"]);
+    assert_eq!(printed, ["7", "0.5", "0"]);
 }
 
 #[test]

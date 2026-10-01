@@ -339,9 +339,9 @@ main(): int {
     u16 a = 65535;
     i16 b = -32768;
     u8 c = 200;
-    print(a);
-    print(b);
-    print(c);
+    print($"{a}");
+    print($"{b}");
+    print($"{c}");
     return 0;
 }"#,
     );

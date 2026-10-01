@@ -206,7 +206,7 @@ main(): int {
     assert(logical >= 1, "at least one logical processor");
     assert(physical >= 1, "at least one core");
     assert(physical <= logical, "no more cores than logical processors");
-    print("logical ", logical, " physical ", physical, "\n");
+    print("logical {0} physical {1}", logical, physical);
     return 0;
 }
 "#;

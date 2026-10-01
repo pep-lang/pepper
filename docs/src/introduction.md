@@ -90,7 +90,6 @@ Some that you will meet quickly:
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.
-- `print` writes each argument on its own line.
 
 Each chapter of this book says plainly what is and is not supported. When a
 chapter shows a feature, the example was compiled and run to check it.

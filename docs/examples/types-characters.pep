@@ -18,6 +18,6 @@ main(): int {
     int digit = bytes[4] - '0';
     assert(digit == 1, "the digit's value");
 
-    print(letter);
+    print($"{letter}");   # 97
     return 0;
 }

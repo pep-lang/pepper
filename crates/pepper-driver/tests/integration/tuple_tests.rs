@@ -452,14 +452,15 @@ fn print_writes_tuples() {
         r#"
 main(): int {
     var s = "two";
-    print((1, s, (2.5, true)), 7);
-    print((-3, "x" + "y"));
+    var t = (1, s, (2.5, true));
+    print("{0} {1}", t, 7);
+    print($"{(-3, "x" + "y")}");
     return 0;
 }
 "#,
     );
     assert!(ok, "stdout: {stdout:?}");
-    assert_eq!(stdout, "(1, two, (2.500000, 1))\n7\n(-3, xy)\n");
+    assert_eq!(stdout, "(1, two, (2.5, true)) 7\n(-3, xy)\n");
 }
 
 #[test]

@@ -31,8 +31,8 @@ A few things to notice:
   always needs braces. Chain conditions with `else if`. See
   [Control flow](../language/control-flow.md).
 - `+=` updates a variable in place, and `+` joins two strings.
-- `print` writes one value per line. Called with several arguments, it prints
-  each one on its own line.
+- `print` writes one value's text on its own line. Interpolate to combine
+  values: `print($"total: {sum_to(100)}")`.
 
 ## Structs
 

@@ -985,9 +985,14 @@ pub const FORMAT_FUNCTION: &str = "_pep_format";
 /// upper, plus, fill, align, width, zero)`. Its call is located at the
 /// specification's character that needs the integer.
 pub const FORMAT_INTEGER_FUNCTION: &str = "_pep_format_integer";
+/// The runtime function called for a format specification with a
+/// precision (`{x:.2}`), which needs a floating-point value:
+/// `_pep_format_float(value, precision, plus, fill, align, width, zero)`.
+/// Its call is located at the specification's `.`.
+pub const FORMAT_FLOAT_FUNCTION: &str = "_pep_format_float";
 
-/// A format specification, `[[fill]align][+][0][width][type]`, as written
-/// after the `:` in `{value:>8}`.
+/// A format specification, `[[fill]align][+][0][width][.precision][type]`,
+/// as written after the `:` in `{value:>8}`.
 #[derive(Debug, Default)]
 struct FormatSpec {
     fill: Option<char>,
@@ -997,6 +1002,8 @@ struct FormatSpec {
     plus: Option<Span>,
     zero: Option<Span>,
     width: Option<i64>,
+    /// The digits after the point, with the span of the `.`.
+    precision: Option<(i64, Span)>,
     /// `d`, `x`, `X`, `b` or `o`.
     kind: Option<(char, Span)>,
 }
@@ -1050,6 +1057,25 @@ fn format_spec(input: &mut &str, end: usize) -> Result<FormatSpec> {
             Err(_) => return Err(error_at(span, "format width is too large".to_string())),
         }
     }
+    if chars.get(i).is_some_and(|(_, c)| *c == '.') {
+        let point = span_of(i);
+        i += 1;
+        let digits_start = i;
+        while chars.get(i).is_some_and(|(_, c)| c.is_ascii_digit()) {
+            i += 1;
+        }
+        if i == digits_start {
+            return Err(error_at(point, "expected a precision after '.' in format specification".to_string()));
+        }
+        let digits = &text[chars[digits_start].0..chars.get(i).map_or(text.len(), |(offset, _)| *offset)];
+        match digits.parse::<u32>() {
+            Ok(precision) if precision <= 100 => spec.precision = Some((precision as i64, point)),
+            _ => {
+                let span = Span { start: span_of(digits_start).start, end: span_of(i - 1).end };
+                return Err(error_at(span, "format precision is too large; the most is 100".to_string()));
+            }
+        }
+    }
     if let Some((_, c @ ('d' | 'x' | 'X' | 'b' | 'o'))) = chars.get(i) {
         spec.kind = Some((*c, span_of(i)));
         i += 1;
@@ -1057,8 +1083,11 @@ fn format_spec(input: &mut &str, end: usize) -> Result<FormatSpec> {
     if let Some((_, c)) = chars.get(i) {
         return Err(error_at(
             span_of(i),
-            format!("unexpected '{}' in format specification; expected '[[fill]align][+][0][width][type]'", c),
+            format!("unexpected '{}' in format specification; expected '[[fill]align][+][0][width][.precision][type]'", c),
         ));
+    }
+    if let (Some((_, point)), Some((kind, _))) = (spec.precision, spec.kind) {
+        return Err(error_at(point, format!("a precision cannot be combined with the integer type '{}'", kind)));
     }
     if let (Some(zero), Some(_)) = (spec.zero, spec.align) {
         return Err(error_at(zero, "'0' padding cannot be combined with an alignment".to_string()));
@@ -1082,6 +1111,18 @@ fn interpolation_call(value: Expression, braces: Span, spec: Option<FormatSpec>)
     let fill = literal(Literal::String(spec.fill.unwrap_or(' ').to_string()));
     let align = literal(Literal::Integer(spec.align.map_or(0, |(align, _)| align)));
     let width = literal(Literal::Integer(spec.width.unwrap_or(0)));
+    if let Some((precision, point)) = spec.precision {
+        let arguments = vec![
+            value,
+            literal(Literal::Integer(precision)),
+            literal(Literal::Bool(spec.plus.is_some())),
+            fill,
+            align,
+            width,
+            literal(Literal::Bool(spec.zero.is_some())),
+        ];
+        return call(FORMAT_FLOAT_FUNCTION, point, arguments);
+    }
     // The character that makes the value an integer: its type, else its
     // sign, else its `0`.
     let integer = spec.kind.map(|(_, span)| span).or(spec.plus).or(spec.zero);
@@ -1234,6 +1275,51 @@ fn string_format(input: &mut &str) -> Result<Expression> {
             "the format of 'String.format' must be a string literal".to_string(),
         ));
     }
+    format_arguments(input, start, paren, name_span, "String.format")
+}
+
+/// `print("{0} + {1}", a, b)`: a string literal followed by arguments prints
+/// the text `String.format` makes of them, so it is lowered here to
+/// `print(String.format(...))`. With no arguments after the literal, `print`
+/// is an ordinary call and the text prints as written.
+fn print_format(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    if !keyword(input, "print") {
+        return Err(bt(input));
+    }
+    let name_span = Span { start, end: pos(input) };
+    ws(input)?;
+    if !input.starts_with('(') {
+        return Err(bt(input));
+    }
+    let paren = pos(input);
+    *input = &input[1..];
+    ws(input)?;
+    if !input.starts_with('"') {
+        return Err(bt(input));
+    }
+    // Only a literal followed by a ',' is a format.
+    let mut rest = *input;
+    if string_constant(&mut rest).is_err() {
+        return Err(bt(input));
+    }
+    ws(&mut rest)?;
+    if !rest.starts_with(',') {
+        return Err(bt(input));
+    }
+    let text = format_arguments(input, start, paren, name_span, "print")?;
+    let span = Span { start, end: pos(input) };
+    Ok(Expression::FunctionCall {
+        function: Box::new(Expression::SymbolRef { id: "print".to_string(), span: name_span }),
+        arguments: vec![text],
+        span,
+    })
+}
+
+/// The format string literal at `input` and the arguments after it, up to
+/// and including the call's `)`: the body of `String.format` and of
+/// `print` with arguments. `callee` names the call in errors.
+fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Span, callee: &str) -> Result<Expression> {
     let open = pos(input);
     *input = &input[1..];
     let mut holes: Vec<(usize, Span)> = vec![];
@@ -1301,7 +1387,7 @@ fn string_format(input: &mut &str) -> Result<Expression> {
     if let Some(unused) = (0..count).find(|i| !holes.iter().any(|(index, _)| index == i)) {
         return Err(error_at(
             argument_spans[unused],
-            format!("argument {} of 'String.format' is not used by its format string", unused),
+            format!("argument {} of '{}' is not used by its format string", unused, callee),
         ));
     }
     let in_order = holes.iter().enumerate().all(|(i, (index, _))| *index == i) && holes.len() == count;
@@ -1558,6 +1644,18 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     if input.starts_with("String") {
         let mut rest = *input;
         match string_format(&mut rest) {
+            Ok(e) => {
+                *input = rest;
+                return Ok(e);
+            }
+            Err(ErrMode::Backtrack(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    // print("{0}", x): the text String.format makes, printed.
+    if input.starts_with("print") {
+        let mut rest = *input;
+        match print_format(&mut rest) {
             Ok(e) => {
                 *input = rest;
                 return Ok(e);
@@ -5066,6 +5164,27 @@ mod tests {
         let Expression::Match(m) = parse_expr("String.format(\"{0}{0}\", a)") else { panic!("expected a match") };
         assert!(matches!(&m.value, Expression::Tuple { elements, .. } if elements.len() == 2));
         assert!(matches!(parse_expr("String.format(\"x\")"), Expression::Literal { value: Literal::String(ref s), .. } if s == "x"));
+    }
+
+    #[test]
+    fn print_with_arguments_prints_a_format() {
+        // A literal and arguments: `print` of the concatenation.
+        let Expression::FunctionCall { function, arguments, .. } = parse_expr("print(\"{0}!\", a)") else { panic!("expected a call") };
+        assert!(matches!(*function, Expression::SymbolRef { ref id, .. } if id == "print"));
+        assert!(matches!(&arguments[..], [Expression::Binary { .. }]));
+        // A literal alone is printed as written, braces included.
+        let Expression::FunctionCall { arguments, .. } = parse_expr("print(\"{0}\")") else { panic!("expected a call") };
+        assert!(matches!(&arguments[..], [Expression::Literal { value: Literal::String(s), .. }] if s == "{0}"));
+        // Anything else is an ordinary call.
+        let Expression::FunctionCall { arguments, .. } = parse_expr("print(a, b)") else { panic!("expected a call") };
+        assert_eq!(arguments.len(), 2);
+    }
+
+    #[test]
+    fn a_precision_lowers_to_the_float_format() {
+        let Expression::FunctionCall { function, arguments, .. } = parse_expr("$\"{x:08.2}\"") else { panic!("expected a call") };
+        assert!(matches!(*function, Expression::SymbolRef { ref id, .. } if id == FORMAT_FLOAT_FUNCTION));
+        assert!(matches!(&arguments[1], Expression::Literal { value: Literal::Integer(2), .. }));
     }
 
     #[test]

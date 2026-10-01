@@ -28,7 +28,9 @@
 //! integer widenings, the narrower target ranks better), and the
 //! winner is no worse than every other viable member in every argument and
 //! better in at least one; between otherwise equal members, a non-generic one
-//! beats a generic one. Anything else is ambiguous.
+//! beats a generic one, and between two generic ones the more specialized
+//! wins, as C++ orders function templates (`f<A, B>((A, B))` beats
+//! `f<T>(T)`; see [`at_least_as_specialized`]). Anything else is ambiguous.
 
 use crate::model::*;
 use crate::passes::check_function_types::canonical;
@@ -960,7 +962,11 @@ impl Overloads {
         let better = |a: &Viable, b: &Viable| {
             let no_worse = a.ranks.iter().zip(&b.ranks).all(|(x, y)| x <= y);
             let strictly = a.ranks.iter().zip(&b.ranks).any(|(x, y)| x < y);
-            no_worse && (strictly || (!a.generic && b.generic))
+            let more_specialized = a.generic
+                && b.generic
+                && at_least_as_specialized(&members[a.member], &members[b.member])
+                && !at_least_as_specialized(&members[b.member], &members[a.member]);
+            no_worse && (strictly || (!a.generic && b.generic) || more_specialized)
         };
         if viable.is_empty() {
             return Outcome::Failed(Failure { message: format!("no matching function for call to '{}'", name), notes });
@@ -986,6 +992,39 @@ impl Overloads {
             }
         }
     }
+}
+
+/// Whether generic member `a` is at least as specialized as generic member
+/// `b`, as C++ orders function templates: `b`'s type parameters can be
+/// deduced from `a`'s parameter types (with `a`'s own type parameters held
+/// as unknown, distinct types) and give back exactly those types. So
+/// `f<A, B>((A, B))` is more specialized than `f<T>(T)`: `T` deduces from
+/// `(A, B)`, but `(A, B)` does not deduce from `T`.
+fn at_least_as_specialized(a: &Member, b: &Member) -> bool {
+    let (Some(a_signature), Some(b_signature)) = (&a.generic, &b.generic) else { return false };
+    let count = a.params.len().min(b.params.len());
+    let opaque: Vec<(String, TypeName)> = a_signature
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.name.clone(), TypeName::with_args(&format!("$opaque{}", i), vec![])))
+        .collect();
+    let a_params: Vec<TypeName> = a.params[..count]
+        .iter()
+        .map(|ty| {
+            let mut ty = ty.clone();
+            crate::type_name::replace_map(&mut ty, &opaque);
+            ty
+        })
+        .collect();
+    let arguments: Vec<Option<TypeName>> = a_params.iter().cloned().map(Some).collect();
+    let Some(type_args) = b_signature.infer(&arguments) else { return false };
+    let map: Vec<(String, TypeName)> = b_signature.params.iter().map(|p| p.name.clone()).zip(type_args).collect();
+    b.params[..count].iter().zip(&a_params).all(|(b_param, a_param)| {
+        let mut ty = b_param.clone();
+        crate::type_name::replace_map(&mut ty, &map);
+        ty.to_string() == a_param.to_string()
+    })
 }
 
 /// A failed constructor call worded as clang words it: `no matching

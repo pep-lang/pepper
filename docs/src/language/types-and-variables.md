@@ -72,7 +72,8 @@ spelling of a type is the same type, so `i32.parse` is `int.parse`:
 ### Booleans
 
 `bool` holds `true` or `false`. Comparisons and the logical operators produce a
-`bool`. In arithmetic a `bool` counts as 0 or 1, and `print(true)` prints `1`.
+`bool`. In arithmetic a `bool` counts as 0 or 1, and its text is `true` or
+`false` (`$"{flag}"`).
 
 ### Characters
 

@@ -24,7 +24,7 @@ main(): int {
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {
-        print((name, count));
+        print($"{name}: {count}");
     }
     return 0;
 }

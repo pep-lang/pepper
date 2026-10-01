@@ -85,7 +85,7 @@ fn main_with_arguments_falls_off_its_end_with_zero() {
 fn a_void_main_with_arguments_exits_zero() {
     let output = run_with(
         "main_args_void",
-        "main(args: String[]): void {\n    print(args.count());\n}\n",
+        "main(args: String[]): void {\n    print($\"{args.count()}\");\n}\n",
         &["x"],
     );
     assert_eq!(stdout_of(&output), "2\n");

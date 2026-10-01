@@ -16,7 +16,7 @@ process_id(): long {
 
 main(): int {
     var id = process_id();
-    print(id);
+    print($"process {id}");
     assert(id > 0, "a running process has a positive id");
     return 0;
 }

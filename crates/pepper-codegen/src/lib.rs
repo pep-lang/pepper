@@ -4065,10 +4065,6 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_call(&mut self, name: &str, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
-        // Builtins first: print → _pep_print/_pep_print_int.
-        if name == "print" {
-            return self.codegen_print(args);
-        }
         // release<T>(v): no-op for POD values (nothing to free), dispatches
         // to T.__release for struct references.
         if name == "release" || name.starts_with("release<") {
@@ -4683,128 +4679,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             .try_as_basic_value()
             .basic()
             .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
-    }
-
-    fn codegen_print(&mut self, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
-        for arg in args {
-            // An owned-rvalue argument is a temporary: released once the
-            // print call has consumed it.
-            let value_temp = self.owned_temp_type(arg);
-            let value = self.codegen_expr(arg)?;
-            // A tuple prints on one line: `(1, two, 3.000000)`.
-            if let Some(tuple) = self.value_sema_type(arg).filter(|t| self.tuples.contains_key(t)) {
-                self.write_tuple(&tuple, value)?;
-                let newline = self.literal_text("\n")?;
-                self.call_function("_pep_write", vec![newline])?;
-                if let Some(ty) = value_temp {
-                    self.release_temp(&ty, value)?;
-                }
-                continue;
-            }
-            match value {
-                BasicValueEnum::PointerValue(_) => {
-                    self.call_function("_pep_print", vec![value])?;
-                }
-                BasicValueEnum::IntValue(v) => {
-                    // Unsigned (and bool) sources widen zero-extended, or a
-                    // u16 65535 prints as -1.
-                    let unsigned = v.get_type().get_bit_width() == 1
-                        || self
-                            .value_sema_type(arg)
-                            .is_some_and(|s| llvm_ops::is_unsigned_int_type(&s));
-                    let wide = if v.get_type().get_bit_width() < 64 && unsigned {
-                        self.builder
-                            .build_int_z_extend(v, self.context.i64_type(), "printw")
-                            .map_err(|e| e.to_string())?
-                    } else if v.get_type().get_bit_width() < 64 {
-                        self.builder
-                            .build_int_s_extend(v, self.context.i64_type(), "printw")
-                            .map_err(|e| e.to_string())?
-                    } else {
-                        v
-                    };
-                    self.call_function("_pep_print_int", vec![BasicValueEnum::IntValue(wide)])?;
-                }
-                BasicValueEnum::FloatValue(v) => {
-                    let double = self
-                        .builder
-                        .build_float_cast(v, self.context.f64_type(), "printf64")
-                        .map_err(|e| e.to_string())?;
-                    self.call_function("_pep_print_float", vec![BasicValueEnum::FloatValue(double)])?;
-                }
-                _ => return Err("unsupported print arg".to_string()),
-            }
-            if let Some(ty) = value_temp {
-                self.release_temp(&ty, value)?;
-            }
-        }
-        Ok(self.context.i32_type().const_zero().into())
-    }
-
-    /// A pointer to a NUL-terminated global holding `text`.
-    fn literal_text(&mut self, text: &str) -> Result<BasicValueEnum<'ctx>, String> {
-        let global = self.builder.build_global_string_ptr(text, "print_text").map_err(|e| e.to_string())?;
-        Ok(global.as_pointer_value().into())
-    }
-
-    /// Write tuple `value` without a newline: `(a, b)`, each element as
-    /// `print` writes it (a `String` as its text, a nested tuple the same
-    /// way).
-    fn write_tuple(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<(), String> {
-        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
-        let open = self.literal_text("(")?;
-        self.call_function("_pep_write", vec![open])?;
-        for (index, element) in elements.iter().enumerate() {
-            if index > 0 {
-                let separator = self.literal_text(", ")?;
-                self.call_function("_pep_write", vec![separator])?;
-            }
-            let item = self
-                .builder
-                .build_extract_value(value.into_struct_value(), index as u32, "element")
-                .map_err(|e| e.to_string())?;
-            if self.tuples.contains_key(element) {
-                self.write_tuple(element, item)?;
-                continue;
-            }
-            match item {
-                BasicValueEnum::IntValue(v) => {
-                    let unsigned = v.get_type().get_bit_width() == 1 || llvm_ops::is_unsigned_int_type(element);
-                    let i64 = self.context.i64_type();
-                    let wide = if v.get_type().get_bit_width() >= 64 {
-                        v
-                    } else if unsigned {
-                        self.builder.build_int_z_extend(v, i64, "printw").map_err(|e| e.to_string())?
-                    } else {
-                        self.builder.build_int_s_extend(v, i64, "printw").map_err(|e| e.to_string())?
-                    };
-                    self.call_function("_pep_write_int", vec![wide.into()])?;
-                }
-                BasicValueEnum::FloatValue(v) => {
-                    let double = self
-                        .builder
-                        .build_float_cast(v, self.context.f64_type(), "printf64")
-                        .map_err(|e| e.to_string())?;
-                    self.call_function("_pep_write_float", vec![double.into()])?;
-                }
-                BasicValueEnum::PointerValue(_) if element == "String" => {
-                    let text = self.call_function("String.c_str", vec![item])?;
-                    self.call_function("_pep_write", vec![text])?;
-                }
-                BasicValueEnum::PointerValue(_) if element.ends_with('*') => {
-                    self.call_function("_pep_write", vec![item])?;
-                }
-                _ => {
-                    return Err(format!(
-                        "cannot print a tuple with an element of type '{}'",
-                        pepper_sema::passes::gather_generics::parse_type_string(element).display()
-                    ))
-                }
-            }
-        }
-        let close = self.literal_text(")")?;
-        self.call_function("_pep_write", vec![close])?;
-        Ok(())
     }
 
     /// Default-argument expressions for the parameters a call did not supply.

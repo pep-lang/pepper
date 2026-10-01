@@ -1,9 +1,12 @@
-# The print builtin writes each argument on its own line.
+# print writes a value's text and a line break.
 main(): int {
-    print("Hello, world!");     # a String
-    print(42);                  # an integer
-    print(true);                # a bool prints as 1 or 0
+    print("Hello, world!");
+    print(42);                            # any value with a text form
+    print((1.5, true));                   # (1.5, true)
     var name = "Pepper";
-    print("Hi, " + name, 3 + 4); # two lines: "Hi, Pepper" and "7"
+    var count = 42;
+    print($"{name} has {count} items");   # interpolate other values
+    print("{0} + {1} = {2}", 3, 4, 3 + 4); # or format them: "3 + 4 = 7"
+    print("{braces} alone print as written");
     return 0;
 }
