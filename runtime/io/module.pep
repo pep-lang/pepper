@@ -86,6 +86,12 @@ export _IO_WAIT_TIMED_OUT;
 export _IO_WAIT_UNWATCHED;
 export _FileTransfer;
 
+# For the tls and async modules only: UTF-16 names for Windows calls.
+[Target(OS(Windows))]
+export _io_win_wide;
+[Target(OS(Windows))]
+export _io_win_wide_len;
+
 # For the tls module only: the socket calls its BIO makes.
 export _io_sys_socket_receive;
 export _io_sys_socket_send;

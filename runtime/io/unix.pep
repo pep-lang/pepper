@@ -31,13 +31,8 @@ export _io_sockaddr_unix_write(buffer: __ptr<u8>, path: Path): IoResult<int> {
     var n = text.size();
     var capacity = _io_sys_unix_path_capacity();
     if (n == 0 || n + 1 > capacity) {
-        var out = Array<u8>();
-        _io_append_text(out, "a Unix socket path must be 1 to ");
-        _io_append_decimal(out, capacity - 1);
-        _io_append_text(out, " bytes: '");
-        _io_append_text(out, text);
-        _io_append_text(out, "'");
-        return IoResult<int>.err(IoError(_io_sys_code_invalid_input(), _io_string_from_bytes(out)));
+        var message = $"a Unix socket path must be 1 to {capacity - 1} bytes: '{text}'";
+        return IoResult<int>.err(IoError(_io_sys_code_invalid_input(), message));
     }
     var p = text.c_str() as __ptr<u8>;
     ulong i = 0;

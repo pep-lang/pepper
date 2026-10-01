@@ -282,13 +282,7 @@ _async_iocp_close_handle(handle: __ptr<void>) {
 _async_iocp_open_afd(port: __ptr<void>): __ptr<void> {
     var name = "\\Device\\Afd\\Pepper";
     var units = name.size();
-    __ptr<u16> wide = _pep_malloc((units + 1) * 2);
-    var text = name.c_str();
-    var i: ulong = 0;
-    while (i < units) {
-        wide[i] = text[i] as u16;
-        i = i + 1;
-    }
+    var wide = io._io_win_wide(name);
     __ptr<u8> unicode = _pep_malloc(16);  # UNICODE_STRING
     (unicode as __ptr<u16>)[0] = (units * 2) as u16;
     ((unicode + 2) as __ptr<u16>)[0] = ((units + 1) * 2) as u16;

@@ -175,8 +175,6 @@ extern int NCryptDeleteKey(ulong key, uint flags);
 extern int NCryptFreeObject(ulong handle);
 
 [Target(OS(Windows))]
-extern int MultiByteToWideChar(uint codepage, uint flags, char* src, int src_len, ushort* dst, int dst_len);
-[Target(OS(Windows))]
 extern uint GetCurrentProcessId();
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -239,20 +237,7 @@ _tls_status_error(what: String, status: int): io.IoError {
 
 [Target(OS(Windows))]
 _tls_hex(value: uint): String {
-    var digits = "0123456789abcdef";
-    var p = digits.c_str() as __ptr<u8>;
-    __ptr<u8> text = _pep_malloc(11);
-    text[0] = 48;
-    text[1] = 120;
-    ulong i = 0;
-    while (i < 8) {
-        var shift = ((7 - i) * 4) as uint;
-        text[2 + i] = p[((value >> shift) & 15) as ulong];
-        i = i + 1;
-    }
-    var result = String(text as __ptr<char>, 10);
-    _pep_free(text);
-    return result;
+    return $"0x{value:08x}";
 }
 
 # Why the certificate check failed, from CERT_CHAIN_POLICY_STATUS.dwError.
@@ -346,30 +331,6 @@ _tls_buffer_at(desc: __ptr<u8>, index: ulong): __ptr<u8> {
     return desc + 16 + index * 16;
 }
 
-# `text` as NUL-terminated UTF-16 in a new block.
-[Target(OS(Windows))]
-_tls_wide(text: String): __ptr<u16> {
-    var units = MultiByteToWideChar(65001, 0, text.c_str(), text.size() as int, __null, 0);
-    if (units < 0) {
-        units = 0;
-    }
-    __ptr<u16> wide = _pep_malloc(((units + 1) * 2) as ulong);
-    if (units > 0) {
-        MultiByteToWideChar(65001, 0, text.c_str(), text.size() as int, wide, units);
-    }
-    wide[units as ulong] = 0;
-    return wide;
-}
-
-[Target(OS(Windows))]
-_tls_wide_length(text: __ptr<u16>): ulong {
-    ulong n = 0;
-    while (text[n] != 0) {
-        n = n + 1;
-    }
-    return n;
-}
-
 # ── Certificates and keys ────────────────────────────────────────────────────
 
 # The DER bytes of every PEM block labeled `label` in `text`.
@@ -455,7 +416,7 @@ _tls_acquire(context: __ptr<u8>, server: bool, certificate: __ptr<void>): int {
     } else {
         _tls_set_u32(credentials, 52, _TLS_CLIENT_CREDENTIAL_FLAGS);
     }
-    var package = _tls_wide("Microsoft Unified Security Protocol Provider");
+    var package = io._io_win_wide("Microsoft Unified Security Protocol Provider");
     __ptr<u8> expiry = _pep_malloc(8);
     var status = AcquireCredentialsHandleW(__null, package, use, __null, credentials, __null, __null, context, expiry);
     _pep_free(expiry);
@@ -486,7 +447,7 @@ export _tls_sys_client_context(): io.IoResult<__ptr<void>> {
 _tls_key_provider(): ulong {
     __ptr<ulong> provider = _pep_malloc(8);
     provider[0] = 0;
-    var name = _tls_wide("Microsoft Software Key Storage Provider");
+    var name = io._io_win_wide("Microsoft Software Key Storage Provider");
     NCryptOpenStorageProvider(provider, name, 0);
     _pep_free(name);
     var result = provider[0];
@@ -505,13 +466,13 @@ _tls_import_key(der: u8[]): io.IoResult<__ptr<u16>> {
         return io.IoResult<__ptr<u16>>.err(_tls_error("cannot open the key storage provider"));
     }
     var number = _tls_key_count.fetch_add(1);
-    var name = _tls_wide("pepper-tls-" + to_string(GetCurrentProcessId() as ulong) + "-" + to_string(number));
+    var name = io._io_win_wide("pepper-tls-" + to_string(GetCurrentProcessId() as ulong) + "-" + to_string(number));
     # NCryptBufferDesc { version, count, buffers } with one NCryptBuffer
     # { cbBuffer, BufferType = NCRYPTBUFFER_PKCS_KEY_NAME, pvBuffer }: the
     # same layout as SecBufferDesc and SecBuffer.
     var desc = _tls_buffers(1);
-    _tls_set_buffer(desc + 16, 0, 45, name as __ptr<u8>, (_tls_wide_length(name) + 1) * 2);
-    var blob_type = _tls_wide("PKCS8_PRIVATEKEY");
+    _tls_set_buffer(desc + 16, 0, 45, name as __ptr<u8>, ((io._io_win_wide_len(name) as ulong) + 1) * 2);
+    var blob_type = io._io_win_wide("PKCS8_PRIVATEKEY");
     __ptr<ulong> key = _pep_malloc(8);
     key[0] = 0;
     # NCRYPT_OVERWRITE_KEY_FLAG | NCRYPT_DO_NOT_FINALIZE_FLAG
@@ -602,7 +563,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     # CRYPT_KEY_PROV_INFO { container, provider, type, flags, cProvParam,
     # rgProvParam, dwKeySpec }: 48 bytes.
     __ptr<u8> info = _pep_malloc(48);
-    var provider_name = _tls_wide("Microsoft Software Key Storage Provider");
+    var provider_name = io._io_win_wide("Microsoft Software Key Storage Provider");
     _tls_set_pointer(info, 0, name as __ptr<u8>);
     _tls_set_pointer(info, 8, provider_name as __ptr<u8>);
     CertSetCertificateContextProperty(certificate, 2, 0, info);  # CERT_KEY_PROV_INFO_PROP_ID
@@ -675,7 +636,7 @@ _tls_session_new(context: __ptr<void>, h: io.SocketHandle, host: String): __ptr<
     _tls_set_pointer(session, 32, _pep_malloc(_TLS_BUFFER_SIZE));
     _tls_set_pointer(session, 48, _pep_malloc(_TLS_BUFFER_SIZE));
     if (host.size() > 0) {
-        _tls_set_pointer(session, 96, _tls_wide(host) as __ptr<u8>);
+        _tls_set_pointer(session, 96, io._io_win_wide(host) as __ptr<u8>);
     }
     return session;
 }

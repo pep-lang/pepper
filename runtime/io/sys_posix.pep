@@ -117,14 +117,14 @@ export _io_sys_last_error(): ErrorCode {
 
 [Target(!OS(Windows))]
 export _io_sys_error_message(code: ErrorCode): String {
-    return _io_string_from_c(strerror(code));
+    return String(strerror(code));
 }
 
 # errno values (identical on Linux and macOS except ENOTEMPTY).
 [Target(!OS(Windows))]
 export _io_sys_is_not_found(code: ErrorCode): bool {
-    return code == 2;
-}  # ENOENT
+    return code == _io_sys_code_not_found();
+}
 
 [Target(!OS(Windows))]
 export _io_sys_is_permission_denied(code: ErrorCode): bool {
@@ -138,8 +138,8 @@ export _io_sys_is_already_exists(code: ErrorCode): bool {
 
 [Target(!OS(Windows))]
 export _io_sys_is_not_a_directory(code: ErrorCode): bool {
-    return code == 20;
-}  # ENOTDIR
+    return code == _io_sys_code_not_a_directory();
+}
 
 [Target(!OS(Windows))]
 export _io_sys_is_is_a_directory(code: ErrorCode): bool {
@@ -158,8 +158,8 @@ export _io_sys_is_directory_not_empty(code: ErrorCode): bool {
 
 [Target(!OS(Windows))]
 export _io_sys_is_invalid_input(code: ErrorCode): bool {
-    return code == 22;
-}  # EINVAL
+    return code == _io_sys_code_invalid_input();
+}
 
 [Target(!OS(Windows))]
 export _io_sys_is_interrupted(code: ErrorCode): bool {
@@ -202,11 +202,10 @@ export _io_sys_code_cancelled(): ErrorCode {
     return 89;
 }  # ECANCELED
 
-[Target(OS(Linux))]
-export _io_sys_is_cancelled(code: ErrorCode): bool { return code == 125; }
-
-[Target(OS(Mac))]
-export _io_sys_is_cancelled(code: ErrorCode): bool { return code == 89; }
+[Target(!OS(Windows))]
+export _io_sys_is_cancelled(code: ErrorCode): bool {
+    return code == _io_sys_code_cancelled();
+}
 
 [Target(!OS(Windows))]
 export _io_posix_err_none(): IoResult<void> {
@@ -608,8 +607,8 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
             }
             break;
         }
-        var name = _io_string_from_c((ent + _io_dirent_name_offset()) as __ptr<char>);
-        if (_io_is_dot(name) || _io_is_dotdot(name)) {
+        var name = String((ent + _io_dirent_name_offset()) as __ptr<char>);
+        if (name == "." || name == "..") {
             continue;
         }
         var entry = DirEntry();
@@ -680,7 +679,7 @@ export _io_sys_getcwd(): IoResult<Path> {
         var buf = _pep_malloc(size);
         var r = getcwd(buf, size);
         if (r != __null) {
-            var p = Path(_io_string_from_c(buf));
+            var p = Path(String(buf));
             _pep_free(buf);
             return IoResult<Path>.ok(p);
         }
@@ -714,14 +713,14 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
         _pep_free(buf);
         return IoResult<Path>.err(e);
     }
-    var p = Path(_io_string_from_c(buf));
+    var p = Path(String(buf));
     _pep_free(buf);
     return IoResult<Path>.ok(p);
 }
 
 [Target(!OS(Windows))]
 export _io_sys_temp_dir(): Path {
-    var s = _io_string_from_c(getenv("TMPDIR"));
+    var s = String(getenv("TMPDIR"));
     if (s.size() == 0) {
         return Path("/tmp");
     }

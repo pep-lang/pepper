@@ -195,7 +195,8 @@ export struct Copies {
         }
         if (_edges !== __null) {
             var address = this._address<T>(value);
-            _edges[address] = (_edges.contains(address) ? _edges.get(address) : 0) + 1;
+            # `get` gives 0 for an address not seen yet.
+            _edges[address] = _edges.get(address) + 1;
         }
         var made = this._find<T>(value);
         if (made !== __null) {

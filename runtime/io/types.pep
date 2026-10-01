@@ -325,24 +325,14 @@ export type IoResult<T> = Result<T, IoError>;
 
 # ── Module-private helpers shared by the io files ───────────────────────────
 
-# A String holding a copy of `n` bytes at `p`. The String constructor derives
-# the character count only when it measures a C string itself, so compute it
-# here; `n == 0` must not reach the constructor, which would read `p` as a
-# NUL-terminated C string.
+# A String holding a copy of `n` bytes at `p`; `n == 0` must not reach the
+# constructor, which would read `p` as a NUL-terminated C string. (For a C
+# string, `String(p)` measures it and takes a null `p` as empty.)
 export _io_string_from(p: __ptr<char>, n: ulong): String {
     if (p == __null || n == 0) {
         return String();
     }
-    return String(p, n, _pep_utf8_length(p, n));
-}
-
-# A one-character String holding the ASCII byte `b`.
-export _io_string_from_byte(b: int): String {
-    var buf: __ptr<char> = _pep_malloc(1);
-    buf[0] = b;
-    var s = String(buf, 1, 1);
-    _pep_free(buf);
-    return s;
+    return String(p, n);
 }
 
 extern void memcpy(void* dest, void* src, ulong n);
@@ -353,14 +343,6 @@ export _io_text_copy(text: String): __ptr<u8> {
     __ptr<u8> bytes = _pep_malloc(text.size() + 1);
     memcpy(bytes, text.c_str(), text.size());
     return bytes;
-}
-
-# A String from a NUL-terminated C string.
-export _io_string_from_c(p: __ptr<char>): String {
-    if (p == __null) {
-        return String();
-    }
-    return _io_string_from(p, _pep_c_strlen(p));
 }
 
 # Byte `i` of the `n` bytes at `p`, or 0 past the end: a bounds-checked read

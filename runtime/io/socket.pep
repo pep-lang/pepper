@@ -700,13 +700,8 @@ export _io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoRes
             return IoResult<void>.err(r.error());
         }
         if (r.value() == 0) {
-            var out = Array<u8>();
-            _io_append_text(out, "connection closed after ");
-            _io_append_decimal(out, done);
-            _io_append_text(out, " of ");
-            _io_append_decimal(out, count);
-            _io_append_text(out, " bytes");
-            return IoResult<void>.err(IoError(_io_sys_code_unexpected_end(), _io_string_from_bytes(out)));
+            var message = $"connection closed after {done} of {count} bytes";
+            return IoResult<void>.err(IoError(_io_sys_code_unexpected_end(), message));
         }
         done = done + r.value();
     }

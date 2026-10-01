@@ -302,7 +302,8 @@ export _io_sys_close(h: FileHandle): IoResult<void> {
     return _io_win_check(CloseHandle(h));
 }
 
-# One ReadFile/WriteFile call moves at most 1 GiB (the count is a DWORD).
+# One ReadFile/WriteFile call moves at most 1 GiB (the count is a DWORD);
+# sockets use the same limit (their length is an int).
 [Target(OS(Windows))]
 export _io_win_max_rw(n: ulong): uint {
     if (n > 1073741824) {
@@ -497,7 +498,7 @@ export _io_sys_list(path: Path): IoResult<DirEntry[]> {
     while (true) {
         var name_ptr = (data + 44) as __ptr<u16>;
         var name = _io_win_narrow(name_ptr, _io_win_wide_len(name_ptr));
-        if (!_io_is_dot(name) && !_io_is_dotdot(name)) {
+        if (name != "." && name != "..") {
             var m = _io_win_metadata(data, 0, 4, 12, 20, 28, 32);
             var entry = DirEntry();
             entry.name = name;
@@ -637,22 +638,11 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
     }
     var s = _io_win_narrow(buf, n as int);
     _pep_free(buf);
-    var p = s.c_str() as __ptr<u8>;
-    var size = s.size();
-    # "\\?\" is 92 92 63 92; "UNC\" is 85 78 67 92.
-    if (_io_byte(p, size, 0) == '\\'
-        && _io_byte(p, size, 1) == '\\'
-        && _io_byte(p, size, 2) == '?'
-        && _io_byte(p, size, 3) == '\\') {
-        if (_io_byte(p, size, 4) == 'U'
-            && _io_byte(p, size, 5) == 'N'
-            && _io_byte(p, size, 6) == 'C'
-            && _io_byte(p, size, 7) == '\\') {
-            var unc = _io_string_from_byte(92);
-            unc.append(_io_string_from_byte(92));
-            unc.append(_io_slice(s, 8, s.size()));
-            return IoResult<Path>.ok(Path(unc));
-        }
+    # Drop the `\\?\` prefix, keeping a UNC path's `\\`.
+    if (s.starts_with("\\\\?\\UNC\\")) {
+        return IoResult<Path>.ok(Path("\\\\" + _io_slice(s, 8, s.size())));
+    }
+    if (s.starts_with("\\\\?\\")) {
         return IoResult<Path>.ok(Path(_io_slice(s, 4, s.size())));
     }
     return IoResult<Path>.ok(Path(s));
@@ -669,13 +659,7 @@ export _io_sys_temp_dir(): Path {
     var n = GetTempPathW(need, buf) as int;
     var s = _io_win_narrow(buf, n);
     _pep_free(buf);
-    var p = s.c_str() as __ptr<u8>;
-    var end = s.size();
-    var root = _io_path_root_end(s);
-    while (end > root && _io_path_is_sep(_io_byte(p, s.size(), end - 1))) {
-        end = end - 1;
-    }
-    return Path(_io_slice(s, 0, end));
+    return Path(_io_slice(s, 0, _io_path_trimmed_end(s)));
 }
 
 # ── Thread-local keys ────────────────────────────────────────────────────────

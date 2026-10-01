@@ -222,15 +222,11 @@ export struct IpAddress {
     ##
     ## @returns the text form, which `IpAddress.parse` reads back
     to_string(): String {
-        var out = Array<u8>();
         if (!_is_v6) {
-            _io_append_v4(out, _low);
-            return _io_string_from_bytes(out);
+            return _io_v4_text(_low);
         }
         if (_high == 0 && (_low >> 32) == 65535) {
-            _io_append_text(out, "::ffff:");
-            _io_append_v4(out, _low & 4294967295);
-            return _io_string_from_bytes(out);
+            return "::ffff:" + _io_v4_text(_low & 4294967295);
         }
         # The longest run of zero groups, at least two long; the first wins a tie.
         ulong best_start = 8;
@@ -254,20 +250,21 @@ export struct IpAddress {
                 i = i + 1;
             }
         }
+        var out = StringBuilder();
         i = 0;
         while (i < 8) {
             if (i == best_start) {
-                _io_append_text(out, "::");
+                out.append("::");
                 i = i + best_length;
                 continue;
             }
             if (i > 0 && i != best_start + best_length) {
-                out.append(':');
+                out.append(":");
             }
-            _io_append_hex(out, _group(i));
+            out.append($"{_group(i):x}");
             i = i + 1;
         }
-        return _io_string_from_bytes(out);
+        return out.to_string();
     }
 
     ## Returns whether two addresses are the same: same family and same
@@ -419,17 +416,11 @@ export struct SocketAddress {
     ##
     ## @returns the text form, which `SocketAddress.parse` reads back
     to_string(): String {
-        var out = Array<u8>();
+        var address = _address.to_string();
         if (_address.is_v6()) {
-            out.append('[');
-            _io_append_text(out, _address.to_string());
-            out.append(']');
-        } else {
-            _io_append_text(out, _address.to_string());
+            return $"[{address}]:{_port}";
         }
-        out.append(':');
-        _io_append_decimal(out, _port as ulong);
-        return _io_string_from_bytes(out);
+        return $"{address}:{_port}";
     }
 
     ## Returns whether two socket addresses have equal IP addresses and the
@@ -503,47 +494,9 @@ export resolve(host: String, port: u16): IoResult<SocketAddress[]> {
 
 # ── Text helpers ─────────────────────────────────────────────────────────────
 
-# The bytes collected in `out` as a String (ASCII only).
-export _io_string_from_bytes(out: u8[]): String {
-    return _io_string_from(out._data as __ptr<char>, out._size);
-}
-
-export _io_append_text(out: u8[], text: String) {
-    var p = text.c_str() as __ptr<u8>;
-    ulong i = 0;
-    while (i < text.size()) {
-        out.append(p[i]);
-        i = i + 1;
-    }
-}
-
-export _io_append_decimal(out: u8[], value: ulong) {
-    if (value >= 10) {
-        _io_append_decimal(out, value / 10);
-    }
-    out.append((48 + value % 10) as u8);
-}
-
-export _io_append_hex(out: u8[], value: ulong) {
-    if (value >= 16) {
-        _io_append_hex(out, value / 16);
-    }
-    var digit = value % 16;
-    if (digit < 10) {
-        out.append((48 + digit) as u8);
-    } else {
-        out.append((87 + digit) as u8);  # 'a' - 10
-    }
-}
-
-export _io_append_v4(out: u8[], value: ulong) {
-    _io_append_decimal(out, (value >> 24) & 255);
-    out.append('.');
-    _io_append_decimal(out, (value >> 16) & 255);
-    out.append('.');
-    _io_append_decimal(out, (value >> 8) & 255);
-    out.append('.');
-    _io_append_decimal(out, value & 255);
+# The dotted-decimal text of the IPv4 address in the low 32 bits of `value`.
+export _io_v4_text(value: ulong): String {
+    return $"{(value >> 24) & 255}.{(value >> 16) & 255}.{(value >> 8) & 255}.{value & 255}";
 }
 
 # ── Parsing helpers: each reads p[start, end) of the n bytes at p ───────────

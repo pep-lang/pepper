@@ -304,7 +304,7 @@ export _async_sys_physical_cpus(): ulong {
     var cores = HashSet<String>();
     var cpu: long = 0;
     while (cpu < configured) {
-        var topology = "/sys/devices/system/cpu/cpu" + _async_decimal(cpu) + "/topology/";
+        var topology = $"/sys/devices/system/cpu/cpu{cpu}/topology/";
         # core_cpus_list since Linux 5.3; thread_siblings_list before.
         var siblings = io.File.read_to_string(io.Path(topology + "core_cpus_list"));
         if (!siblings.is_ok()) {
@@ -316,23 +316,6 @@ export _async_sys_physical_cpus(): ulong {
         cpu = cpu + 1;
     }
     return cores.count() as ulong;
-}
-
-# The decimal digits of `value` (>= 0).
-[Target(OS(Linux))]
-export _async_decimal(value: long): String {
-    var digits = String();
-    if (value == 0) {
-        return "0";
-    }
-    while (value > 0) {
-        var digit: __ptr<char> = _pep_malloc(2);
-        digit[0] = ('0' + value % 10);
-        digits = String(digit, 1, 1) + digits;
-        _pep_free(digit);
-        value = value / 10;
-    }
-    return digits;
 }
 
 [Target(OS(Mac))]

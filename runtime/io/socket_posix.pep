@@ -149,11 +149,10 @@ export _io_sys_is_address_not_available(code: ErrorCode): bool { return code == 
 [Target(OS(Mac))]
 export _io_sys_is_address_not_available(code: ErrorCode): bool { return code == 49; }
 
-[Target(OS(Linux))]
-export _io_sys_is_timed_out(code: ErrorCode): bool { return code == 110; }
-
-[Target(OS(Mac))]
-export _io_sys_is_timed_out(code: ErrorCode): bool { return code == 60; }
+[Target(!OS(Windows))]
+export _io_sys_is_timed_out(code: ErrorCode): bool {
+    return code == _io_sys_code_timed_out();
+}
 
 [Target(OS(Linux))]
 export _io_sys_code_timed_out(): ErrorCode {
@@ -645,7 +644,7 @@ export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
         if (_io_eai_system(rc)) {
             return IoResult<SocketAddress[]>.err(IoError.last());
         }
-        var message = "failed to resolve '" + host + "': " + _io_string_from_c(gai_strerror(rc));
+        var message = "failed to resolve '" + host + "': " + String(gai_strerror(rc));
         if (_io_eai_no_address(rc)) {
             return IoResult<SocketAddress[]>.err(IoError(_io_sys_code_not_found(), message));
         }

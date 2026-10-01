@@ -152,15 +152,6 @@ export _io_win_socket_check(rc: int): IoResult<void> {
     return IoResult<void>.err(_io_win_socket_error());
 }
 
-# One send or receive moves at most this many bytes (the length is an int).
-[Target(OS(Windows))]
-export _io_win_max_socket_rw(n: ulong): int {
-    if (n > 1073741824) {
-        return 1073741824;  # 1 GiB, as File does
-    }
-    return n as int;
-}
-
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
@@ -418,7 +409,7 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
 [Target(OS(Windows))]
 export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<ulong> {
     while (true) {
-        var r = recv(h, destination, _io_win_max_socket_rw(n), 0);
+        var r = recv(h, destination, (_io_win_max_rw(n) as int), 0);
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
@@ -433,7 +424,7 @@ export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong)
 [Target(OS(Windows))]
 export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResult<ulong> {
     while (true) {
-        var r = send(h, source, _io_win_max_socket_rw(n), 0);
+        var r = send(h, source, (_io_win_max_rw(n) as int), 0);
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
@@ -450,7 +441,7 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
     while (true) {
-        var r = sendto(h, source, _io_win_max_socket_rw(n), 0, buffer, length);
+        var r = sendto(h, source, (_io_win_max_rw(n) as int), 0, buffer, length);
         if (r >= 0) {
             _pep_free(buffer);
             return IoResult<ulong>.ok(r as ulong);
@@ -474,7 +465,7 @@ export _io_sys_socket_receive_from(
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _pep_malloc(4) as __ptr<int>;
     length[0] = _io_sockaddr_capacity() as int;
-    var limit = _io_win_max_socket_rw(n);
+    var limit = (_io_win_max_rw(n) as int);
     var r = 0;
     while (true) {
         length[0] = _io_sockaddr_capacity() as int;

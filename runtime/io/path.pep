@@ -124,16 +124,6 @@ export _io_path_name_start(s: String, e: ulong): ulong {
     return i;
 }
 
-export _io_is_dot(s: String): bool {
-    var p = s.c_str() as __ptr<u8>;
-    return s.size() == 1 && _io_byte(p, s.size(), 0) == '.';
-}
-
-export _io_is_dotdot(s: String): bool {
-    var p = s.c_str() as __ptr<u8>;
-    return s.size() == 2 && _io_byte(p, s.size(), 0) == '.' && _io_byte(p, s.size(), 1) == '.';
-}
-
 # The components after the prefix and root, split at separators, with empty
 # parts dropped. `.` parts are dropped too unless `keep_leading_dot` and the
 # path starts with one.
@@ -150,7 +140,7 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
         }
         if (j > i) {
             var part = _io_slice(s, i, j);
-            if (!_io_is_dot(part) || (first && keep_leading_dot)) {
+            if (part != "." || (first && keep_leading_dot)) {
                 parts.append(part);
             }
             first = false;
@@ -377,7 +367,7 @@ export struct Path {
             return String();
         }
         var name = _io_slice(_value, _io_path_name_start(_value, e), e);
-        if (_io_is_dot(name) || _io_is_dotdot(name)) {
+        if (name == "." || name == "..") {
             return String();
         }
         return name;
@@ -519,10 +509,10 @@ export struct Path {
         while (k < parts.count()) {
             var part = parts[k];
             k = k + 1;
-            if (_io_is_dotdot(part)) {
+            if (part == "..") {
                 var climb = false;
                 if (kept.count() > 0) {
-                    climb = !_io_is_dotdot(kept.last());
+                    climb = kept.last() != "..";
                 }
                 if (climb) {
                     kept.pop();

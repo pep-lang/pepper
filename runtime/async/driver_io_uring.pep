@@ -57,6 +57,7 @@
 import io;
 import "driver";
 import "task";
+import "workers";
 
 [Target(OS(Linux))]
 extern long syscall(long number, ...);
@@ -198,7 +199,7 @@ export struct _IoUringDriver {
         }
         var index = this._tail & this._sq_mask;
         var entry = this._entries + (index as ulong) * 64;
-        _async_io_uring_zero(entry, 64);
+        _async_zero(entry, 64);
         entry[0] = opcode;
         ((entry + 4) as __ptr<int>)[0] = fd as int;
         ((entry + 16) as __ptr<ulong>)[0] = address;
@@ -421,14 +422,6 @@ _async_io_uring_store(rings: __ptr<u8>, offset: ulong, value: uint) {
     __atomic_store<uint>(slot, value);
 }
 
-_async_io_uring_zero(memory: __ptr<u8>, size: ulong) {
-    var i: ulong = 0;
-    while (i < size) {
-        memory[i] = 0;
-        i = i + 1;
-    }
-}
-
 # Makes the ring and maps it into `driver`; false when the system has no
 # io_uring with the features this driver needs.
 [Target(OS(Linux))]
@@ -497,7 +490,7 @@ _async_io_uring_setup(driver: _IoUringDriver): bool {
 # ring's descriptor, or negative when the kernel refuses them.
 [Target(OS(Linux))]
 _async_io_uring_try_setup(parameters: __ptr<u8>, flags: uint): long {
-    _async_io_uring_zero(parameters, 120);
+    _async_zero(parameters, 120);
     ((parameters + 8) as __ptr<uint>)[0] = flags;
     return syscall(_IO_URING_SETUP, _IO_URING_ENTRIES, parameters);
 }
