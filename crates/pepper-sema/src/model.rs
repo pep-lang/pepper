@@ -1194,6 +1194,10 @@ pub struct Module {
     /// `strip_bodies` drops only bodies recorded here, and the pass uses the
     /// summaries in their place. `merge` leaves it alone.
     pub recorded_summaries: std::collections::HashMap<Loc, String>,
+    /// The functions and methods whose bodies `strip_bodies` dropped, by
+    /// location: they are still defined (in the cached object), so they stay
+    /// callable and usable as values. See [`Module::is_defined`].
+    pub stripped: std::collections::HashSet<Loc>,
     /// Have `check_confinement` summarize every function and fill
     /// `summaries_to_record`, for the build cache to store.
     pub record_summaries: bool,
@@ -1211,6 +1215,13 @@ pub struct Module {
 }
 
 impl Module {
+    /// Whether `function` has a definition: a body, or one `strip_bodies`
+    /// dropped because the cached object already holds its code. A function
+    /// declared without a body has none.
+    pub fn is_defined(&self, function: &FunctionDef) -> bool {
+        function.body.is_some() || self.stripped.contains(&function.loc)
+    }
+
     /// The struct constructed by a call to `function` and the constructor
     /// it calls: `Point` (a single constructor) or `Point$2`, `Box<int>$2`.
     /// A call still naming an overloaded struct's set has none yet.

@@ -28,6 +28,7 @@ pub fn strip_bodies(module: &mut Module) {
     let module_summaries = std::mem::take(&mut module.recorded_summaries);
     let in_cached = |loc: Loc| !loc.is_none() && cached.get(loc.file.0 as usize).copied().unwrap_or(false);
     let mut dropped = vec![];
+    let mut stripped = std::collections::HashSet::new();
     let mut strip = |function: &mut FunctionDef| {
         if in_cached(function.loc)
             && function.owner.is_none()
@@ -35,7 +36,10 @@ pub fn strip_bodies(module: &mut Module) {
             && !function.ty.is_auto()
             && module_summaries.contains_key(&function.loc)
         {
-            dropped.extend(function.body.take());
+            if let Some(body) = function.body.take() {
+                dropped.push(body);
+                stripped.insert(function.loc);
+            }
         }
     };
     for function in &mut module.functions {
@@ -62,6 +66,7 @@ pub fn strip_bodies(module: &mut Module) {
         }
     }
     module.structs.retain(|st| !closures.contains(&st.name));
+    module.stripped = stripped;
     module.recorded_summaries = module_summaries;
     module.cached_files = cached;
 }

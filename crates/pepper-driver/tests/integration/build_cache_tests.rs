@@ -345,3 +345,27 @@ fn a_skipped_body_keeps_its_recorded_link_summary() {
     assert!(!has_body(&edited, "make"), "lib's bodies are skipped");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_function_whose_body_is_skipped_is_still_a_value() {
+    // lib's bodies are skipped once it is a hit, but `twice` is still
+    // defined (in lib's cached object), so main can pass it as a value,
+    // from its own body and from a closure's.
+    let dir = scratch("function_value");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    let main = |n: i32| {
+        format!(
+            "import \"lib\";\napply(f: (int) => int, x: int): int {{\n    return f(x);\n}}\nmain(): int {{\n    var g = () => apply(twice, {});\n    return apply(twice, {}) - g();\n}}\n",
+            n, n
+        )
+    };
+    write(&project, &[("lib.pep", "export twice(x: int): int {\n    return x * 2;\n}\n"), ("main.pep", &main(1))]);
+    let entry = project.join("main.pep");
+    compile_entry(&entry, &cache, &dir.join("a"), false);
+    write(&project, &[("main.pep", &main(2))]);
+    let (edited, objects) = compile_entry(&entry, &cache, &dir.join("b"), false);
+    assert_ne!(outcome(&objects, "main"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+    assert!(!has_body(&edited, "twice"), "lib's bodies are skipped");
+    let _ = std::fs::remove_dir_all(&dir);
+}

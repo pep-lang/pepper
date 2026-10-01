@@ -53,7 +53,7 @@ pub fn referenceable_functions(module: &Module) -> Vec<(String, TypeName)> {
     module
         .functions
         .iter()
-        .filter(|f| !f.is_generic_func && !f.name.contains('<') && f.body.is_some())
+        .filter(|f| !f.is_generic_func && !f.name.contains('<') && module.is_defined(f))
         .map(|f| (f.name.clone(), signature(f)))
         .collect()
 }

@@ -1097,7 +1097,9 @@ non-generic bodies.
   whether a result is fresh, so it uses the recorded summary instead; a
   summary that reaches a trait call depends on the program and is never
   recorded, so its body stays). Generic code, trait defaults, constructors
-  and destructors stay whole. `objects` generates nothing for those units. A unit that warned is
+  and destructors stay whole. `Module::stripped` lists the functions it
+  stripped: `Module::is_defined` counts them as defined, so they still
+  resolve as function values. `objects` generates nothing for those units. A unit that warned is
   checked again, so its warnings print on every build. `--emit-llvm` and
   the JIT compile whole programs, never stripped.
 - **Verifying** (`--verify-cache`, or `PEPPER_CACHE_VERIFY=1`, which CI's

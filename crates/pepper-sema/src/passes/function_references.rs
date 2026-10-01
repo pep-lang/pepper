@@ -115,7 +115,7 @@ impl Declared {
         let generic_functions = module
             .functions
             .iter()
-            .filter(|f| !f.is_generic_func && f.name.contains('<') && f.body.is_some())
+            .filter(|f| !f.is_generic_func && f.name.contains('<') && module.is_defined(f))
             .map(|f| (f.name.clone(), Signature::of(f)))
             .collect();
         Declared { methods, fields, constructors, plain_structs, generic_functions, statics: StructTable::build(module) }
