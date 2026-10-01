@@ -702,11 +702,12 @@ fn names_at(module: &ast::Module, offset: usize) -> bool {
 }
 
 /// Where enum `owner`'s case `name` is declared: the program file and the
-/// case's name.
+/// case's name. Linking spells another module's declarations with its
+/// namespace (`Backend@async`).
 fn enum_case_declared(program: &Program, owner: &str, name: &str) -> Option<(usize, Span)> {
     program.files.iter().enumerate().find_map(|(i, f)| {
         f.module.declarations.iter().find_map(|d| match d {
-            ast::Declaration::Struct(s) if s.name == owner || (i == 0 && demangle_name(&s.name) == owner) => {
+            ast::Declaration::Struct(s) if demangle_name(&s.name) == owner => {
                 let case = s.enumeration.as_ref()?.cases.iter().find(|c| c.name == name)?;
                 Some((i, case.name_span))
             }
@@ -1302,6 +1303,8 @@ fn find_sema_struct<'a>(module: &'a SemaModule, name: &str) -> Option<&'a Struct
         .iter()
         .find(|s| s.loc.file == FileId(0) && demangle_name(&s.name) == name)
         .or_else(|| module.structs.iter().find(|s| s.name == name))
+        // Another file's export, under its module's namespace.
+        .or_else(|| module.structs.iter().find(|s| demangle_name(&s.name) == name))
 }
 
 fn struct_member_type(st: &StructDef, name: &str) -> Option<String> {

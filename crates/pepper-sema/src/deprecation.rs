@@ -115,7 +115,7 @@ pub(crate) fn warning(name: &str, deprecation: &Deprecation, used: Loc, spelled:
     let mut d = Diagnostic::deprecated_declaration(name, &deprecation.message, used)
         .with_note(format!("'{name}' declared here"), declared.known());
     if let Some(replacement) = &deprecation.replacement
-        && spelled == name
+        && spelled == crate::namespace::demangle_name(name)
     {
         d = d.with_fix(Fix::replace(format!("Replace '{name}' with '{replacement}'"), used, replacement.clone()));
     }

@@ -59,8 +59,10 @@ fn compile_entry_with(
 }
 
 /// Whether sema kept the body of the function `name`.
+/// Whether the function declared as `name` (another file's export is
+/// mangled with its namespace) has a body.
 fn has_body(module: &pepper_sema::model::Module, name: &str) -> bool {
-    module.functions.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("no function '{}'", name)).body.is_some()
+    module.functions.iter().find(|f| pepper_sema::namespace::demangle_name(&f.name) == name).unwrap_or_else(|| panic!("no function '{}'", name)).body.is_some()
 }
 
 /// Build the documentation example `example`.

@@ -117,7 +117,10 @@ pub fn runtime_files(program: &Program) -> Option<Vec<bool>> {
         .map(|f| f.prelude || f.prelude_part || dirs.iter().any(|d| pepper_files::imports::path_key(Path::new(&f.name)).starts_with(d.as_str())))
         .collect();
     let overrides = program.files.iter().enumerate().any(|(i, f)| !in_runtime[i] && crate::program::declares_override(&f.module));
-    (in_runtime.iter().any(|&r| r) && !overrides).then_some(in_runtime)
+    // A runtime file that imports a file outside it (a module nested in a
+    // forced one) cannot be checked without that file.
+    let reaches_out = program.files.iter().enumerate().any(|(i, f)| in_runtime[i] && f.imports.iter().flatten().any(|&j| !in_runtime[j]));
+    (in_runtime.iter().any(|&r| r) && !overrides && !reaches_out).then_some(in_runtime)
 }
 
 /// The sema passes, as the driver runs them on a merged module.

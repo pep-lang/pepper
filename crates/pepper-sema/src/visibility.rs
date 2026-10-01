@@ -268,6 +268,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     let fields = s.fields.iter().filter(|f| mentions(&f.type_name, &|name| params.contains(name)));
                     members.generic_fields.insert(&s.name, fields.map(|f| f.name.as_str()).collect());
                     types.insert(&s.name);
+                    types.insert(demangle_name(&s.name));
                     decls.entry(&s.name).or_default().push(decl(s.is_exported, s.name_span));
                     members.of_struct.entry(&s.name).or_default().extend(struct_member_names(s));
                     members.struct_params.insert(&s.name, s.generic_params.iter().map(|g| g.name.as_str()).collect());
@@ -277,12 +278,14 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                 }
                 Declaration::TypeAlias(t) => {
                     types.insert(&t.name);
+                    types.insert(demangle_name(&t.name));
                     decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
                 }
                 Declaration::Trait(t) => {
                     let methods = t.methods.iter().filter(|m| keep(&m.attributes).unwrap_or(true)).map(|m| m.name.as_str());
                     traits.insert(&t.name, (i, t.is_exported, methods.collect::<Vec<_>>()));
                     types.insert(&t.name);
+                    types.insert(demangle_name(&t.name));
                     decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
                 }
                 Declaration::Variable(v) => decls.entry(&v.name).or_default().push(decl(v.is_exported, v.name_span)),
@@ -363,8 +366,10 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                 continue;
             }
             // The base may be private under its own name (in the root file)
-            // or mangled.
-            let private_bases = entries.iter().filter(|e| !e.exported).chain(private.get(*name).into_iter().flatten());
+            // or mangled. Another module's export is mangled too, but it is
+            // not private: an unrelated one is not this override's base.
+            let mangled = private.get(*name).into_iter().flatten().filter(|e| !e.exported);
+            let private_bases = entries.iter().filter(|e| !e.exported).chain(mangled);
             if let Some(base) = private_bases.into_iter().find(|e| e.file != d.file && is_base_of_d(e)) {
                 errors.push(VisibilityError {
                     file: d.file,
@@ -582,10 +587,12 @@ impl Checker<'_, '_> {
             return;
         }
         let Some(entries) = self.decls.get(name) else {
-            // Linking leaves a reference to another file's private
-            // declaration unrenamed.
-            if let Some(d) = self.private.get(name).and_then(|p| p.iter().find(|d| d.file != self.file)) {
-                let kind = VisibilityErrorKind::Private;
+            // Linking leaves a reference to another file's mangled
+            // declaration unrenamed: a private one, or an export of a file
+            // this one does not import.
+            let candidates = self.private.get(name).into_iter().flatten().filter(|d| d.file != self.file);
+            if let Some(d) = candidates.clone().find(|d| d.exported).or_else(|| candidates.clone().next()) {
+                let kind = if d.exported { VisibilityErrorKind::NotImported } else { VisibilityErrorKind::Private };
                 self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in: d.file, declared_at: None, kind });
                 return;
             }

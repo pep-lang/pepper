@@ -394,11 +394,21 @@ fn named_decls(module: &Module) -> impl Iterator<Item = &Declaration> {
 /// [`pepper_parser::namespace`]), any other its own.
 type Own = HashMap<String, String>;
 
-/// Whether `d` keeps its name in the merged program: an export, whose
-/// importers spell it that way; an extern, which names a C symbol; or a
-/// concrete override (`hash<int>`), which takes its generic's name.
-fn keeps_name(d: &Declaration, file: usize, overrides: &Overrides) -> bool {
-    d.is_exported() || matches!(d, Declaration::Function(f) if f.external || overrides.is(f, file))
+/// Whether `file`'s exports keep their names in the merged program: the
+/// root file's, and the prelude's (the runtime and forced imports), which
+/// every file reaches without an import. Every other file's exports are
+/// mangled with its namespace, as its private names are, so two modules
+/// may export the same name; importers reach each through its own binding.
+fn exports_keep_names(files: &[ProgramFile], file: usize) -> bool {
+    file == 0 || files[file].prelude || files[file].prelude_part
+}
+
+/// Whether `d` keeps its name in the merged program: an export of a file
+/// whose exports keep their names ([`exports_keep_names`]); an extern,
+/// which names a C symbol; or a concrete override (`hash<int>`), which
+/// takes its generic's name.
+fn keeps_name(d: &Declaration, file: usize, bare_exports: bool, overrides: &Overrides) -> bool {
+    (d.is_exported() && bare_exports) || matches!(d, Declaration::Function(f) if f.external || overrides.is(f, file))
 }
 
 /// Every file's [`Own`] names. A concrete override (`f<int>` of a generic
@@ -415,7 +425,7 @@ fn own_names(files: &[ProgramFile], overrides: &Overrides) -> Vec<Own> {
         .enumerate()
         .skip(1)
         .flat_map(|(i, f)| named_decls(&f.module).map(move |d| (i, d)))
-        .filter(|&(i, d)| keeps_name(d, i, overrides))
+        .filter(|&(i, d)| keeps_name(d, i, exports_keep_names(files, i), overrides))
         .map(|(_, d)| d)
         .map(|d| d.name())
         .collect();
@@ -427,8 +437,9 @@ fn own_names(files: &[ProgramFile], overrides: &Overrides) -> Vec<Own> {
             // declares a name more than once (an exported generic and a
             // private override of it for a struct), all take the public
             // name. A private override (`describe<int>`) makes none public.
+            let bare_exports = exports_keep_names(files, i);
             let kept_here: HashSet<&str> = named_decls(&f.module)
-                .filter(|d| d.is_exported() || matches!(d, Declaration::Function(func) if func.external))
+                .filter(|d| (d.is_exported() && bare_exports) || matches!(d, Declaration::Function(func) if func.external))
                 .map(|d| d.name())
                 .collect();
             named_decls(&f.module)
@@ -466,10 +477,11 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     // binding pass is the whole job.
     let direct: Vec<HashMap<String, String>> = files
         .iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(i, f)| {
             named_decls(&f.module)
                 .filter(|d| d.is_exported())
-                .map(|d| (d.name().to_string(), d.name().to_string()))
+                .map(|d| (d.name().to_string(), own[i].get(d.name()).cloned().unwrap_or_else(|| d.name().to_string())))
                 .collect()
         })
         .collect();
@@ -805,11 +817,12 @@ fn resolve_reexports(
 ) -> HashMap<String, String> {
     let mut out = direct.clone();
     // An exported override is exported under its generic's name, as linking
-    // renames it: an alias of the generic resolves to that name.
+    // renames it: an alias of the generic resolves to that name. A generic a
+    // module exports is mangled; importers spell it as it was declared.
     for name in exported_overrides(&files[i].module, i, overrides) {
         if let Some(c) = override_rename(name, own, bindings, prelude) {
             out.remove(name);
-            out.insert(c.clone(), c);
+            out.insert(namespace::demangle_name(&c).to_string(), c);
         }
     }
     // Where each name `out` publishes came from, for "also exported here".

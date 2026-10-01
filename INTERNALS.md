@@ -180,7 +180,13 @@ with no extension, and `module_name()` is the output's stem.
   compiler runs in, such as `tests/util`; the file stem only for a file
   outside both, made unique with `#2`, `#3` in load order). A namespace
   depends only on the file's path, so a file's symbols are the same in
-  every program that loads it, which the build cache relies on. Exports, externs, and concrete overrides keep their names; so do
+  every program that loads it, which the build cache relies on. Exports are
+  mangled the same way (#244), so two modules may export one name, except
+  those of the root file and the prelude (`prelude` or `prelude_part`;
+  `exports_keep_names`), which every file reaches by their bare names. A
+  reference to another file's mangled export that no import binds stays
+  unrenamed, and the visibility check reports it as not imported. Externs
+  and concrete overrides keep their names; so do
   the root file's private names, unless another file keeps the same name
   (so `main` and a JIT test's `test` stay findable). `own_names` decides
   this. Which generic functions are concrete overrides (`hash<int>`, and
@@ -2023,8 +2029,8 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   demangled names before other files' (`find_sema_struct`,
   `declaration_doc`, `member_doc`). Code that synthesizes a reference by name
   (`_pep_interpolate`) can reach only a declaration that keeps its name, so
-  it must be exported. Exported names still share one namespace across
-  modules. `SymbolTable` lets a later declaration overwrite an earlier one.
+  it must be exported by the runtime or the root file, whose exports keep
+  their names. `SymbolTable` lets a later declaration overwrite an earlier one.
 - **Trait values are one level deep.** There are no supertraits, so one
   trait type never converts to another, and there is no downcast from a
   trait value back to its struct. `Atomic<T>` of a trait type is rejected (a trait type is not `Shared`): two

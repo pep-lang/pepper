@@ -274,17 +274,22 @@ runtime's `__ptr<char>` form.
   the same name from a whole-file import. When two whole-file imports provide
   the same name differently, using that name is an error because it is
   ambiguous.
-- **An imported name keeps its original identity.** An imported name is
-  compiled as the name of the declaration it denotes, so a local with that
-  declaration's own name may not be in scope where you use it. If
-  `g.rect_area` is `shapes.pep`'s `area`, calling `g.rect_area(1, 2)` inside a
-  function with a parameter named `area` is an error that asks you to rename
-  one of them.
+- **A local may share an imported declaration's name.** If `g.rect_area` is
+  `shapes.pep`'s `area`, calling `g.rect_area(1, 2)` inside a function with a
+  parameter named `area` calls `shapes.pep`'s function. The one exception is a
+  re-exported runtime name: if a module exports the runtime's `print` as
+  `say`, a local named `print` where you call `say` is an error that asks you
+  to rename one of them.
 
-Each file has its own namespace for its private declarations, so files and
-modules may reuse private names freely. Exported names share one namespace,
-so two modules may not export the same name, even though users reach them
-through different qualifiers. See [Each file has its own namespace](visibility.md#each-file-has-its-own-namespace).
+Each file has its own namespace, for its exported declarations as well as
+its private ones, so files and modules may reuse names freely: two modules
+may both export `parse`, and `a.parse` and `b.parse` stay apart. See
+[Each file has its own namespace](visibility.md#each-file-has-its-own-namespace).
+Here `metric` and `imperial` each export a `Length`, a `parse` and a `unit`:
+
+```pepper
+{{#include ../../examples/modules-same-name/main.pep}}
+```
 
 ## Platform-specific imports
 

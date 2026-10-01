@@ -268,15 +268,36 @@ fn runtime_prelude_needs_no_import() {
 }
 
 #[test]
-fn modules_may_not_export_the_same_name() {
-    // One namespace: `a.f` and `b.f` would both resolve to one declaration.
+fn modules_may_export_the_same_name() {
+    // Each module's exports are its own (#244): `a.f` and `b.f`, and the two
+    // `Point`s, are different declarations.
     let files = [
-        ("a/module.pep", "export f(): int { return 1; }"),
-        ("b/module.pep", "export f(): int { return 2; }"),
-        ("main.pep", "import a;\nimport b;\ntest(): int { return a.f() * 10 + b.f(); }"),
+        ("a/module.pep", "export f(): int { return 1; }\nexport struct Point { var x: int; }"),
+        ("b/module.pep", "export f(): int { return 2; }\nexport struct Point { var y: int; }"),
+        (
+            "main.pep",
+            "import a;\nimport b;\ntest(): int {\n    var p = a.Point();\n    var q = b.Point();\n    p.x = 3;\n    q.y = 4;\n    return a.f() * 10 + b.f() + p.x + q.y - 19;\n}",
+        ),
     ];
-    let err = error("duplicate_export", &files);
-    assert!(err.contains("exported 'f' is also declared in"), "{}", err);
+    assert_eq!(run("same_export", &files), 0);
+}
+
+#[test]
+fn the_same_export_from_two_imports_is_ambiguous_only_where_used() {
+    let files = [
+        ("x.pep", "export f(): int { return 1; }\nexport g(): int { return 3; }"),
+        ("y.pep", "export f(): int { return 2; }"),
+        ("main.pep", "import \"x\";\nimport \"y\";\ntest(): int { return f(); }"),
+    ];
+    let err = error("same_export_ambiguous", &files);
+    assert!(err.contains("'f' is ambiguous: more than one import provides it"), "{}", err);
+    // An import list tells them apart; `g`, which only one provides, needs none.
+    let files = [
+        ("x.pep", "export f(): int { return 1; }\nexport g(): int { return 3; }"),
+        ("y.pep", "export f(): int { return 2; }"),
+        ("main.pep", "import \"x\";\nimport [f as fy] from \"y\";\ntest(): int { return f() * 10 + fy() + g() - 15; }"),
+    ];
+    assert_eq!(run("same_export_aliased", &files), 0);
 }
 
 #[test]
@@ -286,16 +307,12 @@ fn export_may_not_repeat_a_runtime_name() {
 }
 
 #[test]
-fn a_local_may_not_capture_a_rewritten_name() {
-    // `g.rect_area` is `area` in shapes.pep; the parameter `area` would
-    // capture it.
-    let err = error(
-        "capture",
-        &with_geometry("import geometry as g;
+fn a_local_does_not_capture_an_imported_name() {
+    // `g.rect_area` is `area` in shapes.pep, mangled apart from the
+    // parameter `area`.
+    assert_eq!(run("capture", &with_geometry("import geometry as g;
 calc(area: int): int { return area + g.rect_area(1, 1); }
-test(): int { return calc(1); }"),
-    );
-    assert!(err.contains("'g.rect_area' refers to 'area', which a local, parameter, or member named 'area' hides here"), "{}", err);
+test(): int { return calc(1); }")), 2);
 }
 
 #[test]
@@ -754,7 +771,7 @@ fn an_unresolved_forced_import_is_an_error() {
 }
 
 #[test]
-fn a_hidden_extension_method_cannot_capture_a_rewritten_name() {
+fn a_hidden_extension_method_does_not_capture_an_imported_name() {
     let files = [
         ("geo/module.pep", "export area2(): int { return 7; }"),
         (
@@ -764,8 +781,8 @@ fn a_hidden_extension_method_cannot_capture_a_rewritten_name() {
         ("c/other.pep", "import \"module\";\nextend Counter { area2(): int { return 100; } }"),
         ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
     ];
-    let err = error("hidden_capture", &files);
-    assert!(err.contains("'g.area2' refers to the imported 'area2', but an extension in another file"), "{}", err);
+    // `g.area2` is geo's export, mangled apart from the method `area2`.
+    assert_eq!(run("hidden_capture", &files), 7);
 }
 
 #[test]
@@ -858,7 +875,7 @@ fn malformed_target_on_imports_and_re_exports_is_an_error() {
 }
 
 #[test]
-fn an_unaliased_import_may_not_be_captured_by_a_hidden_extension_method() {
+fn an_unaliased_import_is_not_captured_by_a_hidden_extension_method() {
     let files = [
         ("geo/module.pep", "export area2(): int { return 7; }"),
         (
@@ -868,8 +885,7 @@ fn an_unaliased_import_may_not_be_captured_by_a_hidden_extension_method() {
         ("c/other.pep", "import \"module\";\nextend Counter { area2(): int { return 100; } }"),
         ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
     ];
-    let err = error("unaliased_capture", &files);
-    assert!(err.contains("'area2' refers to the imported 'area2', but an extension in another file"), "{}", err);
+    assert_eq!(run("unaliased_capture", &files), 7);
 }
 
 #[test]
@@ -1133,17 +1149,15 @@ fn a_keyword_prefixed_module_qualifies_local_and_field_types() {
 }
 
 #[test]
-fn a_module_nested_in_a_forced_module_is_not_exempt() {
+fn a_module_nested_in_a_forced_module_has_its_own_exports() {
     let files = [
         ("alt/module.pep", "import \"sub\" as s;\nexport f(): int { return s.g(); }"),
         ("alt/sub/module.pep", "export g(): int { return 1; }\nexport assert(condition: bool, msg: __ptr<char>): void { }"),
         ("main.pep", "test(): int { return f(); }"),
     ];
-    let err = match compile_with("forced_nested_module", &files, &["--import", "alt"]) {
-        Ok(_) => panic!("expected a compile error"),
-        Err(e) => e,
-    };
-    assert!(err.contains("exported 'assert' is also declared in"), "{}", err);
+    // `sub` is a module of its own, not part of the forced one, so its
+    // `assert` is its own and replaces nothing.
+    assert_eq!(run_with("forced_nested_module", &files, &["--import", "alt"]), 1);
 }
 
 #[test]
@@ -1281,7 +1295,9 @@ fn private_declarations_are_local_to_the_object() {
     let internal = inkwell::module::Linkage::Internal;
     assert_eq!(generator.module.get_function("helper@lib").expect("helper").get_linkage(), internal);
     assert_eq!(generator.module.get_global("count@lib").expect("count").get_linkage(), internal);
-    assert_ne!(generator.module.get_function("api").expect("api").get_linkage(), internal);
+    // So is an export of a file other than the root's: importers name it
+    // by its mangled name, inside this one object.
+    assert_eq!(generator.module.get_function("api@lib").expect("api").get_linkage(), internal);
 }
 
 #[test]
@@ -1369,16 +1385,18 @@ fn a_module_import_reaches_the_extensions_of_its_files() {
 
 #[test]
 fn an_extension_a_file_cannot_see_may_not_capture_its_calls() {
-    // b.pep's extension adds `helper` to S, but a.pep does not import b.pep:
-    // in S's own method, `helper()` would silently call the method instead
-    // of a.pep's function (or the runtime's `print`).
+    // b.pep's extension adds `helper` and `print` to S, but a.pep does not
+    // import b.pep: in S's own method, `print(1)` would silently call the
+    // method instead of the runtime's `print`.
     let a = "export struct S { var x: int; total(): int { return helper(); } show() { print(1); } }\n\
              export helper(): int { return 1; }";
     let b = "import \"a\";\nexport extend S { helper(): int { return 100; } print(v: int) { } }\nexport touch(): int { return 0; }";
     let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
     let err = error("hidden_extension_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
-    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
-    assert!(err.contains("'print' is declared in an extension in"), "{}", err);
+    // a.pep's own `helper` is mangled apart from the method; the runtime's
+    // `print` keeps its name, so the method would capture it.
+    assert!(!err.contains("'helper' is declared in an extension in"), "{}", err);
+    assert!(err.contains("'print' is declared in an extension in") && err.contains("b.pep"), "{}", err);
 }
 
 #[test]
@@ -1403,15 +1421,15 @@ fn a_dropped_extension_method_captures_nothing() {
 }
 
 #[test]
-fn an_invisible_extension_may_not_capture_a_call_in_a_trait_default() {
+fn an_invisible_extension_does_not_capture_an_exported_function_in_a_trait_default() {
     // S conforms to T in a.pep; b.pep, which a.pep does not import, adds
     // `helper` to S, which T's default `total` would call instead.
     let a = "export trait T { area(): int; total(): int { return helper(); } }\nexport struct S { var x: int; }\n\
              export extend S with T { area(): int { return 0; } }\nexport helper(): int { return 1; }";
     let b = "import \"a\";\nexport extend S { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
     let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
-    let err = error("trait_default_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
-    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+    // `helper` is a.pep's export, mangled apart from b.pep's method.
+    assert_eq!(run("trait_default_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 1);
 }
 
 #[test]
@@ -1424,26 +1442,24 @@ fn a_trait_default_may_call_the_traits_own_methods() {
 }
 
 #[test]
-fn an_invisible_extension_through_an_alias_may_not_capture_a_call() {
+fn an_invisible_extension_through_an_alias_does_not_capture_an_exported_function() {
     // b.pep extends S as `C`; a.pep does not import b.pep.
     let a = "export struct S { var x: int; total(): int { return helper(); } }\nexport helper(): int { return 1; }";
     let b = "import \"a\";\ntype C = S;\nexport extend C { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
     let main = "import \"a\";\nimport \"b\";\ntest(): int { var s = S(); return s.total() + touch(); }";
-    let err = error("alias_extension_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
-    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+    assert_eq!(run("alias_extension_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 1);
 }
 
 #[test]
-fn an_invisible_extension_through_a_generic_alias_may_not_capture_a_call() {
+fn an_invisible_extension_through_a_generic_alias_does_not_capture_an_exported_function() {
     let a = "export struct Box<T> { var v: T; total(): int { return helper(); } }\nexport helper(): int { return 1; }";
     let b = "import \"a\";\ntype B = Box<int>;\nexport extend B { helper(): int { return 100; } }\nexport touch(): int { return 0; }";
     let main = "import \"a\";\nimport \"b\";\ntest(): int { var x = Box<int>(); return x.total() + touch(); }";
-    let err = error("generic_alias_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]);
-    assert!(err.contains("'helper' is declared in an extension in") && err.contains("b.pep"), "{}", err);
+    assert_eq!(run("generic_alias_capture", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 1);
 }
 
 #[test]
-fn an_extension_through_an_alias_may_not_capture_a_renamed_import() {
+fn an_extension_through_an_alias_does_not_capture_a_renamed_import() {
     // In S's method, `hh` is h's `helper`; b.pep's extension (written as
     // `extend C`, C = S, and visible to a.pep) adds a `helper` method.
     let files = [
@@ -1452,12 +1468,11 @@ fn an_extension_through_an_alias_may_not_capture_a_renamed_import() {
         ("b.pep", "import \"a\";\ntype C = S;\nexport extend C { helper(): int { return 100; } }"),
         ("main.pep", "import \"a\";\ntest(): int { var s = S(); return s.total(); }"),
     ];
-    let err = error("alias_capture_renamed_import", &files);
-    assert!(err.contains("'hh' refers to 'helper'"), "{}", err);
+    assert_eq!(run("alias_capture_renamed_import", &files), 1);
 }
 
 #[test]
-fn an_extension_may_not_capture_a_renamed_import_in_a_trait_default() {
+fn an_extension_does_not_capture_a_renamed_import_in_a_trait_default() {
     let files = [
         ("h.pep", "export helper(): int { return 1; }"),
         ("a.pep", "import [helper as hh] from \"h\";\nimport \"b\";\nexport trait T { total(): int { return hh(); } }\n\
@@ -1465,8 +1480,7 @@ fn an_extension_may_not_capture_a_renamed_import_in_a_trait_default() {
         ("b.pep", "import \"a\";\nexport extend S { helper(): int { return 100; } }"),
         ("main.pep", "import \"a\";\ntest(): int { var s = S(); return s.total(); }"),
     ];
-    let err = error("trait_default_capture_renamed", &files);
-    assert!(err.contains("'hh' refers to"), "{}", err);
+    assert_eq!(run("trait_default_capture_renamed", &files), 1);
 }
 
 #[test]

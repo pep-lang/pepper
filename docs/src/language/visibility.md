@@ -183,12 +183,20 @@ This holds across modules too: two modules may each have a `util.pep` with a
 private `helper`. Files are told apart by their path inside their module
 (`io/file.pep`), not by their file name alone.
 
-Exported names are different: they share one namespace across the whole
-program, because importers reach them by name. Two files may not export the
-same name, even from modules reached through different qualifiers:
-`exported 'f' is also declared in b/module.pep`. A private name may repeat an
-exported one from another file; in the file that declares it, the file's own
-declaration is the one that name refers to.
+Exported names work the same way between modules: each module's exports
+are its own, so two modules may export the same name, and importers tell
+them apart by qualifier (`a.parse` and `b.parse`) or by an import list
+(`import [parse as parse_b] from b`). Using a name that two whole-file
+imports both provide is an error at the use (see
+[Modules and imports](modules.md#how-imported-names-behave)). A private name
+may repeat an exported one from another file; in the file that declares it,
+the file's own declaration is the one that name refers to.
+
+Two kinds of file keep their exported names program-wide, because every file
+reaches them without an import or by its bare name: the runtime (and any
+`--import` module), and the program's main file. So an export may not repeat
+a runtime name: `exported 'String' is also declared in` followed by the
+runtime's file.
 
 A few kinds of declaration are not private in this sense:
 

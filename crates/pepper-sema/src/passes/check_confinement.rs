@@ -1806,7 +1806,7 @@ fn check_guard_fields(program: &Program) -> bool {
 fn check_mutex_arguments(program: &Program) -> bool {
     for st in &program.module.structs {
         let Some(argument) = st.ty.sub_types.first() else { continue };
-        let is_mutex = st.ty.name == "Mutex"
+        let is_mutex = pepper_parser::namespace::demangle_name(&st.ty.name) == "Mutex"
             && st.method_members.iter().any(|m| m.name == "lock" && program.is_isolated(&m.ty));
         if !is_mutex || st.name == st.ty.name || !(argument.is_integral() || argument.is_pointer()) {
             continue;
@@ -1966,7 +1966,7 @@ impl Checks<'_, '_> {
         }
         let Some(ty) = self.walk.ty(this) else { return };
         let Some(value) = ty.sub_types.first() else { return };
-        let owner = match ty.name.as_str() {
+        let owner = match pepper_parser::namespace::demangle_name(&ty.name) {
             "ThreadLocal" => "thread",
             "TaskLocal" => "task",
             _ => return,
