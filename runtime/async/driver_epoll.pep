@@ -115,7 +115,7 @@ extend _EpollDriver with _Driver {
     }
 
     _doorbell(): _Doorbell {
-        return _Doorbell(_DOORBELL_EVENTFD, this._bell, __null, __null);
+        return _Doorbell(_DoorbellKind.EventFd, this._bell);
     }
 
     _close() {

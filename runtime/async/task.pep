@@ -411,7 +411,7 @@ struct _Worker {
     _finish_shared(core: _TaskCore) {
         this._remote.remove(core._id);
         var shared = core._shared.value();
-        this._runtime._inbox(shared._owner)._send(shared._proxy, _MESSAGE_COMPLETE);
+        this._runtime._inbox(shared._owner)._send(shared._proxy, _Message.Complete);
     }
 
     # Handles the messages other workers sent.
@@ -421,23 +421,28 @@ struct _Worker {
             if (!found) {
                 return;
             }
-            var id = message / 4;
-            var kind = message % 4;
-            if (kind == _MESSAGE_WAKE) {
-                if (this._sync_waits.contains(id)) {
-                    this._wake(this._sync_waits.get(id));
+            var (id, kind) = _async_unpack_message(message);
+            match (kind) {
+                Wake => {
+                    if (this._sync_waits.contains(id)) {
+                        this._wake(this._sync_waits.get(id));
+                    }
                 }
-            } else if (this._remote.contains(id)) {
-                var core = this._remote.get(id);
-                if (kind == _MESSAGE_COMPLETE) {
-                    this._remote.remove(id);
-                    var complete = core._on_complete;
-                    core._on_complete = () => {};
-                    complete();
-                    core._finished = true;
-                    this._wake_all(core._joiners);
-                } else {
-                    _async_cancel(this, core);
+                Complete => {
+                    if (this._remote.contains(id)) {
+                        var core = this._remote.get(id);
+                        this._remote.remove(id);
+                        var complete = core._on_complete;
+                        core._on_complete = () => {};
+                        complete();
+                        core._finished = true;
+                        this._wake_all(core._joiners);
+                    }
+                }
+                Cancel => {
+                    if (this._remote.contains(id)) {
+                        _async_cancel(this, this._remote.get(id));
+                    }
                 }
             }
         }
@@ -771,18 +776,18 @@ extend _Worker with io._IoWaiter {
         return this._running;
     }
 
-    _wait_ready(handle: io.SocketHandle, interest: int): int {
+    _wait_ready(handle: io.SocketHandle, interest: int): io._IoWait {
         var me = this._current;
         if (me._is_cancelled()) {
-            return io._IO_WAIT_CANCELLED;
+            return io._IoWait.Cancelled;
         }
         if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
-            return io._IO_WAIT_TIMED_OUT;
+            return io._IoWait.TimedOut;
         }
         var key = handle as ulong;
         if (!this._waits.contains(key)) {
             if (!this._driver._watch(handle)) {
-                return io._IO_WAIT_UNWATCHED;
+                return io._IoWait.Unwatched;
             }
             this._waits.insert(key, _SocketWaits());
         }
@@ -792,7 +797,7 @@ extend _Worker with io._IoWaiter {
             queue = waits._writers;
         }
         if (!this._driver._want(handle, interest)) {
-            return io._IO_WAIT_UNWATCHED;
+            return io._IoWait.Unwatched;
         }
         queue.append(me);
         this._io_waiting = this._io_waiting + 1;
@@ -800,12 +805,12 @@ extend _Worker with io._IoWaiter {
         this._io_waiting = this._io_waiting - 1;
         _async_remove_task(queue, me);
         if (me._is_cancelled()) {
-            return io._IO_WAIT_CANCELLED;
+            return io._IoWait.Cancelled;
         }
         if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
-            return io._IO_WAIT_TIMED_OUT;
+            return io._IoWait.TimedOut;
         }
-        return io._IO_WAIT_READY;
+        return io._IoWait.Ready;
     }
 
     _forget(handle: io.SocketHandle) {
@@ -950,10 +955,13 @@ export _async_sync_waiter(): _SyncWaiter {
     return _SyncWaiter(worker._inbox, worker._current._id);
 }
 
-# What `_async_sync_park` reports.
-export const _SYNC_WOKEN = 0;
-export const _SYNC_CANCELLED = 1;
-export const _SYNC_TIMED_OUT = 2;
+# What `_async_sync_park` reports: woken by a waker, or why the wait ended
+# without one.
+export enum _SyncWake {
+    Woken,
+    Cancelled,
+    TimedOut,
+}
 
 # Parks the running task until `waiter`, already in `queue`, is woken, or
 # until `deadline` (monotonic milliseconds, 0 for none) passes. When
@@ -961,8 +969,8 @@ export const _SYNC_TIMED_OUT = 2;
 #
 # A wait that ends without a wake abandons the waiter and takes it out of
 # `queue`, and the result says why; a waker that got there first wins, and
-# the result is `_SYNC_WOKEN`.
-export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong, interruptible: bool): int {
+# the result is `_SyncWake.Woken`.
+export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong, interruptible: bool): _SyncWake {
     var worker = _async_worker();
     var me = worker._current;
     var saved = me._deadline;
@@ -972,15 +980,15 @@ export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong,
     }
     me._deadline = until;
     worker._sync_waits.insert(me._id, me);
-    var result = _SYNC_WOKEN;
+    var result = _SyncWake.Woken;
     while (waiter._state.load() == _WAITER_WAITING) {
-        var reason = _SYNC_WOKEN;
+        var reason = _SyncWake.Woken;
         if (interruptible && me._is_cancelled()) {
-            reason = _SYNC_CANCELLED;
+            reason = _SyncWake.Cancelled;
         } else if (until != 0 && _async_sys_monotonic_milliseconds() >= until) {
-            reason = _SYNC_TIMED_OUT;
+            reason = _SyncWake.TimedOut;
         }
-        if (reason != _SYNC_WOKEN) {
+        if (reason != _SyncWake.Woken) {
             if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED)) {
                 queue._remove(waiter);
                 result = reason;
@@ -1011,7 +1019,7 @@ export _async_sync_wake(waiter: _SyncWaiter) {
             return;
         }
     }
-    waiter._inbox._send(waiter._task, _MESSAGE_WAKE);
+    waiter._inbox._send(waiter._task, _Message.Wake);
 }
 
 # Marks `core` cancelled and wakes it if it waits.

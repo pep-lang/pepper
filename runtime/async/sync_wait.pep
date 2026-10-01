@@ -14,7 +14,7 @@
 # stops waiting on its own (cancelled, or its time ran out), which also
 # takes it out of the queue. The wake reaches the task through its worker:
 # directly when the waker runs on that worker, otherwise as a
-# `_MESSAGE_WAKE` in the worker's inbox. The task re-checks what it waits
+# `_Message.Wake` in the worker's inbox. The task re-checks what it waits
 # for after every wake, as a condition-variable waiter does.
 #
 # A plain thread normally waits on the platform condition instead, but a
@@ -102,11 +102,11 @@ export struct _ThreadWake {
 
 # Sleeps the calling thread (outside a task) until `waiter`, made with a
 # `_ThreadWake`, is woken, or until `deadline` (monotonic milliseconds, 0
-# for none) passes; returns `_SYNC_WOKEN` or `_SYNC_TIMED_OUT`. A wait that
+# for none) passes; returns `_SyncWake.Woken` or `_SyncWake.TimedOut`. A wait that
 # times out abandons the waiter; the caller takes it out of its queues.
-export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): int {
+export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): _SyncWake {
     var wake = waiter._thread;
-    var result = _SYNC_WOKEN;
+    var result = _SyncWake.Woken;
     _async_sys_mutex_lock(wake._lock);
     while (waiter._state.load() == _WAITER_WAITING) {
         if (deadline == 0) {
@@ -116,7 +116,7 @@ export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): int {
         var now = _async_sys_monotonic_milliseconds();
         if (now >= deadline) {
             if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED)) {
-                result = _SYNC_TIMED_OUT;
+                result = _SyncWake.TimedOut;
             }
             break;
         }

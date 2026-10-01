@@ -27,7 +27,7 @@ import "task";
 # `Channel._select_join` found).
 export trait _SelectCase<E> {
     _take(): _Polled<E>;
-    _join(waiter: _SyncWaiter): int;
+    _join(waiter: _SyncWaiter): _Joined;
     _leave(waiter: _SyncWaiter);
 }
 
@@ -59,7 +59,7 @@ extend _ReceiveCase<T, E> with _SelectCase<E> {
         return _Polled<E>.Empty;
     }
 
-    _join(waiter: _SyncWaiter): int {
+    _join(waiter: _SyncWaiter): _Joined {
         return _channel._select_join(waiter);
     }
 
@@ -220,10 +220,10 @@ export struct Select<E> {
                 return Result<E>.err(Error("the time ran out"));
             }
             var woken = this._sleep(deadline);
-            if (woken == _SYNC_CANCELLED) {
+            if (woken == _SyncWake.Cancelled) {
                 return Result<E>.err(Error("the task was cancelled"));
             }
-            if (woken == _SYNC_TIMED_OUT) {
+            if (woken == _SyncWake.TimedOut) {
                 # The task's `timeout`, or `deadline`: one last look.
                 match (this._poll()) {
                     Ready(event) => {
@@ -243,7 +243,7 @@ export struct Select<E> {
     # cancelled; returns which, as `_async_sync_park` does. Returns at once,
     # as woken, when a channel already has a value or every channel is
     # closed: the next look finds which.
-    _sleep(deadline: ulong): int {
+    _sleep(deadline: ulong): _SyncWake {
         var in_task = _async_in_task();
         var waiter = in_task ? _async_sync_waiter() : _SyncWaiter(_ThreadWake());
         var count = _cases.count();
@@ -253,16 +253,16 @@ export struct Select<E> {
         while (joined < count && !ready) {
             var entry: _SelectCase<E> = _cases[joined];
             var found = entry._join(waiter);
-            if (found == _SELECT_READY) {
+            if (found == _Joined.Ready) {
                 ready = true;
             } else {
-                if (found == _SELECT_CLOSED) {
+                if (found == _Joined.Closed) {
                     closed = closed + 1;
                 }
                 joined = joined + 1;
             }
         }
-        var woken = _SYNC_WOKEN;
+        var woken = _SyncWake.Woken;
         if (ready || closed == count) {
             # Nothing to sleep for: stop waiting before sleeping at all.
             waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED);

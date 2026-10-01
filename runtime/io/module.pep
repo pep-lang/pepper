@@ -80,10 +80,7 @@ export _io_set_waiter;
 export _io_clear_waiter;
 export _IO_READABLE;
 export _IO_WRITABLE;
-export _IO_WAIT_READY;
-export _IO_WAIT_CANCELLED;
-export _IO_WAIT_TIMED_OUT;
-export _IO_WAIT_UNWATCHED;
+export _IoWait;
 export _FileTransfer;
 
 # For the tls and async modules only: UTF-16 names for Windows calls.

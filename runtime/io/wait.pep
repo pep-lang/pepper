@@ -31,10 +31,12 @@ export const _IO_READABLE = 1;
 export const _IO_WRITABLE = 2;
 
 # What `_IoWaiter._wait_ready` returns.
-export const _IO_WAIT_READY = 0;
-export const _IO_WAIT_CANCELLED = 1;
-export const _IO_WAIT_TIMED_OUT = 2;
-export const _IO_WAIT_UNWATCHED = 3;
+export enum _IoWait {
+    Ready,
+    Cancelled,
+    TimedOut,
+    Unwatched,
+}
 
 # The task runtime running on this thread, as the sockets see it.
 export trait _IoWaiter {
@@ -43,13 +45,13 @@ export trait _IoWaiter {
     _in_task(): bool;
 
     # Parks the running task until `handle` may be ready for `interest`
-    # (`_IO_READABLE` or `_IO_WRITABLE`), and returns `_IO_WAIT_READY`; or
-    # returns `_IO_WAIT_CANCELLED` or `_IO_WAIT_TIMED_OUT` when the task is
-    # cancelled or its timeout expires first, or `_IO_WAIT_UNWATCHED` when
+    # (`_IO_READABLE` or `_IO_WRITABLE`), and returns `Ready`; or returns
+    # `Cancelled` or `TimedOut` when the task is cancelled or its timeout
+    # expires first, or `Unwatched` when
     # the runtime cannot watch `handle` (the caller then blocks the thread
     # instead). Readiness is a hint: the caller tries the call again and
     # waits again if it would still block.
-    _wait_ready(handle: SocketHandle, interest: int): int;
+    _wait_ready(handle: SocketHandle, interest: int): _IoWait;
 
     # `handle` is about to be closed: forget it, and wake any task waiting
     # on it.
@@ -119,15 +121,18 @@ export _io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
     if (slot != __null) {
         var waiter = slot[0];
         if (waiter._in_task()) {
-            var status = waiter._wait_ready(h, interest);
-            if (status == _IO_WAIT_CANCELLED) {
-                return IoResult<void>.err(IoError(_io_sys_code_cancelled(), "the task was cancelled"));
-            }
-            if (status == _IO_WAIT_TIMED_OUT) {
-                return IoResult<void>.err(IoError(_io_sys_code_timed_out(), "the operation timed out"));
-            }
-            if (status == _IO_WAIT_READY) {
-                return _io_ok_void();
+            match (waiter._wait_ready(h, interest)) {
+                Ready => {
+                    return _io_ok_void();
+                }
+                Cancelled => {
+                    return IoResult<void>.err(IoError(_io_sys_code_cancelled(), "the task was cancelled"));
+                }
+                TimedOut => {
+                    return IoResult<void>.err(IoError(_io_sys_code_timed_out(), "the operation timed out"));
+                }
+                # The runtime cannot watch `h`: block the thread instead.
+                Unwatched => {}
             }
         }
     }

@@ -112,7 +112,7 @@ extend _KqueueDriver with _Driver {
     }
 
     _doorbell(): _Doorbell {
-        return _Doorbell(_DOORBELL_KQUEUE, this._queue, __null, __null);
+        return _Doorbell(_DoorbellKind.Kqueue, this._queue);
     }
 
     _close() {

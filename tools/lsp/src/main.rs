@@ -859,27 +859,45 @@ fn missing_arms_fix(uri: &Url, text: &str, program: &Program, error: &diag::Diag
 
 /// The `match` statement whose keyword starts at `start`.
 fn find_match(module: &ast::Module, start: usize) -> Option<&ast::Match> {
-    fn in_block(b: &ast::Block, start: usize) -> Option<&ast::Match> {
-        b.statements.iter().find_map(|s| in_statement(s, start))
+    find_match_by(module, start, &|m| m.keyword_span.start == start)
+}
+
+/// The case name of a `match` arm's pattern at `offset` (`Red` in
+/// `Red => ...` or `Color.Red => ...`), and the enum the pattern names, if
+/// it names one.
+fn case_pattern_at(module: &ast::Module, offset: usize) -> Option<&ast::Pattern> {
+    let on = |p: &ast::Pattern| !p.case.is_empty() && p.case_span.start <= offset && offset <= p.case_span.end;
+    let m = find_match_by(module, offset, &|m| m.arms.iter().flat_map(|a| &a.patterns).any(on))?;
+    m.arms.iter().flat_map(|a| &a.patterns).find(|p| on(p))
+}
+
+/// The innermost `match` statement around `offset` that `matches`.
+fn find_match_by<'a>(module: &'a ast::Module, start: usize, matches: &dyn Fn(&ast::Match) -> bool) -> Option<&'a ast::Match> {
+    fn in_block<'a>(b: &'a ast::Block, start: usize, matches: &dyn Fn(&ast::Match) -> bool) -> Option<&'a ast::Match> {
+        b.statements.iter().find_map(|s| in_statement(s, start, matches))
     }
-    fn in_statement(s: &ast::Statement, start: usize) -> Option<&ast::Match> {
+    fn in_statement<'a>(s: &'a ast::Statement, start: usize, matches: &dyn Fn(&ast::Match) -> bool) -> Option<&'a ast::Match> {
         let span = s.span();
         if start < span.start || start >= span.end {
             return None;
         }
         match s {
-            ast::Statement::Match(m) if m.keyword_span.start == start => Some(m),
+            ast::Statement::Match(m) if matches(m) => Some(m),
             ast::Statement::Match(m) => m
                 .arms
                 .iter()
                 .map(|a| &a.body)
                 .chain(m.else_arm.as_ref().map(|(_, b)| b))
-                .find_map(|b| in_block(b, start)),
-            ast::Statement::Block(b) => in_block(b, start),
-            ast::Statement::Branch(b) => in_block(&b.if_block, start).or_else(|| b.else_block.as_ref().and_then(|e| in_block(e, start))),
-            ast::Statement::While(w) => in_block(&w.block, start),
-            ast::Statement::For(f) => in_block(&f.block, start),
-            ast::Statement::With(w) => in_block(&w.block, start).or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, start))),
+                .find_map(|b| in_block(b, start, matches)),
+            ast::Statement::Block(b) => in_block(b, start, matches),
+            ast::Statement::Branch(b) => {
+                in_block(&b.if_block, start, matches).or_else(|| b.else_block.as_ref().and_then(|e| in_block(e, start, matches)))
+            }
+            ast::Statement::While(w) => in_block(&w.block, start, matches),
+            ast::Statement::For(f) => in_block(&f.block, start, matches),
+            ast::Statement::With(w) => {
+                in_block(&w.block, start, matches).or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, start, matches)))
+            }
             _ => None,
         }
     }
@@ -897,17 +915,46 @@ fn find_match(module: &ast::Module, start: usize) -> Option<&ast::Match> {
             ast::Declaration::Trait(t) => t.methods.iter().filter_map(|m| m.body.as_ref()).collect(),
             _ => vec![],
         };
-        bodies.into_iter().find_map(|b| in_block(b, start))
+        bodies.into_iter().find_map(|b| in_block(b, start, matches))
     })
+}
+
+/// The enum a `match` pattern's case belongs to: the one it names
+/// (`Color.Red`), else the one enum in the program with a case of that
+/// name.
+fn pattern_enum<'a>(program: &'a Program, pattern: &'a ast::Pattern) -> Option<&'a str> {
+    if let Some(qualifier) = &pattern.qualifier {
+        return Some(qualifier.name.as_str());
+    }
+    let mut owners = program.files.iter().flat_map(|f| &f.module.declarations).filter_map(|d| match d {
+        ast::Declaration::Struct(s) if s.enumeration.as_ref().is_some_and(|e| e.cases.iter().any(|c| c.name == pattern.case)) => {
+            Some(s.name.as_str())
+        }
+        _ => None,
+    });
+    let owner = owners.next()?;
+    owners.all(|o| o == owner).then_some(owner)
+}
+
+/// The enum `lhs` names in `lhs.case`: `Color`, or `_IoWait` in
+/// `io._IoWait`, qualified by its module.
+fn enum_named(lhs: &ast::Expression) -> Option<&str> {
+    match lhs {
+        ast::Expression::SymbolRef { id, .. } => Some(id),
+        ast::Expression::MemberAccess { lhs, name, .. } if matches!(&**lhs, ast::Expression::SymbolRef { .. }) => Some(name),
+        _ => None,
+    }
 }
 
 /// What hover shows for `lhs.name` when `lhs` names an enum and `name` one
 /// of its cases: `Color.Red = 0`, or `Doc.Text(text: String)` for a case
 /// that carries values.
 fn enum_case_of(module: &SemaModule, lhs: &ast::Expression, name: &str) -> Option<String> {
-    let ast::Expression::SymbolRef { id, .. } = lhs else {
-        return None;
-    };
+    enum_case_named(module, enum_named(lhs)?, name)
+}
+
+/// [`enum_case_of`] for the enum named `id`.
+fn enum_case_named(module: &SemaModule, id: &str, name: &str) -> Option<String> {
     if let Some(st) = find_sema_struct(module, id)
         && let Some(cases) = &st.enum_cases
     {
@@ -931,7 +978,8 @@ fn enum_case_of(module: &SemaModule, lhs: &ast::Expression, name: &str) -> Optio
         .enums
         .iter()
         .find(|e| e.loc.file == FileId(0) && demangle_name(&e.name) == id)
-        .or_else(|| module.enums.iter().find(|e| e.name == *id))?;
+        .or_else(|| module.enums.iter().find(|e| e.name == *id))
+        .or_else(|| module.enums.iter().find(|e| demangle_name(&e.name) == id))?;
     let case = e.case(name)?;
     Some(format!("{}.{} = {}", id, case.name, case.value))
 }
@@ -949,9 +997,7 @@ fn parse_after_dot(uri: &Url, text: &str, offset: usize) -> Option<ast::Module> 
 /// [`enum_case_of`] from the document alone, while the program does not
 /// build: `Color.Red`, without its value.
 fn enum_case_in(ast: &ast::Module, lhs: &ast::Expression, name: &str) -> Option<String> {
-    let ast::Expression::SymbolRef { id, .. } = lhs else {
-        return None;
-    };
+    let id = enum_named(lhs)?;
     let body = ast.declarations.iter().find_map(|d| match d {
         ast::Declaration::Struct(s) if s.name == *id => s.enumeration.as_ref(),
         _ => None,
@@ -1656,6 +1702,15 @@ impl PepperLsp {
             }
             HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value })
         };
+        // A `match` arm's case (`Red =>`).
+        if let Some(pattern) = case_pattern_at(&ast, offset)
+            && let Some(owner) =
+                program.and_then(|p| pattern_enum(p, pattern)).or(pattern.qualifier.as_ref().map(|q| q.name.as_str()))
+        {
+            let rendered =
+                sema.and_then(|m| enum_case_named(m, owner, &pattern.case)).unwrap_or_else(|| format!("{}.{}", owner, pattern.case));
+            return Some(Hover { contents: md(format!("`{}` — `{}`", pattern.case, rendered)), range: None });
+        }
         let imported = |(spelled, target): (String, imports::Target)| {
             let program = program?;
             let value = match target {
@@ -1932,11 +1987,21 @@ Returns a fresh value: it shares nothing with the arguments.");
         if let Some((symbol, _)) = declared_at(&ast, offset).or_else(|| generic_param_used(&ast, program, offset).map(|s| (s, None))) {
             return Some(vec![Location::new(uri.clone(), span_to_range(text, symbol.name_span))]);
         }
+        // A `match` arm's case (`Red =>`), declared in any file.
+        if let Some(program) = program
+            && let Some(pattern) = case_pattern_at(&ast, offset)
+            && let Some(owner) = pattern_enum(program, pattern)
+            && let Some((file, span)) = enum_case_declared(program, owner, &pattern.case)
+        {
+            let f = &program.files[file];
+            let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
+            return Some(vec![Location::new(target_uri, span_to_range(&f.source, span))]);
+        }
         // An enum's case (`Backend.Automatic`), declared in any file.
         if let Some(program) = program
             && let Some(ast::Expression::MemberAccess { lhs, name, name_span, .. }) = find_expr(&ast, offset)
             && name_span.start <= offset
-            && let ast::Expression::SymbolRef { id, .. } = &**lhs
+            && let Some(id) = enum_named(lhs)
             && let Some((file, span)) = enum_case_declared(program, id, name)
         {
             let f = &program.files[file];

@@ -176,7 +176,7 @@ export struct Channel<T> {
         while (_capacity > 0 && _state[1] == _capacity && _state[3] == 0) {
             if (!in_task) {
                 _async_sys_condition_wait(_not_full, _lock);
-            } else if (this._park_task(_senders, 0) != _SYNC_WOKEN) {
+            } else if (this._park_task(_senders, 0) != _SyncWake.Woken) {
                 _async_sys_mutex_unlock(_lock);
                 return false;
             }
@@ -221,11 +221,11 @@ export struct Channel<T> {
                 continue;
             }
             var woken = this._park_task(_receivers, 0);
-            if (woken == _SYNC_CANCELLED) {
+            if (woken == _SyncWake.Cancelled) {
                 _async_sys_mutex_unlock(_lock);
                 return Result<T>.err(Error("the task was cancelled"));
             }
-            if (woken == _SYNC_TIMED_OUT) {
+            if (woken == _SyncWake.TimedOut) {
                 break;
             }
         }
@@ -255,11 +255,11 @@ export struct Channel<T> {
         while (_state[1] == 0 && _state[3] == 0) {
             if (in_task) {
                 var woken = this._park_task(_receivers, deadline);
-                if (woken == _SYNC_CANCELLED) {
+                if (woken == _SyncWake.Cancelled) {
                     _async_sys_mutex_unlock(_lock);
                     return Result<T>.err(Error("the task was cancelled"));
                 }
-                if (woken == _SYNC_TIMED_OUT) {
+                if (woken == _SyncWake.TimedOut) {
                     break;
                 }
                 continue;
@@ -402,17 +402,17 @@ export struct Channel<T> {
     }
 
     # For `Select`: adds `waiter` to `_receivers` and returns
-    # `_SELECT_EMPTY`. Returns `_SELECT_READY` without adding it when a
+    # `_Joined.Empty`. Returns `_Joined.Ready` without adding it when a
     # value is waiting (the select should look again instead of sleeping),
-    # and `_SELECT_CLOSED` when the channel is closed and empty (nothing
+    # and `_Joined.Closed` when the channel is closed and empty (nothing
     # will ever wake it).
-    _select_join(waiter: _SyncWaiter): int {
+    _select_join(waiter: _SyncWaiter): _Joined {
         _async_sys_mutex_lock(_lock);
-        var found = _SELECT_EMPTY;
+        var found = _Joined.Empty;
         if (_state[1] != 0) {
-            found = _SELECT_READY;
+            found = _Joined.Ready;
         } else if (_state[3] != 0) {
-            found = _SELECT_CLOSED;
+            found = _Joined.Closed;
         } else {
             _receivers._push(waiter);
         }
@@ -429,7 +429,7 @@ export struct Channel<T> {
     # passes (0 for none), or the task is cancelled or its `timeout` expires;
     # returns which (see `_async_sync_park`). The caller holds the lock,
     # which is released while the task waits and held again on return.
-    _park_task(queue: _SyncQueue, deadline: ulong): int {
+    _park_task(queue: _SyncQueue, deadline: ulong): _SyncWake {
         var waiter = _async_sync_waiter();
         queue._push(waiter);
         _async_sys_mutex_unlock(_lock);
@@ -466,9 +466,11 @@ export struct Channel<T> {
 
 # What `Channel._select_join` found (and, in select.pep, what a case's
 # last `_take` found).
-export const _SELECT_READY = 0;
-export const _SELECT_EMPTY = 1;
-export const _SELECT_CLOSED = 2;
+export enum _Joined {
+    Ready,
+    Empty,
+    Closed,
+}
 
 # What `Channel._select_take` found: a value, nothing yet, or a closed and
 # empty channel.

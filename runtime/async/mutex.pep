@@ -550,6 +550,6 @@ export struct Condition<T> {
         var woken = _async_sync_park(_waiters, waiter, deadline, false);
         _mutex._lock_platform();
         _mutex._owner.store(me);
-        return woken == _SYNC_WOKEN;
+        return woken == _SyncWake.Woken;
     }
 }

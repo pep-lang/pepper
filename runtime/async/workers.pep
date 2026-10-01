@@ -35,7 +35,7 @@
 # Blocking calls: `run_blocking` hands its body to a pool of plain threads
 # that the runtime starts as needed, up to `RuntimeOptions.blocking_threads`,
 # and parks the calling task. A pool thread runs the body and sends the
-# calling worker a `_MESSAGE_COMPLETE` for the task's stand-in, as a worker
+# calling worker a `_Message.Complete` for the task's stand-in, as a worker
 # running a spawned task does. Pool threads wait for more work until the
 # runtime ends.
 #
@@ -52,12 +52,31 @@ import "sys_posix";
 import "sys_windows";
 import "task";
 
-# What a message tells a worker about one of its tasks.
-export const _MESSAGE_COMPLETE: ulong = 0;
-export const _MESSAGE_CANCEL: ulong = 1;
-# A task parked on a `Mutex`, `Condition` or `Channel` here was woken (see
-# sync_wait.pep).
-export const _MESSAGE_WAKE: ulong = 2;
+# What a message tells a worker about one of its tasks. `Wake`: a task
+# parked on a `Mutex`, `Condition` or `Channel` here was woken (see
+# sync_wait.pep). Messages travel packed in a `ulong` (`_Inbox._send`).
+export enum _Message: ulong {
+    Complete,
+    Cancel,
+    Wake,
+}
+
+# The task id and kind packed in an inbox message.
+export _async_unpack_message(message: ulong): (id: ulong, kind: _Message) {
+    var id = message / 4;
+    match (message % 4) {
+        0 => {
+            return (id, _Message.Complete);
+        }
+        1 => {
+            return (id, _Message.Cancel);
+        }
+        else => {
+            return (id, _Message.Wake);
+        }
+    }
+    return (id, _Message.Wake);
+}
 
 # Gives every inbox its own id.
 const _async_inbox_ids = Atomic<ulong>(1);
@@ -68,7 +87,8 @@ export struct _Inbox {
     # Unique among inboxes, so a waker can tell whether a task waits on its
     # own worker.
     const _id: ulong;
-    # `id * 4 + kind` (a `_MESSAGE_*` kind) for each message.
+    # `id * 4 + kind` (a `_Message`) for each message; a `ulong` rather
+    # than a tuple keeps the channel's slots plain words.
     const _messages: Channel<ulong>;
     # Spawned tasks that must run on this worker.
     const _pinned: Channel<_SharedTask>;
@@ -88,8 +108,8 @@ export struct _Inbox {
     }
 
     # Sends the worker `kind` about its task `id`.
-    _send(id: ulong, kind: ulong) {
-        _messages.send(id * 4 + kind);
+    _send(id: ulong, kind: _Message) {
+        _messages.send(id * 4 + (kind as ulong));
         _ring();
     }
 
@@ -131,7 +151,7 @@ export struct _SharedTask {
         _cancelled.store(1);
         var worker = _runner_worker.load();
         if (worker != 0) {
-            runtime._inbox(worker - 1)._send(_runner_id.load(), _MESSAGE_CANCEL);
+            runtime._inbox(worker - 1)._send(_runner_id.load(), _Message.Cancel);
         }
     }
 }
@@ -309,7 +329,7 @@ export _async_blocking_main(runtime: _Runtime) {
         }
         var job = next.value();
         job._body();
-        runtime._inbox(job._owner)._send(job._proxy, _MESSAGE_COMPLETE);
+        runtime._inbox(job._owner)._send(job._proxy, _Message.Complete);
         runtime._blocking_idle.fetch_add(1);
     }
 }

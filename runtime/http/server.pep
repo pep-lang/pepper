@@ -170,7 +170,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     var request = Request(method, target);
     var fields = _http_read_headers(reader, request.headers);
     if (fields.is_err()) {
-        if (fields.error().message.contains("too large")) {
+        if (fields.error().code == _http_code_too_large()) {
             _http_refuse(reader, 431);
         } else {
             _http_refuse(reader, 400);
@@ -196,7 +196,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     }
     var body = _http_read_body(reader, request.headers, request._body, false, MAX_REQUEST_BODY);
     if (body.is_err()) {
-        if (body.error().message.contains("too large")) {
+        if (body.error().code == _http_code_too_large()) {
             _http_refuse(reader, 413);
         } else {
             _http_refuse(reader, 400);

@@ -94,18 +94,19 @@ export trait _Driver {
 }
 
 # What a doorbell rings.
-export const _DOORBELL_EVENTFD = 1;
-export const _DOORBELL_KQUEUE = 2;
-export const _DOORBELL_IOCP = 3;
-export const _DOORBELL_POLL = 4;
+export enum _DoorbellKind {
+    EventFd,
+    Kqueue,
+    Iocp,
+    Poll,
+}
 
 # Wakes a worker blocked in its driver, from any thread (see the notes at
 # the top of this file). The driver that made it keeps its resources open
 # until every worker has stopped, so a ring never reaches a closed handle.
 [Shared]
 export struct _Doorbell {
-    # One of the `_DOORBELL_*` kinds.
-    const _kind: int;
+    const _kind: _DoorbellKind;
     # The eventfd, kqueue or pipe's write end, or the sending UDP socket.
     const _descriptor: long;
     # The completion port (IOCP).
@@ -113,23 +114,45 @@ export struct _Doorbell {
     # The address of the UDP socket a ring sends to (a sockaddr_in).
     const _address: __ptr<u8>;
 
-    construct(kind: int, descriptor: long, port: __ptr<void>, address: __ptr<u8>) {
+    # An eventfd or kqueue doorbell: `descriptor` is rung.
+    construct(kind: _DoorbellKind, descriptor: long) {
         _kind = kind;
         _descriptor = descriptor;
+        _port = __null;
+        _address = __null;
+    }
+
+    # An IOCP doorbell: a completion is posted to `port`.
+    construct(port: __ptr<void>) {
+        _kind = _DoorbellKind.Iocp;
+        _descriptor = 0;
         _port = port;
+        _address = __null;
+    }
+
+    # A poll doorbell: a byte is sent from `descriptor` to `address`.
+    construct(descriptor: long, address: __ptr<u8>) {
+        _kind = _DoorbellKind.Poll;
+        _descriptor = descriptor;
+        _port = __null;
         _address = address;
     }
 
     # Ends the worker's current wait, or its next one.
     _ring() {
-        if (_kind == _DOORBELL_EVENTFD) {
-            _async_epoll_ring(_descriptor);
-        } else if (_kind == _DOORBELL_KQUEUE) {
-            _async_kqueue_ring(_descriptor);
-        } else if (_kind == _DOORBELL_IOCP) {
-            _async_iocp_ring(_port);
-        } else {
-            _async_poll_ring(_descriptor, _address);
+        match (_kind) {
+            EventFd => {
+                _async_epoll_ring(_descriptor);
+            }
+            Kqueue => {
+                _async_kqueue_ring(_descriptor);
+            }
+            Iocp => {
+                _async_iocp_ring(_port);
+            }
+            Poll => {
+                _async_poll_ring(_descriptor, _address);
+            }
         }
     }
 }
@@ -152,28 +175,34 @@ export _async_open_driver(requested: Backend): (_Driver, Backend) {
     if (automatic) {
         backend = _async_best_backend();
     }
-    if (backend == Backend.Epoll) {
-        var epoll = _EpollDriver.open();
-        if (epoll.is_some()) {
-            return (epoll.value(), backend);
+    match (backend) {
+        Epoll => {
+            var epoll = _EpollDriver.open();
+            if (epoll.is_some()) {
+                return (epoll.value(), backend);
+            }
         }
-    } else if (backend == Backend.IoUring) {
-        var io_uring = _IoUringDriver.open();
-        if (io_uring.is_some()) {
-            return (io_uring.value(), backend);
+        IoUring => {
+            var io_uring = _IoUringDriver.open();
+            if (io_uring.is_some()) {
+                return (io_uring.value(), backend);
+            }
         }
-    } else if (backend == Backend.Kqueue) {
-        var kqueue = _KqueueDriver.open();
-        if (kqueue.is_some()) {
-            return (kqueue.value(), backend);
+        Kqueue => {
+            var kqueue = _KqueueDriver.open();
+            if (kqueue.is_some()) {
+                return (kqueue.value(), backend);
+            }
         }
-    } else if (backend == Backend.Iocp) {
-        var iocp = _IocpDriver.open();
-        if (iocp.is_some()) {
-            return (iocp.value(), backend);
+        Iocp => {
+            var iocp = _IocpDriver.open();
+            if (iocp.is_some()) {
+                return (iocp.value(), backend);
+            }
         }
-    } else {
-        return (_PollDriver(), Backend.Poll);
+        Poll, Automatic => {
+            return (_PollDriver(), Backend.Poll);
+        }
     }
     assert(automatic, "async.run: the " + backend.name() + " I/O backend is not available on this system");
     return (_PollDriver(), Backend.Poll);
@@ -204,34 +233,24 @@ _async_backend_from_environment(): Backend {
     if (value == __null) {
         return Backend.Automatic;
     }
-    if (_async_c_string_is(value, "epoll")) {
-        return Backend.Epoll;
-    }
-    if (_async_c_string_is(value, "io_uring")) {
-        return Backend.IoUring;
-    }
-    if (_async_c_string_is(value, "kqueue")) {
-        return Backend.Kqueue;
-    }
-    if (_async_c_string_is(value, "iocp")) {
-        return Backend.Iocp;
-    }
-    if (_async_c_string_is(value, "poll")) {
-        return Backend.Poll;
+    match (String(value)) {
+        "epoll" => {
+            return Backend.Epoll;
+        }
+        "io_uring" => {
+            return Backend.IoUring;
+        }
+        "kqueue" => {
+            return Backend.Kqueue;
+        }
+        "iocp" => {
+            return Backend.Iocp;
+        }
+        "poll" => {
+            return Backend.Poll;
+        }
+        else => {}
     }
     panic("async.run: PEPPER_IO_BACKEND must be epoll, io_uring, kqueue, iocp or poll");
     return Backend.Automatic;
-}
-
-# Whether the C string `c` holds exactly `text`.
-_async_c_string_is(c: __ptr<char>, text: String): bool {
-    var expected = text.c_str();
-    var i: ulong = 0;
-    while (i < text.size()) {
-        if (c[i] != expected[i]) {
-            return false;
-        }
-        i = i + 1;
-    }
-    return c[i] == 0;
 }

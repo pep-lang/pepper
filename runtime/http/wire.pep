@@ -27,6 +27,21 @@ export _http_error(message: String): io.IoError {
     return io.IoError(_http_code_protocol(), message);
 }
 
+# EMSGSIZE (WSAEMSGSIZE on Windows): a message too large to accept, which a
+# server answers with 431 (the head) or 413 (the body) rather than 400.
+[Target(OS(Linux))]
+export _http_code_too_large(): io.ErrorCode { return 90; }
+
+[Target(OS(Mac))]
+export _http_code_too_large(): io.ErrorCode { return 40; }
+
+[Target(OS(Windows))]
+export _http_code_too_large(): io.ErrorCode { return 10040; }
+
+export _http_too_large(message: String): io.IoError {
+    return io.IoError(_http_code_too_large(), message);
+}
+
 # One connection: plain TCP, or TLS over it.
 export struct _HttpConnection {
     var _tcp: io.TcpStream;
@@ -168,7 +183,7 @@ export struct _HttpReader {
             var take = this._available();
             if (take > 0) {
                 if (into.count() + take > limit) {
-                    return io.IoResult<void>.err(_http_error("the body is too large"));
+                    return io.IoResult<void>.err(_http_too_large("the body is too large"));
                 }
                 into._append_raw(this._buffer._data + this._start, take);
                 this._start = this._start + take;
@@ -199,7 +214,7 @@ export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<vo
         }
         total = total + line.size();
         if (total > _HTTP_MAX_HEAD) {
-            return io.IoResult<void>.err(_http_error("the header fields are too large"));
+            return io.IoResult<void>.err(_http_too_large("the header fields are too large"));
         }
         var colon = line.find(":");
         if (colon <= 0) {
@@ -230,7 +245,7 @@ export _http_read_body(
             return io.IoResult<void>.err(_http_error("invalid Content-Length: '" + length.value() + "'"));
         }
         if (n as ulong > limit) {
-            return io.IoResult<void>.err(_http_error("the body is too large"));
+            return io.IoResult<void>.err(_http_too_large("the body is too large"));
         }
         return reader._bytes(into, n as ulong);
     }
@@ -261,7 +276,7 @@ export _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoR
             return _http_read_headers(reader, Headers());
         }
         if (into.count() + size as ulong > limit) {
-            return io.IoResult<void>.err(_http_error("the body is too large"));
+            return io.IoResult<void>.err(_http_too_large("the body is too large"));
         }
         var data = reader._bytes(into, size as ulong);
         if (data.is_err()) {
