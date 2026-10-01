@@ -414,14 +414,161 @@ export struct String {
     ## case the result is -1. The result is also -1 when either String is not
     ## valid UTF-8. Runs in O(size() * needle.size()).
     ##
+    ## With `from`, the search starts at that byte offset, which must be a
+    ## code point boundary (an offset `find` returned, plus a match's size,
+    ## is one); an offset past the end, or inside a code point, finds
+    ## nothing. The result still counts from the start of the String.
+    ##
     ## @param needle the text to search for
-    ## @returns the byte offset of the first match, or -1 when there is none
+    ## @param from the byte offset to start searching at; 0 by default
+    ## @returns the byte offset of the first match at or after `from`, or -1
+    ##   when there is none
     ## @example
     ##     var s = "TESTING";
     ##     assert(s.find("STI") == 2, "byte offset");
     ##     assert(s.find("xyz") == -1, "absent");
-    find(needle: String): long {
-        return _pep_utf8_find(_data, _size, needle._data, needle._size);
+    ##     assert("a,b,c".find(",", 2) == 3, "the second comma");
+    find(needle: String, from: ulong = 0): long {
+        if (from > _size || (from == _size && from > 0)) {
+            return -1;
+        }
+        var found = _pep_utf8_find(_data + from, _size - from, needle._data, needle._size);
+        if (found < 0) {
+            return -1;
+        }
+        return found + (from as long);
+    }
+
+    ## Returns the byte offset of the last place `needle` occurs in this
+    ## String, or -1 when it does not occur. An empty `needle` is found at
+    ## `size()`. Runs in O(size() * needle.size()).
+    ##
+    ## @param needle the text to search for
+    ## @returns the byte offset of the last match, or -1 when there is none
+    ## @example
+    ##     assert("a/b/c".rfind("/") == 3, "the last slash");
+    ##     assert("abc".rfind("x") == -1, "absent");
+    rfind(needle: String): long {
+        if (needle._size > _size) {
+            return -1;
+        }
+        var index = _size - needle._size;
+        while (true) {
+            if (needle._size == 0 || memcmp(_data + index, needle._data, needle._size) == 0) {
+                return index as long;
+            }
+            if (index == 0) {
+                return -1;
+            }
+            index = index - 1;
+        }
+        return -1;
+    }
+
+    ## Splits the String at every occurrence of `separator` and returns the
+    ## pieces between them, in order. Adjacent separators give an empty
+    ## piece, and so does a separator at either end: `"a,,b".split(",")` is
+    ## `["a", "", "b"]` and `",a".split(",")` is `["", "a"]`. A String
+    ## without `separator`, the empty String included, gives one piece: the
+    ## whole String. Runs in O(size() * separator.size()).
+    ##
+    ## @param separator the text to split at
+    ## @returns a new Array with one new String per piece
+    ## @panics if `separator` is empty
+    ## @example
+    ##     var parts = "a,b,,c".split(",");
+    ##     assert(parts.count() == 4, "four pieces");
+    ##     assert(parts[2] == "", "an empty piece");
+    split(separator: String): String[] {
+        assert(separator._size > 0, "String.split: the separator is empty");
+        var result = Array<String>();
+        ulong start = 0;
+        while (true) {
+            var found = find(separator, start);
+            if (found < 0) {
+                break;
+            }
+            result.append(substr_bytes(start, (found as ulong) - start));
+            start = (found as ulong) + separator._size;
+        }
+        result.append(substr_bytes(start, _size - start));
+        return result;
+    }
+
+    ## Splits the String at the first occurrence of `separator`: the text
+    ## before it and the text after it, or none when it does not occur.
+    ## Runs in O(size() * separator.size()).
+    ##
+    ## @param separator the text to split at
+    ## @returns the pieces before and after the first `separator`, or none
+    ## @panics if `separator` is empty
+    ## @example
+    ##     var header = "Host: example.com".split_once(": ");
+    ##     assert(header.is_some(), "has a colon");
+    ##     var (name, value) = header.value();
+    ##     assert(name == "Host" && value == "example.com", "split");
+    split_once(separator: String): (String, String)? {
+        assert(separator._size > 0, "String.split_once: the separator is empty");
+        var found = find(separator);
+        if (found < 0) {
+            return Optional<(String, String)>.none();
+        }
+        var at = found as ulong;
+        var after = at + separator._size;
+        return Optional<(String, String)>.some((substr_bytes(0, at), substr_bytes(after, _size - after)));
+    }
+
+    ## Returns the pieces of `parts` joined into one String, with this String
+    ## between each two of them: `", ".join(names)`. No parts give an empty
+    ## String, and one part gives a copy of it. Runs in O(total size).
+    ##
+    ## @param parts the pieces to join
+    ## @returns a new String
+    ## @example
+    ##     var parts = Array<String>();
+    ##     parts.append("a");
+    ##     parts.append("b");
+    ##     assert(", ".join(parts) == "a, b", "joined");
+    join(parts: String[]): String {
+        var out = StringBuilder();
+        ulong index = 0;
+        var count = parts.count();
+        while (index < count) {
+            if (index > 0) {
+                out.append(this);
+            }
+            out.append(parts[index]);
+            index = index + 1;
+        }
+        return out.to_string();
+    }
+
+    ## Returns a copy of this String with every occurrence of `from` replaced
+    ## by `to`, scanning left to right without overlaps: `"aaa".replace("aa",
+    ## "b")` is `"ba"`. Runs in O(size() * from.size()) plus the result's
+    ## size.
+    ##
+    ## @param from the text to replace
+    ## @param to the text to put in its place
+    ## @returns a new String
+    ## @panics if `from` is empty
+    ## @example
+    ##     assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
+    replace(from: String, to: String): String {
+        assert(from._size > 0, "String.replace: the text to replace is empty");
+        var out = StringBuilder();
+        ulong start = 0;
+        while (true) {
+            var found = find(from, start);
+            if (found < 0) {
+                break;
+            }
+            out.append(substr_bytes(start, (found as ulong) - start));
+            out.append(to);
+            start = (found as ulong) + from._size;
+        }
+        out.append(substr_bytes(start, _size - start));
+        return out.to_string();
     }
 
     ## Returns whether `needle` occurs in this String (`find(needle) >= 0`).

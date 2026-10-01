@@ -118,6 +118,17 @@ text built so far on every append:
 {{#include ../../examples/types-strings-text.pep}}
 ```
 
+To search and take text apart, `find(needle, from)` starts at a byte offset
+and `rfind` finds the last match, `split(separator)` cuts at every separator
+and `split_once` at the first (giving an optional pair), `separator.join(parts)`
+puts the parts back together, and `replace(from, to)` swaps every match. To
+read a number, `math.parse_int(text, base)` (after `import math`) gives an
+optional `long`, empty when the text is not an integer:
+
+```pepper
+{{#include ../../examples/types-strings-search.pep}}
+```
+
 An interpolated string puts values' text into a string literal:
 `$"line {line + 1}: {message}"`. [String interpolation](interpolation.md) covers
 which values it accepts.

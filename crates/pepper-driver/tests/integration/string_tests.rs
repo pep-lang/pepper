@@ -391,3 +391,75 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn find_from_rfind_split_join_replace() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        if ("a,b,c".find(",", 2) != 3) { return -1; }
+        if ("a,b,c".find(",", 4) != -1) { return -2; }
+        if ("a,b,c".find(",", 99) != -1) { return -3; }
+        if ("héllo".find("l", 1) != 3) { return -4; }
+        if ("a/b/c".rfind("/") != 3) { return -5; }
+        if ("abc".rfind("x") != -1) { return -6; }
+        if ("abc".rfind("") != 3) { return -7; }
+        if ("abcabc".rfind("abc") != 3) { return -8; }
+        var parts = "a,b,,c".split(",");
+        if (parts.count() != 4 || !(parts[2] == "") || !(parts[3] == "c")) { return -9; }
+        if ("".split(",").count() != 1) { return -10; }
+        if (",a,".split(",").count() != 3) { return -11; }
+        if ("a--b".split("--").count() != 2) { return -12; }
+        var once = "Host: x: y".split_once(": ");
+        if (!once.is_some()) { return -13; }
+        var (name, value) = once.value();
+        if (!(name == "Host") || !(value == "x: y")) { return -14; }
+        if ("abc".split_once(":").is_some()) { return -15; }
+        if (!(", ".join(parts) == "a, b, , c")) { return -16; }
+        if (!(", ".join(Array<String>()) == "")) { return -17; }
+        if (!("aaa".replace("aa", "b") == "ba")) { return -18; }
+        if (!("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n")) { return -19; }
+        if (!("héllo wörld".replace("ö", "o") == "héllo world")) { return -20; }
+        if (!("abc".replace("x", "y") == "abc")) { return -21; }
+    }
+    if (_pep_live_allocs() != before) { return -22; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn math_parse_int() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+import math;
+
+test(): int {
+    if (math.parse_int("-42").value() != -42) { return -1; }
+    if (math.parse_int("+7").value() != 7) { return -2; }
+    if (math.parse_int("ff", 16).value() != 255) { return -3; }
+    if (math.parse_int("FF", 16).value() != 255) { return -4; }
+    if (math.parse_int("101", 2).value() != 5) { return -5; }
+    if (math.parse_int("z", 36).value() != 35) { return -6; }
+    if (math.parse_int("12x").is_some()) { return -7; }
+    if (math.parse_int("").is_some()) { return -8; }
+    if (math.parse_int("-").is_some()) { return -9; }
+    if (math.parse_int(" 1").is_some()) { return -10; }
+    if (math.parse_int("2", 2).is_some()) { return -11; }
+    if (math.parse_int("9223372036854775807").value() != 9223372036854775807) { return -12; }
+    if (math.parse_int("9223372036854775808").is_some()) { return -13; }
+    if (math.parse_int("-9223372036854775808").value() != -9223372036854775807 - 1) { return -14; }
+    if (math.parse_int("-9223372036854775809").is_some()) { return -15; }
+    if (math.parse_int("99999999999999999999999").is_some()) { return -16; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

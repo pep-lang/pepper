@@ -203,9 +203,10 @@ drop_comments(token: syntax.Token, count: ulong) {
 # its line break and any trailing whitespace.
 line_end(source: String, offset: ulong): ulong {
     var data = source.c_str();
-    ulong end = offset;
-    while (end < source.size() and data[end] != '\n') {
-        end += 1;
+    var end = source.size();
+    var line_break = source.find("\n", offset);
+    if (line_break >= 0) {
+        end = line_break as ulong;
     }
     while (end > offset and (data[end - 1] == ' ' or data[end - 1] == '\t' or data[end - 1] == '\r')) {
         end -= 1;
@@ -216,19 +217,7 @@ line_end(source: String, offset: ulong): ulong {
 # `source` from `start` to `end`, with `\r\n` line breaks as `\n`, the form
 # the renderer works in.
 source_text(source: String, start: ulong, end: ulong): String {
-    var data = source.c_str();
-    var result = "";
-    ulong from = start;
-    ulong i = start;
-    while (i < end) {
-        if (data[i] == '\r' and i + 1 < end and data[i + 1] == '\n') {
-            result += String(data + from, i - from);
-            from = i + 1;
-        }
-        i += 1;
-    }
-    result += String(data + from, end - from);
-    return result;
+    return source.substr_bytes(start, end - start).replace("\r\n", "\n");
 }
 
 # A `# format: off` region: its text as written, and the index of the first

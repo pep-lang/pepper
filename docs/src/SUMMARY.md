@@ -86,6 +86,8 @@
   - [http/module.pep](reference/http-module.md)
     - [http/server.pep](reference/http-server.md)
     - [io/unix.pep](reference/io-unix.md)
+  - [math/module.pep](reference/math-module.md)
+    - [math/parse.pep](reference/math-parse.md)
   - [tls/module.pep](reference/tls-module.md)
     - [tls/stream.pep](reference/tls-stream.md)
   - [uri.pep](reference/uri.md)

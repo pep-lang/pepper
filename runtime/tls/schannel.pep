@@ -378,18 +378,18 @@ _tls_pem_blocks(text: String, label: String): Array<u8[]> {
     var blocks = Array<u8[]>();
     var begin = "-----BEGIN " + label + "-----";
     var end = "-----END " + label + "-----";
-    var rest = text;
+    ulong from = 0;
     while (true) {
-        var start = rest.find(begin);
+        var start = text.find(begin, from);
         if (start < 0) {
             return blocks;
         }
-        var after = rest.substr_bytes(start as ulong, rest.size() - start as ulong);
-        var stop = after.find(end);
+        var stop = text.find(end, start as ulong);
         if (stop < 0) {
             return blocks;
         }
-        var block = after.substr_bytes(0, stop as ulong + end.size());
+        var block_end = stop as ulong + end.size();
+        var block = text.substr_bytes(start as ulong, block_end - start as ulong);
         __ptr<uint> size = _pep_malloc(4);
         size[0] = 0;
         # CRYPT_STRING_BASE64HEADER
@@ -402,7 +402,7 @@ _tls_pem_blocks(text: String, label: String): Array<u8[]> {
             }
         }
         _pep_free(size);
-        rest = after.substr_bytes(block.size(), after.size() - block.size());
+        from = block_end;
     }
     return blocks;
 }

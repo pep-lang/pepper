@@ -90,18 +90,11 @@ import io;
 s(p: io.Path): String { return p.to_string(); }
 
 # The expected text of a path the implementation builds: `/` written here is
-# the platform separator, `\` on Windows. (Kept as `/` in the sources so one string serves every platform.)
+# the platform separator, `\` on Windows.
 w(text: String): String {
     var out = text.clone();
     [Target(OS(Windows))] {
-        var p = out.c_str() as __ptr<u8>;
-        ulong i = 0;
-        while (i < out.size()) {
-            if (p[i] == 47) {
-                p[i] = 92;
-            }
-            i = i + 1;
-        }
+        out = text.replace("/", "\\");
     }
     return out;
 }

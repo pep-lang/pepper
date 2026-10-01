@@ -391,13 +391,10 @@ export struct Path {
     ## @returns the index of the extension's dot, or `name.size` when the
     ## name has no extension (including the empty name)
     static dot_index(name: String): ulong {
-        var p = name.c_str() as __ptr<u8>;
-        var i = name.size();
-        while (i > 1) {
-            i = i - 1;
-            if (p[i] == '.') {
-                return i;
-            }
+        # A dot at 0 starts a hidden file's name, not an extension.
+        var dot = name.rfind(".");
+        if (dot > 0) {
+            return dot as ulong;
         }
         return name.size();
     }

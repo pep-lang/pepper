@@ -354,7 +354,7 @@ content and its own buffer.
 #### find
 
 ```pepper
-find(needle: String): long
+find(needle: String, from: ulong = 0): long
 ```
 
 Returns the **byte offset** of the first occurrence of `needle`, or -1
@@ -366,17 +366,152 @@ An empty `needle` is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
 valid UTF-8. Runs in O(size() * needle.size()).
 
+With `from`, the search starts at that byte offset, which must be a
+code point boundary (an offset `find` returned, plus a match's size,
+is one); an offset past the end, or inside a code point, finds
+nothing. The result still counts from the start of the String.
+
 **Parameters**
 - `needle` — the text to search for
+- `from` — the byte offset to start searching at; 0 by default
 
 **Returns**
-- the byte offset of the first match, or -1 when there is none
+- the byte offset of the first match at or after `from`, or -1 when there is none
 
 **Example**
 ```pepper
     var s = "TESTING";
     assert(s.find("STI") == 2, "byte offset");
     assert(s.find("xyz") == -1, "absent");
+    assert("a,b,c".find(",", 2) == 3, "the second comma");
+```
+
+#### rfind
+
+```pepper
+rfind(needle: String): long
+```
+
+Returns the byte offset of the last place `needle` occurs in this
+String, or -1 when it does not occur. An empty `needle` is found at
+`size()`. Runs in O(size() * needle.size()).
+
+**Parameters**
+- `needle` — the text to search for
+
+**Returns**
+- the byte offset of the last match, or -1 when there is none
+
+**Example**
+```pepper
+    assert("a/b/c".rfind("/") == 3, "the last slash");
+    assert("abc".rfind("x") == -1, "absent");
+```
+
+#### split
+
+```pepper
+split(separator: String): String[]
+```
+
+Splits the String at every occurrence of `separator` and returns the
+pieces between them, in order. Adjacent separators give an empty
+piece, and so does a separator at either end: `"a,,b".split(",")` is
+`["a", "", "b"]` and `",a".split(",")` is `["", "a"]`. A String
+without `separator`, the empty String included, gives one piece: the
+whole String. Runs in O(size() * separator.size()).
+
+**Parameters**
+- `separator` — the text to split at
+
+**Returns**
+- a new Array with one new String per piece
+
+**Panics**
+- if `separator` is empty
+
+**Example**
+```pepper
+    var parts = "a,b,,c".split(",");
+    assert(parts.count() == 4, "four pieces");
+    assert(parts[2] == "", "an empty piece");
+```
+
+#### split_once
+
+```pepper
+split_once(separator: String): (String, String)?
+```
+
+Splits the String at the first occurrence of `separator`: the text
+before it and the text after it, or none when it does not occur.
+Runs in O(size() * separator.size()).
+
+**Parameters**
+- `separator` — the text to split at
+
+**Returns**
+- the pieces before and after the first `separator`, or none
+
+**Panics**
+- if `separator` is empty
+
+**Example**
+```pepper
+    var header = "Host: example.com".split_once(": ");
+    assert(header.is_some(), "has a colon");
+    var (name, value) = header.value();
+    assert(name == "Host" && value == "example.com", "split");
+```
+
+#### join
+
+```pepper
+join(parts: String[]): String
+```
+
+Returns the pieces of `parts` joined into one String, with this String
+between each two of them: `", ".join(names)`. No parts give an empty
+String, and one part gives a copy of it. Runs in O(total size).
+
+**Parameters**
+- `parts` — the pieces to join
+
+**Returns**
+- a new String
+
+**Example**
+```pepper
+    var parts = Array<String>();
+    parts.append("a");
+    parts.append("b");
+    assert(", ".join(parts) == "a, b", "joined");
+```
+
+#### replace
+
+```pepper
+replace(from: String, to: String): String
+```
+
+Returns a copy of this String with every occurrence of `from` replaced
+by `to`, scanning left to right without overlaps: `"aaa".replace("aa",
+"b")` is `"ba"`. Runs in O(size() * from.size()) plus the result's
+size.
+
+**Parameters**
+- `from` — the text to replace
+- `to` — the text to put in its place
+
+**Returns**
+- a new String
+
+**Panics**
+- if `from` is empty
+
+**Example**
+```pepper
+    assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
 ```
 
 #### contains

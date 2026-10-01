@@ -348,33 +348,19 @@ export struct SocketAddress {
         ulong colon = n;
         var v6 = _io_byte(p, n, 0) == '[';
         if (v6) {
-            ulong close = 1;
-            while (close < n) {
-                if (_io_byte(p, n, close) == ']') {
-                    break;
-                }
-                close = close + 1;
-            }
-            if (close + 1 >= n) {
+            var close = text.find("]");
+            if (close < 0 || (close as ulong) + 1 >= n || _io_byte(p, n, (close as ulong) + 1) != ':') {
                 return bad;
             }
-            if (_io_byte(p, n, close + 1) != ':') {
-                return bad;
-            }
-            colon = close + 1;
+            colon = (close as ulong) + 1;
         } else {
-            ulong i = 0;
-            while (i < n) {
-                if (_io_byte(p, n, i) == ':') {
-                    if (colon != n) {
-                        return bad;  # a second colon: IPv6 needs brackets
-                    }
-                    colon = i;
-                }
-                i = i + 1;
-            }
-            if (colon == n) {
+            var first = text.find(":");
+            if (first < 0) {
                 return bad;
+            }
+            colon = first as ulong;
+            if (text.find(":", colon + 1) >= 0) {
+                return bad;  # a second colon: IPv6 needs brackets
             }
         }
         var port = _io_parse_port(p, n, colon + 1, n);
