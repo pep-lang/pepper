@@ -6,9 +6,7 @@ use crate::options::Options;
 use pepper_parser::diagnostic::FileId;
 use pepper_sema::builder::build_file;
 use pepper_sema::model::Module as SemaModule;
-use pepper_sema::passes::transform_pass;
 use pepper_sema::program::{self, Program, Root, Setup};
-use pepper_sema::struct_body;
 use pepper_parser::diagnostic::Loc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -84,9 +82,14 @@ pub fn check_with_runtime(name: &str, source: &str) -> Result<(), String> {
 
 /// Compile `source` (named `name`) with the discovered runtime as its
 /// prelude, as `compile` does: load, link, check, merge, and run the sema
-/// passes. For test harnesses that JIT the result.
+/// passes. For test harnesses that JIT the result. The runtime is checked
+/// once per process and reused (see [`on_checked_runtime`]).
 pub fn compile_with_runtime(name: &str, source: &str) -> Result<Compiled, String> {
-    let mut module = merge(&load_with_runtime(name, source)?)?;
+    let program = load_with_runtime(name, source)?;
+    if let Some(result) = on_checked_runtime(&program) {
+        return result;
+    }
+    let mut module = merge(&program)?;
     run_passes(&mut module)?;
     Ok(module)
 }
@@ -189,6 +192,28 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     Ok((module, program, reused_units))
 }
 
+/// Check `program` against its runtime checked alone, which this process
+/// reuses for every program that loads the same runtime files (see
+/// `pepper_sema::checked`). `None` when the runtime cannot be checked alone.
+fn on_checked_runtime(program: &Program) -> Option<Result<SemaModule, String>> {
+    let in_runtime = pepper_sema::checked::runtime_files(program)?;
+    let sources = |d: &pepper_parser::diagnostic::Diagnostic| {
+        let mut sources = pepper_parser::diagnostic::SourceMap::default();
+        for file in &program.files {
+            sources.add(&file.name, &file.source);
+        }
+        sources.render(d)
+    };
+    Some((|| {
+        program.check()?;
+        let mut module = pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Strict).map_err(|d| sources(&d))?;
+        module.warnings = program.warnings();
+        let result = run_passes(&mut module);
+        crate::report_warnings(&module.render_warnings());
+        result.map(|_| module)
+    })())
+}
+
 /// The units whose objects came from the cache before sema.
 #[derive(Default)]
 struct Reused {
@@ -270,8 +295,5 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
 /// which checks value types) on a merged module; errors are rendered against
 /// its sources.
 fn run_passes(module: &mut SemaModule) -> Result<(), String> {
-    pepper_sema::apply_platform_filters(module).map_err(|d| module.sources.render(&d))?;
-    struct_body::apply(module).map_err(|d| module.sources.render(&d))?;
-    transform_pass(module).map_err(|d| module.sources.render(&d))?;
-    Ok(())
+    pepper_sema::checked::run_passes(module).map_err(|d| module.sources.render(&d))
 }

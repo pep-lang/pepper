@@ -1593,6 +1593,34 @@ type Program = pepper_sema::program::Program;
 /// in the document (`program[0]`) are reported; other files that fail to
 /// build are skipped. Locations carry the file's index in `program`.
 fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
+    // The runtime is checked once and reused (see `pepper_sema::checked`),
+    // unless the document is part of it.
+    let on_runtime = pepper_sema::checked::runtime_files(program).filter(|in_runtime| !in_runtime[0]).and_then(|in_runtime| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pepper_sema::checked::on_checked_runtime(program, &in_runtime, pepper_sema::checked::Build::Document))).ok()
+    });
+    let module = match on_runtime {
+        Some(Ok(module)) => module,
+        Some(Err(e)) if e.loc.is_some_and(|l| l.file == FileId(0)) => return Err(e),
+        _ => merged(program)?,
+    };
+    // Run the sema passes under a panic guard: an LSP must never crash on
+    // a user file, so a panicking pass degrades to "no semantic info".
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut m = module;
+        pepper_sema::checked::run_passes(&mut m)?;
+        Ok(m)
+    }));
+    match result {
+        Ok(Ok(m)) => Ok(m),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err(diag::Diagnostic::error("semantic analysis panicked")),
+    }
+}
+
+/// `program` merged into one sema model as it is: build errors in the
+/// document (`program[0]`) are reported; other files that fail to build are
+/// skipped.
+fn merged(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
     let mut module = SemaModule { linked: true, extension_scopes: program.extension_scopes(), ..SemaModule::default() };
     // Indexed like the files, as the passes that read source text expect.
     for file in &program.files {
@@ -1604,21 +1632,7 @@ fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
         }
     }
     module.merge(pepper_sema::builder::build_file(&program.files[0].module, FileId(0))?);
-
-    // Run the sema passes under a panic guard: an LSP must never crash on
-    // a user file, so a panicking pass degrades to "no semantic info".
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut m = module;
-        pepper_sema::apply_platform_filters(&mut m)?;
-        pepper_sema::struct_body::apply(&mut m)?;
-        pepper_sema::transform_pass(&mut m)?;
-        Ok(m)
-    }));
-    match result {
-        Ok(Ok(m)) => Ok(m),
-        Ok(Err(e)) => Err(e),
-        Err(_) => Err(diag::Diagnostic::error("semantic analysis panicked")),
-    }
+    Ok(module)
 }
 
 /// A dimmed hint over each region of `text` (the document, parsed as

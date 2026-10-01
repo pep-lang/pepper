@@ -629,6 +629,8 @@ fn add_built_in_methods(module: &mut Module) {
         parameter.ty = e.representation.clone();
         added.push(function("from_value", TypeName::new(&result), vec![parameter], items, true));
     }
+    // A checked module's enums have theirs already.
+    added.retain(|f| !module.functions.iter().any(|g| g.name == f.name));
     module.functions.extend(added);
 }
 

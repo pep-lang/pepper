@@ -13,6 +13,9 @@ pub fn release_field_refs(module: &mut Module) {
         .flat_map(|st| [st.name.clone(), st.ty.to_string()])
         .collect();
     for st_idx in 0..module.structs.len() {
+        if module.checked.has_struct(&module.structs[st_idx].name) {
+            continue;
+        }
         let st = &mut module.structs[st_idx];
         let field_names: Vec<String> = st
             .field_members

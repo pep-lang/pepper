@@ -232,7 +232,9 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
             let target_name = ext.resolved.clone().expect("resolved");
             // Apply to every struct matching the resolved name (concrete or
             // specialized instance), once each.
-            for st in &mut module.structs {
+            // A checked struct has had the checked extensions applied.
+            let done = ext_idx < module.checked.extensions;
+            for st in module.structs.iter_mut().filter(|st| !(done && module.checked.has_struct(&st.name))) {
                 if (st.name == target_name || st.ty.is_spelled(&target_name)) && applied.insert((ext_idx, st.name.clone())) {
                     apply_to_struct(st, ext, &module.traits);
                     // An extension's methods join the struct's overload sets.

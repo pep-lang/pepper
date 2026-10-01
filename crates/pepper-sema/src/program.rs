@@ -604,7 +604,7 @@ pub fn load_file(path: &Path, prelude: &[PathBuf], search_paths: &[PathBuf], mod
 
 /// Whether `module` declares a concrete override of a generic function
 /// (module linking marked its generic parameters as type arguments).
-fn declares_override(module: &pepper_parser::ast::Module) -> bool {
+pub fn declares_override(module: &pepper_parser::ast::Module) -> bool {
     module.declarations.iter().any(|d| match d {
         pepper_parser::ast::Declaration::Function(f) => f.generic_params.iter().any(|p| p.is_argument),
         _ => false,

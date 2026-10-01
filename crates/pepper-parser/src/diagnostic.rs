@@ -56,6 +56,42 @@ pub struct Loc {
     pub span: Span,
 }
 
+thread_local! {
+    /// While set, how [`Loc`]s translate their file as they are serialized
+    /// or deserialized (see [`with_file_map`]).
+    static FILE_MAP: std::cell::RefCell<Option<std::collections::HashMap<u32, u32>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` with every [`Loc`] serialized or deserialized meanwhile having
+/// its file translated through `map` (a file it does not name, and
+/// [`Loc::NONE`], stay as they are). A sema module saved without the files
+/// of the program that made it can then be loaded into another program,
+/// whose files are numbered differently: saving maps the program's files
+/// to the snapshot's own list, loading maps that list to the new program's.
+pub fn with_file_map<R>(map: std::collections::HashMap<u32, u32>, f: impl FnOnce() -> R) -> R {
+    let previous = FILE_MAP.with(|m| m.replace(Some(map)));
+    let result = f();
+    FILE_MAP.with(|m| *m.borrow_mut() = previous);
+    result
+}
+
+fn mapped_file(file: u32) -> u32 {
+    FILE_MAP.with(|m| m.borrow().as_ref().and_then(|map| map.get(&file).copied()).unwrap_or(file))
+}
+
+impl serde::Serialize for Loc {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (mapped_file(self.file.0), self.span.start, self.span.end).serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Loc {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (file, start, end) = <(u32, usize, usize)>::deserialize(deserializer)?;
+        Ok(Loc { file: FileId(mapped_file(file)), span: Span { start, end } })
+    }
+}
+
 impl std::fmt::Debug for Loc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // The file index depends on load order: hidden with the span.

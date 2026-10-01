@@ -730,6 +730,7 @@ dependencies = [
  "blake3",
  "pepper-files",
  "pepper-parser",
+ "serde",
 ]
 
 [[package]]

@@ -4,13 +4,13 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::LazyLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TypeFlags {
     Scalar,
     Function,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeName {
     pub name: String,
     pub sub_types: Vec<TypeName>,

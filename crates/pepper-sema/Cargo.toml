@@ -10,3 +10,4 @@ path = "src/lib.rs"
 pepper-parser = { path = "../pepper-parser" }
 pepper-files = { path = "../pepper-files" }
 blake3 = { version = "1.8.7", default-features = false }
+serde = { version = "1", features = ["derive"] }

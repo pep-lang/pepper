@@ -140,7 +140,14 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             return Err(error);
         }
         if (module.structs.len(), module.functions.len()) == before && !methods_added && !copies_added {
-            break;
+            // The round's inference can still have named a new instance
+            // (`wrap(u)` in a method specialized this round, now
+            // `wrap<bool>`): done only when gathering asks for nothing new.
+            let specs = (module.struct_specs.len(), module.func_specs.len());
+            step!(gather_generics(module));
+            if (module.struct_specs.len(), module.func_specs.len()) == specs {
+                break;
+            }
         }
     }
     // And those in the specializations of generic code.
@@ -182,13 +189,18 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_shared_types::check_shared_types(module));
     // What `with` blocks over `[Isolated]` guards may do, `[Move]`
     // arguments, and the guards' own rules, once every type is final.
+    // Callee bodies (link summaries), checked ones included.
+    crate::checked::restore_bodies(module);
     step!(check_confinement::check_confinement(module));
+    // The rest lower bodies, which checked ones have been already.
+    crate::checked::stash_bodies(module);
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
     // `match` arms need the final type of the value matched.
     step!(crate::enums::lower_matches(module));
     // Warnings only: uses of deprecated fields and methods, by final type.
     step!(check_deprecated_members::check_deprecated_members(module));
+    crate::checked::restore_bodies(module);
     Ok(())
 }
 

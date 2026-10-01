@@ -349,6 +349,8 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
+    // Checked declarations' bodies stay out of the passes.
+    crate::checked::stash_bodies(module);
     // Enum names are integer types from here on (closure lifting asks).
     crate::enums::install(&module.enums);
     // Closure literals become structs first, so they get bodies below.
@@ -363,7 +365,7 @@ pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     if let Some(error) = crate::errors::take() {
         return Err(error);
     }
-    for st in &mut module.structs {
+    for st in module.structs.iter_mut().filter(|st| !module.checked.has_struct(&st.name)) {
         apply_synthesized(st);
         let loc = st.loc;
         finish(st).map_err(|e| Diagnostic::error(e).at(loc))?;

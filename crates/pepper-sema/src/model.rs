@@ -8,7 +8,7 @@ pub use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 
 // ── Binary operators (port of Model/BinaryOps.h) ─────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -141,7 +141,7 @@ impl BinaryOp {
 
 // ── Unary operators (port of Model/UnaryOps via ModelBuilder tables) ─────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UnaryOp {
     Neg,
     Pos,
@@ -155,7 +155,7 @@ pub enum UnaryOp {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Kind {
     #[default]
     Variable,
@@ -166,7 +166,7 @@ pub enum Kind {
 // ── Expressions ──────────────────────────────────────────────────────────────
 
 /// The read-modify-write operation of an `AtomicFetch` intrinsic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AtomicFetchOp {
     Add,
     Sub,
@@ -175,7 +175,7 @@ pub enum AtomicFetchOp {
     Xor,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Expression {
     /// Reference to a symbol by identifier, with an (optional, resolved) type.
     SymbolRef {
@@ -456,7 +456,7 @@ impl Expression {
 }
 
 /// See [`Expression::MatchArm`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchArmTest {
     pub subject: Expression,
     pub patterns: Vec<CasePattern>,
@@ -469,7 +469,7 @@ pub struct MatchArmTest {
 }
 
 /// A bare name inside a tuple pattern; see [`MatchArmTest::element_names`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ElementName {
     pub name: String,
     pub loc: Loc,
@@ -481,7 +481,7 @@ pub struct ElementName {
 
 /// The `match` statement an arm belongs to: every arm of one `match`
 /// carries the same one.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MatchSite {
     /// Program-wide number of the `match` (`__match_N`).
     pub id: usize,
@@ -498,7 +498,7 @@ pub struct MatchSite {
 }
 
 /// See [`Expression::WithSubject`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WithSubject {
     /// The `match`'s site id (see [`MatchSite`]).
     pub id: usize,
@@ -511,7 +511,7 @@ pub struct WithSubject {
 }
 
 /// See [`Expression::CaseValue`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CaseValue {
     /// The hidden `__match_N` local.
     pub subject: Expression,
@@ -526,7 +526,7 @@ pub struct CaseValue {
 }
 
 /// One pattern's part in a [`CaseValue`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CaseChoice {
     pub case: String,
     /// Location of the case name in the pattern.
@@ -540,7 +540,7 @@ pub struct CaseChoice {
 }
 
 /// A pattern of a `match` arm: `Case`, `Enum.Case`, or `Case(x, _)`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CasePattern {
     /// The enum named before the case, if any.
     pub qualifier: Option<TypeName>,
@@ -592,7 +592,7 @@ impl CasePattern {
 /// An `enum` declaration whose cases carry no values: an integer type. An
 /// enum with a case that carries values is a struct instead, with
 /// [`StructDef::enum_cases`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnumDef {
     pub name: String,
     /// The integer type its values are stored as (`int` unless written).
@@ -621,7 +621,7 @@ impl EnumDef {
 }
 
 /// One case of an [`EnumDef`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnumCaseDef {
     pub name: String,
     /// The case's value; a reference enum's tag.
@@ -646,7 +646,7 @@ pub const TAG_FIELD: &str = "__tag";
 
 /// A closure literal: `(x: int) => x * 2`. Parameters and the return type
 /// written without a type are `auto`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClosureLiteral {
     pub parameters: Vec<VariableDef>,
     /// The return type (`auto` when not written).
@@ -659,7 +659,7 @@ pub struct ClosureLiteral {
 }
 
 /// Which head count of an object an `Expression::CountStep` changes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CountField {
     /// `__refcount`, the strong count (byte offset 0).
     Strong,
@@ -678,7 +678,7 @@ impl CountField {
 }
 
 /// Which weak reference intrinsic an `Expression::Weak` is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WeakOp {
     From,
     Upgrade,
@@ -707,7 +707,7 @@ impl WeakOp {
 
 // ── Statements ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub name: String,
     pub items: Vec<Statement>,
@@ -715,35 +715,35 @@ pub struct Block {
     pub attributes: Vec<ast::Attribute>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Branch {
     pub condition: Expression,
     pub if_block: Block,
     pub else_block: Option<Block>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct While {
     pub condition: Expression,
     pub block: Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ReturnStatement {
     pub expr: Option<Expression>,
     /// Location of the returned value ([`Loc::NONE`] when synthesized).
     pub loc: Loc,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LoopBreakKind { Break, Continue }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoopBreak {
     pub kind: LoopBreakKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Statement {
     Expression(Expression),
     Block(Block),
@@ -757,7 +757,7 @@ pub enum Statement {
 // ── Declarations ─────────────────────────────────────────────────────────────
 
 /// Variable definition: local, field, or parameter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VariableDef {
     pub name: String,
     pub ty: TypeName,
@@ -776,7 +776,7 @@ pub struct VariableDef {
     pub is_const: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 /// A generic type parameter, optionally with constraints and a default
 /// (`TError=Error` in `Result<TValue, TError=Error>`, `T: Shape = Square`).
 pub struct GenericParam {
@@ -803,7 +803,7 @@ impl GenericParam {
 }
 
 /// One constraint on a generic parameter: the trait `Shape` in `T: Shape`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Bound {
     pub ty: TypeName,
     /// Location of the written trait.
@@ -813,7 +813,7 @@ pub struct Bound {
 /// A member of a constrained extension (`extend Box<T: Named> { label() }`)
 /// that a specialization (`Box<Circle>`) does not have, because its type
 /// argument does not meet the extension's constraint.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Withheld {
     /// The specialization (`Box<Circle>`).
     pub owner: String,
@@ -834,7 +834,7 @@ pub struct Withheld {
 /// `total_area<Circle>(...)`), recorded by the builder so
 /// `passes::constraints` can check each argument against the constraints
 /// of the parameter it fills, at the argument's location.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeUse {
     /// The type as written, arguments included; aliases in the arguments
     /// are expanded by `resolve_type_aliases`, the head is not.
@@ -847,7 +847,7 @@ pub struct TypeUse {
 }
 
 /// What a [`TypeUse`] needs to know about the code around it.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct UseContext {
     /// The generic parameters in scope (the enclosing struct's, trait's,
     /// function's and method's), innermost last.
@@ -860,7 +860,7 @@ pub struct UseContext {
     pub conditions: Vec<ast::Attribute>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionDef {
     pub name: String,
     pub ty: TypeName,
@@ -887,7 +887,7 @@ pub struct FunctionDef {
     pub owner: Loc,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StructDef {
     /// Declared name of the struct (`Test`), or the specialization string
     /// (`Test<int>`) for specialized instances.
@@ -927,7 +927,7 @@ pub const SHARED_ATTRIBUTE: &str = "Shared";
 
 /// A value converted by an `[Implicit]` constructor: `to(value)` where the
 /// value was a `from`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Conversion {
     /// The converted value in the source.
     pub at: Loc,
@@ -984,7 +984,7 @@ impl StructDef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TraitDef {
     pub name: String,
     /// Generic parameters (`T` in `Iterator<T>`), in declaration order.
@@ -1000,14 +1000,14 @@ pub struct TraitDef {
 /// (`Iterator<int>`): the methods a value of this type can call, in vtable
 /// order. Static members and members whose signature names `this` as a type
 /// cannot be called through a value, so they have no slot.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TraitType {
     pub ty: TypeName,
     /// Dispatchable methods (signatures only), in trait declaration order.
     pub methods: Vec<FunctionDef>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExtensionDef {
     /// Target struct, possibly specialized.
     pub target: TypeName,
@@ -1031,7 +1031,7 @@ pub struct ExtensionDef {
 /// `modules::FileScope::extensions`), plus the prelude files, whose
 /// exported extensions every file may use. An extension is always visible
 /// in its own file.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ExtensionScopes {
     pub prelude: std::collections::HashSet<u32>,
     /// Indexed by `FileId`; empty when the module was not linked.
@@ -1047,7 +1047,7 @@ impl ExtensionScopes {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExternDef {
     pub name: String,
     pub ty: TypeName,
@@ -1094,7 +1094,7 @@ impl ExternDef {
 
 /// Type alias definition: `type Name<P1, P2=Default> = Target;`. The target
 /// may reference the alias's parameters; uses are expanded at resolution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasDef {
     pub name: String,
     pub generic_params: Vec<GenericParam>,
@@ -1105,7 +1105,7 @@ pub struct TypeAliasDef {
     pub loc: Loc,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Declaration {
     Variable(VariableDef),
     Function(FunctionDef),
@@ -1117,13 +1117,13 @@ pub enum Declaration {
 }
 
 /// Generic instantiation request: struct or function, keyed by concrete `TypeName`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Spec {
     Struct(TypeName),
     Function(TypeName),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Module {
     pub imports: Vec<ast::Import>,
     pub structs: Vec<StructDef>,
@@ -1185,6 +1185,7 @@ pub struct Module {
     pub call_targets: Vec<(Loc, String)>,
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
+    #[serde(skip)]
     pub sources: pepper_parser::diagnostic::SourceMap,
     /// Each file's namespace, by `FileId`, filled with `sources`. Names sema
     /// synthesizes for a file's code (closure structs) take it, so they do
@@ -1208,6 +1209,13 @@ pub struct Module {
     /// never from a base later passes may have changed, so it depends only on
     /// its generic and type arguments. Empty until frozen.
     pub templates: Templates,
+    /// Declarations already checked (a reused, checked runtime): the passes
+    /// read them but do not walk or change them again.
+    pub checked: Checked,
+    /// The checked declarations' bodies while the passes run, so they leave
+    /// them alone (see `checked::stash_bodies`).
+    #[serde(skip)]
+    pub stashed_bodies: std::collections::HashMap<crate::checked::BodyOf, Block>,
     /// Who first asked for each specialization (by its name, `Box<int>`,
     /// `wrap<long>`) and where: what `gather_generics` found the request in.
     /// The chain of requests bounds how deep specialization nests (see
@@ -1222,6 +1230,7 @@ pub struct Module {
     /// the loaded program (`Program::warnings`), then the uses of
     /// deprecated members `check_deprecated_members` found. `merge` leaves
     /// it alone.
+    #[serde(skip)]
     pub warnings: Vec<Diagnostic>,
     /// Built from files module linking processed, which decided which
     /// generic functions are concrete overrides and marked them
@@ -1229,9 +1238,38 @@ pub struct Module {
     pub linked: bool,
 }
 
+/// Declarations already checked, by name (see [`Module::checked`]).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct Checked {
+    pub structs: std::collections::HashSet<String>,
+    pub functions: std::collections::HashSet<String>,
+    pub globals: std::collections::HashSet<String>,
+    pub extensions: usize,
+}
+
+impl Checked {
+    /// Everything `module` declares now, its extensions included.
+    pub fn all(module: &Module) -> Checked {
+        Checked {
+            structs: module.structs.iter().map(|s| s.name.clone()).collect(),
+            functions: module.functions.iter().map(|f| f.name.clone()).collect(),
+            globals: module.globals.iter().map(|g| g.name.clone()).collect(),
+            extensions: module.extensions.len(),
+        }
+    }
+
+    pub fn has_struct(&self, name: &str) -> bool {
+        self.structs.contains(name)
+    }
+
+    pub fn has_function(&self, name: &str) -> bool {
+        self.functions.contains(name)
+    }
+}
+
 /// Where a specialization was first requested (see
 /// [`Module::spec_requests`]).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SpecRequest {
     /// The declaration whose code or signature names it: a struct, a
     /// function, a global, by name.
@@ -1241,7 +1279,7 @@ pub struct SpecRequest {
 }
 
 /// Frozen generic bases (see [`Module::templates`]).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Templates {
     pub frozen: bool,
     /// Generic struct bases (`Box` of `Box<T>`), closure structs lifted from
@@ -1252,13 +1290,15 @@ pub struct Templates {
 }
 
 impl Templates {
-    /// Freeze `module`'s generic bases.
+    /// Freeze `module`'s generic bases. The templates of checked bases (a
+    /// reused runtime's) stay as they were frozen when it was checked.
     pub fn freeze(module: &Module) -> Templates {
-        Templates {
-            frozen: true,
-            structs: module.structs.iter().filter(|st| st.ty.is_generic() && st.name == st.ty.name).cloned().collect(),
-            functions: module.functions.iter().filter(|f| f.is_generic_func).cloned().collect(),
-        }
+        let mut templates = module.templates.clone();
+        templates.frozen = true;
+        let base = |st: &&StructDef| st.ty.is_generic() && st.name == st.ty.name && !module.checked.has_struct(&st.name);
+        templates.structs.extend(module.structs.iter().filter(base).cloned());
+        templates.functions.extend(module.functions.iter().filter(|f| f.is_generic_func && !module.checked.has_function(&f.name)).cloned());
+        templates
     }
 }
 

@@ -137,6 +137,13 @@ Keys and storage:
 3. **Checked declarations**: a `checked` mark every pass honours; the
    runtime checked alone, then reused in memory (test harnesses, language
    server). Measure.
+   Done: `sema/src/checked.rs`. The memory cache is keyed by the target
+   and the runtime files' places, names and texts (not interface hashes
+   yet). Sema for a small test program drops from about 240 ms to 30 ms
+   after the first. The CLI still checks programs whole: a module checked
+   on the reused runtime has different runtime interface hashes than one
+   checked whole (the runtime's instances differ), so the build cache's
+   keys need phase 4 first.
 4. **On disk**: serde on the sema model, `.checked` files, CLI.
 
 Each phase lands with its INTERNALS.md changes and keeps the full suite and
