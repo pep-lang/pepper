@@ -51,9 +51,12 @@ A `Result` holds either its value or its error, never both. A `match` or an
 and `error()` panic on the wrong one, so call `value()` only after checking
 `is_ok()`, and `error()` only after checking `is_err()`.
 
-A slot of type `Result` that is never given a value holds null, as for any
-enum whose cases carry values: `Result<int>()` is an error, since only the
-cases make values.
+`Result` is a [value enum](enums.md#value-enums): it is stored inline in
+whatever holds it, so making one allocates nothing, and it is never null. A
+slot of type `Result` that is never given a value holds its first case,
+`Ok`, carrying the zero value of `TValue` (`0`, or null for a struct), so give
+every result slot a value. `Result<int>()` is an error, since only the cases
+make values.
 
 ### Results with no value
 

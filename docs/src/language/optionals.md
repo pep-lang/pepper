@@ -42,7 +42,8 @@ var count: int?;   # None
 | Member | What it does |
 |---|---|
 | `Optional<T>.some(value)` | Creates a Some optional holding `value`. |
-| `Optional<T>.none()`, `Optional<T>()` | Create a None optional. |
+| `Optional<T>.none()`, `Optional<T>.None` | Create a None optional. |
+| `Optional<T>.Some(value)` | The case itself: the same as `some(value)`. |
 | `is_some()`, `is_none()` | Report which kind the optional is. |
 | `!!` (truth test) | An optional is a condition by itself: `if (found)` is `if (found.is_some())`, and `!found` is `found.is_none()`. |
 | `value()` | Returns the value; panics with `Optional.value on a None value` if the optional is None. |
@@ -59,7 +60,18 @@ such as `int` or `ulong`. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 [Memory and reference counting](memory.md)).
 
-An optional is a [value struct](value-structs.md): it lives inline in the
+`Optional<T>` is an [enum](enums.md) with the cases `None` and
+`Some(value)`, so `match` and `is` work on it too:
+
+```pepper
+var shown = match (name) {
+    None => "nobody",
+    Some(text) => text,
+};
+if (name is Some(text)) { print(text); }
+```
+
+An optional is a [value enum](enums.md#value-enums): it lives inline in the
 variable, field or array element that holds it, so creating one allocates
 nothing, and copying one gives an independent optional. It is never null,
 and has no identity: compare two optionals with `==`, which compares

@@ -139,11 +139,21 @@ impl<'ctx> Types<'ctx> {
 
     /// [`Types::ensure_opaque`] for a value struct, whose LLVM name marks it
     /// as no object (see [`is_object`]).
+    /// Every spelling of one type (`Result<int>`, `Result<int, Error>`)
+    /// shares the type of its canonical name.
     pub fn ensure_value_opaque(&mut self, name: &str) -> StructType<'ctx> {
         if let Some(st) = self.struct_types.get(name) {
             return *st;
         }
-        let struct_ty = self.context.opaque_struct_type(&format!("{}{}", VALUE_PREFIX, name));
+        let canonical = pepper_sema::value_structs::canonical(name);
+        let struct_ty = match self.struct_types.get(&canonical) {
+            Some(st) => *st,
+            None => {
+                let st = self.context.opaque_struct_type(&format!("{}{}", VALUE_PREFIX, canonical));
+                self.struct_types.insert(canonical, st);
+                st
+            }
+        };
         self.struct_types.insert(name.to_string(), struct_ty);
         struct_ty
     }

@@ -565,12 +565,7 @@ fn variable_in_context(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableD
         check_literal_labels(&decl.type_name, value)?;
     }
     // `long[] a = [1, 2]`: the declared type types a collection literal.
-    let mut default = decl.default_value.as_ref().map(|value| typed_expression(value, Some(&ty))).transpose()?;
-    // An optional slot (`Token? leaf;`, `var n: int?;`) starts as None, not
-    // null: it gets the default `Optional<T>()`.
-    if default.is_none() && kind != Kind::Param && ty.name == "Optional" && ty.sub_types.len() == 1 {
-        default = Some(Expression::FunctionCall { function: ty.to_string(), args: vec![], loc: loc(decl.type_name.span) });
-    }
+    let default = decl.default_value.as_ref().map(|value| typed_expression(value, Some(&ty))).transpose()?;
     Ok(VariableDef {
         name: decl.name.clone(),
         ty,
@@ -1965,8 +1960,9 @@ fn reference_enum_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         }
         // Unlocated: `enums::resolve_enum_cases` reports every located
         // construction of the enum, which only its cases may do. A case that
-        // carries nothing is one shared, immortal object.
-        let make = if case.payload.is_empty() {
+        // carries nothing is one shared, immortal object, except in a
+        // `[Value]` enum, where every case is a value.
+        let make = if case.payload.is_empty() && !has_attribute(&decl.attributes, VALUE_ATTRIBUTE) {
             Expression::StaticCase { ty: st.ty.clone(), tag: case.value }
         } else {
             Expression::FunctionCall { function: st.ty.to_string(), args, loc: Loc::NONE }

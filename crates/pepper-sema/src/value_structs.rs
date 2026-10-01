@@ -22,6 +22,10 @@ thread_local! {
     /// The generic base names (`Span`, `Optional`) of the value structs, for
     /// this run.
     static VALUES: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+    /// Each value struct's name with every omitted type argument filled in
+    /// from its default (`Result<int>` → `Result<int, Error>`), for the
+    /// names that differ.
+    static CANONICAL: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
 /// Make `module`'s value structs the ones [`is_value`] knows, replacing
@@ -32,6 +36,56 @@ pub fn install(module: &Module) {
         v.clear();
         v.extend(module.structs.iter().filter(|st| st.is_value()).map(|st| st.ty.name.clone()));
     });
+    let params: HashMap<&str, &[GenericParam]> = module
+        .structs
+        .iter()
+        .filter(|st| st.generic_params.iter().any(|p| p.default.is_some()))
+        .map(|st| (st.ty.name.as_str(), st.generic_params.as_slice()))
+        .collect();
+    let canonical = module
+        .structs
+        .iter()
+        .filter(|st| st.is_value() && !is_generic_base(st))
+        .filter_map(|st| {
+            let mut ty = st.ty.clone();
+            fill_defaults(&mut ty, &params);
+            let name = ty.to_string();
+            (name != st.name).then(|| (st.name.clone(), name))
+        })
+        .collect();
+    CANONICAL.with(|c| *c.borrow_mut() = canonical);
+}
+
+/// The name that every spelling of value struct `name` shares, so
+/// `Result<int>`, `Result<int, Error>` and `Result<__ptr<int>>` /
+/// `Result<int*>` get one layout in codegen.
+pub fn canonical(name: &str) -> String {
+    CANONICAL.with(|c| c.borrow().get(name).cloned()).unwrap_or_else(|| name.to_string())
+}
+
+/// Spell `ty` one way: every omitted type argument filled in from the
+/// generic parameter's default, and `__ptr<T>` as `T*`. Type names nest
+/// only as deep as the program spells them, so this recursion is bounded by
+/// the source.
+fn fill_defaults(ty: &mut TypeName, params: &HashMap<&str, &[GenericParam]>) {
+    for arg in &mut ty.sub_types {
+        fill_defaults(arg, params);
+    }
+    if ty.name == "__ptr" && ty.sub_types.len() == 1 {
+        *ty = TypeName::new(&format!("{}*", ty.sub_types[0]));
+        return;
+    }
+    let Some(generic) = params.get(ty.name.as_str()) else { return };
+    let mut map: Vec<(String, TypeName)> =
+        generic.iter().zip(&ty.sub_types).map(|(p, a)| (p.name.clone(), a.clone())).collect();
+    for p in generic.iter().skip(ty.sub_types.len()) {
+        let Some(default) = &p.default else { return };
+        let mut arg = default.clone();
+        crate::type_name::replace_map(&mut arg, &map);
+        fill_defaults(&mut arg, params);
+        map.push((p.name.clone(), arg.clone()));
+        ty.sub_types.push(arg);
+    }
 }
 
 /// Whether the type named `name` (`Span`, `Optional<int>`) is a value

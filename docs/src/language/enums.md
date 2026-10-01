@@ -103,6 +103,35 @@ reference counted like a [struct](structs.md).
 - Cases cannot have explicit values (`= 3`), and the enum has no
   representation type (`: u8`), since its values are not integers.
 
+### Value enums
+
+An enum whose cases carry values can be marked `[Value]`, like a
+[value struct](value-structs.md). Each value is then stored inline in
+whatever holds it, and copied when assigned, passed or returned, instead of
+being an object. Making one allocates nothing, which suits small enums that
+are made often, such as [`Optional`](optionals.md) and
+[`Result`](results.md), which are both value enums.
+
+```pepper
+[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+```
+
+- A value enum is never null. A slot that is not given a value holds the
+  first case, with every value it carries zero, `false`, or null: an unset
+  `Shape` is `Circle(0)`.
+- `==` compares the cases and their values; `===`, `!==` and `__null` are
+  errors.
+- Its cases cannot hold the enum itself, since the value would be infinitely
+  large. Use a reference enum for lists and trees.
+- Everything else a [value struct cannot do](value-structs.md#what-a-value-struct-cannot-do)
+  applies too, and so does [boxing](value-structs.md#value-structs-as-trait-values)
+  when it flows into a trait value.
+
 ## Methods
 
 An enum can declare methods after its cases. Inside a method, `this` is the
@@ -163,7 +192,8 @@ library or the network) to a case, since `as` only goes the other way.
   on the enclosing loop or function, as they would inside an `if`.
 
 The value is evaluated once, before any arm runs. A `match` on a null value
-of an enum whose cases carry values panics with `match on a null 'Name'`.
+of an enum whose cases carry values panics with `match on a null 'Name'`; a
+[value enum](#value-enums) is never null.
 
 ## `match` expressions, `is`, and literal patterns
 

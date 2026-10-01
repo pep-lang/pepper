@@ -1388,6 +1388,18 @@ counts of its own, one reference held per reference field. Design:
   place (no `iterate()`) binds the hidden iterator to that place's address
   instead of a copy (`codegen_var_def_unlocated`), so `break` and a second
   loop resume it.
+- **One layout per type.** `value_structs::canonical` spells a value
+  struct's name with omitted type arguments filled from their defaults and
+  `__ptr<T>` as `T*`; `Types::ensure_value_opaque` keys the LLVM struct by
+  it, so `Result<int>` and `Result<int, Error>` (separate specializations)
+  store into each other.
+- **Value enums.** `builder::reference_enum_def` keeps `[Value]` on the
+  lowered struct, so a payload enum becomes a value struct: every case is a
+  constructor call (no shared `StaticCase` object), the zero value is the
+  first case, and `enums` emits no null assert for its `match` (neither in
+  `lower_declaration` nor as a `WithSubject.null_message`). Equality and
+  hashing guard each reference field (`unless_null`), since unused case
+  fields are null. `Optional` and `Result` are value enums.
 
 ## 5. Reference counting: where the shared_ptr model is implemented
 

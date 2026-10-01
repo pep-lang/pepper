@@ -7,7 +7,7 @@ Source: `runtime/optional.pep`
 ## Optional
 
 ```pepper
-[Value] struct Optional<T>
+[Value] enum Optional<T>
 ```
 
 A value of type `T` that may be absent: either Some, holding a `T`, or
@@ -21,14 +21,15 @@ every type, including those that have no null, such as `int`.
 `T?` is shorthand for `Optional<T>`, and a variable or field of an
 optional type that is not given a value starts as None.
 
-Build one with the static `some` or `none` functions, or `Optional<T>()`
-for None, and test it with `is_some()` or `is_none()`, or as a condition
-by itself (`if (found)`).
+Build one with the static `some` or `none` functions, or with its cases
+(`Optional<int>.Some(1)`, `Optional<int>.None`). Test it with `is_some()`
+or `is_none()`, as a condition by itself (`if (found)`), or with `match`
+and `is` on its cases (`if (found is Some(v))`).
 
-An optional is a [value struct](../language/value-structs.md): it is
-stored inline in whatever holds it, with no allocation, and copying one
-gives an independent optional. It is never null, and has no identity, so
-compare optionals with `==`, not `===`.
+An optional is a [value enum](../language/value-structs.md): it is stored
+inline in whatever holds it, with no allocation, and copying one gives an
+independent optional. It is never null, and has no identity, so compare
+optionals with `==`, not `===`.
 
 **Type parameters**
 - `T` — the type of the value a Some optional holds
@@ -52,20 +53,27 @@ compare optionals with `==`, not `===`.
     }
 ```
 
-### Constructor
+### Cases
 
-#### Optional()
+#### None
 
 ```pepper
-construct()
+None
 ```
 
-Creates a None optional, one holding no value.
+Holds no value. It is the first case, so an optional that is never
+given a value is None.
 
-**Example**
+#### Some
+
 ```pepper
-    var nothing = Optional<int>();   # nothing.is_none() == true
+Some(value: T)
 ```
+
+Holds a value.
+
+**Parameters**
+- `value` — the value held
 
 ### Static methods
 
@@ -96,8 +104,7 @@ For a struct `T` the optional acquires a reference to `value`.
 static none(): Optional<T>
 ```
 
-Returns a None optional, one holding no value; the same as
-`Optional<T>()`.
+Returns a None optional, one holding no value.
 
 **Returns**
 - a None optional

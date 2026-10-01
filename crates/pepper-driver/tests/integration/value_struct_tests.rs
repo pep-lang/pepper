@@ -385,3 +385,86 @@ test(): int {
 "#,
     );
 }
+
+#[test]
+fn value_enums_hold_their_case_inline() {
+    assert_runs_clean(
+        r#"
+[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Label(text: String),
+    Point,
+
+    area(): int {
+        match (this) {
+            Circle(r) => { return 3 * r * r; }
+            Rect(w, h) => { return w * h; }
+            Label(t) => { return t.size() as int; }
+            Point => { return 0; }
+        }
+        return 0;
+    }
+}
+
+[Value]
+enum Maybe<T> {
+    Nothing,
+    Just(value: T),
+}
+
+test(): int {
+    var shapes = Array<Shape>();
+    shapes.append(Shape.Circle(2));
+    shapes.append(Shape.Rect(3, 4));
+    shapes.append(Shape.Label("hello"));
+    shapes.append(Shape.Point);
+    var total = 0;
+    for (var s in shapes) {
+        total = total + s.area();
+    }
+    if (total != 29) { return -1; }
+    var copy = shapes[2];
+    if (copy.area() != 5) { return -2; }
+    var m = Maybe<String>.Just("x");
+    match (m) {
+        Just(v) => { if (v != "x") { return -3; } }
+        Nothing => { return -4; }
+    }
+    var z: Shape;
+    if (z.area() != 0 || z.name() != "Circle") { return -5; }
+    if (Shape.Point != Shape.Point || Shape.Circle(1) == Shape.Circle(2)) { return -6; }
+    return 0;
+}
+"#,
+    );
+}
+
+#[test]
+fn result_and_optional_are_value_enums() {
+    assert_runs_clean(
+        r#"
+parse(text: String): Result<int> {
+    if (text == "") {
+        return Result<int>.err(Error("empty"));
+    }
+    return Result<int>.ok(text.length() as int);
+}
+
+test(): int {
+    var results = Array<Result<int>>();
+    results.append(parse("abc"));
+    results.append(parse(""));
+    if (results[0].value() != 3 || results[1].error().message != "empty") { return -1; }
+    var spelled: Result<int, Error> = results[0];
+    if (!spelled.is_ok()) { return -2; }
+    var found = Array<int?>();
+    found.append(Optional<int>.some(1));
+    found.append(Optional<int>.None);
+    if (found[0].value() != 1 || found[1]) { return -3; }
+    return 0;
+}
+"#,
+    );
+}

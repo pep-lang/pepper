@@ -51,6 +51,7 @@ export struct Error {
 ##         var n = match (b) { Ok(v) => v, Err(e) => e.message.length() };   # 4
 ##         return b.ok_or(0);   # 0
 ##     }
+[Value]
 export enum Result<TValue, TError=Error> {
     ## The operation succeeded with `value`.
     ##

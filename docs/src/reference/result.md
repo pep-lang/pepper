@@ -47,7 +47,7 @@ wherever an `Error` is expected, as in `Result<int>.err("bad input")`.
 ## Result
 
 ```pepper
-enum Result<TValue, TError=Error>
+[Value] enum Result<TValue, TError=Error>
 ```
 
 The outcome of an operation that can fail: either Ok, holding a `TValue`,

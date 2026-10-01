@@ -232,12 +232,11 @@ struct _TaskCore {
     # Whether the task was cancelled, here or (for a task from `spawn`) on
     # another worker.
     _is_cancelled(): bool {
-        if (!this._cancelled && this._shared.is_some()) {
-            # Reads the flag through the optional's field rather than
-            # `value()`, whose result is a new reference: two atomic count
-            # steps on every socket wait.
-            if (this._shared._value._cancelled.load() != 0) {
-                this._cancelled = true;
+        if (!this._cancelled) {
+            if (this._shared is Some(shared)) {
+                if (shared._cancelled.load() != 0) {
+                    this._cancelled = true;
+                }
             }
         }
         return this._cancelled;

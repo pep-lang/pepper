@@ -11,7 +11,8 @@ returning it copies it. Creating one allocates nothing.
 ```
 
 Use a value struct for small types that describe a value rather than an
-identity: a span, a point, a color, an [`Optional`](optionals.md). Keep a
+identity: a span, a point, a color. An enum can be a value too (see
+[Value enums](enums.md#value-enums)); `Optional` and `Result` are. Keep a
 reference struct for anything that is shared and changed through several
 names, or that is large.
 
@@ -114,5 +115,6 @@ The runtime's iterators (`ArrayIterator`, `StringIterator`,
 
 ## Current limitations
 
-- `[Value]` does not apply to enums yet, and `Result` is still a reference
-  struct.
+- A [value enum](enums.md#value-enums) stores the values of all its cases
+  side by side, so it is as large as all of them together; the cases do not
+  share storage yet.

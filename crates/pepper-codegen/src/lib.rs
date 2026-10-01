@@ -1474,6 +1474,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             return self.tuple_equal(ty, a, b);
         }
         if self.functions.contains_key(&method) {
+            // A null reference (an unset field, a value enum's payload of
+            // another case) equals only null; `==` runs on two objects.
+            if let (BasicValueEnum::PointerValue(x), BasicValueEnum::PointerValue(y)) = (a, b) {
+                let same = self.builder.build_int_compare(inkwell::IntPredicate::EQ, x, y, "same").map_err(|e| e.to_string())?;
+                return self.unless_null(&[x, y], same, |this| {
+                    let result = this.call_function(&method, vec![a, b])?;
+                    Ok(llvm_ops::as_bool(this.context, &this.builder, result))
+                });
+            }
             let result = self.call_function(&method, vec![a, b])?;
             return Ok(llvm_ops::as_bool(self.context, &self.builder, result));
         }
@@ -1502,6 +1511,34 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
+    /// `compute`'s result, or `if_null` when any of `pointers` is null (then
+    /// `compute` does not run).
+    fn unless_null(
+        &mut self,
+        pointers: &[PointerValue<'ctx>],
+        if_null: inkwell::values::IntValue<'ctx>,
+        compute: impl FnOnce(&mut Self) -> Result<inkwell::values::IntValue<'ctx>, String>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let function = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let mut any_null = self.context.bool_type().const_zero();
+        for pointer in pointers {
+            let is_null = self.builder.build_is_null(*pointer, "is_null").map_err(|e| e.to_string())?;
+            any_null = self.builder.build_or(any_null, is_null, "any_null").map_err(|e| e.to_string())?;
+        }
+        let from = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+        let call = self.context.append_basic_block(function, "not_null");
+        let done = self.context.append_basic_block(function, "null_checked");
+        self.builder.build_conditional_branch(any_null, done, call).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(call);
+        let computed = compute(self)?;
+        let computed_in = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+        self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(done);
+        let phi = self.builder.build_phi(if_null.get_type(), "result").map_err(|e| e.to_string())?;
+        phi.add_incoming(&[(&if_null, from), (&computed, computed_in)]);
+        Ok(phi.as_basic_value().into_int_value())
+    }
+
     /// `hash<T>` of a tuple value: each element's hash folded through
     /// FNV-1a in order. An element hashes as `hash<E>` would: through the
     /// program's `hash<E>` when there is one (`hash<String>` by content),
@@ -1518,7 +1555,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             let element_hash = if self.tuples.contains_key(element) || (self.values.contains_key(element) && !own_hash) {
                 self.tuple_hash(element, item)?
             } else if own_hash {
-                self.call_function(&format!("hash<{}>", element), vec![item])?.into_int_value()
+                // A null reference hashes as 0, without the call.
+                let function = format!("hash<{}>", element);
+                match item {
+                    BasicValueEnum::PointerValue(pointer) => {
+                        let zero = self.context.i64_type().const_zero();
+                        self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&function, vec![item])?.into_int_value()))?
+                    }
+                    _ => self.call_function(&function, vec![item])?.into_int_value(),
+                }
             } else {
                 let item = match item {
                     BasicValueEnum::ArrayValue(_) => self.object_pointer(item)?.into(),

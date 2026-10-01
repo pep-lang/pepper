@@ -35,7 +35,7 @@ test(): int {
     var b = Optional<int>.none();
     if (b.is_some() || !b.is_none()) { return -4; }
     if (b.value_or(7) != 7) { return -5; }
-    var c = Optional<int>();
+    var c = Optional<int>.None;
     if (!c.is_none()) { return -6; }
     return 0;
 }"#),
@@ -206,6 +206,36 @@ test(): int {
     if (!c_style.is_none()) { return -4; }
     n.leaf = Optional<Token>.some(Token());
     if (!n.leaf.is_some()) { return -5; }
+    return 0;
+}"#),
+        0
+    );
+}
+
+#[test]
+fn optional_is_an_enum_with_none_and_some_cases() {
+    assert_eq!(
+        run(r#"
+describe(o: String?): int {
+    return match (o) {
+        None => 0,
+        Some(text) => text.length() as int,
+    };
+}
+
+test(): int {
+    var some = Optional<String>.Some("four");
+    if (describe(some) != 4) { return -1; }
+    if (describe(Optional<String>.None) != 0) { return -2; }
+    if (some is Some(text)) {
+        if (text != "four") { return -3; }
+    } else {
+        return -3;
+    }
+    if (some != Optional<String>.some("four")) { return -4; }
+    if (some == Optional<String>.none()) { return -5; }
+    String? unset;
+    if (unset != Optional<String>.None) { return -6; }
     return 0;
 }"#),
         0

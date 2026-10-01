@@ -853,13 +853,18 @@ fn lower_block(
 
 /// What follows a declaration in a lowered `match`:
 ///
-/// - after the subject (`__match_N`) of a reference enum, a check that it is
-///   not null;
+/// - after the subject (`__match_N`) of a reference enum that is not a
+///   `[Value]` enum, a check that it is not null;
 /// - a binding's local gets the matched case's value: the payload field
 ///   itself when one pattern binds it, else a chain of assignments that
 ///   picks the field by the object's tag (alternatives, `A(x), B(x)`).
 fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>) -> Vec<Statement> {
-    if var.hidden && var.name.starts_with("__match_") && is_reference_enum(&var.ty) {
+    // A `[Value]` enum is never null.
+    if var.hidden
+        && var.name.starts_with("__match_")
+        && is_reference_enum(&var.ty)
+        && !crate::value_structs::is_value(&var.ty.to_string())
+    {
         let message = format!("match on a null '{}'", shown(&var.ty));
         let not_null = Expression::Binary {
             op: BinaryOp::NotIdentical,
@@ -1046,6 +1051,7 @@ fn lower_expressions(
             let ty = subject_type(&with.body, with.id);
             if let Some(ty) = &ty
                 && is_reference_enum(ty)
+                && !crate::value_structs::is_value(&ty.to_string())
             {
                 with.null_message = Some(format!("match on a null '{}'", shown(ty)));
             }

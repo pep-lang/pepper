@@ -1,8 +1,5 @@
 # A value that may be absent, like Rust's `Option<T>` and Swift's
-# `Optional`. Pepper has no enums with payloads yet, so this is a struct with
-# a flag and a slot; once payload enums land it becomes
-# `enum Optional<T> { None, Some(value: T) }` with the same
-# methods. The fields are private so that move changes no caller.
+# `Optional`: a value enum with a None and a Some case.
 
 import "internals";
 
@@ -17,14 +14,15 @@ import "internals";
 ## `T?` is shorthand for `Optional<T>`, and a variable or field of an
 ## optional type that is not given a value starts as None.
 ##
-## Build one with the static `some` or `none` functions, or `Optional<T>()`
-## for None, and test it with `is_some()` or `is_none()`, or as a condition
-## by itself (`if (found)`).
+## Build one with the static `some` or `none` functions, or with its cases
+## (`Optional<int>.Some(1)`, `Optional<int>.None`). Test it with `is_some()`
+## or `is_none()`, as a condition by itself (`if (found)`), or with `match`
+## and `is` on its cases (`if (found is Some(v))`).
 ##
-## An optional is a [value struct](../language/value-structs.md): it is
-## stored inline in whatever holds it, with no allocation, and copying one
-## gives an independent optional. It is never null, and has no identity, so
-## compare optionals with `==`, not `===`.
+## An optional is a [value enum](../language/value-structs.md): it is stored
+## inline in whatever holds it, with no allocation, and copying one gives an
+## independent optional. It is never null, and has no identity, so compare
+## optionals with `==`, not `===`.
 ##
 ## @typeParam T the type of the value a Some optional holds
 ## @example
@@ -44,20 +42,14 @@ import "internals";
 ##         return found.value() - 4;   # 0
 ##     }
 [Value]
-export struct Optional<T> {
-    # Whether `_value` holds the value.
-    bool _has_value;
-    # The value when `_has_value`, otherwise the default of `T` (zero for a
-    # POD type, null for a struct type).
-    T _value;
-
-    ## Creates a None optional, one holding no value.
+export enum Optional<T> {
+    ## Holds no value. It is the first case, so an optional that is never
+    ## given a value is None.
+    None,
+    ## Holds a value.
     ##
-    ## @example
-    ##     var nothing = Optional<int>();   # nothing.is_none() == true
-    construct() {
-        this._has_value = false;
-    }
+    ## @param value the value held
+    Some(value: T),
 
     ## Returns a Some optional holding `value`.
     ##
@@ -68,34 +60,30 @@ export struct Optional<T> {
     ## @example
     ##     var answer = Optional<int>.some(42);
     static some(value: T): Optional<T> {
-        var result = Optional<T>();
-        result._has_value = true;
-        result._value = value;
-        return result;
+        return Optional<T>.Some(value);
     }
 
-    ## Returns a None optional, one holding no value; the same as
-    ## `Optional<T>()`.
+    ## Returns a None optional, one holding no value.
     ##
     ## @returns a None optional
     ## @example
     ##     var nothing = Optional<String>.none();
     static none(): Optional<T> {
-        return Optional<T>();
+        return Optional<T>.None;
     }
 
     ## Reports whether this optional holds a value.
     ##
     ## @returns true when the optional is Some
     is_some(): bool {
-        return this._has_value;
+        return this is Some;
     }
 
     ## Reports whether this optional holds no value.
     ##
     ## @returns true when the optional is None
     is_none(): bool {
-        return !this._has_value;
+        return this is None;
     }
 
     ## Reports whether this optional holds a value: the truth test, so an
@@ -110,7 +98,7 @@ export struct Optional<T> {
     ##     var found = Optional<int>.some(7);
     ##     if (found) { print(found.value()); }   # prints 7
     !!(): bool {
-        return this._has_value;
+        return this is Some;
     }
 
     ## Returns the value, panicking if this optional is None.
@@ -123,8 +111,10 @@ export struct Optional<T> {
     ## @example
     ##     var n = Optional<int>.some(42).value();   # 42
     value(): T {
-        assert(this._has_value, "Optional.value on a None value");
-        return this._value;
+        if (this is Some(value)) {
+            return value;
+        }
+        panic("Optional.value on a None value");
     }
 
     ## Returns the value, or `fallback` if this optional is None.
@@ -137,8 +127,8 @@ export struct Optional<T> {
     ## @example
     ##     var n = Optional<int>.none().value_or(-1);   # -1
     value_or(fallback: T): T {
-        if (this._has_value) {
-            return this._value;
+        if (this is Some(value)) {
+            return value;
         }
         return fallback;
     }
