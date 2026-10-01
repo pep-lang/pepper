@@ -1,6 +1,7 @@
 # Value structs: `[Value]`
 
-Status: phase 1 (value structs, `Optional`) implemented; phases 2 and 3
+Status: phases 1 (value structs, `Optional`) and 2 (boxing, iterators)
+implemented; phase 3
 proposed. Written 2026-10-01 against `main` at 08ccea91. Motivating items:
 C1 and C2 in runtime-modernization.md.
 Related designs: tuples (the value

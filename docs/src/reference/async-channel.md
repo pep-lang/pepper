@@ -239,7 +239,7 @@ exactly one of them.
 ## ChannelIterator
 
 ```pepper
-struct ChannelIterator<T>
+[Value] struct ChannelIterator<T>
 ```
 
 Receives from a `Channel<T>` in a `for` loop: `next()` waits for the next

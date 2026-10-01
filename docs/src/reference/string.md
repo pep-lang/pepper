@@ -1503,7 +1503,7 @@ is unchanged. Runs in O(size()).
 ## StringIterator
 
 ```pepper
-struct StringIterator
+[Value] struct StringIterator
 ```
 
 An `Iterator<String>` over a String's code points, returned by

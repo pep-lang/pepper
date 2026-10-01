@@ -227,19 +227,6 @@ impl Converter {
                     crate::errors::report(error);
                     return;
                 }
-                // A trait value points at an object; a value struct has none
-                // until boxing (value structs, phase 2) gives it one.
-                if crate::value_structs::is_value(&actual.to_string()) {
-                    crate::errors::report(
-                        Diagnostic::error(format!(
-                            "value struct '{}' cannot be converted to trait '{}' yet",
-                            actual.display(),
-                            expected.display()
-                        ))
-                        .at(loc),
-                    );
-                    return;
-                }
                 actual
             };
         self.trait_type(expected);

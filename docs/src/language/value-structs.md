@@ -97,10 +97,22 @@ Each of these is an error at the code to change:
 - A parameter or result of an [`extern`](c-interop.md) function: pass a
   pointer to C instead.
 
+## Value structs as trait values
+
+A value struct can declare [traits](traits-and-extensions.md) like any
+struct. Where it flows into a slot of a trait type, such as an argument of
+type `Iterator<int>`, it is *boxed*: copied into a new object that the trait
+value refers to. The box is a copy, so a mutating method called through the
+trait value changes the box and not the original, and two conversions of
+one value make two boxes. Copying the trait value shares the box, as for
+any trait value.
+
+The runtime's iterators (`ArrayIterator`, `StringIterator`,
+`HashMapIterator`, `HashSetIterator`, `ChannelIterator`, and the `map` and
+`filter` adapters) are value structs, so a `for` loop over an `Array`, a
+`String` or a `HashMap` allocates no iterator.
+
 ## Current limitations
 
-- A value struct cannot be converted to a [trait](traits-and-extensions.md)
-  type yet (`value struct 'Span' cannot be converted to trait 'Sized' yet`);
-  boxing comes next. `[Value]` does not apply to enums yet.
-- The runtime's iterators and `Result` are still reference structs;
-  `Optional` is a value struct.
+- `[Value]` does not apply to enums yet, and `Result` is still a reference
+  struct.

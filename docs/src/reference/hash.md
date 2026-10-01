@@ -648,7 +648,7 @@ of copying the elements.
 ## HashMapIterator
 
 ```pepper
-struct HashMapIterator<K, V>
+[Value] struct HashMapIterator<K, V>
 ```
 
 An `Iterator<(K, V)>` over the entries of a `HashMap`, as `(key, value)`
@@ -713,7 +713,7 @@ Returns the entry the last successful `next()` moved to.
 ## HashSetIterator
 
 ```pepper
-struct HashSetIterator<K>
+[Value] struct HashSetIterator<K>
 ```
 
 An `Iterator<K>` over the members of a `HashSet`, in no defined order;

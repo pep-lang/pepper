@@ -113,9 +113,11 @@ directly:
 
 Every type that declares `Iterator<T>` gets them: `ArrayIterator<T>` (from
 `Array.iterate()`), `StringIterator`, and your own iterators once you write
-`extend YourType with Iterator<T> {}`. The adapter holds a reference to the
-iterator it wraps, so a chain built from a temporary stays alive while the
-loop runs. They are generic methods (see
+`extend YourType with Iterator<T> {}`. The adapter holds its own copy of
+the iterator it wraps (the runtime's iterators are
+[value structs](value-structs.md), boxed when they become an `Iterator<T>`),
+so a chain built from a temporary stays alive while the loop runs, and
+`it.map(f)` leaves `it` where it was. They are generic methods (see
 [Generics](generics.md#generic-methods)), so they are not callable through an
 `Iterator<T>` trait value.
 
@@ -139,8 +141,10 @@ Some things to keep in mind:
   `for` loop over such a value calls the methods through the trait. It also
   gives the type the [adapters](#adapters) `map` and `filter`.
 - **Looping over an iterator uses it up.** When the source is itself an
-  iterator stored in a variable, the loop drives that same object, so it is
-  exhausted afterwards. An iterable starts a new, independent pass every time
+  iterator stored in a variable, the loop drives that variable in place, so
+  it is exhausted afterwards, and a loop left with `break` can be resumed by
+  looping over it again. A `const` variable holding a value iterator cannot
+  be looped over, since `next()` changes it. An iterable starts a new, independent pass every time
   you loop over it.
 - **Generic code can loop** over a type parameter; each specialization checks
   the protocol for its own type (see [Generics](generics.md)).

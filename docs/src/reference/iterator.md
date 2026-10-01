@@ -151,7 +151,7 @@ gets this method.
 ## MapIterator
 
 ```pepper
-struct MapIterator<T, U>
+[Value] struct MapIterator<T, U>
 ```
 
 The iterator `Iterator.map` returns: each element of the source iterator,
@@ -205,7 +205,7 @@ Returns the transformed element the last successful `next()` produced.
 ## FilterIterator
 
 ```pepper
-struct FilterIterator<T>
+[Value] struct FilterIterator<T>
 ```
 
 The iterator `Iterator.filter` returns: the elements of the source

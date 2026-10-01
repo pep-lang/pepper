@@ -681,7 +681,7 @@ Runs in O(count + count of `rhs`). Neither operand is modified; like
 ## ArrayIterator
 
 ```pepper
-struct ArrayIterator<T>
+[Value] struct ArrayIterator<T>
 ```
 
 An `Iterator<T>` over the elements of an Array, in index order; returned by

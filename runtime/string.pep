@@ -1784,6 +1784,7 @@ export struct StringBuilder {
 ##     while (it.next()) {
 ##         print(it.current());   # "a", then "b"
 ##     }
+[Value]
 export struct StringIterator {
     ## The String being iterated. The iterator holds a reference to it.
     String _source;

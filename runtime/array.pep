@@ -709,6 +709,7 @@ export struct Array<T> {
 ##         var x = it.current();
 ##     }
 ## @see Array.iterate
+[Value]
 export struct ArrayIterator<T> {
     ## The Array being iterated; the iterator holds a reference to it for its whole lifetime.
     Array<T> _source;

@@ -842,6 +842,7 @@ export struct HashSet<K> {
 ## @typeParam K the key type of the map
 ## @typeParam V the value type of the map
 ## @see HashMap.iterate
+[Value]
 export struct HashMapIterator<K, V> {
     ## The map being iterated.
     HashMap<K, V> _source;
@@ -900,6 +901,7 @@ export struct HashMapIterator<K, V> {
 ##
 ## @typeParam K the element type of the set
 ## @see HashSet.iterate
+[Value]
 export struct HashSetIterator<K> {
     ## The set being iterated.
     HashSet<K> _source;

@@ -10,6 +10,7 @@
 //! and stores it by value, and passes the address of the receiver's storage
 //! as `this`.
 
+use crate::checked::BodyOf;
 use crate::model::*;
 use crate::static_type::{self, StructTable};
 use crate::type_name::TypeName;
@@ -316,9 +317,13 @@ fn mutating_methods(module: &Module, table: &StructTable) -> HashMap<(String, St
                 if mutating.contains_key(&key) {
                     continue;
                 }
+                // A checked runtime struct's bodies are stashed while the
+                // passes run; its methods change `this` all the same.
+                let stashed = module.stashed_bodies.get(&BodyOf::Member(st.name.clone(), "method", method.name.clone()));
+                let Some(body) = method.body.as_ref().or(stashed) else { continue };
                 let mut first: Option<Loc> = None;
                 let mut uses = Uses::new(table, Some(&st.ty), fields.clone(), &globals, method);
-                uses.function(method, &mut |found| {
+                uses.block(body, &mut |found| {
                     let Found::Change(change) = found else { return };
                     if !matches!(change.root, Root::This) || first.is_some() {
                         return;
@@ -517,6 +522,18 @@ impl<'a> Uses<'a> {
                         Diagnostic::error(format!("'{}' is a value struct and has no object", value.display()))
                             .at(arg.loc()),
                     ));
+                }
+            }
+            // `for` over a value iterator (no `iterate()`) drives it with
+            // `next()` in place, which a `const` forbids.
+            Expression::ForIterator(source) => {
+                let Some(ty) = self.value_type(source) else { return };
+                if self.table.lookup(&ty).is_some_and(|info| info.methods.contains("iterate")) {
+                    return;
+                }
+                let root = self.root(source);
+                if matches!(root, Root::Variable(_, Some(_))) {
+                    found(Found::Change(Change { root, ty, member: "next", method: true, at: source.loc() }));
                 }
             }
             Expression::Weak(_, ty, arg) if is_value(&ty.to_string()) => {

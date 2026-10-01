@@ -98,6 +98,10 @@ pub struct CodeGenerator<'ctx> {
     /// value struct is held by value like a tuple, and its layout has no
     /// header (see `pepper_sema::value_structs`).
     values: HashMap<String, Vec<String>>,
+    /// A unit's value struct `__acquire`/`__release` thunks, declared but
+    /// not yet defined: `codegen_unit` defines the ones its code calls, so
+    /// the program's other instantiations do not reach the unit's code.
+    pending_value_thunks: Vec<(String, &'static str)>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     /// free-function name → return-type sema string (for receiver typing of
@@ -202,6 +206,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             tuples: HashMap::new(),
             tuple_order: Vec::new(),
             values: HashMap::new(),
+            pending_value_thunks: Vec::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
@@ -404,8 +409,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         for &idx in &structs {
             let name = &module.structs[idx].name;
             if self.values.contains_key(name) {
-                self.emit_tuple_refcount_thunk(name, "__acquire")?;
-                self.emit_tuple_refcount_thunk(name, "__release")?;
+                for member in ["__acquire", "__release"] {
+                    let thunk = self.declare_tuple_refcount_thunk(name, member)?;
+                    if self.unit.is_some() {
+                        self.pending_value_thunks.push((name.clone(), member));
+                    } else {
+                        self.define_tuple_refcount_thunk(name, thunk)?;
+                    }
+                }
             }
         }
 
@@ -473,15 +484,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                 None => shared.push((function, loc)),
             }
         }
+        let called = |f: FunctionValue<'ctx>| f.count_basic_blocks() == 0 && unsafe { !inkwell::llvm_sys::core::LLVMGetFirstUse(f.as_value_ref()).is_null() };
         loop {
             let mut emitted = false;
+            let mut waiting = vec![];
+            for (value, member) in std::mem::take(&mut self.pending_value_thunks) {
+                let thunk = self.functions[&format!("{}.{}", value, member)];
+                if called(thunk) {
+                    self.define_tuple_refcount_thunk(&value, thunk)?;
+                    emitted = true;
+                } else {
+                    waiting.push((value, member));
+                }
+            }
+            self.pending_value_thunks = waiting;
             let mut rest = vec![];
             for (function, loc) in shared {
-                let called = self
-                    .functions
-                    .get(&function.name)
-                    .is_some_and(|f| f.count_basic_blocks() == 0 && unsafe { !inkwell::llvm_sys::core::LLVMGetFirstUse(f.as_value_ref()).is_null() });
-                if called {
+                if self.functions.get(&function.name).is_some_and(|&f| called(f)) {
                     let result = self.codegen_function(&function);
                     self.locate(&result, loc);
                     result?;
@@ -492,6 +511,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             shared = rest;
             if !emitted {
+                // A private declaration without a body is invalid; nothing
+                // calls these.
+                for (value, member) in std::mem::take(&mut self.pending_value_thunks) {
+                    if let Some(thunk) = self.functions.remove(&format!("{}.{}", value, member)) {
+                        unsafe { thunk.delete() };
+                    }
+                }
                 return Ok(());
             }
         }
@@ -1309,6 +1335,13 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// `Tuple.__acquire(value)` / `Tuple.__release(value)`: step each
     /// reference element of the tuple, first to last.
     fn emit_tuple_refcount_thunk(&mut self, tuple: &str, member: &str) -> Result<(), String> {
+        let thunk = self.declare_tuple_refcount_thunk(tuple, member)?;
+        self.define_tuple_refcount_thunk(tuple, thunk)
+    }
+
+    /// Declare `Tuple.__acquire` or `Tuple.__release` (see
+    /// [`Self::emit_tuple_refcount_thunk`]) without its body.
+    fn declare_tuple_refcount_thunk(&mut self, tuple: &str, member: &str) -> Result<FunctionValue<'ctx>, String> {
         let ty = self.types.get(tuple).ok_or_else(|| format!("unknown tuple type {}", tuple))?;
         let name = format!("{}.{}", tuple, member);
         let thunk = self.module.add_function(
@@ -1317,6 +1350,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             Some(inkwell::module::Linkage::Private),
         );
         self.functions.insert(name, thunk);
+        Ok(thunk)
+    }
+
+    /// The body of a thunk [`Self::declare_tuple_refcount_thunk`] declared.
+    fn define_tuple_refcount_thunk(&mut self, tuple: &str, thunk: FunctionValue<'ctx>) -> Result<(), String> {
+        let name = thunk.get_name().to_string_lossy().into_owned();
+        let member = if name.ends_with(".__acquire") { "__acquire" } else { "__release" };
         let saved = self.builder.get_insert_block();
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
@@ -1698,16 +1738,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .map(|(name, params, ret)| (implementer(name, params), Some(ret.clone()))),
         );
         let mut entries: Vec<PointerValue<'ctx>> = vec![];
+        let boxed = self.values.contains_key(from);
         for (member, declared) in &members {
-            let function = *self
-                .functions
-                .get(&format!("{}.{}", from, member))
-                .ok_or_else(|| {
-                    format!(
-                        "'{}' does not implement '{}', required by trait '{}'",
-                        from, member, to
-                    )
-                })?;
+            if !self.functions.contains_key(&format!("{}.{}", from, member)) {
+                return Err(format!("'{}' does not implement '{}', required by trait '{}'", from, member, to));
+            }
+            // A value struct's trait value refers to its box: each slot
+            // forwards to the value inside it.
+            let function = if boxed {
+                self.box_member(from, member)?
+            } else {
+                self.functions[&format!("{}.{}", from, member)]
+            };
             // A struct result where the trait returns a trait value converts
             // on the way out.
             let returns = self
@@ -1780,6 +1822,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     function.get_name().to_string_lossy()
                 )
             })?;
+        // A value struct result moves into a box.
+        let object: BasicValueEnum<'ctx> =
+            if self.values.contains_key(returns) { self.box_value(returns, object)?.into() } else { object };
         let pair = self
             .builder
             .build_insert_value(fat.get_undef(), object, 0, "trait_object")
@@ -1815,6 +1860,101 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// The heap layout of a boxed value struct `value`: the two head counts
+    /// every object starts with, then the value.
+    fn box_type(&self, value: &str) -> Result<inkwell::types::StructType<'ctx>, String> {
+        let ty = self.types.get(value).ok_or_else(|| format!("unknown value struct '{}'", value))?;
+        let count = self.context.i32_type();
+        Ok(self.context.struct_type(&[count.into(), count.into(), ty], false))
+    }
+
+    /// A new box holding `value`, a value of value struct `name`, owning one
+    /// reference (like a constructor result). The value moves in: the caller
+    /// has acquired what a copy needs.
+    fn box_value(&mut self, name: &str, value: BasicValueEnum<'ctx>) -> Result<PointerValue<'ctx>, String> {
+        let box_type = self.box_type(name)?;
+        let size = crate::target::host_machine()?.get_target_data().get_abi_size(&box_type.as_any_type_enum());
+        let size = self.context.i64_type().const_int(size, false);
+        let object = self.call_function("_pep_malloc", vec![size.into()])?.into_pointer_value();
+        let one = self.context.i32_type().const_int(1, false);
+        for field in [sema::CountField::Strong, sema::CountField::Weak] {
+            let count = self.head_count_ptr(object, field)?;
+            self.builder.build_store(count, one).map_err(|e| e.to_string())?;
+        }
+        let slot = self.builder.build_struct_gep(box_type, object, 2, "boxed").map_err(|e| e.to_string())?;
+        self.builder.build_store(slot, value).map_err(|e| e.to_string())?;
+        Ok(object)
+    }
+
+    /// The vtable entry for `member` of a boxed value struct `value`:
+    /// `__acquire` and `__release` count the box (the last release releases
+    /// the value's references and frees it), and a method calls the value's
+    /// own with `this` at the value inside the box, so a mutating method
+    /// changes the box.
+    fn box_member(&mut self, value: &str, member: &str) -> Result<FunctionValue<'ctx>, String> {
+        let name = format!("__box.{}.{}", value, member);
+        if let Some(existing) = self.module.get_function(&name) {
+            return Ok(existing);
+        }
+        let box_type = self.box_type(value)?;
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let target = self.functions[&format!("{}.{}", value, member)];
+        let counting = member == "__acquire" || member == "__release";
+        let fn_type = if counting { self.context.void_type().fn_type(&[ptr_type.into()], false) } else { target.get_type() };
+        let thunk = self.module.add_function(&name, fn_type, Some(inkwell::module::Linkage::Private));
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        self.builder.position_at_end(entry);
+        let object = thunk.get_nth_param(0).expect("this").into_pointer_value();
+        if counting {
+            let step = self.context.append_basic_block(thunk, "step");
+            let done = self.context.append_basic_block(thunk, "done");
+            let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
+            self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(step);
+            let count_ptr = self.head_count_ptr(object, sema::CountField::Strong)?;
+            let count_type = self.context.i32_type();
+            let count = self.builder.build_load(count_type, count_ptr, "count").map_err(|e| e.to_string())?.into_int_value();
+            let one = count_type.const_int(1, false);
+            if member == "__acquire" {
+                let next = self.builder.build_int_add(count, one, "count").map_err(|e| e.to_string())?;
+                self.builder.build_store(count_ptr, next).map_err(|e| e.to_string())?;
+                self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+            } else {
+                let next = self.builder.build_int_sub(count, one, "count").map_err(|e| e.to_string())?;
+                self.builder.build_store(count_ptr, next).map_err(|e| e.to_string())?;
+                let last = self.context.append_basic_block(thunk, "last");
+                let zero = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, next, count_type.const_zero(), "zero")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_conditional_branch(zero, last, done).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(last);
+                let slot = self.builder.build_struct_gep(box_type, object, 2, "boxed").map_err(|e| e.to_string())?;
+                let held = self.builder.build_load(box_type.get_field_type_at_index(2).expect("value"), slot, "value").map_err(|e| e.to_string())?;
+                self.call_function(&format!("{}.__release", value), vec![held])?;
+                self.call_function("_pep_free", vec![object.into()])?;
+                self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+            }
+            self.builder.position_at_end(done);
+            self.builder.build_return(None).map_err(|e| e.to_string())?;
+        } else {
+            let slot = self.builder.build_struct_gep(box_type, object, 2, "boxed").map_err(|e| e.to_string())?;
+            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![slot.into()];
+            args.extend(thunk.get_param_iter().skip(1).map(|p| -> inkwell::values::BasicMetadataValueEnum<'ctx> { p.into() }));
+            let call = self.builder.build_call(target, &args, "result").map_err(|e| e.to_string())?;
+            match call.try_as_basic_value().basic() {
+                Some(result) => self.builder.build_return(Some(&result)),
+                None => self.builder.build_return(None),
+            }
+            .map_err(|e| e.to_string())?;
+        }
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(thunk)
+    }
+
     /// `ToTrait`: pair the object with its vtable. A null object (`__null`)
     /// makes a null trait value.
     fn codegen_to_trait(
@@ -1831,9 +1971,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         if from.is_pointer() || matches!(value, Expression::PointerLiteral) {
             return Ok(fat.const_zero().into());
         }
-        let object = self.codegen_expr(value)?;
-        let object = self.object_pointer(object)?;
-        let vtable = self.vtable(&from.to_string(), &to_name)?;
+        let from_name = from.to_string();
+        let object = if self.values.contains_key(&from_name) {
+            // A value struct is copied into a new box: a read acquires the
+            // value's references, an owned rvalue moves them in.
+            let read = self.is_lvalue_read(value);
+            let value = self.codegen_expr(value)?;
+            if read {
+                self.acquire_ref(&from_name, value)?;
+            }
+            self.box_value(&from_name, value)?
+        } else {
+            let object = self.codegen_expr(value)?;
+            self.object_pointer(object)?
+        };
+        let vtable = self.vtable(&from_name, &to_name)?;
         let pair = self
             .builder
             .build_insert_value(fat.get_undef(), object, 0, "trait_object")
@@ -2323,6 +2475,20 @@ impl<'ctx> CodeGenerator<'ctx> {
         if let Some(Expression::ForIterator(source)) = &var.default {
             let mut lowered = var.clone();
             let iterator = self.for_loop_iterator(source)?;
+            // A stored value iterator is driven in place, not through a
+            // copy, so a loop left with `break` can be resumed from it, as
+            // with an iterator object.
+            let source_type = self.struct_name_of(source).unwrap_or_default();
+            let drives_source = !matches!(&iterator, Expression::MethodCall { method, .. } if method == "iterate");
+            if drives_source
+                && self.values.contains_key(&source_type)
+                && self.is_value_place(source)
+            {
+                let place = self.codegen_lvalue(source)?;
+                let ty = self.reference_value_type(&source_type);
+                self.frame.push_local(&var.name, Address::with_llvm_ty(&var.name, &source_type, ty, place.ptr));
+                return Ok(());
+            }
             if lowered.ty.to_string() == pepper_sema::type_name::AUTO {
                 if let Some(ty) = self.value_sema_type(&iterator) {
                     lowered.ty = TypeName::new(&ty);
@@ -2927,6 +3093,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.is_struct_ref_name(&self.value_sema_type(expr))
             }
             // Converting keeps the reference it converts: a read stays a read.
+            // Boxing a value struct makes a new object.
+            Expression::ToTrait { from, .. } if self.values.contains_key(&from.to_string()) => false,
             Expression::ToTrait { value, .. } => self.is_lvalue_read(value),
             // A ternary that owns nothing yields a read of one arm (or null),
             // as `c ? a : b` on two lvalues is an lvalue in C++: the consumer
@@ -2977,7 +3145,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ..
             } => self.is_owned_rvalue(true_expr) || self.is_owned_rvalue(false_expr),
             Expression::WithSubject(with) => self.is_owned_rvalue(&with.body),
-            // A converted call result is still that call's one reference.
+            // A converted call result is still that call's one reference; a
+            // boxed value struct is a new object, owning its one reference.
+            Expression::ToTrait { from, .. } if self.values.contains_key(&from.to_string()) => true,
             Expression::ToTrait { value, .. } => self.is_owned_rvalue(value),
             // An atomic load yields a freshly acquired reference (struct T):
             // an owned rvalue, released by the consuming context.

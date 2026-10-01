@@ -119,6 +119,7 @@ export trait Iterator<T> {
 ## @typeParam T the type of the source's elements
 ## @typeParam U the type of the elements produced
 ## @see Iterator.map
+[Value]
 export struct MapIterator<T, U> {
     ## The iterator whose elements are transformed.
     Iterator<T> _source;
@@ -162,6 +163,7 @@ extend MapIterator<T, U> with Iterator<U> {}
 ##
 ## @typeParam T the type of the elements
 ## @see Iterator.filter
+[Value]
 export struct FilterIterator<T> {
     ## The iterator whose elements are tested.
     Iterator<T> _source;

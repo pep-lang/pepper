@@ -3987,13 +3987,18 @@ fn value_struct_this_changed_in_closure() {
 }
 
 #[test]
-fn value_struct_converted_to_trait() {
-    let source = "trait Sized {\n    length(): int;\n}\n\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    length(): int {\n        return end - start;\n    }\n}\n\nextend Span with Sized {}\n\nmeasure(s: Sized): int {\n    return s.length();\n}\n\nmain(): int {\n    var a = Span(1, 4);\n    return measure(a) - 3;\n}\n";
-    assert_eq!(
-        error_of("value_struct_converted_to_trait", source),
-        "main.pep:25:20: error: value struct 'Span' cannot be converted to trait 'Sized' yet\n\
-         \x20  25 |     return measure(a) - 3;\n\
-         \x20     |                    ^"
+fn value_iterator_looped_over_as_const() {
+    let source = "main(): int {\n    var values = Array<int>();\n    const it = values.iterate();\n    for (var x in it) {\n        return x;\n    }\n    return 0;\n}\n";
+    let error = error_of("value_iterator_looped_over_as_const", source);
+    assert!(
+        error.starts_with(
+            "main.pep:4:19: error: cannot call mutating method 'next' on const variable 'it'\n\
+             \x20   4 |     for (var x in it) {\n\
+             \x20     |                   ^~\n\
+             main.pep:3:11: note: 'it' declared const here\n"
+        ),
+        "{}",
+        error
     );
 }
 

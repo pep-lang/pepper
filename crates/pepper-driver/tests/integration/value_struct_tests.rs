@@ -243,3 +243,145 @@ test(): int {
 "#,
     );
 }
+
+/// A value in a trait slot is a copy in a box: a mutating method through the
+/// trait value changes the box, and copies of the trait value share it.
+#[test]
+fn a_value_converted_to_a_trait_is_boxed() {
+    assert_runs_clean(
+        r#"
+trait Sized {
+    length(): int;
+    grow(by: int);
+}
+
+[Value]
+struct Named {
+    var name: String;
+    var count: int;
+
+    construct(this.name = "", this.count = 0) {}
+
+    length(): int {
+        return count;
+    }
+
+    grow(by: int) {
+        count = count + by;
+    }
+}
+
+extend Named with Sized {}
+
+measure(s: Sized): int {
+    return s.length();
+}
+
+make(): Named {
+    return Named("made", 7);
+}
+
+test(): int {
+    var a = Named("first", 3);
+    if (measure(a) != 3) { return -1; }
+    var s: Sized = a;
+    s.grow(10);
+    if (s.length() != 13 || a.count != 3) { return -2; }
+    if (measure(make()) != 7) { return -3; }
+    var all = Array<Sized>();
+    all.append(a);
+    all.append(make());
+    all[0].grow(1);
+    if (all[0].length() != 4) { return -4; }
+    var t = s;
+    t.grow(1);
+    if (s.length() != 14) { return -5; }
+    return 0;
+}
+"#,
+    );
+}
+
+/// The runtime's iterators are values: a copy is independent, and `for`,
+/// `map`, maps and strings still iterate.
+#[test]
+fn runtime_iterators_are_values() {
+    assert_runs_clean(
+        r#"
+test(): int {
+    var a = Array<int>();
+    a.append(1);
+    a.append(2);
+    a.append(3);
+    var total = 0;
+    for (var x in a) {
+        total = total + x;
+    }
+    if (total != 6) { return -1; }
+    var doubled = 0;
+    for (var y in a.iterate().map<int>((v: int) => v * 2)) {
+        doubled = doubled + y;
+    }
+    if (doubled != 12) { return -2; }
+    var names = Array<String>();
+    names.append("a");
+    names.append("b");
+    var joined = "";
+    for (var n in names) {
+        joined = joined + n;
+    }
+    if (joined != "ab") { return -3; }
+    var it = names.iterate();
+    var copy = it;
+    it.next();
+    copy.next();
+    copy.next();
+    if (it.current() != "a" || copy.current() != "b") { return -4; }
+    var m = HashMap<String, int>();
+    m["x"] = 1;
+    m["y"] = 2;
+    var sum = 0;
+    for (var e in m) {
+        sum = sum + e.1;
+    }
+    if (sum != 3) { return -5; }
+    var chars = 0;
+    for (var c in "héllo") {
+        chars = chars + 1;
+    }
+    if (chars != 5) { return -6; }
+    return 0;
+}
+"#,
+    );
+}
+
+/// `for` drives a stored value iterator in place, so a second loop resumes
+/// after a `break`.
+#[test]
+fn for_over_a_stored_iterator_resumes_it() {
+    assert_runs_clean(
+        r#"
+test(): int {
+    var a = Array<int>();
+    var i = 0;
+    while (i < 5) {
+        a.append(i);
+        i = i + 1;
+    }
+    var it = a.iterate();
+    for (var x in it) {
+        if (x == 1) {
+            break;
+        }
+    }
+    var rest = 0;
+    for (var y in it) {
+        rest = rest + y;
+    }
+    if (rest != 9) { return -1; }
+    return 0;
+}
+"#,
+    );
+}

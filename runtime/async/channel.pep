@@ -492,6 +492,7 @@ export enum _Polled<T> {
 ##     while (values.next()) {
 ##         total = total + values.current();
 ##     }
+[Value]
 export struct ChannelIterator<T> {
     # The channel it receives from.
     const _source: Channel<T>;
