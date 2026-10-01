@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-da10e3cb.js";
+            window.path_to_searchindex_js = "../searchindex-fb15a4e1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dd6b05c.js"></script>
@@ -281,7 +281,9 @@ without being compiled or checked again, as long as what its imports declare
 did not change either: editing a function’s body recompiles that file alone,
 while changing a signature also recompiles the files that import it. A file
 that compiled with warnings is checked again, so its warnings print on every
-build. When nothing changed, nothing is checked or linked again. Deleting <code>.pep/cache/</code> is always safe.</p>
+build. When nothing changed, nothing is checked or linked again. The cache also
+keeps the standard library checked, so a program’s own files are the only ones
+checked on each build. Deleting <code>.pep/cache/</code> is always safe.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
