@@ -1,0 +1,616 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Iteration - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-cb663f27.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-d3d52046.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/iteration.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="iteration"><a class="header" href="#iteration">Iteration</a></h1>
+<p>A <code>for</code> loop visits each element of a collection in turn. You can loop over an
+<a href="../reference/array.html"><code>Array</code></a>, over the code points of a
+<a href="../reference/string.html"><code>String</code></a>, and over any type of your own that follows
+the iterator protocol.</p>
+<h2 id="looping-over-an-array"><a class="header" href="#looping-over-an-array">Looping over an array</a></h2>
+<p><code>for (var x in source) { ... }</code> runs the body once per element, with <code>x</code> bound
+to the element:</p>
+<pre><code class="language-pepper">struct Item {
+    int value;
+    construct(this.value = 0) {}
+}
+
+make_items(): Array&lt;Item&gt; {
+    var items = Array&lt;Item&gt;();
+    items.append(Item(20));
+    items.append(Item(22));
+    return items;
+}
+
+main(): int {
+    var nums = Array&lt;int&gt;();
+    nums.append(1);
+    nums.append(2);
+    nums.append(39);
+
+    # The basic loop: x takes each element in order.
+    var total = 0;
+    for (var x in nums) {
+        total = total + x;
+    }
+    assert(total == 42, "sum of the elements");
+
+    # The loop variable may be typed, and the parentheses are optional.
+    long wide = 0;
+    for (long x in nums) {
+        wide = wide + x;
+    }
+    for var x: int in nums {
+        wide = wide - x;
+    }
+    assert(wide == 0, "typed loop variables");
+
+    # break and continue work as in a while loop.
+    var odd = 0;
+    for (var x in nums) {
+        if (x % 2 == 0) {
+            continue;
+        }
+        if (x &gt; 10) {
+            break;
+        }
+        odd = odd + x;
+    }
+    assert(odd == 1, "only 1 is odd and below 10");
+
+    # A struct element is shared: changing a field changes the element,
+    # but rebinding the loop variable does not touch the array.
+    var items = make_items();
+    for (var item in items) {
+        item.value = item.value * 10;
+        item = Item(99);
+    }
+    assert(items[0].value == 200, "first element was updated");
+    assert(items[1].value == 220, "second element was updated");
+
+    # Iterating a temporary keeps it alive for the whole loop.
+    var sum = 0;
+    for (var item in make_items()) {
+        sum = sum + item.value;
+    }
+    assert(sum == 42, "temporary array stays alive");
+
+    # The loop is shorthand for driving the iterator yourself.
+    var it = nums.iterate();
+    var manual = 0;
+    while (it.next()) {
+        manual = manual + it.current();
+    }
+    assert(manual == 42, "the same elements, by hand");
+
+    # Modifying the array after the loop is fine.
+    nums.append(100);
+    assert(nums.count() == 4, "appended after the loop");
+    return 0;
+}
+</code></pre>
+<p>The example shows each part of the loop:</p>
+<ul>
+<li><strong>The loop variable</strong> can be declared with <code>var</code> or with a type:
+<code>for (var x in nums)</code>, <code>for (long x in nums)</code>, and <code>for (var x: int in nums)</code>
+all work.</li>
+<li><strong>The parentheses are optional</strong>, as with <code>if</code> and <code>while</code>:
+<code>for var x in nums { ... }</code>. The braces are required.</li>
+<li><strong><code>break</code> and <code>continue</code></strong> work as they do in a <code>while</code> loop.</li>
+<li><strong>The loop variable is a copy</strong>, like any <code>var</code>. Assigning a new value to it
+does not change the collection. For a struct element, though, the copy is
+another reference to the same object (see
+<a href="memory.html">Memory and reference counting</a>), so <code>item.value = ...</code> does
+change the element.</li>
+<li><strong>A temporary source stays alive.</strong> The loop holds a reference to what it
+iterates, so <code>for (var item in make_items())</code> is safe.</li>
+</ul>
+<h2 id="looping-over-a-string"><a class="header" href="#looping-over-a-string">Looping over a string</a></h2>
+<p>A <code>String</code> yields its code points one at a time. Each one is a <code>String</code> holding
+a single code point, the same value that indexing gives you (<code>word[i]</code>):</p>
+<pre><code class="language-pepper">main(): int {
+    var word = "héllo ✓";
+
+    # A String yields one code point at a time, as a one-code-point String.
+    var count = 0;
+    var copy = "";
+    for (var c in word) {
+        assert(c.length() == 1, "each piece is one code point");
+        copy.append(c);
+        count = count + 1;
+    }
+    assert(count == 7, "7 code points");
+    assert(copy == word, "the pieces rebuild the string");
+
+    # Each piece is the same value as indexing the string.
+    var i = 0;
+    for (var c in word) {
+        assert(c == word[i], "same as word[i]");
+        i = i + 1;
+    }
+
+    # An empty string runs the body zero times.
+    for (var c in "") {
+        assert(false, "never runs");
+    }
+    return 0;
+}
+</code></pre>
+<h2 id="the-iterator-protocol"><a class="header" href="#the-iterator-protocol">The iterator protocol</a></h2>
+<p>The <code>for</code> loop is not tied to <code>Array</code> and <code>String</code>. It works with any type
+that has the right methods, described by two traits in the runtime
+(<code>runtime/iterator.pep</code>, documented in the <a href="../reference/iterator.html">Iterators</a>
+reference):</p>
+<pre><code class="language-pepper">export trait Iterator&lt;T&gt; {
+    bool next();     # advance; true if there is a current element
+    T current();     # the element next() just moved to
+}
+
+export trait Iterable&lt;T&gt; {
+    iterate(): Iterator&lt;T&gt;;
+}
+</code></pre>
+<ul>
+<li>An <strong>iterator</strong> steps through elements. <code>next()</code> moves to the next element
+and returns <code>true</code>, or returns <code>false</code> when there are no more (and keeps
+returning <code>false</code> after that). <code>current()</code> returns the element <code>next()</code>
+moved to.</li>
+<li>An <strong>iterable</strong> is a collection that hands out a fresh iterator from
+<code>iterate()</code>. <code>Array&lt;T&gt;</code> returns an <code>ArrayIterator&lt;T&gt;</code>, <code>String</code> returns a
+<code>StringIterator</code>, and <code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> return a
+<code>HashMapIterator&lt;K, V&gt;</code> and a <code>HashSetIterator&lt;K&gt;</code>.</li>
+</ul>
+<p><code>for (var x in source) { body }</code> behaves exactly like this:</p>
+<pre><code class="language-pepper">{
+    var it = source.iterate();   # or `var it = source;` when source is itself an iterator
+    while (it.next()) {
+        var x = it.current();
+        { body }
+    }
+}
+</code></pre>
+<p>The loop chooses by the methods the source’s type has, like a C++ range-based
+<code>for</code>: it uses <code>iterate()</code> if the type has one, and otherwise uses the source
+itself as the iterator if it has both <code>next()</code> and <code>current()</code>. A type with
+neither is a compile error:</p>
+<pre><code class="language-text">main.pep:4:19: error: type 'Foo' is not iterable: implement Iterable&lt;T&gt; (iterate()) or Iterator&lt;T&gt; (next() and current())
+    4 |     for (var x in f) {
+      |                   ^
+</code></pre>
+<p><code>HashMap&lt;K, V&gt;</code> yields each entry as a <a href="tuples.html">tuple</a> <code>(K, V)</code>, so
+<code>for (var (name, age) in ages)</code> names both parts; <code>HashSet&lt;K&gt;</code> yields its
+members. Both visit entries in no particular order. Changing a value
+(<code>ages[name] = …</code> for a key already present) is fine while looping, but adding
+or removing an entry stops the program at the iterator’s next step.</p>
+<h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
+<p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
+Each one works lazily, one element at a time as the loop asks for it:</p>
+<ul>
+<li><code>map(transform)</code> yields <code>transform(x)</code> for each element <code>x</code>; its element
+type is whatever <code>transform</code> returns.</li>
+<li><code>filter(keep)</code> yields only the elements for which <code>keep(x)</code> is <code>true</code>.</li>
+</ul>
+<p>Both return iterators, so they chain, and a <code>for</code> loop can use the result
+directly:</p>
+<pre><code class="language-pepper">struct Person {
+    String name;
+    int age;
+    construct(this.name = "", this.age = 0) {}
+}
+
+main(): int {
+    var people = Array&lt;Person&gt;();
+    people.append(Person("Ada", 36));
+    people.append(Person("Bo", 12));
+    people.append(Person("Cyd", 40));
+
+    # filter keeps the adults, map turns each one into a name.
+    var names = Array&lt;String&gt;();
+    for (var name in people.iterate().filter((p) =&gt; p.age &gt;= 18).map((p) =&gt; p.name)) {
+        names.append(name);
+    }
+    assert(names.count() == 2, "two adults");
+    assert(names[0] == "Ada", "Ada first");
+    assert(names[1] == "Cyd", "then Cyd");
+
+    # Adapters work on any Iterator, including a String's.
+    var kept = 0;
+    for (var c in "hello".iterate().filter((c) =&gt; c != "l")) {
+        kept += 1;
+    }
+    assert(kept == 3, "h, e, o");
+    return 0;
+}
+</code></pre>
+<p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
+<code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
+<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds a reference to the
+iterator it wraps, so a chain built from a temporary stays alive while the
+loop runs. They are generic methods (see
+<a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
+<code>Iterator&lt;T&gt;</code> trait value.</p>
+<h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
+<p>To make your own type work in a <code>for</code> loop, give it <code>next()</code> and <code>current()</code>
+(an iterator), or give it an <code>iterate()</code> method that returns such a type (an
+iterable):</p>
+<pre><code class="language-pepper"># An iterator: next() advances, current() returns the element.
+struct Countdown {
+    int remaining;
+    int now;
+
+    construct(this.remaining = 0) {}
+
+    bool next() {
+        if (remaining == 0) {
+            return false;
+        }
+        now = remaining;
+        remaining = remaining - 1;
+        return true;
+    }
+
+    int current() {
+        return now;
+    }
+}
+
+# Declaring the trait documents the intent; the loop goes by the methods.
+extend Countdown with Iterator&lt;int&gt; {}
+
+# An iterable: iterate() hands out a fresh iterator for each loop.
+struct Evens {
+    int limit;
+
+    construct(this.limit = 0) {}
+
+    EvensIterator iterate() {
+        var it = EvensIterator();
+        it.limit = limit;
+        it.now = -2;
+        return it;
+    }
+}
+
+struct EvensIterator {
+    int limit;
+    int now;
+
+    bool next() {
+        now = now + 2;
+        return now &lt; limit;
+    }
+
+    int current() {
+        return now;
+    }
+}
+
+extend EvensIterator with Iterator&lt;int&gt; {}
+extend Evens with Iterable&lt;int&gt; {}
+
+# A generic function can loop over any type that supports the protocol.
+sum&lt;C&gt;(C values): int {
+    var total = 0;
+    for (var v in values) {
+        total = total + v;
+    }
+    return total;
+}
+
+main(): int {
+    var total = 0;
+    for (var n in Countdown(3)) {
+        total = total + n;
+    }
+    assert(total == 6, "3 + 2 + 1");
+
+    # A loop over an iterator in a variable uses that object up.
+    var c = Countdown(2);
+    for (var n in c) {
+        total = total + n;
+    }
+    assert(!c.next(), "the countdown is exhausted");
+
+    # An iterable starts a new pass every time.
+    var evens = Evens(10);
+    assert(sum&lt;Evens&gt;(evens) == 20, "0 + 2 + 4 + 6 + 8");
+    assert(sum&lt;Evens&gt;(evens) == 20, "a second pass sees the same elements");
+
+    var nums = Array&lt;int&gt;();
+    nums.append(30);
+    nums.append(12);
+    assert(sum&lt;Array&lt;int&gt;&gt;(nums) == 42, "arrays work too");
+    return 0;
+}
+</code></pre>
+<p>Some things to keep in mind:</p>
+<ul>
+<li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
+type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
+intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
+<code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
+Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
+<code>for</code> loop over such a value calls the methods through the trait. It also
+gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
+<li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
+iterator stored in a variable, the loop drives that same object, so it is
+exhausted afterwards. An iterable starts a new, independent pass every time
+you loop over it.</li>
+<li><strong>Generic code can loop</strong> over a type parameter; each specialization checks
+the protocol for its own type (see <a href="generics.html">Generics</a>).</li>
+<li><strong>Calling <code>current()</code> out of turn panics</strong> in the runtime’s iterators:
+before the first <code>next()</code> you get <code>ArrayIterator.current() before next()</code>,
+and after <code>next()</code> returned <code>false</code> you get
+<code>ArrayIterator.current() past the end</code>. Your own iterators should follow the
+same rule.</li>
+</ul>
+<h2 id="modifying-a-collection-while-you-loop-over-it"><a class="header" href="#modifying-a-collection-while-you-loop-over-it">Modifying a collection while you loop over it</a></h2>
+<p>Changing an <code>Array</code> or a <code>String</code> while a loop is iterating over it stops the
+program with a panic, because the iterator could otherwise skip or repeat
+elements, or read past the end:</p>
+<pre><code class="language-pepper">var nums = Array&lt;int&gt;();
+nums.append(1);
+nums.append(2);
+for (var x in nums) {
+    nums.append(x);   # panics: Array modified during iteration
+}
+</code></pre>
+<p>Every method that changes an <code>Array</code> counts, including storing an element with
+<code>nums[i] = v</code>. For a <code>String</code>, <code>append</code> and <code>grow</code> count, and the message is
+<code>String modified during iteration</code>. The check happens on the iterator’s next
+step, so modifying the collection after the loop is finished is fine.</p>
+<p>To change elements as you go, loop over an index with <code>while</code> and store through
+it, or collect the changes in a second array and apply them after the loop.</p>
+<h2 id="loop-scope"><a class="header" href="#loop-scope">Loop scope</a></h2>
+<p>The loop variable and anything declared in the loop body exist only inside the
+loop. Each pass gets a new loop variable, and struct values declared in the
+body are released at the end of every pass, whether the pass ends normally or
+by <code>continue</code>, <code>break</code>, or <code>return</code>. Leaving the loop early also releases the
+hidden iterator, so a destructor on a custom iterator runs at that point.</p>
+<p>Using the loop variable or a body local after the loop is an error, the same as
+for any name that is out of scope:</p>
+<pre><code class="language-text">main.pep:6:12: error: use of undeclared identifier 'i'
+    6 |     return i;
+      |            ^
+</code></pre>
+<p>The loop variable, or a local in the loop body, may have the same name as a
+variable declared before the loop. It hides the outer variable inside the loop,
+and the outer variable keeps its value afterwards.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/traits-and-extensions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/scopes.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/traits-and-extensions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/scopes.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-81b39abc.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
