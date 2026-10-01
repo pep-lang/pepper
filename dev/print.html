@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-51b7ffec.js";
+            window.path_to_searchindex_js = "searchindex-303d0334.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3dd6b05c.js"></script>
@@ -1344,6 +1344,10 @@ unsigned, the operation is unsigned: comparing <code>int -1</code> with <code>ui
 <li><strong>Integer and floating point</strong> gives floating point: <code>3 * 0.5</code> is 1.5.</li>
 <li><strong>Division</strong> of integers truncates toward zero (<code>-7 / 2</code> is -3), and <code>%</code> takes
 the sign of the left operand (<code>-7 % 3</code> is -1).</li>
+<li><strong>Conditionals.</strong> <code>c ? a : b</code> with numeric arms of different types has
+their common type by the same rules (<code>c ? 0 : s.length()</code> is a <code>long</code>), and
+so does a <a href="#match-expressions-is-and-literal-patterns"><code>match</code> expression</a>
+over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
 signed types and fills with zeros for unsigned types.</li>
 <li><strong>Overflow</strong> of unsigned arithmetic wraps around. As in C, signed overflow,
@@ -4747,6 +4751,16 @@ keyword(word: String): int {
     };
 }
 
+# The arms' values are numbers of different types (`0` is an `int`,
+# `length()` a `long`), so the `match` has their common type, `long`, and
+# converts to the `int` this function returns.
+length_of(word: String): int {
+    return match (word) {
+        "" =&gt; 0,
+        else =&gt; word.length(),
+    };
+}
+
 main(): int {
     var total = area(Shape.Rect(2, 3)) + keyword("extern");
 
@@ -4776,6 +4790,7 @@ main(): int {
         else =&gt; "many",
     };
     assert(size == "many", "total is past three");
+    assert(length_of("four") == 4 &amp;&amp; length_of("") == 0, "lengths convert");
     assert(total == 6 + 2 + 1 + 3 + 100, "every step adds up");
     return 0;
 }
@@ -4786,7 +4801,10 @@ main(): int {
 arms are separated by commas (one after the last is allowed). It follows
 the rules above: a pattern binds names for its arm’s value, and the arms
 must handle every case unless there is an <code>else</code>. The value has the first
-arm’s type, and every other arm’s value must convert to it. A closure in
+arm’s type, and every other arm’s value must convert to it. When the arms
+are numbers of different types, the value has their common type, as C’s
+<code>? :</code> does (<code>int</code> and <code>long</code> give <code>long</code>), and converts from it wherever
+it goes (<code>0</code> or a <code>long</code> <code>length()</code>, returned as an <code>int</code>). A closure in
 an arm’s value cannot use a name the arm binds; use a <code>match</code> statement
 there.</li>
 <li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case

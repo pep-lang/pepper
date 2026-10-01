@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-51b7ffec.js";
+            window.path_to_searchindex_js = "../searchindex-303d0334.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dd6b05c.js"></script>
@@ -648,6 +648,10 @@ unsigned, the operation is unsigned: comparing <code>int -1</code> with <code>ui
 <li><strong>Integer and floating point</strong> gives floating point: <code>3 * 0.5</code> is 1.5.</li>
 <li><strong>Division</strong> of integers truncates toward zero (<code>-7 / 2</code> is -3), and <code>%</code> takes
 the sign of the left operand (<code>-7 % 3</code> is -1).</li>
+<li><strong>Conditionals.</strong> <code>c ? a : b</code> with numeric arms of different types has
+their common type by the same rules (<code>c ? 0 : s.length()</code> is a <code>long</code>), and
+so does a <a href="enums.html#match-expressions-is-and-literal-patterns"><code>match</code> expression</a>
+over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
 signed types and fills with zeros for unsigned types.</li>
 <li><strong>Overflow</strong> of unsigned arithmetic wraps around. As in C, signed overflow,
