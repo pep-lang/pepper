@@ -59,7 +59,7 @@ export struct _RegexMatcher {
 
     construct(program: _RegexProgram) {
         this.program = program;
-        var size = program.ops.count();
+        var size = program.op_count;
         _slot_count = program.slot_count();
         _current = _RegexThreads(size, _slot_count);
         _next = _RegexThreads(size, _slot_count);

@@ -18,6 +18,9 @@ import "vm";
 ##   of one.
 ## - **`\d`, `\w`, `\s`, `\b`** and case-insensitive matching are ASCII-only.
 ##
+## A Regex never changes once compiled and is `[Shared]`, so one compiled at
+## module scope (`const word = regex.Regex("\\w+");`) serves every thread.
+##
 ## @example
 ##     import regex;
 ##
@@ -28,9 +31,9 @@ import "vm";
 ##         assert(found.start() == 4, "a byte offset");
 ##         return 0;
 ##     }
+[Shared]
 export struct Regex {
-    var _pattern: String;
-    var _program: _RegexProgram;
+    const _program: _RegexProgram;
 
     ## Compiles `pattern`.
     ##
@@ -38,12 +41,19 @@ export struct Regex {
     ## @panics if `pattern` is not a valid regular expression; use `parse`
     ##   for a pattern that may be invalid, such as one from user input
     construct(pattern: String) {
-        _pattern = pattern;
         var compiled = _regex_compile(pattern);
         if (compiled.is_err()) {
             panic(compiled.error().message);
         }
         _program = compiled.value();
+    }
+
+    ## Wraps a compiled program. Use `Regex(pattern)` or `Regex.parse`; this
+    ## constructor is for the runtime.
+    ##
+    ## @param program the compiled pattern
+    construct(program: _RegexProgram) {
+        _program = program;
     }
 
     ## Compiles `pattern`, or reports why it is invalid.
@@ -61,10 +71,7 @@ export struct Regex {
         if (compiled.is_err()) {
             return Result<Regex>.err(compiled.error());
         }
-        var result = Regex("");
-        result._pattern = pattern;
-        result._program = compiled.value();
-        return Result<Regex>.ok(result);
+        return Result<Regex>.ok(Regex(compiled.value()));
     }
 
     ## Returns `text` with every character that has a meaning in a pattern
@@ -112,7 +119,7 @@ export struct Regex {
     ##
     ## @returns the pattern text
     pattern(): String {
-        return _pattern;
+        return _program.pattern();
     }
 
     ## Returns the number of capture groups in the pattern, not counting the
@@ -161,7 +168,7 @@ export struct Regex {
         if (slots.is_none()) {
             return Optional<Match>.none();
         }
-        return Optional<Match>.some(Match(text, slots.value(), _program.names));
+        return Optional<Match>.some(Match(text, slots.value(), _program));
     }
 
     ## Returns an iterator over the matches in `text`, left to right and
@@ -259,7 +266,7 @@ export struct Regex {
     ##
     ## @returns the pattern text
     to_string(): String {
-        return _pattern;
+        return _program.pattern();
     }
 }
 
@@ -274,7 +281,7 @@ extend Regex with ToString;
 export struct Match {
     var _text: String;
     var _slots: long[];
-    var _names: String[];
+    var _program: _RegexProgram;
 
     ## Creates a match over `text` from its capture slots. Matches come from
     ## `Regex`; this constructor is for the runtime.
@@ -282,11 +289,11 @@ export struct Match {
     ## @param text the searched text
     ## @param slots a start and end byte offset for the match and each group,
     ##   -1 for a group that did not take part
-    ## @param names the name of each group by index, "" when unnamed
-    construct(text: String, slots: long[], names: String[]) {
+    ## @param program the compiled pattern, for its group names
+    construct(text: String, slots: long[], program: _RegexProgram) {
         _text = text;
         _slots = slots;
-        _names = names;
+        _program = program;
     }
 
     ## Returns the matched text.
@@ -360,16 +367,11 @@ export struct Match {
     }
 
     _group_index(name: String): ulong {
-        ulong index = 1;
-        var count = _names.count();
-        while (index < count) {
-            if (_names[index] == name) {
-                return index;
-            }
-            index += 1;
+        var index = _program.group_named(name);
+        if (index == 0) {
+            panic($"Match.group: no group named '{name}'");
         }
-        panic($"Match.group: no group named '{name}'");
-        return 0;
+        return index;
     }
 
     # Appends `replacement` to `out` with its `$` references filled in.
@@ -480,7 +482,7 @@ export struct Matches {
                 _position = (start as ulong) + width;
                 continue;
             }
-            _current = Optional<Match>.some(Match(_text, found, _matcher.program.names));
+            _current = Optional<Match>.some(Match(_text, found, _matcher.program));
             _last_end = end;
             _position = end as ulong;
             return true;

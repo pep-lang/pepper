@@ -26,9 +26,9 @@ export const _REGEX_OP_MATCH = 8;
 # Patterns whose program would be larger fail to compile.
 export const _REGEX_MAX_INSTRUCTIONS: ulong = 100000;
 
-# A compiled pattern: its instructions, character classes and group names.
-# Immutable once compiled.
-export struct _RegexProgram {
+# A program being compiled: its instructions, character classes and group
+# names, in arrays that grow. `_RegexProgram` freezes it.
+export struct _RegexBuilder {
     var ops: int[];
     var a: ulong[];
     var b: ulong[];
@@ -36,8 +36,6 @@ export struct _RegexProgram {
     # owns `ranges[class_starts[k]]` up to `ranges[class_starts[k + 1]]`.
     var ranges: ulong[];
     var class_starts: ulong[];
-    # The number of capture groups, not counting the whole match.
-    var group_count: ulong;
     # The name of each group by index; "" when unnamed.
     var names: String[];
     # Whether every match must start at the start of the text (`\A...`).
@@ -50,15 +48,103 @@ export struct _RegexProgram {
         ranges = Array<ulong>();
         class_starts = Array<ulong>();
         class_starts.append(0);
-        group_count = 0;
         names = Array<String>();
         anchored = false;
+    }
+}
+
+# A compiled pattern, immutable and thread-safe: the builder's arrays copied
+# into heap blocks it owns, so a `Regex` can be `[Shared]`.
+[Shared]
+export struct _RegexProgram {
+    const ops: __ptr<int>;
+    const a: __ptr<ulong>;
+    const b: __ptr<ulong>;
+    const op_count: ulong;
+    const ranges: __ptr<ulong>;
+    const class_starts: __ptr<ulong>;
+    # The number of capture groups, not counting the whole match.
+    const group_count: ulong;
+    # The group names' bytes, back to back; name `i` runs from
+    # `name_offsets[i]` to `name_offsets[i + 1]`.
+    const name_bytes: __ptr<u8>;
+    const name_offsets: __ptr<ulong>;
+    # The pattern's bytes.
+    const pattern_bytes: __ptr<u8>;
+    const pattern_size: ulong;
+    const anchored: bool;
+
+    construct(builder: _RegexBuilder, pattern: String) {
+        op_count = builder.ops.count();
+        ops = _pep_malloc(op_count * sizeof<int>() + 1);
+        a = _regex_freeze(builder.a);
+        b = _regex_freeze(builder.b);
+        ulong index = 0;
+        while (index < op_count) {
+            ops[index] = builder.ops[index];
+            index += 1;
+        }
+        ranges = _regex_freeze(builder.ranges);
+        class_starts = _regex_freeze(builder.class_starts);
+        group_count = builder.names.count() - 1;
+        name_offsets = _pep_malloc((group_count + 2) * sizeof<ulong>());
+        ulong total = 0;
+        for (var name in builder.names) {
+            total += name.size();
+        }
+        name_bytes = _pep_malloc(total + 1);
+        ulong at = 0;
+        index = 0;
+        for (var name in builder.names) {
+            name_offsets[index] = at;
+            _regex_copy_bytes(name, name_bytes + at);
+            at += name.size();
+            index += 1;
+        }
+        name_offsets[index] = at;
+        pattern_size = pattern.size();
+        pattern_bytes = _pep_malloc(pattern_size + 1);
+        _regex_copy_bytes(pattern, pattern_bytes);
+        anchored = builder.anchored;
+    }
+
+    destruct {
+        _pep_free(ops);
+        _pep_free(a);
+        _pep_free(b);
+        _pep_free(ranges);
+        _pep_free(class_starts);
+        _pep_free(name_bytes);
+        _pep_free(name_offsets);
+        _pep_free(pattern_bytes);
     }
 
     # The number of capture slots: a start and an end for each group and
     # for the whole match.
     slot_count(): ulong {
         return (group_count + 1) * 2;
+    }
+
+    # The name of group `index`; "" when unnamed.
+    name(index: ulong): String {
+        return _regex_string(name_bytes + name_offsets[index], name_offsets[index + 1] - name_offsets[index]);
+    }
+
+    # The group named `name`, or 0 when there is none.
+    group_named(name: String): ulong {
+        ulong index = 1;
+        while (index <= group_count) {
+            if (this.name(index) == name) {
+                return index;
+            }
+            index += 1;
+        }
+        return 0;
+    }
+
+    # The pattern the program was compiled from.
+    pattern(): String {
+        return _regex_string(pattern_bytes, pattern_size);
     }
 
     # Whether class `index` holds the code point `value`.
@@ -83,6 +169,37 @@ export struct _RegexProgram {
     }
 }
 
+# A heap copy of `values`, which the caller frees.
+_regex_freeze(values: ulong[]): __ptr<ulong> {
+    var count = values.count();
+    __ptr<ulong> copy = _pep_malloc(count * sizeof<ulong>() + 1);
+    ulong index = 0;
+    while (index < count) {
+        copy[index] = values[index];
+        index += 1;
+    }
+    return copy;
+}
+
+# Copies the bytes of `text` to `destination`.
+_regex_copy_bytes(text: String, destination: __ptr<u8>) {
+    var size = text.size();
+    __ptr<u8> source = text._data as __ptr<u8>;
+    ulong index = 0;
+    while (index < size) {
+        destination[index] = source[index];
+        index += 1;
+    }
+}
+
+# A String of the `size` bytes at `data`.
+_regex_string(data: __ptr<u8>, size: ulong): String {
+    if (size == 0) {
+        return "";
+    }
+    return String(data as __ptr<char>, size);
+}
+
 # Compiles `pattern` into a program, or gives the reason it is invalid.
 export _regex_compile(pattern: String): Result<_RegexProgram> {
     var parser = _RegexParser(pattern);
@@ -91,10 +208,8 @@ export _regex_compile(pattern: String): Result<_RegexProgram> {
         return Result<_RegexProgram>.err(Error($"invalid regex '{pattern}': {parser.error}"));
     }
     var compiler = _RegexCompiler();
-    var program = compiler.program;
-    program.group_count = parser.group_count;
-    program.names = parser.names;
-    program.anchored = _regex_starts_anchored(tree);
+    compiler.program.names = parser.names;
+    compiler.program.anchored = _regex_starts_anchored(tree);
     compiler.emit(_REGEX_OP_SAVE, 0, 0);
     compiler.compile(tree);
     compiler.emit(_REGEX_OP_SAVE, 1, 0);
@@ -104,7 +219,7 @@ export _regex_compile(pattern: String): Result<_RegexProgram> {
             Error($"invalid regex '{pattern}': the compiled pattern exceeds {_REGEX_MAX_INSTRUCTIONS} instructions")
         );
     }
-    return Result<_RegexProgram>.ok(program);
+    return Result<_RegexProgram>.ok(_RegexProgram(compiler.program, pattern));
 }
 
 # Whether every match of `node` must start at the start of the text.
@@ -122,11 +237,11 @@ _regex_starts_anchored(node: _RegexNode): bool {
 }
 
 export struct _RegexCompiler {
-    var program: _RegexProgram;
+    var program: _RegexBuilder;
     var too_large: bool;
 
     construct() {
-        program = _RegexProgram();
+        program = _RegexBuilder();
         too_large = false;
     }
 

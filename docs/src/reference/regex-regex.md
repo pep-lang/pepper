@@ -9,7 +9,7 @@ Source: `runtime/regex/regex.pep`
 ## Regex
 
 ```pepper
-struct Regex
+[Shared] struct Regex
 ```
 
 A compiled regular expression: compile a pattern once, then test, find,
@@ -26,6 +26,9 @@ lookaround (`(?=...)`), and a pattern using them fails to compile.
   of one.
 - **`\d`, `\w`, `\s`, `\b`** and case-insensitive matching are ASCII-only.
 
+A Regex never changes once compiled and is `[Shared]`, so one compiled at
+module scope (`const word = regex.Regex("\\w+");`) serves every thread.
+
 **Example**
 ```pepper
     import regex;
@@ -39,7 +42,7 @@ lookaround (`(?=...)`), and a pattern using them fails to compile.
     }
 ```
 
-### Constructor
+### Constructors
 
 #### Regex()
 
@@ -54,6 +57,18 @@ Compiles `pattern`.
 
 **Panics**
 - if `pattern` is not a valid regular expression; use `parse` for a pattern that may be invalid, such as one from user input
+
+#### Regex()
+
+```pepper
+construct(program: _RegexProgram)
+```
+
+Wraps a compiled program. Use `Regex(pattern)` or `Regex.parse`; this
+constructor is for the runtime.
+
+**Parameters**
+- `program` — the compiled pattern
 
 ### Static methods
 
@@ -323,7 +338,7 @@ included.
 #### Match()
 
 ```pepper
-construct(text: String, slots: long[], names: String[])
+construct(text: String, slots: long[], program: _RegexProgram)
 ```
 
 Creates a match over `text` from its capture slots. Matches come from
@@ -332,7 +347,7 @@ Creates a match over `text` from its capture slots. Matches come from
 **Parameters**
 - `text` — the searched text
 - `slots` — a start and end byte offset for the match and each group, -1 for a group that did not take part
-- `names` — the name of each group by index, "" when unnamed
+- `program` — the compiled pattern, for its group names
 
 ### Methods
 

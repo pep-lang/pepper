@@ -4,6 +4,7 @@
 //! explode. Each test returns 0 on success or a distinct negative code per
 //! check, and must leave no allocation behind.
 
+use crate::io_tests::assert_runs;
 use crate::support::jit_census;
 
 fn run(source: &str) -> i32 {
@@ -331,5 +332,47 @@ test(): int {
 }
 "##),
         0
+    );
+}
+
+/// A `Regex` is `[Shared]`: one compiled at module scope serves every
+/// thread at once. Threads run in a built program, not the JIT.
+#[test]
+fn shares_one_regex_between_threads() {
+    assert_runs(
+        "regex_threads",
+        r##"
+import async;
+import regex;
+
+const word = regex.Regex("(?<word>[a-z]+)");
+const found = async.Atomic<long>(0);
+
+count_words() {
+    var i = 0;
+    while (i < 200) {
+        for (var each in word.find_all("one two three")) {
+            if (each.group("word").value().size() > 0) {
+                found.fetch_add(1);
+            }
+        }
+        i += 1;
+    }
+}
+
+main(): int {
+    var workers = Array<async.Thread>();
+    var i = 0;
+    while (i < 4) {
+        workers.append(async.Thread.spawn(count_words));
+        i += 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    assert(found.load() == 4 * 200 * 3, "every thread found every word");
+    return 0;
+}
+"##,
     );
 }

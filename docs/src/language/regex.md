@@ -117,8 +117,21 @@ exceed 100,000 instructions (from large counted repetitions such as
 
 ## Threads
 
-A `Regex` does not change after it is compiled, but it is not `[Shared]`
-yet, so it stays on the thread that made it. Compile one on each thread
-that needs it.
+A `Regex` never changes once it is compiled, and it is `[Shared]`: one
+`Regex` can serve every thread at once, so a pattern the program uses
+often can be compiled once at module scope:
+
+```pepper
+import regex;
+
+const identifier = regex.Regex("^[A-Za-z_][A-Za-z0-9_]*$");
+
+is_identifier(text: String): bool {
+    return identifier.is_match(text);
+}
+```
+
+Each search keeps its working state to itself, and a `Match` (which holds
+the searched `String`) stays on the thread that found it.
 
 The [reference](../reference/regex-module.md) lists every method.
