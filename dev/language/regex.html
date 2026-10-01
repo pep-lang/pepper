@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e11e52e.js";
+            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -335,9 +335,19 @@ fails to compile:</p>
 exceed 100,000 instructions (from large counted repetitions such as
 <code>(a{1000}){1000}</code>) is rejected.</p>
 <h2 id="threads"><a class="header" href="#threads">Threads</a></h2>
-<p>A <code>Regex</code> does not change after it is compiled, but it is not <code>[Shared]</code>
-yet, so it stays on the thread that made it. Compile one on each thread
-that needs it.</p>
+<p>A <code>Regex</code> never changes once it is compiled, and it is <code>[Shared]</code>: one
+<code>Regex</code> can serve every thread at once, so a pattern the program uses
+often can be compiled once at module scope:</p>
+<pre><code class="language-pepper">import regex;
+
+const identifier = regex.Regex("^[A-Za-z_][A-Za-z0-9_]*$");
+
+is_identifier(text: String): bool {
+    return identifier.is_match(text);
+}
+</code></pre>
+<p>Each search keeps its working state to itself, and a <code>Match</code> (which holds
+the searched <code>String</code>) stays on the thread that found it.</p>
 <p>The <a href="../reference/regex-module.html">reference</a> lists every method.</p>
 
                     </main>

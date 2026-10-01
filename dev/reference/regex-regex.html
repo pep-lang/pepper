@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e11e52e.js";
+            window.path_to_searchindex_js = "../searchindex-ed22a71e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-68ad39d4.js"></script>
@@ -186,7 +186,7 @@
 <p>Regex, Match and the iterator over every match.</p>
 <p>Source: <code>runtime/regex/regex.pep</code></p>
 <h2 id="regex"><a class="header" href="#regex">Regex</a></h2>
-<pre><code class="language-pepper">struct Regex
+<pre><code class="language-pepper">[Shared] struct Regex
 </code></pre>
 <p>A compiled regular expression: compile a pattern once, then test, find,
 replace or split text with it.</p>
@@ -201,6 +201,8 @@ offsets, like <code>String.find</code>, so they work with <code>substr_bytes</co
 of one.</li>
 <li><strong><code>\d</code>, <code>\w</code>, <code>\s</code>, <code>\b</code></strong> and case-insensitive matching are ASCII-only.</li>
 </ul>
+<p>A Regex never changes once compiled and is <code>[Shared]</code>, so one compiled at
+module scope (<code>const word = regex.Regex("\\w+");</code>) serves every thread.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import regex;
 
@@ -212,7 +214,7 @@ of one.</li>
         return 0;
     }
 </code></pre>
-<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="regex-1"><a class="header" href="#regex-1">Regex()</a></h4>
 <pre><code class="language-pepper">construct(pattern: String)
 </code></pre>
@@ -224,6 +226,15 @@ of one.</li>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if <code>pattern</code> is not a valid regular expression; use <code>parse</code> for a pattern that may be invalid, such as one from user input</li>
+</ul>
+<h4 id="regex-2"><a class="header" href="#regex-2">Regex()</a></h4>
+<pre><code class="language-pepper">construct(program: _RegexProgram)
+</code></pre>
+<p>Wraps a compiled program. Use <code>Regex(pattern)</code> or <code>Regex.parse</code>; this
+constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>program</code> — the compiled pattern</li>
 </ul>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="parse"><a class="header" href="#parse">parse</a></h4>
@@ -442,9 +453,9 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="match-1"><a class="header" href="#match-1">Match()</a></h4>
-<pre><code class="language-pepper">construct(text: String, slots: long[], names: String[])
+<pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
 <p>Creates a match over <code>text</code> from its capture slots. Matches come from
 <code>Regex</code>; this constructor is for the runtime.</p>
@@ -452,7 +463,7 @@ included.</p>
 <ul>
 <li><code>text</code> — the searched text</li>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
-<li><code>names</code> — the name of each group by index, “” when unnamed</li>
+<li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="text"><a class="header" href="#text">text</a></h4>
@@ -551,7 +562,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
