@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb663f27.js";
+            window.path_to_searchindex_js = "searchindex-ed6e9661.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d3d52046.js"></script>
@@ -10562,7 +10562,9 @@ main(): int {
 what makes the examples above work: a call to <code>GetCurrentProcessId</code>, which
 exists only on Windows, is fine in a block that is removed everywhere else.
 Removed code is not checked for errors beyond parsing, so a typo in it goes
-unnoticed until you build on the platform that keeps it.</p>
+unnoticed until you build on the platform that keeps it. The VS Code
+extension shows it dimmed, from its attribute to its end, with a hint saying
+it is not compiled for the platform you are building on.</p>
 <p>It still has to parse, and every <code>Target</code> condition is validated on every
 platform, even one inside removed code. A misspelled value is always an error,
 never a silent “no match”:</p>
