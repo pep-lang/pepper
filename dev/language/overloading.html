@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -221,8 +221,9 @@ set too, and so are its static methods, its operators, its
 <ul>
 <li>
 <p><strong>The parameter lists must differ</strong> in the number or the types of the
-parameters. Parameter names and default values do not count, and neither
-does the return type:</p>
+parameters. Parameter names and default values do not count (though
+<a href="#how-a-call-picks-a-member">named arguments</a> can pick between members
+that differ in types), and neither does the return type:</p>
 <pre><code class="language-text">main.pep:2:1: error: functions that differ only in their return type cannot be overloaded
     2 | f(x: int): long { return 2; }
       | ^
@@ -373,6 +374,14 @@ main.pep:2:1: note: candidate function not viable: requires 2 arguments, but 1 w
     2 | f(x: int, y: int): int { return 2; }
       | ^
 </code></pre>
+<p>A call with <a href="functions.html#named-arguments">named arguments</a> considers only
+the members that have a parameter of each name it uses and get every
+required parameter, and binds the names before ranking the arguments as
+above. So two overloads whose later parameters have different names can be
+told apart by naming one (<code>pick(1, b = 2)</code> against <code>pick(a: int, b: int = 0)</code>
+and <code>pick(a: String, c: int = 0)</code>). The members it considers must put each
+named argument at the same position; when they do not, the call is an error:
+<code>named arguments bind differently in the overloads of 'f'</code>.</p>
 <p>The member picked decides the call’s type, so <code>var x = half(9.0);</code> is a
 <code>double</code> when <code>half(x: double): double</code> is picked. In the editor, hovering
 the call shows the member it picked and how many others the set has, and

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-778b03c5.js"></script>
@@ -250,6 +250,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 (see <a href="language/structs.html#implicit-conversions">implicit conversions</a>).</li>
 <li>Free functions, methods, operators, constructors, extension methods and
 trait members can be <a href="language/overloading.html">overloaded</a>.</li>
+<li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
+skip defaulted parameters or pass them in any order (see
+<a href="language/functions.html#named-arguments">named arguments</a>).</li>
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
 wherever the generic is used and, inside the generic, against what the
 traits declare (see <a href="language/generics.html#constraints">constraints</a>).

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -217,7 +217,7 @@ or reads the wrong bits when the program runs.</p>
 </div>
 <p>Pepper’s <code>long</code> is always 64 bits. C’s <code>long</code> is 64 bits on Linux and macOS but
 32 bits on Windows, so a C function that takes <code>long</code> needs a different
-prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[LinkName]</code></a>
+prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[Link(name = ...)]</code></a>
 below for an example).</p>
 <p>Some things to know about <code>extern</code> declarations:</p>
 <ul>
@@ -550,39 +550,62 @@ for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> g
 operating system a destructor for its <code>T</code>. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.</p>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
-<p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
-the declared one. Pepper code calls the extern by its declared name, and the
-object file refers to <code>symbol</code>. Use it to give a C function a clearer name, to
-avoid clashing with a Pepper name, or, together with
+<p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
+from the declared one. Pepper code calls the extern by its declared name, and
+the object file refers to <code>symbol</code>. Use it to give a C function a clearer
+name, to avoid clashing with a Pepper name, or, together with
 <a href="platform-selection.html"><code>[Target]</code></a>, to bind one Pepper name to a different
-symbol on each platform:</p>
-<pre><code class="language-pepper"># [LinkName] binds a Pepper name to a C symbol with a different name.
+symbol on each platform. <code>lib</code> names the library that defines the symbol in
+the same attribute, as <a href="linking.html#linking-a-library-from-the-source-link"><code>[Link("library")]</code></a>
+does on its own:</p>
+<pre><code class="language-pepper"># [Link(name = "symbol")] binds a Pepper name to a C symbol with a different name.
 
 # llabs takes a 64-bit long long on every platform.
-[LinkName("llabs")] extern long absolute(long value);
+[Link(name = "llabs")]
+extern long absolute(long value);
 
 # C's long is 64 bits on Linux and macOS but 32 bits on Windows, so
 # the 64-bit labs is only right away from Windows.
-[Target(OS(Windows))] [LinkName("llabs")] extern long abs64(long value);
-[Target(!OS(Windows))] [LinkName("labs")] extern long abs64(long value);
+[Target(OS(Windows))]
+[Link(name = "llabs")]
+extern long abs64(long value);
+[Target(!OS(Windows))]
+[Link(name = "labs")]
+extern long abs64(long value);
+
+# `lib` names the library that defines the symbol, as [Link("m")] does.
+[Target(OS(Linux))]
+[Link(lib = "m", name = "cbrt")]
+extern double cube_root(double value);
 
 main(): int {
     assert(absolute(-7) == 7, "absolute calls llabs");
     assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
+    [Target(OS(Linux))]
+    {
+        var root = cube_root(27.0);
+        assert(root &gt; 2.999 &amp;&amp; root &lt; 3.001, "cube_root calls cbrt from libm");
+    }
     return 0;
 }
 </code></pre>
 <p>Real uses of the per-platform form include macOS on Intel, where the
 64-bit-inode version of <code>stat</code> is named <code>stat$INODE64</code>:</p>
-<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))] [LinkName("stat$INODE64")] extern int stat(char* path, void* buf);
-[Target(OS(Mac) &amp;&amp; Arch(aarch64))] extern int stat(char* path, void* buf);
+<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))]
+[Link(name = "stat$INODE64")]
+extern int stat(char* path, void* buf);
+[Target(OS(Mac) &amp;&amp; Arch(aarch64))]
+extern int stat(char* path, void* buf);
 </code></pre>
-<p><code>LinkName</code> takes exactly one non-empty string, and an extern may carry at most
-one. Anything else is an error, such as:</p>
-<pre><code class="language-text">main.pep:1:34: error: LinkName on extern 'pep_abs' takes exactly one string: [LinkName("sym")]
-    1 | [LinkName("a", "b")] extern long pep_abs(long v);
-      |                                  ^~~~~~~
+<p><code>[Link]</code> takes the library as its one positional argument or as <code>lib</code>, and
+the symbol as <code>name</code>; each is a non-empty string, and an extern names at
+most one symbol. Anything else is an error, such as:</p>
+<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+    1 | [Link(symbol = "labs")] extern long pep_abs(long v);
+      |       ^~~~~~
 </code></pre>
+<p>The earlier <code>[LinkName("symbol")]</code> was removed; it is an error that suggests
+the <code>[Link(name = "symbol")]</code> that replaces it.</p>
 <h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
 <p>A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach

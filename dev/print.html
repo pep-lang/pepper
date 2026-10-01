@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-778b03c5.js"></script>
@@ -248,6 +248,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 (see <a href="#implicit-conversions">implicit conversions</a>).</li>
 <li>Free functions, methods, operators, constructors, extension methods and
 trait members can be <a href="#overloading-1">overloaded</a>.</li>
+<li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
+skip defaulted parameters or pass them in any order (see
+<a href="#named-arguments">named arguments</a>).</li>
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
 wherever the generic is used and, inside the generic, against what the
 traits declare (see <a href="#constraints">constraints</a>).
@@ -2443,9 +2446,96 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Defaults work the same way for methods and constructors. Pepper has no named
-arguments: to give a later parameter a value, you pass every parameter before
-it.</p>
+<p>Defaults work the same way for methods and constructors. To give a later
+parameter a value without passing every parameter before it, name it (see
+<a href="#named-arguments">Named arguments</a>).</p>
+<h2 id="named-arguments"><a class="header" href="#named-arguments">Named arguments</a></h2>
+<p>A call can name its arguments, <code>name = value</code>, so it reads clearly and can
+set one defaulted parameter without passing the ones before it:</p>
+<pre><code class="language-pepper"># Named arguments: `name = value` after the positional arguments.
+window(title: String, width: int = 800, height: int = 600, resizable: bool = true): String {
+    return $"{title} {width}x{height} resizable={resizable}";
+}
+
+struct Point {
+    var x: int;
+    var y: int;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    moved(dx: int = 0, dy: int = 0): Point {
+        return Point(x + dx, y + dy);
+    }
+}
+
+# 'size = ...' works as well as 'count = ...'; 'n = ...' still works, with a
+# deprecation warning.
+[Alias("size", "count")]
+[Rename("n", "count")]
+repeat(text: String, count: int = 1): String {
+    var result = "";
+    for (var i in 0..count) {
+        result = result + text;
+    }
+    return result;
+}
+
+main(): int {
+    assert(window("Editor") == "Editor 800x600 resizable=true", "all defaults");
+    # Skip width and height.
+    assert(window("Editor", resizable = false) == "Editor 800x600 resizable=false", "skip");
+    # Named arguments in any order.
+    assert(window("Editor", height = 400, width = 1200) == "Editor 1200x400 resizable=true", "any order");
+    # Every argument may be named.
+    assert(window(title = "Editor", width = 1024) == "Editor 1024x600 resizable=true", "all named");
+
+    # Constructors and methods take them too.
+    var p = Point(y = 5);
+    assert(p.moved(dy = 2).y == 7, "method");
+
+    assert(repeat("ab", size = 3) == "ababab", "alias");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Positional first.</strong> Positional arguments come first and match parameters
+from the left; named arguments follow, in any order. A positional argument
+after a named one is an error: <code>positional argument cannot follow a named argument</code>.</li>
+<li><strong>Each parameter once.</strong> Naming a parameter that already has an argument is
+an error: <code>argument for 'width' given twice</code>.</li>
+<li><strong>Every required parameter.</strong> A parameter without a default must get an
+argument: <code>missing argument for parameter 'title' in call to 'window'</code>. A
+name the function does not have is an error, with a suggestion when one is
+close: <code>no parameter named 'widht' in 'window'; did you mean 'width'?</code>.</li>
+<li><strong>Order of evaluation.</strong> Arguments are evaluated in the order written, then
+passed to their parameters.</li>
+<li><strong>Everywhere a call is.</strong> Free functions, methods, static methods,
+constructors (a <code>this.x</code> parameter is named <code>x</code>), extension methods, enum
+methods, generic functions, and calls through a <a href="#traits-and-extensions">trait</a>
+value, which use the trait’s parameter names.</li>
+<li><strong>Overloads.</strong> A member of an <a href="#overloading-1">overload set</a> without a
+parameter of a given name is not a candidate, so names can pick between
+overloads.</li>
+<li><strong>Not through function values.</strong> A <a href="#function-types-and-closures">function type</a>
+carries no parameter names, so a call through a function value is
+positional only: <code>cannot name arguments in a call through a function value of type '(int, int) =&gt; int'</code>.</li>
+<li><strong>Not to <code>extern</code> functions.</strong> Their parameter names are copied from C
+headers and stay free to change: <code>cannot name arguments in a call to extern function 'CreateFileW'</code>. Wrap the C function in a Pepper function to give
+it named arguments.</li>
+</ul>
+<h3 id="other-names-for-a-parameter"><a class="header" href="#other-names-for-a-parameter">Other names for a parameter</a></h3>
+<p>Two attributes on a function give its parameters more names. In both, the
+declared parameter’s name comes second:</p>
+<ul>
+<li><code>[Alias("size", "count")]</code> lets a call name parameter <code>count</code> as <code>size</code>
+too, permanently.</li>
+<li><code>[Rename("n", "count")]</code> keeps the former name <code>n</code> working after the
+parameter was renamed to <code>count</code>. Each use warns, like a
+<a href="#deprecation">deprecated</a> declaration, with a fix that renames it.</li>
+</ul>
+<p>The first name must not already be a parameter or another name, and the
+second must be a parameter of the function. A call that names one parameter
+by two of its names gets <code>argument for 'count' given twice</code>.</p>
 <h2 id="returning-several-values"><a class="header" href="#returning-several-values">Returning several values</a></h2>
 <p>A function returns several values as a <a href="#tuples-and-multiple-return-values">tuple</a>, and the caller
 destructures it:</p>
@@ -2968,7 +3058,9 @@ an anonymous function written where it is used.</p>
 </table>
 </div>
 <p><code>=&gt;</code> is right-associative, so the last row is a function that returns a
-function. A function type can be used anywhere a type can: for variables,
+function. A function type carries no parameter names, so a call through a
+function value passes its arguments by position:
+<a href="#named-arguments">named arguments</a> are an error there. A function type can be used anywhere a type can: for variables,
 parameters, return types, struct fields, generic arguments such as
 <code>Array&lt;(int) =&gt; int&gt;</code>, and <a href="#type-aliases">type aliases</a>.</p>
 <p>Written with <code>shared</code> in front, as in <code>shared () =&gt; void</code>, a function type is
@@ -3537,8 +3629,9 @@ set too, and so are its static methods, its operators, its
 <ul>
 <li>
 <p><strong>The parameter lists must differ</strong> in the number or the types of the
-parameters. Parameter names and default values do not count, and neither
-does the return type:</p>
+parameters. Parameter names and default values do not count (though
+<a href="#how-a-call-picks-a-member">named arguments</a> can pick between members
+that differ in types), and neither does the return type:</p>
 <pre><code class="language-text">main.pep:2:1: error: functions that differ only in their return type cannot be overloaded
     2 | f(x: int): long { return 2; }
       | ^
@@ -3689,6 +3782,14 @@ main.pep:2:1: note: candidate function not viable: requires 2 arguments, but 1 w
     2 | f(x: int, y: int): int { return 2; }
       | ^
 </code></pre>
+<p>A call with <a href="#named-arguments">named arguments</a> considers only
+the members that have a parameter of each name it uses and get every
+required parameter, and binds the names before ranking the arguments as
+above. So two overloads whose later parameters have different names can be
+told apart by naming one (<code>pick(1, b = 2)</code> against <code>pick(a: int, b: int = 0)</code>
+and <code>pick(a: String, c: int = 0)</code>). The members it considers must put each
+named argument at the same position; when they do not, the call is an error:
+<code>named arguments bind differently in the overloads of 'f'</code>.</p>
 <p>The member picked decides the call’s type, so <code>var x = half(9.0);</code> is a
 <code>double</code> when <code>half(x: double): double</code> is picked. In the editor, hovering
 the call shows the member it picked and how many others the set has, and
@@ -11680,7 +11781,7 @@ or reads the wrong bits when the program runs.</p>
 </div>
 <p>Pepper’s <code>long</code> is always 64 bits. C’s <code>long</code> is 64 bits on Linux and macOS but
 32 bits on Windows, so a C function that takes <code>long</code> needs a different
-prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[LinkName]</code></a>
+prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[Link(name = ...)]</code></a>
 below for an example).</p>
 <p>Some things to know about <code>extern</code> declarations:</p>
 <ul>
@@ -12013,39 +12114,62 @@ for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> g
 operating system a destructor for its <code>T</code>. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.</p>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
-<p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
-the declared one. Pepper code calls the extern by its declared name, and the
-object file refers to <code>symbol</code>. Use it to give a C function a clearer name, to
-avoid clashing with a Pepper name, or, together with
+<p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
+from the declared one. Pepper code calls the extern by its declared name, and
+the object file refers to <code>symbol</code>. Use it to give a C function a clearer
+name, to avoid clashing with a Pepper name, or, together with
 <a href="#platform-selection"><code>[Target]</code></a>, to bind one Pepper name to a different
-symbol on each platform:</p>
-<pre><code class="language-pepper"># [LinkName] binds a Pepper name to a C symbol with a different name.
+symbol on each platform. <code>lib</code> names the library that defines the symbol in
+the same attribute, as <a href="#linking-a-library-from-the-source-link"><code>[Link("library")]</code></a>
+does on its own:</p>
+<pre><code class="language-pepper"># [Link(name = "symbol")] binds a Pepper name to a C symbol with a different name.
 
 # llabs takes a 64-bit long long on every platform.
-[LinkName("llabs")] extern long absolute(long value);
+[Link(name = "llabs")]
+extern long absolute(long value);
 
 # C's long is 64 bits on Linux and macOS but 32 bits on Windows, so
 # the 64-bit labs is only right away from Windows.
-[Target(OS(Windows))] [LinkName("llabs")] extern long abs64(long value);
-[Target(!OS(Windows))] [LinkName("labs")] extern long abs64(long value);
+[Target(OS(Windows))]
+[Link(name = "llabs")]
+extern long abs64(long value);
+[Target(!OS(Windows))]
+[Link(name = "labs")]
+extern long abs64(long value);
+
+# `lib` names the library that defines the symbol, as [Link("m")] does.
+[Target(OS(Linux))]
+[Link(lib = "m", name = "cbrt")]
+extern double cube_root(double value);
 
 main(): int {
     assert(absolute(-7) == 7, "absolute calls llabs");
     assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
+    [Target(OS(Linux))]
+    {
+        var root = cube_root(27.0);
+        assert(root &gt; 2.999 &amp;&amp; root &lt; 3.001, "cube_root calls cbrt from libm");
+    }
     return 0;
 }
 </code></pre>
 <p>Real uses of the per-platform form include macOS on Intel, where the
 64-bit-inode version of <code>stat</code> is named <code>stat$INODE64</code>:</p>
-<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))] [LinkName("stat$INODE64")] extern int stat(char* path, void* buf);
-[Target(OS(Mac) &amp;&amp; Arch(aarch64))] extern int stat(char* path, void* buf);
+<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))]
+[Link(name = "stat$INODE64")]
+extern int stat(char* path, void* buf);
+[Target(OS(Mac) &amp;&amp; Arch(aarch64))]
+extern int stat(char* path, void* buf);
 </code></pre>
-<p><code>LinkName</code> takes exactly one non-empty string, and an extern may carry at most
-one. Anything else is an error, such as:</p>
-<pre><code class="language-text">main.pep:1:34: error: LinkName on extern 'pep_abs' takes exactly one string: [LinkName("sym")]
-    1 | [LinkName("a", "b")] extern long pep_abs(long v);
-      |                                  ^~~~~~~
+<p><code>[Link]</code> takes the library as its one positional argument or as <code>lib</code>, and
+the symbol as <code>name</code>; each is a non-empty string, and an extern names at
+most one symbol. Anything else is an error, such as:</p>
+<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+    1 | [Link(symbol = "labs")] extern long pep_abs(long v);
+      |       ^~~~~~
 </code></pre>
+<p>The earlier <code>[LinkName("symbol")]</code> was removed; it is an error that suggests
+the <code>[Link(name = "symbol")]</code> that replaces it.</p>
 <h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
 <p>A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach
@@ -12243,8 +12367,8 @@ libraries itself, so you do not need a Developer Command Prompt.</li>
 <p>Anything else must be linked explicitly. On Linux, that includes the math
 library (<code>m</code>) for functions such as <code>pow</code>, and <code>pthread</code> on older systems.</p>
 <h2 id="linking-a-library-from-the-source-link"><a class="header" href="#linking-a-library-from-the-source-link">Linking a library from the source: <code>[Link]</code></a></h2>
-<p>Attach <code>[Link("name")]</code> to an <code>extern</code> declaration to link the library that
-defines it. The compiler passes <code>-lname</code> to the linker, just like <code>-l</code> on the
+<p>Attach <code>[Link("name")]</code> (or <code>[Link(lib = "name")]</code>) to an <code>extern</code>
+declaration to link the library that defines it. The compiler passes <code>-lname</code> to the linker, just like <code>-l</code> on the
 command line. Name the library the way the linker does: <code>m</code> for <code>libm</code>,
 <code>gdi32</code> for <code>gdi32.lib</code>.</p>
 <pre><code class="language-pepper"># [Link("name")] on an extern links the library that defines it.
@@ -12278,6 +12402,9 @@ main(): int {
 <code>[Target]</code>, as above, links a library only on the platforms that need it.</li>
 <li>Each library is linked once, however many externs name it.</li>
 <li>The library is linked even when nothing calls the extern.</li>
+<li>The same attribute can also bind the extern to a differently named C
+symbol: <code>[Link(lib = "m", name = "cbrt")]</code> (see
+<a href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a>).</li>
 </ul>
 <p>Putting <code>[Link]</code> in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
@@ -12308,8 +12435,8 @@ so a function <code>parse</code> appears as <code>_Pparse</code> and <code>Array
 library function of the same name, such as <code>exit</code>. <code>extern</code> functions keep
 their C names.</p>
 <p>To fix it, check the spelling of the extern against the C function (or use
-<a href="#binding-to-a-different-symbol-name"><code>[LinkName]</code></a> when the names
-differ), then add the library that defines it with <code>[Link]</code> or <code>-l</code>.</p>
+<a href="#binding-to-a-different-symbol-name"><code>[Link(name = "symbol")]</code></a>
+when the names differ), then add the library that defines it with <code>[Link]</code> or <code>-l</code>.</p>
 <p>If the compiler cannot run <code>clang</code> at all, the error says
 <code>Link failed: cannot run clang</code>. Install clang (on Linux, from your package
 manager) or the Xcode Command Line Tools on macOS.</p>
@@ -12452,6 +12579,8 @@ the code it replaces:</p>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
 <tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>
+<tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
+<tr><td>A parameter’s former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="#other-names-for-a-parameter">named arguments</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -12692,6 +12821,9 @@ Otherwise leave it out and explain the change in the message.</p>
 <code>extend</code> block)</li>
 </ul>
 <p>A doc comment goes above the attribute, as it does for any attribute.</p>
+<p>To rename a parameter while calls still <a href="#named-arguments">name the old
+one</a>, put <code>[Rename("old", "new")]</code> on the
+function instead (see <a href="#other-names-for-a-parameter">Other names for a parameter</a>).</p>
 <h2 id="which-uses-warn"><a class="header" href="#which-uses-warn">Which uses warn</a></h2>
 <p>Every use of the declaration warns, at the name you wrote:</p>
 <ul>

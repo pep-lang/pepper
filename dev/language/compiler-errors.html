@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -308,6 +308,8 @@ the code it replaces:</p>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
 <tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>
+<tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
+<tr><td>A parameter’s former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="functions.html#other-names-for-a-parameter">named arguments</a>)</td></tr>
 </tbody>
 </table>
 </div>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -345,9 +345,96 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Defaults work the same way for methods and constructors. Pepper has no named
-arguments: to give a later parameter a value, you pass every parameter before
-it.</p>
+<p>Defaults work the same way for methods and constructors. To give a later
+parameter a value without passing every parameter before it, name it (see
+<a href="#named-arguments">Named arguments</a>).</p>
+<h2 id="named-arguments"><a class="header" href="#named-arguments">Named arguments</a></h2>
+<p>A call can name its arguments, <code>name = value</code>, so it reads clearly and can
+set one defaulted parameter without passing the ones before it:</p>
+<pre><code class="language-pepper"># Named arguments: `name = value` after the positional arguments.
+window(title: String, width: int = 800, height: int = 600, resizable: bool = true): String {
+    return $"{title} {width}x{height} resizable={resizable}";
+}
+
+struct Point {
+    var x: int;
+    var y: int;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    moved(dx: int = 0, dy: int = 0): Point {
+        return Point(x + dx, y + dy);
+    }
+}
+
+# 'size = ...' works as well as 'count = ...'; 'n = ...' still works, with a
+# deprecation warning.
+[Alias("size", "count")]
+[Rename("n", "count")]
+repeat(text: String, count: int = 1): String {
+    var result = "";
+    for (var i in 0..count) {
+        result = result + text;
+    }
+    return result;
+}
+
+main(): int {
+    assert(window("Editor") == "Editor 800x600 resizable=true", "all defaults");
+    # Skip width and height.
+    assert(window("Editor", resizable = false) == "Editor 800x600 resizable=false", "skip");
+    # Named arguments in any order.
+    assert(window("Editor", height = 400, width = 1200) == "Editor 1200x400 resizable=true", "any order");
+    # Every argument may be named.
+    assert(window(title = "Editor", width = 1024) == "Editor 1024x600 resizable=true", "all named");
+
+    # Constructors and methods take them too.
+    var p = Point(y = 5);
+    assert(p.moved(dy = 2).y == 7, "method");
+
+    assert(repeat("ab", size = 3) == "ababab", "alias");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Positional first.</strong> Positional arguments come first and match parameters
+from the left; named arguments follow, in any order. A positional argument
+after a named one is an error: <code>positional argument cannot follow a named argument</code>.</li>
+<li><strong>Each parameter once.</strong> Naming a parameter that already has an argument is
+an error: <code>argument for 'width' given twice</code>.</li>
+<li><strong>Every required parameter.</strong> A parameter without a default must get an
+argument: <code>missing argument for parameter 'title' in call to 'window'</code>. A
+name the function does not have is an error, with a suggestion when one is
+close: <code>no parameter named 'widht' in 'window'; did you mean 'width'?</code>.</li>
+<li><strong>Order of evaluation.</strong> Arguments are evaluated in the order written, then
+passed to their parameters.</li>
+<li><strong>Everywhere a call is.</strong> Free functions, methods, static methods,
+constructors (a <code>this.x</code> parameter is named <code>x</code>), extension methods, enum
+methods, generic functions, and calls through a <a href="traits-and-extensions.html">trait</a>
+value, which use the trait’s parameter names.</li>
+<li><strong>Overloads.</strong> A member of an <a href="overloading.html">overload set</a> without a
+parameter of a given name is not a candidate, so names can pick between
+overloads.</li>
+<li><strong>Not through function values.</strong> A <a href="function-types.html">function type</a>
+carries no parameter names, so a call through a function value is
+positional only: <code>cannot name arguments in a call through a function value of type '(int, int) =&gt; int'</code>.</li>
+<li><strong>Not to <code>extern</code> functions.</strong> Their parameter names are copied from C
+headers and stay free to change: <code>cannot name arguments in a call to extern function 'CreateFileW'</code>. Wrap the C function in a Pepper function to give
+it named arguments.</li>
+</ul>
+<h3 id="other-names-for-a-parameter"><a class="header" href="#other-names-for-a-parameter">Other names for a parameter</a></h3>
+<p>Two attributes on a function give its parameters more names. In both, the
+declared parameter’s name comes second:</p>
+<ul>
+<li><code>[Alias("size", "count")]</code> lets a call name parameter <code>count</code> as <code>size</code>
+too, permanently.</li>
+<li><code>[Rename("n", "count")]</code> keeps the former name <code>n</code> working after the
+parameter was renamed to <code>count</code>. Each use warns, like a
+<a href="deprecation.html">deprecated</a> declaration, with a fix that renames it.</li>
+</ul>
+<p>The first name must not already be a parameter or another name, and the
+second must be a parameter of the function. A call that names one parameter
+by two of its names gets <code>argument for 'count' given twice</code>.</p>
 <h2 id="returning-several-values"><a class="header" href="#returning-several-values">Returning several values</a></h2>
 <p>A function returns several values as a <a href="tuples.html">tuple</a>, and the caller
 destructures it:</p>

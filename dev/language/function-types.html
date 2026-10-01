@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
+            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -203,7 +203,9 @@ an anonymous function written where it is used.</p>
 </table>
 </div>
 <p><code>=&gt;</code> is right-associative, so the last row is a function that returns a
-function. A function type can be used anywhere a type can: for variables,
+function. A function type carries no parameter names, so a call through a
+function value passes its arguments by position:
+<a href="functions.html#named-arguments">named arguments</a> are an error there. A function type can be used anywhere a type can: for variables,
 parameters, return types, struct fields, generic arguments such as
 <code>Array&lt;(int) =&gt; int&gt;</code>, and <a href="type-aliases.html">type aliases</a>.</p>
 <p>Written with <code>shared</code> in front, as in <code>shared () =&gt; void</code>, a function type is
