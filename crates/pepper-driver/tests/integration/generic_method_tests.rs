@@ -1,6 +1,7 @@
 //! Generic calls without type arguments (`larger(3, 9)`), methods with
 //! type parameters of their own (`map<U>`), and the iterator adapters built
-//! on them (`Iterator.map`, `Iterator.filter`), with the leak census.
+//! on them (`Iterator.map`, `filter`, `enumerate`, `zip`, `to_array`), with
+//! the leak census.
 
 use crate::support::jit_census as run;
 use crate::support::compile_error;
@@ -120,6 +121,76 @@ test(): int {
 }
 "#;
     assert_eq!(run(src), (50, 0));
+}
+
+#[test]
+fn enumerate_zip_and_to_array() {
+    let src = r#"
+struct Item {
+    int v;
+    construct(this.v = 0) {}
+}
+
+test(): int {
+    var items = [Item(1), Item(2), Item(3)];
+    ulong weighted = 0;
+    for (var (i, item) in items.iterate().enumerate()) {
+        weighted += i * (item.v as ulong);          # 0 + 2 + 6
+    }
+    var signed = 0;
+    for (var (i, item) in items.iterate().enumerate<int>()) {
+        signed += i - item.v;                        # -1 - 1 - 1
+    }
+    var names = ["Ada", "Grace"];
+    var zipped = 0;
+    for (var (item, name) in items.iterate().zip(names.iterate())) {
+        zipped += item.v * (name.size() as int);     # 3 + 10, stops at the shorter
+    }
+    var big = items.iterate().filter((x) => x.v > 1).to_array();
+    var it = items.iterate();
+    var all = it.to_array();
+    if (!it.next() || it.current().v != 1) {         # to_array left it in place
+        return -1;
+    }
+    var pairs = (0..2).zip(names.iterate()).to_array();
+    return (weighted as int) * 1000 + (signed + 3) * 100 + zipped + (big.count() as int) * 10000
+        + (all.count() as int) * 100000 + (pairs[1].1.size() as int) * 1000000;
+}
+"#;
+    assert_eq!(run(src), (5_328_013, 0));
+}
+
+#[test]
+fn trait_parameter_infers_through_a_declared_conformance() {
+    let src = r#"
+struct Countdown {
+    int remaining;
+    int now;
+    construct(this.remaining = 0) {}
+    next(): bool {
+        if (remaining == 0) { return false; }
+        now = remaining;
+        remaining -= 1;
+        return true;
+    }
+    current(): int { return now; }
+}
+
+extend Countdown with Iterator<int> {}
+
+total<T>(items: Iterator<T>): T {
+    T sum = 0;
+    while (items.next()) {
+        sum += items.current();
+    }
+    return sum;
+}
+
+test(): int {
+    return total(Countdown(4));   # T = int, from 'extend Countdown with Iterator<int>'
+}
+"#;
+    assert_eq!(run(src), (10, 0));
 }
 
 #[test]

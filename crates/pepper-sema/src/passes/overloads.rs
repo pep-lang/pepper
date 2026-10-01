@@ -568,6 +568,7 @@ fn promotes(from: &str, to: &str) -> bool {
 
 impl Overloads {
     pub fn build(module: &Module) -> Self {
+        crate::passes::type_arguments::record_conformances(module);
         if !has_overloads(module) {
             return Overloads::default();
         }

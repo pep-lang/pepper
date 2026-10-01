@@ -130,27 +130,32 @@ or removing an entry stops the program at the iterator's next step.
 
 ## Adapters
 
-`Iterator<T>` has two default methods that wrap an iterator in another one.
-Each one works lazily, one element at a time as the loop asks for it:
+`Iterator<T>` has default methods that wrap an iterator in another one.
+Each works lazily, one element at a time as the loop asks for it:
 
 - `map(transform)` yields `transform(x)` for each element `x`; its element
   type is whatever `transform` returns.
 - `filter(keep)` yields only the elements for which `keep(x)` is `true`.
+- `enumerate()` yields `(index, x)` [tuples](tuples.md), counting from 0 in
+  `ulong`; `enumerate<int>()` counts in `int` instead.
+- `zip(other)` yields `(x, y)` pairs, one element from each iterator in
+  step, and stops when either runs out.
 
-Both return iterators, so they chain, and a `for` loop can use the result
-directly:
+They return iterators, so they chain, and a `for` loop can use the result
+directly; destructure a tuple to name its parts. `to_array()` runs an
+iterator to the end and collects what is left into a new `Array`:
 
 ```pepper
 {{#include ../../examples/iteration-adapters.pep}}
 ```
 
 Every type that declares `Iterator<T>` gets them: `ArrayIterator<T>` (from
-`Array.iterate()`), `StringIterator`, and your own iterators once you write
-`extend YourType with Iterator<T> {}`. The adapter holds its own copy of
+`Array.iterate()`), `StringIterator`, [ranges](#looping-over-a-range), and
+your own iterators once you write `extend YourType with Iterator<T> {}`. The adapter holds its own copy of
 the iterator it wraps (the runtime's iterators are
 [value structs](value-structs.md), boxed when they become an `Iterator<T>`),
 so a chain built from a temporary stays alive while the loop runs, and
-`it.map(f)` leaves `it` where it was. They are generic methods (see
+`it.map(f)` and `it.to_array()` leave `it` where it was. They are generic methods (see
 [Generics](generics.md#generic-methods)), so they are not callable through an
 `Iterator<T>` trait value.
 

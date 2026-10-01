@@ -148,6 +148,86 @@ gets this method.
     }
 ```
 
+#### enumerate
+
+```pepper
+enumerate<TIndex=ulong>(): EnumerateIterator<T, TIndex>
+```
+
+Returns an iterator over the elements paired with their positions:
+`(0, first)`, `(1, second)`, and so on.
+
+Lazy, like `map`. Destructure the pair in the loop to name both parts.
+The positions count in `ulong`, like `Array.count()`; name another
+integer type to count in it (`enumerate<int>()`). Every type that
+declares `Iterator<T>` gets this method.
+
+**Type parameters**
+- `TIndex` — the integer type of the positions, `ulong` by default
+
+**Returns**
+- an `EnumerateIterator<T, TIndex>` over `(index, element)` tuples
+
+**Example**
+```pepper
+    var names = ["Ada", "Grace"];
+    for (var (i, name) in names.iterate().enumerate()) {
+        print($"{i}: {name}");   # 0: Ada, then 1: Grace
+    }
+```
+
+#### zip
+
+```pepper
+zip<U>(other: Iterator<U>): ZipIterator<T, U>
+```
+
+Returns an iterator over pairs of this iterator's elements and
+`other`'s, in step: `(first, other's first)`, and so on. It stops when
+either runs out.
+
+Lazy, like `map`. Every type that declares `Iterator<T>` gets this
+method.
+
+**Type parameters**
+- `U` — the type of `other`'s elements
+
+**Parameters**
+- `other` — the iterator whose elements form the second half of each pair
+
+**Returns**
+- a `ZipIterator<T, U>` over `(element, other element)` tuples
+
+**Example**
+```pepper
+    var names = ["Ada", "Grace"];
+    var ages = [36, 45];
+    for (var (name, age) in names.iterate().zip(ages.iterate())) {
+        print($"{name} is {age}");
+    }
+```
+
+#### to_array
+
+```pepper
+to_array(): Array<T>
+```
+
+Returns a new `Array` holding the remaining elements, in order.
+
+Runs the iteration to the end. Like the adapters, it works on a copy
+of the iterator, so a value iterator (every runtime iterator is one)
+is left where it was. Every type that declares `Iterator<T>` gets this
+method.
+
+**Returns**
+- the elements, possibly none
+
+**Example**
+```pepper
+    var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+```
+
 ## MapIterator
 
 ```pepper
@@ -254,6 +334,115 @@ Returns the element the last successful `next()` moved to.
 
 **Returns**
 - the current element
+
+## EnumerateIterator
+
+```pepper
+[Value] struct EnumerateIterator<T, TIndex>
+```
+
+The iterator `Iterator.enumerate` returns: each element of the source
+iterator, paired with its position.
+
+**Type parameters**
+- `T` — the type of the source's elements
+- `TIndex` — the integer type of the positions
+
+**See also**
+- `Iterator.enumerate`
+
+### Constructor
+
+#### EnumerateIterator()
+
+```pepper
+construct(source: Iterator<T>)
+```
+
+Makes an iterator over the elements of `source`, numbered from 0.
+
+**Parameters**
+- `source` — the iterator to number
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element.
+
+**Returns**
+- true if there is a current element, false when the source is exhausted
+
+#### current
+
+```pepper
+current(): (TIndex, T)
+```
+
+Returns the element the last successful `next()` moved to, with its
+index.
+
+**Returns**
+- the current `(index, element)` pair
+
+## ZipIterator
+
+```pepper
+[Value] struct ZipIterator<T, U>
+```
+
+The iterator `Iterator.zip` returns: the elements of two iterators,
+paired in step, until either runs out.
+
+**Type parameters**
+- `T` — the type of the first iterator's elements
+- `U` — the type of the second iterator's elements
+
+**See also**
+- `Iterator.zip`
+
+### Constructor
+
+#### ZipIterator()
+
+```pepper
+construct(first: Iterator<T>, second: Iterator<U>)
+```
+
+Makes an iterator over the elements of `first` and `second`, paired.
+
+**Parameters**
+- `first` — the iterator giving the first half of each pair
+- `second` — the iterator giving the second half of each pair
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances both iterators. `second` is not advanced once `first` has
+run out.
+
+**Returns**
+- true if both have a current element, false when either is exhausted
+
+#### current
+
+```pepper
+current(): (T, U)
+```
+
+Returns the pair the last successful `next()` moved to.
+
+**Returns**
+- the current `(first element, second element)` pair
 
 ## Iterable
 

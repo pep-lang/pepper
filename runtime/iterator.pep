@@ -111,6 +111,65 @@ export trait Iterator<T> {
     filter(keep: (T) => bool): FilterIterator<T> {
         return FilterIterator<T>(this, keep);
     }
+
+    ## Returns an iterator over the elements paired with their positions:
+    ## `(0, first)`, `(1, second)`, and so on.
+    ##
+    ## Lazy, like `map`. Destructure the pair in the loop to name both parts.
+    ## The positions count in `ulong`, like `Array.count()`; name another
+    ## integer type to count in it (`enumerate<int>()`). Every type that
+    ## declares `Iterator<T>` gets this method.
+    ##
+    ## @typeParam TIndex the integer type of the positions, `ulong` by default
+    ## @returns an `EnumerateIterator<T, TIndex>` over `(index, element)` tuples
+    ## @example
+    ##     var names = ["Ada", "Grace"];
+    ##     for (var (i, name) in names.iterate().enumerate()) {
+    ##         print($"{i}: {name}");   # 0: Ada, then 1: Grace
+    ##     }
+    enumerate<TIndex=ulong>(): EnumerateIterator<T, TIndex> {
+        return EnumerateIterator<T, TIndex>(this);
+    }
+
+    ## Returns an iterator over pairs of this iterator's elements and
+    ## `other`'s, in step: `(first, other's first)`, and so on. It stops when
+    ## either runs out.
+    ##
+    ## Lazy, like `map`. Every type that declares `Iterator<T>` gets this
+    ## method.
+    ##
+    ## @typeParam U the type of `other`'s elements
+    ## @param other the iterator whose elements form the second half of each pair
+    ## @returns a `ZipIterator<T, U>` over `(element, other element)` tuples
+    ## @example
+    ##     var names = ["Ada", "Grace"];
+    ##     var ages = [36, 45];
+    ##     for (var (name, age) in names.iterate().zip(ages.iterate())) {
+    ##         print($"{name} is {age}");
+    ##     }
+    zip<U>(other: Iterator<U>): ZipIterator<T, U> {
+        return ZipIterator<T, U>(this, other);
+    }
+
+    ## Returns a new `Array` holding the remaining elements, in order.
+    ##
+    ## Runs the iteration to the end. Like the adapters, it works on a copy
+    ## of the iterator, so a value iterator (every runtime iterator is one)
+    ## is left where it was. Every type that declares `Iterator<T>` gets this
+    ## method.
+    ##
+    ## @returns the elements, possibly none
+    ## @example
+    ##     var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+    to_array(): Array<T> {
+        # A copy: a value iterator is left where it was.
+        var source = this;
+        var result = Array<T>();
+        while (source.next()) {
+            result.append(source.current());
+        }
+        return result;
+    }
 }
 
 ## The iterator `Iterator.map` returns: each element of the source iterator,
@@ -200,6 +259,88 @@ export struct FilterIterator<T> {
 }
 
 extend FilterIterator<T> with Iterator<T> {}
+
+## The iterator `Iterator.enumerate` returns: each element of the source
+## iterator, paired with its position.
+##
+## @typeParam T the type of the source's elements
+## @typeParam TIndex the integer type of the positions
+## @see Iterator.enumerate
+[Value]
+export struct EnumerateIterator<T, TIndex> {
+    ## The iterator whose elements are numbered.
+    Iterator<T> _source;
+    ## How many elements `next()` has moved past; the current element's index plus one.
+    TIndex _count;
+
+    ## Makes an iterator over the elements of `source`, numbered from 0.
+    ##
+    ## @param source the iterator to number
+    construct(source: Iterator<T>) {
+        _source = source;
+    }
+
+    ## Advances to the next element.
+    ##
+    ## @returns true if there is a current element, false when the source is exhausted
+    next(): bool {
+        if (_source.next()) {
+            _count += 1;
+            return true;
+        }
+        return false;
+    }
+
+    ## Returns the element the last successful `next()` moved to, with its
+    ## index.
+    ##
+    ## @returns the current `(index, element)` pair
+    current(): (TIndex, T) {
+        return (_count - 1, _source.current());
+    }
+}
+
+extend EnumerateIterator<T, TIndex> with Iterator<(TIndex, T)> {}
+
+## The iterator `Iterator.zip` returns: the elements of two iterators,
+## paired in step, until either runs out.
+##
+## @typeParam T the type of the first iterator's elements
+## @typeParam U the type of the second iterator's elements
+## @see Iterator.zip
+[Value]
+export struct ZipIterator<T, U> {
+    ## The iterator giving the first half of each pair.
+    Iterator<T> _first;
+    ## The iterator giving the second half of each pair.
+    Iterator<U> _second;
+
+    ## Makes an iterator over the elements of `first` and `second`, paired.
+    ##
+    ## @param first the iterator giving the first half of each pair
+    ## @param second the iterator giving the second half of each pair
+    construct(first: Iterator<T>, second: Iterator<U>) {
+        _first = first;
+        _second = second;
+    }
+
+    ## Advances both iterators. `second` is not advanced once `first` has
+    ## run out.
+    ##
+    ## @returns true if both have a current element, false when either is exhausted
+    next(): bool {
+        return _first.next() && _second.next();
+    }
+
+    ## Returns the pair the last successful `next()` moved to.
+    ##
+    ## @returns the current `(first element, second element)` pair
+    current(): (T, U) {
+        return (_first.current(), _second.current());
+    }
+}
+
+extend ZipIterator<T, U> with Iterator<(T, U)> {}
 
 ## Something that hands out an `Iterator<T>` over its elements, such as
 ## `Array<T>` and `String` (which yields one code point at a time, as a

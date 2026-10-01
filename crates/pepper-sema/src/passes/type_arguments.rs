@@ -17,6 +17,55 @@ use crate::model::{Diagnostic, Expression, FunctionDef, GenericParam, Module};
 use crate::type_name::TypeName;
 use std::collections::HashMap;
 
+thread_local! {
+    /// The traits each struct declares (`extend S with Trait<X>`), by the
+    /// struct's spelled type (`ArrayIterator<int>`) and, for a generic base,
+    /// by its name with its parameters (`ArrayIterator`, `[T]`), so a
+    /// parameter typed `Iterator<U>` can bind `U` from an `ArrayIterator<int>`
+    /// argument. Set by [`record_conformances`] at the start of each pass that
+    /// infers.
+    static CONFORMANCES: std::cell::RefCell<HashMap<String, (Vec<String>, Vec<TypeName>)>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// Record the trait conformances of `module`'s structs for inference to see
+/// through (see [`CONFORMANCES`]).
+pub fn record_conformances(module: &Module) {
+    let mut table = HashMap::new();
+    for st in module.structs.iter().filter(|st| !st.traits.is_empty()) {
+        if st.ty.is_generic() && st.name == st.ty.name {
+            let params = st.generic_params.iter().map(|p| p.name.clone()).collect();
+            table.insert(st.name.clone(), (params, st.traits.clone()));
+        } else {
+            table.insert(st.ty.to_string(), (vec![], st.traits.clone()));
+        }
+    }
+    CONFORMANCES.with(|c| *c.borrow_mut() = table);
+}
+
+/// The traits `actual` declares, with its type arguments substituted.
+fn conformances_of(actual: &TypeName) -> Vec<TypeName> {
+    CONFORMANCES.with(|c| {
+        let table = c.borrow();
+        if let Some((_, traits)) = table.get(&actual.to_string()) {
+            return traits.clone();
+        }
+        let Some((params, traits)) = table.get(&actual.name) else { return vec![] };
+        if params.len() != actual.sub_types.len() {
+            return vec![];
+        }
+        let map: Vec<(String, TypeName)> = params.iter().cloned().zip(actual.sub_types.iter().cloned()).collect();
+        traits
+            .iter()
+            .map(|t| {
+                let mut t = t.clone();
+                crate::type_name::replace_map(&mut t, &map);
+                t
+            })
+            .collect()
+    })
+}
+
 /// A generic function's declaration, as the inference needs it.
 #[derive(Clone, Debug)]
 pub struct GenericSignature {
@@ -89,6 +138,20 @@ impl GenericSignature {
         if pattern.name == actual.name && pattern.sub_types.len() == actual.sub_types.len() {
             for (p, a) in pattern.sub_types.iter().zip(&actual.sub_types) {
                 self.unify(p, a, bindings);
+            }
+            return;
+        }
+        // A trait parameter (`other: Iterator<U>`) takes its arguments from
+        // the trait the argument's struct declares (`ArrayIterator<int>` is an
+        // `Iterator<int>`), as the conversion to the trait value will.
+        if !pattern.sub_types.is_empty() {
+            for conformance in conformances_of(actual) {
+                if conformance.name == pattern.name && conformance.sub_types.len() == pattern.sub_types.len() {
+                    for (p, a) in pattern.sub_types.iter().zip(&conformance.sub_types) {
+                        self.unify(p, a, bindings);
+                    }
+                    return;
+                }
             }
         }
     }

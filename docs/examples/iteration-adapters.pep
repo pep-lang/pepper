@@ -25,5 +25,23 @@ main(): int {
         kept += 1;
     }
     assert(kept == 3, "h, e, o");
+
+    # enumerate pairs each element with its position, and zip pairs two
+    # iterators in step; destructure the tuple to name both parts.
+    var ranked = "";
+    for (var (i, person) in people.iterate().enumerate()) {
+        ranked += $"{i}:{person.name} ";
+    }
+    assert(ranked == "0:Ada 1:Bo 2:Cyd ", "numbered from 0");
+    var seats = ["window", "aisle"];
+    var seated = 0;
+    for (var (person, seat) in people.iterate().zip(seats.iterate())) {
+        seated += 1;   # Cyd gets no seat: zip stops at the shorter
+    }
+    assert(seated == 2, "two pairs");
+
+    # to_array collects what an iterator yields.
+    var ages = people.iterate().map((p) => p.age).to_array();
+    assert(ages.count() == 3 && ages[2] == 40, "every age");
     return 0;
 }

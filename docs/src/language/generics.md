@@ -57,6 +57,11 @@ main.pep:1:1: note: declared here
       | ^~~~
 ```
 
+A parameter whose type is a trait takes its type arguments from the trait the
+argument's type declares: given `total<T>(items: Iterator<T>)`, the call
+`total(Countdown(4))` infers `T = int` from `extend Countdown with
+Iterator<int>`.
+
 Inference works through closures in both directions. In
 `transform(words, (w) => w.size())`, where `transform<T, U>(items: Array<T>,
 f: (T) => U)`, `words` gives `T`, which types the closure's parameter `w`, and
@@ -84,8 +89,8 @@ a function's, or written after the method name:
   `b.map<long>(f)`. With a space, `a.b < c` is a comparison.
 - A generic method cannot be called through a [trait value](traits-and-extensions.md#traits-as-types),
   since each of its uses is compiled separately. Call it on the concrete type.
-- The iterator adapters `map` and `filter` are generic default methods of
-  `Iterator<T>`; see [Iteration](iteration.md#adapters).
+- The iterator adapters `map`, `filter`, `enumerate` and `zip` are generic
+  default methods of `Iterator<T>`; see [Iteration](iteration.md#adapters).
 
 ## Default type arguments
 

@@ -599,6 +599,7 @@ fn pointee(ty: &TypeName) -> Option<TypeName> {
 }
 
 pub fn resolve_implicit_types(module: &mut Module) {
+    crate::passes::type_arguments::record_conformances(module);
     // Inferring a return type can type the callers' locals, so repeat while
     // return types change (bounded: each run only replaces `auto`).
     // Closure types (see `closures::sync_closures`) and inferred types feed
