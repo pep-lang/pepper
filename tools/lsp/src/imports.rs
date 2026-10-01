@@ -21,6 +21,11 @@ fn contains(span: Span, offset: usize) -> bool {
     span.start <= offset && offset < span.end
 }
 
+/// Whether a file of the program declares `name` at the top level.
+pub fn declares(program: &Program, name: &str) -> bool {
+    declaration(program, name).is_some()
+}
+
 /// The top-level declaration `name` denotes, and the program file declaring
 /// it. The merged program keeps the first definition of a name, so the first
 /// file declaring it wins.
@@ -97,7 +102,15 @@ pub fn in_expression(
             {
                 return Some((id.clone(), target));
             }
-            Some((id.clone(), linked(program, *span)?))
+            if let Some(target) = linked(program, *span) {
+                return Some((id.clone(), target));
+            }
+            // A name another file of the program declares (the runtime's
+            // private helpers are visible to the runtime's files).
+            if is_local(id) || doc.declarations.iter().any(|d| d.name() == id.as_str()) {
+                return None;
+            }
+            Some((id.clone(), declaration(program, id)?))
         }
         // Only a qualifier's member: `p.x` on an imported value `p` is a
         // struct member, recorded under the same span start as `p`.
@@ -126,10 +139,21 @@ pub fn in_type(program: &Program, doc: &ast::Module, offset: usize) -> Option<(S
     Some((base.to_string(), linked(program, ty.span)?))
 }
 
+/// The type name at `offset` and the declaration it names: through an
+/// import ([`in_type`]), or a type this file or the runtime declares.
+pub fn named_type(program: &Program, doc: &ast::Module, offset: usize) -> Option<(String, Target)> {
+    in_type(program, doc, offset).or_else(|| {
+        let ty = type_at(doc, offset)?;
+        let base = ty.name.trim_end_matches(['*', '[', ']']);
+        let name = base.rsplit('.').next().unwrap_or(base);
+        Some((name.to_string(), declaration(program, name)?))
+    })
+}
+
 // ── Type names at an offset ───────────────────────────────────────────────────
 
 /// The innermost type name written at `offset` anywhere in `module`.
-fn type_at(module: &ast::Module, offset: usize) -> Option<&ast::TypeName> {
+pub fn type_at(module: &ast::Module, offset: usize) -> Option<&ast::TypeName> {
     module.declarations.iter().find_map(|d| in_declaration(d, offset))
 }
 

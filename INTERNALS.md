@@ -1368,7 +1368,20 @@ diagnostics"). The mechanics:
   executable's directory, unless `PEPPER_RUNTIME` is set. In `Lenient`
   mode a missing runtime is not an error.
 - Tests: `tools/lsp/src/tests.rs` builds a module tree in a temp directory
-  and asserts hover and definition results. `tools/lsp/smoke-test.mjs`
+  and asserts hover and definition results. `tools/lsp/src/sweep.rs` is the
+  resolution sweep: it opens real files as the editor would and asks for
+  the hover and definition of every name. `clean_files_resolve` holds a list
+  of files where all of them resolve; the ignored `resolution_sweep` covers
+  the runtime, `docs/examples` and `tests` and writes
+  `target/resolution-sweep.txt`, one line per name that does not resolve.
+  A file whose every name resolves belongs in the clean list.
+- Declarations answer too: hovering or going to the definition of a name
+  where it is declared (`declared_at`: top-level declarations, members,
+  enum cases, locals, parameters of any signature, generic parameters)
+  shows or goes to itself; a type name anywhere goes to its declaration in
+  any file (`imports::named_type`); a call of a function another file
+  declares goes there (`imports::in_expression`); locals inside closures
+  include the closures' parameters (`closure_in_block`). `tools/lsp/smoke-test.mjs`
   exercises raw JSON-RPC.
 
 **`tools/vscode-pepper`**: `src/extension.js` launches the server. It runs

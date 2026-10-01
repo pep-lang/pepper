@@ -10,6 +10,8 @@
 mod imports;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod sweep;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -285,6 +287,14 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                 {
                     out.push(Symbol { name: v.name.clone(), name_span: v.name_span, ty: variable_type(v) });
                 }
+                ast::Statement::Destructure(d) => {
+                    let mut names = vec![];
+                    push_pattern(&d.bindings, &mut names);
+                    out.extend(names.into_iter().filter(|b| b.name_span.start <= offset && offset <= b.name_span.end));
+                }
+                ast::Statement::For(f) if f.binding.name_span.start <= offset && offset <= f.binding.name_span.end => {
+                    out.push(Symbol { name: f.binding.name.clone(), name_span: f.binding.name_span, ty: variable_type(&f.binding) });
+                }
                 ast::Statement::Block(b) => collect_locals_upto(b, offset, out),
                 ast::Statement::Branch(br) => {
                     if br.if_block.span.start <= offset && offset < br.if_block.span.end {
@@ -331,11 +341,20 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                     }
                 }
                 ast::Statement::Match(m) => {
-                    let arms = m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b));
-                    for body in arms {
-                        if body.span.start <= offset && offset < body.span.end {
-                            collect_locals_upto(body, offset, out);
+                    for arm in &m.arms {
+                        if arm.body.span.start <= offset && offset < arm.body.span.end {
+                            // The names the arm's patterns bind.
+                            for (name, span) in arm.patterns.iter().flat_map(|p| p.bound_names()) {
+                                out.push(Symbol { name, name_span: span, ty: String::new() });
+                            }
+                            collect_locals_upto(&arm.body, offset, out);
                         }
+                    }
+                    if let Some((_, body)) = &m.else_arm
+                        && body.span.start <= offset
+                        && offset < body.span.end
+                    {
+                        collect_locals_upto(body, offset, out);
                     }
                 }
                 _ => {}
@@ -367,10 +386,19 @@ fn function_at(module: &ast::Module, offset: usize) -> Option<(&ast::FunctionDec
     None
 }
 
-/// The function body containing `offset`, if any, plus the enclosing struct.
+/// The function body containing `offset`, if any, plus the enclosing struct:
+/// a function's, method's or constructor's, or a destructor.
 fn body_at(module: &ast::Module, offset: usize) -> Option<(&ast::Block, Option<&ast::StructDecl>)> {
-    let (f, s) = function_at(module, offset)?;
-    Some((f.body.as_ref()?, s))
+    if let Some((f, s)) = function_at(module, offset) {
+        return Some((f.body.as_ref()?, s));
+    }
+    module.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Struct(s) => {
+            let d = s.destructor.as_ref()?;
+            (d.span.start <= offset && offset < d.span.end).then_some((d, Some(s)))
+        }
+        _ => None,
+    })
 }
 
 /// The name of the type the extension around `offset` extends.
@@ -381,10 +409,145 @@ fn extended_at(module: &ast::Module, offset: usize) -> Option<String> {
     })
 }
 
+/// The declaration whose name is at `offset`, and the struct, trait or
+/// extended type it is a member of: a top-level declaration, a member
+/// (field, method, enum case), or a local or parameter.
+fn declared_at(module: &ast::Module, offset: usize) -> Option<(Symbol, Option<String>)> {
+    let at = |s: &Symbol| s.name_span.start <= offset && offset <= s.name_span.end;
+    let methods = |owner: &str, methods: &[ast::FunctionDecl]| {
+        let found = methods.iter().find(|m| m.name_span.start <= offset && offset <= m.name_span.end)?;
+        let symbol = Symbol { name: found.name.clone(), name_span: found.name_span, ty: function_signature(found) };
+        Some((symbol, Some(owner.to_string())))
+    };
+    collect_globals(module)
+        .into_iter()
+        .find(at)
+        .map(|s| (s, None))
+        .or_else(|| {
+            module.declarations.iter().find_map(|d| match d {
+                ast::Declaration::Struct(s) => {
+                    collect_struct_members(s).into_iter().find(at).map(|m| (m, Some(s.name.clone())))
+                }
+                ast::Declaration::Trait(t) => methods(&t.name, &t.methods),
+                ast::Declaration::Extend(e) => methods(&e.target.name, &e.methods),
+                _ => None,
+            })
+        })
+        .or_else(|| scope_locals(module, offset).into_iter().find(at).map(|s| (s, None)))
+        .or_else(|| parameter_at(module, offset).map(|s| (s, None)))
+        .or_else(|| generic_param_at(module, offset, |p| p.name_span.start <= offset && offset <= p.name_span.end))
+}
+
+/// The parameter whose name is at `offset` in any function's signature,
+/// bodiless ones included (`extern`, a trait's methods).
+fn parameter_at(module: &ast::Module, offset: usize) -> Option<Symbol> {
+    let functions = module.declarations.iter().flat_map(|d| -> Box<dyn Iterator<Item = &ast::FunctionDecl>> {
+        match d {
+            ast::Declaration::Function(f) => Box::new(std::iter::once(f)),
+            ast::Declaration::Struct(s) => Box::new(s.methods.iter().chain(&s.constructors)),
+            ast::Declaration::Trait(t) => Box::new(t.methods.iter()),
+            ast::Declaration::Extend(e) => Box::new(e.methods.iter()),
+            _ => Box::new(std::iter::empty()),
+        }
+    });
+    functions.flat_map(|f| &f.parameters).find(|p| p.name_span.start <= offset && offset <= p.name_span.end).map(|p| Symbol {
+        name: p.name.clone(),
+        name_span: p.name_span,
+        ty: variable_type(p),
+    })
+}
+
+/// A generic parameter of the declaration around `offset` that `matches`,
+/// as a symbol whose type reads `type parameter`.
+fn generic_param_at(
+    module: &ast::Module,
+    offset: usize,
+    matches: impl Fn(&ast::GenericParam) -> bool,
+) -> Option<(Symbol, Option<String>)> {
+    let inside = |s: Span| s.start <= offset && offset < s.end;
+    let mut scopes: Vec<&[ast::GenericParam]> = vec![];
+    for d in &module.declarations {
+        match d {
+            ast::Declaration::Function(f) if inside(f.span) => scopes.push(&f.generic_params),
+            ast::Declaration::Struct(s) if inside(s.span) => {
+                scopes.push(&s.generic_params);
+                scopes.extend(s.methods.iter().filter(|m| inside(m.span)).map(|m| m.generic_params.as_slice()));
+            }
+            ast::Declaration::Trait(t) if inside(t.span) => scopes.push(&t.generic_params),
+            ast::Declaration::Extend(e) if inside(e.span) => {
+                scopes.extend(e.methods.iter().filter(|m| inside(m.span)).map(|m| m.generic_params.as_slice()));
+            }
+            ast::Declaration::TypeAlias(t) if inside(t.span) => scopes.push(&t.generic_params),
+            _ => {}
+        }
+    }
+    let p = scopes.into_iter().rev().flatten().find(|p| matches(p))?;
+    let mut ty = "type parameter".to_string();
+    if !p.bounds.is_empty() {
+        ty += &format!(": {}", p.bounds.iter().map(type_string).collect::<Vec<_>>().join(" & "));
+    }
+    Some((Symbol { name: p.name.clone(), name_span: p.name_span, ty }, None))
+}
+
+/// A generic parameter named where `offset` writes a type (`T` in
+/// `Array<T>`), from the declarations around it.
+fn generic_param_used(module: &ast::Module, program: Option<&Program>, offset: usize) -> Option<Symbol> {
+    let ty = imports::type_at(module, offset)?;
+    let name = ty.name.trim_end_matches(['*', '[', ']']);
+    generic_param_at(module, offset, |p| p.name == name).map(|(s, _)| s).or_else(|| {
+        // `extend Box<T>` names its parameters in the extended type; a
+        // primitive or a type a file declares is an argument
+        // (`extend Array<int>`), not a parameter.
+        let declared = |name: &str| {
+            pepper_sema::type_name::INTEGRAL_TYPES.contains(name)
+                || name == "String"
+                || module.declarations.iter().any(|d| d.name() == name)
+                || program.is_some_and(|p| imports::declares(p, name))
+        };
+        module.declarations.iter().find_map(|d| match d {
+            ast::Declaration::Extend(e) if e.span.start <= offset && offset < e.span.end => {
+                let param =
+                    e.target.generic_types.iter().find(|g| g.name == name && g.generic_types.is_empty() && !declared(name))?;
+                Some(Symbol { name: param.name.clone(), name_span: param.span, ty: "type parameter".to_string() })
+            }
+            _ => None,
+        })
+    })
+}
+
+/// Where enum `owner`'s case `name` is declared: the program file and the
+/// case's name.
+fn enum_case_declared(program: &Program, owner: &str, name: &str) -> Option<(usize, Span)> {
+    program.files.iter().enumerate().find_map(|(i, f)| {
+        f.module.declarations.iter().find_map(|d| match d {
+            ast::Declaration::Struct(s) if s.name == owner => {
+                let case = s.enumeration.as_ref()?.cases.iter().find(|c| c.name == name)?;
+                Some((i, case.name_span))
+            }
+            _ => None,
+        })
+    })
+}
+
 /// The locals in scope at `offset`: the enclosing function's parameters,
 /// then what its body declares before `offset`.
 fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
-    let Some((f, _)) = function_at(module, offset) else { return vec![] };
+    let Some((f, _)) = function_at(module, offset) else {
+        // A destructor has no parameters.
+        if let Some((body, _)) = body_at(module, offset) {
+            return locals_at(body, offset);
+        }
+        // A closure in a module-scope variable's initializer.
+        let mut out = vec![];
+        let init = module.declarations.iter().find_map(|d| match d {
+            ast::Declaration::Variable(v) => v.default_value.as_ref(),
+            _ => None,
+        }.filter(|e| expr_start(e) <= offset && offset < e.span().end));
+        if let Some(c) = init.and_then(|e| closure_in_expression(e, offset)) {
+            push_closure_locals(c, offset, &mut out);
+        }
+        return out;
+    };
     let mut out: Vec<Symbol> = f
         .parameters
         .iter()
@@ -393,8 +556,70 @@ fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
         .collect();
     if let Some(body) = &f.body {
         out.extend(locals_at(body, offset));
+        if let Some(c) = closure_in_block(body, offset) {
+            push_closure_locals(c, offset, &mut out);
+        }
     }
     out
+}
+
+/// The locals inside closure `c` at `offset`: its parameters, what its body
+/// declares, and so on for each closure nested there.
+fn push_closure_locals(c: &ast::ClosureLiteral, offset: usize, out: &mut Vec<Symbol>) {
+    let mut closure = Some(c);
+    while let Some(c) = closure {
+        out.extend(c.parameters.iter().map(|p| Symbol { name: p.name.clone(), name_span: p.name_span, ty: variable_type(p) }));
+        out.extend(locals_at(&c.body, offset));
+        closure = closure_in_block(&c.body, offset);
+    }
+}
+
+/// The outermost closure in `block` whose span contains `offset`.
+fn closure_in_block(block: &ast::Block, offset: usize) -> Option<&ast::ClosureLiteral> {
+    let inside = |s: Span| s.start <= offset && offset < s.end;
+    block.statements.iter().find_map(|stmt| {
+        let in_expr = |e| closure_in_expression(e, offset);
+        match stmt {
+            ast::Statement::Expression(e) => in_expr(e),
+            ast::Statement::Return(ast::ReturnStatement { expr: Some(e), .. }) => in_expr(e),
+            ast::Statement::Declaration(ast::Declaration::Variable(v)) => v.default_value.as_ref().and_then(in_expr),
+            ast::Statement::Destructure(d) => in_expr(&d.value),
+            ast::Statement::Block(b) if inside(b.span) => closure_in_block(b, offset),
+            ast::Statement::Branch(b) => in_expr(&b.condition)
+                .or_else(|| closure_in_block(&b.if_block, offset))
+                .or_else(|| b.else_block.as_ref().and_then(|e| closure_in_block(e, offset))),
+            ast::Statement::While(w) => in_expr(&w.condition).or_else(|| closure_in_block(&w.block, offset)),
+            ast::Statement::For(f) => in_expr(&f.iterable).or_else(|| closure_in_block(&f.block, offset)),
+            ast::Statement::With(w) => in_expr(&w.scope)
+                .or_else(|| closure_in_block(&w.block, offset))
+                .or_else(|| w.else_block.as_ref().and_then(|e| closure_in_block(e, offset))),
+            ast::Statement::Match(m) => in_expr(&m.value).or_else(|| {
+                m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b)).find_map(|b| closure_in_block(b, offset))
+            }),
+            _ => None,
+        }
+    })
+}
+
+/// The outermost closure in `expr` whose span contains `offset`.
+fn closure_in_expression(expr: &ast::Expression, offset: usize) -> Option<&ast::ClosureLiteral> {
+    let s = Span { start: expr_start(expr), end: expr.span().end };
+    if !(s.start <= offset && offset < s.end) {
+        return None;
+    }
+    let children: Vec<&ast::Expression> = match expr {
+        ast::Expression::Closure(c) => return Some(c),
+        ast::Expression::Binary { lhs, rhs, .. } | ast::Expression::Index { lhs, rhs, .. } => vec![lhs, rhs],
+        ast::Expression::Unary { operand, .. } => vec![operand],
+        ast::Expression::Cast { expr: value, .. } | ast::Expression::Is { value, .. } => vec![value],
+        ast::Expression::MemberAccess { lhs, .. } => vec![lhs],
+        ast::Expression::Ternary { condition, true_expr, false_expr, .. } => vec![condition, true_expr, false_expr],
+        ast::Expression::FunctionCall { function, arguments, .. } => std::iter::once(&**function).chain(arguments).collect(),
+        ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => elements.iter().collect(),
+        ast::Expression::MapLiteral { entries, .. } => entries.iter().flat_map(|(k, v)| [k, v]).collect(),
+        _ => vec![],
+    };
+    children.into_iter().find_map(|e| closure_in_expression(e, offset))
 }
 
 // ── Expression lookup ─────────────────────────────────────────────────────────
@@ -429,6 +654,13 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
         ast::Expression::Binary { lhs, rhs, .. } => expr_at(lhs, offset).or_else(|| expr_at(rhs, offset)),
         ast::Expression::Unary { operand, .. } => expr_at(operand, offset),
         ast::Expression::Is { value, .. } => expr_at(value, offset).or(Some(expr)),
+        ast::Expression::Closure(c) => find_expr_in_block(&c.body, offset).or(Some(expr)),
+        ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => {
+            elements.iter().find_map(|e| expr_at(e, offset)).or(Some(expr))
+        }
+        ast::Expression::MapLiteral { entries, .. } => {
+            entries.iter().find_map(|(k, v)| expr_at(k, offset).or_else(|| expr_at(v, offset))).or(Some(expr))
+        }
         ast::Expression::Cast { expr: value, .. } => expr_at(value, offset).or(Some(expr)),
         ast::Expression::Ternary { condition, true_expr, false_expr, .. } => {
             expr_at(condition, offset)
@@ -461,17 +693,25 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
 
 /// The innermost expression containing `offset` anywhere in the module.
 fn find_expr<'a>(module: &'a ast::Module, offset: usize) -> Option<&'a ast::Expression> {
-    let (body, _) = body_at(module, offset)?;
-    find_expr_in_block(body, offset)
+    if let Some((body, _)) = body_at(module, offset) {
+        return find_expr_in_block(body, offset);
+    }
+    // A module-scope variable's initializer.
+    module.declarations.iter().find_map(|d| match d {
+        ast::Declaration::Variable(v) => v.default_value.as_ref().and_then(|e| expr_at(e, offset)),
+        _ => None,
+    })
 }
 
 fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a ast::Expression> {
     for stmt in &block.statements {
         let mut s = stmt.span();
         // An expression statement's span is its expression's: an
-        // assignment's starts at the `=`.
-        if let ast::Statement::Expression(e) = stmt {
+        // assignment's starts at the `=`. The `return` a closure's
+        // expression body (`=> x * 2`) becomes need not span its value.
+        if let ast::Statement::Expression(e) | ast::Statement::Return(ast::ReturnStatement { expr: Some(e), .. }) = stmt {
             s.start = s.start.min(expr_start(e));
+            s.end = s.end.max(e.span().end);
         }
         if !(s.start <= offset && offset < s.end) {
             continue;
@@ -484,6 +724,11 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
             }
             ast::Statement::Declaration(ast::Declaration::Variable(v)) => {
                 if let Some(found) = v.default_value.as_ref().and_then(|e| expr_at(e, offset)) {
+                    return Some(found);
+                }
+            }
+            ast::Statement::Destructure(d) => {
+                if let Some(found) = expr_at(&d.value, offset) {
                     return Some(found);
                 }
             }
@@ -1042,12 +1287,14 @@ fn overload_at(sema: &SemaModule, offset: usize) -> Option<(&FunctionDef, usize)
 fn overload_hover(program: &Program, function: &FunctionDef, others: usize) -> String {
     let name = demangle_name(&function.name);
     let more = match others {
+        0 => String::new(),
         1 => " (+1 overload)".to_string(),
         n => format!(" (+{} overloads)", n),
     };
     let file = function.loc.file.0 as usize;
     // The member as its file declares it (a free function, or a method of a
-    // struct or extension), parameter names included, and its doc comment.
+    // struct, extension or trait), parameter names included, and its doc
+    // comment.
     let declared = program.files.get(file).and_then(|f| {
         f.module.declarations.iter().find_map(|d| {
             let methods: &[ast::FunctionDecl] = match d {
@@ -1056,6 +1303,7 @@ fn overload_hover(program: &Program, function: &FunctionDef, others: usize) -> S
                 }
                 ast::Declaration::Struct(s) => &s.methods,
                 ast::Declaration::Extend(e) => &e.methods,
+                ast::Declaration::Trait(t) => &t.methods,
                 _ => return None,
             };
             let m = methods.iter().find(|m| m.name_span == function.loc.span)?;
@@ -1463,7 +1711,7 @@ impl PepperLsp {
         };
         if let Some(program) = program
             && let Some(found) =
-                imports::in_imports(program, &ast, offset).or_else(|| imports::in_type(program, &ast, offset))
+                imports::in_imports(program, &ast, offset).or_else(|| imports::named_type(program, &ast, offset))
         {
             return imported(found);
         }
@@ -1473,23 +1721,37 @@ impl PepperLsp {
         {
             return Some(Hover { contents: md(overload_hover(program, function, others)), range: None });
         }
-        // A local's name where it is declared (`var worker = ...`).
-        if let Some(local) = scope_locals(&ast, offset)
-                .into_iter()
-                .find(|s| s.name_span.start <= offset && offset <= s.name_span.end)
+        // A name where it is declared: a type, function, member, local or
+        // parameter, with its doc comment.
+        // The built-in constraint `T: Shared`, which no file declares.
+        if let Some(ty) = imports::type_at(&ast, offset)
+            && pepper_sema::passes::constraints::is_shared_bound(&pepper_sema::TypeName::new(&ty.name))
+            && program.is_none_or(|p| imports::named_type(p, &ast, offset).is_none())
         {
-            let head = format!("`{}` — `{}`", local.name, symbol_type(sema, &local));
-            return Some(Hover { contents: md(head), range: None });
+            let value = "`Shared` — built-in constraint\n\nThe type is thread-safe: a `[Shared]` struct, a `shared` function type, or a value type.";
+            return Some(Hover { contents: md(value.to_string()), range: None });
+        }
+        if let Some(symbol) = generic_param_used(&ast, program, offset) {
+            return Some(Hover { contents: md(format!("`{}` — `{}`", symbol.name, symbol.ty)), range: None });
+        }
+        if let Some((symbol, owner)) = declared_at(&ast, offset) {
+            let doc = program.and_then(|p| match &owner {
+                Some(owner) => member_doc(p, Some(owner), &symbol.name),
+                None => declaration_doc_at(p, 0, symbol.name_span),
+            });
+            let head = format!("`{}` — `{}`", symbol.name, symbol_type(sema, &symbol));
+            return Some(Hover { contents: md(with_doc(head, doc)), range: None });
         }
         let expr = find_expr(&ast, offset)?;
 
-        let Some((_, enclosing_struct)) = body_at(&ast, offset) else {
-            return None;
-        };
+        // None at module scope (a variable's initializer).
+        let enclosing_struct = body_at(&ast, offset).and_then(|(_, s)| s);
         let locals: Vec<Symbol> = scope_locals(&ast, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
-        let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
+        // A bare member of `this` (in an extension's method) is no global.
+        let bare_member = sema.and_then(|m| pepper_sema::member_lookup::member_at(m, FileId(0), offset)).is_some();
+        let is_local = |id: &str| bare_member || locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
         if let Some(program) = program
             && let Some(found) = imports::in_expression(program, &ast, expr, is_local)
         {
@@ -1542,6 +1804,21 @@ impl PepperLsp {
                 Some(Hover { contents: md(format!("`{}` — `{}`", value, ty)), range: None })
             }
             ast::Expression::SymbolRef { id, .. } => {
+                // A bare member of `this` the document cannot see (in an
+                // extension's method), by the type sema gave `this`.
+                if !locals.iter().chain(&struct_members).any(|s| s.name == *id)
+                    && let Some(program) = program
+                    && let Some(member) = sema.and_then(|m| pepper_sema::member_lookup::member_at(m, FileId(0), offset))
+                {
+                    let value = match member {
+                        pepper_sema::member_lookup::Member::Method(m) => overload_hover(program, m, 0),
+                        pepper_sema::member_lookup::Member::Field(f) => {
+                            let owner = extended_at(&ast, offset);
+                            with_doc(format!("`{}` — `{}`", id, f.ty), member_doc(program, owner.as_deref(), id))
+                        }
+                    };
+                    return Some(Hover { contents: md(value), range: None });
+                }
                 let rendered = locals.iter().rev().find(|s| s.name == *id)
                     .or_else(|| struct_members.iter().find(|s| s.name == *id))
                     .or_else(|| globals.iter().find(|s| s.name == *id))
@@ -1570,6 +1847,16 @@ Returns a fresh value: it shares nothing with the arguments.");
                 Some(Hover { contents: md(with_doc(head, global_doc(id))), range: None })
             }
             ast::Expression::MemberAccess { lhs, name, .. } => {
+                // A method (`a.count` of `a.count()`), as its type declares it;
+                // an enum's case is shown below.
+                let is_case = sema.and_then(|m| enum_case_of(m, lhs, name)).or_else(|| enum_case_in(&ast, lhs, name)).is_some();
+                if let Some(program) = program
+                    && !is_case
+                    && let Some(pepper_sema::member_lookup::Member::Method(m)) =
+                        sema.and_then(|s| pepper_sema::member_lookup::member_at(s, FileId(0), offset))
+                {
+                    return Some(Hover { contents: md(overload_hover(program, m, 0)), range: None });
+                }
                 let rendered = if is_this(expr) {
                     struct_members.iter().find(|s| s.name == *name).map(|s| s.ty.clone())
                         .or_else(|| {
@@ -1600,6 +1887,13 @@ Returns a fresh value: it shares nothing with the arguments.");
                     Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
                 }
                 ast::Expression::MemberAccess { lhs, name, .. } => {
+                    // The method the owner's type has, as declared.
+                    if let Some(program) = program
+                        && let Some(pepper_sema::member_lookup::Member::Method(m)) =
+                            sema.and_then(|s| pepper_sema::member_lookup::member_at(s, FileId(0), offset))
+                    {
+                        return Some(Hover { contents: md(overload_hover(program, m, 0)), range: None });
+                    }
                     let rendered = sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .or_else(|| sema.and_then(|m| enum_method_signature(m, name)))
@@ -1635,7 +1929,7 @@ Returns a fresh value: it shares nothing with the arguments.");
         };
         if let Some(program) = program
             && let Some(found) =
-                imports::in_imports(program, &ast, offset).or_else(|| imports::in_type(program, &ast, offset))
+                imports::in_imports(program, &ast, offset).or_else(|| imports::named_type(program, &ast, offset))
         {
             return imported(found);
         }
@@ -1648,6 +1942,22 @@ Returns a fresh value: it shares nothing with the arguments.");
             let f = program.files.get(file)?;
             let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
             return Some(vec![Location::new(target_uri, span_to_range(&f.source, function.loc.span))]);
+        }
+        // A name where it is declared goes to itself; a generic parameter
+        // used as a type, to the parameter.
+        if let Some((symbol, _)) = declared_at(&ast, offset).or_else(|| generic_param_used(&ast, program, offset).map(|s| (s, None))) {
+            return Some(vec![Location::new(uri.clone(), span_to_range(text, symbol.name_span))]);
+        }
+        // An enum's case (`Backend.Automatic`), declared in any file.
+        if let Some(program) = program
+            && let Some(ast::Expression::MemberAccess { lhs, name, name_span, .. }) = find_expr(&ast, offset)
+            && name_span.start <= offset
+            && let ast::Expression::SymbolRef { id, .. } = &**lhs
+            && let Some((file, span)) = enum_case_declared(program, id, name)
+        {
+            let f = &program.files[file];
+            let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
+            return Some(vec![Location::new(target_uri, span_to_range(&f.source, span))]);
         }
         // A member of any expression (`x.y.z`, `f().m()`), by its owner's
         // type in the sema model.
@@ -1662,13 +1972,14 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
         let expr = find_expr(&ast, offset)?;
 
-        let Some((_, enclosing_struct)) = body_at(&ast, offset) else {
-            return None;
-        };
+        // None at module scope (a variable's initializer).
+        let enclosing_struct = body_at(&ast, offset).and_then(|(_, s)| s);
         let locals: Vec<Symbol> = scope_locals(&ast, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
-        let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
+        // A bare member of `this` (in an extension's method) is no global.
+        let bare_member = sema.and_then(|m| pepper_sema::member_lookup::member_at(m, FileId(0), offset)).is_some();
+        let is_local = |id: &str| bare_member || locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
         if let Some(program) = program
             && let Some(found) = imports::in_expression(program, &ast, expr, is_local)
         {

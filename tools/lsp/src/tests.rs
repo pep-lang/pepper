@@ -1014,3 +1014,80 @@ fn hover_on_parameters_and_assigned_fields() {
     assert!(definition(&uri, &text, &program, at(&text, "start;", 0, 1)).1.starts_with("start: Core"));
     assert!(definition(&uri, &text, &program, at(&text, "total;", 0, 1)).1.starts_with("total = by"));
 }
+
+const EXTENSIONS: &str = r#"struct Point {
+    var x: int;
+    ## Spells the point.
+    to_string(): String { return "p"; }
+}
+extend Point {
+    describe(): String { return to_string(); }
+}
+extend Array<int> {
+    total(): int { return 0; }
+}
+"#;
+
+/// In an extension, a bare call of the type's method is that method, not a
+/// global of the same name; a concrete argument of the extended type is no
+/// type parameter.
+#[test]
+fn extension_members_and_arguments() {
+    let (uri, text, program) = load("extension_members", EXTENSIONS, "main.pep");
+    let call = at(&text, "to_string();", 0, 1);
+    let (file, rest) = definition(&uri, &text, &program, call);
+    assert_eq!(file, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
+    assert!(rest.starts_with("to_string(): String"), "{}", rest);
+    assert!(hover(&uri, &text, &program, call).contains("Spells the point"));
+    let int = hover(&uri, &text, &program, at(&text, "int {", 0, 1));
+    assert!(!int.contains("type parameter"), "{}", int);
+}
+
+const MATCHED: &str = r#"enum Found {
+    Hit(hash: int),
+    Miss,
+}
+look(f: Found): int {
+    match (f) {
+        Hit(hash) => { return hash; }
+        Miss => { return 0; }
+    }
+    return 0;
+}
+const double = (hash: int): int => hash * 2;
+"#;
+
+/// A name a `match` arm binds is a local of the arm, not the runtime's
+/// global of the same name.
+#[test]
+fn a_match_binding_is_local() {
+    let (uri, text, program) = load("match_binding", MATCHED, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "hash; }", 0, 1));
+    assert_eq!(file, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
+    assert!(rest.starts_with("hash) =>"), "{}", rest);
+    // A parameter of a closure at module scope.
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "hash * 2", 0, 1));
+    assert_eq!(file, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
+    assert!(rest.starts_with("hash: int)"), "{}", rest);
+}
+
+const TRAIT_CALL: &str = r#"trait Driver {
+    ## Waits for events, at most `timeout` milliseconds.
+    poll(timeout: int): bool;
+}
+struct Quiet { poll(timeout: int): bool { return false; } }
+extend Quiet with Driver {}
+struct Worker {
+    var driver: Driver;
+    tick(): bool { return this.driver.poll(5); }
+}
+"#;
+
+/// A method called on a trait-typed value hovers with the trait's
+/// signature and doc comment.
+#[test]
+fn hover_on_a_trait_method_call() {
+    let (uri, text, program) = load("trait_call", TRAIT_CALL, "main.pep");
+    let shown = hover(&uri, &text, &program, at(&text, "poll(5)", 0, 1));
+    assert!(shown.contains("poll(timeout: int): bool") && shown.contains("Waits for events"), "{}", shown);
+}

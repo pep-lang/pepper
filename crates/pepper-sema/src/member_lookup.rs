@@ -54,7 +54,8 @@ pub fn member_at(module: &Module, file: FileId, offset: usize) -> Option<Member<
             functions.push((function, Some(&st.ty)));
         }
     }
-    for (function, current) in functions {
+    // Only code the file declares can spell a name in it.
+    for (function, current) in functions.into_iter().filter(|(f, _)| f.loc.file == file) {
         crate::passes::visit_function(function, &mut |e| {
             let (owner, name, loc) = match e {
                 Expression::MemberRef { lhs, name, loc } => (&**lhs, name.as_str(), *loc),
@@ -96,7 +97,13 @@ pub fn member_at(module: &Module, file: FileId, offset: usize) -> Option<Member<
         .structs
         .iter()
         .find(|s| s.ty.to_string() == pointee)
-        .or_else(|| module.structs.iter().find(|s| s.name == base))?;
+        .or_else(|| module.structs.iter().find(|s| s.name == base));
+    // A trait used as a type (`_Driver`): the method it declares.
+    let Some(st) = st else {
+        let t = module.traits.iter().find(|t| t.name == base)?;
+        let m = t.methods.iter().find(|m| m.name == name || crate::passes::overloads::set_name(&m.name) == name)?;
+        return (!m.loc.is_none() && m.loc != used).then_some(Member::Method(m));
+    };
     let field = st.field_members.iter().find(|f| f.name == name).map(Member::Field);
     let method = || {
         st.method_members
@@ -110,9 +117,9 @@ pub fn member_at(module: &Module, file: FileId, offset: usize) -> Option<Member<
     field.or_else(method).filter(|m| !m.loc().is_none() && m.loc() != used && !st.name.starts_with("__closure"))
 }
 
-/// The type sema gave the local declared at `name` (the location of its
-/// name) in file `file`: what `var worker = _async_worker()` infers. `None`
-/// when no checked code declares a local there. In generic code, the first
+/// The type sema gave the local or module-scope variable declared at `name`
+/// (the location of its name) in file `file`: what `var worker =
+/// _async_worker()` infers. `None` when no checked code declares one there. In generic code, the first
 /// specialization's type stands for all of them.
 pub fn local_type(module: &Module, file: FileId, name: usize) -> Option<&TypeName> {
     fn find<'m>(block: &'m Block, file: FileId, name: usize) -> Option<&'m TypeName> {
@@ -125,6 +132,11 @@ pub fn local_type(module: &Module, file: FileId, name: usize) -> Option<&TypeNam
             Statement::While(w) => find(&w.block, file, name),
             _ => None,
         })
+    }
+    // A module-scope variable (`const key = make_key()`).
+    let global = module.globals.iter().find(|v| v.loc.file == file && v.loc.span.start == name && !v.ty.is_auto() && !v.ty.is_empty());
+    if let Some(global) = global {
+        return Some(&global.ty);
     }
     let structs = module.structs.iter().flat_map(|st| st.constructors.iter().chain([&st.destructor]).chain(&st.method_members));
     module.functions.iter().chain(structs).find_map(|f| f.body.as_ref().and_then(|b| find(b, file, name)))
