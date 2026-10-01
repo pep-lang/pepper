@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c2ebcd64.js";
+            window.path_to_searchindex_js = "../searchindex-f7a48b3c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24be83d2.js"></script>
@@ -265,6 +265,9 @@ hexadecimal literal with more than 64 bits, is an error:</p>
 <p><code>float</code> is a 32-bit and <code>double</code> a 64-bit IEEE 754 number (<code>f32</code> and <code>f64</code> are
 aliases). A literal with a decimal point or an exponent, such as <code>0.25</code> or <code>1e3</code>,
 is a <code>double</code>.</p>
+<p>Comparisons follow IEEE 754, as in C: against NaN (<code>0.0 / 0.0</code>), <code>==</code>, <code>&lt;</code>,
+<code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> are false and <code>!=</code> is true, so <code>x != x</code> is true only for a
+NaN. As a condition, a float is true unless it equals zero, NaN included.</p>
 <h3 id="booleans"><a class="header" href="#booleans">Booleans</a></h3>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
 <code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
