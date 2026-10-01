@@ -743,6 +743,61 @@ fn print_and_stdout_keep_order() {
     assert_eq!(out.replace("\r\n", "\n"), "one\ntwo\nthree\nfour\nfive\n");
 }
 
+const PRINT_TRAIT_PROGRAM: &str = r##"
+import io;
+
+# A type of the program's own gets print and print_line from write_all.
+struct Collector {
+    var bytes: u8[];
+
+    construct() {
+        bytes = Array<u8>();
+    }
+
+    write_all(data: u8[]): io.IoResult<void> {
+        for (var b in data) {
+            bytes.append(b);
+        }
+        return io.IoResult<void>.ok();
+    }
+}
+
+extend Collector with io.Print {}
+
+# Any Print works through a constraint.
+greet<T: io.Print>(out: T) {
+    out.print_line("hello");
+}
+
+main(): int {
+    var collector = Collector();
+    assert(collector.print("n = ").is_ok(), "print");
+    assert(collector.print_line(3).is_ok(), "print_line");
+    collector.print_line((1.5, true));
+    greet(collector);
+    var text = String._from_bytes(collector.bytes);
+    assert(text == "n = 3\n(1.5, true)\nhello\n", "collected text");
+
+    var path = io.Directory.temp().join("print_trait_test.txt");
+    var file = io.File.create(path).value();
+    greet(file);
+    file.print(42);
+    file.close();
+    assert(io.File.read_to_string(path).value() == "hello\n42", "file text");
+    io.File.remove(path);
+    print("print-ok");
+    return 0;
+}
+"##;
+
+/// `io.Print` gives `print`/`print_line` to File and to any type with
+/// `write_all(u8[])`, and works as a generic constraint.
+#[test]
+fn print_trait_writes_text() {
+    let out = assert_runs("print_trait", PRINT_TRAIT_PROGRAM);
+    assert_eq!(out.trim_end(), "print-ok");
+}
+
 #[test]
 fn file_closes_on_last_release() {
     let scratch = scratch_name("close");
@@ -785,6 +840,7 @@ fn all_programs() -> Vec<(&'static str, String)> {
         ("close", close_program("x")),
         ("enums", enums_program("x")),
         ("import_names", IMPORT_NAMES_PROGRAM.to_string()),
+        ("print_trait", PRINT_TRAIT_PROGRAM.to_string()),
     ]
 }
 

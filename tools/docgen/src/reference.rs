@@ -32,6 +32,7 @@ const PAGES: &[(&str, &str)] = &[
     ("io/directory.pep", "Directory"),
     ("io/address.pep", "Network addresses"),
     ("io/socket.pep", "Sockets"),
+    ("io/print.pep", "Print"),
     ("async/module.pep", "The async module"),
     ("async/atomic.pep", "Atomic"),
     ("async/thread.pep", "Thread"),

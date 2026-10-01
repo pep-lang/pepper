@@ -71,6 +71,7 @@
     - [Directory](reference/io-directory.md)
     - [Network addresses](reference/io-address.md)
     - [Sockets](reference/io-socket.md)
+    - [Print](reference/io-print.md)
   - [The async module](reference/async-module.md)
     - [Atomic](reference/async-atomic.md)
     - [Thread](reference/async-thread.md)

@@ -61,6 +61,22 @@ A `TcpListener` waits for connections. Each `TcpStream` is one connection:
 - `local_address()` and `peer_address()` return the two ends of the
   connection.
 
+## Printing to a stream
+
+A `File`, a `TcpStream` and a `UnixStream` have the `io.Print` trait, which
+gives them `print(value)` and `print_line(value)`. They write the text that
+`to_string` makes of any value, as the global `print` does on standard
+output:
+
+```pepper
+{{#include ../../examples/networking-print.pep}}
+```
+
+- `print` writes the text alone; `print_line` adds a `\n`.
+- Both return an `IoResult<void>`, like `write_all`.
+- Another type gets them by providing `write_all(data: u8[])` and declaring
+  `extend MyStream with io.Print {}`.
+
 ## UDP
 
 A `UdpSocket` sends and receives datagrams. Each one arrives whole or not
