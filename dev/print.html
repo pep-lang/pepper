@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-67b8fefb.js";
+            window.path_to_searchindex_js = "searchindex-be3f2be5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-19664f2f.js"></script>
@@ -423,7 +423,8 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
-<tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>.</td></tr>
+<tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>. Without it, <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when set.</td></tr>
+<tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>, optimized at the <code>-O</code> level.</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
 <tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
 <tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
