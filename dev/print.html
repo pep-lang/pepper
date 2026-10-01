@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e09cfae4.js";
+            window.path_to_searchindex_js = "searchindex-a2c5c94e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8fc0870b.js"></script>
@@ -9545,6 +9545,86 @@ main(): int {
 <p>Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with <code>spawn_local</code> can share
 it, and each spawned task makes its own.</p>
+<h3 id="waiting-on-several-sockets"><a class="header" href="#waiting-on-several-sockets">Waiting on several sockets</a></h3>
+<p>To wait on whichever of several sockets is ready first, give each socket a
+task that reads it and sends what it read to a channel, and wait on the
+channels with a <a href="#waiting-on-several-channels-with-select"><code>Select</code></a>.
+Closing a channel when its socket closes lets the select stop waiting on it.
+Tasks are cheap, so this costs little, and the reading code stays the
+ordinary blocking-style loop:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+# What the select returns: bytes that arrived on one of the connections.
+enum Event {
+    Data(from: int, count: ulong),
+}
+
+# Reads `stream` until the peer closes it, sending the size of each read to
+# `into`, then closes `into` so the select stops waiting on it.
+forward(stream: io.TcpStream, into: async.Channel&lt;ulong&gt;) {
+    var buffer = Array&lt;u8&gt;();
+    while (true) {
+        var r = stream.read(buffer, 4096);   # parks this task, not the others
+        if (r.is_err() || r.value() == 0) {
+            into.close();
+            return;
+        }
+        into.send(r.value());
+        buffer.clear();
+    }
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var address = listener.local_address().value();
+        var first = io.TcpStream.connect(address).value();
+        var (from_first, first_peer) = listener.accept().value();
+        var second = io.TcpStream.connect(address).value();
+        var (from_second, second_peer) = listener.accept().value();
+
+        # One task per socket turns what it reads into channel messages.
+        var first_bytes = async.Channel&lt;ulong&gt;();
+        var second_bytes = async.Channel&lt;ulong&gt;();
+        async.Task&lt;void&gt;.spawn_local(() =&gt; { forward(from_first, first_bytes); });
+        async.Task&lt;void&gt;.spawn_local(() =&gt; { forward(from_second, second_bytes); });
+
+        first.write_all("hello");
+        first.shutdown_write();
+        second.write_all("hi there");
+        second.shutdown_write();
+
+        # The select then waits on both sockets at once, through their channels.
+        var select = async.Select&lt;Event&gt;();
+        select.receive(first_bytes, (count: ulong): Event =&gt; Event.Data(0, count));
+        select.receive(second_bytes, (count: ulong): Event =&gt; Event.Data(1, count));
+        ulong first_total = 0;
+        ulong second_total = 0;
+        var running = true;
+        while (running) {
+            match (select.wait()) {
+                Ok(event) =&gt; {
+                    match (event) {
+                        Data(from, count) =&gt; {
+                            if (from == 0) {
+                                first_total = first_total + count;
+                            } else {
+                                second_total = second_total + count;
+                            }
+                        }
+                    }
+                }
+                Err(error) =&gt; {
+                    running = false;   # both connections closed
+                }
+            }
+        }
+        assert(first_total == 5 &amp;&amp; second_total == 8, "every byte arrived once");
+    });
+    return 0;
+}
+</code></pre>
 <h3 id="files"><a class="header" href="#files">Files</a></h3>
 <p><code>File.read</code>, <code>write</code> and <code>write_all</code> in a task park the task until the
 system call is done, and the worker runs other tasks meanwhile. With the
