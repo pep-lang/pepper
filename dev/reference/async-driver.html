@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed6e9661.js";
+            window.path_to_searchindex_js = "../searchindex-457c582c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -205,8 +205,8 @@ Windows. The <code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</c
 <pre><code class="language-pepper">IoUring
 </code></pre>
 <p>Linux’s io_uring (kernel 5.11 or later), waiting for sockets with
-one-shot poll requests. Not the default: container seccomp profiles
-and hardened kernels often refuse it.</p>
+one multishot poll request each. Not the default: container seccomp
+profiles and hardened kernels often refuse it.</p>
 <h4 id="kqueue"><a class="header" href="#kqueue">Kqueue</a></h4>
 <pre><code class="language-pepper">Kqueue
 </code></pre>

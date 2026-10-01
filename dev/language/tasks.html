@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ed6e9661.js";
+            window.path_to_searchindex_js = "../searchindex-457c582c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -645,7 +645,7 @@ every few dozen tasks, so a busy task cannot starve the network.</p>
 </thead>
 <tbody>
 <tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
-<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring, with a one-shot poll request per waiting socket; never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
+<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring, with one multishot poll request per waiting socket and deferred completion work (as fast as epoll in our echo benchmark); never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
 <tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
 <tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
 <tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
@@ -658,6 +658,14 @@ the system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and
 <code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>, <code>io_uring</code>, <code>kqueue</code>,
 <code>iocp</code> or <code>poll</code>) overrides the automatic choice without changing the
 program, for testing and benchmarks. <code>async.current_backend()</code> says which one is running.</p>
+<p>io_uring usually pays off as the amount of multiplexed I/O grows: many
+operations in flight, submitted and completed in batches through the ring
+rather than one system call each. Pepper’s <code>IoUring</code> backend does not do
+that yet. It uses the ring only to learn when a socket is ready, then reads
+and writes with ordinary <code>recv</code> and <code>send</code> calls, as epoll does, so it makes
+the same number of system calls. In our echo benchmark it kept level with
+epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
+the reads and writes themselves through the ring is future work.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>
