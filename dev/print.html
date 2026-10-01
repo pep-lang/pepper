@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9c009f99.js";
+            window.path_to_searchindex_js = "searchindex-d59f8295.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e2586fcc.js"></script>
@@ -5604,6 +5604,9 @@ main.pep:1:1: note: declared here
     1 | make&lt;T&gt;(): Box&lt;T&gt; { return Box&lt;T&gt;(); }
       | ^~~~
 </code></pre>
+<p>A parameter whose type is a trait takes its type arguments from the trait the
+argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)</code>, the call
+<code>total(Countdown(4))</code> infers <code>T = int</code> from <code>extend Countdown with Iterator&lt;int&gt;</code>.</p>
 <p>Inference works through closures in both directions. In
 <code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
 the closure’s result gives <code>U</code>.</p>
@@ -5649,8 +5652,8 @@ main(): int {
 <code>b.map&lt;long&gt;(f)</code>. With a space, <code>a.b &lt; c</code> is a comparison.</li>
 <li>A generic method cannot be called through a <a href="#traits-as-types">trait value</a>,
 since each of its uses is compiled separately. Call it on the concrete type.</li>
-<li>The iterator adapters <code>map</code> and <code>filter</code> are generic default methods of
-<code>Iterator&lt;T&gt;</code>; see <a href="#adapters">Iteration</a>.</li>
+<li>The iterator adapters <code>map</code>, <code>filter</code>, <code>enumerate</code> and <code>zip</code> are generic
+default methods of <code>Iterator&lt;T&gt;</code>; see <a href="#adapters">Iteration</a>.</li>
 </ul>
 <h2 id="default-type-arguments"><a class="header" href="#default-type-arguments">Default type arguments</a></h2>
 <p>A type parameter can have a default, written <code>Name=Type</code>. When a use leaves
@@ -6887,15 +6890,20 @@ members. Both visit entries in no particular order. Changing a value
 (<code>ages[name] = …</code> for a key already present) is fine while looping, but adding
 or removing an entry stops the program at the iterator’s next step.</p>
 <h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
-<p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
-Each one works lazily, one element at a time as the loop asks for it:</p>
+<p><code>Iterator&lt;T&gt;</code> has default methods that wrap an iterator in another one.
+Each works lazily, one element at a time as the loop asks for it:</p>
 <ul>
 <li><code>map(transform)</code> yields <code>transform(x)</code> for each element <code>x</code>; its element
 type is whatever <code>transform</code> returns.</li>
 <li><code>filter(keep)</code> yields only the elements for which <code>keep(x)</code> is <code>true</code>.</li>
+<li><code>enumerate()</code> yields <code>(index, x)</code> <a href="#tuples-and-multiple-return-values">tuples</a>, counting from 0 in
+<code>ulong</code>; <code>enumerate&lt;int&gt;()</code> counts in <code>int</code> instead.</li>
+<li><code>zip(other)</code> yields <code>(x, y)</code> pairs, one element from each iterator in
+step, and stops when either runs out.</li>
 </ul>
-<p>Both return iterators, so they chain, and a <code>for</code> loop can use the result
-directly:</p>
+<p>They return iterators, so they chain, and a <code>for</code> loop can use the result
+directly; destructure a tuple to name its parts. <code>to_array()</code> runs an
+iterator to the end and collects what is left into a new <code>Array</code>:</p>
 <pre><code class="language-pepper">struct Person {
     String name;
     int age;
@@ -6923,16 +6931,34 @@ main(): int {
         kept += 1;
     }
     assert(kept == 3, "h, e, o");
+
+    # enumerate pairs each element with its position, and zip pairs two
+    # iterators in step; destructure the tuple to name both parts.
+    var ranked = "";
+    for (var (i, person) in people.iterate().enumerate()) {
+        ranked += $"{i}:{person.name} ";
+    }
+    assert(ranked == "0:Ada 1:Bo 2:Cyd ", "numbered from 0");
+    var seats = ["window", "aisle"];
+    var seated = 0;
+    for (var (person, seat) in people.iterate().zip(seats.iterate())) {
+        seated += 1;   # Cyd gets no seat: zip stops at the shorter
+    }
+    assert(seated == 2, "two pairs");
+
+    # to_array collects what an iterator yields.
+    var ages = people.iterate().map((p) =&gt; p.age).to_array();
+    assert(ages.count() == 3 &amp;&amp; ages[2] == 40, "every age");
     return 0;
 }
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
-<code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
-<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+<code>Array.iterate()</code>), <code>StringIterator</code>, <a href="#looping-over-a-range">ranges</a>, and
+your own iterators once you write <code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
 the iterator it wraps (the runtime’s iterators are
 <a href="#value-structs">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
 so a chain built from a temporary stays alive while the loop runs, and
-<code>it.map(f)</code> leaves <code>it</code> where it was. They are generic methods (see
+<code>it.map(f)</code> and <code>it.to_array()</code> leave <code>it</code> where it was. They are generic methods (see
 <a href="#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
@@ -15191,6 +15217,71 @@ gets this method.</p>
         print(even);
     }
 </code></pre>
+<h4 id="enumerate"><a class="header" href="#enumerate">enumerate</a></h4>
+<pre><code class="language-pepper">enumerate&lt;TIndex=ulong&gt;(): EnumerateIterator&lt;T, TIndex&gt;
+</code></pre>
+<p>Returns an iterator over the elements paired with their positions:
+<code>(0, first)</code>, <code>(1, second)</code>, and so on.</p>
+<p>Lazy, like <code>map</code>. Destructure the pair in the loop to name both parts.
+The positions count in <code>ulong</code>, like <code>Array.count()</code>; name another
+integer type to count in it (<code>enumerate&lt;int&gt;()</code>). Every type that
+declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TIndex</code> — the integer type of the positions, <code>ulong</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an <code>EnumerateIterator&lt;T, TIndex&gt;</code> over <code>(index, element)</code> tuples</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
+    for (var (i, name) in names.iterate().enumerate()) {
+        print($"{i}: {name}");   # 0: Ada, then 1: Grace
+    }
+</code></pre>
+<h4 id="zip"><a class="header" href="#zip">zip</a></h4>
+<pre><code class="language-pepper">zip&lt;U&gt;(other: Iterator&lt;U&gt;): ZipIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over pairs of this iterator’s elements and
+<code>other</code>’s, in step: <code>(first, other's first)</code>, and so on. It stops when
+either runs out.</p>
+<p>Lazy, like <code>map</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type of <code>other</code>’s elements</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the iterator whose elements form the second half of each pair</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>ZipIterator&lt;T, U&gt;</code> over <code>(element, other element)</code> tuples</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
+    var ages = [36, 45];
+    for (var (name, age) in names.iterate().zip(ages.iterate())) {
+        print($"{name} is {age}");
+    }
+</code></pre>
+<h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
+<pre><code class="language-pepper">to_array(): Array&lt;T&gt;
+</code></pre>
+<p>Returns a new <code>Array</code> holding the remaining elements, in order.</p>
+<p>Runs the iteration to the end. Like the adapters, it works on a copy
+of the iterator, so a value iterator (every runtime iterator is one)
+is left where it was. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the elements, possibly none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+</code></pre>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct MapIterator&lt;T, U&gt;
 </code></pre>
@@ -15272,6 +15363,89 @@ iterator that the test function accepts.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h2 id="enumerateiterator"><a class="header" href="#enumerateiterator">EnumerateIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct EnumerateIterator&lt;T, TIndex&gt;
+</code></pre>
+<p>The iterator <code>Iterator.enumerate</code> returns: each element of the source
+iterator, paired with its position.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>TIndex</code> — the integer type of the positions</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.enumerate</code></li>
+</ul>
+<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
+<h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code>, numbered from 0.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to number</li>
+</ul>
+<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h4 id="next-3-1"><a class="header" href="#next-3-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-3-1"><a class="header" href="#current-3-1">current</a></h4>
+<pre><code class="language-pepper">current(): (TIndex, T)
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to, with its
+index.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current <code>(index, element)</code> pair</li>
+</ul>
+<h2 id="zipiterator"><a class="header" href="#zipiterator">ZipIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ZipIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.zip</code> returns: the elements of two iterators,
+paired in step, until either runs out.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the first iterator’s elements</li>
+<li><code>U</code> — the type of the second iterator’s elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.zip</code></li>
+</ul>
+<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h4 id="zipiterator-1"><a class="header" href="#zipiterator-1">ZipIterator()</a></h4>
+<pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;U&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>first</code> and <code>second</code>, paired.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>first</code> — the iterator giving the first half of each pair</li>
+<li><code>second</code> — the iterator giving the second half of each pair</li>
+</ul>
+<h3 id="methods-4-1"><a class="header" href="#methods-4-1">Methods</a></h3>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
+run out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if both have a current element, false when either is exhausted</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">current(): (T, U)
+</code></pre>
+<p>Returns the pair the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current <code>(first element, second element)</code> pair</li>
+</ul>
 <h2 id="iterable"><a class="header" href="#iterable">Iterable</a></h2>
 <pre><code class="language-pepper">trait Iterable&lt;T&gt;
 </code></pre>
@@ -15298,7 +15472,7 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
         total = total + x;
     }
 </code></pre>
-<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h3 id="methods-5-1"><a class="header" href="#methods-5-1">Methods</a></h3>
 <h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
@@ -16957,7 +17131,7 @@ a reparse point.</p>
 <ul>
 <li><code>offset</code> — the new position; negative is an error</li>
 </ul>
-<h4 id="current-4"><a class="header" href="#current-4">Current</a></h4>
+<h4 id="current-5"><a class="header" href="#current-5">Current</a></h4>
 <pre><code class="language-pepper">Current(offset: Offset)
 </code></pre>
 <p><code>offset</code> bytes from the current position.</p>
@@ -17111,7 +17285,7 @@ kinds apart portably.</p>
 <p>The path the File was opened with; <code>&lt;stdin&gt;</code>, <code>&lt;stdout&gt;</code> or
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
-<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
+<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
 <h4 id="file-3"><a class="header" href="#file-3">File()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -17925,7 +18099,7 @@ Windows a read-only file inside the tree is such a failure
         print(r.error().message);
     }
 </code></pre>
-<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
+<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
 <pre><code class="language-pepper">static current(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
@@ -18565,7 +18739,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
+<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18805,7 +18979,7 @@ Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body fo
 <code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.</p>
-<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
 <h4 id="sockettransfer-1"><a class="header" href="#sockettransfer-1">SocketTransfer()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -19413,7 +19587,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
     worker.join();
 </code></pre>
-<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
+<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
@@ -19848,7 +20022,7 @@ returns.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
+<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
 <pre><code class="language-pepper">construct(core: _TaskCore)
 </code></pre>
@@ -20128,7 +20302,7 @@ so a long computation can stop early. False outside a task.</p>
 <code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
 and <code>sleep</code> returns early. Code that does not wait is never interrupted.
 Timeouts nest: an inner one cannot extend an outer one.</p>
-<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
+<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
 <h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
 <pre><code class="language-pepper">construct(milliseconds: ulong)
 </code></pre>
@@ -20974,7 +21148,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
-<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -20982,7 +21156,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
+<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
@@ -21260,7 +21434,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
+<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -22308,7 +22482,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
+<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -22706,7 +22880,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
+<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23236,7 +23410,7 @@ advances that variable.</p>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
 <h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next number: <code>start</code> on the first call, then one
@@ -23246,7 +23420,7 @@ more each time.</p>
 <ul>
 <li>true if there is a current number, false once past the end</li>
 </ul>
-<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
+<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the number the last successful <code>next()</code> moved to.</p>
@@ -23736,7 +23910,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9c009f99.js";
+            window.path_to_searchindex_js = "../searchindex-d59f8295.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -434,15 +434,20 @@ members. Both visit entries in no particular order. Changing a value
 (<code>ages[name] = …</code> for a key already present) is fine while looping, but adding
 or removing an entry stops the program at the iterator’s next step.</p>
 <h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
-<p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
-Each one works lazily, one element at a time as the loop asks for it:</p>
+<p><code>Iterator&lt;T&gt;</code> has default methods that wrap an iterator in another one.
+Each works lazily, one element at a time as the loop asks for it:</p>
 <ul>
 <li><code>map(transform)</code> yields <code>transform(x)</code> for each element <code>x</code>; its element
 type is whatever <code>transform</code> returns.</li>
 <li><code>filter(keep)</code> yields only the elements for which <code>keep(x)</code> is <code>true</code>.</li>
+<li><code>enumerate()</code> yields <code>(index, x)</code> <a href="tuples.html">tuples</a>, counting from 0 in
+<code>ulong</code>; <code>enumerate&lt;int&gt;()</code> counts in <code>int</code> instead.</li>
+<li><code>zip(other)</code> yields <code>(x, y)</code> pairs, one element from each iterator in
+step, and stops when either runs out.</li>
 </ul>
-<p>Both return iterators, so they chain, and a <code>for</code> loop can use the result
-directly:</p>
+<p>They return iterators, so they chain, and a <code>for</code> loop can use the result
+directly; destructure a tuple to name its parts. <code>to_array()</code> runs an
+iterator to the end and collects what is left into a new <code>Array</code>:</p>
 <pre><code class="language-pepper">struct Person {
     String name;
     int age;
@@ -470,16 +475,34 @@ main(): int {
         kept += 1;
     }
     assert(kept == 3, "h, e, o");
+
+    # enumerate pairs each element with its position, and zip pairs two
+    # iterators in step; destructure the tuple to name both parts.
+    var ranked = "";
+    for (var (i, person) in people.iterate().enumerate()) {
+        ranked += $"{i}:{person.name} ";
+    }
+    assert(ranked == "0:Ada 1:Bo 2:Cyd ", "numbered from 0");
+    var seats = ["window", "aisle"];
+    var seated = 0;
+    for (var (person, seat) in people.iterate().zip(seats.iterate())) {
+        seated += 1;   # Cyd gets no seat: zip stops at the shorter
+    }
+    assert(seated == 2, "two pairs");
+
+    # to_array collects what an iterator yields.
+    var ages = people.iterate().map((p) =&gt; p.age).to_array();
+    assert(ages.count() == 3 &amp;&amp; ages[2] == 40, "every age");
     return 0;
 }
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
-<code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
-<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+<code>Array.iterate()</code>), <code>StringIterator</code>, <a href="#looping-over-a-range">ranges</a>, and
+your own iterators once you write <code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
 the iterator it wraps (the runtime’s iterators are
 <a href="value-structs.html">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
 so a chain built from a temporary stays alive while the loop runs, and
-<code>it.map(f)</code> leaves <code>it</code> where it was. They are generic methods (see
+<code>it.map(f)</code> and <code>it.to_array()</code> leave <code>it</code> where it was. They are generic methods (see
 <a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>

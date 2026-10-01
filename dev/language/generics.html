@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9c009f99.js";
+            window.path_to_searchindex_js = "../searchindex-d59f8295.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -324,6 +324,9 @@ main.pep:1:1: note: declared here
     1 | make&lt;T&gt;(): Box&lt;T&gt; { return Box&lt;T&gt;(); }
       | ^~~~
 </code></pre>
+<p>A parameter whose type is a trait takes its type arguments from the trait the
+argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)</code>, the call
+<code>total(Countdown(4))</code> infers <code>T = int</code> from <code>extend Countdown with Iterator&lt;int&gt;</code>.</p>
 <p>Inference works through closures in both directions. In
 <code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
 the closure’s result gives <code>U</code>.</p>
@@ -369,8 +372,8 @@ main(): int {
 <code>b.map&lt;long&gt;(f)</code>. With a space, <code>a.b &lt; c</code> is a comparison.</li>
 <li>A generic method cannot be called through a <a href="traits-and-extensions.html#traits-as-types">trait value</a>,
 since each of its uses is compiled separately. Call it on the concrete type.</li>
-<li>The iterator adapters <code>map</code> and <code>filter</code> are generic default methods of
-<code>Iterator&lt;T&gt;</code>; see <a href="iteration.html#adapters">Iteration</a>.</li>
+<li>The iterator adapters <code>map</code>, <code>filter</code>, <code>enumerate</code> and <code>zip</code> are generic
+default methods of <code>Iterator&lt;T&gt;</code>; see <a href="iteration.html#adapters">Iteration</a>.</li>
 </ul>
 <h2 id="default-type-arguments"><a class="header" href="#default-type-arguments">Default type arguments</a></h2>
 <p>A type parameter can have a default, written <code>Name=Type</code>. When a use leaves

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9c009f99.js";
+            window.path_to_searchindex_js = "../searchindex-d59f8295.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -304,6 +304,71 @@ gets this method.</p>
         print(even);
     }
 </code></pre>
+<h4 id="enumerate"><a class="header" href="#enumerate">enumerate</a></h4>
+<pre><code class="language-pepper">enumerate&lt;TIndex=ulong&gt;(): EnumerateIterator&lt;T, TIndex&gt;
+</code></pre>
+<p>Returns an iterator over the elements paired with their positions:
+<code>(0, first)</code>, <code>(1, second)</code>, and so on.</p>
+<p>Lazy, like <code>map</code>. Destructure the pair in the loop to name both parts.
+The positions count in <code>ulong</code>, like <code>Array.count()</code>; name another
+integer type to count in it (<code>enumerate&lt;int&gt;()</code>). Every type that
+declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TIndex</code> — the integer type of the positions, <code>ulong</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an <code>EnumerateIterator&lt;T, TIndex&gt;</code> over <code>(index, element)</code> tuples</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
+    for (var (i, name) in names.iterate().enumerate()) {
+        print($"{i}: {name}");   # 0: Ada, then 1: Grace
+    }
+</code></pre>
+<h4 id="zip"><a class="header" href="#zip">zip</a></h4>
+<pre><code class="language-pepper">zip&lt;U&gt;(other: Iterator&lt;U&gt;): ZipIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over pairs of this iterator’s elements and
+<code>other</code>’s, in step: <code>(first, other's first)</code>, and so on. It stops when
+either runs out.</p>
+<p>Lazy, like <code>map</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type of <code>other</code>’s elements</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the iterator whose elements form the second half of each pair</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>ZipIterator&lt;T, U&gt;</code> over <code>(element, other element)</code> tuples</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
+    var ages = [36, 45];
+    for (var (name, age) in names.iterate().zip(ages.iterate())) {
+        print($"{name} is {age}");
+    }
+</code></pre>
+<h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
+<pre><code class="language-pepper">to_array(): Array&lt;T&gt;
+</code></pre>
+<p>Returns a new <code>Array</code> holding the remaining elements, in order.</p>
+<p>Runs the iteration to the end. Like the adapters, it works on a copy
+of the iterator, so a value iterator (every runtime iterator is one)
+is left where it was. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the elements, possibly none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+</code></pre>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct MapIterator&lt;T, U&gt;
 </code></pre>
@@ -385,6 +450,89 @@ iterator that the test function accepts.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h2 id="enumerateiterator"><a class="header" href="#enumerateiterator">EnumerateIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct EnumerateIterator&lt;T, TIndex&gt;
+</code></pre>
+<p>The iterator <code>Iterator.enumerate</code> returns: each element of the source
+iterator, paired with its position.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>TIndex</code> — the integer type of the positions</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.enumerate</code></li>
+</ul>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code>, numbered from 0.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to number</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<pre><code class="language-pepper">current(): (TIndex, T)
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to, with its
+index.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current <code>(index, element)</code> pair</li>
+</ul>
+<h2 id="zipiterator"><a class="header" href="#zipiterator">ZipIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ZipIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.zip</code> returns: the elements of two iterators,
+paired in step, until either runs out.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the first iterator’s elements</li>
+<li><code>U</code> — the type of the second iterator’s elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.zip</code></li>
+</ul>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="zipiterator-1"><a class="header" href="#zipiterator-1">ZipIterator()</a></h4>
+<pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;U&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>first</code> and <code>second</code>, paired.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>first</code> — the iterator giving the first half of each pair</li>
+<li><code>second</code> — the iterator giving the second half of each pair</li>
+</ul>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
+run out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if both have a current element, false when either is exhausted</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">current(): (T, U)
+</code></pre>
+<p>Returns the pair the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current <code>(first element, second element)</code> pair</li>
+</ul>
 <h2 id="iterable"><a class="header" href="#iterable">Iterable</a></h2>
 <pre><code class="language-pepper">trait Iterable&lt;T&gt;
 </code></pre>
@@ -411,7 +559,7 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
         total = total + x;
     }
 </code></pre>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
