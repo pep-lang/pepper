@@ -1,17 +1,25 @@
 # The io_uring I/O driver (Linux) for the task runtime; see driver.pep.
 #
-# Readiness through io_uring's poll requests, the way the IOCP driver uses
-# AFD polls: when a task starts waiting for reading or writing and no
-# request for that is in flight, `_want` queues a one-shot IORING_OP_POLL_ADD
-# on the submission ring. `_poll` submits what is queued and waits for
+# Readiness through io_uring's poll requests, the way the epoll driver uses
+# an edge-triggered registration: the first time a task waits on a socket,
+# `_want` queues one multishot IORING_OP_POLL_ADD (IORING_POLL_ADD_MULTI)
+# for the direction it waits on, which stays armed and posts a completion
+# each time the socket wakes. So a wait costs no submission once the socket
+# is armed; arming a one-shot poll per wait made the kernel set up and tear
+# down a poll on every read. A wait in a direction the poll does not cover
+# replaces it with one that covers both. When the kernel ends a request (a
+# completion without IORING_CQE_F_MORE: an error, or a kernel before 5.13
+# that runs every poll one-shot), `_poll` arms a new one for the directions
+# that still have tasks parked and did not just become ready; the new poll
+# reports readiness that is already there, so no wakeup is lost. `_poll` submits what is queued and waits for
 # completions in the same `io_uring_enter` call. Each request's user data is
-# a number unique to this driver, mapped in `_requests` to the socket and
-# what it asked, so a completion for a socket that was closed (and whose
-# descriptor may be reused) is recognized and dropped.
+# a number unique to this driver, mapped in `_requests` to the socket, so a
+# completion for a socket that was closed (and whose descriptor may be
+# reused) is recognized and dropped.
 #
 # A pending poll holds a reference to its socket's file, so closing the
 # descriptor would not close the socket. `_forget` therefore queues an
-# IORING_OP_POLL_REMOVE for each pending request and submits at once,
+# IORING_OP_POLL_REMOVE for the socket's request and submits at once,
 # before the caller closes it.
 #
 # Everything is written over the raw system calls (no liburing):
@@ -29,8 +37,8 @@
 # ring_entries, flags, dropped, array: u32 each) from 40, the completion
 # ring offsets (head, tail, ring_mask, ring_entries, overflow, cqes) from
 # 80. A submission entry is 64 bytes: opcode at 0, fd at 4, addr at 16,
-# poll32_events at 28, user_data at 32. A completion entry is 16 bytes:
-# user_data at 0, res (i32) at 8.
+# len (a poll's flags) at 24, poll32_events at 28, user_data at 32. A
+# completion entry is 16 bytes: user_data at 0, res (i32) at 8, flags at 12.
 #
 # Files: `_start_file` queues an IORING_OP_READ or IORING_OP_WRITE at the
 # file's position (offset -1), mapped in `_files` to the task waiting for
@@ -39,6 +47,12 @@
 # The doorbell is an eventfd with its own poll request, whose user data is
 # `_async_doorbell_key()`; the poll that sees it reads it back to 0 and
 # queues a new request.
+#
+# The ring is made with IORING_SETUP_DEFER_TASKRUN where the kernel has it
+# (6.1), else IORING_SETUP_COOP_TASKRUN (5.19): otherwise every socket
+# wakeup on another CPU interrupts the worker to post its completion, which
+# made this driver twice as slow as epoll. Only the worker's own thread
+# touches its ring, as IORING_SETUP_SINGLE_ISSUER requires.
 
 import io;
 import "driver";
@@ -60,6 +74,13 @@ extern long read(int fd, void* buf, ulong n);
 # System call numbers: the same on x86-64 and AArch64.
 const _IO_URING_SETUP = 425;
 const _IO_URING_ENTER = 426;
+
+# Setup flags, tried in order until the kernel takes one:
+# IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN (6.1), then
+# IORING_SETUP_COOP_TASKRUN (5.19), then none. Without them a socket's
+# wakeup on another CPU interrupts the worker to post the completion.
+const _IO_URING_SETUP_DEFERRED: uint = 12288;
+const _IO_URING_SETUP_COOPERATIVE: uint = 256;
 
 # How many submission entries the ring has.
 const _IO_URING_ENTRIES: uint = 256;
@@ -84,13 +105,17 @@ const _IO_URING_MAX_TRANSFER: ulong = 2147479552;
 const _IO_URING_GETEVENTS: uint = 1;
 const _IO_URING_EXT_ARG: uint = 8;
 
-# What a poll asks for: POLLIN | POLLRDHUP to read, POLLOUT to write. What
-# lets a reader continue: POLLIN, POLLERR, POLLHUP, POLLRDHUP; a writer:
-# POLLOUT, POLLERR, POLLHUP.
+# What a poll asks for: POLLIN | POLLRDHUP to read, POLLOUT to write. What lets a reader continue: POLLIN,
+# POLLERR, POLLHUP, POLLRDHUP; a writer: POLLOUT, POLLERR, POLLHUP.
 const _IO_URING_POLL_READ: uint = 8193;
 const _IO_URING_POLL_WRITE: uint = 4;
 const _IO_URING_READABLE_EVENTS: int = 8217;
 const _IO_URING_WRITABLE_EVENTS: int = 28;
+
+# IORING_POLL_ADD_MULTI, in a poll's len; IORING_CQE_F_MORE, set on a
+# completion when its request stays armed.
+const _IO_URING_POLL_MULTI: uint = 1;
+const _IO_URING_CQE_MORE: uint = 2;
 
 # A worker's io_uring instance.
 export struct _IoUringDriver {
@@ -116,12 +141,11 @@ export struct _IoUringDriver {
     var _tail: uint;
     # The doorbell's eventfd.
     var _bell: long;
-    # Each request in flight: its user data, and its socket times 4 plus
-    # what it asked (io._IO_READABLE or io._IO_WRITABLE).
+    # Each poll in flight: its user data, and its socket times 4 plus the
+    # directions it covers (io._IO_READABLE, io._IO_WRITABLE or both).
     var _requests: HashMap<ulong, ulong>;
-    # The request in flight for reading and for writing on each socket.
-    var _reading: HashMap<ulong, ulong>;
-    var _writing: HashMap<ulong, ulong>;
+    # The poll in flight on each armed socket.
+    var _armed: HashMap<ulong, ulong>;
     var _next_request: ulong;
     # Each file transfer in flight: its user data, and the task it is for.
     var _files: HashMap<ulong, ulong>;
@@ -136,8 +160,7 @@ export struct _IoUringDriver {
         this._ring_fd = -1;
         this._bell = -1;
         this._requests = HashMap<ulong, ulong>();
-        this._reading = HashMap<ulong, ulong>();
-        this._writing = HashMap<ulong, ulong>();
+        this._armed = HashMap<ulong, ulong>();
         this._next_request = 1;
         this._files = HashMap<ulong, ulong>();
         this._finished_tasks = Array<ulong>();
@@ -160,15 +183,16 @@ export struct _IoUringDriver {
         return Optional<_IoUringDriver>.some(driver);
     }
 
-    # Queues a poll on the doorbell.
+    # Queues a one-shot poll on the doorbell.
     _arm_bell() {
-        this._queue(_IO_URING_OP_POLL_ADD, this._bell, 0, _IO_URING_POLL_READ, _async_doorbell_key());
+        this._queue(_IO_URING_OP_POLL_ADD, this._bell, 0, _IO_URING_POLL_READ, 0, _async_doorbell_key());
     }
 
     # Queues a submission entry, first submitting what is queued when the
     # ring is full. `events` is poll32_events for a poll and the length for a
-    # read or write, whose offset is always the file's position (-1).
-    _queue(opcode: u8, fd: long, address: ulong, events: uint, data: ulong) {
+    # read or write, whose offset is always the file's position (-1);
+    # `flags` is a poll's len.
+    _queue(opcode: u8, fd: long, address: ulong, events: uint, flags: uint, data: ulong) {
         if (this._tail - _async_io_uring_load(this._rings, this._sq_head) >= this._sq_entries) {
             this._enter(0, false);
         }
@@ -182,6 +206,7 @@ export struct _IoUringDriver {
             ((entry + 8) as __ptr<ulong>)[0] = ~(0 as ulong);
             ((entry + 24) as __ptr<uint>)[0] = events;
         } else {
+            ((entry + 24) as __ptr<uint>)[0] = flags;
             ((entry + 28) as __ptr<uint>)[0] = events;
         }
         ((entry + 32) as __ptr<ulong>)[0] = data;
@@ -191,13 +216,19 @@ export struct _IoUringDriver {
     }
 
     # Submits every queued entry and, when `wait` is set, waits up to
-    # `timeout` milliseconds (forever when negative) for a completion.
+    # `timeout` milliseconds (forever when negative) for a completion. A
+    # zero timeout still enters with GETEVENTS, which runs the completion
+    # work a ring with IORING_SETUP_DEFER_TASKRUN leaves for its thread.
     _enter(timeout: long, wait: bool) {
         var pending = this._tail - _async_io_uring_load(this._rings, this._sq_head);
         if (!wait) {
             if (pending > 0) {
                 _async_io_uring_enter(this._ring_fd, pending, 0, 0, __null, 0);
             }
+            return;
+        }
+        if (timeout == 0) {
+            _async_io_uring_enter(this._ring_fd, pending, 0, _IO_URING_GETEVENTS, __null, 0);
             return;
         }
         if (timeout < 0) {
@@ -216,10 +247,26 @@ export struct _IoUringDriver {
         );
     }
 
+    # Arms a multishot poll on socket `key` for the directions in `mask`.
+    _arm(key: ulong, mask: int) {
+        var data = this._next_request;
+        this._next_request = data + 1;
+        this._requests.insert(data, key * 4 + mask as ulong);
+        this._armed.insert(key, data);
+        var events: uint = 0;
+        if ((mask & io._IO_READABLE) != 0) {
+            events = events | _IO_URING_POLL_READ;
+        }
+        if ((mask & io._IO_WRITABLE) != 0) {
+            events = events | _IO_URING_POLL_WRITE;
+        }
+        this._queue(_IO_URING_OP_POLL_ADD, key as long, 0, events, _IO_URING_POLL_MULTI, data);
+    }
+
     # Forgets the request `data` and asks the kernel to remove it.
     _cancel(data: ulong) {
         this._requests.remove(data);
-        this._queue(_IO_URING_OP_POLL_REMOVE, -1, data, 0, 0);
+        this._queue(_IO_URING_OP_POLL_REMOVE, -1, data, 0, 0, 0);
     }
 
     _unmap() {
@@ -234,31 +281,29 @@ extend _IoUringDriver with _Driver {
 
     _want(handle: io.SocketHandle, interest: int): bool {
         var key = handle as ulong;
-        var requests = this._reading;
-        var events = _IO_URING_POLL_READ;
-        if (interest == io._IO_WRITABLE) {
-            requests = this._writing;
-            events = _IO_URING_POLL_WRITE;
+        var mask = interest;
+        if (this._armed.contains(key)) {
+            var data = this._armed.get(key);
+            var covered = (this._requests.get(data) % 4) as int;
+            if ((covered & interest) != 0) {
+                return true;
+            }
+            this._cancel(data);
+            mask = covered | interest;
         }
-        if (requests.contains(key)) {
-            return true;
-        }
-        var data = this._next_request;
-        this._next_request = data + 1;
-        this._requests.insert(data, key * 4 + interest as ulong);
-        requests.insert(key, data);
-        this._queue(_IO_URING_OP_POLL_ADD, handle as long, 0, events, data);
+        this._arm(key, mask);
         return true;
     }
 
     _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
-        this._enter(timeout, timeout != 0);
+        this._enter(timeout, true);
         var head = _async_io_uring_load(this._rings, this._cq_head);
         var tail = _async_io_uring_load(this._rings, this._cq_tail);
         while (head != tail) {
             var entry = this._rings + this._cqes + ((head & this._cq_mask) as ulong) * 16;
             var data = (entry as __ptr<ulong>)[0];
             var result = ((entry + 8) as __ptr<int>)[0];
+            var flags = ((entry + 12) as __ptr<uint>)[0];
             head = head + 1;
             if (this._files.contains(data)) {
                 # A file transfer: the count, or -errno as -1 minus the code.
@@ -270,17 +315,11 @@ extend _IoUringDriver with _Driver {
                 this._arm_bell();
             } else if (this._requests.contains(data)) {
                 var request = this._requests.get(data);
-                this._requests.remove(data);
                 var handle = request / 4;
-                var asked = (request % 4) as int;
-                if (asked == io._IO_READABLE) {
-                    this._reading.remove(handle);
-                } else {
-                    this._writing.remove(handle);
-                }
-                # A failed request wakes its waiters, which retry the call
-                # and see any error.
-                var ready = asked;
+                var covered = (request % 4) as int;
+                # A failed request wakes every waiter, which retries the call
+                # and sees any error.
+                var ready = covered;
                 if (result > 0) {
                     ready = 0;
                     if ((result & _IO_URING_READABLE_EVENTS) != 0) {
@@ -289,12 +328,31 @@ extend _IoUringDriver with _Driver {
                     if ((result & _IO_URING_WRITABLE_EVENTS) != 0) {
                         ready = ready | io._IO_WRITABLE;
                     }
-                    if (ready == 0) {
-                        ready = asked;
+                }
+                if (ready != 0) {
+                    handles.append(handle);
+                    interests.append(ready);
+                }
+                if ((flags & _IO_URING_CQE_MORE) == 0) {
+                    # The kernel ended the request: arm a new one for the
+                    # tasks this completion does not wake.
+                    this._requests.remove(data);
+                    this._armed.remove(handle);
+                    var still = 0;
+                    if (waits.contains(handle)) {
+                        var parked = waits.get(handle);
+                        if (parked._readers.count() > 0) {
+                            still = still | io._IO_READABLE;
+                        }
+                        if (parked._writers.count() > 0) {
+                            still = still | io._IO_WRITABLE;
+                        }
+                    }
+                    still = still & ~ready;
+                    if (still != 0) {
+                        this._arm(handle, still);
                     }
                 }
-                handles.append(handle);
-                interests.append(ready);
             }
         }
         _async_io_uring_store(this._rings, this._cq_head, head);
@@ -302,19 +360,10 @@ extend _IoUringDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
-        var removed = false;
-        if (this._reading.contains(key)) {
-            this._cancel(this._reading.get(key));
-            this._reading.remove(key);
-            removed = true;
-        }
-        if (this._writing.contains(key)) {
-            this._cancel(this._writing.get(key));
-            this._writing.remove(key);
-            removed = true;
-        }
-        # The polls hold the socket open until the kernel removes them.
-        if (removed) {
+        # The poll holds the socket open until the kernel removes it.
+        if (this._armed.contains(key)) {
+            this._cancel(this._armed.get(key));
+            this._armed.remove(key);
             this._enter(0, false);
         }
     }
@@ -332,7 +381,7 @@ extend _IoUringDriver with _Driver {
             length = _IO_URING_MAX_TRANSFER;
         }
         var opcode = write ? _IO_URING_OP_WRITE : _IO_URING_OP_READ;
-        this._queue(opcode, handle, buffer, length as uint, data);
+        this._queue(opcode, handle, buffer, length as uint, 0, data);
         return true;
     }
 
@@ -385,9 +434,14 @@ _async_io_uring_zero(memory: __ptr<u8>, size: ulong) {
 [Target(OS(Linux))]
 _async_io_uring_setup(driver: _IoUringDriver): bool {
     __ptr<u8> parameters = _pep_malloc(120);
-    _async_io_uring_zero(parameters, 120);
-    var fd = syscall(_IO_URING_SETUP, _IO_URING_ENTRIES, parameters);
     __ptr<uint> words = parameters;
+    var fd = _async_io_uring_try_setup(parameters, _IO_URING_SETUP_DEFERRED);
+    if (fd < 0) {
+        fd = _async_io_uring_try_setup(parameters, _IO_URING_SETUP_COOPERATIVE);
+    }
+    if (fd < 0) {
+        fd = _async_io_uring_try_setup(parameters, 0);
+    }
     if (fd < 0 || (words[5] & _IO_URING_FEATURES) != _IO_URING_FEATURES) {
         if (fd >= 0) {
             close(fd as int);
@@ -437,6 +491,15 @@ _async_io_uring_setup(driver: _IoUringDriver): bool {
     driver._tail = _async_io_uring_load(rings, driver._sq_tail);
     _pep_free(parameters);
     return true;
+}
+
+# Makes a ring with setup `flags` (struct io_uring_params flags at 8); the
+# ring's descriptor, or negative when the kernel refuses them.
+[Target(OS(Linux))]
+_async_io_uring_try_setup(parameters: __ptr<u8>, flags: uint): long {
+    _async_io_uring_zero(parameters, 120);
+    ((parameters + 8) as __ptr<uint>)[0] = flags;
+    return syscall(_IO_URING_SETUP, _IO_URING_ENTRIES, parameters);
 }
 
 # Submits `count` entries and waits for `minimum` completions. Errors

@@ -217,7 +217,7 @@ How the runtime waits for sockets is its I/O *backend*, an `async.Backend`:
 | Backend | Where | How |
 |---|---|---|
 | `Epoll` | Linux | epoll, edge-triggered |
-| `IoUring` | Linux 5.11 and later | io_uring, with a one-shot poll request per waiting socket; never picked automatically, since container seccomp profiles and hardened kernels often refuse it |
+| `IoUring` | Linux 5.11 and later | io_uring, with one multishot poll request per waiting socket and deferred completion work (as fast as epoll in our echo benchmark); never picked automatically, since container seccomp profiles and hardened kernels often refuse it |
 | `Kqueue` | macOS | kqueue, edge-triggered |
 | `Iocp` | Windows | an I/O completion port, fed by AFD poll requests (as tokio and libuv do) |
 | `Poll` | everywhere | `poll()` (`WSAPoll` on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands |
@@ -228,6 +228,15 @@ the system has. `RuntimeOptions().backend(kind)` asks for one (and
 `PEPPER_IO_BACKEND` environment variable (`epoll`, `io_uring`, `kqueue`,
 `iocp` or `poll`) overrides the automatic choice without changing the
 program, for testing and benchmarks. `async.current_backend()` says which one is running.
+
+io_uring usually pays off as the amount of multiplexed I/O grows: many
+operations in flight, submitted and completed in batches through the ring
+rather than one system call each. Pepper's `IoUring` backend does not do
+that yet. It uses the ring only to learn when a socket is ready, then reads
+and writes with ordinary `recv` and `send` calls, as epoll does, so it makes
+the same number of system calls. In our echo benchmark it kept level with
+epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
+the reads and writes themselves through the ring is future work.
 
 ## Timeouts
 

@@ -280,15 +280,16 @@ export _io_win_set_non_blocking(s: SocketHandle) {
     _pep_free(on);
 }
 
-# After a failed call: waits for `interest` when `e` says the call would
-# block (WSAEWOULDBLOCK), and succeeds when the call should be tried again;
-# otherwise fails with the error to return.
+# After a failed call with Winsock error `code`: waits for `interest` when
+# the call would block (WSAEWOULDBLOCK), and succeeds when the call should be
+# tried again; otherwise fails with the error to return. The error's message
+# is looked up only then, since would-block is the common case.
 [Target(OS(Windows))]
-export _io_win_retry(h: SocketHandle, e: IoError, interest: int): IoResult<void> {
-    if (e.code == 10035) {  # WSAEWOULDBLOCK
+export _io_win_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
+    if (code == 10035) {  # WSAEWOULDBLOCK
         return _io_socket_wait(h, interest);
     }
-    return IoResult<void>.err(e);
+    return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
 }
 
 [Target(OS(Windows))]
@@ -399,7 +400,7 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
         if (_io_sys_socket_valid(s)) {
             break;
         }
-        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_READABLE);
+        var retry = _io_win_retry(h, WSAGetLastError() as ErrorCode, _IO_READABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);
@@ -421,7 +422,7 @@ export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong)
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_READABLE);
+        var retry = _io_win_retry(h, WSAGetLastError() as ErrorCode, _IO_READABLE);
         if (retry.is_err()) {
             return IoResult<ulong>.err(retry.error());
         }
@@ -436,7 +437,7 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_WRITABLE);
+        var retry = _io_win_retry(h, WSAGetLastError() as ErrorCode, _IO_WRITABLE);
         if (retry.is_err()) {
             return IoResult<ulong>.err(retry.error());
         }
@@ -454,7 +455,7 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
             _pep_free(buffer);
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_WRITABLE);
+        var retry = _io_win_retry(h, WSAGetLastError() as ErrorCode, _IO_WRITABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             return IoResult<ulong>.err(retry.error());
@@ -481,12 +482,12 @@ export _io_sys_socket_receive_from(
         if (r >= 0) {
             break;
         }
-        var e = _io_win_socket_error();
-        if (e.code == 10040) {  # WSAEMSGSIZE
+        var code = WSAGetLastError() as ErrorCode;
+        if (code == 10040) {  # WSAEMSGSIZE
             r = limit;
             break;
         }
-        var retry = _io_win_retry(h, e, _IO_READABLE);
+        var retry = _io_win_retry(h, code, _IO_READABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);

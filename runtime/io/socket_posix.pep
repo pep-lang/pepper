@@ -454,19 +454,20 @@ export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     return _io_ok_void();
 }
 
-# After a failed call: waits for `interest` when `e` says the call would
-# block, and succeeds when the call should be tried again (it would have
-# blocked, or a signal interrupted it); otherwise fails with the error to
-# return.
+# After a failed call with error `code`: waits for `interest` when the call
+# would block, and succeeds when the call should be tried again (it would
+# have blocked, or a signal interrupted it); otherwise fails with the error
+# to return. The error's message is looked up only then, since would-block
+# is the common case.
 [Target(!OS(Windows))]
-export _io_posix_retry(h: SocketHandle, e: IoError, interest: int): IoResult<void> {
-    if (_io_posix_would_block(e.code)) {
+export _io_posix_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
+    if (_io_posix_would_block(code)) {
         return _io_socket_wait(h, interest);
     }
-    if (e.is_interrupted()) {
+    if (_io_sys_is_interrupted(code)) {
         return _io_ok_void();
     }
-    return IoResult<void>.err(e);
+    return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
 }
 
 # The accepted socket is non-blocking and close-on-exec like the others.
@@ -497,7 +498,7 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
             _pep_free(length);
             return IoResult<(SocketHandle, SocketAddress)>.ok((fd, peer));
         }
-        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);
@@ -514,7 +515,7 @@ export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong)
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
             return IoResult<ulong>.err(retry.error());
         }
@@ -529,7 +530,7 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_posix_retry(h, IoError.last(), _IO_WRITABLE);
+        var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_WRITABLE);
         if (retry.is_err()) {
             return IoResult<ulong>.err(retry.error());
         }
@@ -547,7 +548,7 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
             _pep_free(buffer);
             return IoResult<ulong>.ok(r as ulong);
         }
-        var retry = _io_posix_retry(h, IoError.last(), _IO_WRITABLE);
+        var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_WRITABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             return IoResult<ulong>.err(retry.error());
@@ -572,7 +573,7 @@ export _io_sys_socket_receive_from(
             _pep_free(length);
             return IoResult<(ulong, SocketAddress)>.ok((r as ulong, from));
         }
-        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);

@@ -33,8 +33,8 @@ export enum Backend {
     ## Linux's epoll, edge-triggered.
     Epoll,
     ## Linux's io_uring (kernel 5.11 or later), waiting for sockets with
-    ## one-shot poll requests. Not the default: container seccomp profiles
-    ## and hardened kernels often refuse it.
+    ## one multishot poll request each. Not the default: container seccomp
+    ## profiles and hardened kernels often refuse it.
     IoUring,
     ## The BSD and macOS kqueue, edge-triggered.
     Kqueue,
