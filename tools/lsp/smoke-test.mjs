@@ -66,6 +66,15 @@ function check(name, cond, extra) {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Waits up to `ms` for the server to publish diagnostics for `u`. A valid file
+// runs full sema over the runtime first, which can take seconds on a loaded
+// runner, so a fixed delay races it.
+async function diagnosticsFor(u, ms = 30000) {
+  const find = () => notifications.find((n) => n.method === "textDocument/publishDiagnostics" && n.params.uri === u);
+  for (const start = Date.now(); !find() && Date.now() - start < ms; ) await wait(50);
+  return find();
+}
+
 // ── Case 1: valid file → empty diagnostics, hover, document symbols ──────────
 const init = await request("initialize", { processId: null, rootUri: null, capabilities: {} });
 check("initialize returns serverInfo pepper-lsp", init?.serverInfo?.name === "pepper-lsp", init);
@@ -76,9 +85,7 @@ check("capabilities advertise documentSymbol", !!init?.capabilities?.documentSym
 
 notify("initialized", {});
 notify("textDocument/didOpen", { textDocument: { uri, languageId: "pep", version: 1, text } });
-await wait(300);
-
-const diags = notifications.find((n) => n.method === "textDocument/publishDiagnostics" && n.params.uri === uri);
+const diags = await diagnosticsFor(uri);
 check("diagnostics published for open doc", !!diags, notifications.map((n) => n.method));
 check("valid file has zero diagnostics", diags?.params.diagnostics.length === 0, diags?.params.diagnostics);
 
@@ -107,9 +114,7 @@ check("completion includes local `s`", Array.isArray(comp) && comp.some((c) => c
 const badUri = "file:///D:/pepper/tools/lsp/smoke-bad.pep";
 const badText = 'main(): int {\n    var x = ;\n}\n';
 notify("textDocument/didOpen", { textDocument: { uri: badUri, languageId: "pep", version: 1, text: badText } });
-await wait(300);
-
-const badDiags = notifications.find((n) => n.method === "textDocument/publishDiagnostics" && n.params.uri === badUri);
+const badDiags = await diagnosticsFor(badUri);
 check("diagnostics published for broken doc", !!badDiags, notifications.map((n) => n.method));
 check("broken file has a diagnostic", badDiags?.params.diagnostics.length >= 1, badDiags?.params.diagnostics);
 // Parser reports the error at line 2 (the `var x = ;` statement).
