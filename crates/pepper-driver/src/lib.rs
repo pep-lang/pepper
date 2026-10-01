@@ -101,7 +101,9 @@ pub fn run(options: Options) -> Result<i32, String> {
         generator.opt_level = options.effective_opt_level()?;
         generator.generate(&sema_module).map_err(|d| sema_module.sources.render(&d))?;
         timer.stage("codegen");
-        pepper_codegen::target::optimize(&generator.module, options.effective_opt_level()?)?;
+        let cpu = options.effective_cpu()?;
+        cpu.stamp(&generator.module);
+        pepper_codegen::target::optimize_with(&generator.module, options.effective_opt_level()?, pepper_codegen::target::Pipeline::Default, &cpu)?;
         timer.stage("optimize");
         let ir_path = build_dir.join(format!("{}.ll", module_name));
         std::fs::write(&ir_path, generator.module.to_string())
@@ -113,7 +115,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
     let build = options.effective_build()?;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build.clone())).transpose()?;
     let program_name = program.files[0].namespace.clone();
     let (mut objects, link_libraries, program_key) = match cached {
         // Every unit and the program came from the cache: sema did not run.
@@ -160,7 +162,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     timer.stage("codegen and emission");
     if build.lto {
         let object = build_dir.join(format!("{}.lto.o", module_name));
-        lto::optimize(&objects, &object, build.opt_level)?;
+        lto::optimize(&objects, &object, &build)?;
         objects = vec![object];
         timer.stage("link-time optimization");
     }
@@ -269,7 +271,7 @@ pub fn objects(
     keys.exact_positions = options.emit_debug;
     let units = &keys.units;
     let build = options.effective_build()?;
-    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build)).transpose()?;
+    let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build.clone())).transpose()?;
     let interfaces = match cache {
         Some(_) => file_interfaces(module, program, interfaces)?,
         None => vec![],
@@ -465,7 +467,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
             }
             Ok(Some(outcome))
         }
-        _ => cache::emit(&generate()?, &job.object, setup.build).map(|_| None),
+        _ => cache::emit(&generate()?, &job.object, &setup.build).map(|_| None),
     }
 }
 
@@ -537,7 +539,7 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
 }
 
 
-/// Machine for object emission: the host, CPU `generic`.
+/// Machine for object emission: the host, with clang's default CPU.
 ///
 /// Delegated to `pepper_codegen::target` so the backend registration lives in
 /// one place; registering only x86 here is what left the CLI unable to compile

@@ -29,7 +29,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
-| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`, `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
+| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pepper-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
@@ -1030,7 +1030,7 @@ program object `<build>/<module>.o`, with the host `TargetMachine`.
 as a level). `cache::emit` runs `target::optimize` (LLVM's `default<On>`
 pipeline, nothing at `-O0`) on each unit's module after `partition::finish`
 and after the cache hashed its bitcode, then writes the object with
-`host_machine_at(level)`, whose codegen level matches. So the cache's code
+`target::machine(level, &cpu)`, whose codegen level matches. So the cache's code
 hash is of the unoptimized module and a "same code" unit skips the
 pipeline too; the level is in `Cache::compiler` and so in every key and
 code hash. `--emit-llvm` optimizes the whole-program module the same way,
@@ -1053,6 +1053,35 @@ the only object the system linker sees. No linker plugin or `lld` is
 involved, so it works wherever the compiler does. The LTO mode is part of
 the cache's directory name and compiler identity (`O2-lto`, or `O2-lto-g` with `-g`). The JIT does
 not use LTO: it compiles the whole program as one module already.
+
+**Target CPU** (`codegen/src/target.rs`). `Cpu` is the CPU, the features
+added to or removed from it, and the CPU to tune for. `Cpu::default` is
+clang's default for the host triple (`default_for`: `x86-64` tuned for
+`generic`, `penryn` on Intel macOS, `apple-m1` on Apple arm64, `generic`
+on other AArch64), never the build machine's CPU. `Cpu::from_options` reads
+`-m` options as clang does: on x86 `-march` names the CPU (`native` asks
+LLVM for the host's CPU and features) and `-mcpu` is an error; on AArch64
+`-mcpu` names the CPU and `-march=armv8.x-a+ext` the architecture
+(`+v8.xa`, `+ext`, `-ext` for `+noext`); `-mtune` sets `tune-cpu`; and
+`-m<feature>`/`-mno-<feature>` add `+feature`/`-feature` last. `Build`
+carries it: `cache::emit` calls `Cpu::stamp`, which puts `target-cpu`,
+`target-features` and `tune-cpu` on every defined function as clang does,
+so LTO keeps each function's CPU, and every pass and object uses
+`target::machine(level, &cpu)`. The CPU is part of the cache's directory
+name and compiler identity (`O2-lto-x86-64@generic`; hashed when it is not
+a plain file name, as `-march=native`'s feature list is not).
+
+**IR facts** (`codegen/src/facts.rs`). `CodeGenerator::generate` ends with
+`facts::annotate`, which states what the language guarantees: `nounwind`
+on every function and `uwtable` on every definition; `noreturn` and `cold`
+on `NO_RETURN` (`_pep_panic`, `_pep_exit`, `abort`, `_Exit`); `noalias` on
+the result of `ALLOCATORS` (`_pep_malloc`, `_pep_realloc`); and `!tbaa` on
+object memory. The TBAA tree has two types under one root, `reference
+counts` and `fields`: a load or store whose address is a field address of
+a struct object (`getelementptr %S, ptr, 0, <i>`: `i < 2` is the head) or
+a head count address (`head_count_ptr`, found by its name `HEAD_COUNT_NAME`)
+gets one; everything else stays untagged and may alias anything. The
+module comment says which facts are left out and why.
 
 It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as

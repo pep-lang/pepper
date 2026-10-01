@@ -6,6 +6,7 @@ pub mod address;
 pub mod context;
 pub mod debug;
 mod debug_types;
+pub mod facts;
 #[cfg(windows)]
 mod jit_memory;
 pub mod ops;
@@ -24,6 +25,10 @@ use ops as llvm_ops;
 /// Field index of `__invoke` in a function object: after the
 /// `__refcount`/`__weakcount` head (see `passes::function_types`).
 const FUNCTION_INVOKE_INDEX: u32 = 2;
+
+/// The name of a head count's address (`head_count_ptr`), by which
+/// [`facts::tbaa`] tells it from other byte addresses.
+pub(crate) const HEAD_COUNT_NAME: &str = "head_count";
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
 use pepper_sema::model::{Diagnostic, Loc};
 use pepper_sema::type_name::TypeName;
@@ -249,7 +254,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 _ => Loc::NONE,
             };
             Diagnostic::error(error).at(loc)
-        })
+        })?;
+        facts::annotate(&self.module);
+        Ok(())
     }
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
@@ -4683,7 +4690,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// Address of head count `field` in the object at `object`.
     fn head_count_ptr(&self, object: PointerValue<'ctx>, field: sema::CountField) -> Result<PointerValue<'ctx>, String> {
         let offset = self.context.i64_type().const_int(field.offset(), false);
-        unsafe { self.builder.build_gep(self.context.i8_type(), object, &[offset], "head_count") }.map_err(|e| e.to_string())
+        unsafe { self.builder.build_gep(self.context.i8_type(), object, &[offset], HEAD_COUNT_NAME) }.map_err(|e| e.to_string())
     }
 
     fn codegen_weak(&mut self, op: sema::WeakOp, ty: &TypeName, arg: &Expression) -> Result<BasicValueEnum<'ctx>, String> {

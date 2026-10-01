@@ -165,6 +165,7 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `-g` | Emit debug info for gdb, lldb, Visual Studio and WinDbg (a `.pdb` on Windows). See [debugging](../tools/debugging.md). |
 | `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `PEPPER_OPT_LEVEL` (`0` to `3`) when set. At `-O2` and `-O3` the whole program is also optimized together once every file is compiled. |
 | `--lto=off` | At `-O2` and `-O3`, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. `--lto=full` turns it on at `-O1`. |
+| `-march=<cpu>`, `-mcpu=<cpu>`, `-mtune=<cpu>`, `-m<feature>`, `-mno-<feature>` | Generate code for a CPU, as clang's options of the same names do. On x86-64, `-march` names the CPU (`x86-64-v3`, `znver4`, `native` for the machine compiling). On AArch64, `-mcpu` names the CPU (`apple-m2`, `native`) and `-march` the architecture (`armv8.2-a+crypto`). `-mtune` only changes scheduling. `-m<feature>` adds a feature (`-mavx2`) and `-mno-<feature>` removes one. Without them, the program runs on any machine of its kind: clang's default CPU (`x86-64`; `apple-m1` on Apple arm64). |
 | `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`, optimized at the `-O` level. |
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |

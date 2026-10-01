@@ -60,7 +60,7 @@
 //! another, so two compilers cannot deadlock.
 
 use inkwell::module::Module;
-use pepper_codegen::target::OptLevel;
+use pepper_codegen::target::{Cpu, OptLevel};
 use pepper_sema::checked::{CheckedRuntime, RuntimeStore};
 use pepper_sema::program::ParseCache;
 use std::fs::File;
@@ -73,23 +73,33 @@ const VERSION: &str = "v1";
 /// How the units of a build are compiled: the `-O` level, and whether each
 /// unit is kept as bitcode for link-time optimization (see [`crate::lto`])
 /// rather than as an object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Build {
     pub opt_level: OptLevel,
     pub lto: bool,
+    /// The CPU to generate code for (`-march`, `-mcpu`, `-mtune`, `-m<feature>`).
+    pub cpu: Cpu,
     /// Debug info (`-g`).
     pub debug: bool,
 }
 
 impl Build {
     /// The extension of a unit's file: `bc` with LTO, else `o`.
-    pub fn extension(self) -> &'static str {
+    pub fn extension(&self) -> &'static str {
         if self.lto { "bc" } else { "o" }
     }
 
-    /// How the options appear in the cache: `O2`, `O2-lto`, `O2-lto-g`.
-    fn name(self) -> String {
-        format!("O{}{}{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" })
+    /// How the options appear in the cache: `O2-x86-64@generic`,
+    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`. A CPU name that is not a plain file name (from
+    /// `-march=native`'s features, say) is hashed.
+    fn name(&self) -> String {
+        let cpu = self.cpu.key();
+        let cpu = if cpu.len() <= 48 && cpu.chars().all(|c| c.is_ascii_alphanumeric() || "-_.+@".contains(c)) {
+            cpu
+        } else {
+            blake3::hash(cpu.as_bytes()).to_hex()[..16].to_string()
+        };
+        format!("O{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, cpu)
     }
 }
 
@@ -114,8 +124,8 @@ impl Cache {
     pub fn open(root: &Path, build: Build) -> Result<Cache, String> {
         let machine = crate::default_target_machine()?;
         let triple = machine.get_triple().as_str().to_string_lossy().into_owned();
-        // A directory per level and LTO mode, so switching between `-O0` and
-        // `-O2` builds keeps both levels' objects (a unit has one record per
+        // A directory per level, LTO mode and CPU, so switching between
+        // `-O0` and `-O2` builds keeps both levels' objects (a unit has one record per
         // directory).
         let target = root.join(VERSION).join(triple);
         let dir = target.join(build.name());
@@ -275,7 +285,7 @@ impl Cache {
             }
             if !same_code {
                 let temporary = temporary_path(&object);
-                emit(&module, &temporary, self.build)?;
+                emit(&module, &temporary, &self.build)?;
                 std::fs::rename(&temporary, &object).map_err(|e| format!("cannot write {}: {}", object.display(), e))?;
             }
             write_atomically(&self.path(name, "summaries"), summaries.as_bytes())?;
@@ -564,19 +574,20 @@ fn json_string<'a>(record: &'a str, field: &str) -> Option<&'a str> {
 /// pipeline has yet to run over (see [`crate::lto`]). The cache hashes a
 /// unit's code before this, so a unit whose code did not change is not
 /// optimized again.
-pub fn emit(module: &Module<'_>, path: &Path, build: Build) -> Result<(), String> {
+pub fn emit(module: &Module<'_>, path: &Path, build: &Build) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
     }
+    build.cpu.stamp(module);
     if build.lto {
-        pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::PreLink)?;
+        pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::PreLink, &build.cpu)?;
         return match module.write_bitcode_to_path(path) {
             true => Ok(()),
             false => Err(format!("cannot write {}", path.display())),
         };
     }
-    pepper_codegen::target::optimize(module, build.opt_level)?;
-    pepper_codegen::target::host_machine_at(build.opt_level)?
+    pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::Default, &build.cpu)?;
+    pepper_codegen::target::machine(build.opt_level, &build.cpu)?
         .write_to_file(module, inkwell::targets::FileType::Object, path)
         .map_err(|e| format!("obj emission failed: {}", e))
 }

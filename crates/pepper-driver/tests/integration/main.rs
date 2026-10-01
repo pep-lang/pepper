@@ -40,6 +40,7 @@ mod implicit_conversion_tests;
 mod interpolation_tests;
 mod int16_tests;
 mod io_tests;
+mod ir_facts_tests;
 mod iterator_tests;
 mod link_tests;
 mod loop_scope_tests;

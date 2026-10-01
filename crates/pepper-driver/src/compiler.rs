@@ -242,7 +242,7 @@ fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reus
         return Ok(Reused::default());
     };
     let build = options.effective_build()?;
-    let cache = crate::cache::Cache::open(&root, build)?;
+    let cache = crate::cache::Cache::open(&root, build.clone())?;
     let n = program.files.len();
     let mut reused = Reused { files: vec![false; n], summaries: HashMap::new(), interfaces: vec![None; n], program: None };
     let mut unit_keys: Vec<Option<String>> = vec![None; program.units().len()];

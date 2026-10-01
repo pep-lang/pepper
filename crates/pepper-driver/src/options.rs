@@ -41,6 +41,14 @@ pub struct Options {
     #[arg(long = "lto", value_name = "MODE", value_parser = ["full", "off"])]
     pub lto: Option<String>,
 
+    /// The CPU to generate code for, with clang's names and meanings:
+    /// `-march=<cpu>` (x86: `x86-64-v3`, `native`), `-mcpu=<cpu>` (AArch64:
+    /// `apple-m2`, `native`), `-march=<arch>` (AArch64: `armv8.2-a+crypto`),
+    /// `-mtune=<cpu>`, and `-m<feature>` / `-mno-<feature>`. The default is
+    /// clang's for the target (`x86-64`; `apple-m1` on Apple arm64).
+    #[arg(short = 'm', value_name = "OPTION", allow_hyphen_values = true)]
+    pub machine: Vec<String>,
+
     /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
@@ -124,7 +132,14 @@ impl Options {
             Some(_) => false,
             None => matches!(opt_level, OptLevel::O2 | OptLevel::O3),
         };
-        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug })
+        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug, cpu: self.effective_cpu()? })
+    }
+
+    /// The CPU `-march`, `-mcpu`, `-mtune` and `-m<feature>` choose for the
+    /// host triple, else clang's default for it.
+    pub fn effective_cpu(&self) -> Result<pepper_codegen::target::Cpu, String> {
+        let triple = inkwell::targets::TargetMachine::get_default_triple();
+        pepper_codegen::target::Cpu::from_options(&triple.as_str().to_string_lossy(), &self.machine)
     }
 
     /// Port of `Options::defaults`: build dir = $CWD/.pep/build, forced

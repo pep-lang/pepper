@@ -142,13 +142,206 @@ pub enum Pipeline {
     Link,
 }
 
-/// Run `level`'s pipeline over `module` (nothing at `-O0`).
-pub fn optimize(module: &inkwell::module::Module<'_>, level: OptLevel) -> Result<(), String> {
-    optimize_with(module, level, Pipeline::Default)
+/// The CPU to generate code for, and the features to add to or remove
+/// from it: what clang's `-march`, `-mcpu`, `-mtune` and `-m<feature>`
+/// choose. The default is clang's for the host triple.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Cpu {
+    /// LLVM's name for the CPU (`x86-64`, `x86-64-v3`, `apple-m1`).
+    pub name: String,
+    /// Features to add or remove, as LLVM spells them (`+avx2,-sse4.2`);
+    /// empty for the CPU's own.
+    pub features: String,
+    /// The CPU to schedule for, when it differs from [`Cpu::name`]
+    /// (`generic`, as clang tunes on x86 without `-march`).
+    pub tune: Option<String>,
 }
 
-/// Run `level`'s `pipeline` over `module` (nothing at `-O0`).
-pub fn optimize_with(module: &inkwell::module::Module<'_>, level: OptLevel, pipeline: Pipeline) -> Result<(), String> {
+impl Default for Cpu {
+    /// Clang's default for the host triple.
+    fn default() -> Cpu {
+        let triple = TargetMachine::get_default_triple();
+        Cpu::default_for(&triple.as_str().to_string_lossy())
+    }
+}
+
+impl Cpu {
+    /// Clang's default CPU for `triple`, from its driver
+    /// (`clang/lib/Driver/ToolChains/Arch/{X86,AArch64}.cpp`): `x86-64`, or
+    /// `penryn` on macOS, tuned for `generic` on x86; `apple-m1` on Apple
+    /// arm64, else `generic` (Armv8-A).
+    pub fn default_for(triple: &str) -> Cpu {
+        let apple = triple.contains("-apple-");
+        if is_x86(triple) {
+            let name = if apple { "penryn" } else { "x86-64" };
+            Cpu { name: name.to_string(), features: String::new(), tune: Some("generic".to_string()) }
+        } else {
+            let name = if apple { "apple-m1" } else { "generic" };
+            Cpu { name: name.to_string(), features: String::new(), tune: None }
+        }
+    }
+
+    /// The CPU clang's options choose for `triple`: each of `machine` is
+    /// what follows `-m`, in order (`arch=x86-64-v3`, `cpu=native`,
+    /// `tune=znver4`, `avx2`, `no-avx2`). As in clang:
+    ///
+    /// - On x86, `-march` names the CPU (`native` is the host's) and
+    ///   `-mcpu` is not accepted. Without `-march`, the code is tuned for
+    ///   `generic`.
+    /// - On AArch64, `-mcpu` names the CPU and `-march` the architecture
+    ///   (`armv8.2-a`), each with `+<extension>` or `+no<extension>` after
+    ///   it.
+    /// - `-mtune` names the CPU to schedule for; `native` is the host's.
+    /// - `-m<feature>` adds an LLVM feature and `-mno-<feature>` removes
+    ///   it, after the ones the CPU or architecture implies.
+    ///
+    /// The last of each option wins.
+    pub fn from_options(triple: &str, machine: &[String]) -> Result<Cpu, String> {
+        let mut cpu = Cpu::default_for(triple);
+        let x86 = is_x86(triple);
+        let host = || TargetMachine::get_host_cpu_name().to_string();
+        let (mut arch, mut mcpu, mut tune) = (None, None, None);
+        let mut extra = vec![];
+        for option in machine {
+            if let Some(value) = option.strip_prefix("arch=") {
+                arch = Some(value);
+            } else if let Some(value) = option.strip_prefix("cpu=") {
+                if x86 {
+                    return Err(format!("unsupported option '-mcpu=' for target '{}'; use '-march' or '-mtune'", triple));
+                }
+                mcpu = Some(value);
+            } else if let Some(value) = option.strip_prefix("tune=") {
+                tune = Some(value);
+            } else if let Some(feature) = option.strip_prefix("no-") {
+                extra.push(format!("-{}", feature));
+            } else if !option.is_empty() && !option.contains('=') {
+                extra.push(format!("+{}", option));
+            } else {
+                return Err(format!("unknown argument '-m{}'", option));
+            }
+        }
+        let mut features: Vec<String> = vec![];
+        let empty = |value: &str, option: &str| {
+            if value.is_empty() {
+                Err(format!("missing value for '-m{}='", option))
+            } else {
+                Ok(())
+            }
+        };
+        if x86 {
+            if let Some(arch) = arch {
+                empty(arch, "arch")?;
+                if arch == "native" {
+                    cpu.name = host();
+                    features.push(TargetMachine::get_host_cpu_features().to_string());
+                    cpu.tune = Some(host());
+                } else {
+                    cpu.name = arch.to_string();
+                    cpu.tune = None;
+                }
+            }
+        } else {
+            // `-mcpu` sets the CPU and `-march` the architecture; with both,
+            // clang takes the CPU from `-mcpu` and the features from both.
+            if let Some(arch) = arch {
+                empty(arch, "arch")?;
+                if arch == "native" {
+                    cpu.name = host();
+                    features.push(TargetMachine::get_host_cpu_features().to_string());
+                } else {
+                    let (base, extensions) = split_extensions(arch);
+                    let version = base
+                        .strip_prefix("armv")
+                        .and_then(|v| v.strip_suffix("-a"))
+                        .filter(|v| !v.is_empty())
+                        .ok_or_else(|| format!("invalid arch name '-march={}'", arch))?;
+                    cpu.name = "generic".to_string();
+                    features.push(format!("+v{}a", version));
+                    features.extend(extensions);
+                }
+            }
+            if let Some(name) = mcpu {
+                empty(name, "cpu")?;
+                if name == "native" {
+                    cpu.name = host();
+                    features.push(TargetMachine::get_host_cpu_features().to_string());
+                } else {
+                    let (base, extensions) = split_extensions(name);
+                    cpu.name = base.to_string();
+                    features.extend(extensions);
+                }
+            }
+        }
+        if let Some(name) = tune {
+            empty(name, "tune")?;
+            cpu.tune = Some(if name == "native" { host() } else { name.to_string() });
+        }
+        features.extend(extra);
+        cpu.features = features.into_iter().filter(|f| !f.is_empty()).collect::<Vec<_>>().join(",");
+        Ok(cpu)
+    }
+
+    /// The CPU, features and tuning as one line, for the build cache's key
+    /// and its directory name (`x86-64-v3+avx512f@generic`).
+    pub fn key(&self) -> String {
+        let mut key = self.name.clone();
+        if !self.features.is_empty() {
+            key.push_str(&self.features.replace(',', ""));
+        }
+        if let Some(tune) = &self.tune {
+            key.push('@');
+            key.push_str(tune);
+        }
+        key
+    }
+
+    /// Put the CPU, features and tuning on every function `module` defines,
+    /// as clang does (`"target-cpu"`, `"target-features"`, `"tune-cpu"`), so
+    /// code keeps its CPU when link-time optimization inlines it into
+    /// another unit's.
+    pub fn stamp(&self, module: &inkwell::module::Module<'_>) {
+        use inkwell::attributes::AttributeLoc;
+        let context = module.get_context();
+        let mut attributes = vec![context.create_string_attribute("target-cpu", &self.name)];
+        if !self.features.is_empty() {
+            attributes.push(context.create_string_attribute("target-features", &self.features));
+        }
+        if let Some(tune) = &self.tune {
+            attributes.push(context.create_string_attribute("tune-cpu", tune));
+        }
+        for function in module.get_functions().filter(|f| f.count_basic_blocks() > 0) {
+            for attribute in &attributes {
+                function.add_attribute(AttributeLoc::Function, *attribute);
+            }
+        }
+    }
+}
+
+fn is_x86(triple: &str) -> bool {
+    triple.starts_with("x86_64") || triple.starts_with("amd64")
+}
+
+/// `name+ext+noext` as `name` and the LLVM features `+ext`, `-ext`.
+fn split_extensions(value: &str) -> (&str, Vec<String>) {
+    let mut parts = value.split('+');
+    let base = parts.next().unwrap_or_default();
+    let extensions = parts
+        .filter(|e| !e.is_empty())
+        .map(|e| match e.strip_prefix("no") {
+            Some(feature) => format!("-{}", feature),
+            None => format!("+{}", e),
+        })
+        .collect();
+    (base, extensions)
+}
+
+/// Run `level`'s pipeline over `module` (nothing at `-O0`).
+pub fn optimize(module: &inkwell::module::Module<'_>, level: OptLevel) -> Result<(), String> {
+    optimize_with(module, level, Pipeline::Default, &Cpu::default())
+}
+
+/// Run `level`'s `pipeline` over `module` (nothing at `-O0`), for `cpu`.
+pub fn optimize_with(module: &inkwell::module::Module<'_>, level: OptLevel, pipeline: Pipeline, cpu: &Cpu) -> Result<(), String> {
     let Some(default) = level.pipeline() else {
         return Ok(());
     };
@@ -158,31 +351,35 @@ pub fn optimize_with(module: &inkwell::module::Module<'_>, level: OptLevel, pipe
         Pipeline::Link => default.replace("default<", "lto<"),
     };
     let pipeline = pipeline.as_str();
-    let machine = host_machine_at(level)?;
+    let machine = machine(level, cpu)?;
     module
         .run_passes(pipeline, &machine, inkwell::passes::PassBuilderOptions::create())
         .map_err(|e| format!("cannot optimize '{}': {}", module.get_name().to_string_lossy(), e.to_string()))
 }
 
-/// The machine to emit for, unoptimized: the host, CPU `generic`.
+/// The machine to emit for, unoptimized: the host, with clang's default CPU.
 pub fn host_machine() -> Result<TargetMachine, String> {
     host_machine_at(OptLevel::O0)
 }
 
-/// The machine to emit for at `level`: the host, CPU `generic`.
-///
-/// `generic` is a port of `LLVMCodeGenerator.cpp:245-258` and is a valid CPU
-/// name for both supported architectures; naming the host CPU instead would
-/// bake the build machine's microarchitecture into the output.
+/// The machine to emit for at `level`: the host, with clang's default CPU.
 pub fn host_machine_at(level: OptLevel) -> Result<TargetMachine, String> {
+    machine(level, &Cpu::default())
+}
+
+/// The machine to emit for at `level`: the host triple, generating code for
+/// `cpu`. Without `-march` or `-mcpu` that is clang's default for the
+/// triple, never the build machine's own CPU, so a program runs on any
+/// machine its triple names.
+pub fn machine(level: OptLevel, cpu: &Cpu) -> Result<TargetMachine, String> {
     initialize_host();
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
     target
         .create_target_machine(
             &triple,
-            "generic",
-            "",
+            &cpu.name,
+            &cpu.features,
             level.machine_level(),
             // PIC so the objects link into PIE executables. `Default` emits
             // non-relocatable code, which GNU ld rejects once clang links with

@@ -14,12 +14,14 @@
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::values::{AsValueRef, GlobalValue};
-use pepper_codegen::target::{OptLevel, Pipeline};
+use crate::cache::Build;
+use pepper_codegen::target::Pipeline;
 use std::path::{Path, PathBuf};
 
 /// Link the units' bitcode files `bitcode` into one module, optimize it as
-/// a whole at `opt_level`, and write it to `object`.
-pub fn optimize(bitcode: &[PathBuf], object: &Path, opt_level: OptLevel) -> Result<(), String> {
+/// a whole as `build` says, and write it to `object`. Each unit's functions
+/// already carry `build`'s CPU (`cache::emit`).
+pub fn optimize(bitcode: &[PathBuf], object: &Path, build: &Build) -> Result<(), String> {
     let context = Context::create();
     let read = |path: &PathBuf| {
         Module::parse_bitcode_from_path(path, &context).map_err(|e| format!("cannot read {}: {}", path.display(), e.to_string()))
@@ -33,9 +35,9 @@ pub fn optimize(bitcode: &[PathBuf], object: &Path, opt_level: OptLevel) -> Resu
             .map_err(|e| format!("cannot link {}: {}", path.display(), e.to_string()))?;
     }
     internalize(&program);
-    pepper_codegen::target::optimize_with(&program, opt_level, Pipeline::Link)?;
+    pepper_codegen::target::optimize_with(&program, build.opt_level, Pipeline::Link, &build.cpu)?;
     program.verify().map_err(|e| format!("the linked program does not verify: {}", e.to_string()))?;
-    pepper_codegen::target::host_machine_at(opt_level)?
+    pepper_codegen::target::machine(build.opt_level, &build.cpu)?
         .write_to_file(&program, inkwell::targets::FileType::Object, object)
         .map_err(|e| format!("cannot write {}: {}", object.display(), e))
 }

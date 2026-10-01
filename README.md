@@ -226,6 +226,7 @@ cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
 cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
+cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
@@ -260,7 +261,7 @@ body recompiles only that file: the files importing it are reused. A file
 whose text did not change is not even parsed again, and when nothing changed
 the compiler checks nothing and does not link again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
-`PEPPER_CACHE_DIR`. The optimization level is part of every object's key, so
+`PEPPER_CACHE_DIR`. The optimization level and target CPU are part of every object's key, so
 switching between `-O0` and `-O2` never reuses the other level's objects.
 
 `-O` runs LLVM's standard `default<O2>` pipeline (what clang runs at `-O2`)
@@ -268,7 +269,11 @@ over each file's object; `-O1` and `-O3` run theirs. At `-O2` and `-O3` the
 compiler also optimizes the program as a whole once every file is compiled
 (link-time optimization), so a call into another file, the runtime
 included, can inline; `--lto=off` optimizes each file alone, which links
-sooner. `PEPPER_OPT_LEVEL=2` makes `-O2` the default, for the compiler
+sooner. The code runs on any machine of its target: clang's default CPU
+for it (`x86-64`; `apple-m1` on Apple arm64), unless `-march`, `-mcpu`,
+`-mtune` or `-m<feature>` (`-mavx2`, `-mno-avx2`) say otherwise, with
+clang's meanings; `-march=native` targets the machine compiling.
+`PEPPER_OPT_LEVEL=2` makes `-O2` the default, for the compiler
 and for the JIT the tests run, so the whole suite can run optimized:
 
 ```bash
