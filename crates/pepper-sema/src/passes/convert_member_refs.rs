@@ -1,6 +1,7 @@
 //! Port of `source/Sema/ConvertMemberRefs.h`: bare unresolved symbols in
 //! struct methods become `this.<field>`; plain calls matching a method become
-//! method calls; params exempt.
+//! method calls (on `this`, or on the struct for a static method, as
+//! `S.f()` would be written); params exempt.
 
 use crate::model::*;
 use crate::type_name::TypeName;
@@ -89,16 +90,25 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 }
             }
             Expression::FunctionCall { function, args, loc } => {
-                // Convert function calls that are actually method calls.
+                // Convert function calls that are actually method calls. A
+                // static method is called on the struct, so a static
+                // method can call another by its bare name (there is no
+                // `this` there).
                 if methods.contains(function) {
                     let method = function.clone();
                     let call_args = args.clone();
+                    let receiver = if methods.contains(&format!("{}{}", STATIC_MARK, function)) {
+                        // A generic base has no name to call on; its
+                        // specializations, copied from it, convert the call.
+                        if methods.contains(&GENERIC_BASE.to_string()) {
+                            return;
+                        }
+                        struct_name.to_string()
+                    } else {
+                        "this".to_string()
+                    };
                     *e = Expression::MethodCall {
-                        this: Box::new(Expression::SymbolRef {
-                            id: "this".to_string(),
-                            ty: TypeName::auto(),
-                            loc: Loc::NONE,
-                        }),
+                        this: Box::new(Expression::SymbolRef { id: receiver, ty: TypeName::auto(), loc: Loc::NONE }),
                         method,
                         args: call_args,
                         loc: *loc,
@@ -109,6 +119,13 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
         }
     });
 }
+
+/// Marks a static method's name in the method list [`convert_expression`]
+/// is given; no identifier contains it.
+const STATIC_MARK: &str = "static ";
+
+/// In the method list, marks a generic base struct (`Array` of `Array<T>`).
+const GENERIC_BASE: &str = "generic base";
 
 pub fn convert_member_refs(module: &mut Module) {
     // Names a bare symbol in a method may resolve to outside the struct:
@@ -129,12 +146,24 @@ pub fn convert_member_refs(module: &mut Module) {
                 .filter(|f| f.kind == Kind::Field)
                 .cloned()
                 .collect();
-            // An overloaded method is also called by its set's name.
-            let methods: Vec<String> = st
+            // An overloaded method is also called by its set's name. A static
+            // method's names are listed again behind `STATIC_MARK`.
+            let mut methods: Vec<String> = st
                 .method_members
                 .iter()
                 .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
                 .collect();
+            let statics: Vec<String> = st
+                .method_members
+                .iter()
+                .filter(|m| m.is_static)
+                .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
+                .map(|name| format!("{}{}", STATIC_MARK, name))
+                .collect();
+            methods.extend(statics);
+            if !st.generic_params.is_empty() {
+                methods.push(GENERIC_BASE.to_string());
+            }
             (fields, methods)
         };
         let st_name = module.structs[st_idx].name.clone();

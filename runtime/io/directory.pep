@@ -172,7 +172,7 @@ export struct Directory {
         }
         var parent = path.parent();
         if (parent._value.size() > 0) {
-            var p = Directory.create_all(parent);
+            var p = create_all(parent);
             if (p.is_err()) {
                 return p;
             }
@@ -242,7 +242,7 @@ export struct Directory {
             var entry = entries[i];
             i = i + 1;
             if (entry.is_directory && !entry.is_symlink) {
-                var r = Directory.remove_all(entry.path);
+                var r = remove_all(entry.path);
                 if (r.is_err()) {
                     return r;
                 }

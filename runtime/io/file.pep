@@ -290,7 +290,7 @@ export struct File {
     ##     }
     ##     var text = r.value().read_string();
     static open(path: Path): IoResult<File> {
-        return File.open_with(path, OpenOptions().read(true));
+        return open_with(path, OpenOptions().read(true));
     }
 
     ## Opens a file for writing only, creating it if it is missing and
@@ -308,7 +308,7 @@ export struct File {
     ##     var f = File.create(Path("report.txt")).value();
     ##     f.write_all("done");
     static create(path: Path): IoResult<File> {
-        return File.open_with(path, OpenOptions().write(true).create(true).truncate(true));
+        return open_with(path, OpenOptions().write(true).create(true).truncate(true));
     }
 
     ## Opens `path` as `options` describe. `OpenOptions.open` is the same
@@ -391,7 +391,7 @@ export struct File {
     ##
     ## @returns a File on standard input, named `<stdin>`
     static stdin(): File {
-        return File.std_file(0, "<stdin>");
+        return std_file(0, "<stdin>");
     }
 
     ## Returns a File writing to the process's standard output. Each call
@@ -405,7 +405,7 @@ export struct File {
     ##     var out = File.stdout();
     ##     out.write_all("hello");
     static stdout(): File {
-        return File.std_file(1, "<stdout>");
+        return std_file(1, "<stdout>");
     }
 
     ## Returns a File writing to the process's standard error. Each call
@@ -415,7 +415,7 @@ export struct File {
     ##
     ## @returns a File on standard error, named `<stderr>`
     static stderr(): File {
-        return File.std_file(2, "<stderr>");
+        return std_file(2, "<stderr>");
     }
 
     ## Returns whether the File holds a valid handle: true after a
@@ -783,7 +783,7 @@ export struct File {
     ##         var n = r.value().count();
     ##     }
     static read_bytes(path: Path): IoResult<u8[]> {
-        var f = File.open(path);
+        var f = open(path);
         if (f.is_err()) {
             return IoResult<u8[]>.err(f.error());
         }
@@ -804,7 +804,7 @@ export struct File {
     ##     }
     ##     var text = r.value();
     static read_to_string(path: Path): IoResult<String> {
-        var f = File.open(path);
+        var f = open(path);
         if (f.is_err()) {
             return IoResult<String>.err(f.error());
         }
@@ -827,7 +827,7 @@ export struct File {
     ##     data.append(1 as u8);
     ##     File.write_bytes(Path("one.bin"), data);
     static write_bytes(path: Path, data: u8[]): IoResult<void> {
-        var f = File.create(path);
+        var f = create(path);
         if (f.is_err()) {
             return IoResult<void>.err(f.error());
         }
@@ -859,7 +859,7 @@ export struct File {
     ##         return 1;
     ##     }
     static write_text(path: Path, s: String): IoResult<void> {
-        var f = File.create(path);
+        var f = create(path);
         if (f.is_err()) {
             return IoResult<void>.err(f.error());
         }
@@ -888,7 +888,7 @@ export struct File {
     ## @example
     ##     var n = File.copy(Path("a.txt"), Path("b.txt")).value();
     static copy(from: Path, to: Path): IoResult<ulong> {
-        var src = File.open(from);
+        var src = open(from);
         if (src.is_err()) {
             return IoResult<ulong>.err(src.error());
         }
@@ -899,7 +899,7 @@ export struct File {
                 IoError(_io_sys_code_invalid_input(), "source and destination are the same file")
             );
         }
-        var dst = File.create(to);
+        var dst = create(to);
         if (dst.is_err()) {
             return IoResult<ulong>.err(dst.error());
         }

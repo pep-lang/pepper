@@ -205,6 +205,13 @@ no `this`, and you call it on the type name: `Vector.unit_x()`. Static methods
 are the usual way to offer named constructors, such as the standard library's
 `Result<int>.ok(42)`.
 
+Inside the struct, any method, static or not, can call a static method by
+its bare name: `unit_x()` in a method of `Vector` means `Vector.unit_x()`.
+
+```pepper
+{{#include ../../examples/structs-static.pep}}
+```
+
 ## Operators
 
 A struct can define what the operators do for it. Declare a method whose name

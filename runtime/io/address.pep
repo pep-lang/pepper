@@ -83,14 +83,14 @@ export struct IpAddress {
     ##
     ## @returns `127.0.0.1`
     static loopback_v4(): IpAddress {
-        return IpAddress.v4(127, 0, 0, 1);
+        return v4(127, 0, 0, 1);
     }
 
     ## Returns the IPv6 loopback address, `::1`.
     ##
     ## @returns `::1`
     static loopback_v6(): IpAddress {
-        return IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);
+        return v6(0, 0, 0, 0, 0, 0, 0, 1);
     }
 
     ## Returns the IPv4 unspecified address, `0.0.0.0`. Binding to it listens
@@ -107,7 +107,7 @@ export struct IpAddress {
     ##
     ## @returns `::`
     static unspecified_v6(): IpAddress {
-        return IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 0);
+        return v6(0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     ## Parses an IPv4 address in dotted decimal (`192.168.0.1`) or an IPv6

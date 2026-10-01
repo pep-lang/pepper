@@ -3280,6 +3280,33 @@ fn constraint_inferred_call_beside_platform_code() {
     );
 }
 
+#[test]
+fn closure_in_static_method_uses_an_instance_member() {
+    assert_eq!(
+        error_of(
+            "closure_in_static_uses_this",
+            "struct S {\n    var n: int = 1;\n    construct(this.n = 1) {}\n    m(): int { return n; }\n    static a(): int {\n        var f = (): int => m();\n        return f();\n    }\n}\n\nmain(): int {\n    return S.a();\n}\n"
+        ),
+        "main.pep:6:28: error: a closure in a static method cannot use 'this' or an instance member of 'S': a static method has none\n\
+         \x20   6 |         var f = (): int => m();\n\
+         \x20     |                            ^"
+    );
+}
+
+#[test]
+fn closure_in_static_method_uses_this() {
+    // `this` carries no location of its own: the closure is underlined.
+    assert_eq!(
+        error_of(
+            "closure_in_static_uses_this_itself",
+            "struct S {\n    var n: int = 1;\n    construct(this.n = 1) {}\n    static a(): int {\n        var f = (): int => this.n;\n        return f();\n    }\n}\n\nmain(): int {\n    return S.a();\n}\n"
+        ),
+        "main.pep:5:17: error: a closure in a static method cannot use 'this' or an instance member of 'S': a static method has none\n\
+         \x20   5 |         var f = (): int => this.n;\n\
+         \x20     |                 ^~~~~~~~~~~~~~~~~"
+    );
+}
+
 /// A constrained parameter offers only what its constraints declare.
 #[test]
 fn constrained_parameter_has_no_such_method() {

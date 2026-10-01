@@ -421,7 +421,7 @@ export struct TcpStream {
         }
         var last = IoResult<TcpStream>.err(IoError(_io_sys_code_not_found(), "no address found for '" + host + "'"));
         for (var address in addresses.value()) {
-            var attempt = TcpStream.connect(address);
+            var attempt = connect(address);
             if (attempt.is_ok()) {
                 return attempt;
             }

@@ -84,8 +84,26 @@ struct Context {
     this_ty: Option<TypeName>,
     fields: HashSet<String>,
     methods: HashSet<String>,
+    /// The static methods among `methods`, extensions' included: a bare call
+    /// to one goes to the struct, not through `this`.
+    statics: HashSet<String>,
+    /// The function being lifted from is static: it has no `this`.
+    in_static: bool,
     /// A trait's default method: `this` has no single struct type yet.
     in_trait: bool,
+}
+
+/// The names of `st`'s static methods, those its extensions declare
+/// included.
+fn static_methods(st: &StructDef, module: &Module) -> HashSet<String> {
+    let extensions = module.extensions.iter().filter(|e| e.target.name == st.ty.name).flat_map(|e| e.methods.iter());
+    st.method_members
+        .iter()
+        .chain(st.generic_methods.iter())
+        .chain(extensions)
+        .filter(|m| m.is_static)
+        .map(|m| m.name.clone())
+        .collect()
 }
 
 struct Var {
@@ -105,6 +123,8 @@ struct Frame {
     uses_this: bool,
     /// Where this closure first uses `this` or a member, when known.
     this_use: Loc,
+    /// Where the closure literal is.
+    literal: Loc,
 }
 
 struct Lifter<'a> {
@@ -164,6 +184,19 @@ impl<'a> Lifter<'a> {
 
     /// A use of `this` inside a closure: every enclosing closure captures it.
     fn use_this(&mut self, loc: Loc) {
+        if self.ctx.in_static {
+            let ty = self.ctx.this_ty.as_ref().map(|t| t.display()).unwrap_or_default();
+            // `this` itself carries no location: point at the closure.
+            let loc = if loc == Loc::NONE { self.frames.last().map_or(loc, |f| f.literal) } else { loc };
+            crate::errors::report(
+                Diagnostic::error(format!(
+                    "a closure in a static method cannot use 'this' or an instance member of '{}': a static method has none",
+                    ty
+                ))
+                .at(loc),
+            );
+            return;
+        }
         if self.ctx.in_trait {
             crate::errors::report(
                 Diagnostic::error("a closure in a trait's default method cannot use 'this' or the members of the struct yet")
@@ -261,6 +294,31 @@ impl<'a> Lifter<'a> {
                     self.use_var(v, loc);
                 } else if inside
                     && self.ctx.this_ty.is_some()
+                    && self.ctx.statics.contains(function.as_str())
+                    && !self.ctx.fields.contains(function.as_str())
+                {
+                    // A bare static method of the enclosing struct:
+                    // `S.m(...)` (`C<T>.m(...)` in a generic one), which
+                    // needs no `this`.
+                    let ty = self.ctx.this_ty.clone().unwrap_or_else(TypeName::auto);
+                    let Expression::FunctionCall { function, args, loc } = std::mem::replace(expr, Expression::PointerLiteral) else {
+                        unreachable!()
+                    };
+                    // A generic type is named as `C<T>.m()` writes it: a
+                    // constructor-style receiver; a plain one by its name.
+                    let receiver = if ty.sub_types.is_empty() {
+                        Expression::SymbolRef { id: ty.to_string(), ty: TypeName::auto(), loc }
+                    } else {
+                        Expression::FunctionCall { function: ty.to_string(), args: vec![], loc }
+                    };
+                    *expr = Expression::MethodCall {
+                        this: Box::new(receiver),
+                        method: function,
+                        args,
+                        loc,
+                    };
+                } else if inside
+                    && self.ctx.this_ty.is_some()
                     && (self.ctx.methods.contains(function.as_str()) || self.ctx.fields.contains(function.as_str()))
                 {
                     // A bare method of the enclosing struct (or a call
@@ -327,7 +385,7 @@ impl<'a> Lifter<'a> {
         };
         let mut literal = *literal;
         self.level += 1;
-        self.frames.push(Frame { level: self.level, captures: vec![], uses_this: false, this_use: Loc::NONE });
+        self.frames.push(Frame { level: self.level, captures: vec![], uses_this: false, this_use: Loc::NONE, literal: literal.loc });
         self.scopes.push(vec![]);
         for param in &literal.parameters {
             self.declare(&param.name, &param.ty, param.loc);
@@ -487,6 +545,7 @@ pub(crate) fn field(name: &str, ty: TypeName, default: Option<Expression>, loc: 
 /// Lift the literals in `function`, whose parameters are locals.
 fn lift_function(function: &mut FunctionDef, ctx: &Context, lifted: &mut Vec<StructDef>) {
     let mut ctx = ctx.clone();
+    ctx.in_static = function.is_static;
     // An override's type arguments (`describe<Point>`) are types, not
     // parameters the lifted closure would take.
     ctx.generics.extend(function.generic_params.iter().filter(|p| !p.is_argument).cloned());
@@ -510,7 +569,7 @@ fn lift_function(function: &mut FunctionDef, ctx: &Context, lifted: &mut Vec<Str
 
 /// Lift a literal outside any function (a global or field default).
 fn lift_default(expr: &mut Expression, ctx: &Context, lifted: &mut Vec<StructDef>) {
-    let ctx = Context { this_ty: None, ..ctx.clone() };
+    let ctx = Context { this_ty: None, in_static: false, ..ctx.clone() };
     let mut lifter = Lifter::new(&ctx);
     lifter.walk_expression(expr);
     lifted.append(&mut lifter.lifted);
@@ -546,6 +605,8 @@ pub fn lift_closures(module: &mut Module) {
                 this_ty: Some(st.ty.clone()),
                 fields: st.field_members.iter().map(|f| f.name.clone()).collect(),
                 methods,
+                statics: static_methods(st, module),
+                in_static: false,
                 in_trait: false,
             }
         })
@@ -569,6 +630,8 @@ pub fn lift_closures(module: &mut Module) {
                 this_ty: Some(ext.target.clone()),
                 fields: target.map(|s| s.field_members.iter().map(|f| f.name.clone()).collect()).unwrap_or_default(),
                 methods,
+                statics: target.map(|st| static_methods(st, module)).unwrap_or_default(),
+                in_static: false,
                 in_trait: false,
             }
         })

@@ -69,3 +69,104 @@ test(): int {{
     );
     assert_eq!(compile_jit_with_runtime(&source), 0);
 }
+
+#[test]
+fn static_methods_call_statics_by_bare_name() {
+    // A bare call to a static method goes to the struct, from a static
+    // method (which has no `this`) as from an instance method, and in a
+    // generic struct.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct S {
+    var n: int = 1;
+    construct(this.n = 1) {}
+    static a(x: int): int { return b(x) + 1; }
+    static b(x: int): int { return x * 2; }
+    c(): int { return b(n) + a(n); }
+}
+
+struct Box<T> {
+    var v: T;
+    construct(value: T) { v = value; }
+    static twice(x: T): Box<T> { return make(x); }
+    static make(x: T): Box<T> { return Box<T>(x); }
+}
+
+struct C {
+    static a(x: int): int {
+        var f = (y: int): int => b(y);
+        return f(x);
+    }
+    static b(x: int): int { return x * 3; }
+}
+
+test(): int {
+    if (S.a(3) != 7) { return -1; }
+    if (S(3).c() != 13) { return -2; }
+    if (Box<int>.twice(4).v != 4) { return -3; }
+    if (C.a(2) != 6) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn closures_in_static_methods_call_statics_by_bare_name() {
+    // In a generic struct, through an extension's static, and in a generic
+    // static method.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct C<T> {
+    var v: T;
+    construct(value: T) { v = value; }
+    static a(x: T): T {
+        var f = (y: T): T => b(y);
+        return f(x);
+    }
+    static b(x: T): T { return x; }
+}
+
+struct E {
+    static a(x: int): int {
+        var f = (y: int): int => e(y);
+        return f(x);
+    }
+}
+
+extend E {
+    static e(x: int): int { return x + 100; }
+}
+
+struct G {
+    static a<T>(x: T): T {
+        var f = (y: T): T => b(y);
+        return f(x);
+    }
+    static b<T>(x: T): T { return x; }
+}
+
+helper(): int { return 7; }
+
+# A field default has no struct to call on: a closure there calls the free
+# function, not the static of the same name.
+struct D {
+    var f: () => int = () => helper();
+    construct() {}
+    static helper(): int { return 1; }
+}
+
+test(): int {
+    if (D().f() != 7) { return -4; }
+    if (C<int>.a(5) != 5) { return -1; }
+    if (E.a(1) != 101) { return -2; }
+    if (G.a<int>(9) != 9) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
