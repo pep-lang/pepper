@@ -507,6 +507,7 @@ impl<'a> Checker<'a> {
                     self.void_used(lhs, current, &slot);
                     self.void_used(rhs, current, &slot);
                     self.enum_operands(*op, lhs, rhs, *loc, current);
+                    self.struct_with_integer(*op, lhs, rhs, *loc, current);
                 }
                 Expression::Unary { op, operand, loc } => {
                     let what = || "an operand".to_string();
@@ -562,6 +563,40 @@ impl<'a> Checker<'a> {
         } else {
             return;
         };
+        if !self.errors.iter().any(|d| d.message == message && d.loc == Some(loc)) {
+            self.errors.push(Diagnostic::error(message).at(loc));
+        }
+    }
+
+    /// A struct value (an `Optional`, a `String`, a tuple) never equals an
+    /// integer: `a.find(x) == -1` would compare the object's address and
+    /// always be false. A struct that declares `==` or `!=` itself decides.
+    fn struct_with_integer(&mut self, op: BinaryOp, lhs: &Expression, rhs: &Expression, loc: Loc, current: Option<&TypeName>) {
+        if !matches!(op, BinaryOp::Equal | BinaryOp::NotEqual) {
+            return;
+        }
+        let (Some(l), Some(r)) = (static_type::of(lhs, &self.table, current), static_type::of(rhs, &self.table, current)) else {
+            return;
+        };
+        let is_integer = |t: &TypeName| {
+            t.is_scalar() && t.name != "bool" && !crate::enums::is_enum(&t.name) && crate::arithmetic::is_numeric_type(&t.name)
+        };
+        let is_struct = |t: &TypeName| {
+            !t.is_pointer()
+                && !crate::enums::is_enum(&t.name)
+                && self.table.structs.get(&t.to_string()).is_some_and(|info| !info.methods.contains(&op.op_name()))
+        };
+        let structure = if is_struct(&l) && is_integer(&r) {
+            l
+        } else if is_struct(&r) && is_integer(&l) {
+            r
+        } else {
+            return;
+        };
+        let message = format!("cannot compare '{}' with an integer", structure.display());
+        // The binary node starts at its operator: point at just the operator.
+        let mut loc = loc;
+        loc.span.end = loc.span.end.min(loc.span.start + op.op_name().len());
         if !self.errors.iter().any(|d| d.message == message && d.loc == Some(loc)) {
             self.errors.push(Diagnostic::error(message).at(loc));
         }

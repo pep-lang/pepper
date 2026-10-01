@@ -87,6 +87,26 @@ fn undeclared_identifier_before_whitespace() {
 }
 
 #[test]
+fn struct_compared_with_integer() {
+    // An `Optional` never equals an integer: comparing would compare the
+    // object, so `find(3) == -1` would always be false.
+    let source = "find(x: int): ulong? {\n    return Optional<ulong>.some(1);\n}\nmain(): int {\n    if (find(3) == -1) { return 1; }\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("struct_with_integer", source),
+        "main.pep:5:17: error: cannot compare 'Optional<ulong>' with an integer\n\
+         \x20   5 |     if (find(3) == -1) { return 1; }\n\
+         \x20     |                 ^~"
+    );
+    let source = "struct P {\n    var x: int = 0;\n}\nmain(): int {\n    var p = P();\n    return 0 != p ? 1 : 0;\n}\n";
+    assert_eq!(
+        error_of("integer_with_struct", source),
+        "main.pep:6:14: error: cannot compare 'P' with an integer\n\
+         \x20   6 |     return 0 != p ? 1 : 0;\n\
+         \x20     |              ^~"
+    );
+}
+
+#[test]
 fn undeclared_function() {
     assert_eq!(
         error_of("undeclared_function", "main(): int {\n    return frob(1);\n}\n"),

@@ -321,6 +321,12 @@ count as equal, as `String` and `Array` do; `!=` then follows from it. `===` and
 `!==` always compare identity, whatever methods the struct declares, so
 `"a" + "b" == "ab"` is true while `"a" + "b" === "ab"` is false.
 
+A struct never equals a number: unless the struct declares an `==` (or `!=`)
+taking one, comparing a struct value such as an `Optional` with an integer is
+an error (`cannot compare 'Optional<ulong>' with an integer`), since it could
+only ever compare the object itself. Test an optional with `is_none()` (or
+`if (found)`) and read its value with `value()`.
+
 ### Indexers
 
 An indexer lets you write `object[index]`. Declare it as a method named `[]`:
