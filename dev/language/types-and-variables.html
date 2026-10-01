@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23e1a76c.js";
+            window.path_to_searchindex_js = "../searchindex-cb663f27.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-24be83d2.js"></script>
+        <script src="../toc-d3d52046.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -268,6 +268,33 @@ is a <code>double</code>.</p>
 <p>Comparisons follow IEEE 754, as in C: against NaN (<code>0.0 / 0.0</code>), <code>==</code>, <code>&lt;</code>,
 <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> are false and <code>!=</code> is true, so <code>x != x</code> is true only for a
 NaN. As a condition, a float is true unless it equals zero, NaN included.</p>
+<h3 id="reading-numbers-from-text"><a class="header" href="#reading-numbers-from-text">Reading numbers from text</a></h3>
+<p>Every number type has a static <code>parse</code> that reads one from a <code>String</code>:
+<code>int.parse("42")</code> gives an <code>int?</code> (see <a href="optionals.html">optionals</a>), empty when
+the text is not a number of that type: not digits, or too big or too small for
+it. The integer types take a base from 2 to 36 as a second argument (<code>"ff"</code> in
+base 16 is 255), and <code>float</code> and <code>double</code> read decimal notation (<code>"2.5"</code>,
+<code>".5"</code>, <code>"1e-3"</code>). Neither accepts spaces, a <code>0x</code> prefix, <code>inf</code> or <code>nan</code>. Each
+spelling of a type is the same type, so <code>i32.parse</code> is <code>int.parse</code>:</p>
+<pre><code class="language-pepper"># Reading numbers from text with each number type's static parse.
+
+main(): int {
+    # An integer type takes an optional base from 2 to 36.
+    assert(int.parse("-42").value() == -42, "decimal");
+    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
+
+    # The result is empty when the text is not a number of that type.
+    assert(int.parse("4 2").is_none(), "not an integer");
+    assert(byte.parse("256").is_none(), "too big for a byte");
+
+    # float and double read decimal notation.
+    var ratio = double.parse("2.5e-1");
+    if (ratio.is_some()) {
+        assert(ratio.value() == 0.25, "an exponent");
+    }
+    return 0;
+}
+</code></pre>
 <h3 id="booleans"><a class="header" href="#booleans">Booleans</a></h3>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
 <code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
@@ -399,11 +426,10 @@ main(): int {
 <p>To search and take text apart, <code>find(needle, from)</code> starts at a byte offset
 and <code>rfind</code> finds the last match, <code>split(separator)</code> cuts at every separator
 and <code>split_once</code> at the first (giving an optional pair), <code>separator.join(parts)</code>
-puts the parts back together, and <code>replace(from, to)</code> swaps every match. To
-read a number, <code>math.parse_int(text, base)</code> (after <code>import math</code>) gives an
-optional <code>long</code>, empty when the text is not an integer:</p>
-<pre><code class="language-pepper"># Searching, splitting, joining and replacing text, and reading numbers.
-import math;
+puts the parts back together, and <code>replace(from, to)</code> swaps every match
+(to read a number from text, see
+<a href="#reading-numbers-from-text">Reading numbers from text</a>):</p>
+<pre><code class="language-pepper"># Searching, splitting, joining and replacing text.
 
 main(): int {
     # find takes a byte offset to start from; rfind finds the last match.
@@ -424,11 +450,6 @@ main(): int {
     # join puts the separator between the parts; replace swaps every match.
     assert(" | ".join(fields) == "name |  | age", "joined");
     assert("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n", "line endings");
-
-    # math.parse_int reads an integer, in any base from 2 to 36.
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(math.parse_int("4 2").is_none(), "not an integer");
     return 0;
 }
 </code></pre>

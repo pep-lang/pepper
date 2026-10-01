@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23e1a76c.js";
+            window.path_to_searchindex_js = "../searchindex-cb663f27.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-24be83d2.js"></script>
+        <script src="../toc-d3d52046.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,12 +186,12 @@
 <p>Reading integers from text.</p>
 <p>Source: <code>runtime/math/parse.pep</code></p>
 <h2 id="parse_int"><a class="header" href="#parse_int">parse_int</a></h2>
-<pre><code class="language-pepper">parse_int(text: String, base: int = 10): long?
+<pre><code class="language-pepper">[Deprecated("use 'long.parse' instead")] parse_int(text: String, base: int = 10): long?
 </code></pre>
+<p>Deprecated: use <code>long.parse</code> instead, which every program has without an
+import (each number type has a static <code>parse</code>).</p>
 <p>Parses <code>text</code> as an integer written in <code>base</code>: an optional <code>+</code> or <code>-</code>,
-then one or more digits, and nothing else. Digits past 9 are the
-letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
-(<code>0x</code>) or separators are accepted.</p>
+then one or more digits, and nothing else.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to parse</li>
@@ -205,14 +205,6 @@ letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
 <ul>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import math;
-
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(!math.parse_int("12x").is_some(), "not a number");
-    assert(!math.parse_int("9223372036854775808").is_some(), "too big");
-</code></pre>
 
                     </main>
 
@@ -222,7 +214,7 @@ letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/tls-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/number.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -236,7 +228,7 @@ letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/tls-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/number.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

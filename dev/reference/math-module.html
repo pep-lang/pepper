@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23e1a76c.js";
+            window.path_to_searchindex_js = "../searchindex-cb663f27.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-24be83d2.js"></script>
+        <script src="../toc-d3d52046.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,21 +183,12 @@
                     <main>
                         <!-- Generated from runtime/math/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="mathmodulepep"><a class="header" href="#mathmodulepep">math/module.pep</a></h1>
-<p>Numbers beyond the operators: parsing them from text for now, and the
-rest of the math library as it grows.</p>
+<p>Numbers beyond the operators: the math library as it grows.</p>
 <p>Bring it in with <code>import math</code>.</p>
 <ul>
-<li><a href="math-parse.html">Parsing</a>: <code>parse_int</code></li>
+<li><a href="math-parse.html">Parsing</a>: <code>parse_int</code>, deprecated: every number type
+has a static <code>parse</code> (<code>long.parse(text, base)</code>) without an import</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import math;
-
-    main(): int {
-        var port = math.parse_int("8080");
-        assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
-        return 0;
-    }
-</code></pre>
 <p>Source: <code>runtime/math/module.pep</code></p>
 
                     </main>

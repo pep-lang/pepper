@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-23e1a76c.js";
+            window.path_to_searchindex_js = "searchindex-cb663f27.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-24be83d2.js"></script>
+        <script src="toc-d3d52046.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -957,6 +957,33 @@ is a <code>double</code>.</p>
 <p>Comparisons follow IEEE 754, as in C: against NaN (<code>0.0 / 0.0</code>), <code>==</code>, <code>&lt;</code>,
 <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> are false and <code>!=</code> is true, so <code>x != x</code> is true only for a
 NaN. As a condition, a float is true unless it equals zero, NaN included.</p>
+<h3 id="reading-numbers-from-text"><a class="header" href="#reading-numbers-from-text">Reading numbers from text</a></h3>
+<p>Every number type has a static <code>parse</code> that reads one from a <code>String</code>:
+<code>int.parse("42")</code> gives an <code>int?</code> (see <a href="#optional-values">optionals</a>), empty when
+the text is not a number of that type: not digits, or too big or too small for
+it. The integer types take a base from 2 to 36 as a second argument (<code>"ff"</code> in
+base 16 is 255), and <code>float</code> and <code>double</code> read decimal notation (<code>"2.5"</code>,
+<code>".5"</code>, <code>"1e-3"</code>). Neither accepts spaces, a <code>0x</code> prefix, <code>inf</code> or <code>nan</code>. Each
+spelling of a type is the same type, so <code>i32.parse</code> is <code>int.parse</code>:</p>
+<pre><code class="language-pepper"># Reading numbers from text with each number type's static parse.
+
+main(): int {
+    # An integer type takes an optional base from 2 to 36.
+    assert(int.parse("-42").value() == -42, "decimal");
+    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
+
+    # The result is empty when the text is not a number of that type.
+    assert(int.parse("4 2").is_none(), "not an integer");
+    assert(byte.parse("256").is_none(), "too big for a byte");
+
+    # float and double read decimal notation.
+    var ratio = double.parse("2.5e-1");
+    if (ratio.is_some()) {
+        assert(ratio.value() == 0.25, "an exponent");
+    }
+    return 0;
+}
+</code></pre>
 <h3 id="booleans"><a class="header" href="#booleans">Booleans</a></h3>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
 <code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
@@ -1088,11 +1115,10 @@ main(): int {
 <p>To search and take text apart, <code>find(needle, from)</code> starts at a byte offset
 and <code>rfind</code> finds the last match, <code>split(separator)</code> cuts at every separator
 and <code>split_once</code> at the first (giving an optional pair), <code>separator.join(parts)</code>
-puts the parts back together, and <code>replace(from, to)</code> swaps every match. To
-read a number, <code>math.parse_int(text, base)</code> (after <code>import math</code>) gives an
-optional <code>long</code>, empty when the text is not an integer:</p>
-<pre><code class="language-pepper"># Searching, splitting, joining and replacing text, and reading numbers.
-import math;
+puts the parts back together, and <code>replace(from, to)</code> swaps every match
+(to read a number from text, see
+<a href="#reading-numbers-from-text">Reading numbers from text</a>):</p>
+<pre><code class="language-pepper"># Searching, splitting, joining and replacing text.
 
 main(): int {
     # find takes a byte offset to start from; rfind finds the last match.
@@ -1113,11 +1139,6 @@ main(): int {
     # join puts the separator between the parts; replace swaps every match.
     assert(" | ".join(fields) == "name |  | age", "joined");
     assert("a\r\nb\r\n".replace("\r\n", "\n") == "a\nb\n", "line endings");
-
-    # math.parse_int reads an integer, in any base from 2 to 36.
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(math.parse_int("4 2").is_none(), "not an integer");
     return 0;
 }
 </code></pre>
@@ -10794,6 +10815,7 @@ the code it replaces:</p>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
+<tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
 </tbody>
 </table>
 </div>
@@ -20717,33 +20739,225 @@ can take it from with <code>UnixStream.adopt</code>, as
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/math/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="mathmodulepep"><a class="header" href="#mathmodulepep">math/module.pep</a></h1>
-<p>Numbers beyond the operators: parsing them from text for now, and the
-rest of the math library as it grows.</p>
+<p>Numbers beyond the operators: the math library as it grows.</p>
 <p>Bring it in with <code>import math</code>.</p>
 <ul>
-<li><a href="#mathparsepep">Parsing</a>: <code>parse_int</code></li>
+<li><a href="#mathparsepep">Parsing</a>: <code>parse_int</code>, deprecated: every number type
+has a static <code>parse</code> (<code>long.parse(text, base)</code>) without an import</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import math;
-
-    main(): int {
-        var port = math.parse_int("8080");
-        assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
-        return 0;
-    }
-</code></pre>
 <p>Source: <code>runtime/math/module.pep</code></p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/math/parse.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="mathparsepep"><a class="header" href="#mathparsepep">math/parse.pep</a></h1>
 <p>Reading integers from text.</p>
 <p>Source: <code>runtime/math/parse.pep</code></p>
 <h2 id="parse_int"><a class="header" href="#parse_int">parse_int</a></h2>
-<pre><code class="language-pepper">parse_int(text: String, base: int = 10): long?
+<pre><code class="language-pepper">[Deprecated("use 'long.parse' instead")] parse_int(text: String, base: int = 10): long?
 </code></pre>
+<p>Deprecated: use <code>long.parse</code> instead, which every program has without an
+import (each number type has a static <code>parse</code>).</p>
 <p>Parses <code>text</code> as an integer written in <code>base</code>: an optional <code>+</code> or <code>-</code>,
+then one or more digits, and nothing else.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value does not fit a <code>long</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/number.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="numberpep"><a class="header" href="#numberpep">number.pep</a></h1>
+<p>Reading numbers from text: every number type has a static <code>parse</code>.</p>
+<p><code>int.parse("42")</code> gives an <code>int?</code>, empty when the text is not a number
+of that type. The integer types take a base from 2 to 36; <code>float</code> and
+<code>double</code> read decimal notation. Each spelling of a type is the same
+type, so <code>i32.parse</code> is <code>int.parse</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var port = int.parse("8080");
+    assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
+    assert(byte.parse("256").is_none(), "too big for a byte");
+</code></pre>
+<p>Source: <code>runtime/number.pep</code></p>
+<h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
+<pre><code class="language-pepper">extend char
+</code></pre>
+<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
+<h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): char?
+</code></pre>
+<p>Parses <code>text</code> as a <code>char</code> (<code>i8</code>) written in <code>base</code>: an optional <code>+</code>
+or <code>-</code>, then one or more digits, and nothing else. Digits past 9 are
+the letters, either case. No spaces, prefixes (<code>0x</code>) or separators
+are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value is outside -128 to 127</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(i8.parse("-128").value() == -128, "the lowest");
+</code></pre>
+<h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
+<pre><code class="language-pepper">extend byte
+</code></pre>
+<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
+<h4 id="parse-1-1"><a class="header" href="#parse-1-1">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): byte?
+</code></pre>
+<p>Parses <code>text</code> as a <code>byte</code> (<code>u8</code>) written in <code>base</code>: an optional <code>+</code>,
 then one or more digits, and nothing else. Digits past 9 are the
-letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
-(<code>0x</code>) or separators are accepted.</p>
+letters, either case. No spaces, prefixes (<code>0x</code>) or separators are
+accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value is above 255 (a <code>-</code> sign is never accepted)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
+</code></pre>
+<h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
+<pre><code class="language-pepper">extend short
+</code></pre>
+<h3 id="static-methods-2-3"><a class="header" href="#static-methods-2-3">Static methods</a></h3>
+<h4 id="parse-2-1"><a class="header" href="#parse-2-1">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): short?
+</code></pre>
+<p>Parses <code>text</code> as a <code>short</code> (<code>i16</code>) written in <code>base</code>: an optional
+<code>+</code> or <code>-</code>, then one or more digits, and nothing else. Digits past 9
+are the letters, either case. No spaces, prefixes (<code>0x</code>) or
+separators are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value is outside -32768 to 32767</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(short.parse("-300").value() == -300, "decimal");
+</code></pre>
+<h2 id="extend-ushort"><a class="header" href="#extend-ushort">extend ushort</a></h2>
+<pre><code class="language-pepper">extend ushort
+</code></pre>
+<h3 id="static-methods-3-2"><a class="header" href="#static-methods-3-2">Static methods</a></h3>
+<h4 id="parse-3"><a class="header" href="#parse-3">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): ushort?
+</code></pre>
+<p>Parses <code>text</code> as a <code>ushort</code> (<code>u16</code>) written in <code>base</code>: an optional
+<code>+</code>, then one or more digits, and nothing else. Digits past 9 are the
+letters, either case. No spaces, prefixes (<code>0x</code>) or separators are
+accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value is above 65535 (a <code>-</code> sign is never accepted)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(ushort.parse("8080").value() == 8080, "a port");
+</code></pre>
+<h2 id="extend-int"><a class="header" href="#extend-int">extend int</a></h2>
+<pre><code class="language-pepper">extend int
+</code></pre>
+<h3 id="static-methods-4-1"><a class="header" href="#static-methods-4-1">Static methods</a></h3>
+<h4 id="parse-4"><a class="header" href="#parse-4">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): int?
+</code></pre>
+<p>Parses <code>text</code> as an <code>int</code> (<code>i32</code>) written in <code>base</code>: an optional <code>+</code>
+or <code>-</code>, then one or more digits, and nothing else. Digits past 9 are
+the letters, either case (<code>"ff"</code> in base 16 is 255). No spaces,
+prefixes (<code>0x</code>) or separators are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value does not fit an <code>int</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(int.parse("-42").value() == -42, "decimal");
+    assert(int.parse("ff", 16).value() == 255, "hexadecimal");
+    assert(int.parse("12x").is_none(), "not a number");
+</code></pre>
+<h2 id="extend-uint"><a class="header" href="#extend-uint">extend uint</a></h2>
+<pre><code class="language-pepper">extend uint
+</code></pre>
+<h3 id="static-methods-5-1"><a class="header" href="#static-methods-5-1">Static methods</a></h3>
+<h4 id="parse-5"><a class="header" href="#parse-5">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): uint?
+</code></pre>
+<p>Parses <code>text</code> as a <code>uint</code> (<code>u32</code>) written in <code>base</code>: an optional <code>+</code>,
+then one or more digits, and nothing else. Digits past 9 are the
+letters, either case. No spaces, prefixes (<code>0x</code>) or separators are
+accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value does not fit a <code>uint</code> (a <code>-</code> sign is never accepted)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(uint.parse("4294967295").value() == 4294967295, "the highest");
+</code></pre>
+<h2 id="extend-long"><a class="header" href="#extend-long">extend long</a></h2>
+<pre><code class="language-pepper">extend long
+</code></pre>
+<h3 id="static-methods-6-1"><a class="header" href="#static-methods-6-1">Static methods</a></h3>
+<h4 id="parse-6"><a class="header" href="#parse-6">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): long?
+</code></pre>
+<p>Parses <code>text</code> as a <code>long</code> (<code>i64</code>) written in <code>base</code>: an optional <code>+</code>
+or <code>-</code>, then one or more digits, and nothing else. Digits past 9 are
+the letters, either case. No spaces, prefixes (<code>0x</code>) or separators
+are accepted.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to parse</li>
@@ -20758,12 +20972,83 @@ letters, either case (<code>"ff"</code> in base 16 is 255). No spaces, prefixes
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import math;
-
-    assert(math.parse_int("-42").value() == -42, "decimal");
-    assert(math.parse_int("ff", 16).value() == 255, "hexadecimal");
-    assert(!math.parse_int("12x").is_some(), "not a number");
-    assert(!math.parse_int("9223372036854775808").is_some(), "too big");
+<pre><code class="language-pepper">    assert(long.parse("-9000000000").value() == -9000000000, "decimal");
+    assert(long.parse("9223372036854775808").is_none(), "too big");
+</code></pre>
+<h2 id="extend-ulong"><a class="header" href="#extend-ulong">extend ulong</a></h2>
+<pre><code class="language-pepper">extend ulong
+</code></pre>
+<h3 id="static-methods-7-1"><a class="header" href="#static-methods-7-1">Static methods</a></h3>
+<h4 id="parse-7"><a class="header" href="#parse-7">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String, base: int = 10): ulong?
+</code></pre>
+<p>Parses <code>text</code> as a <code>ulong</code> (<code>u64</code>) written in <code>base</code>: an optional
+<code>+</code>, then one or more digits, and nothing else. Digits past 9 are the
+letters, either case. No spaces, prefixes (<code>0x</code>) or separators are
+accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+<li><code>base</code> — the base the digits are written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not an integer in <code>base</code> or the value does not fit a <code>ulong</code> (a <code>-</code> sign is never accepted)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
+</code></pre>
+<h2 id="extend-float"><a class="header" href="#extend-float">extend float</a></h2>
+<pre><code class="language-pepper">extend float
+</code></pre>
+<h3 id="static-methods-8-1"><a class="header" href="#static-methods-8-1">Static methods</a></h3>
+<h4 id="parse-8"><a class="header" href="#parse-8">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): float?
+</code></pre>
+<p>Parses <code>text</code> as a <code>float</code> written in decimal notation: an optional
+<code>+</code> or <code>-</code>, digits with an optional <code>.</code> among them (<code>"1.5"</code>, <code>".5"</code>,
+<code>"2."</code>), then an optional exponent (<code>"1e-3"</code>, <code>"2.5E8"</code>), and nothing
+else. The value is the nearest <code>float</code>. No spaces, <code>inf</code>, <code>nan</code> or
+hexadecimal are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not decimal notation or its value is too large for a <code>float</code> (one too small rounds to zero)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(float.parse("0.25").value() == 0.25, "decimal");
+    assert(float.parse("1e39").is_none(), "too big");
+</code></pre>
+<h2 id="extend-double"><a class="header" href="#extend-double">extend double</a></h2>
+<pre><code class="language-pepper">extend double
+</code></pre>
+<h3 id="static-methods-9-1"><a class="header" href="#static-methods-9-1">Static methods</a></h3>
+<h4 id="parse-9"><a class="header" href="#parse-9">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): double?
+</code></pre>
+<p>Parses <code>text</code> as a <code>double</code> written in decimal notation: an optional
+<code>+</code> or <code>-</code>, digits with an optional <code>.</code> among them (<code>"1.5"</code>, <code>".5"</code>,
+<code>"2."</code>), then an optional exponent (<code>"1e-3"</code>, <code>"2.5E8"</code>), and nothing
+else. The value is the nearest <code>double</code>. No spaces, <code>inf</code>, <code>nan</code> or
+hexadecimal are accepted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when <code>text</code> is not decimal notation or its value is too large for a <code>double</code> (one too small rounds to zero)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
+    assert(double.parse("1.5.2").is_none(), "not a number");
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/tls/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="tlsmodulepep"><a class="header" href="#tlsmodulepep">tls/module.pep</a></h1>
@@ -20829,7 +21114,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -20917,7 +21202,7 @@ one.</p>
 <ul>
 <li><code>context</code> — the platform’s server context, or null for none</li>
 </ul>
-<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
+<h3 id="static-methods-1-5"><a class="header" href="#static-methods-1-5">Static methods</a></h3>
 <h4 id="create-1-1"><a class="header" href="#create-1-1">create</a></h4>
 <pre><code class="language-pepper">static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;TlsAcceptor&gt;
 </code></pre>
@@ -21138,8 +21423,8 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
-<h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
 <p>Parses <code>text</code> as a URI reference: an absolute URI with any scheme,
