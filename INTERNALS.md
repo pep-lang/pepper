@@ -1178,9 +1178,25 @@ parsed.
 The model is defined in AGENTS.md ("Reference counting is
 std::shared_ptr<T> passed by value"). This section maps each rule to the
 code that implements it. Every rule is emitted in
-`crates/pepper-codegen/src/lib.rs` as a call to `T.__acquire` or
-`T.__release`. Both are synthesized by `struct_body::apply_synthesized` and
-are null-safe.
+`crates/pepper-codegen/src/lib.rs` through `acquire_ref` and `release_ref`,
+which stand for `T.__acquire` and `T.__release`. Both are synthesized by
+`struct_body::apply_synthesized` and are null-safe.
+
+For a struct with the standard counts (`StructDesc::inline_counts`, set by
+`standard_counts`: not a weak view, a function type's object, or a
+reference enum with immortal cases, whose bodies differ), codegen inlines
+the step instead of calling (`inline_count_step`): a null check and the
+increment or decrement, atomic for a `[Shared]` struct (`count_step`, which
+`CountStep` also uses). Only a release that reaches 0 makes a call, to
+`T.__last_release`, a `cold`, `noinline` function that `last_release`
+emits in each unit that needs it (no owner, so `linkonce_odr`): it calls
+`__dtor`, drops the strong references' weak reference, and frees the object
+when that reached 0, exactly as the zero branch of `__release`. So taking
+or dropping a reference costs no call even across units and at `-O0`, and
+the cache keys need nothing new: the step depends only on the head layout
+and `[Shared]`, which are part of the struct's interface. Tuples and trait
+values still call their thunks, which step their elements or object the
+same way.
 
 | shared_ptr construct | Where |
 | --- | --- |

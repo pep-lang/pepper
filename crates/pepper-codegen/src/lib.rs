@@ -44,6 +44,12 @@ pub struct StructDesc<'ctx> {
     /// method name → parameter sema type strings, for finding the member of
     /// an overload set that implements a trait slot.
     pub method_params: HashMap<String, Vec<String>>,
+    /// Whether codegen steps its reference count inline (see
+    /// [`CodeGenerator::acquire_ref`]), and whether atomically: `None` for
+    /// a struct whose `__acquire`/`__release` are not the standard ones
+    /// (a weak view, a function type's object, a reference enum whose
+    /// cases include immortal static objects), which are called.
+    pub inline_counts: Option<bool>,
 }
 
 /// A trait used as a type (`Shape`, `Iterator<int>`): its dispatchable
@@ -753,6 +759,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .collect(),
             method_returns: HashMap::new(),
             method_params: HashMap::new(),
+            inline_counts: standard_counts(st).then(|| st.atomic_counts()),
         };
         self.structs.insert(st.name.clone(), desc);
 
@@ -2808,10 +2815,102 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
-    /// `T.__acquire(v)` for a struct-reference value (null-guarded inside).
+    /// Acquire a reference to `val`, of type `ty_name`: `T.__acquire(v)`,
+    /// which ignores null. For a struct with the standard counts the step
+    /// is inlined instead (null check and increment, atomic for a `[Shared]`
+    /// struct), so taking a reference costs no call, whichever unit
+    /// defines the struct.
     fn acquire_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
-        self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![val])?;
+        match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
+            Some(atomic) => self.inline_count_step(ty_name, val, true, atomic),
+            None => self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![val]).map(|_| ()),
+        }
+    }
+
+    /// Release a reference to `val`, of type `ty_name`: `T.__release(v)`, or
+    /// inlined like [`Self::acquire_ref`], with only the last release (the
+    /// destructor and freeing) a call, to `T.__last_release`.
+    fn release_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
+        match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
+            Some(atomic) => self.inline_count_step(ty_name, val, false, atomic),
+            None => self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val]).map(|_| ()),
+        }
+    }
+
+    /// The inlined body of a standard `__acquire` (`increment`) or
+    /// `__release`, as `struct_body` synthesizes them.
+    fn inline_count_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool, atomic: bool) -> Result<(), String> {
+        let object = val.into_pointer_value();
+        // The insert point's function: a thunk is emitted while another
+        // function is being compiled.
+        let function = self
+            .builder
+            .get_insert_block()
+            .and_then(|block| block.get_parent())
+            .ok_or_else(|| "a reference count step outside a function".to_string())?;
+        let step = self.context.append_basic_block(function, if increment { "acquire" } else { "release" });
+        let done = self.context.append_basic_block(function, "counted");
+        let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
+        self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(step);
+        let after = self.count_step(object, sema::CountField::Strong, increment, atomic)?;
+        if increment {
+            self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        } else {
+            let last = self.context.append_basic_block(function, "last_release");
+            let zero = self.context.i32_type().const_zero();
+            let is_last = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, after, zero, "is_last")
+                .map_err(|e| e.to_string())?;
+            self.builder.build_conditional_branch(is_last, last, done).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(last);
+            let last_release = self.last_release(ty_name, atomic)?;
+            self.builder.build_call(last_release, &[object.into()], "").map_err(|e| e.to_string())?;
+            self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        }
+        self.builder.position_at_end(done);
         Ok(())
+    }
+
+    /// `T.__last_release(this)`: what a standard `__release` does when the
+    /// strong count reaches 0, out of line (`cold`, never inlined) so each
+    /// inlined release stays a decrement and a branch. It destroys the
+    /// object, then gives up the strong references' weak reference and
+    /// frees the memory when no weak reference remains (see `struct_body`).
+    /// Like an instantiation it has no owner, so each unit that releases
+    /// the struct defines a `linkonce_odr` copy.
+    fn last_release(&mut self, ty_name: &str, atomic: bool) -> Result<FunctionValue<'ctx>, String> {
+        let name = format!("{}.__last_release", ty_name);
+        if let Some(function) = self.module.get_function(&name) {
+            return Ok(function);
+        }
+        let pointer = self.context.ptr_type(inkwell::AddressSpace::default());
+        let function = self.module.add_function(&name, self.context.void_type().fn_type(&[pointer.into()], false), None);
+        for attribute in ["cold", "noinline"] {
+            let kind = inkwell::attributes::Attribute::get_named_enum_kind_id(attribute);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, self.context.create_enum_attribute(kind, 0));
+        }
+        let resume = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+        let object = function.get_nth_param(0).expect("this").into_pointer_value();
+        self.call_function(&format!("{}.__dtor", ty_name), vec![object.into()])?;
+        let weak = self.count_step(object, sema::CountField::Weak, false, atomic)?;
+        let free = self.context.append_basic_block(function, "free");
+        let done = self.context.append_basic_block(function, "done");
+        let zero = self.context.i32_type().const_zero();
+        let unreferenced = self.builder.build_int_compare(inkwell::IntPredicate::EQ, weak, zero, "unreferenced").map_err(|e| e.to_string())?;
+        self.builder.build_conditional_branch(unreferenced, free, done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(free);
+        self.call_function("_pep_free", vec![object.into()])?;
+        self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(done);
+        self.builder.build_return(None).map_err(|e| e.to_string())?;
+        if let Some(block) = resume {
+            self.builder.position_at_end(block);
+        }
+        Ok(function)
     }
 
     /// Sema type name when `expr` produces an owned rvalue temporary that a
@@ -2830,7 +2929,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// type names.
     fn release_temp(&mut self, ty: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
         if !ty.is_empty() {
-            self.call_function(&format!("{}.{}", ty, "__release"), vec![val])?;
+            self.release_ref(ty, val)?;
         }
         Ok(())
     }
@@ -2856,7 +2955,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .builder
                 .build_load(self.reference_value_type(ty_name), *addr, "scope_release")
                 .map_err(|e| e.to_string())?;
-            self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val])?;
+            self.release_ref(ty_name, val)?;
         }
         Ok(())
     }
@@ -3174,9 +3273,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_conditional_branch(same, cont_block, ops_block)
             .map_err(|e| e.to_string())?;
         self.builder.position_at_end(ops_block);
-        self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
+        self.acquire_ref(ty_name, new_val)?;
         self.store_before_release(gep, value_ty, new_val, ty_name)?;
-        self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
+        self.release_ref(ty_name, old)?;
         self.builder
             .build_unconditional_branch(cont_block)
             .map_err(|e| e.to_string())?;
@@ -3443,40 +3542,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Weak(op, ty, arg) => self.codegen_weak(*op, ty, arg),
             Expression::CountStep { field, increment, atomic } => {
-                // One step of a head count of `this`. Every object (and
-                // every weak view) starts with the two u32 counts, so the
-                // count sits at a fixed byte offset whatever the struct.
                 let this = match self.codegen_expr(&Expression::ThisRef)? {
                     BasicValueEnum::PointerValue(p) => p,
                     other => return Err(format!("head count on a non-reference {:?}", other)),
                 };
-                let count = self.head_count_ptr(this, *field)?;
-                let i32_type = self.context.i32_type();
-                let one = i32_type.const_int(1, false);
-                let old = if *atomic {
-                    // Taking a reference needs no ordering (the caller
-                    // already holds one); dropping one is acquire-release,
-                    // so the last release sees every other thread's writes
-                    // before it destroys the object (as in C++'s shared_ptr).
-                    let (op, ordering) = if *increment {
-                        (inkwell::AtomicRMWBinOp::Add, inkwell::AtomicOrdering::Monotonic)
-                    } else {
-                        (inkwell::AtomicRMWBinOp::Sub, inkwell::AtomicOrdering::AcquireRelease)
-                    };
-                    self.builder.build_atomicrmw(op, count, one, ordering).map_err(|e| e.to_string())?
-                } else {
-                    self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?.into_int_value()
-                };
-                let new = if *increment {
-                    self.builder.build_int_add(old, one, "count_after")
-                } else {
-                    self.builder.build_int_sub(old, one, "count_after")
-                }
-                .map_err(|e| e.to_string())?;
-                if !*atomic {
-                    self.builder.build_store(count, new).map_err(|e| e.to_string())?;
-                }
-                Ok(new.into())
+                Ok(self.count_step(this, *field, *increment, *atomic)?.into())
             }
             Expression::FunctionPointer { owner, function, .. } => {
                 let name = match owner {
@@ -3526,10 +3596,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Some(ty) = arg_temp {
                     self.release_temp(&ty, val)?;
                 }
+                // The release may have added blocks (an inlined count step).
+                let then_end = self.builder.get_insert_block().expect("no insert block");
                 self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(merge_block);
                 let phi = self.builder.build_phi(self.context.i32_type(), "__refcount").map_err(|e| e.to_string())?;
-                phi.add_incoming(&[(&loaded, then_block), (&BasicValueEnum::IntValue(zero), entry)]);
+                phi.add_incoming(&[(&loaded, then_end), (&BasicValueEnum::IntValue(zero), entry)]);
                 Ok(phi.as_basic_value().into_int_value().into())
             }
             Expression::Address(ty, arg) => {
@@ -3592,10 +3664,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         if let Some(ty) = arg_temp {
                             self.release_temp(&ty, val)?;
                         }
+                        // The release may have added blocks (an inlined count step).
+                        let then_end = self.builder.get_insert_block().expect("no insert block");
                         self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
                         self.builder.position_at_end(merge_block);
                         let phi = self.builder.build_phi(i64, "__address").map_err(|e| e.to_string())?;
-                        phi.add_incoming(&[(&folded, then_block), (&seed, entry)]);
+                        phi.add_incoming(&[(&folded, then_end), (&seed, entry)]);
                         Ok(phi.as_basic_value().into_int_value().into())
                     }
                     Some(_) => {
@@ -4121,7 +4195,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Some(BasicTypeEnum::StructType(_))
                 ) || self.is_trait_name(&parsed.to_string());
                 if is_struct {
-                    return self.call_function(&format!("{}.__release", parsed), vec![v]);
+                    self.release_ref(&parsed.to_string(), v)?;
+                    return Ok(self.context.i32_type().const_zero().into());
                 }
             }
             return Ok(value.unwrap_or_else(|| self.context.i32_type().const_zero().into()));
@@ -4367,6 +4442,45 @@ impl<'ctx> CodeGenerator<'ctx> {
         let _: BasicValueEnum<'ctx> = null;
         self.builder.build_store(address.ptr, null).map_err(|e| e.to_string())?;
         Ok(moved)
+    }
+
+    /// One step of a head count of `object`, returning the count after it.
+    /// Every object (and every weak view) starts with the two u32 counts,
+    /// so a count sits at a fixed byte offset whatever the struct.
+    fn count_step(
+        &mut self,
+        object: PointerValue<'ctx>,
+        field: sema::CountField,
+        increment: bool,
+        atomic: bool,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let count = self.head_count_ptr(object, field)?;
+        let i32_type = self.context.i32_type();
+        let one = i32_type.const_int(1, false);
+        let old = if atomic {
+            // Taking a reference needs no ordering (the caller already holds
+            // one); dropping one is acquire-release, so the last release sees
+            // every other thread's writes before it destroys the object (as
+            // in C++'s shared_ptr).
+            let (op, ordering) = if increment {
+                (inkwell::AtomicRMWBinOp::Add, inkwell::AtomicOrdering::Monotonic)
+            } else {
+                (inkwell::AtomicRMWBinOp::Sub, inkwell::AtomicOrdering::AcquireRelease)
+            };
+            self.builder.build_atomicrmw(op, count, one, ordering).map_err(|e| e.to_string())?
+        } else {
+            self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?.into_int_value()
+        };
+        let new = if increment {
+            self.builder.build_int_add(old, one, "count_after")
+        } else {
+            self.builder.build_int_sub(old, one, "count_after")
+        }
+        .map_err(|e| e.to_string())?;
+        if !atomic {
+            self.builder.build_store(count, new).map_err(|e| e.to_string())?;
+        }
+        Ok(new)
     }
 
     /// Address of head count `field` in the object at `object`.
@@ -5901,4 +6015,14 @@ fn set_private_linkage(value: inkwell::values::GlobalValue<'_>, name: &str) {
     if name.contains(pepper_sema::namespace::SEPARATOR) {
         value.set_linkage(inkwell::module::Linkage::Internal);
     }
+}
+
+/// Whether a struct's `__acquire` and `__release` are the standard ones
+/// `struct_body` synthesizes, which codegen may inline: not a weak view's
+/// (they step the weak count), a function type's object's, or a reference
+/// enum's with payload-free cases (both skip immortal static objects, see
+/// `function_types::skip_static_objects`).
+fn standard_counts(st: &StructDef) -> bool {
+    let immortal_cases = st.enum_cases.as_ref().is_some_and(|cases| cases.iter().any(|c| c.payload.is_empty()));
+    st.release.body.is_some() && !st.ty.is_weak() && !st.ty.is_function_type() && !immortal_cases
 }
