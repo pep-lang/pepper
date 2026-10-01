@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-06173ff8.js";
+            window.path_to_searchindex_js = "searchindex-da10e3cb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3dd6b05c.js"></script>
@@ -5316,6 +5316,13 @@ and locals can all use them.</li>
 <li>Name the type arguments whenever you use the struct: <code>Stack&lt;int&gt;()</code>,
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
+<li>Each type argument makes a separate copy of the struct, so a struct whose
+copy needs a copy with a larger argument never ends: <code>struct Foo&lt;T&gt;</code> with
+a field <code>var inner: Foo&lt;Array&lt;T&gt;&gt;</code> makes <code>Foo&lt;int&gt;</code> need
+<code>Foo&lt;Array&lt;int&gt;&gt;</code>, which needs <code>Foo&lt;Array&lt;Array&lt;int&gt;&gt;&gt;</code>, and so on. The
+compiler stops 64 levels deep with an error at the type that asks for the
+next level (<code>'Foo' is specialized 65 levels deep, past the limit of 64</code>),
+with a note where the chain started.</li>
 </ul>
 <blockquote>
 <p><strong>Note:</strong> Inside a generic struct, <code>var top = items.last();</code> cannot infer a
@@ -11411,6 +11418,18 @@ the limit, here the 255th <code>+</code> of a long sum:</p>
 </code></pre>
 <p>Split the expression into steps (<code>var part = ...;</code>), or move the inner part
 into a function.</p>
+<p><strong>A generic that asks for a larger copy of itself</strong> (see
+<a href="#generics">Generics</a>). Each type argument makes a separate copy of a
+generic, so a <code>Foo&lt;T&gt;</code> holding a <code>Foo&lt;Array&lt;T&gt;&gt;</code> never runs out of copies to
+make. The compiler stops 64 levels deep, at the type that asks for the next
+level, with a note where the chain started:</p>
+<pre><code class="language-text">main.pep:2:16: error: 'Foo' is specialized 65 levels deep, past the limit of 64; a generic whose instance asks for a larger instance of itself never ends
+    2 |     var inner: Foo&lt;Array&lt;T&gt;&gt;;
+      |                ^~~~~~~~~~~~~
+main.pep:6:13: note: asked for by 'main' here
+    6 |     var f = Foo&lt;int&gt;();
+      |             ^~~~~~~~
+</code></pre>
 <h2 id="errors-while-the-program-runs"><a class="header" href="#errors-while-the-program-runs">Errors while the program runs</a></h2>
 <p>Some problems can only be found while the program runs, such as an array index
 out of range or a failed <code>assert</code>. These are not compiler errors: the program

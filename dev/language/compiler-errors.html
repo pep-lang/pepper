@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-06173ff8.js";
+            window.path_to_searchindex_js = "../searchindex-da10e3cb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dd6b05c.js"></script>
@@ -453,6 +453,18 @@ the limit, here the 255th <code>+</code> of a long sum:</p>
 </code></pre>
 <p>Split the expression into steps (<code>var part = ...;</code>), or move the inner part
 into a function.</p>
+<p><strong>A generic that asks for a larger copy of itself</strong> (see
+<a href="generics.html">Generics</a>). Each type argument makes a separate copy of a
+generic, so a <code>Foo&lt;T&gt;</code> holding a <code>Foo&lt;Array&lt;T&gt;&gt;</code> never runs out of copies to
+make. The compiler stops 64 levels deep, at the type that asks for the next
+level, with a note where the chain started:</p>
+<pre><code class="language-text">main.pep:2:16: error: 'Foo' is specialized 65 levels deep, past the limit of 64; a generic whose instance asks for a larger instance of itself never ends
+    2 |     var inner: Foo&lt;Array&lt;T&gt;&gt;;
+      |                ^~~~~~~~~~~~~
+main.pep:6:13: note: asked for by 'main' here
+    6 |     var f = Foo&lt;int&gt;();
+      |             ^~~~~~~~
+</code></pre>
 <h2 id="errors-while-the-program-runs"><a class="header" href="#errors-while-the-program-runs">Errors while the program runs</a></h2>
 <p>Some problems can only be found while the program runs, such as an array index
 out of range or a failed <code>assert</code>. These are not compiler errors: the program
