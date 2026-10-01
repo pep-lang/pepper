@@ -20,7 +20,7 @@ struct Countdown {
 }
 
 # Declaring the trait documents the intent; the loop goes by the methods.
-extend Countdown with Iterator<int> {}
+extend Countdown with Iterator<int>;
 
 # An iterable: iterate() hands out a fresh iterator for each loop.
 struct Evens {
@@ -50,8 +50,8 @@ struct EvensIterator {
     }
 }
 
-extend EvensIterator with Iterator<int> {}
-extend Evens with Iterable<int> {}
+extend EvensIterator with Iterator<int>;
+extend Evens with Iterable<int>;
 
 # A generic function can loop over any type that supports the protocol.
 sum<C>(C values): int {

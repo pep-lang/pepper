@@ -71,6 +71,11 @@ signatures ending in `;`. Then declare that a type has the trait with
   stands for the type that has the trait.
 - `extend Square with Shape, Printable { ... }` attaches several traits at
   once.
+- When the type already has every method the traits need, from its own
+  methods or the traits' defaults, the extension can end with `;` instead of
+  a body: `extend Square with Labeled;` is the same as
+  `extend Square with Labeled {}`. Only an extension with a `with` clause can
+  leave out its body; `pep-fmt` writes an empty one as `;`.
 - A trait can declare several methods of one name with different parameter
   types; the type implements each with the method whose parameter types
   match (see [Overloading](overloading.md#extensions-and-traits)).

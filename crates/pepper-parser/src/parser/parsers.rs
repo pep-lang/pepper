@@ -3937,7 +3937,8 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
     Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
 }
 
-/// `extend TypeName[<...>] [with Trait, ...] { methods }`
+/// `extend TypeName[<...>] [with Trait, ...] { methods }`, or
+/// `extend TypeName[<...>] with Trait, ...;` with no body.
 fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendDecl> {
     let start = pos(input);
     // Widen the node span to cover any preceding attributes.
@@ -3951,11 +3952,13 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     ws(input)?;
 
     let mut traits = vec![];
+    let mut traits_end = 0;
     if input.starts_with("with") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[4..];
         loop {
             ws(input)?;
             traits.push(type_name(input)?);
+            traits_end = pos(input);
             ws(input)?;
             if input.starts_with(',') {
                 *input = &input[1..];
@@ -3965,7 +3968,18 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
         }
     }
     ws(input)?;
-    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    // `extend X with Trait;` adopts traits whose methods all have defaults:
+    // the same as an empty `{}` body.
+    if !traits.is_empty() && input.starts_with(';') {
+        *input = &input[1..];
+        return Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods: vec![], span: Span { start: decl_start, end: pos(input) }, is_exported: false });
+    }
+    if !input.starts_with('{') {
+        if traits.is_empty() { return Err(cut_expecting(input, "'{'")); }
+        // Right after the last trait, where the `;` would go.
+        let loc = Loc::new(FileId::default(), Span { start: traits_end, end: traits_end });
+        return Err(fail_with(Diagnostic::error("expected '{' or ';'").at(loc).with_fix(Fix::replace("Insert ';'", loc, ";"))));
+    }
     let open = pos(input);
     *input = &input[1..];
 
@@ -6512,6 +6526,26 @@ f() { var r = c.Result<int>.ok(1); }");
             }
             other => panic!("{:?}", other),
         }
+    }
+
+    #[test]
+    fn test_extend_without_body() {
+        let m = parse("export extend Point with Shape, Named;\nextend Box<T: Shape> with Shape;");
+        match (&m.declarations[0], &m.declarations[1]) {
+            (Declaration::Extend(a), Declaration::Extend(b)) => {
+                assert!(a.is_exported);
+                assert_eq!(a.traits.len(), 2);
+                assert!(a.methods.is_empty());
+                assert_eq!(a.to_string(), "export extend Point with Shape, Named;");
+                assert_eq!(b.to_string(), "extend Box<T: Shape> with Shape;");
+            }
+            other => panic!("{:?}", other),
+        }
+        // Without a trait, `;` would declare nothing: the body is required.
+        let s = "extend Point;";
+        let _guard = track_source(s.len());
+        let mut input = s;
+        assert!(parse_module(&mut input).is_err(), "expected parse error for: {s}");
     }
 
     #[test]

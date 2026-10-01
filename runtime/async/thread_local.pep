@@ -193,4 +193,4 @@ export struct ThreadLocalGuard<T> {
     exit() {}
 }
 
-extend ThreadLocalGuard<T> with Scoped<T> {}
+extend ThreadLocalGuard<T> with Scoped<T>;

@@ -75,7 +75,7 @@ export struct ExitStatus {
     }
 }
 
-extend ExitStatus with ToString {}
+extend ExitStatus with ToString;
 
 ## A child process started by `Command.spawn()`: its id, the pipes to the
 ## streams that were piped, and its exit status once it ends.

@@ -17,8 +17,8 @@ struct Square {
     <(other: Square): bool { return side < other.side; }
 }
 
-extend Square with Shape {}
-extend Square with Ordered {}
+extend Square with Shape;
+extend Square with Ordered;
 
 # Inside the body, a T offers what Shape and Ordered declare.
 largest<T: Shape & Ordered>(items: Array<T>): T {

@@ -78,7 +78,7 @@ export move<T>([MoveSource] value: T): T {
 ## copy field by field: one with a destructor or a raw pointer field, such as
 ## a container that owns a buffer.
 ##
-## Declare it with `extend Buffer with Copyable<Buffer> {}` and give the
+## Declare it with `extend Buffer with Copyable<Buffer>;` and give the
 ## struct a `copy(Copies copies)` method. The method builds the copy and
 ## copies each value it holds with `copies.copy(value)`, which reuses a copy
 ## already made, so objects referenced twice stay shared.
@@ -109,7 +109,7 @@ export move<T>([MoveSource] value: T): T {
 ##         }
 ##     }
 ##
-##     extend Buffer with Copyable<Buffer> {}
+##     extend Buffer with Copyable<Buffer>;
 export trait Copyable<T> {
     ## Returns a copy of this value, for `copy`.
     ##

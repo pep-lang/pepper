@@ -1837,10 +1837,10 @@ export struct StringIterator {
     }
 }
 
-extend StringIterator with Iterator<String> {}
+extend StringIterator with Iterator<String>;
 
-extend String with Copyable<String> {}
+extend String with Copyable<String>;
 
-extend String with ToString {}
+extend String with ToString;
 
-extend StringBuilder with ToString {}
+extend StringBuilder with ToString;

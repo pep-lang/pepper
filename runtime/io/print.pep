@@ -64,8 +64,8 @@ export trait Print {
     }
 }
 
-extend File with Print {}
+extend File with Print;
 
-extend TcpStream with Print {}
+extend TcpStream with Print;
 
-extend UnixStream with Print {}
+extend UnixStream with Print;

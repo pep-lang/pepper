@@ -1264,6 +1264,9 @@ impl Display for ExtendDecl {
         }
         if !self.traits.is_empty() {
             write!(f, " with {}", join(&self.traits, ", "))?;
+            if self.methods.is_empty() {
+                return write!(f, ";");
+            }
         }
         write!(f, " {{")?;
         for method in &self.methods {

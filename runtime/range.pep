@@ -115,7 +115,7 @@ export struct Range<T> {
     }
 }
 
-extend Range<T> with Iterator<T> {}
+extend Range<T> with Iterator<T>;
 
 # `a..b` is `_range(a, b, false)` and `a..>b` is `_range(a, b, true)` (the
 # sema builder writes the call), so the bounds infer `T`.

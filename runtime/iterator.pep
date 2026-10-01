@@ -23,7 +23,7 @@
 ## instead. A type with neither protocol is a compile error in a `for` loop.
 ##
 ## The loop goes by the methods a type has, so declaring the trait is
-## optional. Declaring it (`extend Foo with Iterator<int> {}`) checks that
+## optional. Declaring it (`extend Foo with Iterator<int>;`) checks that
 ## the methods match and lets the type be used as an `Iterator<int>` value,
 ## which a `for` loop drives through the trait.
 ##
@@ -49,7 +49,7 @@
 ##         }
 ##     }
 ##
-##     extend Countdown with Iterator<int> {}
+##     extend Countdown with Iterator<int>;
 ##
 ##     main(): int {
 ##         var total = 0;
@@ -215,7 +215,7 @@ export struct MapIterator<T, U> {
     }
 }
 
-extend MapIterator<T, U> with Iterator<U> {}
+extend MapIterator<T, U> with Iterator<U>;
 
 ## The iterator `Iterator.filter` returns: the elements of the source
 ## iterator that the test function accepts.
@@ -258,7 +258,7 @@ export struct FilterIterator<T> {
     }
 }
 
-extend FilterIterator<T> with Iterator<T> {}
+extend FilterIterator<T> with Iterator<T>;
 
 ## The iterator `Iterator.enumerate` returns: each element of the source
 ## iterator, paired with its position.
@@ -300,7 +300,7 @@ export struct EnumerateIterator<T, TIndex> {
     }
 }
 
-extend EnumerateIterator<T, TIndex> with Iterator<(TIndex, T)> {}
+extend EnumerateIterator<T, TIndex> with Iterator<(TIndex, T)>;
 
 ## The iterator `Iterator.zip` returns: the elements of two iterators,
 ## paired in step, until either runs out.
@@ -340,7 +340,7 @@ export struct ZipIterator<T, U> {
     }
 }
 
-extend ZipIterator<T, U> with Iterator<(T, U)> {}
+extend ZipIterator<T, U> with Iterator<(T, U)>;
 
 ## Something that hands out an `Iterator<T>` over its elements, such as
 ## `Array<T>` and `String` (which yields one code point at a time, as a

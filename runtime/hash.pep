@@ -959,8 +959,8 @@ export _map_literal<K, V>(key: K, value: V): HashMap<K, V> {
     return result;
 }
 
-extend HashSetIterator<K> with Iterator<K> {}
+extend HashSetIterator<K> with Iterator<K>;
 
-extend HashMap<K, V> with Copyable<HashMap<K, V>> {}
+extend HashMap<K, V> with Copyable<HashMap<K, V>>;
 
-extend HashSet<K> with Copyable<HashSet<K>> {}
+extend HashSet<K> with Copyable<HashSet<K>>;

@@ -344,7 +344,7 @@ export struct MutexGuard<T> {
     }
 }
 
-extend MutexGuard<T> with Scoped<T> {}
+extend MutexGuard<T> with Scoped<T>;
 
 ## Lets threads that hold a Mutex sleep until another thread changes the
 ## Mutex's value, like C++ `std::condition_variable`. Get one from

@@ -252,7 +252,7 @@ export struct Uri {
     }
 }
 
-extend Uri with ToString {}
+extend Uri with ToString;
 
 _uri_invalid(text: String, why: String): Result<Uri> {
     return Result<Uri>.err(Error($"invalid URI '{text}': {why}"));

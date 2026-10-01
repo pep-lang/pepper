@@ -25,7 +25,7 @@ struct Session {
     }
 }
 
-extend Session with Scoped<Session> {}
+extend Session with Scoped<Session>;
 
 # enter() may return a null reference: then the body is skipped and the
 # `else` block runs.
@@ -43,7 +43,7 @@ struct Lookup {
     exit() {}
 }
 
-extend Lookup with Scoped<Session> {}
+extend Lookup with Scoped<Session>;
 
 first_user(): String {
     with (var session = Session("ada")) {

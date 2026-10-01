@@ -411,7 +411,11 @@ with no extension, and `module_name()` is the output's stem.
   `constraints`) before its default. An `extend` target may restate its
   struct's constraints (`extend Box<T: Shape>`): `extend_target` tries a
   plain type first and keeps the restated ones in
-  `ExtendDecl::target_bounds`, per argument.
+  `ExtendDecl::target_bounds`, per argument. An extension with a `with`
+  clause may end in `;` instead of a body (`extend X with Trait;`); it
+  parses to an `ExtendDecl` with no methods, as `{}` does.
+  `tools/syntax/parser.pep` mirrors it, and `pep-fmt` writes an empty
+  body after a `with` clause as `;`.
   Function types `(P…) => R` are parsed directly into
   `__function<R, P…>`, and thread-safe ones `shared (P…) => R` into
   `__shared_function<R, P…>` (`shared_function_type_name`; `shared` is a

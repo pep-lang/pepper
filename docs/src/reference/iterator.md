@@ -19,7 +19,7 @@ Something a `for` loop can step through, one element at a time.
 instead. A type with neither protocol is a compile error in a `for` loop.
 
 The loop goes by the methods a type has, so declaring the trait is
-optional. Declaring it (`extend Foo with Iterator<int> {}`) checks that
+optional. Declaring it (`extend Foo with Iterator<int>;`) checks that
 the methods match and lets the type be used as an `Iterator<int>` value,
 which a `for` loop drives through the trait.
 
@@ -51,7 +51,7 @@ which a `for` loop drives through the trait.
         }
     }
 
-    extend Countdown with Iterator<int> {}
+    extend Countdown with Iterator<int>;
 
     main(): int {
         var total = 0;

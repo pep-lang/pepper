@@ -75,7 +75,7 @@ output:
 - `print` writes the text alone; `print_line` adds a `\n`.
 - Both return an `IoResult<void>`, like `write_all`.
 - Another type gets them by providing `write_all(data: u8[])` and declaring
-  `extend MyStream with io.Print {}`.
+  `extend MyStream with io.Print;`.
 
 ## UDP
 

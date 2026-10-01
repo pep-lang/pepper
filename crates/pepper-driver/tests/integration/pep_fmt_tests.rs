@@ -155,6 +155,19 @@ fn pep_fmt_places_braces_attributes_and_declarations() {
 }
 
 #[test]
+fn pep_fmt_writes_an_empty_extension_body_as_a_semicolon() {
+    // After a `with` clause an empty body becomes `;`, and one-line
+    // extensions sit together; a body with a comment, or with no `with`
+    // clause, stays.
+    assert_formats(
+        "extend A with Shape {}\nextend B with Shape, Named { }  # both\nextend C with Shape;\n\
+         extend D with Shape {\n    # later\n}\nextend E {}\n",
+        "extend A with Shape;\nextend B with Shape, Named;  # both\nextend C with Shape;\n\n\
+         extend D with Shape {\n    # later\n}\n\nextend E {}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_keeps_one_line_bodies_and_else_as_written() {
     assert_formats(
         "main(): int {\n    for (var x in xs) { if x > 1 { continue; } else if x < 0 { break; }\n    else { print(x); } }\n    return 0;\n}\n",

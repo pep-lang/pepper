@@ -62,6 +62,20 @@ fn missing_semicolon() {
 }
 
 #[test]
+fn extend_without_body_or_semicolon() {
+    // An extension that adopts a trait may end with `;` instead of a body.
+    let source = "extend Point with Shape\nmain(): int {\n    return 0;\n}\n";
+    let error = pepper_parser::parser::parse_source_diag(source).unwrap_err();
+    assert_eq!(
+        error.render_in("main.pep", source),
+        "main.pep:1:24: error: expected '{' or ';'\n\
+         \x20   1 | extend Point with Shape\n\
+         \x20     |                        ^\n\
+         \x20     |                        ;"
+    );
+}
+
+#[test]
 fn undeclared_identifier() {
     assert_eq!(
         error_of("undeclared_identifier", "main(): int {\n    var a = 1;\n    return a + nope;\n}\n"),

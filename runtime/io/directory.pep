@@ -447,7 +447,7 @@ export struct DirectoryIterator {
     }
 }
 
-extend DirectoryIterator with Iterator<IoResult<DirEntry>> {}
+extend DirectoryIterator with Iterator<IoResult<DirEntry>>;
 
 # Every entry of the directory at `path`, all at once (`Directory.entries()`).
 export _io_list(path: Path): IoResult<DirEntry[]> {

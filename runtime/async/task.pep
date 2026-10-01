@@ -1576,7 +1576,7 @@ export struct Deadline {
     }
 }
 
-extend Deadline with Scoped<Deadline> {}
+extend Deadline with Scoped<Deadline>;
 
 ## Returns a time limit for a `with` block: the waits inside it give up
 ## `milliseconds` from now (see `Deadline`).

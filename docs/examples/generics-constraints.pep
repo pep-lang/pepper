@@ -11,7 +11,7 @@ struct Circle {
     area(): int { return 3 * radius * radius; }
 }
 
-extend Circle with Shape {}
+extend Circle with Shape;
 
 struct Square {
     var side: int = 2;
@@ -19,8 +19,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 # Every T must conform to Shape.
 total_area<T: Shape>(shapes: Array<T>): int {

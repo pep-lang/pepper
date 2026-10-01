@@ -708,4 +708,4 @@ export struct Path {
     }
 }
 
-extend Path with ToString {}
+extend Path with ToString;

@@ -2184,6 +2184,11 @@ struct Parser {
                 }
                 break;
             }
+            # `extend X with Trait;` has no body.
+            if (_at(";")) {
+                _take(node);
+                return node;
+            }
         }
         node.add(_members(NodeKind.Extend));
         return node;

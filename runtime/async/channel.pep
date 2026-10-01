@@ -529,4 +529,4 @@ export struct ChannelIterator<T> {
     }
 }
 
-extend ChannelIterator<T> with Iterator<T> {}
+extend ChannelIterator<T> with Iterator<T>;

@@ -151,7 +151,7 @@ iterator to the end and collects what is left into a new `Array`:
 
 Every type that declares `Iterator<T>` gets them: `ArrayIterator<T>` (from
 `Array.iterate()`), `StringIterator`, [ranges](#looping-over-a-range), and
-your own iterators once you write `extend YourType with Iterator<T> {}`. The adapter holds its own copy of
+your own iterators once you write `extend YourType with Iterator<T>;`. The adapter holds its own copy of
 the iterator it wraps (the runtime's iterators are
 [value structs](value-structs.md), boxed when they become an `Iterator<T>`),
 so a chain built from a temporary stays alive while the loop runs, and
@@ -197,7 +197,7 @@ iterable):
 Some things to keep in mind:
 
 - **Declaring the trait is optional.** The loop looks only at which methods a
-  type has. Writing `extend Countdown with Iterator<int> {}` documents your
+  type has. Writing `extend Countdown with Iterator<int>;` documents your
   intent, and the compiler then checks that `Countdown` has both `next()` and
   `current()` (see [Traits and extensions](traits-and-extensions.md)).
   Declaring it also lets the type be used as an `Iterator<int>` value, and a

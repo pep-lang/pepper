@@ -53,7 +53,7 @@
 ##         }
 ##     }
 ##
-##     extend Session with Scoped<Session> {}
+##     extend Session with Scoped<Session>;
 ##
 ##     main(): int {
 ##         with (var session = Session()) {

@@ -224,4 +224,4 @@ export struct TaskLocalGuard<T> {
     exit() {}
 }
 
-extend TaskLocalGuard<T> with Scoped<T> {}
+extend TaskLocalGuard<T> with Scoped<T>;

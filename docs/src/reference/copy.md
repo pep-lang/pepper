@@ -92,7 +92,7 @@ A type that says how `copy` copies it, for a struct that `copy` cannot
 copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.
 
-Declare it with `extend Buffer with Copyable<Buffer> {}` and give the
+Declare it with `extend Buffer with Copyable<Buffer>;` and give the
 struct a `copy(Copies copies)` method. The method builds the copy and
 copies each value it holds with `copies.copy(value)`, which reuses a copy
 already made, so objects referenced twice stay shared.
@@ -126,7 +126,7 @@ already made, so objects referenced twice stay shared.
         }
     }
 
-    extend Buffer with Copyable<Buffer> {}
+    extend Buffer with Copyable<Buffer>;
 ```
 
 ### Methods

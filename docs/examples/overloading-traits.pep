@@ -27,7 +27,7 @@ trait Shape {
 }
 
 # Each trait member is implemented by the method with its parameter types.
-extend Square with Shape {}
+extend Square with Shape;
 
 total(shape: Shape): int {
     return shape.area() + shape.area(10);

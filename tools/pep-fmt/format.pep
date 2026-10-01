@@ -61,7 +61,20 @@ blank_before(node: syntax.Node): bool {
 # extension, or a function with a body), so it gets blank lines around it.
 is_big(node: syntax.Node): bool {
     match (node.kind) {
-        Struct, Trait, Extend, Enum => {
+        Struct, Trait, Enum => {
+            return true;
+        }
+        Extend => {
+            # `extend X with Trait;` is one line.
+            var last = node.child(node.count() - 1);
+            if (last.is_token(";")) {
+                return false;
+            }
+            for (var child in node.children) {
+                if (child.is_token("with")) {
+                    return !is_empty_body(last);
+                }
+            }
             return true;
         }
         Function => {
@@ -72,6 +85,17 @@ is_big(node: syntax.Node): bool {
         }
     }
     return false;
+}
+
+# Whether `node` is a `{}` body with no members and no comments inside,
+# which an extension that adopts a trait writes as `;`.
+is_empty_body(node: syntax.Node): bool {
+    if (node.kind != syntax.NodeKind.Members or node.count() != 2) {
+        return false;
+    }
+    var open = node.child(0).leaf;
+    var close = node.child(1).leaf;
+    return open.leading_comments.count() == 0 and open.trailing_comment.empty() and close.leading_comments.count() == 0;
 }
 
 # Whether `node` is a bare `void`, with no comments to keep, which a
@@ -690,10 +714,22 @@ export struct Formatter {
         ulong i = _prefix(item, result);
         result.add(_leaf(item.child(i)));
         i += 1;
+        bool adopts = false;
         while (i < item.count()) {
             var child = item.child(i);
-            if (child.is_token(",")) {
+            if (child.is_token("with")) {
+                adopts = true;
+            }
+            if (child.is_token(",") or child.is_token(";")) {
                 result.add(_leaf(child));
+            } else if (adopts and is_empty_body(child)) {
+                # `extend X with Trait {}` is written `extend X with Trait;`.
+                var close = child.child(1).leaf;
+                result.add(text(";"));
+                if (!close.trailing_comment.empty()) {
+                    result.add(trailing_comment(close.trailing_comment));
+                    close.trailing_comment = "";
+                }
             } else {
                 result.add(text(" "));
                 result.add(_node(child));

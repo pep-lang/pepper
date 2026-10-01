@@ -38,11 +38,22 @@ extend Square with From<int> {
     }
 }
 
+# A trait whose methods all have defaults needs no body: end the extension
+# with `;`, the same as writing an empty `{}`.
+trait Labeled {
+    label(): String {
+        return "shape";
+    }
+}
+
+extend Square with Labeled;
+
 main(): int {
     var sq = Square(3);
     assert(sq.area() == 9, "trait method called on the struct");
     assert(sq.name() == "square", "second trait method");
     assert(sq.describe() == "a square", "default method from the trait");
     assert(Square.from(4).area() == 16, "static method from a generic trait");
+    assert(sq.label() == "shape", "default method from a bodiless extension");
     return 0;
 }

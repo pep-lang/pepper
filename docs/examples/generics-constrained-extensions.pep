@@ -11,8 +11,8 @@ struct Square {
     name(): String { return "square"; }
 }
 
-extend Square with Shape {}
-extend Square with Named {}
+extend Square with Shape;
+extend Square with Named;
 
 struct Box<T> {
     var item: T;

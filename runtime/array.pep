@@ -762,9 +762,9 @@ export _array_literal<T>(first: T): Array<T> {
     return result;
 }
 
-extend ArrayIterator<T> with Iterator<T> {}
+extend ArrayIterator<T> with Iterator<T>;
 
-extend Array<T> with Copyable<Array<T>> {}
+extend Array<T> with Copyable<Array<T>>;
 
 extern void memcpy(void* dest, void* src, ulong n);
 

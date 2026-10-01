@@ -1233,4 +1233,4 @@ export struct Lines {
     }
 }
 
-extend Lines with Iterator<IoResult<String>> {}
+extend Lines with Iterator<IoResult<String>>;
