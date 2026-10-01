@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-916fb5d7.js";
+            window.path_to_searchindex_js = "searchindex-f7a4d375.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6e3ed46d.js"></script>
@@ -5882,6 +5882,11 @@ signatures ending in <code>;</code>. Then declare that a type has the trait with
 trait Shape {
     area(): int;
     name(): String;
+
+    # A method with a body is a default: every type with the trait gets it.
+    describe(): String {
+        return "a " + name();
+    }
 }
 
 struct Square {
@@ -5917,6 +5922,7 @@ main(): int {
     var sq = Square(3);
     assert(sq.area() == 9, "trait method called on the struct");
     assert(sq.name() == "square", "second trait method");
+    assert(sq.describe() == "a square", "default method from the trait");
     assert(Square.from(4).area() == 16, "static method from a generic trait");
     return 0;
 }
@@ -5972,11 +5978,6 @@ trait’s methods calls it on <code>this</code>, and any other bare name means w
 means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through <code>this</code> explicitly only for the trait’s own methods.</p>
-<blockquote>
-<p><strong>Known problem:</strong> a default body that uses a string literal does not work
-yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
-method in each extension instead.</p>
-</blockquote>
 <h3 id="traits-as-types"><a class="header" href="#traits-as-types">Traits as types</a></h3>
 <p>A trait’s name is also a type. A variable, parameter, field, return value, or
 collection element of type <code>Shape</code> holds any struct that declares <code>Shape</code>, and
