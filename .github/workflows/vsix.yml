@@ -78,9 +78,9 @@ jobs:
 
       # Hosted images ship node; the self-hosted runners may not.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Show toolchain
         run: |
@@ -137,7 +137,7 @@ jobs:
         run: node tools/lsp/smoke-test.mjs tests/String.Methods/test.pep
 
       - name: Upload server binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pepper-lsp-${{ matrix.target }}
           path: ${{ env.PEPPER_LSP_BIN }}
@@ -158,15 +158,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: tools/vscode-pepper/package-lock.json
 
       # Every server binary that was built, one directory per artifact.
       - name: Collect server binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: servers
 
@@ -196,15 +196,20 @@ jobs:
         working-directory: tools/vscode-pepper
         run: npm ci --no-audit --no-fund
 
+      # vsce wants the license beside package.json; the repository's own
+      # LICENSE.md is the one to ship. `vscode:prepublish` bundles the
+      # extension with esbuild.
       - name: Package vsix
         working-directory: tools/vscode-pepper
-        run: npx --yes @vscode/vsce@3 package --out pepper-language.vsix
+        run: |
+          cp ../../LICENSE.md LICENSE.md
+          npx --yes @vscode/vsce@3 package --out pepper-language.vsix
 
       # A branch dispatch keeps the vsix as a run artifact; main and release
       # tags publish.
       - name: Upload vsix (branch dispatch)
         if: ${{ !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pepper-language-vsix
           path: tools/vscode-pepper/pepper-language.vsix

@@ -50,6 +50,8 @@ function Install-PepperExtension {
         Push-Location $ext
         try {
             Invoke-Native { npm ci --no-audit --no-fund }
+            # vsce wants the license beside package.json.
+            Copy-Item (Join-Path $repo "LICENSE.md") (Join-Path $ext "LICENSE.md") -Force
             $vsix = Join-Path ([System.IO.Path]::GetTempPath()) "pepper-language-dev.vsix"
             Invoke-Native { npx --yes "@vscode/vsce@3" package --out $vsix }
         } finally { Pop-Location }

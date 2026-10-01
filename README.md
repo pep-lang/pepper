@@ -333,6 +333,11 @@ dimmed.
 call an `[Implicit]` conversion inserts as an inlay hint; changing it
 restarts the server.
 
+Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
+`tools/vscode-pepper/src` and its dependencies into one file with esbuild
+(`npm run bundle`, the `vscode:prepublish` script), and copies the root
+`LICENSE.md` beside `package.json`.
+
 ## Platform support, honestly
 
 - **Windows x64** is the platform the compiler is developed against and the one
@@ -373,3 +378,7 @@ failure signatures this project has actually hit — LLVM discovery failures, a
 Windows CRT mismatch that corrupts the heap inside LLVM, JIT symbol resolution,
 and how to tell a malformed IR module from a runtime fault. Start there before
 diagnosing from scratch.
+
+## License
+
+Pepper is licensed under the [Apache License 2.0](LICENSE.md).
