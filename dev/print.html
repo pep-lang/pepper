@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-be3f2be5.js";
+            window.path_to_searchindex_js = "searchindex-9f6a3599.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-19664f2f.js"></script>
+        <script src="toc-8fc0870b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1787,6 +1787,65 @@ expression does. A value with a format specification goes through a
 runtime call that pads or converts its text instead. <code>String.format</code> becomes
 the same concatenation, with its arguments bound to hidden names first when
 the braces name them out of order or more than once.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="text-encodings"><a class="header" href="#text-encodings">Text encodings</a></h1>
+<p>A <code>String</code> always holds UTF-8. The <code>text</code> module converts text to and from
+the bytes of an encoding (<code>u8[]</code>), for files, network protocols and C
+libraries that use another one:</p>
+<pre><code class="language-pepper"># Text in other encodings: encode a String to bytes, decode bytes back.
+import text;
+
+main(): int {
+    var greeting = "héllo 🙂";
+
+    # UTF-8 is what a String holds; decode checks the bytes.
+    var utf8 = text.Utf8.encode(greeting);
+    assert(utf8.count() == 11, "é takes two bytes, 🙂 four");
+    assert(text.Utf8.decode(utf8).value() == greeting, "round trip");
+
+    # UTF-16: two bytes per unit, little-endian unless asked otherwise.
+    var utf16 = text.Utf16.encode(greeting);
+    assert(utf16.count() == 16, "🙂 takes a surrogate pair");
+    assert(text.Utf16.decode(utf16).value() == greeting, "round trip");
+
+    # ASCII has no é: strict gives none, lossy writes '?'.
+    assert(text.Ascii.encode(greeting).is_none(), "not ASCII");
+    assert(text.Ascii.encode_lossy("é").count() == 1, "one '?'");
+
+    # Strict decoding rejects invalid bytes; lossy decoding replaces them.
+    var bad = Array&lt;u8&gt;();
+    bad.append(104);
+    bad.append(255);
+    assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+    assert(text.Utf8.decode_lossy(bad) == "h\u{FFFD}", "replaced");
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding.</td></tr>
+<tr><td><code>text.Utf16</code></td><td>UTF-16, two bytes per code unit, little-endian by default (<code>encode(s, true)</code> and <code>decode(bytes, true)</code> for big-endian). A code point past U+FFFF takes a surrogate pair.</td></tr>
+<tr><td><code>text.Ascii</code></td><td>ASCII: code points below 128, one byte each. <code>is_ascii</code> checks a String.</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong><code>decode</code></strong> is strict: it gives none when the bytes are not valid in the
+encoding (a stray UTF-8 continuation byte, an unpaired UTF-16 surrogate,
+an odd UTF-16 byte count, an ASCII byte of 128 or more).</li>
+<li><strong><code>decode_lossy</code></strong> always succeeds: whatever is invalid becomes U+FFFD,
+the replacement character.</li>
+<li><strong><code>Ascii.encode</code></strong> gives none for text with a code point past 127;
+<strong><code>encode_lossy</code></strong> writes <code>?</code> for each instead.</li>
+<li>No byte-order mark is written, and one that is read stays in the text.</li>
+<li><code>io.File.read_string</code> decodes with <code>text.Utf8.decode</code>, and an HTTP body’s
+<code>text()</code> with <code>decode_lossy</code>.</li>
+</ul>
+<p>The <a href="#textmodulepep">reference</a> lists every function.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -21998,6 +22057,254 @@ hexadecimal are accepted.</p>
 <pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
     assert(double.parse("1.5.2").is_none(), "not a number");
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/ascii.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="textasciipep"><a class="header" href="#textasciipep">text/ascii.pep</a></h1>
+<p>ASCII, the first 128 code points, one byte each.</p>
+<p>Source: <code>runtime/text/ascii.pep</code></p>
+<h2 id="ascii"><a class="header" href="#ascii">Ascii</a></h2>
+<pre><code class="language-pepper">struct Ascii
+</code></pre>
+<p>Encodes a <code>String</code> to ASCII bytes and decodes them back. Only code
+points below 128 have an ASCII byte.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
+    assert(text.Ascii.encode("é").is_none(), "not ASCII");
+</code></pre>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h4 id="encode"><a class="header" href="#encode">encode</a></h4>
+<pre><code class="language-pepper">static encode(value: String): u8[]?
+</code></pre>
+<p>Returns the ASCII bytes of <code>value</code>, or none when it holds a code
+point past 127.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of one byte per code point, or none</li>
+</ul>
+<h4 id="encode_lossy"><a class="header" href="#encode_lossy">encode_lossy</a></h4>
+<pre><code class="language-pepper">static encode_lossy(value: String): u8[]
+</code></pre>
+<p>Returns the ASCII bytes of <code>value</code>, with <code>?</code> for each code point past
+127.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of one byte per code point</li>
+</ul>
+<h4 id="is_ascii"><a class="header" href="#is_ascii">is_ascii</a></h4>
+<pre><code class="language-pepper">static is_ascii(value: String): bool
+</code></pre>
+<p>Returns whether every code point of <code>value</code> is ASCII (below 128).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>value</code> is all ASCII</li>
+</ul>
+<h4 id="decode"><a class="header" href="#decode">decode</a></h4>
+<pre><code class="language-pepper">static decode(bytes: u8[]): String?
+</code></pre>
+<p>Decodes ASCII <code>bytes</code>, or gives none when one is 128 or more.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text, or none when <code>bytes</code> is not all ASCII</li>
+</ul>
+<h4 id="decode_lossy"><a class="header" href="#decode_lossy">decode_lossy</a></h4>
+<pre><code class="language-pepper">static decode_lossy(bytes: u8[]): String
+</code></pre>
+<p>Decodes ASCII <code>bytes</code>, replacing each byte of 128 or more with
+U+FFFD, so it always succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="textmodulepep"><a class="header" href="#textmodulepep">text/module.pep</a></h1>
+<p>Converting text to and from bytes in a given encoding.</p>
+<p>Bring it in with <code>import text</code>. A <code>String</code> always holds UTF-8; these
+types encode one into the bytes of an encoding (<code>u8[]</code>) and decode bytes
+back. Each <code>decode</code> is strict and gives none when the bytes are not valid
+in the encoding; each <code>decode_lossy</code> replaces what is invalid with U+FFFD
+and always succeeds.</p>
+<ul>
+<li><a href="#textutf8pep">UTF-8</a>: <code>Utf8</code></li>
+<li><a href="#textutf16pep">UTF-16</a>: <code>Utf16</code></li>
+<li><a href="#textasciipep">ASCII</a>: <code>Ascii</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    main(): int {
+        var bytes = text.Utf8.encode("héllo");
+        assert(bytes.count() == 6, "é takes two bytes");
+        assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/text/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/utf16.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="textutf16pep"><a class="header" href="#textutf16pep">text/utf16.pep</a></h1>
+<p>UTF-16, as Windows and Java hold text.</p>
+<p>Source: <code>runtime/text/utf16.pep</code></p>
+<h2 id="utf16"><a class="header" href="#utf16">Utf16</a></h2>
+<pre><code class="language-pepper">struct Utf16
+</code></pre>
+<p>Encodes a <code>String</code> to UTF-16 bytes and decodes them back. Each code
+unit takes two bytes, little-endian unless <code>big_endian</code> is set; a code
+point past U+FFFF takes two units (a surrogate pair). No byte-order mark
+is written, and one read is kept as part of the text.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var bytes = text.Utf16.encode("hi");
+    assert(bytes.count() == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
+    assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
+</code></pre>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
+<pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
+</code></pre>
+<p>Returns the UTF-16 bytes of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+<li><code>big_endian</code> — whether each code unit’s high byte comes first; false (little-endian) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of two bytes per code unit</li>
+</ul>
+<h4 id="decode-1"><a class="header" href="#decode-1">decode</a></h4>
+<pre><code class="language-pepper">static decode(bytes: u8[], big_endian: bool = false): String?
+</code></pre>
+<p>Decodes UTF-16 <code>bytes</code>, or gives none when they are not valid UTF-16:
+an odd number of bytes, or a surrogate without its partner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+<li><code>big_endian</code> — whether each code unit’s high byte comes first; false (little-endian) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text, or none when <code>bytes</code> is not valid UTF-16</li>
+</ul>
+<h4 id="decode_lossy-1"><a class="header" href="#decode_lossy-1">decode_lossy</a></h4>
+<pre><code class="language-pepper">static decode_lossy(bytes: u8[], big_endian: bool = false): String
+</code></pre>
+<p>Decodes UTF-16 <code>bytes</code>, replacing each unpaired surrogate, and a
+final odd byte, with U+FFFD, so it always succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+<li><code>big_endian</code> — whether each code unit’s high byte comes first; false (little-endian) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/utf8.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="textutf8pep"><a class="header" href="#textutf8pep">text/utf8.pep</a></h1>
+<p>UTF-8, the encoding a <code>String</code> holds.</p>
+<p>Source: <code>runtime/text/utf8.pep</code></p>
+<h2 id="utf8"><a class="header" href="#utf8">Utf8</a></h2>
+<pre><code class="language-pepper">struct Utf8
+</code></pre>
+<p>Encodes a <code>String</code> to UTF-8 bytes and decodes them back. A String already
+holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var bytes = text.Utf8.encode("hi");
+    assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
+</code></pre>
+<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
+<h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
+<pre><code class="language-pepper">static encode(value: String): u8[]
+</code></pre>
+<p>Returns the UTF-8 bytes of <code>value</code>, without a terminating NUL.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>value.size()</code> bytes</li>
+</ul>
+<h4 id="is_valid"><a class="header" href="#is_valid">is_valid</a></h4>
+<pre><code class="language-pepper">static is_valid(bytes: u8[]): bool
+</code></pre>
+<p>Returns whether <code>bytes</code> is valid UTF-8: no stray continuation bytes,
+no truncated, overlong or surrogate sequences, and nothing past
+U+10FFFF.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when every byte is part of a valid sequence</li>
+</ul>
+<h4 id="decode-2"><a class="header" href="#decode-2">decode</a></h4>
+<pre><code class="language-pepper">static decode(bytes: u8[]): String?
+</code></pre>
+<p>Decodes <code>bytes</code> as UTF-8, or gives none when they are not valid UTF-8
+(see <code>is_valid</code>). A byte-order mark is kept as part of the text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text, or none when <code>bytes</code> is not valid UTF-8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var bad = Array&lt;u8&gt;();
+    bad.append(255);
+    assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+</code></pre>
+<h4 id="decode_lossy-2"><a class="header" href="#decode_lossy-2">decode_lossy</a></h4>
+<pre><code class="language-pepper">static decode_lossy(bytes: u8[]): String
+</code></pre>
+<p>Decodes <code>bytes</code> as UTF-8, replacing each byte that does not start a
+valid sequence with U+FFFD, so it always succeeds. Valid input gives
+the same text as <code>decode</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var data = Array&lt;u8&gt;();
+    data.append(104);
+    data.append(255);
+    data.append(105);
+    assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/tls/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="tlsmodulepep"><a class="header" href="#tlsmodulepep">tls/module.pep</a></h1>
 <p>Encrypted connections: TLS 1.2 and 1.3 over TCP, for clients and servers.</p>
@@ -22062,7 +22369,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -22371,7 +22678,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
 <h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
@@ -22394,7 +22701,7 @@ followed by two hexadecimal digits.</p>
     assert(mail.path == "someone@example.com", "the path holds the address");
     assert(Uri.parse("a b").is_err(), "a space must be encoded");
 </code></pre>
-<h4 id="decode"><a class="header" href="#decode">decode</a></h4>
+<h4 id="decode-3"><a class="header" href="#decode-3">decode</a></h4>
 <pre><code class="language-pepper">static decode(text: String): Result&lt;String&gt;
 </code></pre>
 <p>Returns <code>text</code> with each percent-escape (<code>%20</code>) replaced by the byte
