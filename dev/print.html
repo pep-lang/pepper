@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9463cdad.js";
+            window.path_to_searchindex_js = "searchindex-79d6e27a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-9b67b8db.js"></script>
+        <script src="toc-92b0d50d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -4401,6 +4401,163 @@ writes: <code>shelf[i] = value</code>. The second parameter is the value being s
 <a href="#array"><code>Array</code></a> and <a href="#string"><code>String</code></a> are
 indexed this way.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="value-structs"><a class="header" href="#value-structs">Value structs</a></h1>
+<p>A struct is normally a <a href="#values-and-references">reference</a> to an
+object on the heap. A struct marked <code>[Value]</code> is a <em>value</em> instead, like a
+number or a <a href="#tuples-and-multiple-return-values">tuple</a>: it is stored inline in whatever holds it (a
+local, a field, an array element), and assigning it, passing it, or
+returning it copies it. Creating one allocates nothing.</p>
+<pre><code class="language-pepper"># A value struct is stored inline and copied like a number.
+[Value]
+struct Span {
+    var start: int;
+    var end: int;
+
+    construct(this.start = 0, this.end = 0) {}
+
+    length(): int {
+        return end - start;
+    }
+
+    # Assigns a field of `this`, so it changes the value it is called on.
+    grow(by: int) {
+        end = end + by;
+    }
+}
+
+# A reference struct holding a value: the span is part of the line's object.
+struct Line {
+    var text: String;
+    var span: Span;
+
+    construct(this.text = "") {}
+}
+
+# The parameter is a copy: growing it does not change the caller's span.
+grown(span: Span, by: int): Span {
+    span.grow(by);
+    return span;
+}
+
+main(): int {
+    var a = Span(2, 5);
+    var b = a;          # a copy
+    b.grow(10);
+    if (a.length() != 3 || b.length() != 13) {
+        return 1;
+    }
+
+    var c = grown(a, 1);
+    if (a.length() != 3 || c.length() != 4) {
+        return 2;
+    }
+
+    # Through a reference, the change lands in the object's own span.
+    var line = Line("hello");
+    var same = line;
+    line.span.grow(5);
+    if (same.span.length() != 5) {
+        return 3;
+    }
+
+    # An element read from an array is a copy: change it, then store it back.
+    var spans = Array&lt;Span&gt;();
+    spans.append(a);
+    var first = spans[0];
+    first.grow(1);
+    spans[0] = first;
+    if (spans[0].length() != 4) {
+        return 4;
+    }
+
+    # Values compare field by field.
+    if (a != Span(2, 5)) {
+        return 5;
+    }
+    return 0;
+}
+</code></pre>
+<p>Use a value struct for small types that describe a value rather than an
+identity: a span, a point, a color, an <a href="#optional-values"><code>Optional</code></a>. Keep a
+reference struct for anything that is shared and changed through several
+names, or that is large.</p>
+<h2 id="declaring-one"><a class="header" href="#declaring-one">Declaring one</a></h2>
+<p>Put <code>[Value]</code> on its own line above the struct. Everything else is written
+as for any struct: fields, constructors, methods, operators, generic
+parameters, and <a href="#traits-and-extensions">extensions</a>.</p>
+<pre><code class="language-pepper">[Value]
+struct Point {
+    var x: int;
+    var y: int;
+
+    construct(this.x = 0, this.y = 0) {}
+}
+</code></pre>
+<p>A variable or field of a value struct type that is not given a value holds
+the zero value: every field zero, <code>false</code>, or null.</p>
+<h2 id="copies"><a class="header" href="#copies">Copies</a></h2>
+<ul>
+<li><code>var b = a;</code> makes <code>b</code> an independent copy. Changing <code>b</code> leaves <code>a</code> as it
+was.</li>
+<li>A parameter is a copy of the argument. A function can change its
+parameter without the caller seeing it; return the changed value instead.</li>
+<li>A field of a value struct is part of whatever holds it. In a reference
+struct, <code>line.span.grow(5)</code> changes the span inside <code>line</code>’s object, and
+every reference to that object sees it.</li>
+<li>Reading an element of an array, or the result of any call, gives a copy.
+To change an element, read it into a variable, change it, and store it
+back (<code>spans[0] = first;</code>).</li>
+</ul>
+<p>A field that is itself a reference (a <code>String</code>, an <code>Array</code>) is copied as a
+reference, so both copies share that object, as two variables holding the
+same <code>String</code> do. Its count is kept like any other reference’s: copying the
+value acquires it, and the copy going out of scope releases it. Use
+<a href="#copying-a-value-with-copy"><code>copy</code></a> for a deep copy.</p>
+<h2 id="methods-that-change-this"><a class="header" href="#methods-that-change-this">Methods that change <code>this</code></a></h2>
+<p>In a method, <code>this</code> is the value the method was called on, not a copy, so
+a method that assigns a field (<code>end = end + by;</code>), or calls another method
+that does, changes that value. The compiler works out which methods change
+<code>this</code> from their bodies. Calling one on something that would only change a
+copy is an error, because the change would be lost:</p>
+<pre><code class="language-text">main.pep:9:12: error: cannot call mutating method 'grow' on a temporary 'Span'
+    9 |     make().grow(1);
+      |            ^~~~
+main.pep:9:5: note: 'make' returns a copy; store it in a variable, change it, and assign it back
+    9 |     make().grow(1);
+      |     ^~~~
+</code></pre>
+<p>The same holds for assigning a field of a call’s result (<code>spans[0].end = 3;</code>)
+and for changing a <code>const</code> variable’s value. A <a href="#function-types-and-closures">closure</a>
+made in a method holds a copy of <code>this</code>, so it cannot change <code>this</code> either.</p>
+<h2 id="comparing-and-hashing"><a class="header" href="#comparing-and-hashing">Comparing and hashing</a></h2>
+<p><code>==</code> and <code>!=</code> compare two values field by field, and <code>hash</code> combines the
+fields’ hashes, unless the struct declares its own <code>==</code> or <code>hash</code>. A value
+has no identity, so <code>===</code> and <code>!==</code> are errors on it, and it is never null:
+comparing one with <code>__null</code> is an error too.</p>
+<h2 id="what-a-value-struct-cannot-do"><a class="header" href="#what-a-value-struct-cannot-do">What a value struct cannot do</a></h2>
+<p>Each of these is an error at the code to change:</p>
+<ul>
+<li><code>===</code>, <code>!==</code>, or <code>__null</code> on a value.</li>
+<li><code>__weak&lt;T&gt;</code> or <code>__refcount</code> of a value: there is no object to count.</li>
+<li>A <code>destruct</code> block: nothing destroys a value. Its reference fields are
+still released.</li>
+<li><code>[Shared]</code>: a value struct is thread-safe when its fields are, and needs
+no atomic counts.</li>
+<li>A field whose type is the struct itself, directly or through other value
+structs: the value would be infinitely large. Hold it through a reference
+struct or an <code>Array</code> instead.</li>
+<li>A parameter or result of an <a href="#calling-c"><code>extern</code></a> function: pass a
+pointer to C instead.</li>
+</ul>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<ul>
+<li>A value struct cannot be converted to a <a href="#traits-and-extensions">trait</a>
+type yet (<code>value struct 'Span' cannot be converted to trait 'Sized' yet</code>);
+boxing comes next. <code>[Value]</code> does not apply to enums yet.</li>
+<li>The runtime’s iterators and <code>Result</code> are still reference structs;
+<code>Optional</code> is a value struct.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
 <p>An <strong>enum</strong> is a type with a fixed set of named <strong>cases</strong>. A value of the
 enum holds exactly one of them. Use an enum where you would otherwise pass an
@@ -4853,7 +5010,8 @@ behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p
 <h2 id="values-and-references"><a class="header" href="#values-and-references">Values and references</a></h2>
 <p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
 one copies it, as in C. So is a <a href="#tuples-and-multiple-return-values">tuple</a>, whose elements are
-copied the way each element would be on its own.</p>
+copied the way each element would be on its own, and so is a struct marked
+<a href="#value-structs"><code>[Value]</code></a>, such as <code>Optional&lt;T&gt;</code>.</p>
 <p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
 <a href="#function-types-and-closures">function values</a>, is a <em>reference</em> to an object on the
 heap. Assigning a reference, passing it to a function, or storing it in a
@@ -7304,6 +7462,12 @@ operator <code>!!</code> (see <a href="#truth-tests-and-conditions">Truth tests<
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 <a href="#memory-and-reference-counting">Memory and reference counting</a>).</p>
+<p>An optional is a <a href="#value-structs">value struct</a>: it lives inline in the
+variable, field or array element that holds it, so creating one allocates
+nothing, and copying one gives an independent optional. It is never null,
+and has no identity: compare two optionals with <code>==</code>, which compares
+whether each is Some and, if both are, their values; <code>===</code> on an optional
+is an error.</p>
 <h2 id="optionals-in-the-standard-library"><a class="header" href="#optionals-in-the-standard-library">Optionals in the standard library</a></h2>
 <p>Standard library lookups that can come up empty return an optional rather
 than a sentinel value:</p>
@@ -11519,7 +11683,7 @@ out of range or a failed <code>assert</code>. These are not compiler errors: the
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
-<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
 <p>The type check does not compare the type arguments of generic structs yet, so
 <code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
 resulting program has undefined behavior.</p>
@@ -15343,7 +15507,7 @@ is used.</p>
 <h1 id="optional"><a class="header" href="#optional">Optional</a></h1>
 <p>Source: <code>runtime/optional.pep</code></p>
 <h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
-<pre><code class="language-pepper">struct Optional&lt;T&gt;
+<pre><code class="language-pepper">[Value] struct Optional&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
 None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
@@ -15356,6 +15520,10 @@ optional type that is not given a value starts as None.</p>
 <p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
 for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
 by itself (<code>if (found)</code>).</p>
+<p>An optional is a <a href="#value-structs">value struct</a>: it is
+stored inline in whatever holds it, with no allocation, and copying one
+gives an independent optional. It is never null, and has no identity, so
+compare optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
@@ -21595,7 +21763,7 @@ cycle leads back to the copy.</p>
 <ul>
 <li>the copy</li>
 </ul>
-<h2 id="copies"><a class="header" href="#copies">Copies</a></h2>
+<h2 id="copies-1"><a class="header" href="#copies-1">Copies</a></h2>
 <pre><code class="language-pepper">struct Copies
 </code></pre>
 <p>The objects one <code>copy</code> call has copied so far, so each is copied once:
@@ -21603,7 +21771,7 @@ objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
 <h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
-<h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
+<h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>

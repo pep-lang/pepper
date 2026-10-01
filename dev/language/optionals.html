@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9463cdad.js";
+            window.path_to_searchindex_js = "../searchindex-79d6e27a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-9b67b8db.js"></script>
+        <script src="../toc-92b0d50d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -284,6 +284,12 @@ operator <code>!!</code> (see <a href="structs.html#truth-tests-and-conditions">
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 <a href="memory.html">Memory and reference counting</a>).</p>
+<p>An optional is a <a href="value-structs.html">value struct</a>: it lives inline in the
+variable, field or array element that holds it, so creating one allocates
+nothing, and copying one gives an independent optional. It is never null,
+and has no identity: compare two optionals with <code>==</code>, which compares
+whether each is Some and, if both are, their values; <code>===</code> on an optional
+is an error.</p>
 <h2 id="optionals-in-the-standard-library"><a class="header" href="#optionals-in-the-standard-library">Optionals in the standard library</a></h2>
 <p>Standard library lookups that can come up empty return an optional rather
 than a sentinel value:</p>

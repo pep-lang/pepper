@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9463cdad.js";
+            window.path_to_searchindex_js = "../searchindex-79d6e27a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-9b67b8db.js"></script>
+        <script src="../toc-92b0d50d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,7 +185,7 @@
 <h1 id="optional"><a class="header" href="#optional">Optional</a></h1>
 <p>Source: <code>runtime/optional.pep</code></p>
 <h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
-<pre><code class="language-pepper">struct Optional&lt;T&gt;
+<pre><code class="language-pepper">[Value] struct Optional&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
 None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
@@ -198,6 +198,10 @@ optional type that is not given a value starts as None.</p>
 <p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
 for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
 by itself (<code>if (found)</code>).</p>
+<p>An optional is a <a href="../language/value-structs.html">value struct</a>: it is
+stored inline in whatever holds it, with no allocation, and copying one
+gives an independent optional. It is never null, and has no identity, so
+compare optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
