@@ -36,7 +36,7 @@ Match C types with Pepper types of the same size:
 
 Pepper's `long` is always 64 bits. C's `long` is 64 bits on Linux and macOS but
 32 bits on Windows, so a C function that takes `long` needs a different
-prototype per platform (see [`[LinkName]`](#binding-to-a-different-symbol-name)
+prototype per platform (see [`[Link(name = ...)]`](#binding-to-a-different-symbol-name)
 below for an example).
 
 Some things to know about `extern` declarations:
@@ -228,12 +228,14 @@ where the signature is known, since the compiler then checks it.
 
 ## Binding to a different symbol name
 
-`[LinkName("symbol")]` binds an extern to a C symbol whose name differs from
-the declared one. Pepper code calls the extern by its declared name, and the
-object file refers to `symbol`. Use it to give a C function a clearer name, to
-avoid clashing with a Pepper name, or, together with
+`[Link(name = "symbol")]` binds an extern to a C symbol whose name differs
+from the declared one. Pepper code calls the extern by its declared name, and
+the object file refers to `symbol`. Use it to give a C function a clearer
+name, to avoid clashing with a Pepper name, or, together with
 [`[Target]`](platform-selection.md), to bind one Pepper name to a different
-symbol on each platform:
+symbol on each platform. `lib` names the library that defines the symbol in
+the same attribute, as [`[Link("library")]`](linking.md#linking-a-library-from-the-source-link)
+does on its own:
 
 ```pepper
 {{#include ../../examples/c-link-name.pep}}
@@ -243,18 +245,25 @@ Real uses of the per-platform form include macOS on Intel, where the
 64-bit-inode version of `stat` is named `stat$INODE64`:
 
 ```pepper
-[Target(OS(Mac) && Arch(x64))] [LinkName("stat$INODE64")] extern int stat(char* path, void* buf);
-[Target(OS(Mac) && Arch(aarch64))] extern int stat(char* path, void* buf);
+[Target(OS(Mac) && Arch(x64))]
+[Link(name = "stat$INODE64")]
+extern int stat(char* path, void* buf);
+[Target(OS(Mac) && Arch(aarch64))]
+extern int stat(char* path, void* buf);
 ```
 
-`LinkName` takes exactly one non-empty string, and an extern may carry at most
-one. Anything else is an error, such as:
+`[Link]` takes the library as its one positional argument or as `lib`, and
+the symbol as `name`; each is a non-empty string, and an extern names at
+most one symbol. Anything else is an error, such as:
 
 ```text
-main.pep:1:34: error: LinkName on extern 'pep_abs' takes exactly one string: [LinkName("sym")]
-    1 | [LinkName("a", "b")] extern long pep_abs(long v);
-      |                                  ^~~~~~~
+main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+    1 | [Link(symbol = "labs")] extern long pep_abs(long v);
+      |       ^~~~~~
 ```
+
+The earlier `[LinkName("symbol")]` was removed; it is an error that suggests
+the `[Link(name = "symbol")]` that replaces it.
 
 ## Linking the library
 

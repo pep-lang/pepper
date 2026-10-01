@@ -500,23 +500,16 @@ fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Result<R, String> +
     results.into_iter().map(|(_, r)| r).collect()
 }
 
-/// Libraries named by `[Link("name")]` on surviving externs, deduplicated in
-/// declaration order. Shared by the CLI pipeline and the corpus harness so a
-/// fixture's link flags can't drift from the driver's.
+/// Libraries named by `[Link("name")]` (or `[Link(lib = "name")]`) on
+/// surviving externs, deduplicated in declaration order. Shared by the CLI
+/// pipeline and the corpus harness so a fixture's link flags can't drift
+/// from the driver's.
 pub fn link_libraries(module: &pepper_sema::model::Module) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for ext in &module.externs {
-        for attr in &ext.attributes {
-            if let pepper_parser::ast::Expression::FunctionCall { function, arguments, .. } = &attr.body {
-                if let pepper_parser::ast::Expression::SymbolRef { id, .. } = function.as_ref() {
-                    if id == "Link" {
-                        if let Some(pepper_parser::ast::Expression::Literal { value: pepper_parser::ast::Literal::String(s), .. }) = arguments.first() {
-                            if !out.contains(s) {
-                                out.push(s.clone());
-                            }
-                        }
-                    }
-                }
+        for library in ext.link().map(|link| link.libraries).unwrap_or_default() {
+            if !out.contains(&library) {
+                out.push(library);
             }
         }
     }

@@ -300,6 +300,21 @@ pub enum Expression {
         /// Location of the called name.
         loc: Loc,
     },
+    /// A named argument `name = value` of a call, as written. Only directly
+    /// in a call's `args`, until `named_arguments` binds the call: it puts
+    /// each argument at its parameter's position. Never reaches codegen.
+    NamedArgument {
+        name: String,
+        value: Box<Expression>,
+        /// Location of the name.
+        loc: Loc,
+    },
+    /// A parameter a call skipped by naming a later one
+    /// (`open_window("Editor", resizable = false)`): codegen passes the
+    /// parameter's default there, as it does for trailing parameters a call
+    /// leaves out. `ty` is the parameter's type, or `auto` where it names a
+    /// generic parameter.
+    DefaultArgument { ty: TypeName },
     /// Method call on `this` expression
     MethodCall {
         this: Box<Expression>,
@@ -1072,34 +1087,97 @@ pub struct ExternDef {
     pub loc: Loc,
 }
 
+/// The attribute that names an extern's library and C symbol.
+pub const LINK_ATTRIBUTE: &str = "Link";
+
+/// What an extern's `[Link(...)]` attributes say.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Link {
+    /// The libraries to link (`[Link("m")]`, `[Link(lib = "m")]`), in
+    /// declaration order.
+    pub libraries: Vec<String>,
+    /// The C symbol (`[Link(name = "sym")]`), when it differs from the
+    /// declared name.
+    pub name: Option<String>,
+}
+
 impl ExternDef {
-    /// The C symbol this extern binds to: the argument of a
-    /// `[LinkName("sym")]` attribute, else the declared name. Pepper code
-    /// always calls the extern by its declared name.
-    pub fn link_name(&self) -> Result<&str, String> {
-        let mut found: Option<&str> = None;
+    /// The extern's `[Link(...)]` attributes: `[Link("lib")]`,
+    /// `[Link(lib = "lib")]`, `[Link(name = "sym")]`, or both
+    /// (`[Link(lib = "lib", name = "sym")]`). Errors are located at the
+    /// argument (or attribute) that is wrong, including the removed
+    /// `[LinkName("sym")]`.
+    pub fn link(&self) -> Result<Link, Diagnostic> {
+        use pepper_parser::diagnostic::Fix;
+        let at = |span: ast::Span| Loc::new(self.loc.file, span);
+        let mut link = Link::default();
+        let mut name_at: Option<Loc> = None;
         for attr in &self.attributes {
-            let ast::Expression::FunctionCall { function, arguments, .. } = &attr.body else {
-                if matches!(&attr.body, ast::Expression::SymbolRef { id, .. } if id == "LinkName") {
-                    return Err(format!("LinkName on extern '{}' needs a symbol: [LinkName(\"sym\")]", self.name));
+            match attr.name() {
+                Some(LINK_ATTRIBUTE) => {}
+                Some("LinkName") => {
+                    let replacement = match attr.arguments().as_slice() {
+                        [ast::AttributeArgument { name: None, value }] => format!("[Link(name = {})]", value),
+                        _ => "[Link(name = \"sym\")]".to_string(),
+                    };
+                    return Err(Diagnostic::error(format!("'LinkName' was removed; use '{}'", replacement))
+                        .at(at(attr.span))
+                        .with_fix(Fix::replace(format!("replace with '{}'", replacement), at(attr.span), replacement)));
                 }
-                continue;
-            };
-            if !matches!(function.as_ref(), ast::Expression::SymbolRef { id, .. } if id == "LinkName") {
-                continue;
+                _ => continue,
             }
-            let [ast::Expression::Literal { value: ast::Literal::String(sym), .. }] = arguments.as_slice() else {
-                return Err(format!("LinkName on extern '{}' takes exactly one string: [LinkName(\"sym\")]", self.name));
-            };
-            if sym.is_empty() {
-                return Err(format!("LinkName on extern '{}' must not be empty", self.name));
+            let arguments = attr.arguments();
+            if arguments.is_empty() {
+                return Err(Diagnostic::error("'Link' needs a library or a symbol: [Link(\"lib\")], [Link(name = \"sym\")]")
+                    .at(at(attr.span)));
             }
-            if found.is_some() {
-                return Err(format!("extern '{}' has more than one LinkName", self.name));
+            let mut library_given = false;
+            for (index, argument) in arguments.iter().enumerate() {
+                let (key, key_at) = match argument.name {
+                    Some((key, span)) => (key, at(span)),
+                    None if index == 0 => ("lib", at(argument.value.span())),
+                    None => {
+                        return Err(Diagnostic::error("'Link' takes one positional argument, the library; name the others")
+                            .at(at(argument.value.span())));
+                    }
+                };
+                let ast::Expression::Literal { value: ast::Literal::String(value), span } = argument.value else {
+                    return Err(Diagnostic::error(format!("'Link' argument '{}' must be a string", key)).at(at(argument.value.span())));
+                };
+                if value.is_empty() {
+                    return Err(Diagnostic::error(format!("'Link' argument '{}' must not be empty", key)).at(at(*span)));
+                }
+                match key {
+                    "lib" if library_given => {
+                        return Err(Diagnostic::error("library given twice in one 'Link'").at(key_at));
+                    }
+                    "lib" => {
+                        library_given = true;
+                        link.libraries.push(value.clone());
+                    }
+                    "name" => {
+                        if let Some(first) = name_at {
+                            return Err(Diagnostic::error(format!("extern '{}' has more than one symbol name", self.name))
+                                .at(key_at)
+                                .with_note("first named here", Some(first)));
+                        }
+                        name_at = Some(key_at);
+                        link.name = Some(value.clone());
+                    }
+                    other => {
+                        return Err(Diagnostic::error(format!("'Link' has no argument named '{}'; use 'lib' or 'name'", other)).at(key_at));
+                    }
+                }
             }
-            found = Some(sym.as_str());
         }
-        Ok(found.unwrap_or(&self.name))
+        Ok(link)
+    }
+
+    /// The C symbol this extern binds to: the `name` of its `[Link]`
+    /// attribute, else the declared name. Pepper code always calls the
+    /// extern by its declared name.
+    pub fn link_name(&self) -> String {
+        self.link().ok().and_then(|link| link.name).unwrap_or_else(|| self.name.clone())
     }
 }
 

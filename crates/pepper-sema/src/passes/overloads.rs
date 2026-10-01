@@ -468,6 +468,8 @@ pub enum ArgKind {
     Null,
     /// A closure literal with parameter types still unknown: its arity.
     UntypedClosure(usize),
+    /// A parameter skipped by naming a later one: it takes its default.
+    Default,
     /// Another overload set named as a value: its members' function types.
     Overloaded(Vec<TypeName>),
 }
@@ -1004,6 +1006,14 @@ impl Overloads {
             let mut ranks = vec![];
             let mut failed = None;
             for (i, (arg, param)) in args.iter().zip(&params).enumerate() {
+                if matches!(arg.kind, ArgKind::Default) {
+                    if i < member.required {
+                        failed = Some((i, arg, param));
+                        break;
+                    }
+                    ranks.push((0, 0));
+                    continue;
+                }
                 match self.rank(arg, param, true) {
                     Some(r) => ranks.push(r),
                     None => {
@@ -1017,6 +1027,7 @@ impl Overloads {
                     ArgKind::Overloaded(_) => "overloaded function".to_string(),
                     ArgKind::UntypedClosure(n) => format!("a closure of {} parameter{}", n, if *n == 1 { "" } else { "s" }),
                     ArgKind::Null => "__null".to_string(),
+                    ArgKind::Default => "a default argument".to_string(),
                     _ => arg.ty.as_ref().map(|t| format!("'{}'", t.display())).unwrap_or_default(),
                 };
                 notes.push(not_viable(format!("no known conversion from {} to '{}' for {} argument", from, param.display(), ordinal(i + 1))));
@@ -1376,6 +1387,7 @@ pub fn arg_info(arg: &Expression, overloads: &Overloads, ty: Option<TypeName>) -
         Expression::IntLiteral(v) => ArgKind::IntLiteral(*v),
         e if is_string_literal(e) => ArgKind::StringLiteral,
         Expression::PointerLiteral => ArgKind::Null,
+        Expression::DefaultArgument { .. } => ArgKind::Default,
         Expression::MakeClosure { ty, .. } if ty.contains_auto() => ArgKind::UntypedClosure(ty.function_params().len()),
         Expression::SymbolRef { id, ty, loc } if ty.contains_auto() && overloads.is_set(id) => {
             ArgKind::Overloaded(overloads.member_types(id, *loc))
@@ -1385,7 +1397,7 @@ pub fn arg_info(arg: &Expression, overloads: &Overloads, ty: Option<TypeName>) -
     let ty = match (&kind, arg) {
         (ArgKind::IntLiteral(v), _) => Some(TypeName::new(crate::type_name::int_literal_type(*v))),
         (ArgKind::StringLiteral, _) => Some(TypeName::new("String")),
-        (ArgKind::UntypedClosure(_) | ArgKind::Overloaded(_) | ArgKind::Null, _) => None,
+        (ArgKind::UntypedClosure(_) | ArgKind::Overloaded(_) | ArgKind::Null | ArgKind::Default, _) => None,
         _ => known(ty),
     };
     ArgInfo { ty, kind }

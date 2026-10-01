@@ -279,8 +279,33 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
     })
 }
 
+/// A call's arguments: positional ones first, then named ones
+/// (`name = value`), which stay [`Expression::NamedArgument`]s until
+/// `named_arguments` binds the call.
+fn call_arguments(arguments: &[ast::Expression]) -> Result<Vec<Expression>, Diagnostic> {
+    let mut named = None;
+    arguments
+        .iter()
+        .map(|argument| match argument {
+            ast::Expression::NamedArgument { name, name_span, value, .. } => {
+                named.get_or_insert(*name_span);
+                Ok(Expression::NamedArgument { name: name.clone(), value: Box::new(expression(value)?), loc: loc(*name_span) })
+            }
+            positional => match named {
+                Some(first) => Err(Diagnostic::error("positional argument cannot follow a named argument")
+                    .at(loc(positional.span()))
+                    .with_note("first named argument here", Some(loc(first)))),
+                None => expression(positional),
+            },
+        })
+        .collect()
+}
+
 fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
     match expr {
+        ast::Expression::NamedArgument { name_span, .. } => {
+            Err(Diagnostic::error("a named argument can only appear in a call").at(loc(*name_span)))
+        }
         ast::Expression::Literal { value: lit, span } => match lit {
             ast::Literal::String(value) => Ok(Expression::StringLiteral {
                 value: value.clone(),
@@ -389,7 +414,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 return Ok(Expression::MethodCall {
                     this: Box::new(expression(lhs)?),
                     method: name.clone(),
-                    args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                    args: call_arguments(arguments)?,
                     loc: loc(*name_span),
                 });
             }
@@ -405,14 +430,14 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 other => {
                     return Ok(Expression::Invoke {
                         callee: Box::new(expression(other)?),
-                        args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                        args: call_arguments(arguments)?,
                     });
                 }
             };
             record_literal_args(loc(target.span()), arguments);
             Ok(Expression::FunctionCall {
                 function,
-                args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                args: call_arguments(arguments)?,
                 loc: loc(target.span()),
             })
         }

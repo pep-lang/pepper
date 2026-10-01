@@ -74,6 +74,9 @@ Some that you will meet quickly:
   (see [implicit conversions](language/structs.md#implicit-conversions)).
 - Free functions, methods, operators, constructors, extension methods and
   trait members can be [overloaded](language/overloading.md).
+- A call can name its arguments, `window("Editor", resizable = false)`, to
+  skip defaulted parameters or pass them in any order (see
+  [named arguments](language/functions.md#named-arguments)).
 - Generic parameters can require traits (`<T: Shape & Named>`), checked
   wherever the generic is used and, inside the generic, against what the
   traits declare (see [constraints](language/generics.md#constraints)).

@@ -1060,8 +1060,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             .get(&ext.ty.to_string())
             .ok_or_else(|| format!("unknown return type {}", ext.ty))?;
         let fn_type = llvm_fn_type(return_type, &param_types, ext.is_variadic);
-        // `[LinkName("sym")]` binds the declared name to a different C symbol.
-        let symbol = ext.link_name()?;
+        // `[Link(name = "sym")]` binds the declared name to a different C symbol.
+        let symbol = ext.link_name();
+        let symbol = symbol.as_str();
         let fn_value = match self.module.get_function(symbol) {
             Some(f) => f,
             None => {
@@ -4470,6 +4471,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.subjects.get(id).copied().ok_or_else(|| "internal error: 'match' value read outside its 'match'".to_string())
             }
             Expression::NoMatch => Err("internal error: unlowered 'match' expression".to_string()),
+            Expression::NamedArgument { .. } => Err("internal error: unbound named argument".to_string()),
+            Expression::DefaultArgument { .. } => Err("internal error: default argument outside a call".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
@@ -4569,6 +4572,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // entry owns them.
                     let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
                     for (index, arg) in args.iter().enumerate() {
+                        if matches!(arg, Expression::DefaultArgument { .. }) {
+                            let (v, name) = self.default_argument(&mangled, index, &mut owned_arg_temps)?;
+                            arg_names.push(name);
+                            arg_vals.push(v);
+                            continue;
+                        }
                         let v = self.codegen_expr(arg)?;
                         self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                         arg_names.push(self.numeric_source_name(arg, &v));
@@ -4653,6 +4662,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // entry owns them.
                 let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
                 for (index, arg) in args.iter().enumerate() {
+                    if matches!(arg, Expression::DefaultArgument { .. }) {
+                        let (v, name) = self.default_argument(&mangled, index, &mut owned_arg_temps)?;
+                        arg_names.push(name);
+                        arg_vals.push(v);
+                        continue;
+                    }
                     let v = self.codegen_expr(arg)?;
                     self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                     arg_names.push(self.numeric_source_name(arg, &v));
@@ -4858,6 +4873,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut arg_names: Vec<String> = vec![];
         let is_extern = self.extern_names.contains(&target);
         for arg in args {
+            if matches!(arg, Expression::DefaultArgument { .. }) {
+                let (v, name) = self.default_argument(&target, arg_names.len(), &mut owned_arg_temps)?;
+                arg_names.push(name);
+                arg_vals.push(v);
+                continue;
+            }
             // A string literal passed to a C function is its NUL-terminated
             // global (`puts("hi")`, `getenv("HOME")`), exactly as for
             // `assert`'s message; convert_string_literals made it a
@@ -5456,6 +5477,27 @@ impl<'ctx> CodeGenerator<'ctx> {
             .try_as_basic_value()
             .basic()
             .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
+    /// The default of parameter `index` of `target`, which the call skipped
+    /// by naming a later parameter: evaluated at the call, so an owned
+    /// default is a temporary like any other. The value and its source name.
+    fn default_argument(
+        &mut self,
+        target: &str,
+        index: usize,
+        owned_arg_temps: &mut Vec<(BasicValueEnum<'ctx>, String)>,
+    ) -> Result<(BasicValueEnum<'ctx>, String), String> {
+        let default = self
+            .param_defaults
+            .get(target)
+            .and_then(|defaults| defaults.get(index).cloned().flatten())
+            .ok_or_else(|| format!("internal error: parameter {} of '{}' has no default", index + 1, target))?;
+        let v = self.codegen_expr(&default)?;
+        if let Some(ty) = self.owned_temp_type(&default) {
+            owned_arg_temps.push((v, ty));
+        }
+        Ok((v, self.numeric_source_name(&default, &v)))
     }
 
     /// Default-argument expressions for the parameters a call did not supply.

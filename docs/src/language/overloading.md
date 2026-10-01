@@ -18,8 +18,9 @@ set too, and so are its static methods, its operators, its
 ## Declaring overloads
 
 - **The parameter lists must differ** in the number or the types of the
-  parameters. Parameter names and default values do not count, and neither
-  does the return type:
+  parameters. Parameter names and default values do not count (though
+  [named arguments](#how-a-call-picks-a-member) can pick between members
+  that differ in types), and neither does the return type:
 
   ```text
   main.pep:2:1: error: functions that differ only in their return type cannot be overloaded
@@ -152,6 +153,15 @@ main.pep:2:1: note: candidate function not viable: requires 2 arguments, but 1 w
     2 | f(x: int, y: int): int { return 2; }
       | ^
 ```
+
+A call with [named arguments](functions.md#named-arguments) considers only
+the members that have a parameter of each name it uses and get every
+required parameter, and binds the names before ranking the arguments as
+above. So two overloads whose later parameters have different names can be
+told apart by naming one (`pick(1, b = 2)` against `pick(a: int, b: int = 0)`
+and `pick(a: String, c: int = 0)`). The members it considers must put each
+named argument at the same position; when they do not, the call is an error:
+`named arguments bind differently in the overloads of 'f'`.
 
 The member picked decides the call's type, so `var x = half(9.0);` is a
 `double` when `half(x: double): double` is picked. In the editor, hovering

@@ -185,6 +185,44 @@ pub struct Attribute {
     pub span: Span,
 }
 
+/// One argument of an attribute: `"m"` in `[Link("m")]` (no name) or
+/// `name = "sym"` in `[Link(name = "sym")]`.
+#[derive(Debug, Clone, Copy)]
+pub struct AttributeArgument<'a> {
+    /// The argument's name and its span, for a named argument.
+    pub name: Option<(&'a str, Span)>,
+    pub value: &'a Expression,
+}
+
+impl Attribute {
+    /// The attribute's name: `Link` in `[Link("m")]` and in `[Link]`.
+    pub fn name(&self) -> Option<&str> {
+        match &self.body {
+            Expression::SymbolRef { id, .. } => Some(id),
+            Expression::FunctionCall { function, .. } => match function.as_ref() {
+                Expression::SymbolRef { id, .. } => Some(id),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The attribute's arguments in the order written; none for a bare
+    /// `[Name]`.
+    pub fn arguments(&self) -> Vec<AttributeArgument<'_>> {
+        let Expression::FunctionCall { arguments, .. } = &self.body else { return vec![] };
+        arguments
+            .iter()
+            .map(|argument| match argument {
+                Expression::NamedArgument { name, name_span, value, .. } => {
+                    AttributeArgument { name: Some((name.as_str(), *name_span)), value }
+                }
+                value => AttributeArgument { name: None, value },
+            })
+            .collect()
+    }
+}
+
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -235,6 +273,15 @@ pub enum Expression {
     FunctionCall {
         function: Box<Expression>,
         arguments: Vec<Expression>,
+        span: Span,
+    },
+    /// A named argument `name = value`. Appears only directly in a
+    /// [`Expression::FunctionCall`]'s `arguments` (calls and attributes).
+    NamedArgument {
+        name: String,
+        /// Span of the name.
+        name_span: Span,
+        value: Box<Expression>,
         span: Span,
     },
     /// A closure literal: `(x: int, y) => x + y` or `(x): int => { ... }`.
@@ -310,6 +357,7 @@ impl Expression {
             | Expression::MemberAccess { span, .. }
             | Expression::Cast { span, .. }
             | Expression::FunctionCall { span, .. }
+            | Expression::NamedArgument { span, .. }
             | Expression::Tuple { span, .. }
             | Expression::ArrayLiteral { span, .. }
             | Expression::MapLiteral { span, .. }
@@ -1047,6 +1095,7 @@ impl Display for Expression {
                 write!(f, " }}")
             }
             Expression::Is { value, pattern, .. } => write!(f, "({} is {})", value, pattern),
+            Expression::NamedArgument { name, value, .. } => write!(f, "{} = {}", name, value),
         }
     }
 }

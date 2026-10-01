@@ -4121,3 +4121,43 @@ fn hash_keys_with_both_halves_or_neither_compile_cleanly() {
                   test(): int {\n    var a = HashSet<Point>();\n    var b = HashSet<Node>();\n    var c = HashSet<Cell>();\n    return a.count() + b.count() + c.count();\n}\n";
     assert_eq!(warnings_of(source), "");
 }
+
+#[test]
+fn unknown_named_argument() {
+    let source = "f(a: int, width: int = 3): int { return a + width; }\nmain(): int {\n    return f(1, widht = 2);\n}\n";
+    assert_eq!(
+        error_of("unknown_named_argument", source),
+        "main.pep:3:17: error: no parameter named 'widht' in 'f'; did you mean 'width'?\n\
+         \x20   3 |     return f(1, widht = 2);\n\
+         \x20     |                 ^~~~~\n\
+         main.pep:1:1: note: declared here\n\
+         \x20   1 | f(a: int, width: int = 3): int { return a + width; }\n\
+         \x20     | ^"
+    );
+}
+
+#[test]
+fn positional_after_named_argument() {
+    let source = "f(a: int, b: int): int { return a + b; }\nmain(): int {\n    return f(a = 1, 2);\n}\n";
+    assert_eq!(
+        error_of("positional_after_named_argument", source),
+        "main.pep:3:21: error: positional argument cannot follow a named argument\n\
+         \x20   3 |     return f(a = 1, 2);\n\
+         \x20     |                     ^\n\
+         main.pep:3:14: note: first named argument here\n\
+         \x20   3 |     return f(a = 1, 2);\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
+fn link_name_was_removed() {
+    let source = "[LinkName(\"llabs\")]\nextern long pep_abs(long v);\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("link_name_was_removed", source),
+        "main.pep:1:1: error: 'LinkName' was removed; use '[Link(name = \"llabs\")]'\n\
+         \x20   1 | [LinkName(\"llabs\")]\n\
+         \x20     | ^~~~~~~~~~~~~~~~~~~\n\
+         \x20     | [Link(name = \"llabs\")]"
+    );
+}

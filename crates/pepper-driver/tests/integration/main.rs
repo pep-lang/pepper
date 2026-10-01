@@ -47,6 +47,7 @@ mod loop_scope_tests;
 mod lto_tests;
 mod method_inference_tests;
 mod module_tests;
+mod named_argument_tests;
 mod multidim_index_tests;
 mod overload_tests;
 mod nested_array_tests;

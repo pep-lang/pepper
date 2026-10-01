@@ -121,9 +121,61 @@ the end of the list, since arguments are matched from the left.
 {{#include ../../examples/functions-defaults.pep}}
 ```
 
-Defaults work the same way for methods and constructors. Pepper has no named
-arguments: to give a later parameter a value, you pass every parameter before
-it.
+Defaults work the same way for methods and constructors. To give a later
+parameter a value without passing every parameter before it, name it (see
+[Named arguments](#named-arguments)).
+
+## Named arguments
+
+A call can name its arguments, `name = value`, so it reads clearly and can
+set one defaulted parameter without passing the ones before it:
+
+```pepper
+{{#include ../../examples/functions-named-arguments.pep}}
+```
+
+- **Positional first.** Positional arguments come first and match parameters
+  from the left; named arguments follow, in any order. A positional argument
+  after a named one is an error: `positional argument cannot follow a named
+  argument`.
+- **Each parameter once.** Naming a parameter that already has an argument is
+  an error: `argument for 'width' given twice`.
+- **Every required parameter.** A parameter without a default must get an
+  argument: `missing argument for parameter 'title' in call to 'window'`. A
+  name the function does not have is an error, with a suggestion when one is
+  close: `no parameter named 'widht' in 'window'; did you mean 'width'?`.
+- **Order of evaluation.** Arguments are evaluated in the order written, then
+  passed to their parameters.
+- **Everywhere a call is.** Free functions, methods, static methods,
+  constructors (a `this.x` parameter is named `x`), extension methods, enum
+  methods, generic functions, and calls through a [trait](traits-and-extensions.md)
+  value, which use the trait's parameter names.
+- **Overloads.** A member of an [overload set](overloading.md) without a
+  parameter of a given name is not a candidate, so names can pick between
+  overloads.
+- **Not through function values.** A [function type](function-types.md)
+  carries no parameter names, so a call through a function value is
+  positional only: `cannot name arguments in a call through a function value
+  of type '(int, int) => int'`.
+- **Not to `extern` functions.** Their parameter names are copied from C
+  headers and stay free to change: `cannot name arguments in a call to extern
+  function 'CreateFileW'`. Wrap the C function in a Pepper function to give
+  it named arguments.
+
+### Other names for a parameter
+
+Two attributes on a function give its parameters more names. In both, the
+declared parameter's name comes second:
+
+- `[Alias("size", "count")]` lets a call name parameter `count` as `size`
+  too, permanently.
+- `[Rename("n", "count")]` keeps the former name `n` working after the
+  parameter was renamed to `count`. Each use warns, like a
+  [deprecated](deprecation.md) declaration, with a fix that renames it.
+
+The first name must not already be a parameter or another name, and the
+second must be a parameter of the function. A call that names one parameter
+by two of its names gets `argument for 'count' given twice`.
 
 ## Returning several values
 

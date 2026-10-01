@@ -73,19 +73,19 @@ extern void* readdir(void* dir);
 [Target(OS(Mac))]
 extern int* __error();
 [Target(OS(Mac) && Arch(x64))]
-[LinkName("stat$INODE64")]
+[Link(name = "stat$INODE64")]
 extern int stat(char* path, void* buf);
 [Target(OS(Mac) && Arch(x64))]
-[LinkName("lstat$INODE64")]
+[Link(name = "lstat$INODE64")]
 extern int lstat(char* path, void* buf);
 [Target(OS(Mac) && Arch(x64))]
-[LinkName("fstat$INODE64")]
+[Link(name = "fstat$INODE64")]
 extern int fstat(int fd, void* buf);
 [Target(OS(Mac) && Arch(x64))]
-[LinkName("opendir$INODE64")]
+[Link(name = "opendir$INODE64")]
 extern void* opendir(char* path);
 [Target(OS(Mac) && Arch(x64))]
-[LinkName("readdir$INODE64")]
+[Link(name = "readdir$INODE64")]
 extern void* readdir(void* dir);
 [Target(OS(Mac) && Arch(aarch64))]
 extern int stat(char* path, void* buf);

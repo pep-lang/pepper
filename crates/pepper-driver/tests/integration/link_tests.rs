@@ -81,13 +81,13 @@ fn build_binary(name: &str, source: &str) -> Result<PathBuf, String> {
 
 #[test]
 fn link_name_binds_extern_to_c_symbol() {
-    // `pep_abs` exists in no library: the call only links if [LinkName]
+    // `pep_abs` exists in no library: the call only links if [Link(name)]
     // made the object reference `llabs` (libc / the UCRT) instead. `llabs`
     // takes a 64-bit `long long` on every target, matching Pepper's `long`.
     let out_path = build_binary(
         "link_name_probe",
         r#"
-[LinkName("llabs")] extern long pep_abs(long v);
+[Link(name = "llabs")] extern long pep_abs(long v);
 
 main(): int {
     return pep_abs(-7) == 7 ? 0 : 1;
@@ -106,8 +106,8 @@ fn link_name_combines_with_target() {
     let out_path = build_binary(
         "link_name_target_probe",
         r#"
-[Target(OS(Windows))] [LinkName("llabs")] extern long pep_abs(long v);
-[Target(!OS(Windows))] [LinkName("labs")] extern long pep_abs(long v);
+[Target(OS(Windows))] [Link(name = "llabs")] extern long pep_abs(long v);
+[Target(!OS(Windows))] [Link(lib = "m", name = "labs")] extern long pep_abs(long v);
 
 main(): int {
     return pep_abs(-9) == 9 ? 0 : 1;
@@ -119,16 +119,20 @@ main(): int {
 }
 
 #[test]
-fn link_name_requires_one_string() {
-    for (name, attr) in [
-        ("link_name_bare", "[LinkName]"),
-        ("link_name_empty", "[LinkName(\"\")]"),
-        ("link_name_two", "[LinkName(\"a\", \"b\")]"),
-        ("link_name_twice", "[LinkName(\"labs\")] [LinkName(\"llabs\")]"),
+fn link_attribute_errors() {
+    for (name, attr, expected) in [
+        ("link_bare", "[Link]", "'Link' needs a library or a symbol"),
+        ("link_name_empty", "[Link(name = \"\")]", "'Link' argument 'name' must not be empty"),
+        ("link_two_positional", "[Link(\"a\", \"b\")]", "'Link' takes one positional argument"),
+        ("link_unknown_key", "[Link(symbol = \"a\")]", "'Link' has no argument named 'symbol'"),
+        ("link_not_string", "[Link(name = 3)]", "'Link' argument 'name' must be a string"),
+        ("link_lib_twice", "[Link(\"m\", lib = \"c\")]", "library given twice in one 'Link'"),
+        ("link_name_twice", "[Link(name = \"labs\")] [Link(name = \"llabs\")]", "has more than one symbol name"),
+        ("link_name_removed", "[LinkName(\"llabs\")]", "'LinkName' was removed; use '[Link(name = \"llabs\")]'"),
     ] {
         let source = format!("{attr} extern long pep_abs(long v);\nmain(): int {{ return pep_abs(-1) as int - 1; }}");
         let err = build_binary(name, &source).expect_err(attr);
-        assert!(err.contains("LinkName"), "{attr}: unexpected error: {err}");
+        assert!(err.contains(expected), "{attr}: unexpected error: {err}");
     }
 }
 

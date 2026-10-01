@@ -18,7 +18,9 @@ A function type is written `(parameter types) => return type`:
 | `(int) => (int) => int` | takes an `int`, returns an `(int) => int` |
 
 `=>` is right-associative, so the last row is a function that returns a
-function. A function type can be used anywhere a type can: for variables,
+function. A function type carries no parameter names, so a call through a
+function value passes its arguments by position:
+[named arguments](functions.md#named-arguments) are an error there. A function type can be used anywhere a type can: for variables,
 parameters, return types, struct fields, generic arguments such as
 `Array<(int) => int>`, and [type aliases](type-aliases.md).
 

@@ -380,6 +380,7 @@ fn walk<'a>(mut stack: Vec<Node<'a>>, mut visit: impl FnMut(Item<'a>)) {
                         visit(Item::Patterns(std::slice::from_ref(&**pattern), value));
                         stack.push(Node::Expression(value));
                     }
+                    ast::Expression::NamedArgument { value, .. } => stack.push(Node::Expression(value)),
                     ast::Expression::Literal { .. }
                     | ast::Expression::SymbolRef { .. }
                     | ast::Expression::TypeLiteral(_)
@@ -1052,6 +1053,7 @@ impl<'a> Typer<'a> {
                 m.arms.iter().map(|a| &a.value).chain(m.else_arm.as_ref().map(|(_, v)| v)).find_map(|v| self.type_at(v, at, depth))
             }
             ast::Expression::Is { .. } => Some(Ty::named("bool")),
+            ast::Expression::NamedArgument { value, .. } => self.type_at(value, at, depth),
         };
         ty.filter(|t| !t.is_auto())
     }

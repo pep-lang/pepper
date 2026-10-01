@@ -609,10 +609,11 @@ with no extension, and `module_name()` is the output's stem.
   (a method with type parameters of its own, `map<U>`, sits in
   `generic_methods` rather than `method_members` until specialized),
   `FunctionDef` (methods have `parent: Some(struct)`), `ExternDef` (with
-  `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
+  `link()` and `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
   `ForIterator`, `WithEntered`, `Destructure`, `Move`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
+  `NamedArgument`, `DefaultArgument`,
   `MethodAddress`, `CallPointer`), and `Statement`. Each node that names something has a
   `Loc`; `Expression::loc()` returns it (`Loc::NONE` for literals and
   synthesized nodes).
@@ -716,6 +717,7 @@ several passes run more than once on purpose.
 | 0 | `enums::resolve_enum_cases` (`enums.rs`) | First, `value_types::lower_extensions` (`value_types.rs`) turns each extension of a value type (a number type, `char`, `bool`, or an enum whose cases carry no values; `value_types::key` files them under the enum's name or the number's canonical spelling, `i32` for `int`) into free functions `X::m` like an enum's own methods, copies the trait defaults its conformances need, reports a missing member and an enum extension without a trait, and leaves the extension in `module.extensions` with no methods (and `resolved` set) as the declaration of its conformances, which `Conformance` reads for `T: Tr`; `value_types::resolve_static_calls` turns `int.zero()` into `i32::zero()`, and `rewrite_static_calls` does the same for `T.zero()` in a specialization. `convert_to_traits` reports a value type flowing into a trait slot (`'int' cannot be converted to trait 'Tr'`). Installs the reference enums (structs with `enum_cases`) in their own registry (`enums::reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E::from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums::method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums::call_on_value`); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
 | 0a | `entry_point::lower_main_arguments` (`entry_point.rs`) | The C `main` the compiler emits takes no `argc`/`argv`, so a root file's `main(args: String[])` is renamed `main@#args` (`MAIN_WITH_ARGUMENTS`; `#` cannot start a namespace, and messages demangle it to `main`) and a `main()` is synthesized at its location that returns `main@#args(_pep_arguments())` (a `void` one is called, then 0 returned). `_pep_arguments` is `arguments()` under a name a program's own `arguments` cannot shadow. Reports any other parameter list on `main` and `main` declared twice. `is_entry_point` gives both forms the inferred `int` return. |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
+| 1a | `named_arguments::check_attributes`, `check_link_attributes`, `named_arguments::bind_calls` (`named_arguments.rs`) | Reports a wrong `[Alias]`, `[Rename]`, or `[Link(...)]` (including the removed `[LinkName]`). Then binds named arguments: the builder keeps each `name = value` argument as an `Expression::NamedArgument` after the positional ones (reporting a positional one after a named one), and binding rewrites a call's arguments into parameter order, a skipped parameter becoming `Expression::DefaultArgument` (codegen passes the parameter's default there, as `missing_args` does for trailing ones; overload ranking treats it as `ArgKind::Default`). This step binds the calls a name decides (free functions, constructors, an own method called bare); `resolve_implicit_types` binds `value.method(...)` once the receiver is typed (`bind_method_call`, enum methods included), and reports a call through a function value; `check_unbound` (after the last `resolve_implicit_types`) reports what is left. An overloaded callee binds when every member the names fit binds the same positions. When binding reorders the named arguments, a receiver that is a call and each argument that is not a literal or a closure is evaluated first into a `WithSubject` around the call, in the order written. Former names (`[Rename]`) warn with a fix. |
 | 2 | `synthesize_function_types` (`function_types.rs`) | Each tuple type `__tuple<A, B>` becomes a synthesized struct (`tuples::tuple_struct`) with const fields `"0"`, `"1"`, … and a constructor taking the elements, so every pass that types fields, constructor arguments and member reads handles tuples unchanged; codegen emits no object for it (§4.3). Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
 | 4 | `overloads::name_overloads` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`) (`gather_generics::concrete_overrides`). Then groups each file's free functions by name: a name with several is an overload set, whose members become `name$1`, `name$2`, ... (after any namespace: `f@ns$1`; `namespace::demangle` strips both), recorded in `module.overload_sets`. First, where prelude files (a forced import, then the runtime) export the same name, a later file's member with an earlier member's parameters is dropped and the rest form one set (`replace_prelude_members`), so a forced import replaces exactly the overloads it declares. Reports a redefinition, a difference only in return type, and an overloaded `extern`, and attaches an override of an overloaded generic to the member with its arity (`f$2<Point>`). Each struct's same-name methods (operators included) are renamed the same way (`add$1`, `+$2`), recorded in `module.method_overload_sets`; specializations copy the renamed members, and a static and an instance method may not share a name. A trait's same-name methods are renamed the same way, each its own vtable slot (`overloads::group_methods` serves structs, traits, and `apply_extensions`). `StructTable` and `convert_member_refs` also answer to a member's set name, so `a + b` and a bare `add(x)` in a method still find the set. Constructors arrive named by the builder (`Point$1`, `Point$2`; a specialization keeps the ordinal, `Box<int>$2`); this pass reports two with the same parameters (`constructor of 'P' cannot be redeclared`), and `Overloads::build` makes each concrete struct's constructors the set named by its type (`Point`, `Box<int>`), so `Point(args)` resolves like a function call. `Module::constructor_of` maps a call's name to its struct and constructor. |
@@ -881,7 +883,7 @@ How the language lowers:
   looks up `Array<int>` by its full name.
 - **Externs**: declared with the C prototype. Variadic externs use C default
   promotions. Narrow integer arguments get `signext`/`zeroext`.
-  `[LinkName("sym")]` changes the symbol (`ExternDef::link_name`). A string
+  `[Link(name = "sym")]` changes the symbol (`ExternDef::link_name`). A string
   literal passed to an extern is passed as its raw NUL-terminated global.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
@@ -1980,9 +1982,12 @@ re-exports, and blocks, and sema carries it on `attributes`. Attributes
 nobody reads are ignored silently. To give one meaning, read it where it
 applies:
 
-- `[Link("lib")]` → `pepper_driver::link_libraries`
-- `[LinkName("sym")]` → `ExternDef::link_name`, used by
+- `[Link("lib")]`, `[Link(lib = "lib", name = "sym")]` → `ExternDef::link`
+  (validated by `passes::check_link_attributes`), read by
+  `pepper_driver::link_libraries` and, through `ExternDef::link_name`, by
   `instantiate_extern`
+- `[Alias("alias", "parameter")]`, `[Rename("old", "new")]` (functions) →
+  `passes/named_arguments.rs`
 - `[Target(...)]` → `passes/platform.rs`
 - `[Deprecated("message", "replacement")]` → `deprecation.rs` (checked by
   the builder, read by `check_uses` and `check_deprecated_members`)
@@ -2001,7 +2006,9 @@ applies:
 - `[Implicit]` → `StructDef::implicit_from`, checked in `builder.rs` and
   applied by `convert_to_traits`
 
-Validate the arguments and report a located error. Add driver tests (see
+An attribute's arguments may be named, as in a call (`[Link(name =
+"sym")]`): `ast::Attribute::name()` and `arguments()` read them. Validate the
+arguments and report a located error. Add driver tests (see
 `link_tests.rs`, `platform_tests.rs`).
 
 ### Add a platform-specific runtime function
@@ -2009,7 +2016,7 @@ Validate the arguments and report a located error. Add driver tests (see
 Write twin declarations with the same name and signature, guarded
 `[Target(OS(Windows))]` and `[Target(!OS(Windows))]` (see
 `runtime/io/path.pep`, `sys_posix.pep`, and `sys_windows.pep`). Dropped
-twins are never compiled together. Use `[LinkName]` when the
+twins are never compiled together. Use `[Link(name = "sym")]` when the
 C symbol differs by platform, and `[Link]` for extra libraries. Cover the
 other platforms in `platform_tests.rs` with `with_simulated_host`, which
 compiles the code but cannot run it. Run it for real with the

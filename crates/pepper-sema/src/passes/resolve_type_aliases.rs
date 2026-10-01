@@ -257,6 +257,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::ForIterator(lhs)
         | Expression::WithEntered(lhs)
         | Expression::Destructure { value: lhs, .. }
+        | Expression::NamedArgument { value: lhs, .. }
         | Expression::Move { value: lhs, .. } => subst_expr(lhs, aliases, values),
         Expression::CaseValue(value) => subst_expr(&mut value.subject, aliases, values),
         Expression::MatchArm(test) => {
@@ -274,7 +275,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(&mut with.subject, aliases, values);
             subst_expr(&mut with.body, aliases, values);
         }
-        Expression::Subject { ty, .. } => subst(ty, aliases),
+        Expression::Subject { ty, .. } | Expression::DefaultArgument { ty } => subst(ty, aliases),
         Expression::NoMatch => {}
         Expression::MakeClosure { value, ty, .. } => {
             subst(ty, aliases);

@@ -871,6 +871,7 @@ impl<'p, 'a> Walk<'p, 'a> {
             // An immortal payload-free case: no fields to reach.
             Expression::StaticCase { .. }
             | Expression::NoMatch
+            | Expression::DefaultArgument { .. }
             | Expression::BoolLiteral(_)
             | Expression::IntLiteral(_)
             | Expression::FloatLiteral(_)
@@ -1003,7 +1004,7 @@ impl<'p, 'a> Walk<'p, 'a> {
                 None
             }
             Expression::ForIterator(source) => self.eval(source),
-            Expression::Destructure { value, .. } => self.eval(value),
+            Expression::Destructure { value, .. } | Expression::NamedArgument { value, .. } => self.eval(value),
             Expression::Move { value, .. } => self.eval_move(value),
             Expression::MatchArm(test) => {
                 self.eval(&test.subject);

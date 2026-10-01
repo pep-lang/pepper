@@ -32,8 +32,8 @@ library (`m`) for functions such as `pow`, and `pthread` on older systems.
 
 ## Linking a library from the source: `[Link]`
 
-Attach `[Link("name")]` to an `extern` declaration to link the library that
-defines it. The compiler passes `-lname` to the linker, just like `-l` on the
+Attach `[Link("name")]` (or `[Link(lib = "name")]`) to an `extern`
+declaration to link the library that defines it. The compiler passes `-lname` to the linker, just like `-l` on the
 command line. Name the library the way the linker does: `m` for `libm`,
 `gdi32` for `gdi32.lib`.
 
@@ -46,6 +46,9 @@ command line. Name the library the way the linker does: `m` for `libm`,
   `[Target]`, as above, links a library only on the platforms that need it.
 - Each library is linked once, however many externs name it.
 - The library is linked even when nothing calls the extern.
+- The same attribute can also bind the extern to a differently named C
+  symbol: `[Link(lib = "m", name = "cbrt")]` (see
+  [Binding to a different symbol name](c-interop.md#binding-to-a-different-symbol-name)).
 
 Putting `[Link]` in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
@@ -87,8 +90,8 @@ library function of the same name, such as `exit`. `extern` functions keep
 their C names.
 
 To fix it, check the spelling of the extern against the C function (or use
-[`[LinkName]`](c-interop.md#binding-to-a-different-symbol-name) when the names
-differ), then add the library that defines it with `[Link]` or `-l`.
+[`[Link(name = "symbol")]`](c-interop.md#binding-to-a-different-symbol-name)
+when the names differ), then add the library that defines it with `[Link]` or `-l`.
 
 If the compiler cannot run `clang` at all, the error says
 `Link failed: cannot run clang`. Install clang (on Linux, from your package

@@ -337,6 +337,7 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
             .or_else(|| m.else_arm.as_ref().and_then(|(_, v)| in_expression_types(v, offset))),
         ast::Expression::Is { value, pattern, .. } => in_expression_types(value, offset)
             .or_else(|| pattern.all().into_iter().find_map(|p| p.qualifier.as_ref().and_then(|q| in_type_name(q, offset)))),
+        ast::Expression::NamedArgument { value, .. } => in_expression_types(value, offset),
         ast::Expression::Literal { .. } | ast::Expression::SymbolRef { .. } => None,
     }
 }

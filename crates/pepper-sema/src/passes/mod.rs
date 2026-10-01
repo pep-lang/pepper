@@ -68,6 +68,7 @@ pub mod copies;
 pub mod strip_bodies;
 pub mod check_confinement;
 pub mod interpolation;
+pub mod named_arguments;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -105,6 +106,11 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // `main(args: String[])` becomes a `main()` that passes the arguments.
     step!(entry_point::lower_main_arguments(module));
     step!(check_bindings::check_bindings(module));
+    // Named arguments to calls a name decides, before anything reads
+    // arguments by position.
+    step!(named_arguments::check_attributes(module));
+    step!(check_link_attributes(module));
+    step!(named_arguments::bind_calls(module));
     step!(synthesize_function_types(module));
     step!(resolve_literals(module));
     step!(overloads::name_overloads(module));
@@ -198,6 +204,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(function_references::reference_functions(module));
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
+    step!(named_arguments::check_unbound(module));
     step!(type_arguments::check_type_arguments(module));
     step!(overloads::check_overloads(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
@@ -235,6 +242,13 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_hash_keys::check_hash_keys(module));
     crate::checked::restore_bodies(module);
     Ok(())
+}
+
+/// Report the first extern whose `[Link(...)]` attributes are wrong.
+fn check_link_attributes(module: &Module) {
+    if let Some(error) = module.externs.iter().find_map(|ext| ext.link().err()) {
+        crate::errors::report(error);
+    }
 }
 
 // ── Shared walk helpers ──────────────────────────────────────────────────────
@@ -341,7 +355,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             }
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
-        Expression::Destructure { value, .. } | Expression::Move { value, .. } => walk_expression(value, f),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } | Expression::NamedArgument { value, .. } => walk_expression(value, f),
         Expression::MatchArm(test) => {
             walk_expression(&mut test.subject, f);
             for literal in test.patterns.iter_mut().flat_map(|p| p.literals_mut()) {
@@ -353,7 +367,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(&mut with.subject, f);
             walk_expression(&mut with.body, f);
         }
-        Expression::Subject { .. } | Expression::NoMatch => {}
+        Expression::Subject { .. } | Expression::NoMatch | Expression::DefaultArgument { .. } => {}
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
@@ -470,7 +484,7 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
             }
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => visit_expression(source, f),
-        Expression::Destructure { value, .. } | Expression::Move { value, .. } => visit_expression(value, f),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } | Expression::NamedArgument { value, .. } => visit_expression(value, f),
         Expression::MatchArm(test) => {
             visit_expression(&test.subject, f);
             for literal in test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()) {
@@ -482,7 +496,7 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
             visit_expression(&with.subject, f);
             visit_expression(&with.body, f);
         }
-        Expression::Subject { .. } | Expression::NoMatch => {}
+        Expression::Subject { .. } | Expression::NoMatch | Expression::DefaultArgument { .. } => {}
         Expression::ClosureLiteral(closure) => visit_block(&closure.body, f),
         Expression::MakeClosure { value, .. } => visit_expression(value, f),
         Expression::ToTrait { value, .. } => visit_expression(value, f),
@@ -561,6 +575,7 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         | Expression::StaticCase { .. }
         | Expression::Subject { .. }
         | Expression::NoMatch
+        | Expression::DefaultArgument { .. }
         | Expression::Allocate(_)
         | Expression::FunctionRef { .. }
         | Expression::MethodAddress(_)
@@ -596,7 +611,8 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         Expression::MakeClosure { value, .. }
         | Expression::ToTrait { value, .. }
         | Expression::Destructure { value, .. }
-        | Expression::Move { value, .. } => Children::one(value.as_mut()),
+        | Expression::Move { value, .. }
+        | Expression::NamedArgument { value, .. } => Children::one(value.as_mut()),
     }
 }
 
@@ -621,6 +637,7 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         | Expression::StaticCase { .. }
         | Expression::Subject { .. }
         | Expression::NoMatch
+        | Expression::DefaultArgument { .. }
         | Expression::ClosureLiteral(_) => Children::none(),
         Expression::CaseValue(case) => Children::one(&case.subject),
         Expression::WithSubject(with) => Children::two(&with.subject, &with.body),
@@ -638,7 +655,7 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         Expression::MatchArm(test) => {
             Children::Boxed(Box::new(std::iter::once(&test.subject).chain(test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()))))
         }
-        Expression::Destructure { value, .. } | Expression::Move { value, .. } => Children::one(value),
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } | Expression::NamedArgument { value, .. } => Children::one(value),
         Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => Children::two(a, b),
         Expression::AtomicCmpXchg(_, a, b, c) => Children::three(a, b, c),
         Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter()),

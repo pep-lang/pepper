@@ -511,6 +511,7 @@ macro_rules! scope_walker {
                             self.visit_expression(v);
                         }
                     }
+                    Expression::NamedArgument { value, .. } => self.visit_expression(value),
                     Expression::Is { value, pattern, .. } => {
                         self.visit_expression(value);
                         // Its bindings are bound by the `if` or `while` it

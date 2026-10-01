@@ -818,7 +818,9 @@ fn closure_in_expression(expr: &ast::Expression, offset: usize) -> Option<&ast::
         ast::Expression::Closure(c) => return Some(c),
         ast::Expression::Binary { lhs, rhs, .. } | ast::Expression::Index { lhs, rhs, .. } => vec![lhs, rhs],
         ast::Expression::Unary { operand, .. } => vec![operand],
-        ast::Expression::Cast { expr: value, .. } | ast::Expression::Is { value, .. } => vec![value],
+        ast::Expression::Cast { expr: value, .. }
+        | ast::Expression::Is { value, .. }
+        | ast::Expression::NamedArgument { value, .. } => vec![value],
         ast::Expression::MemberAccess { lhs, .. } => vec![lhs],
         ast::Expression::Ternary { condition, true_expr, false_expr, .. } => vec![condition, true_expr, false_expr],
         ast::Expression::FunctionCall { function, arguments, .. } => std::iter::once(&**function).chain(arguments).collect(),
@@ -876,6 +878,7 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
             entries.iter().find_map(|(k, v)| expr_at(k, offset).or_else(|| expr_at(v, offset))).or(Some(expr))
         }
         ast::Expression::Cast { expr: value, .. } => expr_at(value, offset).or(Some(expr)),
+        ast::Expression::NamedArgument { value, .. } => expr_at(value, offset),
         ast::Expression::Ternary { condition, true_expr, false_expr, .. } => {
             expr_at(condition, offset)
                 .or_else(|| expr_at(true_expr, offset))

@@ -379,6 +379,28 @@ fn is_assign(s: &str) -> bool {
     s.starts_with('=') && !s[1..].starts_with('=')
 }
 
+/// The `name =` that starts a named argument (`resize(width = 800)`), with
+/// the name's span; `None`, consuming nothing, before a positional argument.
+/// Assignment is a statement, so `name =` (not `==`) in an argument list is
+/// always a name.
+fn argument_name(input: &mut &str) -> Result<Option<(String, Span)>> {
+    let before = *input;
+    let start = pos(input);
+    let Ok(name) = identifier(input) else {
+        *input = before;
+        return Ok(None);
+    };
+    let name_span = Span { start, end: pos(input) };
+    ws(input)?;
+    if input.starts_with('=') && !input.starts_with("==") && !input.starts_with("=>") {
+        *input = &input[1..];
+        ws(input)?;
+        return Ok(Some((name, name_span)));
+    }
+    *input = before;
+    Ok(None)
+}
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 
 fn identifier(input: &mut &str) -> Result<String> {
@@ -849,7 +871,7 @@ fn find_mutation(e: &Expression) -> Option<(Span, &'static str)> {
         Expression::Match(m) => find_mutation(&m.value)
             .or_else(|| first(m.arms.iter().map(|arm| &arm.value)))
             .or_else(|| m.else_arm.as_ref().and_then(|(_, value)| find_mutation(value))),
-        Expression::Is { value, .. } => find_mutation(value),
+        Expression::Is { value, .. } | Expression::NamedArgument { value, .. } => find_mutation(value),
         Expression::Literal { .. }
         | Expression::SymbolRef { .. }
         | Expression::TypeLiteral(_)
@@ -2029,9 +2051,16 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             if !input.starts_with(')') {
                 loop {
                     ws(input)?;
+                    let named = argument_name(input)?;
                     let (argument, argument_height) = measured(input, expression)?;
                     height = height.max(argument_height);
-                    args.push(argument);
+                    args.push(match named {
+                        Some((name, name_span)) => {
+                            let span = Span { start: name_span.start, end: argument.span().end };
+                            Expression::NamedArgument { name, name_span, value: Box::new(argument), span }
+                        }
+                        None => argument,
+                    });
                     ws(input)?;
                     if input.starts_with(',') {
                         *input = &input[1..];
@@ -4847,6 +4876,7 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
             ptr_check_expr(false_expr)
         }
         Expression::MemberAccess { lhs, .. } => ptr_check_expr(lhs),
+        Expression::NamedArgument { value, .. } => ptr_check_expr(value),
         Expression::FunctionCall { function, arguments, .. } => {
             ptr_check_expr(function)?;
             arguments.iter().try_for_each(ptr_check_expr)

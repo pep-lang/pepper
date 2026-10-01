@@ -10,6 +10,8 @@ use std::collections::{HashMap, HashSet};
 /// by reference, by every function's scopes. Where a name is declared twice,
 /// the first declaration wins, as in the scans these maps replace.
 struct Tables {
+    /// What calls with named arguments bind to.
+    callees: crate::passes::named_arguments::Callees,
     /// Struct field tables: struct type string → fields.
     structs: Vec<(String, Vec<VariableDef>)>,
     /// Struct type string → its positions in `structs`, in order.
@@ -92,6 +94,7 @@ impl Tables {
             module.functions.iter().filter(|f| f.is_generic_func).map(|f| (f.name.clone(), GenericSignature::of(f))),
         );
         Tables {
+            callees: crate::passes::named_arguments::Callees::of(module),
             struct_index: index_of(&structs),
             struct_names: structs.iter().map(|(ty, _)| ty.clone()).collect(),
             struct_bases: structs.iter().map(|(ty, _)| ty.split('<').next().unwrap_or(ty).to_string()).collect(),
@@ -619,6 +622,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         }
     }
     crate::passes::closures::sync_closures(module);
+    crate::passes::named_arguments::take_warnings(module);
 }
 
 /// Whether `function`'s return type is inferred from its returns: it
@@ -1068,9 +1072,43 @@ fn fill_subjects(expr: &mut Expression, scopes: &Scopes, current: Option<&TypeNa
     });
 }
 
+/// Bind a method call's named arguments once its receiver's type is known,
+/// and report naming the arguments of a call through a function value.
+fn bind_named_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    use crate::passes::named_arguments::{bind_method_call, has_named, report_function_value};
+    match e {
+        Expression::MethodCall { this, method, args, .. } if has_named(args) => {
+            let receiver = type_of_expr(this, scopes, current);
+            if receiver.is_empty() || receiver.contains_auto() {
+                return;
+            }
+            if !scopes.has_method(&receiver, method)
+                && let Some(ty) = scopes.field_type(&receiver, method).filter(|t| t.is_callable())
+            {
+                report_function_value(&ty, args);
+                return;
+            }
+            bind_method_call(e, &receiver, &scopes.tables.callees);
+        }
+        Expression::FunctionCall { function, args, .. } if has_named(args) => {
+            if let Some((_, ty)) = scopes.value_callee(function, current) {
+                report_function_value(&ty, args);
+            }
+        }
+        Expression::Invoke { callee, args } if has_named(args) => {
+            let ty = type_of_expr(callee, scopes, current);
+            if !ty.is_empty() && !ty.contains_auto() {
+                report_function_value(&ty, args);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Option<TypeName>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
+        bind_named_arguments(e, scopes, current);
         resolve_overload(e, scopes, current);
         resolve_method_overload(e, scopes, current);
         infer_type_arguments(e, scopes, current);

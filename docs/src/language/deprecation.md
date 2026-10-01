@@ -56,6 +56,10 @@ Put `[Deprecated(...)]` before any declaration other code refers to by name:
 
 A doc comment goes above the attribute, as it does for any attribute.
 
+To rename a parameter while calls still [name the old
+one](functions.md#named-arguments), put `[Rename("old", "new")]` on the
+function instead (see [Other names for a parameter](functions.md#other-names-for-a-parameter)).
+
 ## Which uses warn
 
 Every use of the declaration warns, at the name you wrote:
