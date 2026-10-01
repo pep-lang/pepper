@@ -580,6 +580,18 @@ fn completion_after_an_enum_name_lists_its_cases() {
     assert_eq!(items[0].kind, Some(CompletionItemKind::ENUM_MEMBER));
 }
 
+/// A name right after a non-ASCII character (`─` in a comment banner) is
+/// found whole; looking for it never slices inside that character.
+#[test]
+fn a_name_after_a_non_ascii_character_does_not_panic() {
+    let text = "#─String.format\n#─Color.";
+    let offset = text.find("String").unwrap();
+    assert_eq!(word_at(text, offset + 1), Some(Span { start: offset, end: offset + "String".len() }));
+    assert_eq!(string_format_at(text, offset + 1), None);
+    let module = parse_source("t.pep", text).unwrap();
+    assert!(enum_cases_before(&module, text, text.len()).is_none());
+}
+
 #[test]
 fn a_match_missing_cases_offers_to_add_them() {
     let (uri, text, program) = load("enum_missing_arms", COLORS, "main.pep");

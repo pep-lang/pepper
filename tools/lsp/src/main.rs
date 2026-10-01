@@ -669,7 +669,9 @@ fn type_argument_at(module: &ast::Module, text: &str, offset: usize) -> Option<S
 /// The span of the identifier around `offset` in `text`.
 fn word_at(text: &str, offset: usize) -> Option<Span> {
     let part = |c: char| c.is_ascii_alphanumeric() || c == '_';
-    let start = text.get(..offset)?.rfind(|c: char| !part(c)).map_or(0, |i| i + 1);
+    // The name's characters are ASCII, but what precedes it may not be
+    // (`# ─x`): trimming keeps `start` on a character boundary.
+    let start = text.get(..offset)?.trim_end_matches(part).len();
     let end = text[offset..].find(|c: char| !part(c)).map_or(text.len(), |i| offset + i);
     (end > start).then_some(Span { start, end })
 }
@@ -1260,8 +1262,7 @@ fn enum_method_signature(module: &SemaModule, name: &str) -> Option<String> {
 fn enum_cases_before(ast: &ast::Module, text: &str, offset: usize) -> Option<Vec<CompletionItem>> {
     let before = text.get(..offset)?;
     let before = before.strip_suffix('.')?;
-    let start = before.rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(0, |i| i + 1);
-    let name = &before[start..];
+    let name = &before[before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_').len()..];
     let body = ast.declarations.iter().find_map(|d| match d {
         ast::Declaration::Struct(s) if s.name == name => s.enumeration.as_ref(),
         _ => None,
