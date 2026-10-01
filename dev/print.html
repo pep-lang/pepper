@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-19a2250f.js";
+            window.path_to_searchindex_js = "searchindex-c69ad534.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e2586fcc.js"></script>
@@ -6992,6 +6992,67 @@ so a chain built from a temporary stays alive while the loop runs, and
 <code>it.map(f)</code> and <code>it.to_array()</code> leave <code>it</code> where it was. They are generic methods (see
 <a href="#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
+<h2 id="reading-files-and-directories"><a class="header" href="#reading-files-and-directories">Reading files and directories</a></h2>
+<p>Input that can fail partway, such as a directory listing or a file read line
+by line, yields a <a href="#error-handling-with-result"><code>Result</code></a> per element: an <code>IoResult&lt;T&gt;</code> from
+the <a href="#the-io-module">io module</a>. Handle each error where it
+happens; there is nothing to check after the loop.</p>
+<pre><code class="language-pepper">import [File, Directory, Path] from io;
+
+main(): int {
+    var dir = Directory.temp().join("pepper-iteration-streams-example");
+    Directory.remove_all(dir);
+    assert(Directory.create_all(dir).is_ok(), "created the folder");
+    assert(File.write_text(dir.join("notes.txt"), "first\nsecond\r\nthird").is_ok(), "wrote notes");
+    assert(File.write_text(dir.join("todo.txt"), "").is_ok(), "wrote todo");
+
+    # A Directory yields its entries one at a time, each an IoResult&lt;DirEntry&gt;.
+    var names = 0;
+    for (var entry in Directory.open(dir).value()) {
+        if (entry.is_err()) {
+            print(entry.error().message);
+            break;
+        }
+        assert(entry.value().is_file, "both entries are files");
+        names += 1;
+    }
+    assert(names == 2, "two entries");
+
+    # A File's lines() yields each line, without its line ending.
+    var file = File.open(dir.join("notes.txt")).value();
+    var lines = Array&lt;String&gt;();
+    for (var line in file.lines()) {
+        lines.append(line.value());
+    }
+    assert(lines.count() == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
+
+    # Adapters work on streams too: number the lines.
+    var again = File.open(dir.join("notes.txt")).value();
+    var last = "";
+    for (var (i, line) in again.lines().enumerate()) {
+        last = $"{i}: {line.value()}";
+    }
+    assert(last == "2: third", "the last line, numbered");
+
+    assert(Directory.remove_all(dir).is_ok(), "cleaned up");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>A <code>Directory</code> is iterable.</strong> <code>for (var entry in dir)</code> reads the listing
+one entry at a time (<code>Directory.iterate()</code> returns a <code>DirectoryIterator</code>),
+without building an array the way <code>dir.entries()</code> does. Each element is an
+<code>IoResult&lt;DirEntry&gt;</code>. A directory that cannot be read yields one error and
+then ends.</li>
+<li><strong><code>file.lines()</code></strong> yields each line of an open <code>File</code> from its current
+position, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code> or <code>\r\n</code>. The last
+line counts even without a line ending. A read error, or a line that is not
+valid UTF-8, is yielded as an error and ends the lines.</li>
+<li><strong>An error ends the sequence</strong>: after an <code>Err</code> element, <code>next()</code> returns
+<code>false</code>.</li>
+<li><strong>Leaving early cleans up.</strong> The listing is closed when the loop ends,
+including by <code>break</code> or <code>return</code>, because the iterator is released then.</li>
+</ul>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
 <p>To make your own type work in a <code>for</code> loop, give it <code>next()</code> and <code>current()</code>
 (an iterator), or give it an <code>iterate()</code> method that returns such a type (an
@@ -7533,6 +7594,9 @@ main(): int {
 </code></pre>
 <p>See <a href="#errors-and-platform-types">io: errors and platform types</a> for the full list
 of kinds and the platform codes each one covers.</p>
+<p>Reading a directory or a file line by line in a <code>for</code> loop yields one
+<code>IoResult</code> per element, so each error is handled where it happens; see
+<a href="#reading-files-and-directories">Iteration</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="optional-values"><a class="header" href="#optional-values">Optional values</a></h1>
 <p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>, written <code>T?</code> for
@@ -17659,6 +17723,28 @@ failure <code>buf</code> keeps its previous contents.</p>
         }
     }
 </code></pre>
+<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
+<pre><code class="language-pepper">lines(): Lines
+</code></pre>
+<p>Returns an iterator over the rest of the file’s lines, read as it
+goes, so a <code>for</code> loop handles a large file without reading it all.</p>
+<p>Each element is an <code>IoResult&lt;String&gt;</code>: a line without its line ending
+(<code>\n</code>, or <code>\r\n</code>). The last line counts even without a final line
+ending, and a file that ends with one has no empty line after it. A
+read error, or a line that is not valid UTF-8 (<code>is_invalid_input()</code>),
+is yielded as an error and ends the lines. Reading starts at the
+current position and moves it in 64 KiB chunks, so the position after
+the loop is not the end of the last line returned.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>Lines</code> positioned before the first line</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
+    for (var line in f.lines()) {
+        print(line.value());
+    }
+</code></pre>
 <h4 id="read_all"><a class="header" href="#read_all">read_all</a></h4>
 <pre><code class="language-pepper">read_all(): IoResult&lt;u8[]&gt;
 </code></pre>
@@ -17912,6 +17998,53 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
         return 1;
     }
 </code></pre>
+<h2 id="lines-1-1"><a class="header" href="#lines-1-1">Lines</a></h2>
+<pre><code class="language-pepper">struct Lines
+</code></pre>
+<p>The iterator <code>File.lines()</code> returns: the lines of a file, read in chunks
+as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.lines</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
+    var it = f.lines();
+    while (it.next()) {
+        var line = it.current();
+    }
+</code></pre>
+<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
+<h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
+<pre><code class="language-pepper">construct(file: File)
+</code></pre>
+<p>Makes an iterator over the lines of <code>file</code>, from its current position.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>file</code> — the open file to read</li>
+</ul>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Reads the next line.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element (a line, or the error that ends the lines), false at the end of the file</li>
+</ul>
+<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;String&gt;
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current line, or the error that ended the lines</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called, or already returned false (“Lines.current() without a line”)</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/directory.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="directory-1"><a class="header" href="#directory-1">Directory</a></h1>
 <p>Source: <code>runtime/io/directory.pep</code></p>
@@ -18188,7 +18321,8 @@ a root, or <code>.</code> if that call fails.</p>
 <p>Reads the directory’s listing now, all at once: every entry except
 <code>.</code> and <code>..</code>, in the order the operating system returns them (not
 sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
-<code>FindFirstFileW</code>/<code>FindNextFileW</code> on Windows.</p>
+<code>FindFirstFileW</code>/<code>FindNextFileW</code> on Windows. To read the entries one
+at a time instead, loop over the <code>Directory</code> itself (see <code>iterate</code>).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the entries, possibly none; an error when the directory cannot be read: <code>is_not_found()</code> when it no longer exists (or, on POSIX, <code>path</code> is empty), <code>is_permission_denied()</code>, or on POSIX <code>is_not_a_directory()</code> when <code>path</code> now names a file</li>
@@ -18201,6 +18335,87 @@ sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
         var n = list.value().count();
     }
 </code></pre>
+<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): DirectoryIterator
+</code></pre>
+<p>Returns an iterator that reads the directory’s listing one entry at a
+time, as <code>for (var entry in dir)</code> does, without building an array.</p>
+<p>Each element is an <code>IoResult&lt;DirEntry&gt;</code>. The listing is opened by the
+first <code>next()</code>, so a directory that cannot be read yields one error
+(the same errors as <code>entries()</code>) and then ends; an error while
+reading also ends it. The entries come in the order the operating
+system returns them, without <code>.</code> and <code>..</code>. The listing is closed
+when it ends, or when the iterator is released, so leaving the loop
+early with <code>break</code> or <code>return</code> closes it too.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>DirectoryIterator</code> positioned before the first entry</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var dir = io.Directory.open(io.Path(".")).value();
+    for (var entry in dir) {
+        if (entry.is_err()) {
+            print(entry.error().message);
+            break;
+        }
+        print(entry.value().name);
+    }
+</code></pre>
+<h2 id="directoryiterator"><a class="header" href="#directoryiterator">DirectoryIterator</a></h2>
+<pre><code class="language-pepper">struct DirectoryIterator
+</code></pre>
+<p>The iterator <code>Directory.iterate()</code> returns, and a <code>for</code> loop over a
+<code>Directory</code> drives: the directory’s entries, read one at a time, each
+as an <code>IoResult&lt;DirEntry&gt;</code>.</p>
+<p>It holds the open listing (a <code>DIR*</code> on POSIX, a find handle on Windows)
+from the first <code>next()</code> until the listing ends, an error ends it, or the
+iterator is released.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Directory.iterate</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var it = io.Directory.open(io.Path(".")).value().iterate();
+    while (it.next()) {
+        var entry = it.current();
+    }
+</code></pre>
+<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
+<h4 id="directoryiterator-1"><a class="header" href="#directoryiterator-1">DirectoryIterator()</a></h4>
+<pre><code class="language-pepper">construct(path: Path)
+</code></pre>
+<p>Makes an iterator over the entries of the directory at <code>path</code>. Nothing
+is opened until the first <code>next()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the directory to list</li>
+</ul>
+<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Reads the next entry, opening the listing on the first call.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element (an entry, or the error that ends the listing), false once the listing has ended</li>
+</ul>
+<h4 id="current-1-4"><a class="header" href="#current-1-4">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;DirEntry&gt;
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry, or the error that ended the listing</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called, or already returned false (“DirectoryIterator.current() without an entry”)</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/address.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="network-addresses"><a class="header" href="#network-addresses">Network addresses</a></h1>
 <p>Network addresses: <code>IpAddress</code> (IPv4 or IPv6), <code>SocketAddress</code> (an IP
@@ -18770,7 +18985,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
+<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18824,7 +19039,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
 <h4 id="is_open-1-1"><a class="header" href="#is_open-1-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -19010,7 +19225,7 @@ Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body fo
 <code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.</p>
-<h3 id="constructor-3-2"><a class="header" href="#constructor-3-2">Constructor</a></h3>
+<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
 <h4 id="sockettransfer-1"><a class="header" href="#sockettransfer-1">SocketTransfer()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -20053,7 +20268,7 @@ returns.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
+<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
 <pre><code class="language-pepper">construct(core: _TaskCore)
 </code></pre>
@@ -20082,7 +20297,7 @@ task can, since it stays on this thread.</p>
 <ul>
 <li>outside <code>run</code></li>
 </ul>
-<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
 <h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
@@ -20333,7 +20548,7 @@ so a long computation can stop early. False outside a task.</p>
 <code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
 and <code>sleep</code> returns early. Code that does not wait is never interrupted.
 Timeouts nest: an inner one cannot extend an outer one.</p>
-<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
+<h3 id="constructor-3-4"><a class="header" href="#constructor-3-4">Constructor</a></h3>
 <h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
 <pre><code class="language-pepper">construct(milliseconds: ulong)
 </code></pre>
@@ -21135,7 +21350,7 @@ change it as soon as it returns.</p>
 <ul>
 <li>the number of queued values</li>
 </ul>
-<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
+<h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): ChannelIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator that receives until the channel is closed and
@@ -21179,7 +21394,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -21465,7 +21680,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
+<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -21479,7 +21694,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
+<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
 <h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -22513,7 +22728,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
+<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -22522,7 +22737,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -22911,7 +23126,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22945,7 +23160,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
+<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
 <h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -23441,7 +23656,7 @@ advances that variable.</p>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
 <h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
-<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next number: <code>start</code> on the first call, then one
@@ -23941,7 +24156,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -23952,7 +24167,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>

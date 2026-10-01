@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-19a2250f.js";
+            window.path_to_searchindex_js = "../searchindex-c69ad534.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -457,7 +457,8 @@ a root, or <code>.</code> if that call fails.</p>
 <p>Reads the directory’s listing now, all at once: every entry except
 <code>.</code> and <code>..</code>, in the order the operating system returns them (not
 sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
-<code>FindFirstFileW</code>/<code>FindNextFileW</code> on Windows.</p>
+<code>FindFirstFileW</code>/<code>FindNextFileW</code> on Windows. To read the entries one
+at a time instead, loop over the <code>Directory</code> itself (see <code>iterate</code>).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the entries, possibly none; an error when the directory cannot be read: <code>is_not_found()</code> when it no longer exists (or, on POSIX, <code>path</code> is empty), <code>is_permission_denied()</code>, or on POSIX <code>is_not_a_directory()</code> when <code>path</code> now names a file</li>
@@ -470,6 +471,87 @@ sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
         var n = list.value().count();
     }
 </code></pre>
+<h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): DirectoryIterator
+</code></pre>
+<p>Returns an iterator that reads the directory’s listing one entry at a
+time, as <code>for (var entry in dir)</code> does, without building an array.</p>
+<p>Each element is an <code>IoResult&lt;DirEntry&gt;</code>. The listing is opened by the
+first <code>next()</code>, so a directory that cannot be read yields one error
+(the same errors as <code>entries()</code>) and then ends; an error while
+reading also ends it. The entries come in the order the operating
+system returns them, without <code>.</code> and <code>..</code>. The listing is closed
+when it ends, or when the iterator is released, so leaving the loop
+early with <code>break</code> or <code>return</code> closes it too.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>DirectoryIterator</code> positioned before the first entry</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var dir = io.Directory.open(io.Path(".")).value();
+    for (var entry in dir) {
+        if (entry.is_err()) {
+            print(entry.error().message);
+            break;
+        }
+        print(entry.value().name);
+    }
+</code></pre>
+<h2 id="directoryiterator"><a class="header" href="#directoryiterator">DirectoryIterator</a></h2>
+<pre><code class="language-pepper">struct DirectoryIterator
+</code></pre>
+<p>The iterator <code>Directory.iterate()</code> returns, and a <code>for</code> loop over a
+<code>Directory</code> drives: the directory’s entries, read one at a time, each
+as an <code>IoResult&lt;DirEntry&gt;</code>.</p>
+<p>It holds the open listing (a <code>DIR*</code> on POSIX, a find handle on Windows)
+from the first <code>next()</code> until the listing ends, an error ends it, or the
+iterator is released.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Directory.iterate</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var it = io.Directory.open(io.Path(".")).value().iterate();
+    while (it.next()) {
+        var entry = it.current();
+    }
+</code></pre>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="directoryiterator-1"><a class="header" href="#directoryiterator-1">DirectoryIterator()</a></h4>
+<pre><code class="language-pepper">construct(path: Path)
+</code></pre>
+<p>Makes an iterator over the entries of the directory at <code>path</code>. Nothing
+is opened until the first <code>next()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the directory to list</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="next"><a class="header" href="#next">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Reads the next entry, opening the listing on the first call.</p>
+<p>Once it returns false it keeps returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element (an entry, or the error that ends the listing), false once the listing has ended</li>
+</ul>
+<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;DirEntry&gt;
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry, or the error that ended the listing</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called, or already returned false (“DirectoryIterator.current() without an entry”)</li>
+</ul>
 
                     </main>
 

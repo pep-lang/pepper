@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-19a2250f.js";
+            window.path_to_searchindex_js = "../searchindex-c69ad534.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -430,6 +430,9 @@ main(): int {
 </code></pre>
 <p>See <a href="../reference/io-types.html">io: errors and platform types</a> for the full list
 of kinds and the platform codes each one covers.</p>
+<p>Reading a directory or a file line by line in a <code>for</code> loop yields one
+<code>IoResult</code> per element, so each error is handled where it happens; see
+<a href="iteration.html#reading-files-and-directories">Iteration</a>.</p>
 
                     </main>
 

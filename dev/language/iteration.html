@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-19a2250f.js";
+            window.path_to_searchindex_js = "../searchindex-c69ad534.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e2586fcc.js"></script>
@@ -505,6 +505,67 @@ so a chain built from a temporary stays alive while the loop runs, and
 <code>it.map(f)</code> and <code>it.to_array()</code> leave <code>it</code> where it was. They are generic methods (see
 <a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
+<h2 id="reading-files-and-directories"><a class="header" href="#reading-files-and-directories">Reading files and directories</a></h2>
+<p>Input that can fail partway, such as a directory listing or a file read line
+by line, yields a <a href="results.html"><code>Result</code></a> per element: an <code>IoResult&lt;T&gt;</code> from
+the <a href="../reference/io-module.html">io module</a>. Handle each error where it
+happens; there is nothing to check after the loop.</p>
+<pre><code class="language-pepper">import [File, Directory, Path] from io;
+
+main(): int {
+    var dir = Directory.temp().join("pepper-iteration-streams-example");
+    Directory.remove_all(dir);
+    assert(Directory.create_all(dir).is_ok(), "created the folder");
+    assert(File.write_text(dir.join("notes.txt"), "first\nsecond\r\nthird").is_ok(), "wrote notes");
+    assert(File.write_text(dir.join("todo.txt"), "").is_ok(), "wrote todo");
+
+    # A Directory yields its entries one at a time, each an IoResult&lt;DirEntry&gt;.
+    var names = 0;
+    for (var entry in Directory.open(dir).value()) {
+        if (entry.is_err()) {
+            print(entry.error().message);
+            break;
+        }
+        assert(entry.value().is_file, "both entries are files");
+        names += 1;
+    }
+    assert(names == 2, "two entries");
+
+    # A File's lines() yields each line, without its line ending.
+    var file = File.open(dir.join("notes.txt")).value();
+    var lines = Array&lt;String&gt;();
+    for (var line in file.lines()) {
+        lines.append(line.value());
+    }
+    assert(lines.count() == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
+
+    # Adapters work on streams too: number the lines.
+    var again = File.open(dir.join("notes.txt")).value();
+    var last = "";
+    for (var (i, line) in again.lines().enumerate()) {
+        last = $"{i}: {line.value()}";
+    }
+    assert(last == "2: third", "the last line, numbered");
+
+    assert(Directory.remove_all(dir).is_ok(), "cleaned up");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>A <code>Directory</code> is iterable.</strong> <code>for (var entry in dir)</code> reads the listing
+one entry at a time (<code>Directory.iterate()</code> returns a <code>DirectoryIterator</code>),
+without building an array the way <code>dir.entries()</code> does. Each element is an
+<code>IoResult&lt;DirEntry&gt;</code>. A directory that cannot be read yields one error and
+then ends.</li>
+<li><strong><code>file.lines()</code></strong> yields each line of an open <code>File</code> from its current
+position, as an <code>IoResult&lt;String&gt;</code> without the <code>\n</code> or <code>\r\n</code>. The last
+line counts even without a line ending. A read error, or a line that is not
+valid UTF-8, is yielded as an error and ends the lines.</li>
+<li><strong>An error ends the sequence</strong>: after an <code>Err</code> element, <code>next()</code> returns
+<code>false</code>.</li>
+<li><strong>Leaving early cleans up.</strong> The listing is closed when the loop ends,
+including by <code>break</code> or <code>return</code>, because the iterator is released then.</li>
+</ul>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
 <p>To make your own type work in a <code>for</code> loop, give it <code>next()</code> and <code>current()</code>
 (an iterator), or give it an <code>iterate()</code> method that returns such a type (an
