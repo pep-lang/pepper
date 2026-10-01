@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -258,7 +258,8 @@ main(): int {
 }
 </code></pre>
 <p>Use a value struct for small types that describe a value rather than an
-identity: a span, a point, a color, an <a href="optionals.html"><code>Optional</code></a>. Keep a
+identity: a span, a point, a color. An enum can be a value too (see
+<a href="enums.html#value-enums">Value enums</a>); <code>Optional</code> and <code>Result</code> are. Keep a
 reference struct for anything that is shared and changed through several
 names, or that is large.</p>
 <h2 id="declaring-one"><a class="header" href="#declaring-one">Declaring one</a></h2>
@@ -343,8 +344,9 @@ any trait value.</p>
 <code>String</code> or a <code>HashMap</code> allocates no iterator.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
-<li><code>[Value]</code> does not apply to enums yet, and <code>Result</code> is still a reference
-struct.</li>
+<li>A <a href="enums.html#value-enums">value enum</a> stores the values of all its cases
+side by side, so it is as large as all of them together; the cases do not
+share storage yet.</li>
 </ul>
 
                     </main>

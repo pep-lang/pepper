@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -185,7 +185,7 @@
 <h1 id="optional"><a class="header" href="#optional">Optional</a></h1>
 <p>Source: <code>runtime/optional.pep</code></p>
 <h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
-<pre><code class="language-pepper">[Value] struct Optional&lt;T&gt;
+<pre><code class="language-pepper">[Value] enum Optional&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
 None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
@@ -195,13 +195,14 @@ value may be missing: the type says so, and reading the value goes through
 every type, including those that have no null, such as <code>int</code>.</p>
 <p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
 optional type that is not given a value starts as None.</p>
-<p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
-for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
-by itself (<code>if (found)</code>).</p>
-<p>An optional is a <a href="../language/value-structs.html">value struct</a>: it is
-stored inline in whatever holds it, with no allocation, and copying one
-gives an independent optional. It is never null, and has no identity, so
-compare optionals with <code>==</code>, not <code>===</code>.</p>
+<p>Build one with the static <code>some</code> or <code>none</code> functions, or with its cases
+(<code>Optional&lt;int&gt;.Some(1)</code>, <code>Optional&lt;int&gt;.None</code>). Test it with <code>is_some()</code>
+or <code>is_none()</code>, as a condition by itself (<code>if (found)</code>), or with <code>match</code>
+and <code>is</code> on its cases (<code>if (found is Some(v))</code>).</p>
+<p>An optional is a <a href="../language/value-structs.html">value enum</a>: it is stored
+inline in whatever holds it, with no allocation, and copying one gives an
+independent optional. It is never null, and has no identity, so compare
+optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
@@ -223,16 +224,22 @@ compare optionals with <code>==</code>, not <code>===</code>.</p>
         return found.value() - 4;   # 0
     }
 </code></pre>
-<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
-<h4 id="optional-2"><a class="header" href="#optional-2">Optional()</a></h4>
-<pre><code class="language-pepper">construct()
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="none"><a class="header" href="#none">None</a></h4>
+<pre><code class="language-pepper">None
 </code></pre>
-<p>Creates a None optional, one holding no value.</p>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var nothing = Optional&lt;int&gt;();   # nothing.is_none() == true
+<p>Holds no value. It is the first case, so an optional that is never
+given a value is None.</p>
+<h4 id="some"><a class="header" href="#some">Some</a></h4>
+<pre><code class="language-pepper">Some(value: T)
 </code></pre>
+<p>Holds a value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value held</li>
+</ul>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
-<h4 id="some"><a class="header" href="#some">some</a></h4>
+<h4 id="some-1"><a class="header" href="#some-1">some</a></h4>
 <pre><code class="language-pepper">static some(value: T): Optional&lt;T&gt;
 </code></pre>
 <p>Returns a Some optional holding <code>value</code>.</p>
@@ -248,11 +255,10 @@ compare optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var answer = Optional&lt;int&gt;.some(42);
 </code></pre>
-<h4 id="none"><a class="header" href="#none">none</a></h4>
+<h4 id="none-1"><a class="header" href="#none-1">none</a></h4>
 <pre><code class="language-pepper">static none(): Optional&lt;T&gt;
 </code></pre>
-<p>Returns a None optional, one holding no value; the same as
-<code>Optional&lt;T&gt;()</code>.</p>
+<p>Returns a None optional, one holding no value.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a None optional</li>

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-91075960.js";
+            window.path_to_searchindex_js = "searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-92b0d50d.js"></script>
@@ -4478,7 +4478,8 @@ main(): int {
 }
 </code></pre>
 <p>Use a value struct for small types that describe a value rather than an
-identity: a span, a point, a color, an <a href="#optional-values"><code>Optional</code></a>. Keep a
+identity: a span, a point, a color. An enum can be a value too (see
+<a href="#value-enums">Value enums</a>); <code>Optional</code> and <code>Result</code> are. Keep a
 reference struct for anything that is shared and changed through several
 names, or that is large.</p>
 <h2 id="declaring-one"><a class="header" href="#declaring-one">Declaring one</a></h2>
@@ -4563,8 +4564,9 @@ any trait value.</p>
 <code>String</code> or a <code>HashMap</code> allocates no iterator.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
-<li><code>[Value]</code> does not apply to enums yet, and <code>Result</code> is still a reference
-struct.</li>
+<li>A <a href="#value-enums">value enum</a> stores the values of all its cases
+side by side, so it is as large as all of them together; the cases do not
+share storage yet.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
@@ -4743,6 +4745,32 @@ thread-safe. It can conform to a trait with
 <li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no
 representation type (<code>: u8</code>), since its values are not integers.</li>
 </ul>
+<h3 id="value-enums"><a class="header" href="#value-enums">Value enums</a></h3>
+<p>An enum whose cases carry values can be marked <code>[Value]</code>, like a
+<a href="#value-structs">value struct</a>. Each value is then stored inline in
+whatever holds it, and copied when assigned, passed or returned, instead of
+being an object. Making one allocates nothing, which suits small enums that
+are made often, such as <a href="#optional-values"><code>Optional</code></a> and
+<a href="#error-handling-with-result"><code>Result</code></a>, which are both value enums.</p>
+<pre><code class="language-pepper">[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+</code></pre>
+<ul>
+<li>A value enum is never null. A slot that is not given a value holds the
+first case, with every value it carries zero, <code>false</code>, or null: an unset
+<code>Shape</code> is <code>Circle(0)</code>.</li>
+<li><code>==</code> compares the cases and their values; <code>===</code>, <code>!==</code> and <code>__null</code> are
+errors.</li>
+<li>Its cases cannot hold the enum itself, since the value would be infinitely
+large. Use a reference enum for lists and trees.</li>
+<li>Everything else a <a href="#what-a-value-struct-cannot-do">value struct cannot do</a>
+applies too, and so does <a href="#value-structs-as-trait-values">boxing</a>
+when it flows into a trait value.</li>
+</ul>
 <h2 id="methods-1"><a class="header" href="#methods-1">Methods</a></h2>
 <p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
 value the method was called on, and a bare call of another method of the
@@ -4887,7 +4915,8 @@ other arms handle every case, is a warning.</li>
 on the enclosing loop or function, as they would inside an <code>if</code>.</li>
 </ul>
 <p>The value is evaluated once, before any arm runs. A <code>match</code> on a null value
-of an enum whose cases carry values panics with <code>match on a null 'Name'</code>.</p>
+of an enum whose cases carry values panics with <code>match on a null 'Name'</code>; a
+<a href="#value-enums">value enum</a> is never null.</p>
 <h2 id="match-expressions-is-and-literal-patterns"><a class="header" href="#match-expressions-is-and-literal-patterns"><code>match</code> expressions, <code>is</code>, and literal patterns</a></h2>
 <pre><code class="language-pepper"># `match` produces a value, `is` tests one case, and a `match` on an
 # integer, character, `bool` or `String` compares with literals.
@@ -7211,9 +7240,12 @@ with <code>is</code> (<code>if (r is Err(e)) { ... }</code>) or <code>is_ok()</c
 <code>is</code> test reads the one it holds, so it cannot pick the wrong one. <code>value()</code>
 and <code>error()</code> panic on the wrong one, so call <code>value()</code> only after checking
 <code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
-<p>A slot of type <code>Result</code> that is never given a value holds null, as for any
-enum whose cases carry values: <code>Result&lt;int&gt;()</code> is an error, since only the
-cases make values.</p>
+<p><code>Result</code> is a <a href="#value-enums">value enum</a>: it is stored inline in
+whatever holds it, so making one allocates nothing, and it is never null. A
+slot of type <code>Result</code> that is never given a value holds its first case,
+<code>Ok</code>, carrying the zero value of <code>TValue</code> (<code>0</code>, or null for a struct), so give
+every result slot a value. <code>Result&lt;int&gt;()</code> is an error, since only the cases
+make values.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
 uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
@@ -7425,9 +7457,14 @@ main(): int {
     # value_or supplies a fallback instead of panicking.
     assert(index_of("pepper", "z").value_or(99) == 99, "fallback for None");
 
-    # Optional&lt;T&gt;() is None, like Optional&lt;T&gt;.none().
-    var nothing = Optional&lt;int&gt;();
-    assert(nothing.is_none(), "Optional() is None");
+    # Optional is an enum with the cases None and Some(value).
+    var nothing = Optional&lt;int&gt;.None;
+    assert(nothing.is_none(), "the None case is None");
+    var first_p = match (index_of("pepper", "p")) {
+        None =&gt; -1,
+        Some(at) =&gt; at as int,
+    };
+    assert(first_p == 0, "match on an optional");
 
     # An optional slot that is not given a value starts as None.
     var later: String?;
@@ -7459,7 +7496,8 @@ var count: int?;   # None
 </thead>
 <tbody>
 <tr><td><code>Optional&lt;T&gt;.some(value)</code></td><td>Creates a Some optional holding <code>value</code>.</td></tr>
-<tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;()</code></td><td>Create a None optional.</td></tr>
+<tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;.None</code></td><td>Create a None optional.</td></tr>
+<tr><td><code>Optional&lt;T&gt;.Some(value)</code></td><td>The case itself: the same as <code>some(value)</code>.</td></tr>
 <tr><td><code>is_some()</code>, <code>is_none()</code></td><td>Report which kind the optional is.</td></tr>
 <tr><td><code>!!</code> (truth test)</td><td>An optional is a condition by itself: <code>if (found)</code> is <code>if (found.is_some())</code>, and <code>!found</code> is <code>found.is_none()</code>.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on a None value</code> if the optional is None.</td></tr>
@@ -7475,7 +7513,15 @@ operator <code>!!</code> (see <a href="#truth-tests-and-conditions">Truth tests<
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
 <a href="#memory-and-reference-counting">Memory and reference counting</a>).</p>
-<p>An optional is a <a href="#value-structs">value struct</a>: it lives inline in the
+<p><code>Optional&lt;T&gt;</code> is an <a href="#enums-and-match">enum</a> with the cases <code>None</code> and
+<code>Some(value)</code>, so <code>match</code> and <code>is</code> work on it too:</p>
+<pre><code class="language-pepper">var shown = match (name) {
+    None =&gt; "nobody",
+    Some(text) =&gt; text,
+};
+if (name is Some(text)) { print(text); }
+</code></pre>
+<p>An optional is a <a href="#value-enums">value enum</a>: it lives inline in the
 variable, field or array element that holds it, so creating one allocates
 nothing, and copying one gives an independent optional. It is never null,
 and has no identity: compare two optionals with <code>==</code>, which compares
@@ -11531,6 +11577,7 @@ the code it replaces:</p>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
+<tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -15364,7 +15411,7 @@ wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("b
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
 </ul>
 <h2 id="result-1"><a class="header" href="#result-1">Result</a></h2>
-<pre><code class="language-pepper">enum Result&lt;TValue, TError=Error&gt;
+<pre><code class="language-pepper">[Value] enum Result&lt;TValue, TError=Error&gt;
 </code></pre>
 <p>The outcome of an operation that can fail: either Ok, holding a <code>TValue</code>,
 or Err, holding a <code>TError</code>, like Rust’s <code>Result&lt;T, E&gt;</code>.</p>
@@ -15520,7 +15567,7 @@ is used.</p>
 <h1 id="optional"><a class="header" href="#optional">Optional</a></h1>
 <p>Source: <code>runtime/optional.pep</code></p>
 <h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
-<pre><code class="language-pepper">[Value] struct Optional&lt;T&gt;
+<pre><code class="language-pepper">[Value] enum Optional&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
 None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
@@ -15530,13 +15577,14 @@ value may be missing: the type says so, and reading the value goes through
 every type, including those that have no null, such as <code>int</code>.</p>
 <p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
 optional type that is not given a value starts as None.</p>
-<p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
-for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
-by itself (<code>if (found)</code>).</p>
-<p>An optional is a <a href="#value-structs">value struct</a>: it is
-stored inline in whatever holds it, with no allocation, and copying one
-gives an independent optional. It is never null, and has no identity, so
-compare optionals with <code>==</code>, not <code>===</code>.</p>
+<p>Build one with the static <code>some</code> or <code>none</code> functions, or with its cases
+(<code>Optional&lt;int&gt;.Some(1)</code>, <code>Optional&lt;int&gt;.None</code>). Test it with <code>is_some()</code>
+or <code>is_none()</code>, as a condition by itself (<code>if (found)</code>), or with <code>match</code>
+and <code>is</code> on its cases (<code>if (found is Some(v))</code>).</p>
+<p>An optional is a <a href="#value-structs">value enum</a>: it is stored
+inline in whatever holds it, with no allocation, and copying one gives an
+independent optional. It is never null, and has no identity, so compare
+optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
@@ -15558,16 +15606,22 @@ compare optionals with <code>==</code>, not <code>===</code>.</p>
         return found.value() - 4;   # 0
     }
 </code></pre>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
-<h4 id="optional-2"><a class="header" href="#optional-2">Optional()</a></h4>
-<pre><code class="language-pepper">construct()
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="none"><a class="header" href="#none">None</a></h4>
+<pre><code class="language-pepper">None
 </code></pre>
-<p>Creates a None optional, one holding no value.</p>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var nothing = Optional&lt;int&gt;();   # nothing.is_none() == true
+<p>Holds no value. It is the first case, so an optional that is never
+given a value is None.</p>
+<h4 id="some"><a class="header" href="#some">Some</a></h4>
+<pre><code class="language-pepper">Some(value: T)
 </code></pre>
+<p>Holds a value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value held</li>
+</ul>
 <h3 id="static-methods-3"><a class="header" href="#static-methods-3">Static methods</a></h3>
-<h4 id="some"><a class="header" href="#some">some</a></h4>
+<h4 id="some-1"><a class="header" href="#some-1">some</a></h4>
 <pre><code class="language-pepper">static some(value: T): Optional&lt;T&gt;
 </code></pre>
 <p>Returns a Some optional holding <code>value</code>.</p>
@@ -15583,11 +15637,10 @@ compare optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var answer = Optional&lt;int&gt;.some(42);
 </code></pre>
-<h4 id="none"><a class="header" href="#none">none</a></h4>
+<h4 id="none-1"><a class="header" href="#none-1">none</a></h4>
 <pre><code class="language-pepper">static none(): Optional&lt;T&gt;
 </code></pre>
-<p>Returns a None optional, one holding no value; the same as
-<code>Optional&lt;T&gt;()</code>.</p>
+<p>Returns a None optional, one holding no value.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a None optional</li>
@@ -15839,7 +15892,7 @@ the <code>EIO</code> of a short write or the <code>EBADF</code> of a closed <cod
         }
     }
 </code></pre>
-<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
 <h4 id="notfound"><a class="header" href="#notfound">NotFound</a></h4>
 <pre><code class="language-pepper">NotFound
 </code></pre>
@@ -15948,7 +16001,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(code: ErrorCode = 0, message: String = "")
 </code></pre>
@@ -16209,7 +16262,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
@@ -16658,7 +16711,7 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.value();
 </code></pre>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -16790,7 +16843,7 @@ reparse point, junctions included, even one that points to a directory.</p>
         }
     }
 </code></pre>
-<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h3 id="cases-3"><a class="header" href="#cases-3">Cases</a></h3>
 <h4 id="file-1"><a class="header" href="#file-1">File</a></h4>
 <pre><code class="language-pepper">File
 </code></pre>
@@ -17636,7 +17689,7 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -17899,7 +17952,7 @@ that maps it are different values.</p>
     print(a.is_v4());         # true
     print(b.to_string());     # 2001:db8::1
 </code></pre>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18274,7 +18327,7 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
         stream.write_all("hello " + peer.to_string());
     }
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19012,7 +19065,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
         return 0;
     }
 </code></pre>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
@@ -19251,7 +19304,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
@@ -19410,7 +19463,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19587,7 +19640,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -20087,7 +20140,7 @@ it.</p>
 </code></pre>
 <p>The I/O backend a runtime waits on sockets with (see
 <code>RuntimeOptions.backend</code>).</p>
-<h3 id="cases-3"><a class="header" href="#cases-3">Cases</a></h3>
+<h3 id="cases-4"><a class="header" href="#cases-4">Cases</a></h3>
 <h4 id="automatic"><a class="header" href="#automatic">Automatic</a></h4>
 <pre><code class="language-pepper">Automatic
 </code></pre>
@@ -20160,7 +20213,7 @@ also waits for it and collects what it wrote.</p>
 </code></pre>
 <p>Where a child’s standard input, output or error goes (see
 <code>Command.stdin</code>, <code>Command.stdout</code> and <code>Command.stderr</code>).</p>
-<h3 id="cases-4"><a class="header" href="#cases-4">Cases</a></h3>
+<h3 id="cases-5"><a class="header" href="#cases-5">Cases</a></h3>
 <h4 id="inherit"><a class="header" href="#inherit">Inherit</a></h4>
 <pre><code class="language-pepper">Inherit
 </code></pre>
@@ -20197,7 +20250,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -20423,7 +20476,7 @@ signal.</p>
     assert(!status.success(), "false fails");
     assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -20689,7 +20742,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -20924,7 +20977,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -21268,7 +21321,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -21431,7 +21484,7 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -21544,7 +21597,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -21783,7 +21836,7 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -21933,7 +21986,7 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22317,7 +22370,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -22431,7 +22484,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23353,7 +23406,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -23686,7 +23739,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>

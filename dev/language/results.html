@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -267,9 +267,12 @@ with <code>is</code> (<code>if (r is Err(e)) { ... }</code>) or <code>is_ok()</c
 <code>is</code> test reads the one it holds, so it cannot pick the wrong one. <code>value()</code>
 and <code>error()</code> panic on the wrong one, so call <code>value()</code> only after checking
 <code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
-<p>A slot of type <code>Result</code> that is never given a value holds null, as for any
-enum whose cases carry values: <code>Result&lt;int&gt;()</code> is an error, since only the
-cases make values.</p>
+<p><code>Result</code> is a <a href="enums.html#value-enums">value enum</a>: it is stored inline in
+whatever holds it, so making one allocates nothing, and it is never null. A
+slot of type <code>Result</code> that is never given a value holds its first case,
+<code>Ok</code>, carrying the zero value of <code>TValue</code> (<code>0</code>, or null for a struct), so give
+every result slot a value. <code>Result&lt;int&gt;()</code> is an error, since only the cases
+make values.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
 uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type

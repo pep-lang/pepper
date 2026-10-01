@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -357,6 +357,32 @@ thread-safe. It can conform to a trait with
 <li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no
 representation type (<code>: u8</code>), since its values are not integers.</li>
 </ul>
+<h3 id="value-enums"><a class="header" href="#value-enums">Value enums</a></h3>
+<p>An enum whose cases carry values can be marked <code>[Value]</code>, like a
+<a href="value-structs.html">value struct</a>. Each value is then stored inline in
+whatever holds it, and copied when assigned, passed or returned, instead of
+being an object. Making one allocates nothing, which suits small enums that
+are made often, such as <a href="optionals.html"><code>Optional</code></a> and
+<a href="results.html"><code>Result</code></a>, which are both value enums.</p>
+<pre><code class="language-pepper">[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+</code></pre>
+<ul>
+<li>A value enum is never null. A slot that is not given a value holds the
+first case, with every value it carries zero, <code>false</code>, or null: an unset
+<code>Shape</code> is <code>Circle(0)</code>.</li>
+<li><code>==</code> compares the cases and their values; <code>===</code>, <code>!==</code> and <code>__null</code> are
+errors.</li>
+<li>Its cases cannot hold the enum itself, since the value would be infinitely
+large. Use a reference enum for lists and trees.</li>
+<li>Everything else a <a href="value-structs.html#what-a-value-struct-cannot-do">value struct cannot do</a>
+applies too, and so does <a href="value-structs.html#value-structs-as-trait-values">boxing</a>
+when it flows into a trait value.</li>
+</ul>
 <h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
 <p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
 value the method was called on, and a bare call of another method of the
@@ -501,7 +527,8 @@ other arms handle every case, is a warning.</li>
 on the enclosing loop or function, as they would inside an <code>if</code>.</li>
 </ul>
 <p>The value is evaluated once, before any arm runs. A <code>match</code> on a null value
-of an enum whose cases carry values panics with <code>match on a null 'Name'</code>.</p>
+of an enum whose cases carry values panics with <code>match on a null 'Name'</code>; a
+<a href="#value-enums">value enum</a> is never null.</p>
 <h2 id="match-expressions-is-and-literal-patterns"><a class="header" href="#match-expressions-is-and-literal-patterns"><code>match</code> expressions, <code>is</code>, and literal patterns</a></h2>
 <pre><code class="language-pepper"># `match` produces a value, `is` tests one case, and a `match` on an
 # integer, character, `bool` or `String` compares with literals.

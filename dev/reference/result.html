@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -209,7 +209,7 @@ wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("b
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
 </ul>
 <h2 id="result-1"><a class="header" href="#result-1">Result</a></h2>
-<pre><code class="language-pepper">enum Result&lt;TValue, TError=Error&gt;
+<pre><code class="language-pepper">[Value] enum Result&lt;TValue, TError=Error&gt;
 </code></pre>
 <p>The outcome of an operation that can fail: either Ok, holding a <code>TValue</code>,
 or Err, holding a <code>TError</code>, like Rust’s <code>Result&lt;T, E&gt;</code>.</p>

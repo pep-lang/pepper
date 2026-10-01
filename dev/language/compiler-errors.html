@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91075960.js";
+            window.path_to_searchindex_js = "../searchindex-00c090a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -306,6 +306,7 @@ the code it replaces:</p>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
 <tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 <tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
+<tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.none()</code> or <code>Optional&lt;T&gt;.None</code></td></tr>
 </tbody>
 </table>
 </div>
