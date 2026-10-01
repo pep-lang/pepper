@@ -505,6 +505,24 @@ first; outside a task, the thread sleeps.
 **Parameters**
 - `milliseconds` — how long to wait
 
+## sleep
+
+```pepper
+sleep(duration: os.Duration)
+```
+
+Waits at least `duration`, the same as `sleep(milliseconds)`. A duration
+that is not a whole number of milliseconds rounds up, so the wait is never
+shorter than asked.
+
+**Parameters**
+- `duration` — how long to wait
+
+**Example**
+```pepper
+    async.sleep(os.Duration.from_seconds(1));
+```
+
 ## is_cancelled
 
 ```pepper

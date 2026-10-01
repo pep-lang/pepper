@@ -50,6 +50,7 @@
 # it also sets a timer for the deadline.
 
 import io;
+import os;
 import "atomic";
 import "cpus";
 import "driver";
@@ -1474,6 +1475,21 @@ export yield_now() {
 ##
 ## @param milliseconds how long to wait
 export sleep(milliseconds: ulong) {
+    _async_task_sleep(milliseconds);
+}
+
+## Waits at least `duration`, the same as `sleep(milliseconds)`. A duration
+## that is not a whole number of milliseconds rounds up, so the wait is never
+## shorter than asked.
+##
+## @param duration how long to wait
+## @example
+##     async.sleep(os.Duration.from_seconds(1));
+export sleep(duration: os.Duration) {
+    var milliseconds = duration.milliseconds();
+    if (os.Duration.from_milliseconds(milliseconds) < duration) {
+        milliseconds = milliseconds + 1;
+    }
     _async_task_sleep(milliseconds);
 }
 

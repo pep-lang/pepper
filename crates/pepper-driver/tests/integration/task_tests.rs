@@ -1259,6 +1259,43 @@ fn task_locals_are_per_task() {
 }
 
 #[test]
+fn sleep_takes_a_duration() {
+    let source = r#"
+import async;
+import os;
+
+main(): int {
+    # Outside a task the thread sleeps; a part millisecond rounds up.
+    var start = os.Instant.now();
+    async.sleep(os.Duration.from_microseconds(2500));
+    assert(start.elapsed() >= os.Duration.from_microseconds(2500), "never shorter than asked");
+
+    # In a task, the shorter sleep finishes first.
+    var order = Array<int>();
+    async.run(() => {
+        var slow = async.Task<void>.spawn_local(() => {
+            async.sleep(os.Duration.from_milliseconds(40));
+            order.append(1);
+        });
+        var fast = async.Task<void>.spawn_local(() => {
+            async.sleep(os.Duration.from_milliseconds(5));
+            order.append(0);
+        });
+        slow.join();
+        fast.join();
+    });
+    assert(order.count() == 2 && order[0] == 0 && order[1] == 1, "shorter sleep first");
+
+    # The millisecond overload still works, and a zero duration returns.
+    async.sleep(1);
+    async.sleep(os.Duration());
+    return 0;
+}
+"#;
+    assert_runs("task_sleep_duration", source);
+}
+
+#[test]
 fn tasks_take_turns_and_free_everything() {
     assert_runs("task_scheduling", SCHEDULING_PROGRAM);
 }

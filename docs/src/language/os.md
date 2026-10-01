@@ -78,6 +78,5 @@ be negative.
 
 - Dates, time zones, and formatting a `SystemTime` as a date are not
   supported yet.
-- `async.sleep` and `async.timeout` still take milliseconds, not a
-  `Duration`.
+- `async.timeout` still takes milliseconds, not a `Duration`.
 - `total_memory()` does not take a container's memory limit into account.

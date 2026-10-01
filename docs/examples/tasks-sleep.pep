@@ -1,4 +1,5 @@
 import async;
+import os;
 
 main(): int {
     var order = Array<int>();
@@ -9,7 +10,7 @@ main(): int {
             var n = i;
             # The later a task starts, the shorter it sleeps.
             tasks.append(async.Task<void>.spawn_local(() => {
-                async.sleep(((3 - n) * 20) as ulong);
+                async.sleep(os.Duration.from_milliseconds(((3 - n) * 20) as ulong));
                 order.append(n);
             }));
             i = i + 1;

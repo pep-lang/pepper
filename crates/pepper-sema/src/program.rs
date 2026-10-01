@@ -240,8 +240,8 @@ impl Program {
         units
     }
 
-    /// The files whose text a unit's generated code can depend on, in index
-    /// order: its own files, every prelude file (visible everywhere), the
+    /// The files whose text a unit's generated code can depend on, in
+    /// namespace order: its own files, every prelude file (visible everywhere), the
     /// files they import or take extensions from, transitively, and every
     /// file that declares a concrete override (`hash<Point>`), since sema
     /// honours an override wherever its generic is instantiated.
@@ -261,7 +261,11 @@ impl Program {
                 stack.extend(scope.extensions.iter().copied());
             }
         }
-        (0..self.files.len()).filter(|&i| seen[i]).collect()
+        // By namespace, not index: the index follows the order this
+        // program loaded the files in, which the key must not depend on.
+        let mut inputs: Vec<usize> = (0..self.files.len()).filter(|&i| seen[i]).collect();
+        inputs.sort_by(|&a, &b| self.files[a].namespace.cmp(&self.files[b].namespace));
+        inputs
     }
 
     /// Which files' extensions each file sees (see [`crate::model::ExtensionScopes`]).

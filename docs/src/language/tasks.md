@@ -85,8 +85,10 @@ calls `body`.
 
 ## Waiting
 
-`async.sleep(milliseconds)` puts a task to sleep and runs the others
-meanwhile, so many tasks can wait at the same time on one thread:
+`async.sleep` puts a task to sleep and runs the others meanwhile, so many
+tasks can wait at the same time on one thread. It takes an `os.Duration`
+(see [The operating system](os.md)), or a number of milliseconds; a duration
+that is not a whole number of milliseconds rounds up:
 
 ```pepper
 {{#include ../../examples/tasks-sleep.pep}}

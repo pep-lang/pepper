@@ -287,12 +287,15 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// else the module's name.
     fn debug_unit_name(&self, module: &SemaModule) -> String {
         use pepper_parser::diagnostic::Sources;
-        let file = self.unit.as_ref().and_then(|filter| {
+        // The unit's first file by name, not by index: the index follows
+        // the order the program loaded its files in, and the unit's code
+        // must not depend on that.
+        let name = self.unit.as_ref().and_then(|filter| {
             let unit = filter.unit?;
-            filter.unit_of_file.iter().position(|&u| u == unit)
+            let files = filter.unit_of_file.iter().enumerate().filter(|&(_, &u)| u == unit);
+            files.filter_map(|(f, _)| module.sources.get(pepper_parser::diagnostic::FileId(f as u32))).map(|(name, _)| name).min()
         });
-        file.and_then(|f| module.sources.get(pepper_parser::diagnostic::FileId(f as u32)))
-            .map(|(name, _)| name.to_string())
+        name.map(|name| name.to_string())
             .unwrap_or_else(|| self.module.get_name().to_string_lossy().into_owned())
     }
 
