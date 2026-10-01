@@ -1060,7 +1060,9 @@ parsed.
   `main`); unowned definitions become `linkonce_odr` in a comdat (no comdat
   on Mach-O), except private helpers other than function objects and
   thunks; `globaldce` drops unused ones; private string constants are
-  renumbered; and `symbol_name` respells every Pepper symbol except `main`
+  put in the order of their first use and numbered in it (code is
+  generated in an order that depends on the rest of the program, so their
+  creation order would make a unit's bitcode depend on it too); and `symbol_name` respells every Pepper symbol except `main`
   and plain member names (`Point.length`): `Array<int>.count` →
   `_PArray_3cint_3e.count`, `helper@io/file` → `_Phelper_40io_2ffile`, and
   a free function or global even when plain (`exit` → `_Pexit`), so no

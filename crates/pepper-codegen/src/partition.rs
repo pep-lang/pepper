@@ -25,7 +25,7 @@
 //! since an instantiation in another object may call them.
 
 use inkwell::module::{Linkage, Module};
-use inkwell::values::GlobalValue;
+use inkwell::values::{AsValueRef, GlobalValue};
 use inkwell::GlobalVisibility;
 use std::collections::{HashMap, HashSet};
 
@@ -78,17 +78,7 @@ pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), 
     module
         .run_passes("globaldce", &machine, inkwell::passes::PassBuilderOptions::create())
         .map_err(|e| format!("cannot finish unit: {}", e.to_string()))?;
-    // Number string constants in order: a constant made for code this unit
-    // does not keep (and removed above) must not shift the names of the rest,
-    // or the unit's bitcode, and so its cache key, would depend on the
-    // program around it.
-    let strings: Vec<GlobalValue<'_>> = module
-        .get_globals()
-        .filter(|g| matches!(g.get_linkage(), Linkage::Private | Linkage::Internal) && name_of(*g).starts_with("str"))
-        .collect();
-    for (i, g) in strings.iter().enumerate() {
-        g.set_name(&format!("__str.{}", i));
-    }
+    order_strings(module);
     for f in module.get_functions() {
         respell(module, f.as_global_value(), &defined);
     }
@@ -96,6 +86,60 @@ pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), 
         respell(module, g, &defined);
     }
     module.verify().map_err(|e| format!("unit does not verify: {}", e.to_string()))
+}
+
+/// Put the unit's string constants in the order of their first use, walking
+/// the functions in module order, and number them in that order. Code is
+/// generated in an order that depends on the program around the unit (an
+/// instantiation's body is generated when a caller first needs it), and a
+/// constant is created with the code that uses it, so the creation order,
+/// and with it the unit's bitcode and cache key, would otherwise depend on
+/// the program too. Constants made for code this unit does not keep were
+/// removed by `globaldce`, so they shift nothing either.
+fn order_strings(module: &Module<'_>) {
+    use inkwell::llvm_sys::core::*;
+    use inkwell::llvm_sys::prelude::LLVMValueRef;
+    let strings: Vec<GlobalValue<'_>> = module
+        .get_globals()
+        .filter(|g| matches!(g.get_linkage(), Linkage::Private | Linkage::Internal) && name_of(*g).starts_with("str"))
+        .collect();
+    let mut position: HashMap<LLVMValueRef, usize> =
+        strings.iter().enumerate().map(|(i, g)| (g.as_value_ref(), i)).collect();
+    let mut order: Vec<usize> = Vec::with_capacity(strings.len());
+    for function in module.get_functions() {
+        for block in function.get_basic_block_iter() {
+            let mut instruction = block.get_first_instruction();
+            while let Some(i) = instruction {
+                for index in 0..i.get_num_operands() {
+                    let operand = unsafe { LLVMGetOperand(i.as_value_ref(), index) };
+                    if let Some(at) = position.remove(&operand) {
+                        order.push(at);
+                    }
+                }
+                instruction = i.get_next_instruction();
+            }
+        }
+    }
+    // Strings only other constants use keep their relative order, last.
+    let mut rest: Vec<usize> = position.into_values().collect();
+    rest.sort_unstable();
+    order.extend(rest);
+    // Re-create each constant at the end of the global list in that order,
+    // so the module lists them in it too, not only names them by it.
+    for (number, &at) in order.iter().enumerate() {
+        let old = strings[at].as_value_ref();
+        unsafe {
+            let name = std::ffi::CString::new(format!("__str.{}", number)).unwrap();
+            let new = LLVMAddGlobal(module.as_mut_ptr(), LLVMGlobalGetValueType(old), name.as_ptr());
+            LLVMSetInitializer(new, LLVMGetInitializer(old));
+            LLVMSetGlobalConstant(new, LLVMIsGlobalConstant(old));
+            LLVMSetLinkage(new, LLVMGetLinkage(old));
+            LLVMSetUnnamedAddress(new, LLVMGetUnnamedAddress(old));
+            LLVMSetAlignment(new, LLVMGetAlignment(old));
+            LLVMReplaceAllUsesWith(old, new);
+            LLVMDeleteGlobal(old);
+        }
+    }
 }
 
 /// Linkage of a shared definition: `linkonce_odr`, except private helpers
