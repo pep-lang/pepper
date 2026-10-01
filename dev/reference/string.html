@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -1041,6 +1041,234 @@ negative.</p>
 <li>a new String, <code>"true"</code> or <code>"false"</code></li>
 </ul>
 <h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: double): String
+</code></pre>
+<p>Returns the shortest decimal text that reads back as exactly <code>value</code>,
+as Swift prints a <code>Double</code>.</p>
+<p>A whole number keeps a <code>.0</code> (<code>"3.0"</code>), so the text always reads as a
+floating-point number. Values from 1e-4 up to 1e16 print in decimal;
+others use an exponent (<code>"1e+16"</code>, <code>"1.5e-05"</code>). The special values are
+<code>"nan"</code>, <code>"inf"</code> and <code>"-inf"</code>. For a fixed number of fraction digits,
+interpolate with a precision instead: <code>$"{value:.2}"</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"0.1"</code> or <code>"-2.5"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(to_string(0.1) == "0.1", "shortest");
+    assert(to_string(3.0) == "3.0", "keeps the point");
+    assert(to_string(1.0e20) == "1e+20", "exponent");
+</code></pre>
+<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: float): String
+</code></pre>
+<p>Returns the shortest decimal text that reads back as exactly <code>value</code> as
+a <code>float</code>, laid out as <code>to_string(double)</code> lays it out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"0.1"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    float third = 1.0 / 3.0;
+    assert(to_string(third) == "0.33333334", "a float's digits");
+</code></pre>
+<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B&gt;(value: (A, B)): String
+</code></pre>
+<p>Returns the text of a pair, <code>"(1, x)"</code>: each element’s <code>to_string</code>
+text, separated by <code>", "</code>, in parentheses. A String element is its text
+without quotes. Tuples of up to eight elements convert this way.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, two)"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(to_string((1, "two")) == "(1, two)", "a pair");
+    var nested = (1, (2.5, true));
+    assert($"{nested}" == "(1, (2.5, true))", "nested");
+</code></pre>
+<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C&gt;(value: (A, B, C)): String
+</code></pre>
+<p>Returns the text of a three-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3)"</code></li>
+</ul>
+<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D&gt;(value: (A, B, C, D)): String
+</code></pre>
+<p>Returns the text of a four-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4)"</code></li>
+</ul>
+<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E&gt;(value: (A, B, C, D, E)): String
+</code></pre>
+<p>Returns the text of a five-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5)"</code></li>
+</ul>
+<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F&gt;(value: (A, B, C, D, E, F)): String
+</code></pre>
+<p>Returns the text of a six-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6)"</code></li>
+</ul>
+<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G&gt;(value: (A, B, C, D, E, F, G)): String
+</code></pre>
+<p>Returns the text of a seven-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+<li><code>G</code> — the type of the seventh element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7)"</code></li>
+</ul>
+<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G, H&gt;(value: (A, B, C, D, E, F, G, H)): String
+</code></pre>
+<p>Returns the text of an eight-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+<li><code>G</code> — the type of the seventh element</li>
+<li><code>H</code> — the type of the eighth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7, 8)"</code></li>
+</ul>
+<h2 id="print"><a class="header" href="#print">print</a></h2>
+<pre><code class="language-pepper">print(text: String)
+</code></pre>
+<p>Writes <code>text</code> and a line break to standard output.</p>
+<p>Any other value prints through <code>print(value)</code>, which writes its
+<code>to_string</code> text. To combine values, interpolate them
+(<code>print($"total: {n}")</code>), or pass a format string and arguments, which
+prints what <code>String.format</code> makes of them (<code>print("{0} of {1}", a, b)</code>).
+A string with no arguments after it is printed as written, braces
+included.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to print</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    print("hello");
+    var n = 3;
+    print($"n = {n}");
+    print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+</code></pre>
+<h2 id="print-1"><a class="header" href="#print-1">print</a></h2>
+<pre><code class="language-pepper">print&lt;T&gt;(value: T)
+</code></pre>
+<p>Writes the text of <code>value</code> and a line break to standard output: what
+<code>$"{value}"</code> would make of it, through <code>to_string</code>. That covers numbers,
+<code>bool</code> (<code>true</code> or <code>false</code>), tuples, and any type with a <code>to_string()</code>
+method or a <code>to_string&lt;T&gt;</code> override; another type is a compile error at
+the argument.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    print(42);          # 42
+    print(0.5);         # 0.5
+    print((1, "two"));  # (1, two)
+</code></pre>
+<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
 </code></pre>
 <p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
@@ -1100,7 +1328,7 @@ it.</p>
     assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h4>
+<h4 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the text of this value.</p>
@@ -1179,7 +1407,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h4>
+<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -233,7 +233,14 @@ ordinary string.</li>
 <p>Each value is converted with <code>to_string(value)</code>, so it can be:</p>
 <ul>
 <li>an integer of any size, signed or unsigned, which gives its decimal text;</li>
+<li>a <code>float</code> or <code>double</code>, which gives the shortest decimal text that reads
+back as the same number, as Swift prints one: <code>0.1</code>, <code>3.0</code> (a whole
+number keeps its <code>.0</code>), <code>-2.5</code>, and an exponent outside 1e-4 to 1e16
+(<code>1e+16</code>, <code>1.5e-05</code>); <code>nan</code>, <code>inf</code> and <code>-inf</code> for the special values;</li>
 <li>a <code>bool</code>, which gives <code>true</code> or <code>false</code>;</li>
+<li>a <a href="tuples.html">tuple</a> of up to eight values that can each be
+interpolated, which gives its elements’ text in parentheses, <code>(1, two)</code>
+(a <code>String</code> element without quotes);</li>
 <li>a <code>String</code>, which is used as it is;</li>
 <li>a value whose type has a <code>to_string(): String</code> method, such as a struct
 that implements the runtime’s <code>ToString</code> trait, or a value of type
@@ -278,19 +285,36 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>Numbers and tuples, with the <a href="#format-specifications">format specifications</a>
+below:</p>
+<pre><code class="language-pepper"># Floating-point numbers and tuples have text too.
+main(): int {
+    var price = 4.5;
+    var ratio = 1.0 / 3.0;
+    assert($"{price}" == "4.5", "the shortest text that reads back");
+    assert($"{2.0}" == "2.0", "a whole number keeps its point");
+    assert($"{1.0e20}" == "1e+20", "large numbers use an exponent");
+    assert($"{ratio:.3}" == "0.333", "a precision rounds to that many digits");
+    assert($"[{price:8.2}]" == "[    4.50]", "numbers align right");
+    assert($"{price:+08.2}" == "+0004.50", "with a sign and zeros");
+
+    var point = (3, "north");
+    assert($"{point}" == "(3, north)", "a tuple's elements in parentheses");
+    print("{0} at {1:.1}", point, price);   # (3, north) at 4.5
+    return 0;
+}
+</code></pre>
 <p><code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement <code>ToString</code>. An enum is
 interpolated through a <code>to_string()</code> method it declares (<code>return name();</code>
 gives the case’s name).</p>
-<p>Floating-point numbers have no text conversion yet, so a <code>float</code> or <code>double</code>
-cannot be interpolated. A plain overload such as <code>to_string(p: Point)</code> is not
-used either: overloads of a name do not merge across files (see
+<p>A plain overload such as <code>to_string(p: Point)</code> is not used: overloads of a name do not merge across files (see
 <a href="overloading.html">overloading</a>), so the runtime cannot see yours. Write a
 <code>to_string&lt;Point&gt;</code> override or a method instead.</p>
 <h2 id="format-specifications"><a class="header" href="#format-specifications">Format specifications</a></h2>
 <p>A <code>:</code> after the expression starts a format specification, which pads the
-value’s text or writes an integer in another base. Its parts, all optional,
-come in this order:</p>
-<pre><code class="language-text">{value:[[fill]align][+][0][width][type]}
+value’s text, writes an integer in another base, or rounds a floating-point
+number to a number of digits. Its parts, all optional, come in this order:</p>
+<pre><code class="language-text">{value:[[fill]align][+][0][width][.precision][type]}
 </code></pre>
 <div class="table-wrapper">
 <table>
@@ -298,11 +322,12 @@ come in this order:</p>
 <tr><th>Part</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>align</code></td><td><code>&lt;</code> left, <code>^</code> centered (leaning left), <code>&gt;</code> right. Without one, integers go to the right and everything else to the left.</td></tr>
+<tr><td><code>align</code></td><td><code>&lt;</code> left, <code>^</code> centered (leaning left), <code>&gt;</code> right. Without one, numbers go to the right and everything else to the left.</td></tr>
 <tr><td><code>fill</code></td><td>The character the padding is made of, written before <code>align</code>; a space by default. It can be any character but <code>{</code>, <code>}</code>, <code>"</code>, <code>'</code> and <code>#</code>.</td></tr>
 <tr><td><code>+</code></td><td>Writes a <code>+</code> before a number that is not negative.</td></tr>
 <tr><td><code>0</code></td><td>Pads with zeros after the sign (<code>-0042</code>). It cannot be combined with <code>align</code>.</td></tr>
 <tr><td><code>width</code></td><td>The least number of characters the text takes; longer text is kept whole.</td></tr>
+<tr><td><code>.precision</code></td><td>For a <code>float</code> or <code>double</code>: the number of digits after the point, rounded to nearest, a tie to the even digit (<code>{pi:.2}</code> is <code>3.14</code>, <code>{0.125:.2}</code> is <code>0.12</code>; <code>.0</code> leaves no point). At most 100.</td></tr>
 <tr><td><code>type</code></td><td><code>d</code> decimal, <code>x</code> and <code>X</code> hexadecimal (lower and upper case), <code>b</code> binary, <code>o</code> octal.</td></tr>
 </tbody>
 </table>
@@ -334,15 +359,16 @@ main(): int {
 <li>Padding (<code>fill</code>, <code>align</code> and <code>width</code>) works for any value that can be
 interpolated: it pads the value’s <code>to_string</code> text, counting characters,
 not bytes.</li>
-<li><code>+</code>, <code>0</code> and a <code>type</code> need an integer (of any size, signed or unsigned).
-Using one with any other value is an error at that character.</li>
+<li><code>+</code> and <code>0</code> need a number: an integer (of any size, signed or unsigned),
+or a <code>float</code> or <code>double</code> given a precision (<code>{x:+08.2}</code>). A <code>type</code> needs
+an integer, and a precision a <code>float</code> or <code>double</code>. Using one with any
+other value is an error at that character, and a precision cannot be
+combined with a <code>type</code>.</li>
 <li>A negative number keeps its sign in every base: <code>{-42:x}</code> is <code>-2a</code>, not
 the bits of its two’s complement.</li>
 <li>The <code>:</code> that starts the specification is the one after the whole
 expression, so a ternary can be formatted as it is:
 <code>{n &gt; 1 ? "many" : "one":&gt;5}</code>.</li>
-<li>There is no precision (<code>.2</code>) yet, since floating-point numbers have no
-text conversion.</li>
 </ul>
 <h2 id="formatting-by-position-stringformat"><a class="header" href="#formatting-by-position-stringformat">Formatting by position: <code>String.format</code></a></h2>
 <p><code>String.format</code> takes a string literal whose braces name its other
@@ -372,6 +398,9 @@ braces name it and in whatever order.</li>
 (<code>"{0} is {0:x} in hex"</code>).</li>
 <li>It is part of the compiler, not a function in the runtime: it cannot be
 stored in a variable or called through a function value.</li>
+<li><a href="functions.html#printing-with-print"><code>print</code></a> takes the same arguments:
+<code>print("{0} of {1}", done, total)</code> prints what <code>String.format</code> makes of
+them.</li>
 </ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A value with no conversion is reported at its braces, with a note at its
@@ -405,12 +434,15 @@ main.pep:3:15: note: to match this '{'
 token inside the braces.</p>
 <p>A format specification’s errors are reported at the character in it that
 is wrong:</p>
-<pre><code class="language-text">main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'
+<pre><code class="language-text">main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][.precision][type]'
     5 |     print($"{n:q}");
       |                ^
 main.pep:5:19: error: cannot format a value of type 'String' as an integer
     5 |     print($"{name:x}");
       |                   ^
+main.pep:6:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one
+    6 |     print($"{n:.2}");
+      |                ^
 </code></pre>
 <p><code>String.format</code> reports an index with no argument at the index, and an
 argument with no index at the argument:</p>

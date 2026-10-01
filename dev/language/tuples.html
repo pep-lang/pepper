@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -392,7 +392,7 @@ yields <code>(key, value)</code> tuples:</p>
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {
-        print((name, count));
+        print($"{name}: {count}");
     }
     return 0;
 }
@@ -403,7 +403,9 @@ would on its own: a type with an <code>==</code> operator (such as <code>String<
 and any other struct compares by identity (the same object).</li>
 <li>A tuple can be a <code>HashMap</code> key or a <code>HashSet</code> member. Its hash combines the
 hashes of its elements, so equal tuples hash equally.</li>
-<li><code>print((1, "two"))</code> prints <code>(1, two)</code>.</li>
+<li><code>to_string((1, "two"))</code> is <code>(1, two)</code>, so a tuple of up to eight
+values that each have a <code>to_string</code> can be
+<a href="interpolation.html">interpolated</a> and printed: <code>print($"{t}")</code>.</li>
 <li><code>copy(t)</code> (see <a href="memory.html#copying-a-value-with-copy">Copying a value</a>) copies each element: a struct
 element as <code>copy</code> would copy it on its own, anything thread-safe as is.</li>
 </ul>

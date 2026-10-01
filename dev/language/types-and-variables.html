@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -297,7 +297,8 @@ main(): int {
 </code></pre>
 <h3 id="booleans"><a class="header" href="#booleans">Booleans</a></h3>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
-<code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
+<code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and its text is <code>true</code> or
+<code>false</code> (<code>$"{flag}"</code>).</p>
 <h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
 <p>A character literal is one ASCII character between single quotes: <code>'a'</code>, <code>'"'</code>,
 <code>'#'</code>. Its value is the character’s code, and its type is <code>byte</code> (<code>u8</code>), the type
@@ -323,7 +324,7 @@ main(): int {
     int digit = bytes[4] - '0';
     assert(digit == 1, "the digit's value");
 
-    print(letter);
+    print($"{letter}");   # 97
     return 0;
 }
 </code></pre>

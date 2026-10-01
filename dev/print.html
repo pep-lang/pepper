@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-457c582c.js";
+            window.path_to_searchindex_js = "searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d3d52046.js"></script>
@@ -264,7 +264,6 @@ cannot be copied yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="#weak-references">weak reference</a> on one side.</li>
-<li><code>print</code> writes each argument on its own line.</li>
 </ul>
 <p>Each chapter of this book says plainly what is and is not supported. When a
 chapter shows a feature, the example was compiled and run to check it.</p>
@@ -344,7 +343,7 @@ main(): int {
 }
 </code></pre>
 <p>Every program starts at <code>main</code>, which takes no arguments and returns an <code>int</code>:
-the process’s exit code, where 0 means success. <code>print</code> writes its argument to
+the process’s exit code, where 0 means success. <code>print</code> writes a value’s text to
 standard output, followed by a new line. Comments start with <code>#</code> and run to
 the end of the line.</p>
 <h2 id="compile-and-run-it"><a class="header" href="#compile-and-run-it">Compile and run it</a></h2>
@@ -535,7 +534,7 @@ main(): int {
     assert(describe(7) == "small", "7 is small");
 
     print(greet("Pepper"));
-    print(sum_to(100));
+    print($"{sum_to(100)}");
     return 0;
 }
 </code></pre>
@@ -553,8 +552,8 @@ See <a href="#functions">Functions</a>.</li>
 always needs braces. Chain conditions with <code>else if</code>. See
 <a href="#control-flow">Control flow</a>.</li>
 <li><code>+=</code> updates a variable in place, and <code>+</code> joins two strings.</li>
-<li><code>print</code> writes one value per line. Called with several arguments, it prints
-each one on its own line.</li>
+<li><code>print</code> writes one value’s text on its own line. Interpolate to combine
+values: <code>print($"total: {sum_to(100)}")</code>.</li>
 </ul>
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <p>A struct groups related data with the methods that act on it:</p>
@@ -805,8 +804,7 @@ main(): int {
     assert(result.is_ok(), "the file we just wrote can be read");
     var counter = result.value();
     for (var word in counter.order) {
-        print(word);
-        print(counter.count(word));
+        print($"{word}: {counter.count(word)}");
     }
     assert(counter.total == 11, "eleven words");
     assert(counter.count("the") == 3, "'the' appears three times");
@@ -986,7 +984,8 @@ main(): int {
 </code></pre>
 <h3 id="booleans"><a class="header" href="#booleans">Booleans</a></h3>
 <p><code>bool</code> holds <code>true</code> or <code>false</code>. Comparisons and the logical operators produce a
-<code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and <code>print(true)</code> prints <code>1</code>.</p>
+<code>bool</code>. In arithmetic a <code>bool</code> counts as 0 or 1, and its text is <code>true</code> or
+<code>false</code> (<code>$"{flag}"</code>).</p>
 <h3 id="characters"><a class="header" href="#characters">Characters</a></h3>
 <p>A character literal is one ASCII character between single quotes: <code>'a'</code>, <code>'"'</code>,
 <code>'#'</code>. Its value is the character’s code, and its type is <code>byte</code> (<code>u8</code>), the type
@@ -1012,7 +1011,7 @@ main(): int {
     int digit = bytes[4] - '0';
     assert(digit == 1, "the digit's value");
 
-    print(letter);
+    print($"{letter}");   # 97
     return 0;
 }
 </code></pre>
@@ -1554,7 +1553,14 @@ ordinary string.</li>
 <p>Each value is converted with <code>to_string(value)</code>, so it can be:</p>
 <ul>
 <li>an integer of any size, signed or unsigned, which gives its decimal text;</li>
+<li>a <code>float</code> or <code>double</code>, which gives the shortest decimal text that reads
+back as the same number, as Swift prints one: <code>0.1</code>, <code>3.0</code> (a whole
+number keeps its <code>.0</code>), <code>-2.5</code>, and an exponent outside 1e-4 to 1e16
+(<code>1e+16</code>, <code>1.5e-05</code>); <code>nan</code>, <code>inf</code> and <code>-inf</code> for the special values;</li>
 <li>a <code>bool</code>, which gives <code>true</code> or <code>false</code>;</li>
+<li>a <a href="#tuples-and-multiple-return-values">tuple</a> of up to eight values that can each be
+interpolated, which gives its elements’ text in parentheses, <code>(1, two)</code>
+(a <code>String</code> element without quotes);</li>
 <li>a <code>String</code>, which is used as it is;</li>
 <li>a value whose type has a <code>to_string(): String</code> method, such as a struct
 that implements the runtime’s <code>ToString</code> trait, or a value of type
@@ -1599,19 +1605,36 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>Numbers and tuples, with the <a href="#format-specifications">format specifications</a>
+below:</p>
+<pre><code class="language-pepper"># Floating-point numbers and tuples have text too.
+main(): int {
+    var price = 4.5;
+    var ratio = 1.0 / 3.0;
+    assert($"{price}" == "4.5", "the shortest text that reads back");
+    assert($"{2.0}" == "2.0", "a whole number keeps its point");
+    assert($"{1.0e20}" == "1e+20", "large numbers use an exponent");
+    assert($"{ratio:.3}" == "0.333", "a precision rounds to that many digits");
+    assert($"[{price:8.2}]" == "[    4.50]", "numbers align right");
+    assert($"{price:+08.2}" == "+0004.50", "with a sign and zeros");
+
+    var point = (3, "north");
+    assert($"{point}" == "(3, north)", "a tuple's elements in parentheses");
+    print("{0} at {1:.1}", point, price);   # (3, north) at 4.5
+    return 0;
+}
+</code></pre>
 <p><code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement <code>ToString</code>. An enum is
 interpolated through a <code>to_string()</code> method it declares (<code>return name();</code>
 gives the case’s name).</p>
-<p>Floating-point numbers have no text conversion yet, so a <code>float</code> or <code>double</code>
-cannot be interpolated. A plain overload such as <code>to_string(p: Point)</code> is not
-used either: overloads of a name do not merge across files (see
+<p>A plain overload such as <code>to_string(p: Point)</code> is not used: overloads of a name do not merge across files (see
 <a href="#overloading-1">overloading</a>), so the runtime cannot see yours. Write a
 <code>to_string&lt;Point&gt;</code> override or a method instead.</p>
 <h2 id="format-specifications"><a class="header" href="#format-specifications">Format specifications</a></h2>
 <p>A <code>:</code> after the expression starts a format specification, which pads the
-value’s text or writes an integer in another base. Its parts, all optional,
-come in this order:</p>
-<pre><code class="language-text">{value:[[fill]align][+][0][width][type]}
+value’s text, writes an integer in another base, or rounds a floating-point
+number to a number of digits. Its parts, all optional, come in this order:</p>
+<pre><code class="language-text">{value:[[fill]align][+][0][width][.precision][type]}
 </code></pre>
 <div class="table-wrapper">
 <table>
@@ -1619,11 +1642,12 @@ come in this order:</p>
 <tr><th>Part</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>align</code></td><td><code>&lt;</code> left, <code>^</code> centered (leaning left), <code>&gt;</code> right. Without one, integers go to the right and everything else to the left.</td></tr>
+<tr><td><code>align</code></td><td><code>&lt;</code> left, <code>^</code> centered (leaning left), <code>&gt;</code> right. Without one, numbers go to the right and everything else to the left.</td></tr>
 <tr><td><code>fill</code></td><td>The character the padding is made of, written before <code>align</code>; a space by default. It can be any character but <code>{</code>, <code>}</code>, <code>"</code>, <code>'</code> and <code>#</code>.</td></tr>
 <tr><td><code>+</code></td><td>Writes a <code>+</code> before a number that is not negative.</td></tr>
 <tr><td><code>0</code></td><td>Pads with zeros after the sign (<code>-0042</code>). It cannot be combined with <code>align</code>.</td></tr>
 <tr><td><code>width</code></td><td>The least number of characters the text takes; longer text is kept whole.</td></tr>
+<tr><td><code>.precision</code></td><td>For a <code>float</code> or <code>double</code>: the number of digits after the point, rounded to nearest, a tie to the even digit (<code>{pi:.2}</code> is <code>3.14</code>, <code>{0.125:.2}</code> is <code>0.12</code>; <code>.0</code> leaves no point). At most 100.</td></tr>
 <tr><td><code>type</code></td><td><code>d</code> decimal, <code>x</code> and <code>X</code> hexadecimal (lower and upper case), <code>b</code> binary, <code>o</code> octal.</td></tr>
 </tbody>
 </table>
@@ -1655,15 +1679,16 @@ main(): int {
 <li>Padding (<code>fill</code>, <code>align</code> and <code>width</code>) works for any value that can be
 interpolated: it pads the value’s <code>to_string</code> text, counting characters,
 not bytes.</li>
-<li><code>+</code>, <code>0</code> and a <code>type</code> need an integer (of any size, signed or unsigned).
-Using one with any other value is an error at that character.</li>
+<li><code>+</code> and <code>0</code> need a number: an integer (of any size, signed or unsigned),
+or a <code>float</code> or <code>double</code> given a precision (<code>{x:+08.2}</code>). A <code>type</code> needs
+an integer, and a precision a <code>float</code> or <code>double</code>. Using one with any
+other value is an error at that character, and a precision cannot be
+combined with a <code>type</code>.</li>
 <li>A negative number keeps its sign in every base: <code>{-42:x}</code> is <code>-2a</code>, not
 the bits of its two’s complement.</li>
 <li>The <code>:</code> that starts the specification is the one after the whole
 expression, so a ternary can be formatted as it is:
 <code>{n &gt; 1 ? "many" : "one":&gt;5}</code>.</li>
-<li>There is no precision (<code>.2</code>) yet, since floating-point numbers have no
-text conversion.</li>
 </ul>
 <h2 id="formatting-by-position-stringformat"><a class="header" href="#formatting-by-position-stringformat">Formatting by position: <code>String.format</code></a></h2>
 <p><code>String.format</code> takes a string literal whose braces name its other
@@ -1693,6 +1718,9 @@ braces name it and in whatever order.</li>
 (<code>"{0} is {0:x} in hex"</code>).</li>
 <li>It is part of the compiler, not a function in the runtime: it cannot be
 stored in a variable or called through a function value.</li>
+<li><a href="#printing-with-print"><code>print</code></a> takes the same arguments:
+<code>print("{0} of {1}", done, total)</code> prints what <code>String.format</code> makes of
+them.</li>
 </ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A value with no conversion is reported at its braces, with a note at its
@@ -1726,12 +1754,15 @@ main.pep:3:15: note: to match this '{'
 token inside the braces.</p>
 <p>A format specification’s errors are reported at the character in it that
 is wrong:</p>
-<pre><code class="language-text">main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'
+<pre><code class="language-text">main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][.precision][type]'
     5 |     print($"{n:q}");
       |                ^
 main.pep:5:19: error: cannot format a value of type 'String' as an integer
     5 |     print($"{name:x}");
       |                   ^
+main.pep:6:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one
+    6 |     print($"{n:.2}");
+      |                ^
 </code></pre>
 <p><code>String.format</code> reports an index with no argument at the index, and an
 argument with no index at the argument:</p>
@@ -2106,7 +2137,7 @@ void log_c(String message) { print(message); }
     if n &lt;= 0 {
         return;
     }
-    print(n);
+    print($"{n}");
 }
 </code></pre>
 <p>A call to such a function has no value, so it cannot be stored, passed,
@@ -2190,28 +2221,41 @@ and each call picks the best fit for its arguments. See
 <p>A function can take type parameters in angle brackets after its name, such as
 <code>first&lt;T&gt;(items: T[]): T</code>. <a href="#generics">Generics</a> covers them.</p>
 <h2 id="printing-with-print"><a class="header" href="#printing-with-print">Printing with <code>print</code></a></h2>
-<p><code>print</code> is a built-in function that writes its arguments to standard output,
-each on its own line. It accepts any number of arguments, and each one can be a
-<code>String</code>, an integer, a <code>bool</code> (printed as <code>1</code> or <code>0</code>), a floating-point
-number, or a <a href="#tuples-and-multiple-return-values">tuple</a> of these (printed as <code>(1, two)</code>).</p>
-<pre><code class="language-pepper"># The print builtin writes each argument on its own line.
+<p><code>print(value)</code> writes a value’s text and a line break to standard output:
+what <a href="#which-values-can-be-interpolated">interpolating</a> it,
+<code>$"{value}"</code>, would make. That covers a <code>String</code>, numbers, <code>bool</code> (<code>true</code> or
+<code>false</code>), tuples, and any type with a <code>to_string()</code>. To print several values
+on one line, interpolate them (<code>print($"total: {n}")</code>), or pass a format
+string and its arguments, which prints what
+<a href="#formatting-by-position-stringformat"><code>String.format</code></a> makes
+of them (<code>print("{0} of {1}", done, total)</code>).</p>
+<pre><code class="language-pepper"># print writes a value's text and a line break.
 main(): int {
-    print("Hello, world!");     # a String
-    print(42);                  # an integer
-    print(true);                # a bool prints as 1 or 0
+    print("Hello, world!");
+    print(42);                            # any value with a text form
+    print((1.5, true));                   # (1.5, true)
     var name = "Pepper";
-    print("Hi, " + name, 3 + 4); # two lines: "Hi, Pepper" and "7"
+    var count = 42;
+    print($"{name} has {count} items");   # interpolate other values
+    print("{0} + {1} = {2}", 3, 4, 3 + 4); # or format them: "3 + 4 = 7"
+    print("{braces} alone print as written");
     return 0;
 }
 </code></pre>
-<p>To print several values on one line, build a <code>String</code> first, with an
-<a href="#string-interpolation">interpolated string</a> (<code>print($"line {n}")</code>) or <code>+</code>
-(<code>print("line " + to_string(n))</code>).</p>
+<ul>
+<li>With a string literal and <strong>no other arguments</strong>, the text prints as
+written: its braces are not a format.</li>
+<li>A value with no text form is an error at the argument:</li>
+</ul>
+<pre><code class="language-text">main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload
+    5 |     print(f);
+      |           ^
+</code></pre>
 <p><code>print</code> buffers its output. Writing to standard output through
 <code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
 in the order the program wrote it, even when standard output is a pipe.</p>
-<p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
-<code>print(0.5)</code> prints <code>0.500000</code>.</p>
+<p>A <code>float</code> or <code>double</code> prints its shortest exact text (<code>print(0.5)</code> prints
+<code>0.5</code>), and a tuple its elements in parentheses (<code>(1, two)</code>).</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
 <code>panic(message)</code>, which always stops it. Each is
 <a href="#overloading-1">overloaded</a>: the message may be a <code>String</code>, built at run time
@@ -2463,7 +2507,7 @@ yields <code>(key, value)</code> tuples:</p>
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {
-        print((name, count));
+        print($"{name}: {count}");
     }
     return 0;
 }
@@ -2474,7 +2518,9 @@ would on its own: a type with an <code>==</code> operator (such as <code>String<
 and any other struct compares by identity (the same object).</li>
 <li>A tuple can be a <code>HashMap</code> key or a <code>HashSet</code> member. Its hash combines the
 hashes of its elements, so equal tuples hash equally.</li>
-<li><code>print((1, "two"))</code> prints <code>(1, two)</code>.</li>
+<li><code>to_string((1, "two"))</code> is <code>(1, two)</code>, so a tuple of up to eight
+values that each have a <code>to_string</code> can be
+<a href="#string-interpolation">interpolated</a> and printed: <code>print($"{t}")</code>.</li>
 <li><code>copy(t)</code> (see <a href="#copying-a-value-with-copy">Copying a value</a>) copies each element: a struct
 element as <code>copy</code> would copy it on its own, anything thread-safe as is.</li>
 </ul>
@@ -3297,7 +3343,12 @@ argument, the conversion has a rank, best first:</p>
 </table>
 </div>
 <p>One viable member is <strong>better</strong> than another when none of its arguments
-ranks worse and at least one ranks better, as in C++. The call picks the
+ranks worse and at least one ranks better, as in C++. Between two members
+whose arguments rank the same, a non-generic one is better than a generic
+one, and of two generic ones the <strong>more specialized</strong> is better: the one
+whose parameter types the other’s could take but not the reverse. So
+<code>describe&lt;A, B&gt;(pair: (A, B))</code> takes a tuple argument over
+<code>describe&lt;T&gt;(value: T)</code>, which takes anything else. The call picks the
 member that is better than every other viable one. When there is none, the
 call is an error that lists the candidates:</p>
 <pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
@@ -8634,7 +8685,7 @@ main(): int {
     var next = Array&lt;String&gt;();
     next.append("third");
     var old = log.replace(move(next));
-    print(old.count());          # 2
+    print($"{old.count()}");     # 2
     print(old[1]);               # second
     return 0;
 }
@@ -10560,7 +10611,7 @@ process_id(): long {
 
 main(): int {
     var id = process_id();
-    print(id);
+    print($"process {id}");
     assert(id &gt; 0, "a running process has a positive id");
     return 0;
 }
@@ -11416,7 +11467,7 @@ prints it too).</p>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
 declaration or statement that owns it, and <code>else</code> goes between the braces:</p>
 <pre><code class="language-pepper">if count &gt; 0 {
-    print(count);
+    print($"{count}");
 } else {
     print("none");
 }
@@ -12494,6 +12545,234 @@ negative.</p>
 <li>a new String, <code>"true"</code> or <code>"false"</code></li>
 </ul>
 <h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: double): String
+</code></pre>
+<p>Returns the shortest decimal text that reads back as exactly <code>value</code>,
+as Swift prints a <code>Double</code>.</p>
+<p>A whole number keeps a <code>.0</code> (<code>"3.0"</code>), so the text always reads as a
+floating-point number. Values from 1e-4 up to 1e16 print in decimal;
+others use an exponent (<code>"1e+16"</code>, <code>"1.5e-05"</code>). The special values are
+<code>"nan"</code>, <code>"inf"</code> and <code>"-inf"</code>. For a fixed number of fraction digits,
+interpolate with a precision instead: <code>$"{value:.2}"</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"0.1"</code> or <code>"-2.5"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(to_string(0.1) == "0.1", "shortest");
+    assert(to_string(3.0) == "3.0", "keeps the point");
+    assert(to_string(1.0e20) == "1e+20", "exponent");
+</code></pre>
+<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: float): String
+</code></pre>
+<p>Returns the shortest decimal text that reads back as exactly <code>value</code> as
+a <code>float</code>, laid out as <code>to_string(double)</code> lays it out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"0.1"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    float third = 1.0 / 3.0;
+    assert(to_string(third) == "0.33333334", "a float's digits");
+</code></pre>
+<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B&gt;(value: (A, B)): String
+</code></pre>
+<p>Returns the text of a pair, <code>"(1, x)"</code>: each element’s <code>to_string</code>
+text, separated by <code>", "</code>, in parentheses. A String element is its text
+without quotes. Tuples of up to eight elements convert this way.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, two)"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(to_string((1, "two")) == "(1, two)", "a pair");
+    var nested = (1, (2.5, true));
+    assert($"{nested}" == "(1, (2.5, true))", "nested");
+</code></pre>
+<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C&gt;(value: (A, B, C)): String
+</code></pre>
+<p>Returns the text of a three-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3)"</code></li>
+</ul>
+<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D&gt;(value: (A, B, C, D)): String
+</code></pre>
+<p>Returns the text of a four-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4)"</code></li>
+</ul>
+<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E&gt;(value: (A, B, C, D, E)): String
+</code></pre>
+<p>Returns the text of a five-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5)"</code></li>
+</ul>
+<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F&gt;(value: (A, B, C, D, E, F)): String
+</code></pre>
+<p>Returns the text of a six-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6)"</code></li>
+</ul>
+<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G&gt;(value: (A, B, C, D, E, F, G)): String
+</code></pre>
+<p>Returns the text of a seven-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+<li><code>G</code> — the type of the seventh element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7)"</code></li>
+</ul>
+<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G, H&gt;(value: (A, B, C, D, E, F, G, H)): String
+</code></pre>
+<p>Returns the text of an eight-element tuple, as the pair overload does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the type of the first element</li>
+<li><code>B</code> — the type of the second element</li>
+<li><code>C</code> — the type of the third element</li>
+<li><code>D</code> — the type of the fourth element</li>
+<li><code>E</code> — the type of the fifth element</li>
+<li><code>F</code> — the type of the sixth element</li>
+<li><code>G</code> — the type of the seventh element</li>
+<li><code>H</code> — the type of the eighth element</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the tuple to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7, 8)"</code></li>
+</ul>
+<h2 id="print"><a class="header" href="#print">print</a></h2>
+<pre><code class="language-pepper">print(text: String)
+</code></pre>
+<p>Writes <code>text</code> and a line break to standard output.</p>
+<p>Any other value prints through <code>print(value)</code>, which writes its
+<code>to_string</code> text. To combine values, interpolate them
+(<code>print($"total: {n}")</code>), or pass a format string and arguments, which
+prints what <code>String.format</code> makes of them (<code>print("{0} of {1}", a, b)</code>).
+A string with no arguments after it is printed as written, braces
+included.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to print</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    print("hello");
+    var n = 3;
+    print($"n = {n}");
+    print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+</code></pre>
+<h2 id="print-1"><a class="header" href="#print-1">print</a></h2>
+<pre><code class="language-pepper">print&lt;T&gt;(value: T)
+</code></pre>
+<p>Writes the text of <code>value</code> and a line break to standard output: what
+<code>$"{value}"</code> would make of it, through <code>to_string</code>. That covers numbers,
+<code>bool</code> (<code>true</code> or <code>false</code>), tuples, and any type with a <code>to_string()</code>
+method or a <code>to_string&lt;T&gt;</code> override; another type is a compile error at
+the argument.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to print</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    print(42);          # 42
+    print(0.5);         # 0.5
+    print((1, "two"));  # (1, two)
+</code></pre>
+<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
 </code></pre>
 <p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
@@ -12553,7 +12832,7 @@ it.</p>
     assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
 <h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
-<h4 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h4>
+<h4 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the text of this value.</p>
@@ -12632,7 +12911,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h4>
+<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
@@ -15074,7 +15353,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
 </ul>
 <h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
-<h4 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h4>
+<h4 id="to_string-22"><a class="header" href="#to_string-22">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the path’s text, the same String the Path holds, not a copy.</p>
@@ -16702,7 +16981,7 @@ IPv6.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
 </code></pre>
-<h4 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h4>
+<h4 id="to_string-23"><a class="header" href="#to_string-23">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the address as text: dotted decimal for IPv4, the RFC 5952
@@ -21503,7 +21782,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h4>
+<h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a

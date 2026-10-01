@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -272,7 +272,12 @@ argument, the conversion has a rank, best first:</p>
 </table>
 </div>
 <p>One viable member is <strong>better</strong> than another when none of its arguments
-ranks worse and at least one ranks better, as in C++. The call picks the
+ranks worse and at least one ranks better, as in C++. Between two members
+whose arguments rank the same, a non-generic one is better than a generic
+one, and of two generic ones the <strong>more specialized</strong> is better: the one
+whose parameter types the other’s could take but not the reverse. So
+<code>describe&lt;A, B&gt;(pair: (A, B))</code> takes a tuple argument over
+<code>describe&lt;T&gt;(value: T)</code>, which takes anything else. The call picks the
 member that is better than every other viable one. When there is none, the
 call is an error that lists the candidates:</p>
 <pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -281,7 +281,7 @@ void log_c(String message) { print(message); }
     if n &lt;= 0 {
         return;
     }
-    print(n);
+    print($"{n}");
 }
 </code></pre>
 <p>A call to such a function has no value, so it cannot be stored, passed,
@@ -365,28 +365,41 @@ and each call picks the best fit for its arguments. See
 <p>A function can take type parameters in angle brackets after its name, such as
 <code>first&lt;T&gt;(items: T[]): T</code>. <a href="generics.html">Generics</a> covers them.</p>
 <h2 id="printing-with-print"><a class="header" href="#printing-with-print">Printing with <code>print</code></a></h2>
-<p><code>print</code> is a built-in function that writes its arguments to standard output,
-each on its own line. It accepts any number of arguments, and each one can be a
-<code>String</code>, an integer, a <code>bool</code> (printed as <code>1</code> or <code>0</code>), a floating-point
-number, or a <a href="tuples.html">tuple</a> of these (printed as <code>(1, two)</code>).</p>
-<pre><code class="language-pepper"># The print builtin writes each argument on its own line.
+<p><code>print(value)</code> writes a value’s text and a line break to standard output:
+what <a href="interpolation.html#which-values-can-be-interpolated">interpolating</a> it,
+<code>$"{value}"</code>, would make. That covers a <code>String</code>, numbers, <code>bool</code> (<code>true</code> or
+<code>false</code>), tuples, and any type with a <code>to_string()</code>. To print several values
+on one line, interpolate them (<code>print($"total: {n}")</code>), or pass a format
+string and its arguments, which prints what
+<a href="interpolation.html#formatting-by-position-stringformat"><code>String.format</code></a> makes
+of them (<code>print("{0} of {1}", done, total)</code>).</p>
+<pre><code class="language-pepper"># print writes a value's text and a line break.
 main(): int {
-    print("Hello, world!");     # a String
-    print(42);                  # an integer
-    print(true);                # a bool prints as 1 or 0
+    print("Hello, world!");
+    print(42);                            # any value with a text form
+    print((1.5, true));                   # (1.5, true)
     var name = "Pepper";
-    print("Hi, " + name, 3 + 4); # two lines: "Hi, Pepper" and "7"
+    var count = 42;
+    print($"{name} has {count} items");   # interpolate other values
+    print("{0} + {1} = {2}", 3, 4, 3 + 4); # or format them: "3 + 4 = 7"
+    print("{braces} alone print as written");
     return 0;
 }
 </code></pre>
-<p>To print several values on one line, build a <code>String</code> first, with an
-<a href="interpolation.html">interpolated string</a> (<code>print($"line {n}")</code>) or <code>+</code>
-(<code>print("line " + to_string(n))</code>).</p>
+<ul>
+<li>With a string literal and <strong>no other arguments</strong>, the text prints as
+written: its braces are not a format.</li>
+<li>A value with no text form is an error at the argument:</li>
+</ul>
+<pre><code class="language-text">main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload
+    5 |     print(f);
+      |           ^
+</code></pre>
 <p><code>print</code> buffers its output. Writing to standard output through
 <code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
 in the order the program wrote it, even when standard output is a pipe.</p>
-<p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
-<code>print(0.5)</code> prints <code>0.500000</code>.</p>
+<p>A <code>float</code> or <code>double</code> prints its shortest exact text (<code>print(0.5)</code> prints
+<code>0.5</code>), and a tuple its elements in parentheses (<code>(1, two)</code>).</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
 <code>panic(message)</code>, which always stops it. Each is
 <a href="overloading.html">overloaded</a>: the message may be a <code>String</code>, built at run time

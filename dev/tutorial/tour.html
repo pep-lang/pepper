@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-457c582c.js";
+            window.path_to_searchindex_js = "../searchindex-32115d7f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d3d52046.js"></script>
@@ -240,7 +240,7 @@ main(): int {
     assert(describe(7) == "small", "7 is small");
 
     print(greet("Pepper"));
-    print(sum_to(100));
+    print($"{sum_to(100)}");
     return 0;
 }
 </code></pre>
@@ -258,8 +258,8 @@ See <a href="../language/functions.html">Functions</a>.</li>
 always needs braces. Chain conditions with <code>else if</code>. See
 <a href="../language/control-flow.html">Control flow</a>.</li>
 <li><code>+=</code> updates a variable in place, and <code>+</code> joins two strings.</li>
-<li><code>print</code> writes one value per line. Called with several arguments, it prints
-each one on its own line.</li>
+<li><code>print</code> writes one value’s text on its own line. Interpolate to combine
+values: <code>print($"total: {sum_to(100)}")</code>.</li>
 </ul>
 <h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
 <p>A struct groups related data with the methods that act on it:</p>
@@ -510,8 +510,7 @@ main(): int {
     assert(result.is_ok(), "the file we just wrote can be read");
     var counter = result.value();
     for (var word in counter.order) {
-        print(word);
-        print(counter.count(word));
+        print($"{word}: {counter.count(word)}");
     }
     assert(counter.total == 11, "eleven words");
     assert(counter.count("the") == 3, "'the' appears three times");
