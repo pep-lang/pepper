@@ -141,6 +141,21 @@ fn the_runtime_unit_is_shared_between_programs() {
 }
 
 #[test]
+fn a_module_unit_is_the_same_whichever_program_built_it_first() {
+    // Both programs use `text/ascii`, whose code includes `Array<u8>`'s
+    // methods. Its string constants once followed the order the program
+    // generated bodies in, so the second build's verification failed.
+    for (first, second) in [("text-encodings", "http-basics"), ("http-basics", "text-encodings")] {
+        let dir = scratch(&format!("module_unit_{}", first.replace('-', "_")));
+        let cache = dir.join("cache");
+        build(first, &cache, &dir.join("a"));
+        let objects = build(second, &cache, &dir.join("b"));
+        assert_eq!(outcome(&objects, "text/ascii"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
 fn a_record_that_does_not_match_is_a_miss() {
     let dir = scratch("stale");
     let cache = dir.join("cache");
