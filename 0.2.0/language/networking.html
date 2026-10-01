@@ -1,0 +1,549 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Networking - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-6e3ed46d.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/networking.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
+<p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket
+addresses, and host name lookup; the <code>tls</code> module encrypts TCP connections,
+and the <a href="http.html"><code>http</code></a> module speaks HTTP over them.
+In a plain program every call blocks the calling thread until it completes,
+like <code>File</code>. To serve several connections at once, give each
+one its own <a href="threads.html">thread</a>, or its own <a href="tasks.html#sockets">task</a>: in a
+task, a call that has to wait parks only that task.</p>
+<h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
+<p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
+address and a port:</p>
+<pre><code class="language-pepper">import io;
+
+main(): int {
+    var home = io.IpAddress.v4(127, 0, 0, 1);
+    assert(home.is_loopback(), "127.0.0.1 is loopback");
+
+    # Text is read strictly and printed in one canonical form.
+    var six = io.IpAddress.parse("2001:DB8:0:0:0:0:0:1").value();
+    assert(six.to_string() == "2001:db8::1", "IPv6 prints compressed and lowercase");
+    assert(io.IpAddress.parse("256.1.1.1").error().is_invalid_input(), "256 is out of range");
+
+    var service = io.SocketAddress.parse("[::1]:8080").value();
+    assert(service.is_v6() &amp;&amp; service.port() == 8080, "IPv6 with a port");
+    assert(service.to_string() == "[::1]:8080", "brackets around IPv6");
+
+    # A host name goes to the system resolver; an IP address is used as is.
+    var local = io.resolve("localhost", 80).value();
+    assert(local.count() &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>IpAddress.v4(a, b, c, d)</code> and <code>IpAddress.v6(a, ..., h)</code> build an address
+from its bytes or its eight 16-bit groups. <code>loopback_v4()</code>,
+<code>loopback_v6()</code>, <code>unspecified_v4()</code> (<code>0.0.0.0</code>) and <code>unspecified_v6()</code>
+(<code>::</code>) are the well-known ones. <code>IpAddress()</code> is <code>0.0.0.0</code>.</li>
+<li><code>IpAddress.parse</code> reads dotted decimal IPv4 and the RFC 4291 text form of
+IPv6, and <code>to_string()</code> prints the RFC 5952 form: lowercase,
+zeros compressed, <code>::ffff:1.2.3.4</code> for an IPv4-mapped address. Parsing and
+printing are the same on every platform.</li>
+<li><code>SocketAddress(address, port)</code> or <code>SocketAddress.parse("1.2.3.4:80")</code>
+make a socket address. IPv6 takes brackets: <code>[::1]:80</code>.</li>
+<li><code>resolve(host, port)</code> looks a host name up with the system resolver (the
+hosts file and DNS) and returns every address it has, with <code>port</code> attached.
+An IP address is returned as is. A name with no address fails with
+<code>is_not_found()</code>.</li>
+</ul>
+<h2 id="tcp"><a class="header" href="#tcp">TCP</a></h2>
+<p>A <code>TcpListener</code> waits for connections. Each <code>TcpStream</code> is one connection:</p>
+<pre><code class="language-pepper">import io;
+
+# A server and a client on this machine, taking turns on one thread: the
+# system completes a connection before the server accepts it.
+main(): int {
+    # Port 0 asks the system for any free port.
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+    var address = listener.local_address().value();
+
+    var client = io.TcpStream.connect(address).value();
+    var (server, peer) = listener.accept().value();
+    assert(peer == client.local_address().value(), "accept reports who connected");
+
+    # The client sends a request and closes its sending side.
+    assert(client.write_string("ping").is_ok(), "send the request");
+    client.shutdown_write();
+
+    # The server reads until the client is done: read returns 0 at the end.
+    var request = Array&lt;u8&gt;();
+    while (server.read(request, 4096).value() &gt; 0) {
+    }
+    assert(request.count() == 4, "the whole request arrived");
+
+    # It answers, and the client reads exactly the bytes it expects.
+    server.write_string("pong");
+    var reply = Array&lt;u8&gt;();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>TcpListener.bind(address)</code> listens on a local address. Port 0 lets the
+system pick a free port, and <code>local_address()</code> says which one it picked.
+<code>accept()</code> waits for the next connection and returns the stream and the
+peer’s address as a <a href="tuples.html">tuple</a>.</li>
+<li><code>TcpStream.connect(address)</code> connects to an address.
+<code>TcpStream.connect_host(host, port)</code> resolves a name and tries each of its
+addresses in turn.</li>
+<li><code>read(buffer, max)</code> waits until some data arrives, then appends up to <code>max</code>
+bytes of it to <code>buffer</code>, the same way <code>File.read</code> does. It returns 0 once
+the peer has closed its side. <code>read_exact(buffer, count)</code> loops until
+<code>count</code> bytes have arrived.</li>
+<li><code>write(data)</code> sends what the system will take in one call.
+<code>write_all(data)</code> and <code>write_string(text)</code> loop until everything is sent.</li>
+<li><code>shutdown_write()</code> tells the peer that nothing more is coming, while this
+side can still read.</li>
+<li><code>set_no_delay(true)</code> sends small writes immediately instead of combining
+them.</li>
+<li><code>local_address()</code> and <code>peer_address()</code> return the two ends of the
+connection.</li>
+</ul>
+<h2 id="udp"><a class="header" href="#udp">UDP</a></h2>
+<p>A <code>UdpSocket</code> sends and receives datagrams. Each one arrives whole or not
+at all, and in no guaranteed order:</p>
+<pre><code class="language-pepper">import io;
+
+main(): int {
+    var loopback = io.SocketAddress(io.IpAddress.loopback_v4(), 0);
+    var sender = io.UdpSocket.bind(loopback).value();
+    var receiver = io.UdpSocket.bind(loopback).value();
+
+    var datagram = Array&lt;u8&gt;();
+    datagram.append(1);
+    datagram.append(2);
+    datagram.append(3);
+    sender.send_to(datagram, receiver.local_address().value());
+
+    # One receive takes one whole datagram and says who sent it.
+    var buffer = Array&lt;u8&gt;();
+    var (count, from) = receiver.receive_from(buffer, 1500).value();
+    assert(count == 3 &amp;&amp; buffer[2] == 3, "the datagram arrived whole");
+    assert(from == sender.local_address().value(), "from the sender");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UdpSocket.bind(address)</code> opens a socket on a local address.</li>
+<li><code>send_to(data, address)</code> sends one datagram.
+<code>receive_from(buffer, max)</code> waits for one datagram, appends it to
+<code>buffer</code>, and returns the byte count and the sender. The part of a
+datagram beyond <code>max</code> bytes is lost.</li>
+<li>After <code>connect(address)</code>, <code>send</code> and <code>receive</code> use that peer, and
+datagrams from anyone else are dropped.</li>
+<li><code>set_broadcast(true)</code> allows sending to a broadcast address.</li>
+</ul>
+<h2 id="unix-domain-sockets"><a class="header" href="#unix-domain-sockets">Unix domain sockets</a></h2>
+<p>A Unix domain socket connects processes on the same machine through a path
+in the file system instead of an IP address and port. <code>UnixListener</code> and
+<code>UnixStream</code> work like <code>TcpListener</code> and <code>TcpStream</code>:</p>
+<pre><code class="language-pepper">import io;
+
+# A server and a client over a Unix domain socket, taking turns on one
+# thread, as in the TCP example.
+main(): int {
+    var path = io.Directory.temp().join("pepper-networking-unix.sock");
+    # Binding fails if the socket file is still there from an earlier run.
+    io.File.remove(path);
+    var listener = io.UnixListener.bind(path).value();
+
+    var client = io.UnixStream.connect(path).value();
+    var server = listener.accept().value();
+
+    assert(client.write_string("ping").is_ok(), "send the request");
+    var request = Array&lt;u8&gt;();
+    assert(server.read_exact(request, 4).is_ok(), "read the request");
+    server.write_string("pong");
+    var reply = Array&lt;u8&gt;();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+
+    # Closing the listener leaves the socket file; remove it when done.
+    listener.close();
+    assert(io.File.remove(path).is_ok(), "remove the socket file");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UnixListener.bind(path)</code> creates a socket file at <code>path</code> and listens on
+it. Binding fails with <code>is_address_in_use()</code> if a file is already there,
+and closing the listener does not remove the file, so a server removes it
+with <code>File.remove</code> before binding and when it is done.</li>
+<li><code>UnixStream.connect(path)</code> connects to it. It fails with <code>is_not_found()</code>
+when there is no socket file, and with <code>is_connection_refused()</code> when the
+file is there but nothing listens on it.</li>
+<li><code>accept()</code> returns just the stream: the client’s end has no path.</li>
+<li>Reading, writing, <code>shutdown_write()</code>, <code>into_transfer()</code> and <code>adopt</code> are
+the same as on a <code>TcpStream</code>, and <code>SharedUnixListener</code> is the counterpart
+of <code>SharedTcpListener</code>.</li>
+<li>A path holds at most 107 bytes (103 on macOS); a longer or empty one
+fails with <code>is_invalid_input()</code>.</li>
+</ul>
+<p>Only stream sockets are supported, since Windows (10 version 1803 and later)
+has no Unix datagram sockets.</p>
+<h2 id="tls"><a class="header" href="#tls">TLS</a></h2>
+<p>The <code>tls</code> module encrypts a TCP connection with TLS 1.2 or 1.3. A
+<code>TlsConnector</code> makes client connections and checks the server’s
+certificate. A <code>TlsAcceptor</code> serves them with a certificate and key. Both
+produce a <code>TlsStream</code>, which reads and writes like a <code>TcpStream</code>:</p>
+<pre><code class="language-pepper">import async;
+import io;
+import tls;
+import "test_certificate";
+
+# A TLS server and client on this machine, in two tasks.
+main(): int {
+    var connector = tls.TlsConnector.create();
+    if (connector.is_err()) {
+        # On Windows, or where OpenSSL 3 is not installed.
+        print(connector.error().message);
+        return 0;
+    }
+    # A real server reads its certificate and key from files it was given.
+    var certificate = io.Directory.temp().join("pepper-example-cert.pem");
+    var key = io.Directory.temp().join("pepper-example-key.pem");
+    io.File.write_text(certificate, test_certificate());
+    io.File.write_text(key, test_private_key());
+
+    async.run(
+        () =&gt; {
+            var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = listener.local_address().value().port();
+            var server = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                var (tcp, peer) = listener.accept().value();
+                var stream = acceptor.accept(tcp).value();
+                var request = Array&lt;u8&gt;();
+                stream.read_exact(request, 4);
+                stream.write_string("pong");
+                stream.shutdown();
+            });
+
+            # The client trusts the test certificate as well as the system's.
+            var client = connector.value();
+            assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
+            var stream = client.connect_host("localhost", port).value();
+            stream.write_string("ping");
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 4096).value() &gt; 0) {}
+            assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+            server.join();
+        }
+    );
+    io.File.remove(certificate);
+    io.File.remove(key);
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>TlsConnector.create()</code> trusts the system’s root certificates, and
+<code>add_root_certificate(path)</code> adds more from a PEM file, such as a private
+certificate authority. Make one connector and share it: it is <code>[Shared]</code>.</li>
+<li><code>connector.connect(tcp, host)</code> runs the handshake over a connected
+<code>TcpStream</code>. It checks that the certificate is valid and was issued for
+<code>host</code>, which is also sent to the server (SNI). <code>connect_host(host, port)</code>
+connects the TCP stream first. An IP address in <code>host</code> is checked against
+the certificate’s addresses.</li>
+<li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
+<code>acceptor.accept(tcp)</code> runs the handshake over a connection a
+<code>TcpListener</code> accepted.</li>
+<li><code>read</code>, <code>read_exact</code>, <code>write</code>, <code>write_all</code> and <code>write_string</code> work on the
+decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
+returns 0 once the peer has sent one or closed the connection.</li>
+<li>A failed handshake returns an error whose message says why, such as
+<code>certificate verify failed: self-signed certificate</code>.</li>
+</ul>
+<p>On Linux and macOS the module uses OpenSSL 3, loaded when the first
+connector or acceptor is made: install it with the system’s package
+manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
+<code>create()</code> returns an error. On Windows it uses the system’s SChannel,
+which needs nothing installed; a server’s private key must be PKCS #8
+(<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or Server 2022.</p>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
+<code>IoError</code> has these for networking:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Predicate</th><th>When</th></tr>
+</thead>
+<tbody>
+<tr><td><code>is_connection_refused()</code></td><td>nothing listens at the address</td></tr>
+<tr><td><code>is_connection_reset()</code></td><td>the peer reset or closed the connection (writing to a closed connection included)</td></tr>
+<tr><td><code>is_address_in_use()</code></td><td>another socket already has the address and port</td></tr>
+<tr><td><code>is_address_not_available()</code></td><td>the IP address is not one of this machine’s</td></tr>
+<tr><td><code>is_timed_out()</code></td><td>the peer never answered</td></tr>
+<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name, or <code>UnixStream.connect</code> found no socket file</td></tr>
+</tbody>
+</table>
+</div>
+<p>Writing to a closed connection never raises <code>SIGPIPE</code>, so it cannot kill
+the process. The write returns an error instead.</p>
+<h2 id="closing"><a class="header" href="#closing">Closing</a></h2>
+<p>A socket closes when the last reference to it goes, like a <code>File</code>, and
+<code>close()</code> closes it earlier and reports any error. A socket cannot be
+copied, so it cannot go through a <a href="threads.html#channels">channel</a> to another
+thread. Use it on the thread that made it, or move it: <code>into_transfer()</code>
+turns a <code>TcpStream</code> (or a <code>UnixStream</code>) into a thread-safe <code>SocketTransfer</code>
+that <code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>) takes on another thread, and a <code>SharedTcpListener</code> is a
+listener any thread can accept on (see
+<a href="tasks.html#accepting-on-every-worker">Tasks</a>).</p>
+<p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
+away. On Windows it does not, because there that option would let another
+program take over the port.</p>
+<h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
+<ul>
+<li>Outside a task every call blocks its thread, with no timeout. In a task
+a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
+limits how long it may wait.</li>
+<li>TLS clients cannot present certificates.</li>
+<li>Unix datagram sockets are not supported.</li>
+<li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
+</ul>
+<p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
+<a href="../reference/io-socket.html">sockets</a> and
+<a href="../reference/io-unix.html">Unix domain sockets</a> and
+<a href="../reference/tls-stream.html">TLS</a> document every method.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/tasks.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/http.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/tasks.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/http.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-81b39abc.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

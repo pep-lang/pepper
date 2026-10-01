@@ -1,0 +1,659 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Calling C - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-14030659.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-6e3ed46d.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/c-interop.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
+<p>Pepper programs can call functions written in C: the C standard library, your
+operating system’s API, or any other library with a C interface. You declare
+the C function’s prototype with <code>extern</code>, make sure the library that defines it
+is linked, and then call it like any Pepper function.</p>
+<h2 id="declaring-a-c-function"><a class="header" href="#declaring-a-c-function">Declaring a C function</a></h2>
+<p>An <code>extern</code> declaration is a C prototype, written the way C writes it: the
+return type, the name, and the parameter types, each followed by a parameter
+name. It has no body.</p>
+<pre><code class="language-pepper">extern ulong strlen(char* s);
+extern int strcmp(char* a, char* b);
+extern void* malloc(ulong size);
+extern void free(void* p);
+</code></pre>
+<p>After that, <code>strlen("hello")</code> calls the C library’s <code>strlen</code>. The compiler
+does not check your prototype against any C header, so it must match the real
+C function exactly. A wrong parameter or return type compiles, and then passes
+or reads the wrong bits when the program runs.</p>
+<p>Match C types with Pepper types of the same size:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>C</th><th>Pepper</th></tr>
+</thead>
+<tbody>
+<tr><td><code>char</code>, <code>signed char</code>, <code>unsigned char</code></td><td><code>char</code> or <code>i8</code>, <code>u8</code> or <code>byte</code></td></tr>
+<tr><td><code>short</code>, <code>unsigned short</code></td><td><code>short</code> or <code>i16</code>, <code>ushort</code> or <code>u16</code></td></tr>
+<tr><td><code>int</code>, <code>unsigned int</code></td><td><code>int</code> or <code>i32</code>, <code>uint</code> or <code>u32</code></td></tr>
+<tr><td><code>long long</code>, <code>unsigned long long</code>, <code>int64_t</code>, <code>size_t</code> (64-bit)</td><td><code>long</code> or <code>i64</code>, <code>ulong</code> or <code>u64</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td><code>T*</code></td><td><code>T*</code> in the prototype</td></tr>
+</tbody>
+</table>
+</div>
+<p>Pepper’s <code>long</code> is always 64 bits. C’s <code>long</code> is 64 bits on Linux and macOS but
+32 bits on Windows, so a C function that takes <code>long</code> needs a different
+prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[LinkName]</code></a>
+below for an example).</p>
+<p>Some things to know about <code>extern</code> declarations:</p>
+<ul>
+<li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
+Pepper functions use is a parse error on an extern, and <code>__ptr&lt;T&gt;</code> as a
+parameter type is an error too: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
+<li>An extern is private to its file, like every declaration. Write
+<code>export extern ...</code> to let files that import this one call it (see
+<a href="visibility.html">Visibility</a>).</li>
+<li>Several files may declare the same extern, since every declaration names the
+same C function. The runtime already declares <code>malloc</code>, <code>free</code> and a few
+others privately, and your program can declare them again.</li>
+<li>An extern is linked by name. If no linked library defines it, the program
+compiles and then fails to link, with the linker reporting an undefined symbol. See
+<a href="linking.html">Linking</a> for how to add libraries.</li>
+</ul>
+<h2 id="passing-strings"><a class="header" href="#passing-strings">Passing strings</a></h2>
+<p>Pepper’s <a href="../reference/string.html"><code>String</code></a> is a reference-counted object, not
+a C string, so a <code>String</code> value cannot be passed where C expects <code>char*</code>.</p>
+<ul>
+<li>A <strong>string literal</strong> passed to an extern is passed as a NUL-terminated C
+string, with no allocation: <code>strlen("hello")</code> is 5. The same is true
+wherever a literal flows into a <code>__ptr&lt;char&gt;</code>, <code>__ptr&lt;u8&gt;</code>, or
+<code>__ptr&lt;void&gt;</code> in Pepper code (a variable, field, argument, or return
+value), so <code>String("hello")</code> copies the literal’s five bytes.</li>
+<li>A <strong><code>String</code> value</strong> is passed with <code>c_str()</code>, which returns the String’s
+NUL-terminated buffer as a <code>__ptr&lt;char&gt;</code>. The pointer belongs to the String:
+it is valid until the String is destroyed or grows (for example with
+<code>append</code> or <code>+=</code>). An empty <code>String()</code> has no buffer, so its <code>c_str()</code> is
+<code>__null</code>; check before you pass it to a C function that does not accept
+<code>NULL</code>.</li>
+<li>To turn a C string back into a <code>String</code>, pass the pointer to the
+constructor: <code>String(p)</code> copies a NUL-terminated C string, and
+<code>String(p, size)</code> copies <code>size</code> bytes. If you already know the number of
+code points, pass it as a third argument:
+<code>String(p, size, String.length_of(p, size))</code>. The constructor copies the
+bytes, so you still own (and may free) the C buffer. A C string is never
+passed or stored where a <code>String</code> is expected without this copy: that is
+an error.</li>
+</ul>
+<pre><code class="language-pepper"># Passing strings to C, and turning C strings back into Strings.
+
+extern ulong strlen(char* s);
+extern int strcmp(char* a, char* b);
+extern char* strchr(char* s, int c);
+
+main(): int {
+    # A string literal passed to an extern is a NUL-terminated C string.
+    assert(strlen("hello") == 5, "a literal is passed as a C string");
+    assert(strcmp("abc", "abc") == 0, "equal C strings compare as 0");
+
+    # So is one stored in a __ptr&lt;char&gt;, or passed to the String
+    # constructor, which copies it.
+    __ptr&lt;char&gt; greeting = "hello";
+    assert(strlen(greeting) == 5, "a literal in a __ptr&lt;char&gt; is a C string");
+    assert(String("hello").size() == 5, "String(literal) copies its bytes");
+
+    # A String value goes through c_str().
+    var name = "Pepper";
+    name += " and C";
+    assert(strlen(name.c_str()) == name.size(), "c_str() is the String's bytes");
+
+    # A char* result is a __ptr&lt;char&gt;. Copy it into a String with the
+    # constructor: the byte size and the number of code points.
+    var rest = strchr(name.c_str(), 32);   # 32 is ' '
+    assert(rest != __null, "strchr found a space");
+    var size = strlen(rest);
+    var copy = String(rest, size, String.length_of(rest, size));
+    assert(copy == " and C", "the copy holds the tail of the C string");
+    return 0;
+}
+</code></pre>
+<p>Passing a <code>String</code> value directly to an extern’s <code>char*</code> parameter is an error:</p>
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+    4 |     return strlen(name) as int;
+      |                   ^~~~
+</code></pre>
+<p>The reverse is an error too: a <code>char*</code> (or any raw pointer, <code>void*</code>
+included) is never a <code>String</code>, so passing one where a <code>String</code> is expected,
+assigning it to a <code>String</code> variable, or returning it as one is rejected. Copy
+it into a String with <code>String(p)</code> first:</p>
+<pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
+</code></pre>
+<h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
+<p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
+ends its prototype with <code>...</code> after at least one named parameter:</p>
+<pre><code class="language-pepper">extern int snprintf(char* buffer, ulong size, char* format, ...);
+</code></pre>
+<p>The call uses the C calling convention for variadic functions, which differs
+from a plain call on some targets (such as macOS on Apple silicon). Each
+argument past the named ones gets C’s default argument promotions: integers
+narrower than <code>int</code> widen to <code>int</code>, and <code>float</code> widens to <code>double</code>. Match your
+format string to the promoted type: <code>%d</code> for a <code>u8</code>, <code>%f</code> for a <code>float</code>, and
+<code>%lld</code> (not <code>%ld</code>) for a <code>long</code>, because C’s <code>long</code> is 32 bits on Windows.</p>
+<p><code>...</code> must come last and must follow a named parameter: <code>extern int f(...);</code>
+is a parse error.</p>
+<pre><code class="language-pepper"># Calling a C function that takes a variable argument list.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+# On Windows, snprintf lives in legacy_stdio_definitions.
+[Target(OS(Windows))] [Link("legacy_stdio_definitions")]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
+[Target(!OS(Windows))]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
+
+main(): int {
+    var buffer = malloc(64) as __ptr&lt;char&gt;;
+    u8 small = 200;     # widened to int
+    float half = 0.5;   # widened to double
+    long big = 5000000000;
+    var written = snprintf(buffer, 64, "%d %.1f %lld %s", small, half, big, "ok");
+    var text = String(buffer, written as ulong, String.length_of(buffer, written as ulong));
+    free(buffer);
+    assert(text == "200 0.5 5000000000 ok", "snprintf formatted every argument");
+    return 0;
+}
+</code></pre>
+<p>On Windows, the C runtime defines <code>snprintf</code> and its relatives inline in its
+headers, so the linkable symbols live in a separate library,
+<code>legacy_stdio_definitions</code>. The example links it with <code>[Link]</code> on Windows only.</p>
+<h2 id="pointers"><a class="header" href="#pointers">Pointers</a></h2>
+<p>C code deals in raw pointers, and Pepper has a raw pointer type for talking to
+it: <code>__ptr&lt;T&gt;</code>, such as <code>__ptr&lt;void&gt;</code>, <code>__ptr&lt;char&gt;</code> or <code>__ptr&lt;__ptr&lt;int&gt;&gt;</code>.
+A <code>void*</code> returned by an extern is a <code>__ptr&lt;void&gt;</code> in Pepper, and a
+<code>__ptr&lt;T&gt;</code> can be passed to an extern that takes a C pointer.</p>
+<p>A pointer supports these operations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>p[i]</code></td><td>reads or writes the element <code>i</code> places from <code>p</code>; its type is <code>T</code>, so <code>var v = p[i]</code> declares a <code>T</code></td></tr>
+<tr><td><code>p + n</code></td><td>the address <code>n</code> elements after <code>p</code> (<code>n</code> bytes for <code>__ptr&lt;void&gt;</code>)</td></tr>
+<tr><td><code>p == __null</code>, <code>p != __null</code></td><td>compares with the null pointer</td></tr>
+<tr><td><code>p == q</code>, <code>p != q</code></td><td>compares two addresses (a pointer also compares with an integer address)</td></tr>
+<tr><td><code>p as ulong</code>, <code>p as long</code></td><td>the address as an integer</td></tr>
+<tr><td><code>p as __ptr&lt;U&gt;</code></td><td>the same address, seen as pointing at <code>U</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>__null</code> is the null pointer. <code>sizeof&lt;T&gt;()</code> gives the size of a type in bytes,
+which you need to allocate memory for C.</p>
+<p><code>T*</code> spelling is for extern prototypes only, since they mirror C. Everywhere
+else (parameters, return types, struct fields, locals, globals, type aliases,
+generic arguments and casts) you write <code>__ptr&lt;T&gt;</code>, and <code>T*</code> is a compile error:</p>
+<pre><code class="language-pepper">clear(p: void*, n: ulong) { }
+</code></pre>
+<pre><code class="language-text">main.pep:1:10: error: C pointer syntax `void*` is only allowed in extern declarations; use `__ptr&lt;void&gt;`
+    1 | clear(p: void*, n: ulong) { }
+      |          ^~~~
+</code></pre>
+<pre><code class="language-pepper"># Raw pointers: __ptr&lt;T&gt; in Pepper code, T* in extern prototypes.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+extern void* memset(void* p, int value, ulong size);
+
+struct Buffer {
+    var data: __ptr&lt;u8&gt; = __null;
+    var size: ulong = 0;
+}
+
+make_buffer(size: ulong): Buffer {
+    var b = Buffer();
+    b.data = malloc(size) as __ptr&lt;u8&gt;;
+    b.size = size;
+    memset(b.data, 0, size);
+    return b;
+}
+
+sum(values: __ptr&lt;int&gt;, count: int): int {
+    var total = 0;
+    var i = 0;
+    while (i &lt; count) {
+        total = total + values[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+# `var` takes the element type from the pointer: `big` is a ulong, so a value
+# above 2^32 reads back whole.
+first(values: __ptr&lt;ulong&gt;): ulong {
+    var big = values[0];
+    return big;
+}
+
+main(): int {
+    # Indexing reads and writes elements of T.
+    var numbers = malloc(4 * sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
+    numbers[0] = 10;
+    numbers[1] = 20;
+    numbers[2] = 30;
+    numbers[3] = 40;
+    assert(sum(numbers, 4) == 100, "indexing reads what was written");
+
+    var wide = malloc(sizeof&lt;ulong&gt;()) as __ptr&lt;ulong&gt;;
+    wide[0] = 5000000000;
+    assert(first(wide) == 5000000000, "var v = p[i] has the pointee's type");
+    free(wide);
+
+    # p + n moves by n elements, not n bytes.
+    var third = numbers + 2;
+    assert(third[0] == 30, "numbers + 2 points at the third element");
+    assert((third as ulong) - (numbers as ulong) == 8, "two ints are eight bytes");
+
+    # __ptr&lt;void&gt; strides by bytes; cast to see the memory another way.
+    var raw = numbers as __ptr&lt;void&gt;;
+    var bytes = raw as __ptr&lt;u8&gt;;
+    assert(bytes[4] == 20, "the second int starts at byte 4 (little-endian)");
+    free(raw);
+
+    # Pointers can live in struct fields, and compare with __null.
+    var b = make_buffer(16);
+    assert(b.data != __null, "malloc returned memory");
+    assert(b.data[15] == 0, "memset cleared it");
+    free(b.data);
+    b.data = __null;
+
+    # A pointer to pointers: indexing yields the inner pointer, and indexing
+    # again reads or writes through it.
+    var rows = malloc(2 * sizeof&lt;__ptr&lt;int&gt;&gt;()) as __ptr&lt;__ptr&lt;int&gt;&gt;;
+    var row = malloc(sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
+    rows[1] = row;
+    rows[1][0] = 7;
+    assert(rows[1][0] == 7, "rows[1][0] reads through the row pointer");
+    assert(row[0] == 7, "rows[1] is the row pointer");
+    free(row);
+    free(rows);
+    return 0;
+}
+</code></pre>
+<p>Pointers are not reference-counted and nothing checks them: indexing past the
+end of an allocation, using memory after <code>free</code>, or forgetting to <code>free</code> it
+behaves exactly as it would in C. Keep raw pointers inside small functions or
+structs that own the memory, and give the rest of your program ordinary Pepper
+types.</p>
+<h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
+<p>A Pepper <a href="function-types.html">function value</a> is a reference-counted object,
+not a C function pointer. For C, Pepper has a separate type,
+<code>extern (P...) =&gt; R</code>: the address of a function that C calls with the C
+calling convention. Declare a callback parameter of a C function with it,
+and pass a named function, or a closure that captures nothing:</p>
+<pre><code class="language-pepper"># `extern (P...) =&gt; R` is a C function pointer type: qsort calls `compare`
+# with pointers to two elements.
+extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
+
+ascending(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+    __ptr&lt;int&gt; x = a;
+    __ptr&lt;int&gt; y = b;
+    return x[0] - y[0];
+}
+
+main(): int {
+    __ptr&lt;int&gt; numbers = _pep_malloc(4 * sizeof&lt;int&gt;());
+    numbers[0] = 30;
+    numbers[1] = 10;
+    numbers[2] = 40;
+    numbers[3] = 20;
+
+    # A named function converts to the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), ascending);
+    assert(numbers[0] == 10 &amp;&amp; numbers[3] == 40, "ascending");
+
+    # So does a closure that captures nothing; its parameter types come
+    # from the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), (a, b) =&gt; {
+        __ptr&lt;int&gt; x = a;
+        __ptr&lt;int&gt; y = b;
+        return y[0] - x[0];
+    });
+    assert(numbers[0] == 40 &amp;&amp; numbers[3] == 10, "descending");
+
+    # A C function pointer is a value like a number: store it, call it.
+    var compare: extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int = ascending;
+    assert(compare(numbers, numbers + 1) &gt; 0, "40 sorts after 30");
+
+    _pep_free(numbers);
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>What converts.</strong> A named free function, a static method
+(<code>Order.descending</code>), or a closure literal that captures nothing, whose
+parameter and return types match the C function pointer type exactly. A
+closure literal takes its parameter types from the type, as it does from
+any function type.</p>
+</li>
+<li>
+<p><strong>Nothing captured.</strong> C calls the function with its arguments alone, so a
+closure that captures a value, or a bound method (<code>p.get</code>), cannot
+convert:</p>
+<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
+    4 |     qsort(_pep_malloc(4), 0, 4, (a, b) =&gt; bias);
+      |                                           ^~~~
+main.pep:3:9: note: pass what the callback needs through the C function's context argument instead
+    3 |     var bias = 1;
+      |         ^~~~
+</code></pre>
+<p>Most C APIs that take a callback also take a <code>void*</code> context argument that
+they hand back to it; pass what the callback needs through that.
+A function value held in a variable does not convert either, since it may
+be a closure.</p>
+</li>
+<li>
+<p><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
+and return types must be numbers, <code>bool</code>, pointers, or other C function
+pointer types. A struct is an error:
+<code>C function pointer type 'extern (String) =&gt; int' cannot use 'String'; C passes only numbers, 'bool' and pointers</code>.
+Write pointers as <code>void*</code> in an <code>extern</code> declaration and as <code>__ptr&lt;void&gt;</code>
+elsewhere, as for any pointer.</p>
+</li>
+<li>
+<p><strong>A value like a number.</strong> A C function pointer has no reference count.
+Store it in a variable, field or module-scope <code>const</code>, return it, pass it
+to other threads, or call it: <code>compare(a, b)</code> calls through it with the C
+calling convention. Calling a null one (from C) panics. It converts to
+<code>void*</code> but not to a Pepper function type; wrap it in a closure that calls
+it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
+</li>
+</ul>
+<p><code>__function_pointer(name)</code> also gives a function’s address, as an untyped
+<code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
+whose method uses it. Inside a generic struct the static method is the one
+for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> gives the
+operating system a destructor for its <code>T</code>. Prefer a C function pointer type
+where the signature is known, since the compiler then checks it.</p>
+<h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
+<p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
+the declared one. Pepper code calls the extern by its declared name, and the
+object file refers to <code>symbol</code>. Use it to give a C function a clearer name, to
+avoid clashing with a Pepper name, or, together with
+<a href="platform-selection.html"><code>[Target]</code></a>, to bind one Pepper name to a different
+symbol on each platform:</p>
+<pre><code class="language-pepper"># [LinkName] binds a Pepper name to a C symbol with a different name.
+
+# llabs takes a 64-bit long long on every platform.
+[LinkName("llabs")] extern long absolute(long value);
+
+# C's long is 64 bits on Linux and macOS but 32 bits on Windows, so
+# the 64-bit labs is only right away from Windows.
+[Target(OS(Windows))] [LinkName("llabs")] extern long abs64(long value);
+[Target(!OS(Windows))] [LinkName("labs")] extern long abs64(long value);
+
+main(): int {
+    assert(absolute(-7) == 7, "absolute calls llabs");
+    assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
+    return 0;
+}
+</code></pre>
+<p>Real uses of the per-platform form include macOS on Intel, where the
+64-bit-inode version of <code>stat</code> is named <code>stat$INODE64</code>:</p>
+<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))] [LinkName("stat$INODE64")] extern int stat(char* path, void* buf);
+[Target(OS(Mac) &amp;&amp; Arch(aarch64))] extern int stat(char* path, void* buf);
+</code></pre>
+<p><code>LinkName</code> takes exactly one non-empty string, and an extern may carry at most
+one. Anything else is an error, such as:</p>
+<pre><code class="language-text">main.pep:1:34: error: LinkName on extern 'pep_abs' takes exactly one string: [LinkName("sym")]
+    1 | [LinkName("a", "b")] extern long pep_abs(long v);
+      |                                  ^~~~~~~
+</code></pre>
+<h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
+<p>A C function is only callable if the library that defines it is linked into
+your program. The C library is always linked. For anything else, attach
+<code>[Link("name")]</code> to the extern or pass <code>-l name</code> to the compiler. The
+<a href="linking.html">Linking</a> chapter covers both.</p>
+<pre><code class="language-pepper">[Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int kind);
+</code></pre>
+<h2 id="calling-pepper-from-c"><a class="header" href="#calling-pepper-from-c">Calling Pepper from C</a></h2>
+<p>Pepper builds executables, and there is no supported way yet for C code to
+call Pepper functions. The parser accepts an <code>[Export]</code> attribute on a
+function, intended to give it a C interface with object references passed as
+opaque handles, but the compiler does not act on it yet: <code>[Export]</code> currently
+has no effect.</p>
+<p>Do not confuse <code>[Export]</code> with the <code>export</code> keyword, which makes a
+declaration visible to other Pepper files (see <a href="visibility.html">Visibility</a>).</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/http.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/platform-selection.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/http.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/platform-selection.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-81b39abc.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
