@@ -265,6 +265,17 @@ pub fn convert_intrinsics(module: &mut Module) {
         convert_type_string(&mut var.ty);
         crate::passes::walk_global(var, &mut convert_expression);
     }
+    // A trait's signatures, which its instances (`Shape s`) copy for the
+    // calls through a value. The bodies of default methods are converted in
+    // the structs they are copied into.
+    for t in &mut module.traits {
+        for method in &mut t.methods {
+            convert_type_string(&mut method.ty);
+            for param in &mut method.parameters {
+                convert_type_string(&mut param.ty);
+            }
+        }
+    }
     for st in &mut module.structs {
         for field in &mut st.field_members {
             convert_type_string(&mut field.ty);

@@ -1224,7 +1224,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.emit_trait_refcount_thunk(&name, "__release", VTABLE_RELEASE)?;
         self.emit_trait_refcount_thunk(&name, "__acquire", VTABLE_ACQUIRE)?;
         for (slot, method) in t.methods.iter().enumerate() {
-            self.emit_trait_dispatch_thunk(&name, method, VTABLE_METHODS + slot as u64)?;
+            // A thunk has no node of its own: an error is the trait
+            // method's, located at its declaration unless a parameter's
+            // type claimed it.
+            let result = self.emit_trait_dispatch_thunk(&name, method, VTABLE_METHODS + slot as u64);
+            self.locate(&result, method.loc);
+            result?;
         }
         Ok(())
     }
@@ -3384,7 +3389,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(None);
         }
         let local = local.clone();
-        let ty = self.types.get(&local.ty).ok_or_else(|| format!("unknown type {}", local.ty))?;
+        let ty = self.types.get(&local.ty).ok_or_else(|| format!("unknown type name '{}'", local.ty))?;
         let ptr = local.load(&self.builder).ok_or_else(|| "load this failed".to_string())?.into_pointer_value();
         Ok(Some(Address::with_llvm_ty("this", &local.ty, ty, ptr)))
     }
@@ -3853,7 +3858,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::ThisRef => {
                 if let Some(storage) = self.value_this()? {
                     // A copy of the value `this` refers to.
-                    let ty = self.types.get(&storage.ty).ok_or_else(|| format!("unknown type {}", storage.ty))?;
+                    let ty = self.types.get(&storage.ty).ok_or_else(|| format!("unknown type name '{}'", storage.ty))?;
                     return self.builder.build_load(ty, storage.ptr, "this").map_err(|e| e.to_string());
                 }
                 let addr = self
@@ -4016,7 +4021,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.context.i64_type().const_int(size, false),
                     ))
                 } else {
-                    Err(format!("unknown type in sizeof: {}", name))
+                    Err(format!("unknown type name '{}' in 'sizeof'", name))
                 }
             }
             Expression::IsPod(ty) => {
@@ -4610,7 +4615,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 // An owned value receiver is released as the method left it.
                 if let (Some(ty), Some(slot)) = (this_temp, this_slot) {
-                    let llvm = self.types.get(&ty).ok_or_else(|| format!("unknown type {}", ty))?;
+                    let llvm = self.types.get(&ty).ok_or_else(|| format!("unknown type name '{}'", ty))?;
                     let value = self.builder.build_load(llvm, slot, "receiver").map_err(|e| e.to_string())?;
                     self.deferred_temps.push((value, ty));
                 }
@@ -4839,7 +4844,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         match self.types.get(ty) {
             Some(ty @ BasicTypeEnum::StructType(_)) if types::is_object(&ty) => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).into()),
             Some(other) => Ok(other),
-            None => Err(format!("unknown type {}", ty)),
+            None => Err(format!("unknown type name '{}'", ty)),
         }
     }
 

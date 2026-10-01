@@ -639,6 +639,48 @@ test(): int {
     assert_eq!(leaked, 0);
 }
 
+/// Raw pointers in a trait's signatures, spelled `__ptr<T>`, are the same
+/// `T*` a value's calls pass and return as the struct's methods: a
+/// parameter, a result, and one built from the trait's type argument. They
+/// once failed with "unknown type __ptr<char>", the result with no location
+/// (#327).
+#[test]
+fn trait_signatures_take_and_return_raw_pointers() {
+    let (result, leaked) = run(r#"
+trait Sink {
+    put(p: __ptr<char>): int;
+}
+
+trait Source<T> {
+    get(): __ptr<T>;
+}
+
+struct Text {
+    construct() {}
+
+    put(p: __ptr<char>): int {
+        return p[1] == 'i' ? 1 : 0;
+    }
+
+    get(): __ptr<char> {
+        return "hi";
+    }
+}
+
+extend Text with Sink {}
+extend Text with Source<char> {}
+
+test(): int {
+    Sink sink = Text();
+    Source<char> source = Text();
+    var p = source.get();
+    return p[0] == 'h' ? sink.put(p) : 0;
+}
+"#);
+    assert_eq!(result, 1);
+    assert_eq!(leaked, 0);
+}
+
 /// A default body's string literals are Strings, as in any other method:
 /// they were left raw (`apply_extensions` copies the body after literals are
 /// converted), so a default returning one crashed at run time and one
