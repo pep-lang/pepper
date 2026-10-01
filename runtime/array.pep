@@ -87,10 +87,14 @@ export struct Array<T> {
     }
 
     destruct {
-        ulong __i = 0;
-        while (__i < _size) {
-            _data[__i] = __default<T>();
-            __i = __i + 1;
+        # Storing the default releases each element; a plain value owns
+        # nothing, so its slots are freed as they are.
+        if (!__is_pod<T>()) {
+            ulong __i = 0;
+            while (__i < _size) {
+                _data[__i] = __default<T>();
+                __i = __i + 1;
+            }
         }
         _pep_free(_data);
     }

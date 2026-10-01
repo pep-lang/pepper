@@ -1552,7 +1552,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// `hash<T>` of a tuple value: each element's hash folded through
-    /// FNV-1a in order. An element hashes as `hash<E>` would: through the
+    /// `hash_fold` in order. An element hashes as `hash<E>` would: through the
     /// program's `hash<E>` when there is one (`hash<String>` by content),
     /// else by identity for references and by value otherwise.
     fn tuple_hash(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
@@ -1583,7 +1583,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 };
                 self.hash_value_to_i64(&item)?
             };
-            h = self.fnv_fold_8(h, &element_hash)?;
+            h = self.hash_fold(h, &element_hash)?;
         }
         Ok(h)
     }
@@ -3400,6 +3400,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         match expr {
             Expression::SymbolRef { id, .. } => self.frame.find_local(id).is_some() || self.global_addrs.contains_key(id),
             Expression::ThisRef => true,
+            // A slot of a raw buffer (`_data[i]`) is storage; an indexer
+            // call (`a[i]` on an Array) returns a copy instead.
+            Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
+                self.value_sema_type(lhs).is_some_and(|ty| ty.ends_with('*'))
+            }
             Expression::MemberRef { lhs, .. } => {
                 let owner = self.struct_name_of(lhs).unwrap_or_default();
                 if self.values.contains_key(&owner) {
@@ -4136,8 +4141,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Address(ty, arg) => {
                 // __address<T>(v): identity hash — the object's pointer
-                // address for struct T (null → seed), the value's own bytes
-                // folded FNV-1a for POD T.
+                // address for struct T (null → seed), the value's own bits
+                // for POD T, folded into the seed by `hash_fold`.
                 let i64 = self.context.i64_type();
                 let seed = i64.const_int(0xcbf29ce484222325, false);
                 let lowered = self.types.get(&ty.to_string());
@@ -4187,10 +4192,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .build_conditional_branch(is_null, merge_block, then_block)
                             .map_err(|e| e.to_string())?;
                         self.builder.position_at_end(then_block);
-                        // Fold the address bits through FNV-1a: every
+                        // Fold the address bits through `hash_fold`: every
                         // `_pep_malloc` result is pointer-aligned, so a raw
                         // `h & mask` would land all struct keys in bucket 0.
-                        let folded = self.fnv_fold_8(seed, &ptr_int)?;
+                        let folded = self.hash_fold(seed, &ptr_int)?;
                         if let Some(ty) = arg_temp {
                             self.release_temp(&ty, val)?;
                         }
@@ -4206,7 +4211,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // POD: fold the value's own bytes.
                         let val = self.codegen_expr(arg)?;
                         let v64 = self.hash_value_to_i64(&val)?;
-                        Ok(self.fnv_fold_8(seed, &v64)?.into())
+                        Ok(self.hash_fold(seed, &v64)?.into())
                     }
                     None => Err(format!("__address: unknown type {}", ty)),
                 }
@@ -4459,10 +4464,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // of the raw buffer. Indexer methods are the exception — they
                 // address the pointee's own data (`s[0]` on `String s`), so
                 // they dispatch to the pointee when it declares them.
-                if matches!(
-                    this.as_ref(),
-                    Expression::Index { .. } | Expression::ArrayIndex { .. }
-                ) {
+                // A value struct element is the exception the other way: its
+                // methods take the slot's address as `this`, which the
+                // general path below computes (`value_address`).
+                let value_element = !method.starts_with("__index_")
+                    && match this.as_ref() {
+                        Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
+                            self.index_receiver_pointee(lhs).is_some_and(|name| self.values.contains_key(&name))
+                        }
+                        _ => false,
+                    };
+                if !value_element
+                    && matches!(
+                        this.as_ref(),
+                        Expression::Index { .. } | Expression::ArrayIndex { .. }
+                    )
+                {
                     let lhs = match this.as_ref() {
                         Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
                             lhs.as_ref()
@@ -4626,17 +4643,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
     }
-    /// FNV-1a fold of one i64's eight bytes (memory order) into `h`.
-    fn fnv_fold_8(&mut self, mut h: inkwell::values::IntValue<'ctx>, v: &inkwell::values::IntValue<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+    /// Folds one i64 into the running hash `h`: the 128-bit product of
+    /// `h ^ v` and an odd constant, its high half xored into its low half
+    /// (wyhash's "mum"). One multiply, and every bit of the input reaches
+    /// the low bits a power-of-two table masks with, so aligned addresses
+    /// and keys that differ only in high bits still spread.
+    fn hash_fold(&mut self, h: inkwell::values::IntValue<'ctx>, v: &inkwell::values::IntValue<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
         let i64 = self.context.i64_type();
-        let prime = i64.const_int(0x100000001b3, false);
-        for shift in [0u64, 8, 16, 24, 32, 40, 48, 56] {
-            let byte = self.builder.build_right_shift(*v, i64.const_int(shift, false), false, "hfsh").map_err(|e| e.to_string())?;
-            let masked = self.builder.build_and(byte, i64.const_int(0xff, false), "hfb").map_err(|e| e.to_string())?;
-            h = self.builder.build_xor(h, masked, "hfx").map_err(|e| e.to_string())?;
-            h = self.builder.build_int_mul(h, prime, "hfm").map_err(|e| e.to_string())?;
-        }
-        Ok(h)
+        let i128 = self.context.i128_type();
+        let mixed = self.builder.build_xor(h, *v, "hfx").map_err(|e| e.to_string())?;
+        let wide = self.builder.build_int_z_extend(mixed, i128, "hfw").map_err(|e| e.to_string())?;
+        let product = self.builder.build_int_mul(wide, i128.const_int(0x9e3779b97f4a7c15, false), "hfm").map_err(|e| e.to_string())?;
+        let low = self.builder.build_int_truncate(product, i64, "hflo").map_err(|e| e.to_string())?;
+        let shifted = self.builder.build_right_shift(product, i128.const_int(64, false), false, "hfsh").map_err(|e| e.to_string())?;
+        let high = self.builder.build_int_truncate(shifted, i64, "hfhi").map_err(|e| e.to_string())?;
+        self.builder.build_xor(low, high, "hfold").map_err(|e| e.to_string())
     }
 
     /// A loaded field's value as i64: ints zext/trunc, floats bitcast,

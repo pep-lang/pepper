@@ -4095,3 +4095,44 @@ fn range_of_a_non_integer() {
          \x20     |                      ^~"
     );
 }
+
+// ── Hash keys whose == and hash<T> disagree ─────────────────────────────────
+
+#[test]
+fn hash_key_with_equality_but_no_hash_is_an_error_at_the_operator() {
+    let source = "struct Point {\n    int x;\n    ==(other: Point): bool { return x == other.x; }\n}\n\
+                  test(): int {\n    var seen = HashSet<Point>();\n    return seen.count();\n}\n";
+    assert_eq!(
+        error_of("hash_key_equality", source),
+        "main.pep:3:5: error: 'Point' declares '==' but no 'hash<Point>', so as a HashMap or HashSet key, equal values will not find each other\n\
+         \x20   3 |     ==(other: Point): bool { return x == other.x; }\n\
+         \x20     |     ^~\n\
+         note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares"
+    );
+}
+
+#[test]
+fn hash_key_with_hash_but_no_equality_is_an_error_at_the_override() {
+    let source = "struct Node {\n    int id;\n}\n\
+                  hash<Node>(value: Node): u64 { return hash<int>(value.id); }\n\
+                  test(): int {\n    var seen = HashMap<Node, int>();\n    return seen.count();\n}\n";
+    assert_eq!(
+        error_of("hash_key_hash", source),
+        "main.pep:4:1: error: 'hash<Node>' is overridden but 'Node' declares no '==', so HashMap and HashSet keys still compare by identity\n\
+         \x20   4 | hash<Node>(value: Node): u64 { return hash<int>(value.id); }\n\
+         \x20     | ^~~~\n\
+         main.pep:1:8: note: declare '==(other: Node): bool' comparing the fields the hash uses\n\
+         \x20   1 | struct Node {\n\
+         \x20     |        ^~~~"
+    );
+}
+
+#[test]
+fn hash_keys_with_both_halves_or_neither_compile_cleanly() {
+    let source = "struct Point {\n    int x;\n    ==(other: Point): bool { return x == other.x; }\n}\n\
+                  hash<Point>(value: Point): u64 { return hash<int>(value.x); }\n\
+                  struct Node {\n    int id;\n}\n\
+                  [Value]\nstruct Cell {\n    int row;\n}\n\
+                  test(): int {\n    var a = HashSet<Point>();\n    var b = HashSet<Node>();\n    var c = HashSet<Cell>();\n    return a.count() + b.count() + c.count();\n}\n";
+    assert_eq!(warnings_of(source), "");
+}

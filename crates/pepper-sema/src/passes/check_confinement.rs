@@ -310,7 +310,7 @@ struct Program<'a> {
     /// What [`record_summaries`] found.
     recorded_out: Vec<(Loc, String)>,
     /// The runtime's directory, found on first use.
-    runtime_directory: std::cell::OnceCell<Option<std::path::PathBuf>>,
+    runtime_directory: super::RuntimeDirectory,
 }
 
 impl<'a> Program<'a> {
@@ -330,7 +330,7 @@ impl<'a> Program<'a> {
             isolated,
             regions: std::cell::RefCell::new(HashMap::new()),
             recorded_out: vec![],
-            runtime_directory: std::cell::OnceCell::new(),
+            runtime_directory: super::RuntimeDirectory::default(),
         }
     }
 
@@ -355,21 +355,9 @@ impl<'a> Program<'a> {
         answer
     }
 
-    /// Whether `file` is part of the runtime (under the discovered runtime
-    /// directory). With no runtime or no source to compare with (a harness
-    /// that registers none), everything is.
+    /// Whether `file` is part of the runtime.
     fn is_runtime_file(&self, file: pepper_parser::diagnostic::FileId) -> bool {
-        use pepper_parser::diagnostic::Sources;
-        let directory = self.runtime_directory.get_or_init(|| {
-            let (sources, _, _) = pepper_files::runtime::discover();
-            sources.first().and_then(|s| s.parent()).and_then(|d| d.canonicalize().ok())
-        });
-        match (directory, self.module.sources.get(file)) {
-            (Some(directory), Some((name, _))) => {
-                std::path::Path::new(name).canonicalize().is_ok_and(|path| path.starts_with(directory.as_path()))
-            }
-            (Some(_), None) | (None, _) => true,
-        }
+        self.runtime_directory.contains(self.module, file)
     }
 
     fn struct_named(&self, name: &str) -> Option<&'a StructDef> {

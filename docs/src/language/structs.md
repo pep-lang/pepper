@@ -241,7 +241,9 @@ Keep these rules in mind:
   `+(int)`), and `a + b` picks by `b`'s type, as for any
   [overloaded](overloading.md#methods-and-operators) method.
 - Each operator is its own method, with one exception: when a struct defines
-  `==` but not `!=`, `a != b` means `!(a == b)`. `+=` is not rewritten to
+  `==` but not `!=`, `a != b` means `!(a == b)`. A struct that defines `==`
+  and is used as a `HashMap` or `HashSet` key also needs a matching
+  `hash<T>` (see [Hashing and equality](hashing.md)). `+=` is not rewritten to
   `a = a + b`; define each one you want to use.
 - Comparison operators must return `bool`; any other return type is an error
   (`comparison operator '==' must return 'bool', not 'String'`). Logical

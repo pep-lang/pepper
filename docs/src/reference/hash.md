@@ -10,17 +10,26 @@ Source: `runtime/hash.pep`
 hash<T>(value: T): u64
 ```
 
-Returns a 64-bit FNV-1a hash of `value`, the hash `HashMap` and `HashSet`
-use for their keys.
+Returns a 64-bit hash of `value`, the hash `HashMap` and `HashSet` use for
+their keys.
 
-- POD types (integers, floats, pointers, `bool`) fold the value's own
-  bytes, so equal values hash equally.
-- Struct types hash by identity: the object's address, folded through
-  FNV-1a so that aligned addresses spread across buckets. Two distinct
-  objects with equal fields therefore hash differently and are distinct
-  keys. A null reference hashes to the FNV-1a offset basis.
+- POD types (integers, floats, pointers, `bool`) mix the value's own
+  bits, so equal values hash equally.
+- Struct types hash by identity: the object's address, mixed so that
+  aligned addresses spread across buckets. Two distinct objects with
+  equal fields therefore hash differently and are distinct keys. A null
+  reference hashes to the FNV-1a offset basis (0xcbf29ce484222325).
+
+Every input bit reaches the low bits of the result, which a power-of-two
+table masks with. The hash is not keyed, so it does not resist inputs
+chosen to collide.
 - `String` hashes by content through the concrete `hash<String>`
   override, so equal strings at different addresses collide.
+
+A struct whose keys should match by content instead declares an `==`
+operator and overrides this function for itself, hashing the fields `==`
+compares: `hash<Point>(value: Point): u64`. Keys that are `==` must hash
+equally (see the "Hashing and equality" chapter of the book).
 
 The result is deterministic within and across runs of a program for POD
 values and strings; for other struct types it depends on where the object
@@ -51,12 +60,13 @@ argument is released afterwards.
 hash<String>(value: String): u64
 ```
 
-Returns a 64-bit FNV-1a hash of a String's bytes, so equal strings hash
-equally wherever they are stored. Keeps equal `String` keys of a
-`HashMap` or `HashSet` in one bucket.
+Returns a 64-bit hash of a String's bytes, so equal strings hash equally
+wherever they are stored. Keeps equal `String` keys of a `HashMap` or
+`HashSet` in one bucket.
 
-Hashes the `size()` bytes of the String (not the NUL terminator) in O(size). An
-empty String hashes to the FNV-1a offset basis.
+Hashes the `size()` bytes of the String (not the NUL terminator) 8 bytes
+at a time, in O(size). An empty String hashes to the FNV-1a offset basis
+(0xcbf29ce484222325).
 
 **Parameters**
 - `value` — the String to hash; it must not be a null reference
@@ -79,17 +89,19 @@ A hash table that maps keys of type `K` to values of type `V`.
 
 Keys are hashed with `hash<K>` and compared with `==`: POD keys by value,
 `String` keys by content, and other struct keys by identity (two distinct
-objects with equal fields are different keys). Any type can be a key.
+objects with equal fields are different keys) unless the struct declares
+an `==` operator and a matching `hash<K>` override. Any type can be a key.
 
 The map holds one reference to each stored key and value. It acquires
 them when they are stored and releases them when they are overwritten,
 removed, cleared, or when the map is destroyed.
 
-Lookups, inserts, and removals take expected O(1) time. The table doubles
-before an insert of a new key would fill half of it (live entries plus
-removed-slot tombstones), so it never shrinks, and churn (many inserts and
-removals of different keys) can keep growing it even while `count()`
-stays small.
+Lookups, inserts, and removals take expected O(1) time. Before an insert
+of a new key would fill half the table (live entries plus removed-slot
+tombstones), the table is rebuilt: at double the size, or at the same size
+when tombstones make up at least half of that load, so churn (many
+inserts and removals of different keys) does not keep growing it. It
+never shrinks.
 
 `iterate()` visits the entries as `(key, value)` tuples, in no defined order.
 
@@ -384,14 +396,18 @@ A hash set of distinct elements of type `K`, built on the same table as
 
 Elements are hashed with `hash<K>` and compared with `==`: POD elements
 by value, `String` elements by content, and other struct elements by
-identity (two distinct objects with equal fields are both members). The
+identity (two distinct objects with equal fields are both members)
+unless the struct declares an `==` operator and a matching `hash<K>`
+override. The
 set holds one reference to each member. It acquires the reference on
 insert and releases it on remove, on `clear`, or when the set is
 destroyed.
 
-Membership tests, inserts, and removals take expected O(1) time. The
-table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. `iterate()` visits the
+Membership tests, inserts, and removals take expected O(1) time. Before
+an insert of a new element would fill half the table (members plus
+tombstones), the table is rebuilt: at double the size, or at the same
+size when tombstones make up at least half of that load. It never
+shrinks. `iterate()` visits the
 members, in no defined order. The lowercase fields and the `_find_slot`
 and `grow` methods are the table's internal state: they are public but
 may change, and writing to them breaks the set.

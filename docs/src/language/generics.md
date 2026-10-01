@@ -309,7 +309,9 @@ argument. Write the concrete type where the type parameter would go:
 A call whose type argument matches an override, such as `describe<int>(7)`,
 uses the override; every other call uses the generic version. The standard
 library uses this to give [`hash<String>`](../reference/hash.md) a
-content-based hash, while `hash<T>` hashes other structs by identity.
+content-based hash, while `hash<T>` hashes other structs by identity; a
+struct keyed by its content overrides `hash<T>` the same way (see
+[Hashing and equality](hashing.md)).
 
 An override can name a built-in type (`int`, `bool`, `String`, and so on) or
 a struct, such as `describe<Point>`. It may be declared in any file that can

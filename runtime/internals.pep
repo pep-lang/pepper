@@ -1,5 +1,6 @@
 # ── C ABI externs (identical signatures on MSVC CRT and libc) ───────────────
 extern void* malloc(ulong size);
+extern void* calloc(ulong count, ulong size);
 extern void free(void* p);
 extern void* realloc(void* p, ulong size);
 extern void memcpy(void* dest, void* src, ulong n);
@@ -117,10 +118,10 @@ _pep_check_sync_enabled(): bool {
 export const _PEP_CHECK_SYNC_ON = _pep_check_sync_enabled();
 
 export _pep_malloc(size: ulong): __ptr<void> {
-    var p = malloc(size);
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
-    memset(p, 0, size);
+    # calloc skips the clearing for fresh pages the OS already zeroed.
+    var p = calloc(1, size);
     __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
     return p;
 }
@@ -232,16 +233,46 @@ export _pep_move_ref(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
     }
 }
 
-# ── FNV-1a 64-bit (same constants as the compiler's __address lowering) ─────
+# ── Byte hash: 8 bytes per step, then a final avalanche ──────────────────────
+# Each 8-byte word is xored in and multiplied by an odd constant, with the
+# high half folded down so later words reach the low bits; the tail's 1-7
+# bytes form one more word. The finish is MurmurHash3's fmix64, so every
+# input bit reaches the low bits a power-of-two table masks with. Words are
+# assembled from single bytes (LLVM merges them into one unaligned load), so
+# `data` needs no alignment. An empty or null buffer hashes to the FNV-1a
+# offset basis, the seed `hash<T>` also uses.
 export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
     if (data == __null || length == 0) { return -3750763034362895579; }
-    var h = -3750763034362895579;
-    var i = 0;
-    while (i < length) {
-        h = (h ^ data[i]) * 1099511628211;
-        i = i + 1;
+    __ptr<u8> bytes = data as __ptr<u8>;
+    ulong h = (-3750763034362895579 as ulong) ^ length;
+    ulong i = 0;
+    while (i + 8 <= length) {
+        h = _pep_hash_step(h, _pep_hash_word(bytes, i, 8));
+        i = i + 8;
     }
-    return h;
+    if (i < length) {
+        h = _pep_hash_step(h, _pep_hash_word(bytes, i, length - i));
+    }
+    h = (h ^ (h >> 33)) * 0xff51afd7ed558ccd;
+    h = (h ^ (h >> 33)) * 0xc4ceb9fe1a85ec53;
+    return h ^ (h >> 33);
+}
+
+# The `count` (1-8) bytes at `bytes[start]` as a little-endian word.
+_pep_hash_word(bytes: __ptr<u8>, start: ulong, count: ulong): ulong {
+    ulong word = 0;
+    ulong k = 0;
+    while (k < count) {
+        word = word | ((bytes[start + k] as ulong) << (k * 8));
+        k = k + 1;
+    }
+    return word;
+}
+
+# One step of `_pep_hash_bytes`: mixes `word` into `h`.
+_pep_hash_step(h: ulong, word: ulong): ulong {
+    var mixed = (h ^ word) * 0x9e3779b97f4a7c15;
+    return mixed ^ (mixed >> 32);
 }
 
 # ── UTF-8 helpers (length-based; no NUL assumptions on language data) ───────

@@ -468,3 +468,46 @@ test(): int {
 "#,
     );
 }
+
+#[test]
+fn methods_on_a_buffer_slot_of_a_value_struct_take_its_address() {
+    // `_data[i] == key` and `_data[i].m()` on a value element used to fail
+    // ("index method on struct value"); HashMap and HashSet compare their
+    // keys this way, so a value struct with its own `==` could not be a key.
+    assert_runs_clean(
+        r#"
+[Value]
+struct Tag {
+    int n;
+    String text;
+
+    construct(this.n = 0, this.text = "") {}
+
+    ==(other: Tag): bool {
+        return n % 10 == other.n % 10;
+    }
+
+    bump() {
+        n = n + 1;
+    }
+}
+
+hash<Tag>(value: Tag): u64 {
+    return hash<int>(value.n % 10);
+}
+
+test(): int {
+    var tags = Array<Tag>(2);
+    tags._size = 2;
+    tags._data[0] = Tag(3, "three");
+    if (!(tags._data[0] == Tag(13))) { return -1; }
+    tags._data[0].bump();
+    if (tags._data[0].n != 4) { return -2; }
+    var seen = HashSet<Tag>();
+    seen.insert(Tag(5, "five"));
+    if (!seen.contains(Tag(25))) { return -3; }
+    return 0;
+}
+"#,
+    );
+}

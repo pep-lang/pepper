@@ -78,7 +78,8 @@ made in a method holds a copy of `this`, so it cannot change `this` either.
 ## Comparing and hashing
 
 `==` and `!=` compare two values field by field, and `hash` combines the
-fields' hashes, unless the struct declares its own `==` or `hash`. A value
+fields' hashes, unless the struct declares its own `==` or `hash` (declare
+both together; see [Hashing and equality](hashing.md)). A value
 has no identity, so `===` and `!==` are errors on it, and it is never null:
 comparing one with `__null` is an error too.
 

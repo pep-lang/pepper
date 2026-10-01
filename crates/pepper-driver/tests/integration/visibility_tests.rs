@@ -126,7 +126,7 @@ fn leak_census_helper_is_exported() {
 fn a_struct_override_of_a_runtime_generic_is_honored() {
     // `hash<Pt>` overrides the runtime's `hash<T>` for `Pt`, as `hash<int>`
     // would: it compiles, and must not be reported as a private duplicate.
-    let main = "struct Pt { var x: int; }\nhash<Pt>(Pt p): u64 { return 42; }\n\
+    let main = "struct Pt { var x: int; ==(other: Pt): bool { return x == other.x; } }\nhash<Pt>(Pt p): u64 { return 42; }\n\
                 main(): int { var s = HashSet<Pt>(); s.insert(Pt()); return hash<Pt>(Pt()) as int; }";
     compile("override", LIB, main).expect("a struct override");
 }

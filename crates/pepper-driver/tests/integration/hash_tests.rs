@@ -1,7 +1,7 @@
 //! HashMap / HashSet API coverage: each snippet is compiled together with
 //! the runtime prelude and JIT-executed through the entry function `test`.
 
-use crate::support::compile_jit_with_runtime;
+use crate::support::{compile_jit_with_runtime, jit_census};
 
 #[test]
 fn hash_is_deterministic() {
@@ -103,20 +103,22 @@ test(): int {
 
 #[test]
 fn same_bucket_collision() {
-    // int keys 1 and 9 hash to the same initial bucket (h & 7 == 4 for both)
-    // but have distinct full hashes, so they must be separated by probing.
+    // Two int keys that hash to the same initial bucket of an 8-slot table
+    // but have distinct full hashes must be separated by probing. The second
+    // key is found by search, so the test holds for any hash function.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
     var m = HashMap<int, int>();
-    if ((hash<int>(1) & 7) != (hash<int>(9) & 7)) { return -1; }
+    var other = 2;
+    while ((hash<int>(other) & 7) != (hash<int>(1) & 7)) { other = other + 1; }
     if (!m.insert(1, 100)) { return -2; }
-    if (!m.insert(9, 200)) { return -3; }
+    if (!m.insert(other, 200)) { return -3; }
     if (m.count() != 2) { return -4; }
-    if (m[1] != 100 || m[9] != 200) { return -5; }
+    if (m[1] != 100 || m[other] != 200) { return -5; }
     if (!m.remove(1)) { return -6; }
-    if (m[9] != 200) { return -7; }
+    if (m[other] != 200) { return -7; }
     return 0;
 }"#
         ),
@@ -608,4 +610,60 @@ test(): int {
         ),
         0
     );
+}
+
+#[test]
+fn struct_keys_with_their_own_hash_and_equality_match_by_content() {
+    // A struct that declares `==` and overrides `hash<T>` is keyed by its
+    // fields: a fresh object with equal fields finds, replaces and removes
+    // the stored entry, through every HashMap and HashSet path (insert,
+    // lookup, remove, growth, iteration, copy), with no leaked references.
+    let (result, leaked) = jit_census(
+        r#"
+struct Person {
+    String name;
+    int id;
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+
+    ==(other: Person): bool {
+        return id == other.id and name == other.name;
+    }
+}
+
+hash<Person>(value: Person): u64 {
+    return hash<(String, int)>((value.name, value.id));
+}
+
+test(): int {
+    var ages = HashMap<Person, int>();
+    var i = 0;
+    while (i < 100) {
+        ages[Person($"p{i}", i)] = i;
+        i = i + 1;
+    }
+    if (ages.count() != 100) { return -1; }
+    if (ages[Person("p42", 42, "nick")] != 42) { return -2; }
+    if (ages.insert(Person("p7", 7), 70)) { return -3; }
+    if (ages[Person("p7", 7)] != 70 || ages.count() != 100) { return -4; }
+    if (ages.contains(Person("p7", 8))) { return -5; }
+    if (!ages.remove(Person("p7", 7)) || ages.contains(Person("p7", 7))) { return -6; }
+    var total = 0;
+    for (var (person, age) in ages) {
+        total += age;
+    }
+    if (total != 4950 - 7) { return -7; }
+    var people = HashSet<Person>();
+    people.insert(Person("Ada", 1, "A"));
+    if (people.insert(Person("Ada", 1, "Countess"))) { return -8; }
+    if (people[Person("Ada", 1)].nickname != "A") { return -9; }
+    var copied = copy(people);
+    if (!copied.contains(Person("Ada", 1))) { return -10; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0, "test() returned {}", result);
+    assert_eq!(leaked, 0, "{} allocations leaked", leaked);
 }

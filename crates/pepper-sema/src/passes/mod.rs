@@ -5,6 +5,30 @@
 use crate::model::*;
 use std::mem;
 
+/// The runtime's directory, found on first use, to tell which files are
+/// part of the runtime.
+#[derive(Default)]
+pub struct RuntimeDirectory(std::cell::OnceCell<Option<std::path::PathBuf>>);
+
+impl RuntimeDirectory {
+    /// Whether `file` is part of the runtime (under the discovered runtime
+    /// directory). With no runtime or no source to compare with (a harness
+    /// that registers none), everything is.
+    pub fn contains(&self, module: &Module, file: pepper_parser::diagnostic::FileId) -> bool {
+        use pepper_parser::diagnostic::Sources;
+        let directory = self.0.get_or_init(|| {
+            let (sources, _, _) = pepper_files::runtime::discover();
+            sources.first().and_then(|s| s.parent()).and_then(|d| d.canonicalize().ok())
+        });
+        match (directory, module.sources.get(file)) {
+            (Some(directory), Some((name, _))) => {
+                std::path::Path::new(name).canonicalize().is_ok_and(|path| path.starts_with(directory.as_path()))
+            }
+            (Some(_), None) | (None, _) => true,
+        }
+    }
+}
+
 pub mod entry_point;
 pub mod resolve_literals;
 pub mod resolve_type_aliases;
@@ -30,6 +54,7 @@ pub mod function_types;
 pub mod check_function_types;
 pub mod check_bindings;
 pub mod check_deprecated_members;
+pub mod check_hash_keys;
 pub mod lower_with_blocks;
 pub mod weak_types;
 pub mod closures;
@@ -206,6 +231,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(crate::enums::lower_matches(module));
     // Warnings only: uses of deprecated fields and methods, by final type.
     step!(check_deprecated_members::check_deprecated_members(module));
+    // Struct keys whose `==` and `hash<T>` disagree.
+    step!(check_hash_keys::check_hash_keys(module));
     crate::checked::restore_bodies(module);
     Ok(())
 }
