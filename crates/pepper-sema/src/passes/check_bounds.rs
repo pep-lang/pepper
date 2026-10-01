@@ -140,7 +140,7 @@ pub fn check_bounds(module: &Module) {
         .filter(|st| !st.generic_params.is_empty() && !st.name.contains('<'))
         .map(|st| (st.name.clone(), st.generic_params.iter().map(|p| p.name.clone()).collect()))
         .collect();
-    let checker = Checker { traits: &module.traits, table: &table, struct_params };
+    let checker = Checker { traits: &module.traits, literal_args: &module.literal_args, table: &table, struct_params };
     for function in module.functions.iter().filter(|f| f.is_generic_func && generic(f)) {
         checker.function(function, &[], None);
     }
@@ -191,6 +191,8 @@ pub fn check_bounds(module: &Module) {
 
 struct Checker<'m> {
     traits: &'m [TraitDef],
+    /// Where literal arguments are written (`Module::literal_args`).
+    literal_args: &'m [(Loc, usize, Loc)],
     table: &'m StructTable,
     /// Each generic struct's parameter names, to read its members' types at
     /// a specialization (`Array<T>`'s `__index_get` returns `T`).
@@ -639,7 +641,9 @@ impl Checker<'_> {
                         base,
                         crate::passes::constraints::spelled(expected)
                     ))
-                    .at(arg.loc().known().unwrap_or(loc)),
+                    .at(arg.loc().known().unwrap_or_else(|| {
+                        self.literal_args.iter().find(|(c, j, _)| *c == loc && *j == i).map_or(loc, |(_, _, at)| *at)
+                    })),
                     (format!("'{}' declared here", base), Some(member.loc)),
                 );
                 return;

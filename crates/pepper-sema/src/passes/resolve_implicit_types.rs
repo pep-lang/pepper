@@ -348,12 +348,14 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             if this_type.is_empty() || this_type.is_auto() {
                 return TypeName::auto();
             }
-            // A method of an enum is the function `E::m` (see `enums`).
-            if crate::enums::method_is_static(&this_type.to_string(), method) == Some(false) {
+            // A method of an enum or another value type is the function
+            // `E::m` (see `enums`, `value_types`).
+            let key = crate::value_types::key(&this_type.to_string()).unwrap_or_else(|| this_type.to_string());
+            if crate::enums::method_is_static(&key, method) == Some(false) {
                 let mut all = vec![(**this).clone()];
                 all.extend(args.iter().cloned());
                 let call = Expression::FunctionCall {
-                    function: crate::enums::method_name(&this_type.to_string(), method),
+                    function: crate::enums::method_name(&key, method),
                     args: all,
                     loc: *loc,
                 };
@@ -1060,12 +1062,16 @@ fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Opt
             }
             return;
         }
-        // `c.name()` on an enum value calls the function `Color::name(c)`.
+        // `c.name()` on an enum value calls the function `Color::name(c)`,
+        // and `x.doubled()` on an `int` with that method `i32::doubled(x)`.
         if let Expression::MethodCall { this, method, args, loc } = e {
             let this_type = type_of_expr(this, scopes, current);
-            if crate::enums::is_enum(&this_type.to_string()) {
+            let key = crate::value_types::key(&this_type.to_string());
+            let value_method = key.as_deref().is_some_and(|k| crate::enums::method_is_static(k, method).is_some());
+            if crate::enums::is_enum(&this_type.to_string()) || value_method {
+                let key = key.unwrap_or_else(|| this_type.to_string());
                 let this = std::mem::replace(this.as_mut(), Expression::ThisRef);
-                match crate::enums::call_on_value(&this_type.to_string(), method, this.clone(), std::mem::take(args), *loc) {
+                match crate::enums::call_on_value(&key, method, this.clone(), std::mem::take(args), *loc) {
                     Some(call) => *e = call,
                     None => {
                         if let Expression::MethodCall { this: slot, .. } = e {

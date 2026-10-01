@@ -49,6 +49,9 @@ struct Converter {
     conversions: Vec<Conversion>,
     table: StructTable,
     trait_defs: Vec<TraitDef>,
+    /// Each conformance of a value type (`extend int with Tr`): the type's
+    /// key (`value_types::key`), the trait, and the extension.
+    value_conformances: Vec<(String, TypeName, Loc)>,
     /// Present when an extension adds constraints: says which condition of
     /// a conditional conformance a struct does not meet.
     conformance: Option<crate::passes::constraints::Conformance>,
@@ -175,7 +178,31 @@ impl Converter {
                     return;
                 }
                 let Some(facts) = self.structs.get(&actual.to_string()) else {
-                    // Not a struct: the type checks report the mismatch.
+                    // A number, `bool` or enum may conform to the trait, for
+                    // constraints, but is never a trait value.
+                    if crate::value_types::is_value_type(&actual) {
+                        let key = crate::value_types::key(&actual.name);
+                        let declared = self
+                            .value_conformances
+                            .iter()
+                            .find(|(k, t, _)| Some(k) == key.as_ref() && *t == crate::passes::check_function_types::canonical(expected))
+                            .map(|(_, _, at)| *at);
+                        let shown = crate::passes::constraints::spelled(&actual);
+                        let error = Diagnostic::error(format!(
+                            "'{}' cannot be converted to trait '{}': only structs and enums whose cases carry values can be trait values",
+                            shown,
+                            expected.display()
+                        ))
+                        .at(loc);
+                        crate::errors::report(match declared {
+                            Some(at) => error.with_note(
+                                format!("'{}' conforms to '{}' here, which makes it meet the constraint, not a trait value", shown, expected.display()),
+                                Some(at),
+                            ),
+                            None => error,
+                        });
+                    }
+                    // Anything else: the type checks report the mismatch.
                     return;
                 };
                 let expected_canonical = crate::passes::check_function_types::canonical(expected);
@@ -755,6 +782,15 @@ pub fn convert_to_traits(module: &mut Module) {
         conversions: vec![],
         table: StructTable::build(module),
         trait_defs: module.traits.clone(),
+        value_conformances: module
+            .extensions
+            .iter()
+            .filter(|e| crate::value_types::is_value_type(&e.target))
+            .flat_map(|e| {
+                let key = crate::value_types::key(&e.target.name).unwrap_or_default();
+                e.traits.iter().map(move |t| (key.clone(), crate::passes::check_function_types::canonical(t), e.loc))
+            })
+            .collect(),
         conformance: module
             .extensions
             .iter()

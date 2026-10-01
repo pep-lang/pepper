@@ -537,7 +537,7 @@ fn method_errors() {
     let declared = |member: &str| error_of(&format!("enum E {{ A\n    {}\n}}\ntest(): int {{ return 0; }}", member));
     assert!(declared("name(): String { return \"\"; }").contains("'name' is built into every enum and cannot be redeclared"));
     assert!(error_of(&format!("{}extend Light {{ extra(): int {{ return 1; }} }}\ntest(): int {{ return 0; }}", LIGHT))
-        .contains("cannot extend enum 'Light': declare its methods inside the enum"));
+        .contains("cannot extend enum 'Light' without a trait: declare its methods inside the enum"));
     assert!(declared("pick<T>(x: T): T { return x; }").contains("methods of an enum cannot be generic yet ('pick')"));
 }
 

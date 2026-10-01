@@ -221,10 +221,11 @@ pub fn method_name(enum_name: &str, method: &str) -> String {
     format!("{}::{}", enum_name, method)
 }
 
-/// The enum and method a function named by [`method_name`] belongs to.
+/// The enum (or other value type, see `value_types`) and method a function
+/// named by [`method_name`] belongs to.
 pub fn method_of(function: &str) -> Option<(&str, &str)> {
     let (enum_name, method) = function.split_once("::")?;
-    is_enum(enum_name).then_some((enum_name, method))
+    (crate::value_types::key(enum_name).as_deref() == Some(enum_name)).then_some((enum_name, method))
 }
 
 /// The `this` parameter of an instance method of enum `enum_name`: the
@@ -377,23 +378,18 @@ fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Opt
 pub fn resolve_enum_cases(module: &mut Module) {
     install(&module.enums);
     install_reference_enums(&module.structs);
+    // Extensions of numbers, `bool` and enums become functions `X::m`.
+    crate::value_types::lower_extensions(module);
     if module.enums.is_empty() && !module.structs.iter().any(|st| st.enum_cases.is_some()) {
+        install_methods(module);
+        method_bodies(module);
+        crate::value_types::resolve_static_calls(module);
         return;
-    }
-    for ext in &module.extensions {
-        if is_enum(&ext.target.name) {
-            report(
-                Diagnostic::error(format!(
-                    "cannot extend enum '{}': declare its methods inside the enum",
-                    pepper_parser::namespace::demangle_name(&ext.target.name)
-                ))
-                .at(ext.loc),
-            );
-        }
     }
     add_built_in_methods(module);
     install_methods(module);
     method_bodies(module);
+    crate::value_types::resolve_static_calls(module);
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
     // The types named as receivers (`Tree<int>` in `Tree<int>.Leaf`), which
     // the walk meets as calls right after the member they are the receiver

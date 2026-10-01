@@ -124,8 +124,11 @@ A type argument conforms to a trait when:
 - it is a type parameter constrained by that trait: inside
   `wrap<T: Shape>`, `Gallery<String, T>` is allowed.
 
-Numbers, `bool`, enums, pointers, tuples and function types conform to no
-trait.
+A number type, `char`, `bool` or an enum whose cases carry no values
+conforms when it declares the trait the same way (`extend int with Shape`;
+see [numbers, `bool` and enums](traits-and-extensions.md#numbers-bool-and-enums)),
+for constraints only: it never becomes a trait value. Pointers, tuples and
+function types conform to no trait.
 
 ### The `Shared` constraint
 

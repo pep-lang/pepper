@@ -71,6 +71,16 @@ pub(crate) fn rewrite_static_calls(function: &mut FunctionDef, type_map: &[(Stri
         return;
     }
     crate::passes::walk_block(body, &mut |e: &mut Expression| {
+        // A value type's static method is its function `X::m`.
+        if let Expression::MethodCall { this, method, args, loc } = e
+            && let Expression::SymbolRef { id, .. } = this.as_ref()
+            && let Some((_, ty)) = map.iter().find(|(p, _)| p == id)
+            && let Some(key) = crate::value_types::key(&ty.to_string())
+            && crate::enums::method_is_static(&key, method) == Some(true)
+        {
+            *e = Expression::FunctionCall { function: crate::enums::method_name(&key, method), args: std::mem::take(args), loc: *loc };
+            return;
+        }
         if let Expression::MethodCall { this, .. } = e
             && let Expression::SymbolRef { id, loc, .. } = this.as_mut()
             && let Some((_, ty)) = map.iter().find(|(p, _)| p == id)

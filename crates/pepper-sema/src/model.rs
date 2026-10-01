@@ -1152,6 +1152,11 @@ pub struct Module {
     pub type_uses: Vec<TypeUse>,
     /// The contexts `type_uses` point into.
     pub use_contexts: Vec<UseContext>,
+    /// Where each literal argument of a call is written, as (the call's
+    /// location, the argument's position, the literal's location): a
+    /// literal carries no location of its own, and an error about the
+    /// argument belongs at it (see [`Module::argument_loc`]).
+    pub literal_args: Vec<(Loc, usize, Loc)>,
     /// The type aliases that constrain a parameter, which
     /// `resolve_type_aliases` keeps when it expands the rest away, so their
     /// uses can still be checked.
@@ -1222,6 +1227,16 @@ impl Module {
         function.body.is_some() || self.stripped.contains(&function.loc)
     }
 
+    /// Where argument `index` of the call at `call` is written: its own
+    /// location, or a literal's, else the call's.
+    pub fn argument_loc(&self, call: Loc, index: usize, arg: &Expression) -> Loc {
+        let own = arg.loc();
+        if !own.is_none() {
+            return own;
+        }
+        self.literal_args.iter().find(|(c, i, _)| *c == call && *i == index).map_or(call, |(_, _, at)| *at)
+    }
+
     /// The struct constructed by a call to `function` and the constructor
     /// it calls: `Point` (a single constructor) or `Point$2`, `Box<int>$2`.
     /// A call still naming an overloaded struct's set has none yet.
@@ -1254,6 +1269,7 @@ impl Module {
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);
         self.withheld.extend(other.withheld);
+        self.literal_args.extend(other.literal_args);
         let offset = self.use_contexts.len();
         self.use_contexts.extend(other.use_contexts);
         self.type_uses.extend(other.type_uses.into_iter().map(|mut u| {

@@ -3699,3 +3699,77 @@ fn shared_constraint_name_taken_by_a_trait() {
          \x20     |       ^~~~~~"
     );
 }
+
+/// A number that declares a trait still is no trait value.
+#[test]
+fn value_type_is_never_a_trait_value() {
+    let source = "trait Doubled {\n    doubled(): int;\n}\nextend int with Doubled {\n    doubled(): int { return this * 2; }\n}\nmain(): int {\n    Doubled d = 3;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("value_type_is_never_a_trait_value", source),
+        "main.pep:8:5: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values\n\
+         \x20   8 |     Doubled d = 3;\n\
+         \x20     |     ^~~~~~~\n\
+         main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the constraint, not a trait value\n\
+         \x20   4 | extend int with Doubled {\n\
+         \x20     |        ^~~"
+    );
+}
+
+/// A value type's conformance needs every member the trait has no default for.
+#[test]
+fn value_type_misses_a_trait_member() {
+    let source = "trait Doubled {\n    doubled(): int;\n}\nextend int with Doubled {\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("value_type_misses_a_trait_member", source),
+        "main.pep:4:8: error: 'int' does not implement 'doubled', required by trait 'Doubled'\n\
+         \x20   4 | extend int with Doubled {\n\
+         \x20     |        ^~~\n\
+         main.pep:2:5: note: 'doubled' declared here\n\
+         \x20   2 |     doubled(): int;\n\
+         \x20     |     ^~~~~~~"
+    );
+}
+
+/// An enum declares its methods inside it; an extension of one names a trait.
+#[test]
+fn enum_extension_without_a_trait() {
+    let source = "enum Light {\n    Red,\n    Green,\n}\nextend Light {\n    f(): int { return 1; }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("enum_extension_without_a_trait", source),
+        "main.pep:5:8: error: cannot extend enum 'Light' without a trait: declare its methods inside the enum\n\
+         \x20   5 | extend Light {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+/// A number meets a constraint only by declaring the trait; the error is at the literal.
+#[test]
+fn value_type_does_not_conform() {
+    let source = "trait Doubled {\n    doubled(): int;\n}\ntwice<T: Doubled>(x: T): int { return 0; }\nmain(): int { return twice(3); }\n";
+    assert_eq!(
+        error_of("value_type_does_not_conform", source),
+        "main.pep:5:28: error: 'int' does not conform to trait 'Doubled', required by 'T' in 'twice'\n\
+         \x20   5 | main(): int { return twice(3); }\n\
+         \x20     |                            ^\n\
+         main.pep:4:10: note: constraint declared here\n\
+         \x20   4 | twice<T: Doubled>(x: T): int { return 0; }\n\
+         \x20     |          ^~~~~~~\n\
+         note: declare it with 'extend int with Doubled'"
+    );
+}
+
+/// A generic method's constraint, reported at a literal argument.
+#[test]
+fn value_type_literal_argument_of_a_method() {
+    let source = "trait Doubled {\n    doubled(): int;\n}\nstruct Canvas {\n    draw<T: Doubled>(x: T): int { return 1; }\n}\nmain(): int {\n    var c = Canvas();\n    return c.draw(-7);\n}\n";
+    assert_eq!(
+        error_of("value_type_literal_argument_of_a_method", source),
+        "main.pep:9:19: error: 'int' does not conform to trait 'Doubled', required by 'T' in 'draw'\n\
+         \x20   9 |     return c.draw(-7);\n\
+         \x20     |                   ^~\n\
+         main.pep:5:13: note: constraint declared here\n\
+         \x20   5 |     draw<T: Doubled>(x: T): int { return 1; }\n\
+         \x20     |             ^~~~~~~\n\
+         note: declare it with 'extend int with Doubled'"
+    );
+}

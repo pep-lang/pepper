@@ -247,6 +247,10 @@ impl Conformance {
         if arg.is_pointer() {
             return false;
         }
+        // A number, `bool` or enum conforms through `extend int with Tr`.
+        if let Some(key) = arg.sub_types.is_empty().then(|| crate::value_types::key(&arg.name)).flatten() {
+            return self.value_conformances(&key).any(|t| canonical(t) == want);
+        }
         self.declaring(arg, required).any(|(map, conditions)| {
             conditions.iter().all(|(i, bound, _)| {
                 let mut bound = bound.clone();
@@ -254,6 +258,14 @@ impl Conformance {
                 arg.sub_types.get(*i).is_some_and(|a| self.conforms(a, &bound, scope))
             })
         })
+    }
+
+    /// The traits value type `key` (see `value_types::key`) declares.
+    fn value_conformances<'s>(&'s self, key: &'s str) -> impl Iterator<Item = &'s TypeName> + 's {
+        self.extensions
+            .iter()
+            .filter(move |(target, _, _)| target.sub_types.is_empty() && crate::value_types::key(&target.name).as_deref() == Some(key))
+            .flat_map(|(_, traits, _)| traits)
     }
 
     /// The extensions that declare `required` for `arg`, a struct: each with
@@ -391,12 +403,14 @@ impl Conformance {
     /// type arguments do not meet its constraints.
     pub fn check_call(&self, module: &Module, base: &FunctionDef, spec: &TypeName, call: Loc, args: &[Loc]) -> Option<Diagnostic> {
         let unmet = self.unmet(&base.generic_params, &spec.sub_types)?;
+        let literal = |i: usize| module.literal_args.iter().find(|(c, j, _)| *c == call && *j == i).map(|(_, _, at)| *at);
         let at = base
             .parameters
             .iter()
             .zip(args)
-            .find(|(p, a)| mentions(&p.ty, &unmet.param) && !a.is_none())
-            .map_or(call, |(_, a)| *a);
+            .enumerate()
+            .find(|(_, (p, _))| mentions(&p.ty, &unmet.param))
+            .map_or(call, |(i, (_, a))| if a.is_none() { literal(i).unwrap_or(call) } else { *a });
         let generic = crate::passes::overloads::set_name(&base.name);
         Some(self.error(&unmet, generic, at, module, &Scope::new()))
     }
@@ -456,6 +470,11 @@ impl Conformance {
         }
         if let Some((note, at)) = self.condition_note(&unmet.arg, &unmet.required) {
             return error.with_note(note, Some(at));
+        }
+        // A number, `bool` or enum conforms by an extension too.
+        if crate::value_types::is_value_type(&unmet.arg) {
+            let declared = self.enums.get(&unmet.arg.name).copied();
+            return error.with_note(format!("declare it with 'extend {} with {}'", arg, required), declared);
         }
         if let Some(st) = self.structs.get(&unmet.arg.name).filter(|_| !unmet.arg.is_pointer()) {
             let written = pepper_parser::namespace::demangle(&arg).to_string();
@@ -942,7 +961,7 @@ fn spec_site(module: &Module, spec: &TypeName, unmet: &Unmet) -> Loc {
         if let Expression::FunctionCall { function, args, loc } = expr
             && *function == name
         {
-            found = Some(argument_site(base, &unmet.param, args, *loc));
+            found = Some(argument_site(module, base, &unmet.param, args, *loc));
         }
     };
     for_each_expression(module, &mut visit);
@@ -954,15 +973,14 @@ fn spec_site(module: &Module, spec: &TypeName, unmet: &Unmet) -> Loc {
 
 /// The argument of a call to `base` (or of a generic method) that fixes
 /// `param`: the first whose parameter's declared type mentions it.
-pub fn argument_site(base: Option<&FunctionDef>, param: &str, args: &[Expression], call: Loc) -> Loc {
+pub fn argument_site(module: &Module, base: Option<&FunctionDef>, param: &str, args: &[Expression], call: Loc) -> Loc {
     let Some(base) = base else { return call };
     base.parameters
         .iter()
         .zip(args)
-        .find(|(p, _)| mentions(&p.ty, param))
-        .map(|(_, a)| a.loc())
-        .filter(|l| !l.is_none())
-        .unwrap_or(call)
+        .enumerate()
+        .find(|(_, (p, _))| mentions(&p.ty, param))
+        .map_or(call, |(i, (_, a))| module.argument_loc(call, i, a))
 }
 
 fn mentions(ty: &TypeName, name: &str) -> bool {

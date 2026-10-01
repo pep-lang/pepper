@@ -2,6 +2,7 @@ pub mod arithmetic;
 pub mod builder;
 pub mod deprecation;
 pub mod enums;
+pub mod value_types;
 pub mod interface;
 pub mod member_lookup;
 pub(crate) mod errors;

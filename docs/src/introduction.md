@@ -77,6 +77,8 @@ Some that you will meet quickly:
 - Generic parameters can require traits (`<T: Shape & Named>`), checked
   wherever the generic is used and, inside the generic, against what the
   traits declare (see [constraints](language/generics.md#constraints)).
+  Numbers, `bool` and enums can declare traits too, for constraints, but
+  are never trait values.
 - Threads can share only thread-safe values, which the compiler checks,
   closure captures included. A channel hands over what it is sent without
   copying it (`send(move(x))`, or `send(copy(x))` to keep `x`), a `Select`

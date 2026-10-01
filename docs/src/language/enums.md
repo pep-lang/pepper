@@ -116,7 +116,11 @@ itself (`Light.first()`).
 
 For an enum whose cases carry nothing, `this` is passed by value, like an
 `int`: a method cannot change the value it was called on. Return a new case
-instead, as `next()` does. For an enum whose cases carry values, `this` is
+instead, as `next()` does. Such an enum can also declare a trait with
+`extend Light with Describe { ... }`, which makes it meet the constraint
+`T: Describe` (see
+[numbers, `bool` and enums](traits-and-extensions.md#numbers-bool-and-enums));
+it is still never a trait value. For an enum whose cases carry values, `this` is
 the object, as in a struct's method; its values still cannot change.
 
 ### Built-in methods

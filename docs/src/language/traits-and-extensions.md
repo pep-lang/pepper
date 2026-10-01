@@ -126,6 +126,39 @@ means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through `this` explicitly only for the trait's own methods.
 
+### Numbers, `bool` and enums
+
+A number type (`int`, `long`, `byte`, `char`, `float`, `double` and the
+rest), `bool`, or an enum whose cases carry no values can declare a trait
+too, with an extension written the same way. Inside its methods, `this` is
+the value:
+
+```pepper
+{{#include ../../examples/traits-value-types.pep}}
+```
+
+- The type then meets the constraint `T: Describe` (see
+  [constraints](generics.md#constraints)), and its methods can be called on
+  a value (`x.describe()`) or, for a static one, on the type (`int.zero()`,
+  or `T.zero()` in a generic). Each call goes straight to the method: there
+  is no object and no vtable.
+- It is never a trait value. A number or such an enum cannot be stored in a
+  `Describe` variable, passed as one, or added to an `Array<Describe>`:
+
+  ```text
+  main.pep:7:15: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
+      7 | main(): int { Doubled d = 3; return 0; }
+        |               ^~~~~~~
+  main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the constraint, not a trait value
+      4 | extend int with Doubled {
+        |        ^~~
+  ```
+
+- An extension of a number type may also add methods without a trait
+  (`extend int { ... }`). An enum declares its methods inside the enum, so
+  an extension of one must name a trait.
+- The spellings of one type are one type: `extend int` is also `extend i32`.
+
 ### Traits as types
 
 A trait's name is also a type. A variable, parameter, field, return value, or

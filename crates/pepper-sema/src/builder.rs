@@ -26,6 +26,24 @@ thread_local! {
     /// The index of `CONTEXT` in the recorded contexts, once a use recorded
     /// it; cleared whenever it changes.
     static CONTEXT_INDEX: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// The literal arguments of the calls built so far (see
+    /// `Module::literal_args`).
+    static LITERAL_ARGS: std::cell::RefCell<Vec<(Loc, usize, Loc)>> = const { std::cell::RefCell::new(vec![]) };
+}
+
+/// Records where each literal among `arguments` of the call at `call` is
+/// written (`-1` included).
+fn record_literal_args(call: Loc, arguments: &[ast::Expression]) {
+    for (i, arg) in arguments.iter().enumerate() {
+        let literal = match arg {
+            ast::Expression::Literal { span, .. } => Some(*span),
+            ast::Expression::Unary { operand, span, .. } if matches!(operand.as_ref(), ast::Expression::Literal { .. }) => Some(*span),
+            _ => None,
+        };
+        if let Some(span) = literal {
+            LITERAL_ARGS.with(|l| l.borrow_mut().push((call, i, loc(span))));
+        }
+    }
 }
 
 /// Builds with `change` applied to the context, restoring it afterwards.
@@ -358,6 +376,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                     ))
                     .at(loc(*name_span)));
                 }
+                record_literal_args(loc(*name_span), arguments);
                 return Ok(Expression::MethodCall {
                     this: Box::new(expression(lhs)?),
                     method: name.clone(),
@@ -381,6 +400,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                     });
                 }
             };
+            record_literal_args(loc(target.span()), arguments);
             Ok(Expression::FunctionCall {
                 function,
                 args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
@@ -2041,6 +2061,7 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     let previous = FILE.with(|f| f.replace(file));
     let previous_error = LABEL_ERROR.with(|e| e.take());
     let previous_uses = TYPE_USES.with(|u| u.take());
+    let previous_literals = LITERAL_ARGS.with(|l| l.take());
     let previous_context = CONTEXT.with(|c| c.take());
     let previous_index = CONTEXT_INDEX.with(|i| i.take());
     // Hidden locals are numbered per file, so a file's code (and its build
@@ -2049,11 +2070,13 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     set_counters([0; 4]);
     let built = build_module(module);
     let (uses, contexts) = TYPE_USES.with(|u| u.replace(previous_uses));
+    let literals = LITERAL_ARGS.with(|l| l.replace(previous_literals));
     CONTEXT.with(|c| *c.borrow_mut() = previous_context);
     CONTEXT_INDEX.with(|i| i.set(previous_index));
     let built = built.map(|mut m| {
         m.type_uses = uses;
         m.use_contexts = contexts;
+        m.literal_args = literals;
         m
     });
     set_counters(previous_counters);
