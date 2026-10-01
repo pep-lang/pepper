@@ -12,6 +12,7 @@ pub mod overloads;
 pub mod convert_string_literals;
 pub mod gather_generics;
 pub mod constraints;
+pub mod check_bounds;
 pub mod check_shared_types;
 pub mod resolve_implicit_types;
 pub mod resolve_resolvables;
@@ -93,6 +94,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(interpolation::check_interpolations(module));
     // Generic constraints, before any specialization clones a body.
     step!(constraints::check_constraints(module));
+    // Constrained generic code uses only what its constraints offer.
+    step!(check_bounds::check_bounds(module));
     step!(specialize_structs(module));
     step!(specialize_functions(module));
     step!(generic_methods::specialize_methods(module));

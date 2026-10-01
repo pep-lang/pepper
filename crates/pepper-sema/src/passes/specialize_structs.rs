@@ -52,6 +52,10 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         specialized.field_members.push(f);
     }
 
+    // A field's name is a value in every method, never the type parameter
+    // a static call names.
+    let fields: Vec<String> = base.field_members.iter().map(|f| f.name.clone()).collect();
+
     // Methods: clone then substitute types. A generic method keeps its own
     // type parameters (`map<U>` of `Box<int>`).
     for method in &base.generic_methods {
@@ -69,6 +73,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         if let Some(body) = &mut m.body {
             substitute_block(body, &type_map);
         }
+        crate::passes::specialize_functions::rewrite_static_calls(&mut m, &type_map, &fields);
         specialized.generic_methods.push(m);
     }
     for method in &base.method_members {
@@ -83,6 +88,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         if let Some(body) = &mut m.body {
             substitute_block(body, &type_map);
         }
+        crate::passes::specialize_functions::rewrite_static_calls(&mut m, &type_map, &fields);
         specialized.method_members.push(m);
     }
 
@@ -102,6 +108,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         if let Some(body) = &mut ctor.body {
             substitute_block(body, &type_map);
         }
+        crate::passes::specialize_functions::rewrite_static_calls(&mut ctor, &type_map, &fields);
         ctor.name = match base_ctor.name.strip_prefix(&base_name) {
             Some(suffix) if suffix.starts_with(pepper_parser::namespace::OVERLOAD_SEPARATOR) => {
                 format!("{}{}", spec_type, suffix)
@@ -116,6 +123,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     if let Some(body) = &mut dtor.body {
         substitute_block(body, &type_map);
     }
+    crate::passes::specialize_functions::rewrite_static_calls(&mut dtor, &type_map, &fields);
     specialized.destructor = dtor;
     let mut acquire = base.acquire.clone();
     if let Some(body) = &mut acquire.body {

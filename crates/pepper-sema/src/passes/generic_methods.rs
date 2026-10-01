@@ -109,5 +109,6 @@ fn specialize(base: &FunctionDef, spec: &TypeName) -> FunctionDef {
     if let Some(body) = &mut method.body {
         crate::passes::specialize_functions::replace_body_types(body, &type_map);
     }
+    crate::passes::specialize_functions::rewrite_static_calls(&mut method, &type_map, &[]);
     method
 }

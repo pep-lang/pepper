@@ -138,12 +138,21 @@ pub fn convert_member_refs(module: &mut Module) {
             (fields, methods)
         };
         let st_name = module.structs[st_idx].name.clone();
+        // A generic base's own type parameters name types, not members: the
+        // receiver of a static call through one (`T.zero()`), which each
+        // specialization rewrites to its type argument.
+        let type_params: Vec<String> = module.structs[st_idx]
+            .generic_params
+            .iter()
+            .map(|p| p.name.clone())
+            .filter(|p| !fields.iter().any(|f| f.name == *p))
+            .collect();
 
         // Constructor: params exempt.
         {
             let st = &mut module.structs[st_idx];
             for c in &mut st.constructors {
-                let mut locals: Vec<String> = c.parameters.iter().map(|p| p.name.clone()).collect();
+                let mut locals: Vec<String> = c.parameters.iter().map(|p| p.name.clone()).chain(type_params.iter().cloned()).collect();
                 if let Some(body) = &mut c.body {
                     convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
                 }
@@ -157,6 +166,7 @@ pub fn convert_member_refs(module: &mut Module) {
                 .parameters
                 .iter()
                 .map(|p| p.name.clone())
+                .chain(type_params.iter().cloned())
                 .collect();
             // A trait's default method sees only the trait: its methods, on
             // `this`, and no fields. What its author wrote could not name

@@ -3294,3 +3294,168 @@ fn constraint_inferred_call_beside_platform_code() {
          \x20     |        ^~~~~"
     );
 }
+
+/// A constrained parameter offers only what its constraints declare.
+#[test]
+fn constrained_parameter_has_no_such_method() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.perimeter(); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_has_no_such_method", source),
+        "main.pep:5:45: error: no member named 'perimeter' in 'T'\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.perimeter(); }\n\
+         \x20     |                                             ^~~~~~~~~\n\
+         main.pep:5:10: note: 'T' is constrained by 'Shape', which has no member 'perimeter'\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.perimeter(); }\n\
+         \x20     |          ^~~~~"
+    );
+}
+
+/// A field is not something a trait declares.
+#[test]
+fn constrained_parameter_has_no_fields() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.radius; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_has_no_fields", source),
+        "main.pep:5:45: error: no member named 'radius' in 'T'\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.radius; }\n\
+         \x20     |                                             ^~~~~~\n\
+         main.pep:5:10: note: 'T' is constrained by 'Shape', which has no member 'radius'\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.radius; }\n\
+         \x20     |          ^~~~~"
+    );
+}
+
+/// A constrained type parameter cannot be constructed.
+#[test]
+fn constrained_parameter_has_no_constructor() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nmake<T: Shape>(item: T): T { return T(); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_has_no_constructor", source),
+        "main.pep:5:37: error: cannot construct 'T': a constrained type parameter has no constructor\n\
+         \x20   5 | make<T: Shape>(item: T): T { return T(); }\n\
+         \x20     |                                     ^\n\
+         main.pep:5:9: note: 'T' is constrained by 'Shape', which has no constructor\n\
+         \x20   5 | make<T: Shape>(item: T): T { return T(); }\n\
+         \x20     |         ^~~~~"
+    );
+}
+
+/// A member two constraints declare is ambiguous.
+#[test]
+fn constrained_parameter_member_of_two_constraints() {
+    let source = "trait Named {\n    name(): String;\n}\ntrait Titled {\n    name(): String;\n}\nlabel<T: Named & Titled>(item: T): String { return item.name(); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_member_of_two_constraints", source),
+        "main.pep:7:57: error: 'name' is declared by both 'Named' and 'Titled'; call it through one of them\n\
+         \x20   7 | label<T: Named & Titled>(item: T): String { return item.name(); }\n\
+         \x20     |                                                         ^~~~\n\
+         main.pep:7:10: note: 'T' is constrained here\n\
+         \x20   7 | label<T: Named & Titled>(item: T): String { return item.name(); }\n\
+         \x20     |          ^~~~~"
+    );
+}
+
+/// A constraint's method takes the arguments it declares.
+#[test]
+fn constrained_parameter_call_with_too_many_arguments() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.scale(1, 2); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_call_with_too_many_arguments", source),
+        "main.pep:5:45: error: too many arguments to 'scale': expected 1, have 2\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.scale(1, 2); }\n\
+         \x20     |                                             ^~~~~\n\
+         main.pep:3:5: note: 'scale' declared here\n\
+         \x20   3 |     scale(by: int): int;\n\
+         \x20     |     ^~~~~"
+    );
+}
+
+/// A constraint's method takes the argument types it declares.
+#[test]
+fn constrained_parameter_call_with_wrong_argument() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.scale(\"twice\"); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_call_with_wrong_argument", source),
+        "main.pep:5:51: error: cannot pass a value of type 'String' as argument 1 of 'scale', which has type 'int'\n\
+         \x20   5 | total<T: Shape>(item: T): int { return item.scale(\"twice\"); }\n\
+         \x20     |                                                   ^~~~~~~\n\
+         main.pep:3:5: note: 'scale' declared here\n\
+         \x20   3 |     scale(by: int): int;\n\
+         \x20     |     ^~~~~"
+    );
+}
+
+/// A constrained value converts only to its constraints' trait types.
+#[test]
+fn constrained_parameter_converts_only_to_its_constraints() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Circle {\n}\nkeep<T: Shape>(item: T): int {\n    var shape: Shape = item;\n    var circle: Circle = item;\n    return 0;\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_converts_only_to_its_constraints", source),
+        "main.pep:9:26: error: cannot initialize variable 'circle' of type 'Circle' with a value of type 'T'\n\
+         \x20   9 |     var circle: Circle = item;\n\
+         \x20     |                          ^~~~\n\
+         main.pep:7:9: note: 'T' converts only to its constraint 'Shape'\n\
+         \x20   7 | keep<T: Shape>(item: T): int {\n\
+         \x20     |         ^~~~~"
+    );
+}
+
+/// An operator the constraints do not declare.
+#[test]
+fn constrained_parameter_operator_not_declared() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nsmaller<T: Shape>(a: T, b: T): bool { return a < b; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_operator_not_declared", source),
+        "main.pep:5:48: error: invalid operands to binary expression ('T' and 'T')\n\
+         \x20   5 | smaller<T: Shape>(a: T, b: T): bool { return a < b; }\n\
+         \x20     |                                                ^\n\
+         main.pep:5:12: note: 'T' is constrained by 'Shape', which has no operator '<'\n\
+         \x20   5 | smaller<T: Shape>(a: T, b: T): bool { return a < b; }\n\
+         \x20     |            ^~~~~"
+    );
+}
+
+/// Inside a constrained generic struct, checked without any specialization.
+#[test]
+fn constrained_parameter_in_struct_method() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Gallery<T: Shape> {\n    var items = Array<T>();\n    first(): int { return items[0].depth(); }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_in_struct_method", source),
+        "main.pep:7:36: error: no member named 'depth' in 'T'\n\
+         \x20   7 |     first(): int { return items[0].depth(); }\n\
+         \x20     |                                    ^~~~~\n\
+         main.pep:5:19: note: 'T' is constrained by 'Shape', which has no member 'depth'\n\
+         \x20   5 | struct Gallery<T: Shape> {\n\
+         \x20     |                   ^~~~~"
+    );
+}
+
+/// A static member through the parameter must be one a constraint declares.
+#[test]
+fn constrained_parameter_static_member() {
+    let source = "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nmake<T: Shape>(): T { return T.unit(); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_static_member", source),
+        "main.pep:5:32: error: no member named 'unit' in 'T'\n\
+         \x20   5 | make<T: Shape>(): T { return T.unit(); }\n\
+         \x20     |                                ^~~~\n\
+         main.pep:5:9: note: 'T' is constrained by 'Shape', which has no static member 'unit'\n\
+         \x20   5 | make<T: Shape>(): T { return T.unit(); }\n\
+         \x20     |         ^~~~~"
+    );
+}
+
+/// A compound assignment is its own operator: '+' does not provide '+='.
+#[test]
+fn constrained_parameter_compound_operator_not_declared() {
+    let source = "trait Addable {\n    +(other: this): this;\n}\ngrow<T: Addable>(a: T, b: T): T {\n    var total = a;\n    total += b;\n    return total;\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constrained_parameter_compound_operator_not_declared", source),
+        "main.pep:6:11: error: invalid operands to binary expression ('T' and 'T')\n\
+         \x20   6 |     total += b;\n\
+         \x20     |           ^~\n\
+         main.pep:4:9: note: 'T' is constrained by 'Addable', which has no operator '+='\n\
+         \x20   4 | grow<T: Addable>(a: T, b: T): T {\n\
+         \x20     |         ^~~~~~~"
+    );
+}

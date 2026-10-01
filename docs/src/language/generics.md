@@ -162,10 +162,46 @@ as quick fixes.
   argument: `describe<Point: Shape>` declares a generic function whose
   parameter happens to be named `Point`.
 
-> **Note:** For now a constraint is checked where the generic is used, not
-> inside it. The body of `total_area<T: Shape>` is still compiled for each
-> type argument, so it may call methods that `Shape` does not declare, and a
-> mistake there is reported when a use compiles it.
+### Inside a constrained generic
+
+The compiler also checks the generic itself, once, whether or not anything
+uses it: inside `largest<T: Shape & Ordered>`, a value of type `T` offers
+exactly what `Shape` and `Ordered` declare. It may:
+
+- call their instance methods and operators (`item.area()`, `best < item`),
+- call their static members through the parameter (`T.unit()`),
+- convert to one of their trait types (`var shape: Shape = item;`),
+- be stored, passed, returned, and compared with `==`, `!=`, `===` and `!==`.
+
+```pepper
+{{#include ../../examples/generics-constrained-bodies.pep}}
+```
+
+Anything else is an error at the member or operator, even before any use:
+a field, a method no constraint declares, a constructor `T()`, a call of a
+constraint's method with the wrong number or types of arguments, or
+initializing, assigning or returning a `T` as another type. (Passing a `T`
+to a function that takes another type is still reported in each
+specialization.)
+
+```text
+main.pep:5:45: error: no member named 'perimeter' in 'T'
+    5 | total<T: Shape>(item: T): int { return item.perimeter(); }
+      |                                             ^~~~~~~~~
+main.pep:5:10: note: 'T' is constrained by 'Shape', which has no member 'perimeter'
+    5 | total<T: Shape>(item: T): int { return item.perimeter(); }
+      |          ^~~~~
+```
+
+A method that two constraints both declare is an error too
+(`'name' is declared by both 'Named' and 'Titled'; call it through one of
+them`).
+
+Each use is still compiled for its type argument, so a call goes straight
+to that type's own method, with no trait value in between. A parameter
+without a constraint keeps working as before: its uses are checked in each
+specialization. In a list that mixes the two, such as `f<T: Shape, U>`, only
+the uses of `T` are checked in the generic.
 
 ## Overriding a generic function for one type
 

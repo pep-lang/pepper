@@ -51,7 +51,57 @@ pub fn specialize_functions(module: &mut Module) {
         if let Some(body) = &mut specialized.body {
             replace_body_types(body, &type_map);
         }
+        rewrite_static_calls(&mut specialized, &type_map, &[]);
         module.functions.push(specialized);
+    }
+}
+
+/// Rewrites each static call through a type parameter in `function`'s body
+/// (`T.unit()`) to name its type argument, as the builder writes a type
+/// there: `Square.unit()`, and `Box<int>.make()` as a type literal. A
+/// parameter, local or field (`fields`) of that name is a value, not the
+/// type, anywhere in the function.
+pub(crate) fn rewrite_static_calls(function: &mut FunctionDef, type_map: &[(String, TypeName)], fields: &[String]) {
+    let Some(body) = &mut function.body else { return };
+    let mut values: std::collections::HashSet<String> = fields.iter().cloned().collect();
+    values.extend(function.parameters.iter().map(|p| p.name.trim_start_matches("this.").to_string()));
+    collect_locals(body, &mut values);
+    let map: Vec<&(String, TypeName)> = type_map.iter().filter(|(p, _)| !values.contains(p)).collect();
+    if map.is_empty() {
+        return;
+    }
+    crate::passes::walk_block(body, &mut |e: &mut Expression| {
+        if let Expression::MethodCall { this, .. } = e
+            && let Expression::SymbolRef { id, loc, .. } = this.as_mut()
+            && let Some((_, ty)) = map.iter().find(|(p, _)| p == id)
+        {
+            if ty.sub_types.is_empty() {
+                *id = ty.to_string();
+            } else {
+                let loc = *loc;
+                **this = Expression::FunctionCall { function: ty.to_string(), args: vec![], loc };
+            }
+        }
+    });
+}
+
+/// The names of the locals declared anywhere in `block`.
+fn collect_locals(block: &Block, out: &mut std::collections::HashSet<String>) {
+    for stmt in &block.items {
+        match stmt {
+            Statement::Declaration(Declaration::Variable(var)) => {
+                out.insert(var.name.clone());
+            }
+            Statement::Block(inner) => collect_locals(inner, out),
+            Statement::Branch(branch) => {
+                collect_locals(&branch.if_block, out);
+                if let Some(else_block) = &branch.else_block {
+                    collect_locals(else_block, out);
+                }
+            }
+            Statement::While(wh) => collect_locals(&wh.block, out),
+            _ => {}
+        }
     }
 }
 
