@@ -271,7 +271,7 @@ macro_rules! scope_walker {
                         let params = self.extend_params(&e.target);
                         self.scopes_mut().push(Scope::Generics(params));
                         self.visit_type_name(&$($m)? e.target);
-                        for bound in (&$($m)? e.target_bounds).into_iter().flatten() {
+                        for bound in (&$($m)? e.target_bounds).into_iter().flatten().filter(|b| !(b.name == crate::passes::constraints::SHARED && b.generic_types.is_empty())) {
                             self.visit_type_name(bound);
                         }
                         for t in &$($m)? e.traits {
@@ -554,7 +554,8 @@ macro_rules! scope_walker {
             fn push_generics(&mut self, params: &$($m)? [GenericParam]) {
                 self.scopes_mut().push(Scope::Generics(params.iter().map(|p| p.name.clone()).collect()));
                 for p in params {
-                    for bound in &$($m)? p.bounds {
+                    // The built-in `Shared` names no declaration.
+                    for bound in (&$($m)? p.bounds).into_iter().filter(|b| !(b.name == crate::passes::constraints::SHARED && b.generic_types.is_empty())) {
                         self.visit_type_name(bound);
                     }
                     if let Some(d) = &$($m)? p.default {

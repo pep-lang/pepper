@@ -127,6 +127,27 @@ A type argument conforms to a trait when:
 Numbers, `bool`, enums, pointers, tuples and function types conform to no
 trait.
 
+### The `Shared` constraint
+
+`T: Shared` is built in: it requires a type that is safe to share between
+threads, by the same rule as a field of a `[Shared]` struct. The types that
+conform are listed in
+[What threads can share](threads.md#what-threads-can-share); no `extend`
+can make another type conform. It gives `T` no methods, and it joins other
+constraints with `&` (`T: Shared & Named`):
+
+```pepper
+{{#include ../../examples/generics-shared.pep}}
+```
+
+The standard library states the rule this way where it applies:
+`spawn<T: Shared>`, `run_blocking<T: Shared>` and `Lazy<T: Shared>`, so
+`async.spawn<String>(...)` is reported at `String`, with a note saying why
+it is not thread-safe (`'String' is not declared [Shared]`). In a
+constraint, `Shared` always means this built-in, so a trait cannot be
+named `Shared`. A generic that passes its own `T` to one of these (say
+`run_blocking<T>`) needs `T: Shared` too.
+
 The compiler checks every use: a type argument you write, one it infers from
 a call, a default, and a
 [concrete override](#overriding-a-generic-function-for-one-type). The error

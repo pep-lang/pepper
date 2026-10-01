@@ -582,39 +582,57 @@ fn reexported_variable_not_const() {
 
 #[test]
 fn shared_generic_argument_not_thread_safe() {
-    // The error points at the code that names the specialization; the notes
-    // (in the runtime) name the field and the type.
+    // `Atomic<T: Shared>`: the error points at the type argument, with the
+    // constraint and why the type is not thread-safe.
     let error = error_of("shared_generic_argument", "import async;\nmain(): int {\n    var a = async.Atomic<String>();\n    return 0;\n}\n");
     assert!(
         error.starts_with(
-            "main.pep:3:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+            "main.pep:3:26: error: 'String' does not conform to 'Shared', required by 'T' in 'Atomic'\n\
              \x20   3 |     var a = async.Atomic<String>();\n\
-             \x20     |             ^~~~~~~~~~~~~~~~~~~~\n"
+             \x20     |                          ^~~~~~\n"
         ),
         "{error}"
     );
-    assert!(error.contains("note: required by field '_data' declared here"), "{error}");
+    assert!(error.contains("note: constraint declared here"), "{error}");
+    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+}
+
+#[test]
+fn shared_constraint_on_a_runtime_function() {
+    // `spawn<T: Shared>`: the error points at the type argument, with the
+    // constraint and why the type is not thread-safe.
+    let error = error_of(
+        "shared_constraint_on_spawn",
+        "import async;\n\nmain(): int {\n    async.run(() => {\n        var t = async.spawn<String>(() => { return \"x\"; });\n    });\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:5:29: error: 'String' does not conform to 'Shared', required by 'T' in 'spawn'\n\
+             \x20   5 |         var t = async.spawn<String>(() => { return \"x\"; });\n\
+             \x20     |                             ^~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: constraint declared here"), "{error}");
     assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
 }
 
 #[test]
 fn shared_generic_argument_through_generic_function() {
-    // A shared struct named inside a generic function: the error points at
-    // the call that asked for the specialization, and a note shows where the
-    // specialization names the struct.
-    let error = error_of(
-        "shared_generic_through_function",
-        "import async;\n\nmain(): int {\n    async.run(() => {\n        var t = async.spawn<String>(() => { return \"x\"; });\n    });\n    return 0;\n}\n",
-    );
+    // A shared struct named inside a generic function without a constraint:
+    // the error points at the call that asked for the specialization, and a
+    // note shows where the specialization names the struct.
+    let source = "[Shared]\nstruct Cell<T> {\n    const value: T;\n}\n\nmake<T>(): Cell<T> { return Cell<T>(); }\n\nmain(): int {\n    var c = make<String>();\n    return 0;\n}\n";
+    let error = error_of("shared_generic_through_function", source);
     assert!(
         error.starts_with(
-            "main.pep:5:17: error: 'spawn<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
-             \x20   5 |         var t = async.spawn<String>(() => { return \"x\"; });\n\
-             \x20     |                 ^~~~~~~~~~~~~~~~~~~\n"
+            "main.pep:9:13: error: 'make<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+             \x20   9 |     var c = make<String>();\n\
+             \x20     |             ^~~~~~~~~~~~\n"
         ),
         "{error}"
     );
-    assert!(error.contains("note: '_TaskResult<String>' is required here, in 'spawn<String>'"), "{error}");
+    assert!(error.contains("note: 'Cell<String>' is required here, in 'make<String>'"), "{error}");
     assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
 }
 
@@ -3560,5 +3578,104 @@ fn constrained_extension_names_an_unknown_type() {
         "main.pep:15:15: error: unknown type name 'Nope'\n\
          \x20  15 | extend Box<T: Nope> {\n\
          \x20     |               ^~~~"
+    );
+}
+
+/// `T: Shared` takes only thread-safe types; the note says why a struct is not one.
+#[test]
+fn shared_constraint_not_met_by_struct() {
+    let source = "struct Plain {\n    var n: int;\n}\nkeep<T: Shared>(value: T): int { return 1; }\nmain(): int { return keep(Plain()); }\n";
+    assert_eq!(
+        error_of("shared_constraint_not_met_by_struct", source),
+        "main.pep:5:27: error: 'Plain' does not conform to 'Shared', required by 'T' in 'keep'\n\
+         \x20   5 | main(): int { return keep(Plain()); }\n\
+         \x20     |                           ^~~~~\n\
+         main.pep:4:9: note: constraint declared here\n\
+         \x20   4 | keep<T: Shared>(value: T): int { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+/// A plain function type is not thread-safe; the note says to declare it shared.
+#[test]
+fn shared_constraint_not_met_by_function_type() {
+    let source = "keep<T: Shared>(value: T): int { return 1; }\nf() {}\nmain(): int {\n    var g: () => void = f;\n    return keep(g);\n}\n";
+    assert_eq!(
+        error_of("shared_constraint_not_met_by_function_type", source),
+        "main.pep:5:17: error: '() => void' does not conform to 'Shared', required by 'T' in 'keep'\n\
+         \x20   5 |     return keep(g);\n\
+         \x20     |                 ^\n\
+         main.pep:1:9: note: constraint declared here\n\
+         \x20   1 | keep<T: Shared>(value: T): int { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         note: declare the function type 'shared () => void' to share it between threads"
+    );
+}
+
+/// A tuple is thread-safe when its elements are.
+#[test]
+fn shared_constraint_not_met_by_tuple_element() {
+    let source = "struct Plain {\n    var n: int;\n}\nkeep<T: Shared>(value: T): int { return 1; }\nmain(): int { return keep((1, Plain())); }\n";
+    assert_eq!(
+        error_of("shared_constraint_not_met_by_tuple_element", source),
+        "main.pep:5:27: error: '(int, Plain)' does not conform to 'Shared', required by 'T' in 'keep'\n\
+         \x20   5 | main(): int { return keep((1, Plain())); }\n\
+         \x20     |                           ^~~~~~~~~~~~\n\
+         main.pep:4:9: note: constraint declared here\n\
+         \x20   4 | keep<T: Shared>(value: T): int { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+/// A type parameter passed on to `T: Shared` must be constrained `Shared` itself.
+#[test]
+fn shared_constraint_not_met_by_parameter() {
+    let source = "keep<T: Shared>(value: T): int { return 1; }\npass<T>(value: T): int { return keep<T>(value); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("shared_constraint_not_met_by_parameter", source),
+        "main.pep:2:38: error: 'T' does not conform to 'Shared', required by 'T' in 'keep'\n\
+         \x20   2 | pass<T>(value: T): int { return keep<T>(value); }\n\
+         \x20     |                                      ^\n\
+         \x20     |       : Shared\n\
+         main.pep:1:9: note: constraint declared here\n\
+         \x20   1 | keep<T: Shared>(value: T): int { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         main.pep:2:6: note: add a constraint to 'T': 'T: Shared'\n\
+         \x20   2 | pass<T>(value: T): int { return keep<T>(value); }\n\
+         \x20     |      ^"
+    );
+}
+
+/// A trait value may hold any struct, so it is not thread-safe.
+#[test]
+fn shared_constraint_not_met_by_trait_value() {
+    let source = "trait Shape {\n    area(): int;\n}\nkeep<T: Shared>(value: T): int { return 1; }\npass(s: Shape): int { return keep(s); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("shared_constraint_not_met_by_trait_value", source),
+        "main.pep:5:35: error: 'Shape' does not conform to 'Shared', required by 'T' in 'keep'\n\
+         \x20   5 | pass(s: Shape): int { return keep(s); }\n\
+         \x20     |                                   ^\n\
+         main.pep:4:9: note: constraint declared here\n\
+         \x20   4 | keep<T: Shared>(value: T): int { return 1; }\n\
+         \x20     |         ^~~~~~\n\
+         note: a value of trait type 'Shape' may refer to any struct, which need not be thread-safe"
+    );
+}
+
+/// `Shared` in a constraint is always the built-in, so no trait takes the name.
+#[test]
+fn shared_constraint_name_taken_by_a_trait() {
+    let source = "trait Shared {\n    f(): int;\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("shared_constraint_name_taken_by_a_trait", source),
+        "main.pep:1:7: error: trait 'Shared' takes the name of the built-in constraint 'Shared'; rename it\n\
+         \x20   1 | trait Shared {\n\
+         \x20     |       ^~~~~~"
     );
 }

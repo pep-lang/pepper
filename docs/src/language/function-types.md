@@ -220,10 +220,11 @@ a module-scope variable, or `async.Atomic<shared (int) => int>`.
 - **What converts to `shared`.** A named function, which holds no state; a
   method, constructor or generic function value with nothing captured, such
   as `Point.norm` or `Box<int>`; and a closure literal (or a bound method
-  such as `p.norm`) whose captured values are all thread-safe: numbers,
-  `Atomic<T>` and other `[Shared]` structs, weak references to them, and
-  `shared` function values. The value must be written where the `shared`
-  type is expected, so that it is made thread-safe from the start.
+  such as `p.norm`) whose captured values are all
+  [thread-safe](threads.md#what-threads-can-share): numbers, `Atomic<T>`
+  and other `[Shared]` structs, `shared` function values, and the rest of
+  that list. The value must be written where the `shared` type is expected,
+  so that it is made thread-safe from the start.
 - **What does not.** A closure that captures a value that is not thread-safe
   is reported at the capture, with a note at the captured variable:
 

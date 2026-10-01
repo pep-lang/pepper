@@ -91,7 +91,7 @@ Reports whether a body has finished running.
 ## Lazy
 
 ```pepper
-[Shared] struct Lazy<T>
+[Shared] struct Lazy<T: Shared>
 ```
 
 A value built on first use by whichever thread asks first, like Rust's
@@ -101,12 +101,12 @@ expensive to build, or that cannot be built before `main` runs.
 The first `get()` runs the initializer; threads that call `get()` while it
 runs wait for it, and every later call returns the same value.
 
-`T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-type), because every thread gets the same value; `Lazy<String>` is a
-compile error.
+`T` is constrained `Shared` (a thread-safe type such as a number, a
+`[Shared]` struct, or a `shared` function type), because every thread
+gets the same value; `Lazy<String>` is a compile error.
 
 **Type parameters**
-- `T` — the value's type, which must be thread-safe
+- `T` — the value's type, which must be thread-safe (`T: Shared`)
 
 **Example**
 ```pepper

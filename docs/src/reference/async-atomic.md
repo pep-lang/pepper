@@ -7,7 +7,7 @@ Source: `runtime/async/atomic.pep`
 ## Atomic
 
 ```pepper
-[Shared] struct Atomic<T>
+[Shared] struct Atomic<T: Shared>
 ```
 
 A value of type `T` that threads can read and update without data races,
@@ -23,11 +23,13 @@ acquire-release.
 
 `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
 be used from several threads at once: pass the Atomic around (or keep it
-in a `const` global) to share the value between threads. A struct `T` must be
-thread-safe (itself `[Shared]`); `async.Atomic<String>` is a compile error.
+in a `const` global) to share the value between threads, so `T` is
+constrained `Shared`: a number, `bool`, an enum, a `[Shared]` struct, or
+another thread-safe type. `async.Atomic<String>` is a compile error at
+`String`.
 
 **Type parameters**
-- `T` — the type of the stored value
+- `T` — the type of the stored value, which must be thread-safe (`T: Shared`)
 
 **Example**
 ```pepper

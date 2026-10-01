@@ -35,6 +35,10 @@ impl Constrained {
     fn of(param: &GenericParam, traits: &[TraitDef]) -> Self {
         let mut members = vec![];
         for (index, bound) in param.bounds.iter().enumerate() {
+            // The built-in `Shared` offers no members.
+            if crate::passes::constraints::is_shared_bound(&bound.ty) {
+                continue;
+            }
             let Some(def) = traits.iter().find(|t| t.name == bound.ty.name) else { continue };
             let mut map: Vec<(String, TypeName)> = def
                 .generic_params

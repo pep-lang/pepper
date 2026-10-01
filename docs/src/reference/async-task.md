@@ -330,21 +330,22 @@ Runs `body` like `run`, with the given settings.
 ## spawn
 
 ```pepper
-spawn<T>(body: shared () => T): Task<T>
+spawn<T: Shared>(body: shared () => T): Task<T>
 ```
 
 Starts a task that runs `body` on whichever worker is free first, and
 returns it. Unlike `Task<T>.spawn_local`, the task may run on another
 thread, in parallel with the calling task, so the body must be a
 `shared` function (it may capture only thread-safe values) and its result
-crosses threads, so `T` must be thread-safe too: a number, a `[Shared]`
-struct, or a `shared` function type (`spawn<String>` is a compile error).
+crosses threads, so `T` is constrained `Shared`: a thread-safe type such
+as a number, a `[Shared]` struct, or a `shared` function type
+(`spawn<String>` is a compile error at `String`).
 
 A task, once started, stays on the worker that started it. Joining and
 cancelling work as for `spawn_local`.
 
 **Type parameters**
-- `T` — the type of the body's result, which must be thread-safe; `void` when there is none
+- `T` — the type of the body's result, which must be thread-safe (`T: Shared`); `void` when there is none
 
 **Parameters**
 - `body` — the task's code
@@ -432,7 +433,7 @@ a `shared` function.
 ## run_blocking
 
 ```pepper
-run_blocking<T>(body: shared () => T): T
+run_blocking<T: Shared>(body: shared () => T): T
 ```
 
 Runs `body` on a separate thread and returns what it returns, parking
@@ -443,7 +444,8 @@ that waits) or a long computation.
 
 The runtime keeps a pool of threads for these calls, started as needed up
 to `RuntimeOptions.blocking_threads`. `body` runs on one of them, so it
-must be a `shared` function and `T` must be thread-safe, as for `spawn`.
+must be a `shared` function and `T` is constrained `Shared`, as for
+`spawn`.
 On a pool thread, sockets block the thread, and `sleep` and the other task
 functions behave as outside `run`.
 
@@ -452,7 +454,7 @@ around the call expiring, takes effect once `run_blocking` has returned.
 Outside a task, `run_blocking` just calls `body`.
 
 **Type parameters**
-- `T` — the type of the body's result, which must be thread-safe; `void` when there is none
+- `T` — the type of the body's result, which must be thread-safe (`T: Shared`); `void` when there is none
 
 **Parameters**
 - `body` — the blocking code

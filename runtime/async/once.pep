@@ -131,11 +131,11 @@ export struct Once {
 ## The first `get()` runs the initializer; threads that call `get()` while it
 ## runs wait for it, and every later call returns the same value.
 ##
-## `T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-## type), because every thread gets the same value; `Lazy<String>` is a
-## compile error.
+## `T` is constrained `Shared` (a thread-safe type such as a number, a
+## `[Shared]` struct, or a `shared` function type), because every thread
+## gets the same value; `Lazy<String>` is a compile error.
 ##
-## @typeParam T the value's type, which must be thread-safe
+## @typeParam T the value's type, which must be thread-safe (`T: Shared`)
 ## @example
 ##     import async;
 ##
@@ -156,7 +156,7 @@ export struct Once {
 ##         return 0;
 ##     }
 [Shared]
-export struct Lazy<T> {
+export struct Lazy<T: Shared> {
     # The function that builds the value.
     const _initializer: shared () => T;
 

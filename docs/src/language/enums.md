@@ -95,7 +95,9 @@ reference counted like a [struct](structs.md).
   the enum itself, directly or through other types, so lists and trees are
   enums.
 - The enum can be `[Shared]` when every value its cases carry is
-  thread-safe (see [Threads](threads.md)). It can conform to a trait with
+  thread-safe (see [What threads can share](threads.md#what-threads-can-share)).
+  An enum whose cases carry nothing is stored as an integer and is always
+  thread-safe. It can conform to a trait with
   `extend Name with Trait`, like a struct, and its methods can come from an
   `extend` block too.
 - Cases cannot have explicit values (`= 3`), and the enum has no

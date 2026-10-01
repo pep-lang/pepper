@@ -139,7 +139,7 @@ export struct _SharedTask {
 # The result of a spawned task: stored on the worker that runs it, taken on
 # the worker that spawned it.
 [Shared]
-export struct _TaskResult<T> {
+export struct _TaskResult<T: Shared> {
     # A heap slot for the value (one reference for a struct `T`).
     const _value: __ptr<T>;
 

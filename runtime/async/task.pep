@@ -1260,14 +1260,15 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
 ## returns it. Unlike `Task<T>.spawn_local`, the task may run on another
 ## thread, in parallel with the calling task, so the body must be a
 ## `shared` function (it may capture only thread-safe values) and its result
-## crosses threads, so `T` must be thread-safe too: a number, a `[Shared]`
-## struct, or a `shared` function type (`spawn<String>` is a compile error).
+## crosses threads, so `T` is constrained `Shared`: a thread-safe type such
+## as a number, a `[Shared]` struct, or a `shared` function type
+## (`spawn<String>` is a compile error at `String`).
 ##
 ## A task, once started, stays on the worker that started it. Joining and
 ## cancelling work as for `spawn_local`.
 ##
-## @typeParam T the type of the body's result, which must be thread-safe;
-##   `void` when there is none
+## @typeParam T the type of the body's result, which must be thread-safe
+##   (`T: Shared`); `void` when there is none
 ## @param body the task's code
 ## @returns the task
 ## @panics outside `run`
@@ -1292,7 +1293,7 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
 ##         });
 ##         return 0;
 ##     }
-export spawn<T>(body: shared () => T): Task<T> {
+export spawn<T: Shared>(body: shared () => T): Task<T> {
     assert(_async_on_worker(), "async.spawn: not inside async.run");
     var worker = _async_worker();
     var result = _TaskResult<T>();
@@ -1379,7 +1380,8 @@ export spawn_on_each_worker(body: shared () => void): Array<Task<void>> {
 ##
 ## The runtime keeps a pool of threads for these calls, started as needed up
 ## to `RuntimeOptions.blocking_threads`. `body` runs on one of them, so it
-## must be a `shared` function and `T` must be thread-safe, as for `spawn`.
+## must be a `shared` function and `T` is constrained `Shared`, as for
+## `spawn`.
 ## On a pool thread, sockets block the thread, and `sleep` and the other task
 ## functions behave as outside `run`.
 ##
@@ -1387,8 +1389,8 @@ export spawn_on_each_worker(body: shared () => void): Array<Task<void>> {
 ## around the call expiring, takes effect once `run_blocking` has returned.
 ## Outside a task, `run_blocking` just calls `body`.
 ##
-## @typeParam T the type of the body's result, which must be thread-safe;
-##   `void` when there is none
+## @typeParam T the type of the body's result, which must be thread-safe
+##   (`T: Shared`); `void` when there is none
 ## @param body the blocking code
 ## @returns what `body` returns
 ## @example
@@ -1409,7 +1411,7 @@ export spawn_on_each_worker(body: shared () => void): Array<Task<void>> {
 ##         });
 ##         return 0;
 ##     }
-export run_blocking<T>(body: shared () => T): T {
+export run_blocking<T: Shared>(body: shared () => T): T {
     var result = _TaskResult<T>();
     if (!_async_on_worker() || !_async_worker()._running) {
         result._run(body);

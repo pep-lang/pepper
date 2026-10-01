@@ -18,10 +18,13 @@
 ##
 ## `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
 ## be used from several threads at once: pass the Atomic around (or keep it
-## in a `const` global) to share the value between threads. A struct `T` must be
-## thread-safe (itself `[Shared]`); `async.Atomic<String>` is a compile error.
+## in a `const` global) to share the value between threads, so `T` is
+## constrained `Shared`: a number, `bool`, an enum, a `[Shared]` struct, or
+## another thread-safe type. `async.Atomic<String>` is a compile error at
+## `String`.
 ##
-## @typeParam T the type of the stored value
+## @typeParam T the type of the stored value, which must be thread-safe
+##   (`T: Shared`)
 ## @example
 ##     main(): int {
 ##         var counter = async.Atomic<long>(0);
@@ -30,7 +33,7 @@
 ##         return 0;
 ##     }
 [Shared]
-export struct Atomic<T> {
+export struct Atomic<T: Shared> {
     ## The heap slot the value lives in: `sizeof<T>()` bytes for a POD `T`,
     ## or one reference pointer for a struct `T`. Allocated by the
     ## constructor and never null afterwards. Internal storage; access it only

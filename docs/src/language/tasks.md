@@ -46,9 +46,11 @@ worker is free first runs, in parallel with the others:
 
 Because such a task may run on another thread, its body must be a `shared`
 function: it may capture only thread-safe values, as a
-[thread](threads.md)'s body. Its result crosses threads too, so `T` must be
-thread-safe (a number, a `[Shared]` struct, or a `shared` function type);
-`async.spawn<String>` is a compile error. `join`, `cancel` and
+[thread](threads.md)'s body. Its result crosses threads too, so `spawn`
+constrains it [`T: Shared`](generics.md#the-shared-constraint): a
+[thread-safe type](threads.md#what-threads-can-share) such as a number, a
+`[Shared]` struct, or a `shared` function type. `async.spawn<String>` is a
+compile error at `String`. `join`, `cancel` and
 `is_finished` work as for `spawn_local`, from the task that started it.
 
 A task, once started, stays on its worker until it finishes, so the tasks it

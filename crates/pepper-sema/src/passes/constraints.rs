@@ -112,6 +112,20 @@ pub struct Conformance {
     /// Shape` conforms only when `T` does): the parameter's position, the
     /// trait, and where it is written.
     extensions: Vec<(TypeName, Vec<TypeName>, Vec<(usize, TypeName, Loc)>)>,
+    /// The structs whose references are thread-safe (`[Shared]` structs and
+    /// `shared` function types), by name, generic bases included: what the
+    /// built-in constraint [`SHARED`] accepts.
+    shared: HashSet<String>,
+}
+
+/// The built-in constraint `T: Shared`: `T` is thread-safe, as
+/// `check_shared_types` decides for a field of a `[Shared]` struct. In a
+/// constraint the name always means it, whatever the program declares.
+pub const SHARED: &str = "Shared";
+
+/// Whether constraint `ty` is the built-in [`SHARED`].
+pub fn is_shared_bound(ty: &TypeName) -> bool {
+    ty.name == SHARED && ty.sub_types.is_empty()
 }
 
 /// A constraint an argument does not meet.
@@ -150,7 +164,14 @@ impl Conformance {
                 (st.name.clone(), StructFacts { params, loc: st.loc })
             })
             .collect();
+        let shared = module
+            .structs
+            .iter()
+            .filter(|st| st.is_shared() || st.ty.is_shared_function_type())
+            .map(|st| st.name.clone())
+            .collect();
         Conformance {
+            shared,
             traits,
             structs,
             enums: module.enums.iter().map(|e| (e.name.clone(), e.loc)).collect(),
@@ -169,8 +190,51 @@ impl Conformance {
         ty.is_scalar() && !ty.is_pointer() && self.traits.contains_key(&ty.name)
     }
 
+    /// The first part of `ty` that is not thread-safe, if any: what makes it
+    /// miss the constraint `Shared`. A type parameter is thread-safe when it
+    /// is constrained `Shared` itself.
+    fn unshared_part(&self, ty: &TypeName, scope: &Scope) -> Option<TypeName> {
+        if ty.sub_types.is_empty()
+            && let Some(param) = scope.get(&ty.name)
+        {
+            return (!param.bounds.iter().any(is_shared_bound)).then(|| ty.clone());
+        }
+        let name = ty.to_string();
+        if name == "void"
+            || crate::type_name::is_integral_name(&name)
+            || ty.is_shared_function_type()
+            || ty.is_extern_function_type()
+        {
+            return None;
+        }
+        if ty.is_function_type() {
+            return Some(ty.clone());
+        }
+        if let Some(pointee) = name.strip_suffix('*') {
+            return self.unshared_part(&crate::passes::gather_generics::parse_type_string(pointee), scope);
+        }
+        if ty.name == "__ptr" && ty.sub_types.len() == 1 {
+            return self.unshared_part(&ty.sub_types[0], scope);
+        }
+        if let Some(target) = ty.weak_target() {
+            return self.unshared_part(target, scope);
+        }
+        if ty.is_tuple() {
+            return ty.tuple_elements().iter().find_map(|e| self.unshared_part(e, scope));
+        }
+        // A `[Shared]` generic struct's own constraints say which arguments
+        // it takes (`Atomic<T: Shared>`).
+        if self.shared.contains(&ty.name) || self.shared.contains(&name) {
+            return None;
+        }
+        Some(ty.clone())
+    }
+
     /// Whether `arg` conforms to the trait type `required`.
     fn conforms(&self, arg: &TypeName, required: &TypeName, scope: &Scope) -> bool {
+        if is_shared_bound(required) {
+            return self.unshared_part(arg, scope).is_none();
+        }
         let want = canonical(required);
         if arg.sub_types.is_empty()
             && let Some(param) = scope.get(&arg.name)
@@ -340,9 +404,14 @@ impl Conformance {
     /// The error for `unmet`, a constraint of `generic`, at `at`.
     fn error(&self, unmet: &Unmet, generic: &str, at: Loc, module: &Module, scope: &Scope) -> Diagnostic {
         let (arg, required) = (spelled(&unmet.arg), spelled(&unmet.required));
+        let shared = is_shared_bound(&unmet.required);
         let mut error = Diagnostic::error(format!(
-            "'{}' does not conform to trait '{}', required by '{}' in '{}'",
-            arg, required, unmet.param, generic
+            "'{}' does not conform to {}'{}', required by '{}' in '{}'",
+            arg,
+            if shared { "" } else { "trait " },
+            required,
+            unmet.param,
+            generic
         ))
         .at(at)
         .with_note("constraint declared here", Some(unmet.bound));
@@ -361,6 +430,17 @@ impl Conformance {
                 });
             }
             return error;
+        }
+        if shared {
+            // Why it is not thread-safe, as for a `[Shared]` struct's field.
+            return match self.unshared_part(&unmet.arg, scope) {
+                Some(part) if self.is_trait(&part) => error.with_note(
+                    format!("a value of trait type '{}' may refer to any struct, which need not be thread-safe", spelled(&part)),
+                    None,
+                ),
+                Some(part) => crate::passes::check_shared_types::not_shared_note(error, &part, module),
+                None => error,
+            };
         }
         if self.is_trait(&unmet.arg) {
             let facts = &self.traits[&unmet.arg.name];
@@ -660,6 +740,15 @@ fn declarations(module: &Module) -> Vec<Declared<'_>> {
 /// the concrete overrides, then the specializations gathered so far (see
 /// the module docs).
 pub fn check_constraints(module: &Module) {
+    // `Shared` in a constraint is always the built-in, so a trait cannot
+    // take the name.
+    if let Some(t) = module.traits.iter().find(|t| pepper_parser::namespace::demangle_name(&t.name) == SHARED) {
+        crate::errors::report(
+            Diagnostic::error(format!("trait '{}' takes the name of the built-in constraint 'Shared'; rename it", SHARED))
+                .at(t.loc),
+        );
+        return;
+    }
     if !has_constraints(module) {
         return;
     }
@@ -671,7 +760,7 @@ pub fn check_constraints(module: &Module) {
             if !seen.insert(bound.loc) {
                 continue;
             }
-            if conformance.is_trait(&bound.ty) {
+            if conformance.is_trait(&bound.ty) || is_shared_bound(&bound.ty) {
                 continue;
             }
             crate::errors::report(conformance.not_a_trait(bound, params.iter().chain(outer)));
@@ -689,7 +778,7 @@ pub fn check_constraints(module: &Module) {
                 (Some(_), Some(p), Some(a)) if a.sub_types.is_empty() && a.name == p.name => {
                     // A constraint the struct lacks makes a constrained
                     // extension; either way it must name a trait.
-                    if conformance.is_trait(&bound.ty) {
+                    if conformance.is_trait(&bound.ty) || is_shared_bound(&bound.ty) {
                         continue;
                     }
                     conformance.not_a_trait(bound, base.iter().flat_map(|st| &st.generic_params))

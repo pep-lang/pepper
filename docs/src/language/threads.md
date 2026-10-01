@@ -124,17 +124,29 @@ The compiler checks every `[Shared]` struct:
 - **Every field must be `const`.** It is set once, by the constructor, and
   never assigned again, so threads cannot race on it. To change shared state,
   give the struct a thread-safe member such as an `Atomic<T>`.
-- **Every field must have a thread-safe type.** These are the thread-safe
-  types:
-  - numbers and `bool`;
-  - raw pointers (`__ptr<T>`) to thread-safe types;
+- **Every field must have a thread-safe type.** These are all the
+  thread-safe types, the same ones the constraint
+  [`T: Shared`](generics.md#the-shared-constraint) accepts:
+  - every number type (`int`, `long`, `byte`, `char`, `short`, `float`,
+    `double` and the rest), `bool`, and `void`;
+  - [enums](enums.md) whose cases carry no values, which are stored as
+    integers;
+  - `[Shared]` structs, and enums whose cases carry values that are declared
+    `[Shared]`;
+  - weak references to thread-safe types;
+  - raw pointers (`__ptr<T>`, and `void*`) to thread-safe types;
   - `shared` function types, such as `shared () => void` (see
-    [Function types](function-types.md#sharing-function-values-between-threads));
-  - `[Shared]` structs, and weak references to them;
-  - [tuples](tuples.md) whose elements are all thread-safe.
+    [Function types](function-types.md#sharing-function-values-between-threads)),
+    and C function pointer types (`extern (int) => int`);
+  - [tuples](tuples.md) whose elements are all thread-safe;
+  - inside a generic, a type parameter constrained `T: Shared`.
 
-  `String`, `Array` and other structs that are not `[Shared]` are not
-  thread-safe, and neither is a plain function type such as `() => void`:
+  Nothing else is. A struct is never thread-safe on its own, even when all
+  its fields are numbers: a struct value is a reference to a
+  reference-counted object, and only a `[Shared]` struct counts those
+  references atomically. So `String`, `Array` and other structs that are not
+  `[Shared]` are not thread-safe, and neither is a plain function type such
+  as `() => void`:
 
   ```text
   main.pep:3:14: error: field 'F' of shared struct 'H' has type '() => void', which is not thread-safe
@@ -143,17 +155,44 @@ The compiler checks every `[Shared]` struct:
   note: declare the function type 'shared () => void' to share it between threads
   ```
 
-A generic `[Shared]` struct is checked for each set of type arguments.
-`Atomic<T>` is `[Shared]`, so `Atomic<int>` and `Atomic<Settings>` are fine,
-and `Atomic<String>` is an error that points at the code that names it:
+A generic `[Shared]` struct whose parameter has no constraint is checked
+for each set of type arguments, and the error points at the code that asked
+for the specialization:
+
+```pepper
+[Shared]
+struct Cell<T> {
+    const value: T;
+}
+
+make<T>(): Cell<T> { return Cell<T>(); }
+
+main(): int {
+    var c = make<String>();
+    return 0;
+}
+```
 
 ```text
-main.pep:3:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe
-    3 |     var a = async.Atomic<String>();
-      |             ^~~~~~~~~~~~~~~~~~~~
-runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
-runtime/string.pep:33:15: note: 'String' is not declared [Shared]
+main.pep:9:13: error: 'make<String>' requires thread-safe type arguments; 'String' is not thread-safe
+    9 |     var c = make<String>();
+      |             ^~~~~~~~~~~~
+main.pep:6:29: note: 'Cell<String>' is required here, in 'make<String>'
+    6 | make<T>(): Cell<T> { return Cell<T>(); }
+      |                             ^~~~~~~
+main.pep:3:18: note: required by field 'value' declared here
+    3 |     const value: T;
+      |                  ^
+runtime/string.pep:41:15: note: 'String' is not declared [Shared]
 ```
+
+A generic can state the rule up front with the built-in constraint
+[`T: Shared`](generics.md#the-shared-constraint): `[Shared] struct
+Cell<T: Shared>` accepts exactly the type arguments above, and a wrong one
+is reported where it is written (`'String' does not conform to 'Shared',
+required by 'T' in 'Cell'`). The standard library's `Atomic<T>`, `spawn`,
+`run_blocking` and `Lazy<T>` do this, so `Atomic<String>` is reported at
+`String`.
 
 A field that is not `const`, or that has a type that is not thread-safe, is
 reported at the field:

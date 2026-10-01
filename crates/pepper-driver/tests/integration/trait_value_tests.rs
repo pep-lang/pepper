@@ -551,14 +551,14 @@ fn one_trait_does_not_convert_to_another() {
 
 #[test]
 fn atomics_reject_trait_values() {
-    // Atomic is [Shared], and a trait value is not thread-safe: sema rejects
-    // the specialization before codegen's own guard is reached.
+    // Atomic<T: Shared>, and a trait value is not thread-safe: the
+    // constraint rejects it before codegen's own guard is reached.
     let error = sema(&shapes(
         "test(): int {\n    var a = async.Atomic<Shape>();\n    a.store(Square(1));\n    return 0;\n}\n",
     ))
     .expect_err("expected a thread-safety error");
     assert!(
-        error.contains("error: shared struct 'Atomic<Shape>' requires thread-safe type arguments; 'Shape' is not thread-safe"),
+        error.contains("error: 'Shape' does not conform to 'Shared', required by 'T' in 'Atomic'"),
         "{}",
         error
     );

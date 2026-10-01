@@ -46,10 +46,14 @@ Some details differ from C++:
   floating-point or struct `T` compiles, but stops the program when it runs.
 - **`is_lock_free()`** is true for any number type of 8 bytes or less, and for
   any struct type.
-- **A struct `T` must be thread-safe.** `Atomic` is a `[Shared]` struct, so
-  its `T` must be a `[Shared]` struct too (or a number, pointer or function
-  type). `Atomic<String>` is a compile error. See
+- **`T` must be thread-safe.** `Atomic` is a `[Shared]` struct, so it is
+  declared `Atomic<T: Shared>`: `T` is a number, `bool`, an enum, a
+  `[Shared]` struct, or another type in
   [What threads can share](threads.md#what-threads-can-share).
+  `Atomic<String>` is a compile error at `String` (see
+  [the `Shared` constraint](generics.md#the-shared-constraint)). A tuple is
+  thread-safe, but its value cannot be stored atomically, so `Atomic` of a
+  tuple is an error too.
 
 ## Common patterns
 
