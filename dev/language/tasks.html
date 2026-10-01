@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f9c9cf2c.js";
+            window.path_to_searchindex_js = "../searchindex-2116bdc7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-778b03c5.js"></script>
@@ -313,9 +313,12 @@ to the end: cancelling the task, or a <code>timeout</code> around the call, take
 effect once the call has returned. Outside a task, <code>run_blocking</code> just
 calls <code>body</code>.</p>
 <h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
-<p><code>async.sleep(milliseconds)</code> puts a task to sleep and runs the others
-meanwhile, so many tasks can wait at the same time on one thread:</p>
+<p><code>async.sleep</code> puts a task to sleep and runs the others meanwhile, so many
+tasks can wait at the same time on one thread. It takes an <code>os.Duration</code>
+(see <a href="os.html">The operating system</a>), or a number of milliseconds; a duration
+that is not a whole number of milliseconds rounds up:</p>
 <pre><code class="language-pepper">import async;
+import os;
 
 main(): int {
     var order = Array&lt;int&gt;();
@@ -326,7 +329,7 @@ main(): int {
             var n = i;
             # The later a task starts, the shorter it sleeps.
             tasks.append(async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                async.sleep(((3 - n) * 20) as ulong);
+                async.sleep(os.Duration.from_milliseconds(((3 - n) * 20) as ulong));
                 order.append(n);
             }));
             i = i + 1;

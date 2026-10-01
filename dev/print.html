@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f9c9cf2c.js";
+            window.path_to_searchindex_js = "searchindex-2116bdc7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-778b03c5.js"></script>
@@ -10317,9 +10317,12 @@ to the end: cancelling the task, or a <code>timeout</code> around the call, take
 effect once the call has returned. Outside a task, <code>run_blocking</code> just
 calls <code>body</code>.</p>
 <h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
-<p><code>async.sleep(milliseconds)</code> puts a task to sleep and runs the others
-meanwhile, so many tasks can wait at the same time on one thread:</p>
+<p><code>async.sleep</code> puts a task to sleep and runs the others meanwhile, so many
+tasks can wait at the same time on one thread. It takes an <code>os.Duration</code>
+(see <a href="#the-operating-system">The operating system</a>), or a number of milliseconds; a duration
+that is not a whole number of milliseconds rounds up:</p>
 <pre><code class="language-pepper">import async;
+import os;
 
 main(): int {
     var order = Array&lt;int&gt;();
@@ -10330,7 +10333,7 @@ main(): int {
             var n = i;
             # The later a task starts, the shorter it sleeps.
             tasks.append(async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                async.sleep(((3 - n) * 20) as ulong);
+                async.sleep(os.Duration.from_milliseconds(((3 - n) * 20) as ulong));
                 order.append(n);
             }));
             i = i + 1;
@@ -11637,8 +11640,7 @@ main(): int {
 <ul>
 <li>Dates, time zones, and formatting a <code>SystemTime</code> as a date are not
 supported yet.</li>
-<li><code>async.sleep</code> and <code>async.timeout</code> still take milliseconds, not a
-<code>Duration</code>.</li>
+<li><code>async.timeout</code> still takes milliseconds, not a <code>Duration</code>.</li>
 <li><code>total_memory()</code> does not take a container’s memory limit into account.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -21227,6 +21229,19 @@ first; outside a task, the thread sleeps.</p>
 <ul>
 <li><code>milliseconds</code> — how long to wait</li>
 </ul>
+<h2 id="sleep-1-1"><a class="header" href="#sleep-1-1">sleep</a></h2>
+<pre><code class="language-pepper">sleep(duration: os.Duration)
+</code></pre>
+<p>Waits at least <code>duration</code>, the same as <code>sleep(milliseconds)</code>. A duration
+that is not a whole number of milliseconds rounds up, so the wait is never
+shorter than asked.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how long to wait</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    async.sleep(os.Duration.from_seconds(1));
+</code></pre>
 <h2 id="is_cancelled-1-1"><a class="header" href="#is_cancelled-1-1">is_cancelled</a></h2>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
