@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-79d6e27a.js";
+            window.path_to_searchindex_js = "searchindex-91075960.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-92b0d50d.js"></script>
@@ -4549,13 +4549,22 @@ struct or an <code>Array</code> instead.</li>
 <li>A parameter or result of an <a href="#calling-c"><code>extern</code></a> function: pass a
 pointer to C instead.</li>
 </ul>
+<h2 id="value-structs-as-trait-values"><a class="header" href="#value-structs-as-trait-values">Value structs as trait values</a></h2>
+<p>A value struct can declare <a href="#traits-and-extensions">traits</a> like any
+struct. Where it flows into a slot of a trait type, such as an argument of
+type <code>Iterator&lt;int&gt;</code>, it is <em>boxed</em>: copied into a new object that the trait
+value refers to. The box is a copy, so a mutating method called through the
+trait value changes the box and not the original, and two conversions of
+one value make two boxes. Copying the trait value shares the box, as for
+any trait value.</p>
+<p>The runtime’s iterators (<code>ArrayIterator</code>, <code>StringIterator</code>,
+<code>HashMapIterator</code>, <code>HashSetIterator</code>, <code>ChannelIterator</code>, and the <code>map</code> and
+<code>filter</code> adapters) are value structs, so a <code>for</code> loop over an <code>Array</code>, a
+<code>String</code> or a <code>HashMap</code> allocates no iterator.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
-<li>A value struct cannot be converted to a <a href="#traits-and-extensions">trait</a>
-type yet (<code>value struct 'Span' cannot be converted to trait 'Sized' yet</code>);
-boxing comes next. <code>[Value]</code> does not apply to enums yet.</li>
-<li>The runtime’s iterators and <code>Result</code> are still reference structs;
-<code>Optional</code> is a value struct.</li>
+<li><code>[Value]</code> does not apply to enums yet, and <code>Result</code> is still a reference
+struct.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
@@ -6817,9 +6826,11 @@ main(): int {
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
 <code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
-<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds a reference to the
-iterator it wraps, so a chain built from a temporary stays alive while the
-loop runs. They are generic methods (see
+<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+the iterator it wraps (the runtime’s iterators are
+<a href="#value-structs">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
+so a chain built from a temporary stays alive while the loop runs, and
+<code>it.map(f)</code> leaves <code>it</code> where it was. They are generic methods (see
 <a href="#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
@@ -6926,8 +6937,10 @@ Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> v
 <code>for</code> loop over such a value calls the methods through the trait. It also
 gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
-iterator stored in a variable, the loop drives that same object, so it is
-exhausted afterwards. An iterable starts a new, independent pass every time
+iterator stored in a variable, the loop drives that variable in place, so
+it is exhausted afterwards, and a loop left with <code>break</code> can be resumed by
+looping over it again. A <code>const</code> variable holding a value iterator cannot
+be looped over, since <code>next()</code> changes it. An iterable starts a new, independent pass every time
 you loop over it.</li>
 <li><strong>Generic code can loop</strong> over a type parameter; each specialization checks
 the protocol for its own type (see <a href="#generics">Generics</a>).</li>
@@ -13683,7 +13696,7 @@ is unchanged. Runs in O(size()).</p>
 <li>a new String</li>
 </ul>
 <h2 id="stringiterator"><a class="header" href="#stringiterator">StringIterator</a></h2>
-<pre><code class="language-pepper">struct StringIterator
+<pre><code class="language-pepper">[Value] struct StringIterator
 </code></pre>
 <p>An <code>Iterator&lt;String&gt;</code> over a String’s code points, returned by
 <code>String.iterate()</code> and used by <code>for (var c in s)</code>.</p>
@@ -14273,7 +14286,7 @@ same as <code>append_all</code>.</p>
 <pre><code class="language-pepper">    var c = a + b;
 </code></pre>
 <h2 id="arrayiterator"><a class="header" href="#arrayiterator">ArrayIterator</a></h2>
-<pre><code class="language-pepper">struct ArrayIterator&lt;T&gt;
+<pre><code class="language-pepper">[Value] struct ArrayIterator&lt;T&gt;
 </code></pre>
 <p>An <code>Iterator&lt;T&gt;</code> over the elements of an Array, in index order; returned by
 <code>Array.iterate()</code> and driven by <code>for (var x in array)</code>.</p>
@@ -14832,7 +14845,7 @@ of copying the elements.</p>
 <li>the copy</li>
 </ul>
 <h2 id="hashmapiterator"><a class="header" href="#hashmapiterator">HashMapIterator</a></h2>
-<pre><code class="language-pepper">struct HashMapIterator&lt;K, V&gt;
+<pre><code class="language-pepper">[Value] struct HashMapIterator&lt;K, V&gt;
 </code></pre>
 <p>An <code>Iterator&lt;(K, V)&gt;</code> over the entries of a <code>HashMap</code>, as <code>(key, value)</code>
 tuples in no defined order; returned by <code>HashMap.iterate()</code> and driven by
@@ -14885,7 +14898,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <li>if <code>next()</code> was never called or already returned false (“HashMapIterator.current() without an entry”)</li>
 </ul>
 <h2 id="hashsetiterator"><a class="header" href="#hashsetiterator">HashSetIterator</a></h2>
-<pre><code class="language-pepper">struct HashSetIterator&lt;K&gt;
+<pre><code class="language-pepper">[Value] struct HashSetIterator&lt;K&gt;
 </code></pre>
 <p>An <code>Iterator&lt;K&gt;</code> over the members of a <code>HashSet</code>, in no defined order;
 returned by <code>HashSet.iterate()</code> and driven by <code>for (var x in set)</code>.</p>
@@ -15059,7 +15072,7 @@ gets this method.</p>
     }
 </code></pre>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
-<pre><code class="language-pepper">struct MapIterator&lt;T, U&gt;
+<pre><code class="language-pepper">[Value] struct MapIterator&lt;T, U&gt;
 </code></pre>
 <p>The iterator <code>Iterator.map</code> returns: each element of the source iterator,
 passed through the transform function.</p>
@@ -15100,7 +15113,7 @@ passed through the transform function.</p>
 <li>the current element</li>
 </ul>
 <h2 id="filteriterator"><a class="header" href="#filteriterator">FilterIterator</a></h2>
-<pre><code class="language-pepper">struct FilterIterator&lt;T&gt;
+<pre><code class="language-pepper">[Value] struct FilterIterator&lt;T&gt;
 </code></pre>
 <p>The iterator <code>Iterator.filter</code> returns: the elements of the source
 iterator that the test function accepts.</p>
@@ -20808,7 +20821,7 @@ exactly one of them.</p>
     }   # ends once `lines` is closed and empty
 </code></pre>
 <h2 id="channeliterator"><a class="header" href="#channeliterator">ChannelIterator</a></h2>
-<pre><code class="language-pepper">struct ChannelIterator&lt;T&gt;
+<pre><code class="language-pepper">[Value] struct ChannelIterator&lt;T&gt;
 </code></pre>
 <p>Receives from a <code>Channel&lt;T&gt;</code> in a <code>for</code> loop: <code>next()</code> waits for the next
 value and returns false once the channel is closed and empty.</p>

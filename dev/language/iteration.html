@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-79d6e27a.js";
+            window.path_to_searchindex_js = "../searchindex-91075960.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -403,9 +403,11 @@ main(): int {
 </code></pre>
 <p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
 <code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
-<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds a reference to the
-iterator it wraps, so a chain built from a temporary stays alive while the
-loop runs. They are generic methods (see
+<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds its own copy of
+the iterator it wraps (the runtime’s iterators are
+<a href="value-structs.html">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
+so a chain built from a temporary stays alive while the loop runs, and
+<code>it.map(f)</code> leaves <code>it</code> where it was. They are generic methods (see
 <a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
 <code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
@@ -512,8 +514,10 @@ Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> v
 <code>for</code> loop over such a value calls the methods through the trait. It also
 gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
-iterator stored in a variable, the loop drives that same object, so it is
-exhausted afterwards. An iterable starts a new, independent pass every time
+iterator stored in a variable, the loop drives that variable in place, so
+it is exhausted afterwards, and a loop left with <code>break</code> can be resumed by
+looping over it again. A <code>const</code> variable holding a value iterator cannot
+be looped over, since <code>next()</code> changes it. An iterable starts a new, independent pass every time
 you loop over it.</li>
 <li><strong>Generic code can loop</strong> over a type parameter; each specialization checks
 the protocol for its own type (see <a href="generics.html">Generics</a>).</li>

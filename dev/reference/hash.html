@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-79d6e27a.js";
+            window.path_to_searchindex_js = "../searchindex-91075960.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -689,7 +689,7 @@ of copying the elements.</p>
 <li>the copy</li>
 </ul>
 <h2 id="hashmapiterator"><a class="header" href="#hashmapiterator">HashMapIterator</a></h2>
-<pre><code class="language-pepper">struct HashMapIterator&lt;K, V&gt;
+<pre><code class="language-pepper">[Value] struct HashMapIterator&lt;K, V&gt;
 </code></pre>
 <p>An <code>Iterator&lt;(K, V)&gt;</code> over the entries of a <code>HashMap</code>, as <code>(key, value)</code>
 tuples in no defined order; returned by <code>HashMap.iterate()</code> and driven by
@@ -742,7 +742,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <li>if <code>next()</code> was never called or already returned false (“HashMapIterator.current() without an entry”)</li>
 </ul>
 <h2 id="hashsetiterator"><a class="header" href="#hashsetiterator">HashSetIterator</a></h2>
-<pre><code class="language-pepper">struct HashSetIterator&lt;K&gt;
+<pre><code class="language-pepper">[Value] struct HashSetIterator&lt;K&gt;
 </code></pre>
 <p>An <code>Iterator&lt;K&gt;</code> over the members of a <code>HashSet</code>, in no defined order;
 returned by <code>HashSet.iterate()</code> and driven by <code>for (var x in set)</code>.</p>

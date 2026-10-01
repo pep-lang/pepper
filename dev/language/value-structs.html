@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-79d6e27a.js";
+            window.path_to_searchindex_js = "../searchindex-91075960.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-92b0d50d.js"></script>
@@ -329,13 +329,22 @@ struct or an <code>Array</code> instead.</li>
 <li>A parameter or result of an <a href="c-interop.html"><code>extern</code></a> function: pass a
 pointer to C instead.</li>
 </ul>
+<h2 id="value-structs-as-trait-values"><a class="header" href="#value-structs-as-trait-values">Value structs as trait values</a></h2>
+<p>A value struct can declare <a href="traits-and-extensions.html">traits</a> like any
+struct. Where it flows into a slot of a trait type, such as an argument of
+type <code>Iterator&lt;int&gt;</code>, it is <em>boxed</em>: copied into a new object that the trait
+value refers to. The box is a copy, so a mutating method called through the
+trait value changes the box and not the original, and two conversions of
+one value make two boxes. Copying the trait value shares the box, as for
+any trait value.</p>
+<p>The runtime’s iterators (<code>ArrayIterator</code>, <code>StringIterator</code>,
+<code>HashMapIterator</code>, <code>HashSetIterator</code>, <code>ChannelIterator</code>, and the <code>map</code> and
+<code>filter</code> adapters) are value structs, so a <code>for</code> loop over an <code>Array</code>, a
+<code>String</code> or a <code>HashMap</code> allocates no iterator.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
-<li>A value struct cannot be converted to a <a href="traits-and-extensions.html">trait</a>
-type yet (<code>value struct 'Span' cannot be converted to trait 'Sized' yet</code>);
-boxing comes next. <code>[Value]</code> does not apply to enums yet.</li>
-<li>The runtime’s iterators and <code>Result</code> are still reference structs;
-<code>Optional</code> is a value struct.</li>
+<li><code>[Value]</code> does not apply to enums yet, and <code>Result</code> is still a reference
+struct.</li>
 </ul>
 
                     </main>
