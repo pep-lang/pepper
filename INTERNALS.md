@@ -791,14 +791,16 @@ language side.
 - **Builder.** `static_items::static_block` sorts the statements by name:
   one that uses a capture or a runtime local of the block (or calls `get`,
   `set` or `call`) is emitted, the rest is compile-time. The result is a
-  `model::StaticBlock` of `StaticItem`s: `For`, `If`, `Var` and `Evaluate`
+  `model::StaticBlock` of `StaticItem`s: `For`, `While`, `If`, `Var` and `Evaluate`
   keep their compile-time expressions as the AST; `Emit` holds a model
   statement, built normally except that a sub-expression of only
   compile-time names becomes `Expression::StaticValue` and `x.get(v)` /
   `x.set(v, y)` / `x.call(...)` become `Expression::StaticMember`
   (`placeholder`, through the `COMPILE_TIME` thread-local that
   `expression` checks first); `EmitIf` is a runtime `if` whose branches
-  hold items.
+  hold items. `break`/`continue` in a compile-time loop is a `Jump`; one
+  under a runtime `if`, or outside any compile-time loop, is an error
+  (`Names::loops`, `Names::in_runtime_if`).
 - **Generic code.** The walks in `passes/mod.rs` reach the emitted
   statements, so the early passes lower them with the rest of a generic
   base; passes with their own statement walks skip `Statement::Static`.
@@ -810,7 +812,9 @@ language side.
   bases) with a block of what it emits: it evaluates the compile-time items
   (`Expander::evaluate`, a small interpreter over `Value`s: numbers, `bool`,
   strings, enum cases, members, functions, lists and attribute values),
-  unrolls each `For` into one block per element, and fills in the emitted
+  unrolls each `For` into one block per element and each `While` into one
+  per iteration (at most `MAX_ITERATIONS`; a `Jump` sets
+  `Expander::jump`, which skips the rest of the pass), and fills in the emitted
   statements: `x.Type` types first (`replace_body_types`), then each
   placeholder (`fill`). `transform_pass` calls it at the start (concrete
   code, `lowered = false`), after the first specialization, inside the

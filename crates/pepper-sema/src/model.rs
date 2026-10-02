@@ -881,7 +881,7 @@ impl StaticBlock {
         fn items(list: &mut [StaticItem], statement: &mut impl FnMut(&mut Statement), condition: &mut impl FnMut(&mut Expression)) {
             for item in list {
                 match item {
-                    StaticItem::For { body, .. } | StaticItem::Block(body) => items(body, statement, condition),
+                    StaticItem::For { body, .. } | StaticItem::While { body, .. } | StaticItem::Block(body) => items(body, statement, condition),
                     StaticItem::If { then_items, else_items, .. } => {
                         items(then_items, statement, condition);
                         items(else_items, statement, condition);
@@ -892,7 +892,7 @@ impl StaticBlock {
                         items(else_items, statement, condition);
                     }
                     StaticItem::Emit(emitted) => statement(emitted),
-                    StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+                    StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
                 }
             }
         }
@@ -919,6 +919,11 @@ impl StaticBlock {
 pub enum StaticItem {
     /// `for (var name in list)` over a compile-time list: unrolled.
     For { name: String, iterable: ast::Expression, body: Vec<StaticItem>, loc: Loc },
+    /// `while` on a compile-time condition: its body is expanded once per
+    /// iteration, until the condition is false or a compile-time `break`.
+    While { condition: ast::Expression, body: Vec<StaticItem>, loc: Loc },
+    /// `break` or `continue` of the innermost compile-time `for` or `while`.
+    Jump { kind: ast::LoopBreakKind, loc: Loc },
     /// `if` on a compile-time condition: only the branch taken is expanded.
     If { condition: ast::Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem>, loc: Loc },
     /// A runtime `if` (its condition uses a captured name), whose branches

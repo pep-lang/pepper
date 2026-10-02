@@ -36,6 +36,12 @@ thread_local! {
 struct Names {
     compile_time: Vec<HashSet<String>>,
     runtime: Vec<HashSet<String>>,
+    /// The compile-time `for` and `while` loops around the statement being
+    /// built, which a compile-time `break` or `continue` leaves.
+    loops: usize,
+    /// The statement is in a branch of a runtime `if`, which a compile-time
+    /// `break` cannot depend on.
+    in_runtime_if: bool,
 }
 
 impl Names {
@@ -254,7 +260,7 @@ pub(super) fn static_block(block: &ast::StaticBlock) -> Result<Statement, Diagno
     if COMPILE_TIME.with(|c| c.borrow().is_some()) {
         return Err(Diagnostic::error("a 'static' block cannot be nested in another").at(loc(block.keyword_span)));
     }
-    let mut names = Names { compile_time: vec![HashSet::new()], runtime: vec![HashSet::new()] };
+    let mut names = Names { compile_time: vec![HashSet::new()], runtime: vec![HashSet::new()], loops: 0, in_runtime_if: false };
     for (i, (name, span)) in block.captures.iter().enumerate() {
         if let Some((_, first)) = block.captures[..i].iter().find(|(other, _)| other == name) {
             return Err(Diagnostic::error(format!("'{}' is captured twice", name))
@@ -299,12 +305,20 @@ fn items(statements: &[ast::Statement], names: &mut Names) -> Result<Vec<StaticI
                 return Err(Diagnostic::error("only variables can be declared in a 'static' block").at(loc(d.span())));
             }
             ast::Statement::Branch(b) if !contains_is(&b.condition) => {
-                let then_items = scoped(&b.if_block, names)?;
+                let runtime = names.mentions_runtime(&b.condition);
+                let (loops, in_runtime_if) = (names.loops, names.in_runtime_if);
+                if runtime {
+                    names.loops = 0;
+                    names.in_runtime_if = true;
+                }
+                let then_items = scoped(&b.if_block, names);
                 let else_items = match &b.else_block {
-                    Some(e) => scoped(e, names)?,
-                    None => vec![],
+                    Some(e) => scoped(e, names),
+                    None => Ok(vec![]),
                 };
-                if names.mentions_runtime(&b.condition) {
+                (names.loops, names.in_runtime_if) = (loops, in_runtime_if);
+                let (then_items, else_items) = (then_items?, else_items?);
+                if runtime {
                     StaticItem::EmitIf { condition: emit_expression(&b.condition, names)?, then_items, else_items }
                 } else {
                     StaticItem::If { condition: b.condition.clone(), then_items, else_items, loc: loc(b.condition.span()) }
@@ -313,9 +327,33 @@ fn items(statements: &[ast::Statement], names: &mut Names) -> Result<Vec<StaticI
             ast::Statement::For(f) if f.pattern.is_empty() && !names.mentions_runtime(&f.iterable) => {
                 names.push();
                 names.declare(&f.binding.name, false);
+                names.loops += 1;
                 let body = items(&f.block.statements, names);
+                names.loops -= 1;
                 names.pop();
                 StaticItem::For { name: f.binding.name.clone(), iterable: f.iterable.clone(), body: body?, loc: loc(f.iterable.span()) }
+            }
+            ast::Statement::While(w) if !names.mentions_runtime(&w.condition) => {
+                names.loops += 1;
+                let body = scoped(&w.block, names);
+                names.loops -= 1;
+                StaticItem::While {
+                    condition: w.condition.clone(),
+                    body: body?,
+                    loc: loc(ast::Span { start: w.span.start, end: w.span.start + "while".len() }),
+                }
+            }
+            ast::Statement::LoopBreak(jump) => {
+                let word = if jump.kind == ast::LoopBreakKind::Break { "break" } else { "continue" };
+                if names.loops == 0 {
+                    let message = if names.in_runtime_if {
+                        format!("'{}' in a runtime 'if' cannot leave a compile-time loop; the condition is not known while compiling", word)
+                    } else {
+                        format!("'{}' in a 'static' block must be in a compile-time 'for' or 'while'", word)
+                    };
+                    return Err(Diagnostic::error(message).at(loc(jump.span)));
+                }
+                StaticItem::Jump { kind: jump.kind, loc: loc(jump.span) }
             }
             ast::Statement::Block(b) => StaticItem::Block(scoped(b, names)?),
             ast::Statement::Static(s) => {

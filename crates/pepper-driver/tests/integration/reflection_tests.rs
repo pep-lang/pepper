@@ -300,3 +300,59 @@ fn compile_time_calls_and_emitted_members_are_errors() {
     let error = compile_error("struct P {\n    var x: int;\n}\n\ntest(): int {\n    var n = 0;\n    static (n) {\n        for (var f in reflect.properties<P>()) {\n            n = f;\n        }\n    }\n    return n;\n}\n");
     assert!(error.starts_with("test.pep:9:17: error: 'f' is a compile-time member, which emitted code cannot use"), "{}", error);
 }
+
+#[test]
+fn compile_time_while_break_and_continue() {
+    let source = r#"
+struct P {
+    var a: int;
+    var b: int;
+    var c: int;
+    var d: int;
+}
+
+test(): int {
+    var total = 0;
+    static (total) {
+        # Powers of two below 100, emitted as one addition each.
+        var n = 1;
+        while (n < 100) {
+            total += n;
+            n = n * 2;
+        }
+        # Skip 'b', stop before 'd'.
+        for (var field in reflect.properties<P>()) {
+            if (field.name == "b") {
+                continue;
+            }
+            if (field.name == "d") {
+                break;
+            }
+            total += 1000;
+        }
+        var i = 0;
+        while (true) {
+            i += 1;
+            if (i > 3) {
+                break;
+            }
+            total += 10000;
+        }
+    }
+    return total == 32127 ? 0 : total;
+}
+"#;
+    assert_eq!(jit_census(source), (0, 0));
+}
+
+#[test]
+fn compile_time_while_errors() {
+    let error = compile_error("test(): int {\n    static {\n        var n = 0;\n        while (n >= 0) {\n            n += 1;\n        }\n    }\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:4:9: error: a compile-time 'while' ran 100000 times; is its condition ever false?"), "{}", error);
+    let error = compile_error(
+        "struct P {\n    var x: int;\n}\n\ntest(): int {\n    var n = 0;\n    static (n) {\n        for (var f in reflect.properties<P>()) {\n            if (n > 0) {\n                break;\n            }\n        }\n    }\n    return n;\n}\n",
+    );
+    assert!(error.starts_with("test.pep:10:17: error: 'break' in a runtime 'if' cannot leave a compile-time loop; the condition is not known while compiling"), "{}", error);
+    let error = compile_error("test(): int {\n    static {\n        continue;\n    }\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:3:9: error: 'continue' in a 'static' block must be in a compile-time 'for' or 'while'"), "{}", error);
+}

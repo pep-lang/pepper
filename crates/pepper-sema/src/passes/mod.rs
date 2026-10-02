@@ -323,7 +323,7 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
 fn walk_static_items(items: &mut [StaticItem], f: &mut impl FnMut(&mut Expression)) {
     for item in items {
         match item {
-            StaticItem::For { body, .. } | StaticItem::Block(body) => walk_static_items(body, f),
+            StaticItem::For { body, .. } | StaticItem::While { body, .. } | StaticItem::Block(body) => walk_static_items(body, f),
             StaticItem::If { then_items, else_items, .. } => {
                 walk_static_items(then_items, f);
                 walk_static_items(else_items, f);
@@ -334,7 +334,7 @@ fn walk_static_items(items: &mut [StaticItem], f: &mut impl FnMut(&mut Expressio
                 walk_static_items(else_items, f);
             }
             StaticItem::Emit(statement) => walk_statement(statement, f),
-            StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+            StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
         }
     }
 }
@@ -477,7 +477,7 @@ pub fn visit_statement<'e>(stmt: &'e Statement, f: &mut impl FnMut(&'e Expressio
 fn visit_static_items<'e>(items: &'e [StaticItem], f: &mut impl FnMut(&'e Expression)) {
     for item in items {
         match item {
-            StaticItem::For { body, .. } | StaticItem::Block(body) => visit_static_items(body, f),
+            StaticItem::For { body, .. } | StaticItem::While { body, .. } | StaticItem::Block(body) => visit_static_items(body, f),
             StaticItem::If { then_items, else_items, .. } => {
                 visit_static_items(then_items, f);
                 visit_static_items(else_items, f);
@@ -488,7 +488,7 @@ fn visit_static_items<'e>(items: &'e [StaticItem], f: &mut impl FnMut(&'e Expres
                 visit_static_items(else_items, f);
             }
             StaticItem::Emit(statement) => visit_statement(statement, f),
-            StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+            StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
         }
     }
 }

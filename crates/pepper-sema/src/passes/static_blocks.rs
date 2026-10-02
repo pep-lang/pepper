@@ -52,6 +52,10 @@ pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
 /// The attribute that makes a struct an attribute.
 pub const ATTRIBUTE_ATTRIBUTE: &str = "Attribute";
 
+/// How many times a compile-time `while` may run before it is taken to be
+/// endless.
+const MAX_ITERATIONS: usize = 100_000;
+
 /// Whether `module` has a `static` block anywhere, so a pass that expands
 /// them can return at once when it has not.
 fn has_static(block: &Block) -> bool {
@@ -121,7 +125,7 @@ pub fn expand(module: &mut Module, lowered: bool) -> bool {
         };
         let Some(mut body) = function.body.take() else { continue };
         let context = Context::of(function, &body);
-        let mut expander = Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![] };
+        let mut expander = Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None };
         expander.expand_in(&mut body);
         notes.append(&mut expander.notes);
         let function = match site {
@@ -361,6 +365,9 @@ struct Expander<'m> {
     passes: Vec<(Loc, usize, usize, String)>,
     /// What `reflect.print` wrote.
     notes: Vec<Diagnostic>,
+    /// A compile-time `break` or `continue` that ran and has not yet reached
+    /// its loop: the statements after it are skipped.
+    jump: Option<ast::LoopBreakKind>,
 }
 
 impl Expander<'_> {
@@ -397,6 +404,7 @@ impl Expander<'_> {
         self.file = block.loc.file;
         self.scopes = vec![HashMap::new()];
         self.passes.clear();
+        self.jump = None;
         let items = self.items(&block.items).map_err(|error| {
             let mut error = error;
             if !self.context.name.is_empty() {
@@ -418,7 +426,12 @@ impl Expander<'_> {
 
     fn with_passes(&self, mut diagnostic: Diagnostic) -> Diagnostic {
         for (loc, index, count, element) in self.passes.iter().rev() {
-            diagnostic = diagnostic.with_note(format!("in pass {} of {} ({})", index + 1, count, element), Some(*loc));
+            let note = if element.is_empty() {
+                format!("in iteration {} of the compile-time 'while'", index + 1)
+            } else {
+                format!("in pass {} of {} ({})", index + 1, count, element)
+            };
+            diagnostic = diagnostic.with_note(note, Some(*loc));
         }
         diagnostic
     }
@@ -452,7 +465,43 @@ impl Expander<'_> {
                         });
                         self.passes.pop();
                         out.push(Statement::Block(block_of(pass?)));
+                        if self.jump.take() == Some(ast::LoopBreakKind::Break) {
+                            break;
+                        }
                     }
+                }
+                StaticItem::While { condition, body, loc } => {
+                    let mut iteration = 0;
+                    loop {
+                        let keep_going = match self.evaluate(condition)? {
+                            Value::Bool(value) => value,
+                            other => {
+                                return Err(self.error(format!("a compile-time condition must be a 'bool', not a {}", other.kind()), condition.span()))
+                            }
+                        };
+                        if !keep_going {
+                            break;
+                        }
+                        if iteration == MAX_ITERATIONS {
+                            let message = format!("a compile-time 'while' ran {} times; is its condition ever false?", MAX_ITERATIONS);
+                            return Err(self.with_passes(Diagnostic::error(message).at(*loc)));
+                        }
+                        self.passes.push((*loc, iteration, 0, String::new()));
+                        let pass = self.scoped(|this| this.items(body));
+                        self.passes.pop();
+                        let pass = pass?;
+                        if !pass.is_empty() {
+                            out.push(Statement::Block(block_of(pass)));
+                        }
+                        iteration += 1;
+                        if self.jump.take() == Some(ast::LoopBreakKind::Break) {
+                            break;
+                        }
+                    }
+                }
+                StaticItem::Jump { kind, .. } => {
+                    self.jump = Some(*kind);
+                    return Ok(out);
                 }
                 StaticItem::If { condition, then_items, else_items, .. } => {
                     let taken = match self.evaluate(condition)? {
@@ -486,6 +535,9 @@ impl Expander<'_> {
                     self.fill_statement(&mut stmt)?;
                     out.push(stmt);
                 }
+            }
+            if self.jump.is_some() {
+                break;
             }
         }
         Ok(out)

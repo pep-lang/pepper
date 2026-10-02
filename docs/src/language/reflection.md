@@ -36,8 +36,9 @@ into the function:
   `out.append(field.name)` emits `out.append("x")`.
 - Everything else runs in the compiler: `var` declarations whose value uses
   no captured name, `if` on a compile-time condition (only the branch taken
-  is kept), and `for` over a compile-time list, which is unrolled, one copy
-  of its body per element.
+  is kept), `for` over a compile-time list, which is unrolled, one copy
+  of its body per element, and `while` on a compile-time condition, which
+  emits its body once per iteration.
 - An `if` whose condition uses a captured name is emitted as a runtime
   `if`; its branches can still hold compile-time steps.
 
@@ -49,8 +50,26 @@ error at that name:
 main.pep:9:24: error: 'total' is a runtime value; add it to the static block's capture list
 ```
 
-Each pass of an unrolled `for`, and the branch an `if` keeps, is its own
-block, like the body of a real loop.
+Each pass of an unrolled `for` or `while`, and the branch an `if` keeps, is
+its own block, like the body of a real loop.
+
+### Compile-time loops
+
+`break` and `continue` in a compile-time `for` or `while` run in the
+compiler: `continue` drops the rest of the pass, and `break` ends the
+unrolling. They cannot sit in a runtime `if`, whose condition the compiler
+does not know:
+
+```text
+main.pep:10:17: error: 'break' in a runtime 'if' cannot leave a compile-time loop; the condition is not known while compiling
+```
+
+A `while` that runs 100,000 times is taken to be endless and stops the
+compile at its `while`.
+
+```pepper
+{{#include ../../examples/reflection-loops.pep}}
+```
 
 ### In generic code
 
@@ -165,8 +184,7 @@ methods, constructors, parameters and module-scope variables.
 
 ## Not supported yet
 
-- Calling functions other than the `reflect` functions at compile time,
-  and `while` loops in the compiler.
+- Calling functions other than the `reflect` functions at compile time.
 - `static` blocks at module scope, to compute constants.
 - Reflecting methods and constructors (`reflect.methods<T>()`).
 - The values of built-in attributes: `attribute<Deprecated>()` is an error;
