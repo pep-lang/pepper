@@ -462,11 +462,13 @@ fn module_scope_block_errors() {
 
 #[test]
 fn built_in_attribute_values_come_from_the_runtime_declarations() {
+    // `Handle`'s `Target` condition holds on every OS: a struct whose
+    // condition is false is compiled out, and reflection could not read it.
     let source = r#"
 [Deprecated("use 'fresh' instead", "fresh")]
 stale(): int { return 1; }
 
-[Target(!OS(Windows))]
+[Target(OS(Windows) || !OS(Windows))]
 [NotCopyable("holds a handle")]
 struct Handle {
     var fd: int;
@@ -493,7 +495,7 @@ test(): int {
             }
         }
     }
-    if (text != "use 'fresh' instead|fresh;!OS(Windows);holds a handle;x:true") {
+    if (text != "use 'fresh' instead|fresh;(OS(Windows) || !OS(Windows));holds a handle;x:true") {
         print(text);
         return 1;
     }
