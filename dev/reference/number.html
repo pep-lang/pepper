@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-447ae866.js";
+            window.path_to_searchindex_js = "../searchindex-f8b9395b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -239,6 +239,160 @@ are accepted.</p>
 <pre><code class="language-pepper">    assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="is_digit"><a class="header" href="#is_digit">is_digit</a></h4>
+<pre><code class="language-pepper">is_digit(): bool
+</code></pre>
+<p>Whether this is an ASCII decimal digit, <code>0</code> to <code>9</code>, like C’s
+<code>isdigit</code>.</p>
+<p>Like every classification method on <code>char</code>, it looks at ASCII only,
+as C does in the “C” locale: a negative <code>char</code> (a byte of UTF-8 text
+above 127) is never a digit, letter, space or punctuation. Unlike C’s
+functions, it is defined for every value, negative ones included.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>0</code> to <code>9</code></li>
+</ul>
+<h4 id="is_hex_digit"><a class="header" href="#is_hex_digit">is_hex_digit</a></h4>
+<pre><code class="language-pepper">is_hex_digit(): bool
+</code></pre>
+<p>Whether this is an ASCII hexadecimal digit, <code>0</code> to <code>9</code>, <code>a</code> to <code>f</code> or
+<code>A</code> to <code>F</code>, like C’s <code>isxdigit</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a hexadecimal digit, either case</li>
+</ul>
+<h4 id="is_alphabetic"><a class="header" href="#is_alphabetic">is_alphabetic</a></h4>
+<pre><code class="language-pepper">is_alphabetic(): bool
+</code></pre>
+<p>Whether this is an ASCII letter, <code>a</code> to <code>z</code> or <code>A</code> to <code>Z</code>, like C’s
+<code>isalpha</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an ASCII letter</li>
+</ul>
+<h4 id="is_alphanumeric"><a class="header" href="#is_alphanumeric">is_alphanumeric</a></h4>
+<pre><code class="language-pepper">is_alphanumeric(): bool
+</code></pre>
+<p>Whether this is an ASCII letter or digit, like C’s <code>isalnum</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>a</code> to <code>z</code>, <code>A</code> to <code>Z</code> or <code>0</code> to <code>9</code></li>
+</ul>
+<h4 id="is_upper"><a class="header" href="#is_upper">is_upper</a></h4>
+<pre><code class="language-pepper">is_upper(): bool
+</code></pre>
+<p>Whether this is an ASCII uppercase letter, <code>A</code> to <code>Z</code>, like C’s
+<code>isupper</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>A</code> to <code>Z</code></li>
+</ul>
+<h4 id="is_lower"><a class="header" href="#is_lower">is_lower</a></h4>
+<pre><code class="language-pepper">is_lower(): bool
+</code></pre>
+<p>Whether this is an ASCII lowercase letter, <code>a</code> to <code>z</code>, like C’s
+<code>islower</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>a</code> to <code>z</code></li>
+</ul>
+<h4 id="is_whitespace"><a class="header" href="#is_whitespace">is_whitespace</a></h4>
+<pre><code class="language-pepper">is_whitespace(): bool
+</code></pre>
+<p>Whether this is ASCII whitespace: a space, tab (<code>\t</code>), line feed
+(<code>\n</code>), vertical tab, form feed or carriage return (<code>\r</code>), like C’s
+<code>isspace</code>. <code>String.trim</code> strips the same set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for one of the six whitespace characters</li>
+</ul>
+<h4 id="is_blank"><a class="header" href="#is_blank">is_blank</a></h4>
+<pre><code class="language-pepper">is_blank(): bool
+</code></pre>
+<p>Whether this is a space or a tab, like C’s <code>isblank</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>' '</code> and <code>'\t'</code></li>
+</ul>
+<h4 id="is_punctuation"><a class="header" href="#is_punctuation">is_punctuation</a></h4>
+<pre><code class="language-pepper">is_punctuation(): bool
+</code></pre>
+<p>Whether this is ASCII punctuation: printable, but not a letter, digit
+or space, like C’s <code>ispunct</code>. That is <code>!"#$%&amp;'()*+,-./:;&lt;=&gt;?@[\]^_`{|}~</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for one of the 32 ASCII punctuation characters</li>
+</ul>
+<h4 id="is_graphic"><a class="header" href="#is_graphic">is_graphic</a></h4>
+<pre><code class="language-pepper">is_graphic(): bool
+</code></pre>
+<p>Whether this is printable and not a space, <code>!</code> to <code>~</code>, like C’s
+<code>isgraph</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a letter, digit or punctuation</li>
+</ul>
+<h4 id="is_printable"><a class="header" href="#is_printable">is_printable</a></h4>
+<pre><code class="language-pepper">is_printable(): bool
+</code></pre>
+<p>Whether this is printable, a space through <code>~</code> (<code>0x20</code> to <code>0x7E</code>),
+like C’s <code>isprint</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a space, letter, digit or punctuation</li>
+</ul>
+<h4 id="is_control"><a class="header" href="#is_control">is_control</a></h4>
+<pre><code class="language-pepper">is_control(): bool
+</code></pre>
+<p>Whether this is an ASCII control character, <code>0x00</code> to <code>0x1F</code> or
+<code>0x7F</code> (delete), like C’s <code>iscntrl</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a control character</li>
+</ul>
+<h4 id="is_ascii"><a class="header" href="#is_ascii">is_ascii</a></h4>
+<pre><code class="language-pepper">is_ascii(): bool
+</code></pre>
+<p>Whether this is ASCII, <code>0x00</code> to <code>0x7F</code>, like C’s <code>isascii</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a value from 0 to 127</li>
+</ul>
+<h4 id="to_upper"><a class="header" href="#to_upper">to_upper</a></h4>
+<pre><code class="language-pepper">to_upper(): char
+</code></pre>
+<p>Returns the uppercase letter for an ASCII lowercase letter, and this
+value unchanged for anything else, like C’s <code>toupper</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>A</code> to <code>Z</code> for <code>a</code> to <code>z</code>, otherwise this value</li>
+</ul>
+<h4 id="to_lower"><a class="header" href="#to_lower">to_lower</a></h4>
+<pre><code class="language-pepper">to_lower(): char
+</code></pre>
+<p>Returns the lowercase letter for an ASCII uppercase letter, and this
+value unchanged for anything else, like C’s <code>tolower</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>a</code> to <code>z</code> for <code>A</code> to <code>Z</code>, otherwise this value</li>
+</ul>
+<h4 id="digit_value"><a class="header" href="#digit_value">digit_value</a></h4>
+<pre><code class="language-pepper">digit_value(base: int = 10): int?
+</code></pre>
+<p>Returns the value of this digit in <code>base</code>: <code>0</code> to <code>9</code> are 0 to 9,
+and the letters, either case, are 10 and up (<code>a</code> is 10, <code>z</code> is 35).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>base</code> — the base the digit is written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digit’s value, or none when this is not a digit in <code>base</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
 <h4 id="wrapping_add"><a class="header" href="#wrapping_add">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: char): char
 </code></pre>
@@ -578,6 +732,176 @@ accepted.</p>
 <pre><code class="language-pepper">    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="is_digit-1"><a class="header" href="#is_digit-1">is_digit</a></h4>
+<pre><code class="language-pepper">is_digit(): bool
+</code></pre>
+<p>Whether this is an ASCII decimal digit, <code>0</code> to <code>9</code>, like C’s
+<code>isdigit</code>.</p>
+<p>Like every classification method on <code>byte</code>, it looks at ASCII only,
+as C does in the “C” locale: a value above 127 is never a digit,
+letter, space or punctuation.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>0</code> to <code>9</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(('7' as byte).is_digit(), "a digit");
+    assert(!('x' as byte).is_digit(), "a letter");
+</code></pre>
+<h4 id="is_hex_digit-1"><a class="header" href="#is_hex_digit-1">is_hex_digit</a></h4>
+<pre><code class="language-pepper">is_hex_digit(): bool
+</code></pre>
+<p>Whether this is an ASCII hexadecimal digit, <code>0</code> to <code>9</code>, <code>a</code> to <code>f</code> or
+<code>A</code> to <code>F</code>, like C’s <code>isxdigit</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a hexadecimal digit, either case</li>
+</ul>
+<h4 id="is_alphabetic-1"><a class="header" href="#is_alphabetic-1">is_alphabetic</a></h4>
+<pre><code class="language-pepper">is_alphabetic(): bool
+</code></pre>
+<p>Whether this is an ASCII letter, <code>a</code> to <code>z</code> or <code>A</code> to <code>Z</code>, like C’s
+<code>isalpha</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an ASCII letter</li>
+</ul>
+<h4 id="is_alphanumeric-1"><a class="header" href="#is_alphanumeric-1">is_alphanumeric</a></h4>
+<pre><code class="language-pepper">is_alphanumeric(): bool
+</code></pre>
+<p>Whether this is an ASCII letter or digit, like C’s <code>isalnum</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>a</code> to <code>z</code>, <code>A</code> to <code>Z</code> or <code>0</code> to <code>9</code></li>
+</ul>
+<h4 id="is_upper-1"><a class="header" href="#is_upper-1">is_upper</a></h4>
+<pre><code class="language-pepper">is_upper(): bool
+</code></pre>
+<p>Whether this is an ASCII uppercase letter, <code>A</code> to <code>Z</code>, like C’s
+<code>isupper</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>A</code> to <code>Z</code></li>
+</ul>
+<h4 id="is_lower-1"><a class="header" href="#is_lower-1">is_lower</a></h4>
+<pre><code class="language-pepper">is_lower(): bool
+</code></pre>
+<p>Whether this is an ASCII lowercase letter, <code>a</code> to <code>z</code>, like C’s
+<code>islower</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>a</code> to <code>z</code></li>
+</ul>
+<h4 id="is_whitespace-1"><a class="header" href="#is_whitespace-1">is_whitespace</a></h4>
+<pre><code class="language-pepper">is_whitespace(): bool
+</code></pre>
+<p>Whether this is ASCII whitespace: a space, tab (<code>\t</code>), line feed
+(<code>\n</code>), vertical tab, form feed or carriage return (<code>\r</code>), like C’s
+<code>isspace</code>. <code>String.trim</code> strips the same set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for one of the six whitespace characters</li>
+</ul>
+<h4 id="is_blank-1"><a class="header" href="#is_blank-1">is_blank</a></h4>
+<pre><code class="language-pepper">is_blank(): bool
+</code></pre>
+<p>Whether this is a space or a tab, like C’s <code>isblank</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>' '</code> and <code>'\t'</code></li>
+</ul>
+<h4 id="is_punctuation-1"><a class="header" href="#is_punctuation-1">is_punctuation</a></h4>
+<pre><code class="language-pepper">is_punctuation(): bool
+</code></pre>
+<p>Whether this is ASCII punctuation: printable, but not a letter, digit
+or space, like C’s <code>ispunct</code>. That is <code>!"#$%&amp;'()*+,-./:;&lt;=&gt;?@[\]^_`{|}~</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for one of the 32 ASCII punctuation characters</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((';' as byte).is_punctuation(), "punctuation");
+    assert(!(' ' as byte).is_punctuation(), "a space is not");
+</code></pre>
+<h4 id="is_graphic-1"><a class="header" href="#is_graphic-1">is_graphic</a></h4>
+<pre><code class="language-pepper">is_graphic(): bool
+</code></pre>
+<p>Whether this is printable and not a space, <code>!</code> to <code>~</code>, like C’s
+<code>isgraph</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a letter, digit or punctuation</li>
+</ul>
+<h4 id="is_printable-1"><a class="header" href="#is_printable-1">is_printable</a></h4>
+<pre><code class="language-pepper">is_printable(): bool
+</code></pre>
+<p>Whether this is printable, a space through <code>~</code> (<code>0x20</code> to <code>0x7E</code>),
+like C’s <code>isprint</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a space, letter, digit or punctuation</li>
+</ul>
+<h4 id="is_control-1"><a class="header" href="#is_control-1">is_control</a></h4>
+<pre><code class="language-pepper">is_control(): bool
+</code></pre>
+<p>Whether this is an ASCII control character, <code>0x00</code> to <code>0x1F</code> or
+<code>0x7F</code> (delete), like C’s <code>iscntrl</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a control character</li>
+</ul>
+<h4 id="is_ascii-1"><a class="header" href="#is_ascii-1">is_ascii</a></h4>
+<pre><code class="language-pepper">is_ascii(): bool
+</code></pre>
+<p>Whether this is ASCII, <code>0x00</code> to <code>0x7F</code>, like C’s <code>isascii</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a value below 128</li>
+</ul>
+<h4 id="to_upper-1"><a class="header" href="#to_upper-1">to_upper</a></h4>
+<pre><code class="language-pepper">to_upper(): byte
+</code></pre>
+<p>Returns the uppercase letter for an ASCII lowercase letter, and this
+value unchanged for anything else, like C’s <code>toupper</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>A</code> to <code>Z</code> for <code>a</code> to <code>z</code>, otherwise this value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(('q' as byte).to_upper() == 'Q', "raised");
+    assert(('?' as byte).to_upper() == '?', "kept");
+</code></pre>
+<h4 id="to_lower-1"><a class="header" href="#to_lower-1">to_lower</a></h4>
+<pre><code class="language-pepper">to_lower(): byte
+</code></pre>
+<p>Returns the lowercase letter for an ASCII uppercase letter, and this
+value unchanged for anything else, like C’s <code>tolower</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>a</code> to <code>z</code> for <code>A</code> to <code>Z</code>, otherwise this value</li>
+</ul>
+<h4 id="digit_value-1"><a class="header" href="#digit_value-1">digit_value</a></h4>
+<pre><code class="language-pepper">digit_value(base: int = 10): int?
+</code></pre>
+<p>Returns the value of this digit in <code>base</code>: <code>0</code> to <code>9</code> are 0 to 9,
+and the letters, either case, are 10 and up (<code>a</code> is 10, <code>z</code> is 35).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>base</code> — the base the digit is written in, from 2 to 36; 10 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digit’s value, or none when this is not a digit in <code>base</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>base</code> is less than 2 or greater than 36</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(('7' as byte).digit_value().value() == 7, "decimal");
+    assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
+    assert(('9' as byte).digit_value(8).is_empty(), "not octal");
+</code></pre>
 <h4 id="wrapping_add-1"><a class="header" href="#wrapping_add-1">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: byte): byte
 </code></pre>

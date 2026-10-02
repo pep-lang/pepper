@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-447ae866.js";
+            window.path_to_searchindex_js = "../searchindex-f8b9395b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -344,6 +344,50 @@ main.pep:2:14: error: character literal must be a single ASCII character; use a 
 strings (<code>__ptr&lt;char&gt;</code>). The ASCII characters have the same value as a <code>char</code>
 and as a <code>byte</code>; <code>'\xFF'</code> is 255 as a <code>byte</code> but -1 read through a <code>char</code>.
 Text is a <code>String</code>, and a single character of it is a one-code-point <code>String</code>.</p>
+<p><code>byte</code> and <code>char</code> classify ASCII characters as C’s <code>ctype.h</code> does in the “C”
+locale: <code>is_digit</code>, <code>is_hex_digit</code>, <code>is_alphabetic</code>, <code>is_alphanumeric</code>,
+<code>is_upper</code>, <code>is_lower</code>, <code>is_whitespace</code>, <code>is_blank</code>, <code>is_punctuation</code>,
+<code>is_graphic</code>, <code>is_printable</code>, <code>is_control</code> and <code>is_ascii</code>, plus <code>to_upper</code>,
+<code>to_lower</code> and <code>digit_value(base)</code>. The names are spelled out (<code>is_punctuation</code>
+for C’s <code>ispunct</code>). A byte above 127, which is a negative <code>char</code>, is never a
+letter, digit, space or punctuation. Unicode classification is not covered.</p>
+<pre><code class="language-pepper"># Classify and convert ASCII characters, as C's ctype.h does.
+main(): int {
+    assert('7'.is_digit() and 'f'.is_hex_digit(), "digits");
+    assert('q'.is_alphabetic() and 'Q'.is_upper() and 'q'.is_lower(), "letters");
+    assert('\t'.is_whitespace() and '\t'.is_blank(), "whitespace");
+    assert(';'.is_punctuation() and !'_'.is_alphanumeric(), "punctuation");
+    assert('\n'.is_control() and !'\n'.is_printable(), "control");
+    assert('a'.to_upper() == 'A' and '?'.to_upper() == '?', "case");
+
+    # The digit's value in a base, or none when it is not a digit there.
+    assert('F'.digit_value(16).value() == 15, "hexadecimal");
+    assert('9'.digit_value(8).is_empty(), "not an octal digit");
+
+    # Count the words and digits of a String, a byte at a time.
+    var text = "Call 555-0100 at 9 a.m.";
+    var words = 0;
+    var digits = 0;
+    var in_word = false;
+    for (var b in text.bytes()) {
+        if (b.is_digit()) {
+            digits = digits + 1;
+        }
+        if (b.is_alphanumeric() and !in_word) {
+            words = words + 1;
+        }
+        in_word = b.is_alphanumeric();
+    }
+
+    # A char answers the same, and bytes above 127 (negative as a char)
+    # are never letters.
+    char e_acute = -61;   # the first byte of "é" in UTF-8
+    assert(!e_acute.is_alphabetic() and !e_acute.is_ascii(), "not ASCII");
+
+    print($"{words} words, {digits} digits");   # 7 words, 8 digits
+    return 0;
+}
+</code></pre>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
 value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
