@@ -2757,6 +2757,95 @@ fn different_specializations_do_not_convert() {
     );
 }
 
+/// Type arguments compare wherever a value flows: an assignment, an
+/// argument, a return, nested type arguments, and a field (#376).
+#[test]
+fn different_specializations_do_not_convert_anywhere() {
+    let cases = [
+        (
+            "spec_assign",
+            "main(): int {\n    var a = Array<int>();\n    a = Array<String>();\n    return 0;\n}\n",
+            "main.pep:3:9: error: cannot assign a value of type 'Array<String>' to a variable of type 'Array<int>'\n\
+             \x20   3 |     a = Array<String>();\n\
+             \x20     |         ^~~~~~~~~~~~~",
+        ),
+        (
+            "spec_argument",
+            "take(a: Array<int>): int { return 0; }\nmain(): int {\n    var b = Array<String>();\n    return take(b);\n}\n",
+            "main.pep:4:17: error: cannot pass a value of type 'Array<String>' as argument 1 of 'take', which has type 'Array<int>'\n\
+             \x20   4 |     return take(b);\n\
+             \x20     |                 ^",
+        ),
+        (
+            "spec_return",
+            "make(): Array<int> {\n    return Array<String>();\n}\nmain(): int { return make().count; }\n",
+            "main.pep:2:12: error: cannot return a value of type 'Array<String>' from 'make', which returns 'Array<int>'\n\
+             \x20   2 |     return Array<String>();\n\
+             \x20     |            ^~~~~~~~~~~~~",
+        ),
+        (
+            "spec_nested",
+            "main(): int {\n    var b = Array<Array<String>>();\n    Array<Array<int>> a = b;\n    return 0;\n}\n",
+            "main.pep:3:27: error: cannot initialize variable 'a' of type 'Array<Array<int>>' with a value of type 'Array<Array<String>>'\n\
+             \x20   3 |     Array<Array<int>> a = b;\n\
+             \x20     |                           ^",
+        ),
+        (
+            "spec_field",
+            "struct Box<T> {\n    var value: Array<T>;\n    construct() { this.value = Array<T>(); }\n}\nmain(): int {\n    var b = Box<int>();\n    b.value = Array<String>();\n    return 0;\n}\n",
+            "main.pep:7:15: error: cannot assign a value of type 'Array<String>' to a variable of type 'Array<int>'\n\
+             \x20   7 |     b.value = Array<String>();\n\
+             \x20     |               ^~~~~~~~~~~~~",
+        ),
+        (
+            "spec_alias",
+            "type Ints = Array<int>;\nmain(): int {\n    Ints a = Array<String>();\n    return 0;\n}\n",
+            "main.pep:3:14: error: cannot initialize variable 'a' of type 'Array<int>' with a value of type 'Array<String>'\n\
+             \x20   3 |     Ints a = Array<String>();\n\
+             \x20     |              ^~~~~~~~~~~~~",
+        ),
+    ];
+    for (test, source, expected) in cases {
+        assert_eq!(error_of(test, source), expected, "{test}");
+    }
+}
+
+/// An omitted type argument is its default, so `Result<int>` is
+/// `Result<int, Error>` but not `Result<int, String>` (#376).
+#[test]
+fn defaulted_type_arguments_compare_filled_in() {
+    assert_eq!(
+        error_of("spec_default", "main(): int {\n    var r: Result<int> = Result<int, String>.Ok(1);\n    return 0;\n}\n"),
+        "main.pep:2:46: error: cannot initialize variable 'r' of type 'Result<int>' with a value of type 'Result<int, String>'\n\
+         \x20   2 |     var r: Result<int> = Result<int, String>.Ok(1);\n\
+         \x20     |                                              ^~"
+    );
+}
+
+/// The arms of `c ? a : b` must have one type: the false arm converts to
+/// the true arm's (#376).
+#[test]
+fn conditional_arms_of_different_types() {
+    assert_eq!(
+        error_of(
+            "conditional_arms",
+            "main(): int {\n    var flag = true;\n    var a = flag ? Array<int>() : Array<String>();\n    return 0;\n}\n"
+        ),
+        "main.pep:3:35: error: incompatible operand types ('Array<int>' and 'Array<String>')\n\
+         \x20   3 |     var a = flag ? Array<int>() : Array<String>();\n\
+         \x20     |                                   ^~~~~~~~~~~~~"
+    );
+    assert_eq!(
+        error_of(
+            "conditional_structs",
+            "struct Foo {}\nstruct Bar {}\nmain(): int {\n    var c = true ? Foo() : Bar();\n    return 0;\n}\n"
+        ),
+        "main.pep:4:28: error: incompatible operand types ('Foo' and 'Bar')\n\
+         \x20   4 |     var c = true ? Foo() : Bar();\n\
+         \x20     |                            ^~~"
+    );
+}
+
 #[test]
 fn interpolation_without_to_string() {
     assert_eq!(

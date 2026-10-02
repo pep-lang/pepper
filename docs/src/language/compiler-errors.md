@@ -250,8 +250,13 @@ and a value converts to a struct whose constructor from its type is
 A raw pointer is never a struct either: a `__ptr<char>` is not a `String`
 (copy it with `String(p)`), and a `String` is not a `__ptr<char>` (pass its
 `c_str()`).
+Two specializations of one generic struct are different types: `Array<int>`
+is not `Array<String>` and `Array<Derived>` is not `Array<Base>`. Type
+arguments compare exactly, at every depth, after aliases resolve and omitted
+arguments take their defaults (`Result<int>` is `Result<int, Error>`).
 The check applies wherever a value flows into a typed place: a variable's
-initializer, an assignment, an argument and a `return`:
+initializer, an assignment, an argument, a `return`, and each arm of
+`c ? a : b`, whose false arm must convert to the true arm's type:
 
 ```text
 main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
@@ -275,6 +280,18 @@ main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of
 main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
       |            ^~~
+```
+
+```text
+main.pep:2:20: error: cannot initialize variable 'a' of type 'Array<int>' with a value of type 'Array<String>'
+    2 |     Array<int> a = Array<String>();
+      |                    ^~~~~~~~~~~~~
+```
+
+```text
+main.pep:3:35: error: incompatible operand types ('Array<int>' and 'Array<String>')
+    3 |     var a = flag ? Array<int>() : Array<String>();
+      |                                   ^~~~~~~~~~~~~
 ```
 
 **A struct used as a trait it does not declare** (see
@@ -382,9 +399,3 @@ out of range or a failed `assert`. These are not compiler errors: the program
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from `main`). See [`assert` and
 `panic`](../reference/internals.md).
-
-## Current limitations
-
-The type check does not compare the type arguments of generic structs yet, so
-`Array<int> a = Array<String>();` compiles. Read such code carefully: the
-resulting program has undefined behavior.

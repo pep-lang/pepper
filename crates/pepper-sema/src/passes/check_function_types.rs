@@ -10,6 +10,7 @@
 use crate::model::*;
 use crate::static_type::{self, StructTable};
 use crate::type_name::TypeName;
+use std::collections::HashMap;
 
 /// Canonical spelling of a type for comparison: primitive aliases collapse
 /// (`int` and `i32` are one type), recursively through generic arguments.
@@ -88,6 +89,10 @@ struct Checker<'a> {
     /// (`T`) in annotations, which says nothing about the type, even when a
     /// user struct happens to have that name.
     unbound: Vec<String>,
+    /// Each generic struct with a defaulted parameter, by base name, so two
+    /// spellings of one specialization (`Result<int>`, `Result<int, Error>`)
+    /// compare equal.
+    defaults: HashMap<&'a str, &'a [GenericParam]>,
 }
 
 impl<'a> Checker<'a> {
@@ -107,6 +112,14 @@ impl<'a> Checker<'a> {
     /// of the base being checked.
     fn mentions_unbound(&self, ty: &TypeName) -> bool {
         self.unbound.iter().any(|p| *p == ty.name) || ty.sub_types.iter().any(|t| self.mentions_unbound(t))
+    }
+
+    /// `ty` canonical, with every omitted type argument filled in from its
+    /// parameter's default.
+    fn with_defaults(&self, ty: &TypeName) -> TypeName {
+        let mut ty = canonical(ty);
+        crate::value_structs::fill_defaults(&mut ty, &self.defaults);
+        canonical(&ty)
     }
 
     /// What a type certainly is, or `None` when unknown here (unresolved,
@@ -191,18 +204,15 @@ impl<'a> Checker<'a> {
         let mismatch = match (expected_kind, actual_kind) {
             (Kind::Enum, Kind::Enum) => canonical(expected).name != canonical(&actual).name,
             (Kind::Numeric, Kind::Numeric) => false,
-            // Different structs; type arguments are not compared, since
-            // defaults (`Result<int>` is `Result<int, Error>`) and
-            // aliases may spell one specialization two ways.
             // Tuples have no defaults or aliases of their own: the element
             // types must match (`(int, String)` is not `(long, String)`).
             (Kind::Struct, Kind::Struct) if expected.is_tuple() || actual.is_tuple() => canonical(expected) != canonical(&actual),
             // Two specializations of one generic struct differ when their
-            // type arguments do (`Array<int>` is not `Array<long>`), unless
-            // one is spelled with fewer arguments (defaults) or not yet
-            // concrete.
+            // type arguments do (`Array<int>` is not `Array<long>`), with
+            // omitted arguments filled from their defaults (`Result<int>` is
+            // `Result<int, Error>`), unless one is not yet concrete.
             (Kind::Struct, Kind::Struct) => {
-                let (expected, actual) = (canonical(expected), canonical(&actual));
+                let (expected, actual) = (self.with_defaults(expected), self.with_defaults(&actual));
                 expected.name != actual.name
                     || (expected.sub_types.len() == actual.sub_types.len()
                         && !expected.contains_auto()
@@ -277,6 +287,12 @@ impl<'a> Checker<'a> {
 
     /// `value` flows into a slot of type `expected`.
     fn flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
+        // Each arm of `c ? a : b` flows into the slot.
+        if let Expression::Ternary { true_expr, false_expr, .. } = value {
+            self.flows_into(true_expr, expected, current, slot);
+            self.flows_into(false_expr, expected, current, slot);
+            return;
+        }
         if self.void_used(value, current, slot) {
             return;
         }
@@ -458,7 +474,15 @@ impl<'a> Checker<'a> {
     fn expression(&mut self, expr: &Expression, current: Option<&TypeName>) {
         let mut nodes: Vec<&Expression> = vec![];
         crate::passes::visit_expression(expr, &mut |e: &Expression| {
-            if matches!(e, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. } | Expression::Binary { .. } | Expression::Unary { .. }) {
+            if matches!(
+                e,
+                Expression::FunctionCall { .. }
+                    | Expression::MethodCall { .. }
+                    | Expression::Invoke { .. }
+                    | Expression::Binary { .. }
+                    | Expression::Unary { .. }
+                    | Expression::Ternary { .. }
+            ) {
                 nodes.push(e);
             }
         });
@@ -522,6 +546,17 @@ impl<'a> Checker<'a> {
                             self.errors.push(Diagnostic::error(message).at(*loc));
                         }
                     }
+                }
+                // `c ? a : b` has the true arm's type (or the numeric arms'
+                // common type), so the false arm must convert to it. A
+                // `match` expression's arms (a chain of these) are checked
+                // by `enums::check_arm_types`.
+                Expression::Ternary { condition, true_expr, false_expr } if !matches!(**condition, Expression::MatchArm(_)) => {
+                    let Some(true_type) = static_type::of(true_expr, &self.table, current) else { continue };
+                    let mismatch = |expected: &str, actual: &str| format!("incompatible operand types ('{}' and '{}')", expected, actual);
+                    let what = || "an operand of '?:'".to_string();
+                    let fallback = false_expr.loc();
+                    self.flows_into(false_expr, &true_type, current, &Slot { what: &what, mismatch: &mismatch, fallback });
                 }
                 Expression::Binary { op: BinaryOp::Assign, lhs, rhs, loc } => {
                     // A raw buffer slot (`Data[i] = v`) has no reliable
@@ -710,7 +745,8 @@ pub(crate) fn base_params(module: &Module, name: &str, is_struct: bool) -> Vec<S
 
 pub fn check_function_types(module: &mut Module) {
     let module = &*module;
-    let mut checker = Checker { module, table: StructTable::build(module), errors: vec![], unbound: vec![] };
+    let defaults = crate::value_structs::defaulted_params(module);
+    let mut checker = Checker { module, table: StructTable::build(module), errors: vec![], unbound: vec![], defaults };
     let base_params = |name: &str, is_struct: bool| base_params(module, name, is_struct);
     for function in &module.functions {
         checker.unbound = base_params(&function.name, false);

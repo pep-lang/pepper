@@ -36,12 +36,7 @@ pub fn install(module: &Module) {
         v.clear();
         v.extend(module.structs.iter().filter(|st| st.is_value()).map(|st| st.ty.name.clone()));
     });
-    let params: HashMap<&str, &[GenericParam]> = module
-        .structs
-        .iter()
-        .filter(|st| st.generic_params.iter().any(|p| p.default.is_some()))
-        .map(|st| (st.ty.name.as_str(), st.generic_params.as_slice()))
-        .collect();
+    let params = defaulted_params(module);
     let canonical = module
         .structs
         .iter()
@@ -63,11 +58,22 @@ pub fn canonical(name: &str) -> String {
     CANONICAL.with(|c| c.borrow().get(name).cloned()).unwrap_or_else(|| name.to_string())
 }
 
+/// Each generic struct with a defaulted parameter, by base name: what
+/// [`fill_defaults`] reads.
+pub(crate) fn defaulted_params(module: &Module) -> HashMap<&str, &[GenericParam]> {
+    module
+        .structs
+        .iter()
+        .filter(|st| st.generic_params.iter().any(|p| p.default.is_some()))
+        .map(|st| (st.ty.name.as_str(), st.generic_params.as_slice()))
+        .collect()
+}
+
 /// Spell `ty` one way: every omitted type argument filled in from the
 /// generic parameter's default, and `__ptr<T>` as `T*`. Type names nest
 /// only as deep as the program spells them, so this recursion is bounded by
 /// the source.
-fn fill_defaults(ty: &mut TypeName, params: &HashMap<&str, &[GenericParam]>) {
+pub(crate) fn fill_defaults(ty: &mut TypeName, params: &HashMap<&str, &[GenericParam]>) {
     for arg in &mut ty.sub_types {
         fill_defaults(arg, params);
     }
