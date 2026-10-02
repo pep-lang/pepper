@@ -644,6 +644,43 @@ test(): int {
 }
 
 #[test]
+fn a_match_in_a_generic_method_takes_a_parameter_of_the_type_argument() {
+    // In `Box<int>`, `other` is an `int` like `value`: a specialization's
+    // symbols keep no type parameter.
+    let src = r#"
+struct Box<T> {
+    T value;
+    construct(v: T) { value = v; }
+    pick(first: bool, other: T): T {
+        return match (first) {
+            true => value,
+            false => other,
+        };
+    }
+}
+
+enum Maybe<T> {
+    Some(value: T),
+    Nothing,
+
+    value_or(fallback: T): T {
+        return match (this) {
+            Some(v) => v,
+            Nothing => fallback,
+        };
+    }
+}
+
+test(): int {
+    var b = Box<int>(1);
+    var some = Maybe<int>.Some(4);
+    return b.pick(true, 2) + b.pick(false, 20) * 10 + some.value_or(0) * 100 + Maybe<int>.Nothing.value_or(5) * 1000;
+}
+"#;
+    assert_eq!(run(src), 1 + 200 + 400 + 5000);
+}
+
+#[test]
 fn a_case_without_values_is_one_shared_object() {
     let src = format!(
         "{}{}",

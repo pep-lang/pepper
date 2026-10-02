@@ -352,12 +352,14 @@ fn case_value(e: &EnumDef, case: &EnumCaseDef, loc: Loc) -> Expression {
 
 /// Every function body, method body and initializer in the module.
 fn for_each_body(module: &mut Module, mut f: impl FnMut(&mut Block, bool)) {
-    for_each_body_in(module, |body, generic, _| f(body, generic));
+    for_each_body_in(module, |body, generic, _, _| f(body, generic));
 }
 
 /// [`for_each_body`], with the struct whose method each body is (its
 /// `this`), if any.
-fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Option<&TypeName>)) {
+/// `f` gets each body, whether it is generic, the struct it belongs to, and
+/// its function's parameters.
+fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Option<&TypeName>, &[VariableDef])) {
     for st in &mut module.structs {
         let generic_base = st.ty.is_generic() && st.name == st.ty.name;
         let current = st.ty.clone();
@@ -368,8 +370,9 @@ fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Opt
             .chain(st.constructors.iter_mut())
             .chain([&mut st.destructor, &mut st.acquire, &mut st.release])
         {
+            let generic = generic_base || method.is_generic_func;
             if let Some(body) = &mut method.body {
-                f(body, generic_base || method.is_generic_func, Some(&current));
+                f(body, generic, Some(&current), &method.parameters);
             }
         }
     }
@@ -377,21 +380,21 @@ fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Opt
         let current = extension.target.clone();
         for method in &mut extension.methods {
             if let Some(body) = &mut method.body {
-                f(body, true, Some(&current));
+                f(body, true, Some(&current), &method.parameters);
             }
         }
     }
     for tr in &mut module.traits {
         for method in &mut tr.methods {
             if let Some(body) = &mut method.body {
-                f(body, true, None);
+                f(body, true, None, &method.parameters);
             }
         }
     }
     for function in &mut module.functions {
         let generic = function.is_generic_func;
         if let Some(body) = &mut function.body {
-            f(body, generic, None);
+            f(body, generic, None, &function.parameters);
         }
     }
 }
@@ -865,11 +868,11 @@ pub fn lower_matches(module: &mut Module) {
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
     let table = crate::static_type::StructTable::build(module);
     let mut warnings: Vec<Diagnostic> = vec![];
-    for_each_body_in(module, |block, generic, current| {
+    for_each_body_in(module, |block, generic, current, parameters| {
         if generic {
             return;
         }
-        check_arm_types(block, &table, current);
+        check_arm_types(block, &table, current, parameters);
         // Per body: a generic function's specializations each hold a copy
         // of its `match`es.
         let mut coverage: BTreeMap<usize, Coverage> = BTreeMap::new();
@@ -1428,8 +1431,14 @@ fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
 /// Report a `match` expression whose arms produce values of types that do
 /// not mix: it has the first arm's type, or, when the arms are numbers, their
 /// common type (`arithmetic::conditional_result`). Numbers mix (they
-/// convert), and `__null` fits any reference.
-fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, current: Option<&TypeName>) {
+/// convert), and `__null` fits any reference. A parameter has its declared
+/// type: in a specialization, a symbol may still carry the generic
+/// parameter (`T`) it was typed with in the generic base.
+fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, current: Option<&TypeName>, parameters: &[VariableDef]) {
+    let type_of = |e: &Expression| match e {
+        Expression::SymbolRef { id, .. } if let Some(p) = parameters.iter().find(|p| p.name == *id) => Some(p.ty.clone()),
+        _ => crate::static_type::of(e, table, current),
+    };
     crate::passes::walk_block(block, &mut |e| {
         let Expression::WithSubject(with) = e else { return };
         let mut arms: Vec<&Expression> = vec![];
@@ -1448,12 +1457,12 @@ fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, c
             arms.push(at);
         }
         let first = arms[0];
-        let Some(expected) = crate::static_type::of(first, table, current) else { return };
+        let Some(expected) = type_of(first) else { return };
         for arm in &arms[1..] {
             if matches!(arm, Expression::PointerLiteral) {
                 continue;
             }
-            let Some(actual) = crate::static_type::of(arm, table, current) else { continue };
+            let Some(actual) = type_of(arm) else { continue };
             let primitive = |t: &TypeName| t.is_scalar() && crate::type_name::INTEGRAL_TYPES.contains(t.name.as_str());
             if actual == expected || (primitive(&actual) && primitive(&expected)) {
                 continue;
