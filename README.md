@@ -231,6 +231,7 @@ cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
 cargo run -- tests/hello.pep --no-cache    # compile everything, skip the build cache
+cargo run -- main.pep -L libs -l foo        # link libfoo from the folder libs
 ```
 
 The compiler produces an executable; it does not run it for you. With no `-o`

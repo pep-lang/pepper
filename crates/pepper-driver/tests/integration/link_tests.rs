@@ -180,3 +180,48 @@ test(): int {
     let ee = generator.jit_engine(&mut module).expect("jit");
     assert_eq!(pepper_codegen::CodeGenerator::jit_call_i32(&ee, "test"), Ok(7));
 }
+
+/// `-L dir` adds a library search directory: a `[Link]` library that only
+/// exists in that folder links, and the call into it runs.
+#[cfg(not(windows))]
+#[test]
+fn library_search_directory_reaches_linker() {
+    let root = repo_root();
+    std::env::set_current_dir(&root).unwrap();
+
+    let dir = std::env::temp_dir().join(format!("pepper_link_search_dir_{}", std::process::id()));
+    let libs = dir.join("libs");
+    std::fs::create_dir_all(&libs).unwrap();
+    let c_path = dir.join("probe.c");
+    let object = dir.join("probe.o");
+    std::fs::write(&c_path, "int pepper_search_probe(void) { return 42; }\n").unwrap();
+    let status = Command::new(pepper_driver::linker::link_driver()).arg("-c").arg(&c_path).arg("-o").arg(&object).status().expect("run clang");
+    assert!(status.success(), "clang -c failed");
+    let status = Command::new("ar").arg("rcs").arg(libs.join("libpepper_search_probe.a")).arg(&object).status().expect("run ar");
+    assert!(status.success(), "ar failed");
+
+    let src_path = dir.join("search_probe.pep");
+    let out_path = dir.join("search_probe");
+    std::fs::write(
+        &src_path,
+        r#"
+[Link("pepper_search_probe")]
+extern int pepper_search_probe();
+
+main(): int {
+    return pepper_search_probe() == 42 ? 0 : 1;
+}"#,
+    )
+    .unwrap();
+    let options = pepper_driver::Options::parse_from(vec![
+        "pepper".to_string(),
+        src_path.to_string_lossy().into_owned(),
+        "-L".to_string(),
+        libs.to_string_lossy().into_owned(),
+        "-o".to_string(),
+        out_path.to_string_lossy().into_owned(),
+    ]);
+    assert_eq!(pepper_driver::run(options).expect("compile + link"), 0);
+    let status = Command::new(&out_path).status().expect("spawn linked binary");
+    assert!(status.success(), "linked binary exited with {}", status);
+}

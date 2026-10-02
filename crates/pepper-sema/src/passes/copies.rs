@@ -863,8 +863,15 @@ pub(crate) fn struct_end(module: &Module, loc: Loc) -> Option<usize> {
 
 /// The `Copyable` skeleton for `ty`, as the note shows it (indented) and as
 /// the fix inserts it.
+/// `ty` as the user writes it. Text outside single quotes (the skeleton, a
+/// fix's title) is not demangled when the diagnostic renders, and a struct
+/// that shares a runtime type's name (`Handle`) is mangled (`Handle@main`).
+fn written(ty: &TypeName) -> String {
+    pepper_parser::namespace::demangle(&format!("'{}'", ty.display())).trim_matches('\'').to_string()
+}
+
 fn skeleton(ty: &TypeName, indent: &str) -> String {
-    let t = ty.display();
+    let t = written(ty);
     [
         format!("extend {t} with Copyable<{t}> {{"),
         format!("    {t} copy(Copies copies) {{"),
@@ -945,7 +952,7 @@ fn cannot_copy(module: &Module, root: &TypeName, fallback: Loc, path: Vec<Hop>, 
         _ => unreachable!(),
     };
     diagnostic = diagnostic.with_note(
-        format!("implement 'Copyable<{}>' to say how to copy it:\n{}", ty.display(), skeleton(ty, "    ")),
+        format!("implement 'Copyable<{}>' to say how to copy it:\n{}", written(ty), skeleton(ty, "    ")),
         None,
     );
     // The editor applies a fix to the file it shows: offer one when the
@@ -956,7 +963,7 @@ fn cannot_copy(module: &Module, root: &TypeName, fallback: Loc, path: Vec<Hop>, 
     {
         let insert = Loc::new(decl.file, pepper_parser::ast::Span { start: end, end });
         diagnostic = diagnostic.with_fix(Fix {
-            message: format!("Implement Copyable<{}>", ty.display()),
+            message: format!("Implement Copyable<{}>", written(ty)),
             edits: vec![Edit { loc: insert, replacement: format!("\n\n{}", skeleton(ty, "")) }],
         });
     }

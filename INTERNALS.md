@@ -120,7 +120,7 @@ the runtime's own instances, so it is checked whole (`compiler::merge`).
 
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
-`--import`, `-l`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
+`--import`, `-l`, `-L`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
 [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
 `--emit-llvm`, `--emit-ast`, and
 `--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
@@ -1173,7 +1173,7 @@ module comment says which facts are left out and why.
 
 It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as
-`-L<dir> -l<name>`), then `link_libraries(&module)`, which gathers the
+`-L<dir> -l<name>`, after the `-L` directories), then `link_libraries(&module)`, which gathers the
 `[Link("name")]` attributes of externs that survived platform filtering,
 deduplicated. `linker::link` invokes **clang as the link driver**,
 preferring `$LLVM_SYS_<NN>1_PREFIX/bin/clang` so the linker matches the
@@ -1630,6 +1630,7 @@ diagnostics"). The mechanics:
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
 | `scoped.pep` | `Scoped<T>`, the `with` protocol (`enter()`, and `exit()` called from the destructor). |
 | `weak.pep` | `Weak<T>` over `__weak<T>`; implements `Scoped<T>` (`enter()` upgrades). |
+| `handle.pep` | `Handle<T>`, a raw resource (a C library's object) with a release closure that runs once, from the destructor or `release()`; `detach()` keeps it from running. |
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `uri.pep` | `Uri`: RFC 3986 URI references (any scheme, or none) split into their components, `Uri.decode` for percent-escapes. `http` parses URLs and request targets with it. |
 | `copy.pep` | `copy<T>`, the `Copyable<T>` trait and `Copies` (original-to-copy addresses, deferred weak fixes), and `_pep_check_sync<T>`, the `PEP_CHECK_SYNC` census. `Copies.copy<T>` is the `__copy<T>` intrinsic that `passes/copies.rs` lowers. `String`, `Array`, `HashMap` and `HashSet` implement `Copyable` with a `copy(Copies)` method; `io.File` is `[NotCopyable]`. |

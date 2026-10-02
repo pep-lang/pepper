@@ -402,7 +402,8 @@ fn cannot_copy_offers_a_copyable_skeleton() {
     let (uri, text, program) = load("not_copyable", NOT_COPYABLE, "main.pep");
     let diagnostics = fixable_diagnostics(&text, Some(&program), Some(&sema_model_of(&program)));
     let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
-    assert_eq!(error.message, "cannot copy 'Handle', which is not trivially copyable");
+    // The runtime also declares a 'Handle', so this one is mangled ('Handle@main') until the message is shown.
+    assert_eq!(demangle(&error.message), "cannot copy 'Handle', which is not trivially copyable");
     let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(9, 13), Position::new(9, 13)));
     let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(action.title, "Implement Copyable<Handle>");

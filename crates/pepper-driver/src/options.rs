@@ -21,6 +21,10 @@ pub struct Options {
     #[arg(short = 'l', value_name = "LIB")]
     pub libraries: Vec<String>,
 
+    /// Add a directory to the linker's library search path.
+    #[arg(short = 'L', value_name = "DIR")]
+    pub library_dirs: Vec<PathBuf>,
+
     /// Output executable path.
     #[arg(short = 'o', value_name = "OUT")]
     pub output: Option<PathBuf>,

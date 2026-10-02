@@ -170,7 +170,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     // Discover runtime libs for linking.
     let (_sources, runtime_libs, runtime_dirs) = runtime::discover();
     let mut libraries: Vec<String> = options.libraries.clone();
-    let mut library_dirs: Vec<PathBuf> = vec![];
+    let mut library_dirs: Vec<PathBuf> = options.library_dirs.clone();
     for lib in &runtime_libs {
         if let Some(parent) = lib.parent() {
             library_dirs.push(parent.to_path_buf());

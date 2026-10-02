@@ -62,9 +62,18 @@ The `-l` option links a library for one build:
 pepper main.pep -l m -o main
 ```
 
-Repeat it for more libraries (`-l m -l pthread`). There is no option to add a
-library search directory yet, so a library must be one the linker finds on its
-own: a system library, or one in a directory the linker searches by default.
+Repeat it for more libraries (`-l m -l pthread`).
+
+A library the linker does not find on its own (one outside the system's
+library directories, such as a Homebrew install on macOS) needs its folder
+on the search path. `-L dir` adds one, like `-L` for clang:
+
+```sh
+pepper main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
+```
+
+Repeat it for more folders. The folders are searched for `-l` libraries and
+`[Link]` libraries alike, in the order given, before the default ones.
 
 ## When linking fails
 

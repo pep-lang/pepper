@@ -172,6 +172,33 @@ behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.
 
+## Owning a C resource: `Handle<T>`
+
+A C library hands out objects that it frees with a function of its own
+(`fclose`, `free`, `LLVMDisposeModule`). Pepper's reference counting does
+not know about them, so the runtime's `Handle<T>` ties one to Pepper's
+lifetimes, like C#'s `SafeHandle`: it holds the raw value and a release
+function, and calls the function once, when the last reference to the
+handle goes away.
+
+```pepper
+{{#include ../../examples/c-handle.pep}}
+```
+
+- `Handle<T>(value, release)` takes ownership of `value`. `T` is usually
+  `__ptr<void>` or an integer descriptor.
+- `value` reads the raw value, to pass to C.
+- A handle is a reference, so copies share the resource; it is released
+  when the last copy goes away. Keep it in a field of the struct that
+  wraps the resource, as `Buffer` does.
+- `release()` frees the resource early, and `detach()` gives it back
+  without freeing it. Either way the release function never runs again,
+  and `is_owned()` becomes false.
+- `release` is a function value, so a closure may capture what the release
+  needs. A captured reference stays alive until the release runs, which is
+  how a C object that must not outlive its parent (an LLVM module and its
+  context) keeps the parent alive.
+
 ## Passing a Pepper function to C
 
 A Pepper [function value](function-types.md) is a reference-counted object,

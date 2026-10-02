@@ -118,6 +118,7 @@
     - [async/select.pep](reference/async-select.md)
     - [async/task_local.pep](reference/async-task_local.md)
   - [copy.pep](reference/copy.md)
+  - [handle.pep](reference/handle.md)
     - [http/client.pep](reference/http-client.md)
     - [http/message.pep](reference/http-message.md)
   - [http/module.pep](reference/http-module.md)
