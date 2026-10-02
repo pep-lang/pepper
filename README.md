@@ -217,6 +217,19 @@ gh workflow run llvm-versions.yml --ref main
 On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
 all five pass; CI's `test-macos` job runs the suite there against LLVM 20.
 
+### Benchmarks
+
+`benchmarks/` holds scripts that time runtime modules against a reference
+implementation, for comparing a change before and after. They need a release
+build (`cargo build --release`) and Python 3:
+
+```bash
+python3 benchmarks/compress/bench.py    # compress vs the gzip command, 12 MB of text
+python3 benchmarks/compress/check.py    # round trips against Python's zlib; ends "failures 0"
+```
+
+`bench.py --tool <binary>` times a tool built from another checkout instead.
+
 ## Run the compiler
 
 The compiler is `pep-build`. `pepper`, built from `tools/pepper` as above, is

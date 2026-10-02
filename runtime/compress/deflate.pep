@@ -21,11 +21,17 @@ const _DEFLATE_MATCH: uint = 0x80000000;
 export struct _Deflater {
     var _format: Format;
     var _level: int;
-    # The match search's effort: how many earlier positions to try, the
-    # length that is good enough to stop at, and whether to look one byte
-    # further for a longer match before taking one.
+    # The match search's effort, as zlib's table has it: how many earlier
+    # positions to try, the length that is good enough to stop at, the
+    # length after which a search tries only a quarter of the chain, and
+    # whether to look one byte further for a longer match before taking
+    # one. With `_lazy`, `_max_lazy` is the match length not worth looking
+    # past; without it, the longest match whose positions still go into
+    # the hash chains.
     var _max_chain: ulong;
     var _nice_length: ulong;
+    var _good_length: ulong;
+    var _max_lazy: ulong;
     var _lazy: bool;
 
     # The input from absolute stream position `_base` on.
@@ -35,18 +41,20 @@ export struct _Deflater {
     # and of the first byte of the block being collected.
     var _done: ulong;
     var _block_start: ulong;
-    # Hash chains: the latest position (plus one, 0 for none) whose three
-    # bytes hash to each value, and for each position in the window the
-    # position before it with the same hash.
-    var _head: ulong[];
-    var _prev: ulong[];
+    # Hash chains: the latest position whose three bytes hash to each
+    # value, and for each position in the window the position before it
+    # with the same hash. Positions are stored plus one, modulo 2^32 (0 for
+    # none), which halves the tables; a search only follows a chain while
+    # the distances grow and stay in the window, and checks every byte it
+    # matches, so a stale entry can cost a match but never make a wrong one.
+    var _head: uint[];
+    var _prev: uint[];
     var _inserted: ulong;
-    # A match search already done one position ahead (lazy matching).
-    var _cached_at: ulong;
-    var _cached_length: ulong;
-    var _cached_distance: ulong;
-    var _found_length: ulong;
-    var _found_distance: ulong;
+    # Lazy matching: whether the byte before `_done` is still to be
+    # written, and the match found there (length 0 for none).
+    var _match_available: bool;
+    var _prev_length: ulong;
+    var _prev_distance: ulong;
 
     var _tokens: uint[];
     var _literal_counts: uint[];
@@ -73,21 +81,25 @@ export struct _Deflater {
     construct(format: Format, level: int) {
         _format = format;
         _level = level;
-        var chains = [0, 4, 8, 16, 16, 32, 128, 256, 1024, 4096];
-        var nice = [0, 8, 16, 32, 32, 64, 128, 258, 258, 258];
+        # zlib's configuration table (deflate.c).
+        var goods = [0, 4, 4, 4, 4, 8, 8, 8, 32, 32];
+        var lazies = [0, 4, 5, 6, 4, 16, 16, 32, 128, 258];
+        var nices = [0, 8, 16, 32, 16, 32, 128, 128, 258, 258];
+        var chains = [0, 4, 8, 32, 16, 32, 128, 256, 1024, 4096];
+        _good_length = goods[level as ulong] as ulong;
+        _max_lazy = lazies[level as ulong] as ulong;
+        _nice_length = nices[level as ulong] as ulong;
         _max_chain = chains[level as ulong] as ulong;
-        _nice_length = nice[level as ulong] as ulong;
         _lazy = level >= 4;
         _buffer = Array<u8>();
-        _head = Array<ulong>(_DEFLATE_HASH_SIZE);
-        _prev = Array<ulong>(_DEFLATE_WINDOW);
+        _head = Array<uint>(_DEFLATE_HASH_SIZE);
+        _prev = Array<uint>(_DEFLATE_WINDOW);
         ulong index = 0;
         while (index < _DEFLATE_WINDOW) {
             _head.append(0);
             _prev.append(0);
             index += 1;
         }
-        _cached_at = 0xFFFFFFFFFFFFFFFF;
         _tokens = Array<uint>(_DEFLATE_BLOCK_TOKENS);
         _literal_counts = Array<uint>(286);
         _distance_counts = Array<uint>(30);
@@ -193,10 +205,11 @@ export struct _Deflater {
     }
 
     _distance_code(distance: ulong): ulong {
+        __ptr<u8> codes = _distance_codes._data;
         if (distance <= 256) {
-            return _distance_codes[distance - 1] as ulong;
+            return codes[distance - 1] as ulong;
         }
-        return _distance_codes[256 + ((distance - 1) >> 7)] as ulong;
+        return codes[256 + ((distance - 1) >> 7)] as ulong;
     }
 
     _clear_counts() {
@@ -328,38 +341,40 @@ export struct _Deflater {
             }
             limit = end - _DEFLATE_LOOKAHEAD;
         }
+        if (_lazy) {
+            _compress_lazy(limit, end);
+        } else {
+            _compress_fast(limit, end);
+        }
+        if (final) {
+            # A match found at the last position would reach past the end,
+            # so what waits is a literal.
+            if (_match_available) {
+                _emit_literal(_buffer._data[_done - 1 - _base]);
+                _match_available = false;
+            }
+            _write_block(true, end);
+        }
+        _trim();
+    }
+
+    # Levels 1 to 3 (zlib's `deflate_fast`): takes the longest match at each
+    # position, and leaves the positions inside a match longer than
+    # `_max_lazy` out of the hash chains.
+    _compress_fast(limit: ulong, end: ulong) {
         __ptr<u8> data = _buffer._data;
         var position = _done;
         while (position < limit) {
-            ulong length = 0;
-            ulong distance = 0;
-            if (_cached_at == position) {
-                length = _cached_length;
-                distance = _cached_distance;
-                _cached_at = 0xFFFFFFFFFFFFFFFF;
-            } else {
-                _find(position, end);
-                length = _found_length;
-                distance = _found_distance;
-            }
-            if (length >= 3 && _lazy && length < _nice_length && position + 1 < limit) {
-                _find(position + 1, end);
-                _cached_at = position + 1;
-                _cached_length = _found_length;
-                _cached_distance = _found_distance;
-                if (_found_length > length) {
-                    length = 0;
-                }
-            }
+            var found = _find(position, end, _max_chain, 2);
+            var length = found >> 16;
             if (length >= 3) {
-                _tokens.append(_DEFLATE_MATCH | ((length as uint) << 16) | (distance as uint));
-                _literal_counts[257 + (_length_codes[length] as ulong)] += 1;
-                _distance_counts[_distance_code(distance)] += 1;
+                _emit_match(length, found & 65535);
                 position += length;
+                if (length > _max_lazy) {
+                    _inserted = position;
+                }
             } else {
-                var byte = data[position - _base];
-                _tokens.append(byte as uint);
-                _literal_counts[byte as ulong] += 1;
+                _emit_literal(data[position - _base]);
                 position += 1;
             }
             if (_tokens.count >= _DEFLATE_BLOCK_TOKENS && position < end) {
@@ -367,10 +382,73 @@ export struct _Deflater {
             }
         }
         _done = position;
-        if (final) {
-            _write_block(true, end);
+    }
+
+    # Levels 4 to 9 (zlib's `deflate_slow`): before taking a match, looks
+    # for a longer one at the next position, and takes that one instead
+    # (writing a literal) when it finds it.
+    _compress_lazy(limit: ulong, end: ulong) {
+        __ptr<u8> data = _buffer._data;
+        var position = _done;
+        while (position < limit) {
+            var previous_length = _prev_length;
+            ulong length = 0;
+            ulong distance = 0;
+            if (previous_length < _max_lazy) {
+                var chain = _max_chain;
+                if (previous_length >= _good_length) {
+                    chain = chain >> 2;
+                }
+                var best = previous_length;
+                if (best < 2) {
+                    best = 2;
+                }
+                var found = _find(position, end, chain, best);
+                length = found >> 16;
+                distance = found & 65535;
+                # A short match far back costs about as much as its literals.
+                if (length == 3 && distance > 4096) {
+                    length = 0;
+                }
+            }
+            if (previous_length >= 3 && length <= previous_length) {
+                _emit_match(previous_length, _prev_distance);
+                position = position - 1 + previous_length;
+                _match_available = false;
+                _prev_length = 0;
+            } else {
+                if (_match_available) {
+                    _emit_literal(data[position - 1 - _base]);
+                }
+                _match_available = true;
+                _prev_length = length;
+                _prev_distance = distance;
+                position += 1;
+            }
+            if (_tokens.count >= _DEFLATE_BLOCK_TOKENS && position < end) {
+                var block_end = position;
+                if (_match_available) {
+                    block_end -= 1;
+                }
+                _write_block(false, block_end);
+            }
         }
-        _trim();
+        _done = position;
+    }
+
+    _emit_literal(byte: u8) {
+        _tokens.append(byte as uint);
+        __ptr<uint> counts = _literal_counts._data;
+        counts[byte as ulong] += 1;
+    }
+
+    _emit_match(length: ulong, distance: ulong) {
+        _tokens.append(_DEFLATE_MATCH | ((length as uint) << 16) | (distance as uint));
+        __ptr<uint> literal_counts = _literal_counts._data;
+        __ptr<uint> distance_counts = _distance_counts._data;
+        __ptr<u8> length_codes = _length_codes._data;
+        literal_counts[257 + (length_codes[length] as ulong)] += 1;
+        distance_counts[_distance_code(distance)] += 1;
     }
 
     # Level 0: stored blocks only, of at most 65535 bytes each.
@@ -406,71 +484,79 @@ export struct _Deflater {
     }
 
     _hash(data: __ptr<u8>, at: ulong): ulong {
-        var value = ((data[at] as ulong) << 10) ^ ((data[at + 1] as ulong) << 5) ^ (data[at + 2] as ulong);
-        return (value * 2654435761 >> 7) & (_DEFLATE_HASH_SIZE - 1);
+        var value = (data[at] as uint) | ((data[at + 1] as uint) << 8) | ((data[at + 2] as uint) << 16);
+        return (value.wrapping_mul(2654435761) >> 17) as ulong;
     }
 
     # Adds the positions before `position` to the hash chains, finds the
-    # longest match at `position` (into `_found_length` and
-    # `_found_distance`, length 0 for none), then adds `position` itself.
-    _find(position: ulong, end: ulong) {
+    # longest match at `position` that is longer than `best` (at least 2),
+    # trying at most `chain` earlier positions, then adds `position` itself.
+    # Returns `length << 16 | distance`, or 0 for none.
+    _find(position: ulong, end: ulong, chain: ulong, best: ulong): ulong {
         __ptr<u8> data = _buffer._data;
+        __ptr<uint> head = _head._data;
+        __ptr<uint> prev = _prev._data;
         while (_inserted < position) {
-            _insert(data, _inserted, end);
+            _insert(data, head, prev, _inserted, end);
             _inserted += 1;
         }
-        _found_length = 0;
-        _found_distance = 0;
+        ulong found = 0;
         var max_length = end - position;
         if (max_length > 258) {
             max_length = 258;
         }
-        if (max_length >= 3) {
+        if (max_length > best) {
             var here = position - _base;
-            ulong best = 2;
-            var candidate = _head[_hash(data, here)];
-            var chain = _max_chain;
-            while (candidate != 0 && chain > 0) {
-                var start = candidate - 1;
-                if (start >= position || position - start > _DEFLATE_WINDOW || start < _base) {
+            __ptr<u8> scan = data + here;
+            var current = ((position + 1) & 0xFFFFFFFF) as uint;
+            var candidate = head[_hash(data, here)];
+            var nice = _nice_length;
+            var reach = here;
+            if (reach > _DEFLATE_WINDOW) {
+                reach = _DEFLATE_WINDOW;
+            }
+            var tries = chain;
+            ulong last = 0;
+            while (candidate != 0 && tries > 0) {
+                var distance = current.wrapping_sub(candidate) as ulong;
+                if (distance <= last || distance > reach) {
                     break;
                 }
-                var there = start - _base;
-                if (data[there + best] == data[here + best] && data[there] == data[here]) {
-                    ulong length = 0;
-                    while (length < max_length && data[there + length] == data[here + length]) {
-                        length += 1;
-                    }
+                last = distance;
+                __ptr<u8> earlier = data + (here - distance);
+                # The two bytes at the end of the best match so far, then
+                # the first two: most candidates fail one of these.
+                if (earlier[best] == scan[best]
+                    && earlier[best - 1] == scan[best - 1]
+                    && earlier[0] == scan[0]
+                    && earlier[1] == scan[1]) {
+                    var length = _compress_match_length(earlier, scan, max_length);
                     if (length > best) {
                         best = length;
-                        _found_length = length;
-                        _found_distance = position - start;
-                        if (length >= _nice_length || length == max_length) {
+                        found = (length << 16) | distance;
+                        if (length >= nice || length == max_length) {
                             break;
                         }
                     }
                 }
-                var next = _prev[start & (_DEFLATE_WINDOW - 1)];
-                if (next >= candidate) {
-                    break;
-                }
-                candidate = next;
-                chain -= 1;
+                candidate = prev[(position - distance) & (_DEFLATE_WINDOW - 1)];
+                tries -= 1;
             }
         }
         if (_inserted == position) {
-            _insert(data, position, end);
+            _insert(data, head, prev, position, end);
             _inserted += 1;
         }
+        return found;
     }
 
-    _insert(data: __ptr<u8>, position: ulong, end: ulong) {
+    _insert(data: __ptr<u8>, head: __ptr<uint>, prev: __ptr<uint>, position: ulong, end: ulong) {
         if (position + 3 > end) {
             return;
         }
         var hash = _hash(data, position - _base);
-        _prev[position & (_DEFLATE_WINDOW - 1)] = _head[hash];
-        _head[hash] = position + 1;
+        prev[position & (_DEFLATE_WINDOW - 1)] = head[hash];
+        head[hash] = ((position + 1) & 0xFFFFFFFF) as uint;
     }
 
     # Writes the tokens collected as one block covering the input from
@@ -621,27 +707,57 @@ export struct _Deflater {
     _write_tokens(literal_lengths: u8[], distance_lengths: u8[]) {
         var literal_codes = _compress_canonical_codes(literal_lengths);
         var distance_codes = _compress_canonical_codes(distance_lengths);
-        for (var token in _tokens) {
+        # A token takes at most 48 bits, and each one leaves fewer than 8
+        # bits in `bits`; the 8 bytes stored after each token may run up to
+        # 7 bytes past the ones it fills.
+        var token_count = _tokens.count;
+        output.reserve(output.count + token_count * 6 + 16);
+        __ptr<u8> out = output._data;
+        var at = output.count;
+        var bits = _bits;
+        var count = _bit_count;
+        __ptr<uint> tokens = _tokens._data;
+        __ptr<uint> literal_code = literal_codes._data;
+        __ptr<u8> literal_length = literal_lengths._data;
+        __ptr<uint> distance_code_bits = distance_codes._data;
+        __ptr<u8> distance_length = distance_lengths._data;
+        __ptr<u8> length_codes = _length_codes._data;
+        __ptr<uint> length_base = _length_base._data;
+        __ptr<uint> length_extra = _length_extra._data;
+        __ptr<uint> distance_base = _distance_base._data;
+        __ptr<uint> distance_extra = _distance_extra._data;
+        ulong index = 0;
+        while (index < token_count) {
+            var token = tokens[index];
+            index += 1;
             if ((token & _DEFLATE_MATCH) == 0) {
                 var literal = token as ulong;
-                _write_bits(literal_codes[literal] as ulong, literal_lengths[literal] as ulong);
-                continue;
+                bits = bits | ((literal_code[literal] as ulong) << count);
+                count += literal_length[literal] as ulong;
+            } else {
+                var length = ((token >> 16) & 511) as ulong;
+                var distance = (token & 65535) as ulong;
+                var code = length_codes[length] as ulong;
+                bits = bits | ((literal_code[257 + code] as ulong) << count);
+                count += literal_length[257 + code] as ulong;
+                bits = bits | ((length - (length_base[code] as ulong)) << count);
+                count += length_extra[code] as ulong;
+                var distance_code = _distance_code(distance);
+                bits = bits | ((distance_code_bits[distance_code] as ulong) << count);
+                count += distance_length[distance_code] as ulong;
+                bits = bits | ((distance - (distance_base[distance_code] as ulong)) << count);
+                count += distance_extra[distance_code] as ulong;
             }
-            var length = ((token >> 16) & 511) as ulong;
-            var distance = (token & 65535) as ulong;
-            var code = _length_codes[length] as ulong;
-            _write_bits(literal_codes[257 + code] as ulong, literal_lengths[257 + code] as ulong);
-            var extra = _length_extra[code] as ulong;
-            if (extra > 0) {
-                _write_bits(length - (_length_base[code] as ulong), extra);
-            }
-            var distance_code = _distance_code(distance);
-            _write_bits(distance_codes[distance_code] as ulong, distance_lengths[distance_code] as ulong);
-            extra = _distance_extra[distance_code] as ulong;
-            if (extra > 0) {
-                _write_bits(distance - (_distance_base[distance_code] as ulong), extra);
-            }
+            _compress_store_64(out, at, bits);
+            var whole = count & 56;
+            at += whole >> 3;
+            bits = bits >> whole;
+            count -= whole;
         }
+        output._size = at;
+        output._version += 1;
+        _bits = bits;
+        _bit_count = count;
         _write_bits(literal_codes[256] as ulong, literal_lengths[256] as ulong);
     }
 
@@ -655,6 +771,23 @@ export struct _Deflater {
         _write_little_endian(count ^ 65535, 2);
         output._append_raw(_buffer._data + (start - _base), count);
     }
+}
+
+# The number of bytes, up to `max_length`, that `a` and `b` have in common
+# at the start, compared eight at a time.
+_compress_match_length(a: __ptr<u8>, b: __ptr<u8>, max_length: ulong): ulong {
+    ulong length = 0;
+    while (length + 8 <= max_length) {
+        var difference = _compress_load_64(a, length) ^ _compress_load_64(b, length);
+        if (difference != 0) {
+            return length + ((difference.trailing_zeros() as ulong) >> 3);
+        }
+        length += 8;
+    }
+    while (length < max_length && a[length] == b[length]) {
+        length += 1;
+    }
+    return length;
 }
 
 _compress_flag(final: bool): ulong {

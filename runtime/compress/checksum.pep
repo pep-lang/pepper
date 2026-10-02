@@ -13,7 +13,9 @@
 ##     assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
 ##     assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 export struct Crc32 {
-    # The 256-entry lookup table, one byte of input at a time.
+    # Eight 256-entry lookup tables, for eight bytes of input at a time
+    # ("slicing-by-8"): table `k` holds the remainder of each byte followed
+    # by `k` zero bytes.
     var _table: uint[];
     # The running remainder, inverted.
     var _state: uint;
@@ -43,6 +45,18 @@ export struct Crc32 {
         var state = _state;
         __ptr<uint> table = _table._data;
         ulong index = 0;
+        while (index + 8 <= count) {
+            var word = _compress_load_64(data, index) ^ (state as ulong);
+            state = table[1792 + (word & 255)]
+                ^ table[1536 + ((word >> 8) & 255)]
+                ^ table[1280 + ((word >> 16) & 255)]
+                ^ table[1024 + ((word >> 24) & 255)]
+                ^ table[768 + ((word >> 32) & 255)]
+                ^ table[512 + ((word >> 40) & 255)]
+                ^ table[256 + ((word >> 48) & 255)]
+                ^ table[word >> 56];
+            index += 8;
+        }
         while (index < count) {
             state = table[((state ^ (data[index] as uint)) & 255) as ulong] ^ (state >> 8);
             index += 1;
@@ -66,9 +80,11 @@ export struct Crc32 {
     }
 }
 
-# The table of the reflected polynomial 0xEDB88320.
+# The slicing-by-8 tables of the reflected polynomial 0xEDB88320: table 0
+# is the classic byte-at-a-time table, and table `k` entry `n` is
+# `table[k - 1][n]` advanced by one more zero byte.
 _compress_crc_table(): uint[] {
-    var table = Array<uint>(256);
+    var table = Array<uint>(2048);
     uint n = 0;
     while (n < 256) {
         var c = n;
@@ -84,7 +100,35 @@ _compress_crc_table(): uint[] {
         table.append(c);
         n += 1;
     }
+    ulong index = 256;
+    while (index < 2048) {
+        var previous = table[index - 256];
+        table.append(table[(previous & 255) as ulong] ^ (previous >> 8));
+        index += 1;
+    }
     return table;
+}
+
+# The eight bytes at `data + at` as a little-endian number. LLVM turns the
+# byte loads into one unaligned load.
+export _compress_load_64(data: __ptr<u8>, at: ulong): ulong {
+    __ptr<u8> bytes = data + at;
+    var low = (bytes[0] as uint) | ((bytes[1] as uint) << 8) | ((bytes[2] as uint) << 16) | ((bytes[3] as uint) << 24);
+    var high = (bytes[4] as uint) | ((bytes[5] as uint) << 8) | ((bytes[6] as uint) << 16) | ((bytes[7] as uint) << 24);
+    return (low as ulong) | ((high as ulong) << 32);
+}
+
+# Stores `value` as the eight little-endian bytes at `data + at`.
+export _compress_store_64(data: __ptr<u8>, at: ulong, value: ulong) {
+    __ptr<u8> bytes = data + at;
+    bytes[0] = (value & 255) as u8;
+    bytes[1] = ((value >> 8) & 255) as u8;
+    bytes[2] = ((value >> 16) & 255) as u8;
+    bytes[3] = ((value >> 24) & 255) as u8;
+    bytes[4] = ((value >> 32) & 255) as u8;
+    bytes[5] = ((value >> 40) & 255) as u8;
+    bytes[6] = ((value >> 48) & 255) as u8;
+    bytes[7] = (value >> 56) as u8;
 }
 
 ## The Adler-32 checksum (RFC 1950, the one zlib streams carry), computed

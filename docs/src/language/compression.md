@@ -18,8 +18,12 @@ written in Pepper, so a program that uses them links no extra library.
 | `Format.Raw` | `compress.Deflate` | zip entries, other containers with their own framing |
 
 - `compress(data, level = 6)` returns the compressed bytes. The level runs
-  from 0 (stored, no compression) to 9 (smallest, slowest). The output is
-  about the size zlib makes at the same level.
+  from 0 (stored, no compression) to 9 (smallest, slowest). Each level
+  searches for matches with zlib's settings for it, so the output is about
+  the size zlib makes at the same level, at a similar speed: on 12 MB of
+  source text, compressing at level 6 takes about 1.2 times as long as the
+  `gzip` command, and decompressing is a little faster than `gzip -d`
+  (`benchmarks/compress/bench.py` measures it).
 - `decompress(data)` returns an `io.IoResult<u8[]>`. Damaged or truncated
   data is an error whose `is_invalid_input()` holds, and gzip and zlib
   data is checked against its CRC-32 or Adler-32 checksum.

@@ -782,6 +782,12 @@ export struct _Inflater {
     # Decodes symbols until the block ends or `want` bytes are available.
     _codes(want: ulong) {
         while (available < want) {
+            if (_codes_fast(want)) {
+                return;
+            }
+            if (available >= want) {
+                return;
+            }
             var symbol = _decode(_literals);
             if (symbol < 0) {
                 return;
@@ -832,13 +838,176 @@ export struct _Inflater {
             _compress_copy_match(output, distance, length);
         }
     }
+
+    # Decodes symbols the fast way (as zlib's `inflate_fast` does) while at
+    # least 8 bytes of input are left: one 8-byte refill of the bit buffer
+    # covers a whole length/distance pair, and the output has room for the
+    # longest match plus 8 bytes, so no symbol checks for the end of either.
+    # Returns true when the block ended or decoding failed; false when the
+    # slow path must take over (near the end of the input, or once `want`
+    # bytes are available).
+    _codes_fast(want: ulong): bool {
+        var input_count = _input.count;
+        if (_position + 8 > input_count) {
+            return false;
+        }
+        __ptr<u8> input = _input._data;
+        var position = _position;
+        var bits = _bit_buffer;
+        var count = _bit_count;
+        var out_count = output.count;
+        var capacity = output.capacity;
+        __ptr<u8> out = output._data;
+        var first = output_position;
+        __ptr<uint> literal_fast = _literals.fast._data;
+        __ptr<uint> distance_fast = _distances.fast._data;
+        __ptr<uint> length_base = _length_base._data;
+        __ptr<uint> length_extra = _length_extra._data;
+        __ptr<uint> distance_base = _distance_base._data;
+        __ptr<uint> distance_extra = _distance_extra._data;
+        var stop = false;
+        while (position + 8 <= input_count && out_count - first < want) {
+            if (out_count + 266 > capacity) {
+                output._size = out_count;
+                var next = capacity * 2;
+                if (next < out_count + 65536) {
+                    next = out_count + 65536;
+                }
+                output.reserve(next);
+                out = output._data;
+                capacity = output.capacity;
+            }
+            # Refill to at least 56 bits. The bits loaded past `count` are
+            # the stream's next bits, so loading them again later is
+            # harmless.
+            bits = bits | (_compress_load_64(input, position) << count);
+            position += (63 - count) >> 3;
+            count = count | 56;
+
+            var entry = literal_fast[bits & 1023];
+            if (entry == 0) {
+                entry = _inflate_decode_long(_literals, bits);
+                if (entry == 0) {
+                    _fail("invalid Huffman code");
+                    stop = true;
+                    break;
+                }
+            }
+            var size = (entry & 15) as ulong;
+            bits = bits >> size;
+            count -= size;
+            var symbol = (entry >> 4) as ulong;
+            if (symbol < 256) {
+                out[out_count] = symbol as u8;
+                out_count += 1;
+                continue;
+            }
+            if (symbol == 256) {
+                _block_done();
+                stop = true;
+                break;
+            }
+            var code = symbol - 257;
+            if (code >= 29) {
+                _fail("invalid length code");
+                stop = true;
+                break;
+            }
+            var extra = length_extra[code] as ulong;
+            var length = (length_base[code] as ulong) + (bits & (((1 as ulong) << extra) - 1));
+            bits = bits >> extra;
+            count -= extra;
+
+            entry = distance_fast[bits & 1023];
+            if (entry == 0) {
+                entry = _inflate_decode_long(_distances, bits);
+                if (entry == 0) {
+                    _fail("invalid Huffman code");
+                    stop = true;
+                    break;
+                }
+            }
+            size = (entry & 15) as ulong;
+            bits = bits >> size;
+            count -= size;
+            var distance_code = (entry >> 4) as ulong;
+            if (distance_code >= 30) {
+                _fail("invalid distance code");
+                stop = true;
+                break;
+            }
+            extra = distance_extra[distance_code] as ulong;
+            var distance = (distance_base[distance_code] as ulong) + (bits & (((1 as ulong) << extra) - 1));
+            bits = bits >> extra;
+            count -= extra;
+            if (distance > out_count) {
+                _fail("invalid distance: before the start of the data");
+                stop = true;
+                break;
+            }
+            var from = out_count - distance;
+            if (distance >= 8) {
+                # Eight bytes at a time; each load reads only bytes already
+                # written, and the copy may run up to 7 bytes past the match.
+                ulong index = 0;
+                while (index < length) {
+                    _compress_store_64(out, out_count + index, _compress_load_64(out, from + index));
+                    index += 8;
+                }
+            } else {
+                ulong index = 0;
+                while (index < length) {
+                    out[out_count + index] = out[from + index];
+                    index += 1;
+                }
+            }
+            out_count += length;
+        }
+        output._size = out_count;
+        output._version += 1;
+        # Keep only the bits counted, so the slow path sees a clean buffer.
+        _bit_buffer = bits & (((1 as ulong) << count) - 1);
+        _bit_count = count;
+        _position = position;
+        return stop;
+    }
+}
+
+# Decodes a code longer than the fast table covers from the low bits of
+# `bits` (which holds at least 15), walking the canonical code one bit at a
+# time. Returns `symbol << 4 | length` as the fast table does, or 0 for a
+# code the decoder does not have.
+_inflate_decode_long(code: _HuffmanDecoder, bits: ulong): uint {
+    __ptr<uint> counts = code.counts._data;
+    ulong value = 0;
+    ulong first = 0;
+    ulong index = 0;
+    ulong length = 1;
+    while (length < 16) {
+        value = value | ((bits >> (length - 1)) & 1);
+        var count = counts[length] as ulong;
+        if (value < first + count) {
+            return (code.symbols[index + (value - first)] << 4) | (length as uint);
+        }
+        index += count;
+        first = (first + count) << 1;
+        value = value << 1;
+        length += 1;
+    }
+    return 0;
 }
 
 # Appends `length` bytes to `output`, copied from `distance` bytes back; the
 # two ranges may overlap, which repeats the bytes in between.
 export _compress_copy_match(output: u8[], distance: ulong, length: ulong) {
     var at = output.count;
-    output.reserve(at + length);
+    if (at + length > output.capacity) {
+        var next = output.capacity * 2;
+        if (next < at + length) {
+            next = at + length;
+        }
+        output.reserve(next);
+    }
     __ptr<u8> data = output._data;
     var from = at - distance;
     ulong index = 0;
