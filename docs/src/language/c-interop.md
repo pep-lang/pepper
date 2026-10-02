@@ -142,8 +142,14 @@ A pointer supports these operations:
 | `p + n` | the address `n` elements after `p` (`n` bytes for `__ptr<void>`) |
 | `p == __null`, `p != __null` | compares with the null pointer |
 | `p == q`, `p != q` | compares two addresses (a pointer also compares with an integer address) |
-| `p as ulong`, `p as long` | the address as an integer |
-| `p as __ptr<U>` | the same address, seen as pointing at `U` |
+| `p as __ptr<void>`, `v as __ptr<T>` | the same address, to and from `__ptr<void>` |
+| `unsafe_cast<__ptr<U>>(p)` | the same address, seen as pointing at `U` |
+| `unsafe_cast<ulong>(p)`, `unsafe_cast<__ptr<T>>(n)` | the address as an integer, and back |
+
+`as` converts a pointer only to and from `__ptr<void>`, like `static_cast` in
+C++. Any other pointer conversion reinterprets memory, so it is spelled
+`unsafe_cast` (see [Reinterpreting with
+`unsafe_cast`](types-and-variables.md#reinterpreting-with-unsafe_cast)).
 
 `__null` is the null pointer. `sizeof<T>()` gives the size of a type in bytes,
 which you need to allocate memory for C.

@@ -61,7 +61,7 @@ export struct Sha1 {
     ##
     ## @param text the text to add
     update(text: String) {
-        _buffer.feed<Sha1>(this, text.c_str() as __ptr<u8>, text.size);
+        _buffer.feed<Sha1>(this, unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
     }
 
     ## Returns the 20-byte digest of the input given since the hasher was

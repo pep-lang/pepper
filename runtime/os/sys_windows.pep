@@ -158,7 +158,7 @@ export _os_sys_total_memory(): ulong {
     status[0] = 64;
     var bytes: ulong = 0;
     if (GlobalMemoryStatusEx(status) != 0) {
-        __ptr<ulong> fields = status as __ptr<ulong>;
+        __ptr<ulong> fields = unsafe_cast<__ptr<ulong>>(status);
         bytes = fields[1];
     }
     _pep_free(status);

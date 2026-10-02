@@ -210,7 +210,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
 
 # The position of the last space in `line`, or -1.
 _http_last_space(line: String): long {
-    var p = line.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(line.c_str());
     var i = line.size;
     while (i > 0) {
         i = i - 1;

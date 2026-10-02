@@ -198,17 +198,17 @@ export struct _IoUringDriver {
         var entry = this._entries + (index as ulong) * 64;
         _async_zero(entry, 64);
         entry[0] = opcode;
-        ((entry + 4) as __ptr<int>)[0] = fd as int;
-        ((entry + 16) as __ptr<ulong>)[0] = address;
+        unsafe_cast<__ptr<int>>(entry + 4)[0] = fd as int;
+        unsafe_cast<__ptr<ulong>>(entry + 16)[0] = address;
         if (opcode == _IO_URING_OP_READ || opcode == _IO_URING_OP_WRITE) {
-            ((entry + 8) as __ptr<ulong>)[0] = ~(0 as ulong);
-            ((entry + 24) as __ptr<uint>)[0] = events;
+            unsafe_cast<__ptr<ulong>>(entry + 8)[0] = ~(0 as ulong);
+            unsafe_cast<__ptr<uint>>(entry + 24)[0] = events;
         } else {
-            ((entry + 24) as __ptr<uint>)[0] = flags;
-            ((entry + 28) as __ptr<uint>)[0] = events;
+            unsafe_cast<__ptr<uint>>(entry + 24)[0] = flags;
+            unsafe_cast<__ptr<uint>>(entry + 28)[0] = events;
         }
-        ((entry + 32) as __ptr<ulong>)[0] = data;
-        ((this._rings + this._sq_array) as __ptr<uint>)[index as ulong] = index;
+        unsafe_cast<__ptr<ulong>>(entry + 32)[0] = data;
+        unsafe_cast<__ptr<uint>>(this._rings + this._sq_array)[index as ulong] = index;
         this._tail = this._tail + 1;
         _async_io_uring_store(this._rings, this._sq_tail, this._tail);
     }
@@ -237,7 +237,7 @@ export struct _IoUringDriver {
         __ptr<ulong> words = this._wait_argument;
         words[0] = 0;
         words[1] = 0;
-        words[2] = (this._wait_argument + 24) as ulong;
+        words[2] = unsafe_cast<ulong>(this._wait_argument + 24);
         words[3] = (timeout / 1000) as ulong;
         words[4] = ((timeout % 1000) * 1000000) as ulong;
         _async_io_uring_enter(
@@ -299,9 +299,9 @@ extend _IoUringDriver with _Driver {
         var tail = _async_io_uring_load(this._rings, this._cq_tail);
         while (head != tail) {
             var entry = this._rings + this._cqes + ((head & this._cq_mask) as ulong) * 16;
-            var data = (entry as __ptr<ulong>)[0];
-            var result = ((entry + 8) as __ptr<int>)[0];
-            var flags = ((entry + 12) as __ptr<uint>)[0];
+            var data = unsafe_cast<__ptr<ulong>>(entry)[0];
+            var result = unsafe_cast<__ptr<int>>(entry + 8)[0];
+            var flags = unsafe_cast<__ptr<uint>>(entry + 12)[0];
             head = head + 1;
             if (this._files.contains(data)) {
                 # A file transfer: the count, or -errno as -1 minus the code.
@@ -443,11 +443,11 @@ _async_io_uring_setup(driver: _IoUringDriver): bool {
     var entries_size = (sq_entries * 64) as ulong;
     var entries = mmap(__null, entries_size, 3, 32769, fd as int, _IO_URING_OFF_SQES);
     # MAP_FAILED is (void*)-1.
-    if ((rings as ulong) == ~(0 as ulong) || (entries as ulong) == ~(0 as ulong)) {
-        if ((rings as ulong) != ~(0 as ulong)) {
+    if (unsafe_cast<ulong>(rings) == ~(0 as ulong) || unsafe_cast<ulong>(entries) == ~(0 as ulong)) {
+        if (unsafe_cast<ulong>(rings) != ~(0 as ulong)) {
             munmap(rings, size);
         }
-        if ((entries as ulong) != ~(0 as ulong)) {
+        if (unsafe_cast<ulong>(entries) != ~(0 as ulong)) {
             munmap(entries, entries_size);
         }
         close(fd as int);
@@ -478,7 +478,7 @@ _async_io_uring_setup(driver: _IoUringDriver): bool {
 [Target(OS(Linux))]
 _async_io_uring_try_setup(parameters: __ptr<u8>, flags: uint): long {
     _async_zero(parameters, 120);
-    ((parameters + 8) as __ptr<uint>)[0] = flags;
+    unsafe_cast<__ptr<uint>>(parameters + 8)[0] = flags;
     return syscall(_IO_URING_SETUP, _IO_URING_ENTRIES, parameters);
 }
 

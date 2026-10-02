@@ -304,7 +304,7 @@ pub fn default_value(name: &str) -> Option<i64> {
 /// enum.
 pub fn default_expression(ty: &TypeName) -> Option<Expression> {
     let value = default_value(&ty.to_string())?;
-    Some(Expression::Cast { expr: Box::new(Expression::IntLiteral(value)), ty: ty.clone(), loc: Loc::NONE })
+    Some(Expression::Cast { expr: Box::new(Expression::IntLiteral(value)), ty: ty.clone(), loc: Loc::NONE, kind: CastKind::Synthesized })
 }
 
 /// `name` names an enum.
@@ -323,7 +323,7 @@ pub fn stored_as(name: &str) -> std::borrow::Cow<'_, str> {
 /// A case's value as an expression of the enum's type: `Color.Red` is
 /// `0 as Color`.
 fn case_value(e: &EnumDef, case: &EnumCaseDef, loc: Loc) -> Expression {
-    Expression::Cast { expr: Box::new(Expression::IntLiteral(case.value)), ty: TypeName::new(&e.name), loc }
+    Expression::Cast { expr: Box::new(Expression::IntLiteral(case.value)), ty: TypeName::new(&e.name), loc, kind: CastKind::Synthesized }
 }
 
 /// Every function body, method body and initializer in the module.
@@ -478,10 +478,7 @@ pub fn resolve_enum_cases(module: &mut Module) {
             }
             return;
         }
-        // Every located `as E` here is one the user wrote: the cases below
-        // are not resolved yet, and synthesized defaults have no location.
-        if let Expression::Cast { ty, loc, .. } = expr
-            && !loc.is_none()
+        if let Expression::Cast { ty, loc, kind: CastKind::Static, .. } = expr
             && let Some(e) = enums.get(&ty.to_string())
         {
             report(
@@ -622,6 +619,7 @@ fn add_built_in_methods(module: &mut Module) {
                     expr: Box::new(Expression::IntLiteral(c.value)),
                     ty: e.representation.clone(),
                     loc: Loc::NONE,
+                    kind: CastKind::Synthesized,
                 };
                 when(equal(value(), literal), returns(make("ok", case_value(e, c, Loc::NONE))))
             })

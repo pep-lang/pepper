@@ -30,7 +30,7 @@ export struct Ascii {
     ## @returns a new array of one byte per code point
     static encode_lossy(value: String): u8[] {
         var out = Array<u8>(value.size);
-        __ptr<u8> data = value._data as __ptr<u8>;
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
         var size = value.size;
         ulong index = 0;
         while (index < size) {
@@ -50,7 +50,7 @@ export struct Ascii {
     ## @param value the text to check
     ## @returns true when `value` is all ASCII
     static is_ascii(value: String): bool {
-        __ptr<u8> data = value._data as __ptr<u8>;
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
         ulong index = 0;
         while (index < value.size) {
             if (data[index] >= 128) {

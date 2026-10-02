@@ -189,7 +189,7 @@ export struct Copies {
     # The address of struct object `value`.
     _address<T>(value: T): ulong {
         __ptr<void> raw = value;
-        return raw as ulong;
+        return unsafe_cast<ulong>(raw);
     }
 
     # The copy of struct `value`: null for null, the copy already made of

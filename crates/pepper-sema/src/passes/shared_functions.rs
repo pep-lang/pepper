@@ -214,6 +214,7 @@ impl Converter {
             expr: Box::new(Expression::FunctionPointer { owner: None, function, loc }),
             ty: expected.clone(),
             loc,
+            kind: CastKind::Synthesized,
         };
     }
 

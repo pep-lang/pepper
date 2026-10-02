@@ -148,8 +148,8 @@ export struct _IocpDriver {
             } else {
                 this._writing.remove(handle);
             }
-            var status = (block as __ptr<int>)[0];
-            var events = ((block + 40) as __ptr<uint>)[0];
+            var status = unsafe_cast<__ptr<int>>(block)[0];
+            var events = unsafe_cast<__ptr<uint>>(block + 40)[0];
             var ready = asked;
             if (status == 0) {
                 if ((events & _AFD_POLL_ERRORS) != 0) {
@@ -201,7 +201,7 @@ extend _IocpDriver with _Driver {
         var count = _async_iocp_dequeue(this._port, this._entries, _IOCP_CAPACITY, timeout);
         var i: ulong = 0;
         while (i < count) {
-            __ptr<u8> block = ((this._entries + i * 32 + 8) as __ptr<__ptr<u8>>)[0];
+            __ptr<u8> block = unsafe_cast<__ptr<__ptr<u8>>>(this._entries + i * 32 + 8)[0];
             if (block != __null) {
                 this._complete(block, ready_sockets);
             }
@@ -212,11 +212,11 @@ extend _IocpDriver with _Driver {
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
         if (this._reading.contains(key)) {
-            (this._reading.get(key) as __ptr<ulong>)[8] = 1;
+            unsafe_cast<__ptr<ulong>>(this._reading.get(key))[8] = 1;
             this._reading.remove(key);
         }
         if (this._writing.contains(key)) {
-            (this._writing.get(key) as __ptr<ulong>)[8] = 1;
+            unsafe_cast<__ptr<ulong>>(this._writing.get(key))[8] = 1;
             this._writing.remove(key);
         }
     }
@@ -253,7 +253,7 @@ extend _IocpDriver with _Driver {
 _async_iocp_block(address: ulong): __ptr<ulong> {
     __ptr<ulong> slot = _pep_malloc(8);
     slot[0] = address;
-    var block = (slot as __ptr<__ptr<ulong>>)[0];
+    var block = unsafe_cast<__ptr<__ptr<ulong>>>(slot)[0];
     _pep_free(slot);
     return block;
 }
@@ -279,12 +279,12 @@ _async_iocp_open_afd(port: __ptr<void>): __ptr<void> {
     var units = name.size;
     var wide = io._io_win_wide(name);
     __ptr<u8> unicode = _pep_malloc(16);  # UNICODE_STRING
-    (unicode as __ptr<u16>)[0] = (units * 2) as u16;
-    ((unicode + 2) as __ptr<u16>)[0] = ((units + 1) * 2) as u16;
-    ((unicode + 8) as __ptr<__ptr<u16>>)[0] = wide;
+    unsafe_cast<__ptr<u16>>(unicode)[0] = (units * 2) as u16;
+    unsafe_cast<__ptr<u16>>(unicode + 2)[0] = ((units + 1) * 2) as u16;
+    unsafe_cast<__ptr<__ptr<u16>>>(unicode + 8)[0] = wide;
     __ptr<u8> attributes = _pep_malloc(48);  # OBJECT_ATTRIBUTES
-    (attributes as __ptr<uint>)[0] = 48;
-    ((attributes + 16) as __ptr<__ptr<u8>>)[0] = unicode;
+    unsafe_cast<__ptr<uint>>(attributes)[0] = 48;
+    unsafe_cast<__ptr<__ptr<u8>>>(attributes + 16)[0] = unicode;
     __ptr<u8> status = _pep_malloc(16);
     __ptr<__ptr<void>> afd = _pep_malloc(8);
     var rc = NtCreateFile(afd, 1048576, attributes, status, __null, 0, 3, 1, 0, __null, 0);  # SYNCHRONIZE, FILE_SHARE_READ | WRITE, FILE_OPEN
@@ -327,12 +327,12 @@ _async_iocp_submit(afd: __ptr<void>, block: __ptr<u8>, socket: ulong, events: ui
     __ptr<long> status = block;
     status[0] = 259;  # STATUS_PENDING
     var info = block + 16;
-    (info as __ptr<long>)[0] = 9223372036854775807;  # no timeout
-    ((info + 8) as __ptr<uint>)[0] = 1;              # one handle
-    ((info + 12) as __ptr<uint>)[0] = 0;             # not exclusive
-    ((info + 16) as __ptr<ulong>)[0] = socket;
-    ((info + 24) as __ptr<uint>)[0] = events;
-    ((info + 28) as __ptr<uint>)[0] = 0;
+    unsafe_cast<__ptr<long>>(info)[0] = 9223372036854775807;  # no timeout
+    unsafe_cast<__ptr<uint>>(info + 8)[0] = 1;                # one handle
+    unsafe_cast<__ptr<uint>>(info + 12)[0] = 0;               # not exclusive
+    unsafe_cast<__ptr<ulong>>(info + 16)[0] = socket;
+    unsafe_cast<__ptr<uint>>(info + 24)[0] = events;
+    unsafe_cast<__ptr<uint>>(info + 28)[0] = 0;
     var rc = NtDeviceIoControlFile(afd, __null, __null, block, block, 73764, info, 32, info, 32);  # IOCTL_AFD_POLL
     return rc == 0 || rc == 259;
 }

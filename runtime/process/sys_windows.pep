@@ -220,7 +220,7 @@ _process_stream(which: int, stream: Stream, parent_end: __ptr<__ptr<void>>): __p
     if (stream == Stream.Inherit) {
         # STD_INPUT_HANDLE is -10, then -11 and -12, as a DWORD.
         var own = GetStdHandle((4294967286 - which) as uint);
-        if (own != __null && own as long != -1) {
+        if (own != __null && unsafe_cast<long>(own) != -1) {
             # A duplicate, inheritable whatever the original is.
             var process = GetCurrentProcess();
             if (DuplicateHandle(process, own, process, slot, 0, 1, 2) != 0) {  # DUPLICATE_SAME_ACCESS
@@ -235,7 +235,7 @@ _process_stream(which: int, stream: Stream, parent_end: __ptr<__ptr<void>>): __p
         result = CreateFileW(device, 3221225472, 3, attributes, 3, 0, __null);
         _pep_free(attributes);
         _pep_free(device);
-        if (result as long == -1) {  # INVALID_HANDLE_VALUE
+        if (unsafe_cast<long>(result) == -1) {  # INVALID_HANDLE_VALUE
             result = __null;
         }
     } else {
@@ -245,7 +245,7 @@ _process_stream(which: int, stream: Stream, parent_end: __ptr<__ptr<void>>): __p
             # the others to the write end.
             var child = which == 0 ? slot[0] : slot[1];
             var parent = which == 0 ? slot[1] : slot[0];
-            SetHandleInformation(parent as ulong, 1, 0);  # HANDLE_FLAG_INHERIT off
+            SetHandleInformation(unsafe_cast<ulong>(parent), 1, 0);  # HANDLE_FLAG_INHERIT off
             parent_end[0] = parent;
             result = child;
         }

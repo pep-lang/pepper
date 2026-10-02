@@ -245,6 +245,8 @@ pub enum Expression {
         expr: Box<Expression>,
         ty: TypeName,
         span: Span,
+        /// The `as` keyword, where a cast error points.
+        keyword_span: Span,
     },
     Binary {
         lhs: Box<Expression>,

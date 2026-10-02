@@ -53,6 +53,7 @@ pub mod platform;
 pub mod function_types;
 pub mod check_function_types;
 pub mod check_bindings;
+pub mod check_casts;
 pub mod check_deprecated_members;
 pub mod check_hash_keys;
 pub mod lower_with_blocks;
@@ -227,6 +228,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Struct values flowing into trait-typed slots, once every type is final.
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
+    // `as` and `unsafe_cast` convert only what their kind allows.
+    step!(check_casts::check_casts(module));
     step!(check_shared_types::check_shared_types(module));
     // What `with` blocks over `[Isolated]` guards may do, `[Move]`
     // arguments, and the guards' own rules, once every type is final.

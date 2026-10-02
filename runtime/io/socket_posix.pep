@@ -195,7 +195,7 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
     if (v6) {
         family = _io_af_inet6();
     }
-    (buffer as __ptr<u16>)[0] = family as u16;
+    unsafe_cast<__ptr<u16>>(buffer)[0] = family as u16;
 }
 
 [Target(OS(Mac))]
@@ -211,7 +211,7 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
 # 4 for IPv4, 6 for IPv6, 0 for any other family.
 [Target(OS(Linux))]
 export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
-    var family = (buffer as __ptr<u16>)[0] as int;
+    var family = unsafe_cast<__ptr<u16>>(buffer)[0] as int;
     if (family == _io_af_inet()) {
         return 4;
     }
@@ -237,7 +237,7 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 # path, NUL-terminated, at 2: at most 108 bytes on Linux, 104 on macOS.
 [Target(OS(Linux))]
 export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
-    (buffer as __ptr<u16>)[0] = 1;
+    unsafe_cast<__ptr<u16>>(buffer)[0] = 1;
 }
 
 [Target(OS(Mac))]
@@ -366,7 +366,7 @@ export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: in
         return waited;
     }
     var slot = _pep_malloc(8) as __ptr<int>;
-    var size = (slot + 1) as __ptr<uint>;
+    var size = unsafe_cast<__ptr<uint>>(slot + 1);
     slot[0] = 0;
     size[0] = 4;
     var got = getsockopt(h, _io_sol_socket(), _io_so_error(), slot, size);
@@ -385,8 +385,8 @@ export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: in
 [Target(!OS(Windows))]
 export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     var buffer = _IoBuffer(8);
-    var descriptor = buffer._bytes as __ptr<int>;
-    var events = buffer._bytes as __ptr<u16>;
+    var descriptor = unsafe_cast<__ptr<int>>(buffer._bytes);
+    var events = unsafe_cast<__ptr<u16>>(buffer._bytes);
     descriptor[0] = h;
     events[2] = 1;  # POLLIN
     if (interest == _IO_WRITABLE) {
@@ -558,9 +558,9 @@ export _io_addrinfo_address_offset(): ulong { return 32; }
 [Target(!OS(Windows))]
 export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     var hints = _IoBuffer(48);
-    (hints._bytes as __ptr<int>)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
+    unsafe_cast<__ptr<int>>(hints._bytes)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
     var result = _IoBuffer(8);
-    var list = result._bytes as __ptr<__ptr<u8>>;
+    var list = unsafe_cast<__ptr<__ptr<u8>>>(result._bytes);
     var rc = getaddrinfo(host.c_str(), __null, hints._bytes, list);
     if (rc != 0) {
         if (_io_eai_system(rc)) {
@@ -575,14 +575,14 @@ export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     var out = Array<SocketAddress>();
     var entry = list[0];
     while (entry != __null) {
-        var address = ((entry + _io_addrinfo_address_offset()) as __ptr<__ptr<u8>>)[0];
+        var address = unsafe_cast<__ptr<__ptr<u8>>>(entry + _io_addrinfo_address_offset())[0];
         if (address != __null) {
             if (_io_sys_sockaddr_family(address) != 0) {
                 var found = _io_sockaddr_read(address);
                 out.append(SocketAddress(found.address(), port));
             }
         }
-        entry = ((entry + 40) as __ptr<__ptr<u8>>)[0];
+        entry = unsafe_cast<__ptr<__ptr<u8>>>(entry + 40)[0];
     }
     freeaddrinfo(list[0]);
     return IoResult<SocketAddress[]>.ok(out);

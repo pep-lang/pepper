@@ -258,32 +258,32 @@ _tls_certificate_reason(error: uint): String {
 
 [Target(OS(Windows))]
 _tls_u32(block: __ptr<u8>, offset: ulong): uint {
-    return ((block + offset) as __ptr<uint>)[0];
+    return unsafe_cast<__ptr<uint>>(block + offset)[0];
 }
 
 [Target(OS(Windows))]
 _tls_set_u32(block: __ptr<u8>, offset: ulong, value: uint) {
-    ((block + offset) as __ptr<uint>)[0] = value;
+    unsafe_cast<__ptr<uint>>(block + offset)[0] = value;
 }
 
 [Target(OS(Windows))]
 _tls_word(block: __ptr<u8>, offset: ulong): ulong {
-    return ((block + offset) as __ptr<ulong>)[0];
+    return unsafe_cast<__ptr<ulong>>(block + offset)[0];
 }
 
 [Target(OS(Windows))]
 _tls_set_word(block: __ptr<u8>, offset: ulong, value: ulong) {
-    ((block + offset) as __ptr<ulong>)[0] = value;
+    unsafe_cast<__ptr<ulong>>(block + offset)[0] = value;
 }
 
 [Target(OS(Windows))]
 _tls_pointer(block: __ptr<u8>, offset: ulong): __ptr<u8> {
-    return ((block + offset) as __ptr<__ptr<u8>>)[0];
+    return unsafe_cast<__ptr<__ptr<u8>>>(block + offset)[0];
 }
 
 [Target(OS(Windows))]
 _tls_set_pointer(block: __ptr<u8>, offset: ulong, value: __ptr<u8>) {
-    ((block + offset) as __ptr<__ptr<u8>>)[0] = value;
+    unsafe_cast<__ptr<__ptr<u8>>>(block + offset)[0] = value;
 }
 
 # Copies `n` bytes from `source` to `destination`, front to back (so it may
@@ -399,7 +399,7 @@ _tls_acquire(context: __ptr<u8>, server: bool, certificate: __ptr<void>): int {
     if (server) {
         use = 1;  # SECPKG_CRED_INBOUND
         _tls_set_u32(credentials, 8, 1);
-        _tls_set_pointer(credentials, 16, certificates as __ptr<u8>);
+        _tls_set_pointer(credentials, 16, unsafe_cast<__ptr<u8>>(certificates));
         _tls_set_u32(credentials, 52, _TLS_SERVER_CREDENTIAL_FLAGS);
     } else {
         _tls_set_u32(credentials, 52, _TLS_CLIENT_CREDENTIAL_FLAGS);
@@ -459,7 +459,7 @@ _tls_import_key(der: u8[]): io.IoResult<__ptr<u16>> {
     # { cbBuffer, BufferType = NCRYPTBUFFER_PKCS_KEY_NAME, pvBuffer }: the
     # same layout as SecBufferDesc and SecBuffer.
     var desc = _tls_buffers(1);
-    _tls_set_buffer(desc + 16, 0, 45, name as __ptr<u8>, ((io._io_win_wide_len(name) as ulong) + 1) * 2);
+    _tls_set_buffer(desc + 16, 0, 45, unsafe_cast<__ptr<u8>>(name), ((io._io_win_wide_len(name) as ulong) + 1) * 2);
     var blob_type = io._io_win_wide("PKCS8_PRIVATEKEY");
     __ptr<ulong> key = _pep_malloc(8);
     key[0] = 0;
@@ -550,8 +550,8 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     # rgProvParam, dwKeySpec }: 48 bytes.
     __ptr<u8> info = _pep_malloc(48);
     var provider_name = io._io_win_wide("Microsoft Software Key Storage Provider");
-    _tls_set_pointer(info, 0, name as __ptr<u8>);
-    _tls_set_pointer(info, 8, provider_name as __ptr<u8>);
+    _tls_set_pointer(info, 0, unsafe_cast<__ptr<u8>>(name));
+    _tls_set_pointer(info, 8, unsafe_cast<__ptr<u8>>(provider_name));
     CertSetCertificateContextProperty(certificate, 2, 0, info);  # CERT_KEY_PROV_INFO_PROP_ID
     _pep_free(provider_name);
     _pep_free(info);
@@ -569,7 +569,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     _tls_set_word(context, 16, 1);
     _tls_set_pointer(context, 24, store as __ptr<u8>);
     _tls_set_pointer(context, 32, certificate as __ptr<u8>);
-    _tls_set_pointer(context, 40, name as __ptr<u8>);
+    _tls_set_pointer(context, 40, unsafe_cast<__ptr<u8>>(name));
     return io.IoResult<__ptr<void>>.ok(context);
 }
 
@@ -600,7 +600,7 @@ export _tls_sys_context_free(context: __ptr<void>) {
     var store = _tls_pointer(block, 24);
     if (_tls_word(block, 16) == 1) {
         CertFreeCertificateContext(_tls_pointer(block, 32));
-        var name = _tls_pointer(block, 40) as __ptr<u16>;
+        var name = unsafe_cast<__ptr<u16>>(_tls_pointer(block, 40));
         _tls_delete_key(name);
         _pep_free(name);
     }
@@ -620,7 +620,7 @@ _tls_session_new(context: __ptr<void>, h: io.SocketHandle, host: String): __ptr<
     _tls_set_pointer(session, 32, _pep_malloc(_TLS_BUFFER_SIZE));
     _tls_set_pointer(session, 48, _pep_malloc(_TLS_BUFFER_SIZE));
     if (host.size > 0) {
-        _tls_set_pointer(session, 96, io._io_win_wide(host) as __ptr<u8>);
+        _tls_set_pointer(session, 96, unsafe_cast<__ptr<u8>>(io._io_win_wide(host)));
     }
     return session;
 }
@@ -1062,7 +1062,7 @@ export _tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
     __ptr<uint> kind = _pep_malloc(4);
     kind[0] = 1;  # SCHANNEL_SHUTDOWN
     var desc = _tls_buffers(1);
-    _tls_set_buffer(desc + 16, 0, _TLS_BUFFER_TOKEN, kind as __ptr<u8>, 4);
+    _tls_set_buffer(desc + 16, 0, _TLS_BUFFER_TOKEN, unsafe_cast<__ptr<u8>>(kind), 4);
     var status = ApplyControlToken(block, desc);
     _pep_free(desc);
     _pep_free(kind);

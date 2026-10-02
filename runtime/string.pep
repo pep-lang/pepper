@@ -163,7 +163,7 @@ export struct String {
             }
             length = length + 1;
         }
-        var result = String(decoded as __ptr<char>, written, length);
+        var result = String(unsafe_cast<__ptr<char>>(decoded), written, length);
         _pep_free(decoded);
         return result;
     }

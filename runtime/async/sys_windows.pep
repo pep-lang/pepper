@@ -214,7 +214,7 @@ export _async_sys_physical_cpus(): ulong {
         if (GetLogicalProcessorInformationEx(0, buffer, length) != 0) {
             ulong offset = 0;
             while (offset + 8 <= length[0] as ulong) {
-                __ptr<uint> record = (buffer + offset) as __ptr<uint>;
+                __ptr<uint> record = unsafe_cast<__ptr<uint>>(buffer + offset);
                 var record_size = record[1] as ulong;
                 if (record_size == 0) {
                     break;

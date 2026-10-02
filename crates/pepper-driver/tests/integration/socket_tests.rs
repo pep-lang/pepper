@@ -152,7 +152,7 @@ bytes_equal(buffer: u8[], text: String): bool {
     if (buffer.count != text.size) {
         return false;
     }
-    var p = text.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(text.c_str());
     ulong i = 0;
     while (i < text.size) {
         if (buffer[i] != p[i]) {

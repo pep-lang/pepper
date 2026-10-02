@@ -169,7 +169,7 @@ export struct _FileTransfer {
 
     # The buffer's address, for a driver that hands it to the kernel.
     _address(): ulong {
-        return _buffer as ulong;
+        return unsafe_cast<ulong>(_buffer);
     }
 }
 

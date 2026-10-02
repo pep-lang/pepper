@@ -184,7 +184,7 @@ _regex_freeze(values: ulong[]): __ptr<ulong> {
 # Copies the bytes of `text` to `destination`.
 _regex_copy_bytes(text: String, destination: __ptr<u8>) {
     var size = text.size;
-    __ptr<u8> source = text._data as __ptr<u8>;
+    __ptr<u8> source = unsafe_cast<__ptr<u8>>(text._data);
     ulong index = 0;
     while (index < size) {
         destination[index] = source[index];
@@ -197,7 +197,7 @@ _regex_string(data: __ptr<u8>, size: ulong): String {
     if (size == 0) {
         return "";
     }
-    return String(data as __ptr<char>, size);
+    return String(unsafe_cast<__ptr<char>>(data), size);
 }
 
 # Compiles `pattern` into a program, or gives the reason it is invalid.

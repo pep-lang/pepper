@@ -68,7 +68,7 @@ export _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
     var page = sysconf(_FIBER_PAGE_SIZE_NAME) as ulong;
     var length = (stack_size + page - 1) / page * page + page;
     var base = mmap(__null, length, _FIBER_READ_WRITE, _FIBER_MAP_FLAGS, -1, 0);
-    if ((base as ulong) == ~(0 as ulong)) {
+    if (unsafe_cast<ulong>(base) == ~(0 as ulong)) {
         return __null;
     }
     mprotect(base, page, 0);

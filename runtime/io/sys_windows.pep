@@ -228,7 +228,7 @@ export _io_sys_invalid_handle(): FileHandle {
 # Neither null nor INVALID_HANDLE_VALUE (-1).
 [Target(OS(Windows))]
 export _io_sys_handle_valid(h: FileHandle): bool {
-    return h != __null && (h as long) != -1;
+    return h != __null && unsafe_cast<long>(h) != -1;
 }
 
 # STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are (DWORD)-10,
@@ -506,7 +506,7 @@ export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
             }
             return IoResult<bool>.ok(false);
         }
-        var name_ptr = (data + 44) as __ptr<u16>;
+        var name_ptr = unsafe_cast<__ptr<u16>>(data + 44);
         var name = _io_win_narrow(name_ptr, _io_win_wide_len(name_ptr));
         if (name == "." || name == "..") {
             continue;
@@ -586,7 +586,7 @@ export _io_sys_getcwd(): IoResult<Path> {
         return IoResult<Path>.err(IoError.last());
     }
     var buffer = _IoBuffer((need as ulong) * 2);
-    var buf = buffer._bytes as __ptr<u16>;
+    var buf = unsafe_cast<__ptr<u16>>(buffer._bytes);
     var n = GetCurrentDirectoryW(need, buf);
     if (n == 0) {
         return IoResult<Path>.err(IoError.last());
@@ -618,7 +618,7 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
         return IoResult<Path>.err(e);
     }
     var buffer = _IoBuffer((need as ulong) * 2 + 2);
-    var buf = buffer._bytes as __ptr<u16>;
+    var buf = unsafe_cast<__ptr<u16>>(buffer._bytes);
     var n = GetFinalPathNameByHandleW(h.value(), buf, need, 0);
     var code = GetLastError();
     CloseHandle(h.value());

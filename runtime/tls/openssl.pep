@@ -199,7 +199,7 @@ _tls_session_ssl(session: __ptr<void>): __ptr<void> {
 [Target(!OS(Windows))]
 _tls_session_error(session: __ptr<void>): __ptr<io.IoError> {
     __ptr<ulong> block = session;
-    return (block + 2) as __ptr<io.IoError>;
+    return unsafe_cast<__ptr<io.IoError>>(block + 2);
 }
 
 # The BIO callbacks. Each finds its session through the BIO's data.

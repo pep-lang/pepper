@@ -209,7 +209,7 @@ _async_poll_entry_size(): ulong {
 # Fills a pollfd: POLLIN 1, POLLOUT 4.
 [Target(!OS(Windows))]
 _async_poll_set(descriptor: __ptr<u8>, handle: ulong, interest: int) {
-    (descriptor as __ptr<int>)[0] = handle as int;
+    unsafe_cast<__ptr<int>>(descriptor)[0] = handle as int;
     var events = 0;
     if ((interest & io._IO_READABLE) != 0) {
         events = events | 1;
@@ -217,15 +217,15 @@ _async_poll_set(descriptor: __ptr<u8>, handle: ulong, interest: int) {
     if ((interest & io._IO_WRITABLE) != 0) {
         events = events | 4;
     }
-    ((descriptor + 4) as __ptr<u16>)[0] = events as u16;
-    ((descriptor + 6) as __ptr<u16>)[0] = 0;
+    unsafe_cast<__ptr<u16>>(descriptor + 4)[0] = events as u16;
+    unsafe_cast<__ptr<u16>>(descriptor + 6)[0] = 0;
 }
 
 # What a pollfd's revents allow. POLLERR 8, POLLHUP 16 and POLLNVAL 32 wake
 # both sides, so their waiters retry and see the error.
 [Target(!OS(Windows))]
 _async_poll_ready(descriptor: __ptr<u8>): int {
-    var returned = ((descriptor + 6) as __ptr<u16>)[0] as int;
+    var returned = unsafe_cast<__ptr<u16>>(descriptor + 6)[0] as int;
     if ((returned & 56) != 0) {
         return io._IO_READABLE | io._IO_WRITABLE;
     }
@@ -264,7 +264,7 @@ _async_poll_create_bell(made: __ptr<long>): __ptr<u8> {
     __ptr<ulong> words = address;
     words[0] = 0;
     words[1] = 0;
-    (address as __ptr<u16>)[0] = 2;
+    unsafe_cast<__ptr<u16>>(address)[0] = 2;
     address[4] = 127;
     address[7] = 1;
     __ptr<int> length = _pep_malloc(4);
@@ -320,7 +320,7 @@ _async_poll_entry_size(): ulong {
 # Fills a WSAPOLLFD: POLLRDNORM 256, POLLWRNORM 16.
 [Target(OS(Windows))]
 _async_poll_set(descriptor: __ptr<u8>, handle: ulong, interest: int) {
-    (descriptor as __ptr<ulong>)[0] = handle;
+    unsafe_cast<__ptr<ulong>>(descriptor)[0] = handle;
     var events = 0;
     if ((interest & io._IO_READABLE) != 0) {
         events = events | 256;
@@ -328,15 +328,15 @@ _async_poll_set(descriptor: __ptr<u8>, handle: ulong, interest: int) {
     if ((interest & io._IO_WRITABLE) != 0) {
         events = events | 16;
     }
-    ((descriptor + 8) as __ptr<u16>)[0] = events as u16;
-    ((descriptor + 10) as __ptr<u16>)[0] = 0;
+    unsafe_cast<__ptr<u16>>(descriptor + 8)[0] = events as u16;
+    unsafe_cast<__ptr<u16>>(descriptor + 10)[0] = 0;
 }
 
 # What a WSAPOLLFD's revents allow. POLLERR 1, POLLHUP 2 and POLLNVAL 4 wake
 # both sides.
 [Target(OS(Windows))]
 _async_poll_ready(descriptor: __ptr<u8>): int {
-    var returned = ((descriptor + 10) as __ptr<u16>)[0] as int;
+    var returned = unsafe_cast<__ptr<u16>>(descriptor + 10)[0] as int;
     if ((returned & 7) != 0) {
         return io._IO_READABLE | io._IO_WRITABLE;
     }

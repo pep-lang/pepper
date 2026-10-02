@@ -127,7 +127,7 @@ export struct IpAddress {
     ##     var r = IpAddress.parse("10.0.0.300");
     ##     print(r.is_err());   # true: 300 is out of range
     static parse(text: String): IoResult<IpAddress> {
-        var p = text.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(text.c_str());
         var n = text.size;
         var v4 = _io_parse_v4(p, n, 0, n);
         if (v4.is_some()) {
@@ -335,7 +335,7 @@ export struct SocketAddress {
     ##     var a = SocketAddress.parse("127.0.0.1:8080").value();
     ##     var b = SocketAddress.parse("[::1]:8080").value();
     static parse(text: String): IoResult<SocketAddress> {
-        var p = text.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(text.c_str());
         var n = text.size;
         var bad = IoResult<SocketAddress>.err(IoError(_io_sys_code_invalid_input(), "invalid socket address syntax"));
         if (n == 0) {

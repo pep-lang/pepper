@@ -87,6 +87,24 @@ test(): int {
 }
 
 #[test]
+fn as_converts_a_struct_to_a_trait_it_conforms_to() {
+    // `s as Shape` is the same conversion as a trait-typed slot: one
+    // reference, released once.
+    let (result, leaked) = run(&shapes(
+        r#"
+test(): int {
+    var square = Square(3);
+    var shape = square as Shape;
+    if (shape.area() != 9) { return 1; }
+    return (Rect(2, 5) as Shape).area();
+}
+"#,
+    ));
+    assert_eq!(result, 10);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
 fn default_trait_methods_dispatch_too() {
     let (result, leaked) = run(&shapes(
         r#"

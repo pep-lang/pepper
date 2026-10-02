@@ -59,7 +59,7 @@ export struct _SockAddr {
     # The length slot to pass to accept, recvfrom, getsockname or
     # getpeername, set to the capacity.
     _length_slot(): __ptr<uint> {
-        var slot = (_bytes + _io_sockaddr_capacity()) as __ptr<uint>;
+        var slot = unsafe_cast<__ptr<uint>>(_bytes + _io_sockaddr_capacity());
         slot[0] = _io_sockaddr_capacity() as uint;
         return slot;
     }
@@ -902,7 +902,7 @@ export _io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
 # `File.write_all` does.
 export _io_socket_send_text(h: SocketHandle, text: String): IoResult<void> {
     if (!_io_in_task()) {
-        return _io_socket_send_all(h, text.c_str() as __ptr<u8>, text.size);
+        return _io_socket_send_all(h, unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
     }
     var bytes = _io_text_copy(text);
     var r = _io_socket_send_all(h, bytes, text.size);

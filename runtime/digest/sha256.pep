@@ -63,7 +63,7 @@ export struct Sha256 {
     ##
     ## @param text the text to add
     update(text: String) {
-        _update_raw(text.c_str() as __ptr<u8>, text.size);
+        _update_raw(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
     }
 
     _update_raw(data: __ptr<u8>, size: ulong) {

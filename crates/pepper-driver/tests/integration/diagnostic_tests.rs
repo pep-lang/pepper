@@ -4327,3 +4327,86 @@ fn trait_method_with_other_parameter_names_warns_with_a_rename() {
     let ctx = inkwell::context::Context::create();
     assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 42);
 }
+
+#[test]
+fn cast_that_reinterprets_needs_unsafe_cast() {
+    // `as` is a static cast: a pointer to an integer reinterprets, so the
+    // error is at the `as` and names `unsafe_cast`.
+    assert_eq!(
+        error_of(
+            "cast_pointer_to_integer",
+            "main(): int {\n    var p = __null as __ptr<int>;\n    var a = p as ulong;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:15: error: cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret\n\
+         \x20   3 |     var a = p as ulong;\n\
+         \x20     |               ^~"
+    );
+    assert_eq!(
+        error_of(
+            "cast_pointer_to_pointer",
+            "main(): int {\n    var p = __null as __ptr<int>;\n    var b = p as __ptr<u16>;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:15: error: cannot cast '__ptr<int>' to '__ptr<ushort>' with 'as'; use 'unsafe_cast<__ptr<ushort>>(...)' to reinterpret\n\
+         \x20   3 |     var b = p as __ptr<u16>;\n\
+         \x20     |               ^~"
+    );
+}
+
+#[test]
+fn cast_of_a_struct_to_a_pointer() {
+    assert_eq!(
+        error_of(
+            "cast_struct_to_pointer",
+            "struct Dog {\n    construct() {}\n}\nmain(): int {\n    var d = Dog();\n    var p = d as __ptr<void>;\n    return 0;\n}\n"
+        ),
+        "main.pep:6:15: error: cannot cast 'Dog' to '__ptr<void>'\n\
+         \x20   6 |     var p = d as __ptr<void>;\n\
+         \x20     |               ^~"
+    );
+}
+
+#[test]
+fn unsafe_cast_never_reinterprets_a_reference() {
+    assert_eq!(
+        error_of(
+            "unsafe_cast_struct",
+            "struct Dog {\n    construct() {}\n}\nmain(): int {\n    var d = Dog();\n    var p = unsafe_cast<__ptr<void>>(d);\n    return 0;\n}\n"
+        ),
+        "main.pep:6:13: error: 'unsafe_cast' cannot convert 'Dog' to '__ptr<void>': it reinterprets only pointers and numbers\n\
+         \x20   6 |     var p = unsafe_cast<__ptr<void>>(d);\n\
+         \x20     |             ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn unsafe_cast_of_numbers_of_different_widths() {
+    assert_eq!(
+        error_of("unsafe_cast_widths", "main(): int {\n    var n = 3;\n    var w = unsafe_cast<long>(n);\n    return 0;\n}\n"),
+        "main.pep:3:13: error: 'unsafe_cast' cannot convert 'int' to 'long': the sizes differ; use 'as' to convert the value\n\
+         \x20   3 |     var w = unsafe_cast<long>(n);\n\
+         \x20     |             ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn unsafe_cast_arguments() {
+    let error = |test: &str, call: &str| error_of(test, &format!("main(): int {{\n    var x = {};\n    return 0;\n}}\n", call));
+    assert_eq!(
+        error("unsafe_cast_no_type", "unsafe_cast(3)"),
+        "main.pep:2:13: error: 'unsafe_cast' needs the type to cast to: 'unsafe_cast<T>(value)'\n\
+         \x20   2 |     var x = unsafe_cast(3);\n\
+         \x20     |             ^~~~~~~~~~~"
+    );
+    assert_eq!(
+        error("unsafe_cast_two_types", "unsafe_cast<int, int>(3)"),
+        "main.pep:2:13: error: 'unsafe_cast' takes 1 type argument, have 2\n\
+         \x20   2 |     var x = unsafe_cast<int, int>(3);\n\
+         \x20     |             ^~~~~~~~~~~"
+    );
+    assert_eq!(
+        error("unsafe_cast_two_values", "unsafe_cast<int>(3, 4)"),
+        "main.pep:2:13: error: too many arguments to 'unsafe_cast': expected 1, have 2\n\
+         \x20   2 |     var x = unsafe_cast<int>(3, 4);\n\
+         \x20     |             ^~~~~~~~~~~"
+    );
+}

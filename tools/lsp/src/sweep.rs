@@ -51,7 +51,7 @@ const BUILT_IN: &[&str] = &[
     "this", "null", "auto", "void", "bool", "byte", "char", "short", "ushort", "int", "uint", "long", "ulong",
     "float", "double", "sbyte", "__ptr", "__weak", "__null", "sizeof", "assert", "panic", "as", "with",
     "break", "continue", "not", "async", "await", "yield", "type", "extend", "with", "__default",
-    "__function_pointer", "__weak_from", "__weak_upgrade", "__move", "__unreachable", "_", "print",
+    "__function_pointer", "__weak_from", "__weak_upgrade", "unsafe_cast", "__move", "__unreachable", "_", "print",
     // A property's accessors.
     "get", "set",
 ];

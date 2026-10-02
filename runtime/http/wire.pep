@@ -319,8 +319,8 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
     if (size == 0) {
         return "";
     }
-    if (String.length_of(data as __ptr<char>, size) > 0) {
-        return String(data as __ptr<char>, size);
+    if (String.length_of(unsafe_cast<__ptr<char>>(data), size) > 0) {
+        return String(unsafe_cast<__ptr<char>>(data), size);
     }
     var bytes = Array<u8>(size);
     bytes._append_raw(data, size);
@@ -328,7 +328,7 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
 }
 
 export _http_append(out: u8[], text: String) {
-    out._append_raw(text.c_str() as __ptr<u8>, text.size);
+    out._append_raw(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
 }
 
 # ── Text ─────────────────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ export _http_parse_decimal(text: String): long {
     if (t.size == 0 || t.size > 18) {
         return -1;
     }
-    var p = t.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(t.c_str());
     long value = 0;
     ulong i = 0;
     while (i < t.size) {
@@ -358,7 +358,7 @@ export _http_parse_hex(text: String): long {
     if (text.size == 0 || text.size > 15) {
         return -1;
     }
-    var p = text.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(text.c_str());
     long value = 0;
     ulong i = 0;
     while (i < text.size) {

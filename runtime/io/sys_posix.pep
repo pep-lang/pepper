@@ -604,7 +604,7 @@ export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
             }
             return IoResult<bool>.ok(false);
         }
-        var name = String((ent + _io_dirent_name_offset()) as __ptr<char>);
+        var name = String(unsafe_cast<__ptr<char>>(ent + _io_dirent_name_offset()));
         if (name == "." || name == "..") {
             continue;
         }
@@ -681,7 +681,7 @@ export _io_sys_getcwd(): IoResult<Path> {
     ulong size = 4096;
     while (true) {
         var buf = _IoBuffer(size);
-        var r = getcwd(buf._bytes as __ptr<char>, size);
+        var r = getcwd(unsafe_cast<__ptr<char>>(buf._bytes), size);
         if (r != __null) {
             return IoResult<Path>.ok(Path(_io_string_from_c(r)));
         }
@@ -708,7 +708,7 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
     var buf = _IoBuffer(4096);  # PATH_MAX (Linux 4096, macOS 1024)
-    var r = realpath(path._value.c_str(), buf._bytes as __ptr<char>);
+    var r = realpath(path._value.c_str(), unsafe_cast<__ptr<char>>(buf._bytes));
     if (r == __null) {
         return IoResult<Path>.err(IoError.last());
     }
@@ -722,7 +722,7 @@ export _io_sys_temp_dir(): Path {
         return Path("/tmp");
     }
     # macOS's TMPDIR ends in '/'.
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var n = s.size;
     while (n > 1 && _io_byte(p, s.size, n - 1) == '/') {
         n = n - 1;

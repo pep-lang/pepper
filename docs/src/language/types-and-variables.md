@@ -300,8 +300,25 @@ var wide = whole as long;
 - Integer to a wider integer sign-extends a signed source and zero-extends an
   unsigned one: `(-1 as i16) as long` is -1, and `(65535 as u16) as long` is
   65535.
-- Casting between unrelated struct types is a compile error
-  (`cannot cast to Q`).
+- `bool` and enums convert like integers: `true as int` is 1, and an enum
+  converts to the integer it is stored as. An integer does not convert to an
+  enum; name a case instead.
+- A struct converts to a trait it conforms to: `dog as Named`.
+- A pointer converts to `__ptr<void>` and back: `p as __ptr<void>`, then
+  `v as __ptr<int>`.
+- A value converts to its own type.
+
+Anything else is a compile error at the `as`, since it would not be a value
+conversion but a reinterpretation of memory:
+
+```text
+main.pep:3:15: error: cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret
+    3 |     var a = p as ulong;
+      |               ^~
+```
+
+Casting between unrelated struct types, or between a struct and a number or
+pointer, is an error with no alternative (`cannot cast 'P' to 'Q'`).
 
 `as` binds more tightly than the arithmetic operators, so `x * 10 as int` means
 `x * (10 as int)`. Put parentheses around the expression you want to convert:
@@ -310,6 +327,33 @@ var wide = whole as long;
 Many conversions also happen without `as`: assigning or passing a number to a
 variable or parameter of another numeric type converts it, as in C, including
 narrowing conversions (`int n = 2.7;` stores 2).
+
+## Reinterpreting with `unsafe_cast`
+
+`unsafe_cast<Type>(value)` reinterprets a value's bits as another type, like
+`reinterpret_cast` in C++. It is for C interop and low-level code, and nothing
+checks that the result makes sense:
+
+- A pointer to a pointer of another type: `unsafe_cast<__ptr<u8>>(text.c_str())`.
+- A pointer to an integer, and an integer to a pointer:
+  `unsafe_cast<ulong>(p)`, `unsafe_cast<__ptr<int>>(address)`.
+- A number to another number of the same width, keeping its bits:
+  `unsafe_cast<uint>(1.0 as float)` is `0x3F800000`, and
+  `unsafe_cast<double>(bits)` turns a `ulong` back into a `double`.
+
+```pepper
+{{#include ../../examples/unsafe-cast.pep}}
+```
+
+It never converts a struct, trait or function value, so it cannot get around
+reference counting. A conversion `as` can make is not a reinterpretation, so
+`unsafe_cast<long>(n)` on an `int` is an error that says to use `as`:
+
+```text
+main.pep:3:13: error: 'unsafe_cast' cannot convert 'int' to 'long': the sizes differ; use 'as' to convert the value
+    3 |     var w = unsafe_cast<long>(n);
+      |             ^~~~~~~~~~~
+```
 
 ## Arithmetic follows C
 

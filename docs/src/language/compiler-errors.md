@@ -364,6 +364,17 @@ main.pep:6:13: note: asked for by 'main' here
       |             ^~~~~~~~
 ```
 
+**A cast that reinterprets memory.** `as` converts values, like `static_cast`
+(see [Casting with `as`](types-and-variables.md#casting-with-as)); a pointer to
+an integer, or to a pointer of another type, needs
+[`unsafe_cast`](types-and-variables.md#reinterpreting-with-unsafe_cast):
+
+```text
+main.pep:3:15: error: cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret
+    3 |     var a = p as ulong;
+      |               ^~
+```
+
 ## Errors while the program runs
 
 Some problems can only be found while the program runs, such as an array index

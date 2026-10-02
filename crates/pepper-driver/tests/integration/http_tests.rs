@@ -52,7 +52,7 @@ raw(port: u16, request: u8[]): String {
     if (reply.count == 0) {
         return "";
     }
-    return String(reply._data as __ptr<char>, reply.count);
+    return String(unsafe_cast<__ptr<char>>(reply._data), reply.count);
 }
 
 # Counts the occurrences of `needle` in `text`.

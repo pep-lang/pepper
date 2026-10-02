@@ -77,19 +77,19 @@ extend _KqueueDriver with _Driver {
         var i = 0;
         while (i < count) {
             var event = this._events + (i as ulong) * 32;
-            var filter = ((event + 8) as __ptr<i16>)[0] as int;
+            var filter = unsafe_cast<__ptr<i16>>(event + 8)[0] as int;
             if (filter == _KQUEUE_FILTER_USER) {
                 i = i + 1;
                 continue;
             }
-            var flags = ((event + 10) as __ptr<u16>)[0] as int;
+            var flags = unsafe_cast<__ptr<u16>>(event + 10)[0] as int;
             var interest = io._IO_WRITABLE;
             if ((flags & _KQUEUE_END_FLAGS) != 0) {
                 interest = io._IO_READABLE | io._IO_WRITABLE;
             } else if (filter == _KQUEUE_FILTER_READ) {
                 interest = io._IO_READABLE;
             }
-            ready_sockets.append(((event as __ptr<ulong>)[0], interest));
+            ready_sockets.append((unsafe_cast<__ptr<ulong>>(event)[0], interest));
             i = i + 1;
         }
     }
@@ -104,8 +104,8 @@ extend _KqueueDriver with _Driver {
         __ptr<u8> changes = _pep_malloc(64);
         _async_kqueue_change(changes, 0, handle, _KQUEUE_FILTER_READ);
         _async_kqueue_change(changes, 1, handle, _KQUEUE_FILTER_WRITE);
-        ((changes + 10) as __ptr<u16>)[0] = 2;  # EV_DELETE
-        ((changes + 42) as __ptr<u16>)[0] = 2;
+        unsafe_cast<__ptr<u16>>(changes + 10)[0] = 2;  # EV_DELETE
+        unsafe_cast<__ptr<u16>>(changes + 42)[0] = 2;
         _async_kqueue_call(this._queue, changes, 2, __null, 0, -1);
         _pep_free(changes);
     }
@@ -129,8 +129,8 @@ _async_kqueue_change(changes: __ptr<u8>, index: ulong, handle: io.SocketHandle, 
     words[2] = 0;
     words[3] = 0;
     words[0] = handle as ulong;
-    ((change + 8) as __ptr<i16>)[0] = filter as i16;
-    ((change + 10) as __ptr<u16>)[0] = 33;  # EV_ADD | EV_CLEAR
+    unsafe_cast<__ptr<i16>>(change + 8)[0] = filter as i16;
+    unsafe_cast<__ptr<u16>>(change + 10)[0] = 33;  # EV_ADD | EV_CLEAR
 }
 
 # A new kqueue, or -1.
@@ -172,8 +172,8 @@ _async_kqueue_call(
 export _async_kqueue_ring(queue: long) {
     __ptr<u8> change = _pep_malloc(32);
     _async_kqueue_change(change, 0, 0, _KQUEUE_FILTER_USER);
-    ((change + 10) as __ptr<u16>)[0] = 0;
-    ((change + 12) as __ptr<uint>)[0] = 16777216;  # NOTE_TRIGGER
+    unsafe_cast<__ptr<u16>>(change + 10)[0] = 0;
+    unsafe_cast<__ptr<uint>>(change + 12)[0] = 16777216;  # NOTE_TRIGGER
     _async_kqueue_call(queue, change, 1, __null, 0, -1);
     _pep_free(change);
 }

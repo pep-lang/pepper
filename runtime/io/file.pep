@@ -709,7 +709,7 @@ export struct File {
             return c;
         }
         if (!_io_in_task()) {
-            return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size);
+            return _io_write_all_raw(_handle, unsafe_cast<__ptr<u8>>(s.c_str()), s.size);
         }
         # Another task could change `s` while the write waits, so write a
         # copy.

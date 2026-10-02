@@ -22,7 +22,7 @@ export struct Utf16 {
     ## @returns a new array of two bytes per code unit
     static encode(value: String, big_endian: bool = false): u8[] {
         var out = Array<u8>(value.size * 2);
-        __ptr<u8> data = value._data as __ptr<u8>;
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
         var size = value.size;
         ulong index = 0;
         while (index < size) {

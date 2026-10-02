@@ -175,6 +175,19 @@ pub enum AtomicFetchOp {
     Xor,
 }
 
+/// What wrote an `Expression::Cast`, which decides what it may convert
+/// (`crate::casts::check`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CastKind {
+    /// `x as T`: a `static_cast`.
+    Static,
+    /// `unsafe_cast<T>(x)`: a `reinterpret_cast` of a pointer or number.
+    Unsafe,
+    /// A conversion sema inserted (a character literal's `byte`, an enum
+    /// case's value, a C function pointer); never checked.
+    Synthesized,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Expression {
     /// Reference to a symbol by identifier, with an (optional, resolved) type.
@@ -216,11 +229,15 @@ pub enum Expression {
         operand: Box<Expression>,
         loc: Loc,
     },
-    /// `expr as Type` — static cast (docs/src/language/types-and-variables.md).
+    /// `expr as Type` (a static cast) or `unsafe_cast<Type>(expr)` (a
+    /// reinterpret cast), or a conversion sema synthesized; see
+    /// [`CastKind`] and `crate::casts`.
     Cast {
         expr: Box<Expression>,
         ty: TypeName,
+        /// The `as` keyword, or the `unsafe_cast` name.
         loc: Loc,
+        kind: CastKind,
     },
     Ternary {
         condition: Box<Expression>,

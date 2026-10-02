@@ -2135,10 +2135,11 @@ fn cast(input: &mut &str) -> Result<Expression> {
     ws(input)?;
     if input.starts_with("as") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = expr.span().start;
+        let keyword_span = Span { start: pos(input), end: pos(input) + 2 };
         *input = &input[2..];
         ws(input)?;
         let ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-        return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) } });
+        return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) }, keyword_span });
     }
     *input = before;
     Ok(expr)

@@ -100,7 +100,7 @@ export struct Array<T> {
         # written, since the buffer is freed next. Anything such a
         # destructor appends lands in a new buffer, released the same way.
         # The pointer compares as bytes: `__ptr<T>` would pick `T`'s own `!=`.
-        while ((_data as __ptr<u8>) != __null) {
+        while (unsafe_cast<__ptr<u8>>(_data) != __null) {
             __ptr<T> data = _data;
             ulong count = _size;
             _data = __null;
@@ -121,7 +121,7 @@ export struct Array<T> {
     # The address of slot `index`, in bytes: `_data + index` would pick `T`'s
     # own `+` when `T` has one.
     _slot(index: ulong): __ptr<u8> {
-        __ptr<u8> bytes = _data as __ptr<u8>;
+        __ptr<u8> bytes = unsafe_cast<__ptr<u8>>(_data);
         return bytes + index * sizeof<T>();
     }
 
@@ -551,7 +551,7 @@ export struct Array<T> {
         }
         # The sorted elements ended in `scratch`: copy them back as bytes,
         # leaving `scratch` with copies it does not own, and free it as is.
-        if ((source as __ptr<u8>) == (scratch as __ptr<u8>)) {
+        if (unsafe_cast<__ptr<u8>>(source) == unsafe_cast<__ptr<u8>>(scratch)) {
             _array_copy(_data, scratch, sizeof<T>() * _size);
         }
         _pep_free(scratch);
@@ -858,8 +858,8 @@ _array_swap(a: __ptr<u8>, b: __ptr<u8>, size: ulong) {
     ulong offset = 0;
     if (size % 8 == 0) {
         while (offset < size) {
-            __ptr<ulong> x = (a + offset) as __ptr<ulong>;
-            __ptr<ulong> y = (b + offset) as __ptr<ulong>;
+            __ptr<ulong> x = unsafe_cast<__ptr<ulong>>(a + offset);
+            __ptr<ulong> y = unsafe_cast<__ptr<ulong>>(b + offset);
             ulong held = x[0];
             x[0] = y[0];
             y[0] = held;

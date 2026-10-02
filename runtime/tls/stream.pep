@@ -332,7 +332,7 @@ export struct TlsStream {
     ##     stream.write_all("ping");
     write_all(text: String): io.IoResult<void> {
         if (!io._io_in_task()) {
-            return _write_all(text.c_str() as __ptr<u8>, text.size);
+            return _write_all(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
         }
         # Another task could change `text` while a send waits, so send a
         # copy, as `io.File.write_all` does.

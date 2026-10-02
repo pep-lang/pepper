@@ -51,7 +51,7 @@ main(): int {
     # p + n moves by n elements, not n bytes.
     var third = numbers + 2;
     assert(third[0] == 30, "numbers + 2 points at the third element");
-    assert((third as ulong) - (numbers as ulong) == 8, "two ints are eight bytes");
+    assert(unsafe_cast<ulong>(third) - unsafe_cast<ulong>(numbers) == 8, "two ints are eight bytes");
 
     # __ptr<void> strides by bytes; cast to see the memory another way.
     var raw = numbers as __ptr<void>;

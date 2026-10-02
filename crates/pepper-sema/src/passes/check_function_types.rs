@@ -690,22 +690,27 @@ impl<'a> Checker<'a> {
 /// Reject values whose type does not match the typed slot they flow into.
 /// Runs near the end of `transform_pass`, before `lower_with_blocks`, so the
 /// language server reports it too.
+/// The parameter names of the generic base the specialization `name` (a
+/// function, or a struct when `is_struct`) came from; none for a name that
+/// is not a specialization. A specialized clone can keep annotations that
+/// still name them.
+pub(crate) fn base_params(module: &Module, name: &str, is_struct: bool) -> Vec<String> {
+    let base = name.split('<').next().unwrap_or(name);
+    if base == name {
+        return vec![];
+    }
+    let params: Vec<&crate::model::GenericParam> = if is_struct {
+        module.structs.iter().filter(|b| b.ty.name == base).flat_map(|b| b.generic_params.iter()).collect()
+    } else {
+        module.functions.iter().filter(|f| f.name == base).flat_map(|f| f.generic_params.iter()).collect()
+    };
+    params.into_iter().map(|p| p.name.clone()).collect()
+}
+
 pub fn check_function_types(module: &mut Module) {
     let module = &*module;
     let mut checker = Checker { module, table: StructTable::build(module), errors: vec![], unbound: vec![] };
-    // The parameter names of the generic base a specialization came from.
-    let base_params = |name: &str, is_struct: bool| -> Vec<String> {
-        let base = name.split('<').next().unwrap_or(name);
-        if base == name {
-            return vec![];
-        }
-        let params: Vec<&crate::model::GenericParam> = if is_struct {
-            module.structs.iter().filter(|b| b.ty.name == base).flat_map(|b| b.generic_params.iter()).collect()
-        } else {
-            module.functions.iter().filter(|f| f.name == base).flat_map(|f| f.generic_params.iter()).collect()
-        };
-        params.into_iter().map(|p| p.name.clone()).collect()
-    };
+    let base_params = |name: &str, is_struct: bool| base_params(module, name, is_struct);
     for function in &module.functions {
         checker.unbound = base_params(&function.name, false);
         checker.function(function, None);

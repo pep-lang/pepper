@@ -150,7 +150,7 @@ export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
 [Target(OS(Windows))]
 export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     var descriptor = _pep_malloc(16) as __ptr<ulong>;
-    var events = descriptor as __ptr<u16>;
+    var events = unsafe_cast<__ptr<u16>>(descriptor);
     descriptor[0] = h;
     events[4] = 256;  # POLLRDNORM
     if (interest == _IO_WRITABLE) {
@@ -174,13 +174,13 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
     if (v6) {
         family = 23;
     }
-    (buffer as __ptr<u16>)[0] = family as u16;
+    unsafe_cast<__ptr<u16>>(buffer)[0] = family as u16;
 }
 
 # 4 for IPv4, 6 for IPv6, 0 for any other family.
 [Target(OS(Windows))]
 export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
-    var family = (buffer as __ptr<u16>)[0] as int;
+    var family = unsafe_cast<__ptr<u16>>(buffer)[0] as int;
     if (family == 2) {
         return 4;
     }
@@ -194,7 +194,7 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 # at 2: at most 108 bytes.
 [Target(OS(Windows))]
 export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
-    (buffer as __ptr<u16>)[0] = 1;
+    unsafe_cast<__ptr<u16>>(buffer)[0] = 1;
 }
 
 [Target(OS(Windows))]
@@ -346,7 +346,7 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
     var peer = _SockAddr();
     var s = _io_sys_socket_invalid();
     while (true) {
-        s = accept(h, peer._bytes, peer._length_slot() as __ptr<int>);
+        s = accept(h, peer._bytes, unsafe_cast<__ptr<int>>(peer._length_slot()));
         if (_io_sys_socket_valid(s)) {
             break;
         }
@@ -417,7 +417,7 @@ export _io_sys_socket_receive_from(
     var limit = (_io_win_max_rw(n) as int);
     var r = 0;
     while (true) {
-        r = recvfrom(h, destination, limit, 0, from._bytes, from._length_slot() as __ptr<int>);
+        r = recvfrom(h, destination, limit, 0, from._bytes, unsafe_cast<__ptr<int>>(from._length_slot()));
         if (r >= 0) {
             break;
         }
@@ -443,13 +443,17 @@ export _io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
 [Target(OS(Windows))]
 export _io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
-    return _io_win_address_result(getsockname(h, address._bytes, address._length_slot() as __ptr<int>), address);
+    return _io_win_address_result(
+        getsockname(h, address._bytes, unsafe_cast<__ptr<int>>(address._length_slot())), address
+    );
 }
 
 [Target(OS(Windows))]
 export _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
-    return _io_win_address_result(getpeername(h, address._bytes, address._length_slot() as __ptr<int>), address);
+    return _io_win_address_result(
+        getpeername(h, address._bytes, unsafe_cast<__ptr<int>>(address._length_slot())), address
+    );
 }
 
 # The address getsockname/getpeername wrote into `address`, or the Winsock
@@ -471,9 +475,9 @@ export _io_win_address_result(rc: int, address: _SockAddr): IoResult<SocketAddre
 export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     _io_win_socket_startup();
     var hints = _IoBuffer(48);
-    (hints._bytes as __ptr<int>)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
+    unsafe_cast<__ptr<int>>(hints._bytes)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
     var result = _IoBuffer(8);
-    var list = result._bytes as __ptr<__ptr<u8>>;
+    var list = unsafe_cast<__ptr<__ptr<u8>>>(result._bytes);
     var node = _io_win_wide(host);
     var rc = GetAddrInfoW(node, __null, hints._bytes, list);
     _pep_free(node);
@@ -488,14 +492,14 @@ export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     var out = Array<SocketAddress>();
     var entry = list[0];
     while (entry != __null) {
-        var address = ((entry + 32) as __ptr<__ptr<u8>>)[0];
+        var address = unsafe_cast<__ptr<__ptr<u8>>>(entry + 32)[0];
         if (address != __null) {
             if (_io_sys_sockaddr_family(address) != 0) {
                 var found = _io_sockaddr_read(address);
                 out.append(SocketAddress(found.address(), port));
             }
         }
-        entry = ((entry + 40) as __ptr<__ptr<u8>>)[0];
+        entry = unsafe_cast<__ptr<__ptr<u8>>>(entry + 40)[0];
     }
     FreeAddrInfoW(list[0]);
     return IoResult<SocketAddress[]>.ok(out);

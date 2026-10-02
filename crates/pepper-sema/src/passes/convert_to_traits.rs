@@ -501,6 +501,15 @@ impl Converter {
                 self.expression(rhs, current);
             }
             Expression::Unary { operand, .. } => self.expression(operand, current),
+            // `s as Trait` is the conversion a trait-typed slot makes.
+            Expression::Cast { expr: inner, ty, kind: CastKind::Static, .. } if traits::is_trait_type(&self.trait_defs, ty) => {
+                self.expression(inner, current);
+                let ty = ty.clone();
+                self.convert(inner, &ty, current, Loc::NONE);
+                if matches!(inner.as_ref(), Expression::ToTrait { .. }) {
+                    *expr = std::mem::replace(inner.as_mut(), Expression::PointerLiteral);
+                }
+            }
             Expression::Cast { expr, .. } => self.expression(expr, current),
             Expression::Ternary {
                 condition,

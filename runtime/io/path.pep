@@ -94,7 +94,7 @@ export _io_slice(s: String, begin: ulong, end: ulong): String {
 
 # End of the prefix plus any root separators: the part no operation strips.
 export _io_path_root_end(s: String): ulong {
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var n = s.size;
     var i = _io_path_prefix_len(p, n);
     while (i < n && _io_path_is_sep(_io_byte(p, n, i))) {
@@ -105,7 +105,7 @@ export _io_path_root_end(s: String): ulong {
 
 # End of the path with trailing separators removed (never inside the root).
 export _io_path_trimmed_end(s: String): ulong {
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var root = _io_path_root_end(s);
     var e = s.size;
     while (e > root && _io_path_is_sep(_io_byte(p, s.size, e - 1))) {
@@ -116,7 +116,7 @@ export _io_path_trimmed_end(s: String): ulong {
 
 # Start of the last component (== root end when there is no separator).
 export _io_path_name_start(s: String, e: ulong): ulong {
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var root = _io_path_root_end(s);
     var i = e;
     while (i > root && !_io_path_is_sep(_io_byte(p, s.size, i - 1))) {
@@ -130,7 +130,7 @@ export _io_path_name_start(s: String, e: ulong): ulong {
 # path starts with one.
 export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
     var parts = Array<String>();
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var n = s.size;
     var i = _io_path_root_end(s);
     var first = true;
@@ -241,7 +241,7 @@ export struct Path {
     ##
     ## @returns true when the path is absolute
     is_absolute(): bool {
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
@@ -281,7 +281,7 @@ export struct Path {
         if (_value.size == 0 || other.is_absolute() || other.has_root_or_prefix()) {
             return Path(other._value.copy());
         }
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var s = _value.copy();
         if (!_io_path_is_sep(_io_byte(p, _value.size, _value.size - 1))) {
             s.append(_io_path_separator());
@@ -313,7 +313,7 @@ export struct Path {
     ##
     ## @returns true when the path has a root separator or a prefix
     has_root_or_prefix(): bool {
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var n = _value.size;
         if (_io_path_prefix_len(p, n) > 0) {
             return true;
@@ -354,7 +354,7 @@ export struct Path {
             }
             return Optional<Path>.some(Path(_io_slice(_value, 0, root)));
         }
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var j = start;
         while (j > root && _io_path_is_sep(_io_byte(p, _value.size, j - 1))) {
             j = j - 1;
@@ -496,7 +496,7 @@ export struct Path {
     ##     var d = io.Path("./a/b").components();            # [".", "a", "b"]
     components(): Array<String> {
         var out = Array<String>();
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         if (prefix > 0) {
@@ -534,7 +534,7 @@ export struct Path {
         if (_value.size == 0) {
             return Path();
         }
-        var p = _value.c_str() as __ptr<u8>;
+        var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));

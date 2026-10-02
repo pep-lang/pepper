@@ -30,7 +30,7 @@ const FUNCTION_INVOKE_INDEX: u32 = 2;
 /// [`facts::tbaa`] tells it from other byte addresses.
 pub(crate) const HEAD_COUNT_NAME: &str = "head_count";
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
-use pepper_sema::model::{Diagnostic, Loc};
+use pepper_sema::model::{CastKind, Diagnostic, Loc};
 use pepper_sema::type_name::TypeName;
 use std::collections::HashMap;
 
@@ -3983,7 +3983,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Binary { op, lhs, rhs, .. } => self.codegen_binary(op, lhs, rhs),
             Expression::Unary { op, operand, .. } => self.codegen_unary(*op, operand),
-            Expression::Cast { expr, ty, .. } => self.codegen_cast(expr, ty),
+            Expression::Cast { expr, ty, kind, .. } => self.codegen_cast(expr, ty, *kind),
             Expression::Ternary {
                 condition,
                 true_expr,
@@ -6167,10 +6167,15 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// bool targets only; struct casts are rejected. A pointer may cast to an
     /// integer (address-as-integer for C ABI interop) or to another pointer
     /// type.
-    fn codegen_cast(&mut self, expr: &Expression, ty: &TypeName) -> Result<BasicValueEnum<'ctx>, String> {
+    fn codegen_cast(&mut self, expr: &Expression, ty: &TypeName, kind: CastKind) -> Result<BasicValueEnum<'ctx>, String> {
         // Source signedness decides zext vs sext on widening (same rule as
         // ops::coerce); resolve it before codegen_expr mutates the frame.
         let source_name = self.value_sema_type(expr);
+        // Sema's `check_casts` reported the casts whose operand it could
+        // type; the exact type decides the rest.
+        if let Some(source) = &source_name {
+            pepper_sema::casts::check(&pepper_sema::passes::gather_generics::parse_type_string(source), ty, kind)?;
+        }
         // An owned-rvalue source is a temporary: released once the cast has
         // consumed it.
         let src_temp = self.owned_temp_type(expr);
@@ -6229,6 +6234,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicValueEnum::FloatValue(v)
                 }
             }
+            // `unsafe_cast` between a number and a float of the same width
+            // keeps the bits.
+            (BasicValueEnum::IntValue(_), BasicTypeEnum::FloatType(to)) if kind == CastKind::Unsafe => {
+                self.builder.build_bit_cast(val, to, "bits").map_err(|e| e.to_string())?
+            }
+            (BasicValueEnum::FloatValue(_), BasicTypeEnum::IntType(to)) if kind == CastKind::Unsafe => {
+                self.builder.build_bit_cast(val, to, "bits").map_err(|e| e.to_string())?
+            }
             (BasicValueEnum::IntValue(from), BasicTypeEnum::FloatType(to)) => {
                 // Same signedness rule as the int->int widening arm: unsigned
                 // and 1-bit sources convert via sitofp's unsigned sibling, or
@@ -6269,6 +6282,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Address-as-integer for C ABI interop (e.g. hex-dumping a pointer).
                 BasicValueEnum::IntValue(
                     self.builder.build_ptr_to_int(from, to, "ptrtoint").map_err(|e| e.to_string())?,
+                )
+            }
+            (BasicValueEnum::IntValue(from), BasicTypeEnum::PointerType(to)) => {
+                BasicValueEnum::PointerValue(
+                    self.builder.build_int_to_ptr(from, to, "inttoptr").map_err(|e| e.to_string())?,
                 )
             }
             _ => return Err(format!("cannot cast to {}", name)),

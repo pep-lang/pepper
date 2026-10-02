@@ -478,7 +478,7 @@ export struct Matches {
                 if ((start as ulong) >= size) {
                     break;
                 }
-                var (value, width) = _regex_decode(_text._data as __ptr<u8>, start as ulong, size);
+                var (value, width) = _regex_decode(unsafe_cast<__ptr<u8>>(_text._data), start as ulong, size);
                 _position = (start as ulong) + width;
                 continue;
             }

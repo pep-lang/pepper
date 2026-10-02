@@ -1099,7 +1099,7 @@ impl<'a> Typer<'a> {
                 self.function_result(id, &[])
             }
             ast::Expression::TypeLiteral(t) => match t.name.as_str() {
-                "__weak_upgrade" => t.generic_types.first().map(Ty::from_ast),
+                "__weak_upgrade" | "unsafe_cast" => t.generic_types.first().map(Ty::from_ast),
                 "__weak_from" => Some(Ty::of("__weak", t.generic_types.iter().map(Ty::from_ast).collect())),
                 name if self.is_type(&plain(name), at) => Some(Ty::from_ast(t)),
                 name => self.function_result(name, &t.generic_types.iter().map(Ty::from_ast).collect::<Vec<_>>()),

@@ -20,15 +20,7 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         // Non-numeric operand: keep the lhs type.
         return lhs.to_string();
     }
-    let width = |n: &str| -> u32 {
-        match n {
-            "bool" | "i1" => 1,
-            "i8" | "char" | "u8" | "byte" => 8,
-            "i16" | "short" | "u16" | "ushort" => 16,
-            "f64" | "double" | "i64" | "long" | "u64" | "ulong" => 64,
-            _ => 32,
-        }
-    };
+    let width = |n: &str| bit_width(n).unwrap_or(32);
     let w = width(lhs).max(width(rhs));
     if is_float_type(lhs) || is_float_type(rhs) {
         return if w > 32 { "f64".to_string() } else { "f32".to_string() };
@@ -46,6 +38,19 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         (false, true) => "u32".to_string(),
         (false, false) => "i32".to_string(),
     }
+}
+
+/// The bit width a numeric primitive is stored in (`bool` is 1), or `None`
+/// for any other type.
+pub fn bit_width(n: &str) -> Option<u32> {
+    Some(match n {
+        "bool" | "i1" => 1,
+        "i8" | "char" | "u8" | "byte" => 8,
+        "i16" | "short" | "u16" | "ushort" => 16,
+        "i32" | "int" | "u32" | "uint" | "f32" | "float" => 32,
+        "f64" | "double" | "i64" | "long" | "u64" | "ulong" => 64,
+        _ => return None,
+    })
 }
 
 /// Whether a type name is a numeric primitive (bool, integer or float,

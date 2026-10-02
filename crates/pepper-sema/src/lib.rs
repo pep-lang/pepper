@@ -1,5 +1,6 @@
 pub mod arithmetic;
 pub mod builder;
+pub mod casts;
 pub mod checked;
 pub mod deprecation;
 pub mod enums;

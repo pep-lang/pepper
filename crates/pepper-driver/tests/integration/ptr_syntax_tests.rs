@@ -38,7 +38,7 @@ is_null(p: __ptr<char>): bool {
     return p == __null;
 }
 addr(p: __ptr<void>): ulong {
-    return p as ulong;
+    return unsafe_cast<ulong>(p);
 }
 test(): int {
     var p = _pep_malloc(8);
@@ -209,9 +209,9 @@ test(): int {
     __ptr<__ptr<void>> slots = _pep_malloc(16);
     __ptr<double> d = _pep_malloc(16);
     __ptr<float> f = _pep_malloc(16);
-    var r = ((slots + 1) as long - slots as long) as int;
-    r = r * 100 + ((d + 1) as long - d as long) as int;
-    r = r * 100 + ((f + 1) as long - f as long) as int;
+    var r = (unsafe_cast<long>(slots + 1) - unsafe_cast<long>(slots)) as int;
+    r = r * 100 + (unsafe_cast<long>(d + 1) - unsafe_cast<long>(d)) as int;
+    r = r * 100 + (unsafe_cast<long>(f + 1) - unsafe_cast<long>(f)) as int;
     _pep_free(slots);
     _pep_free(d);
     _pep_free(f);
@@ -236,7 +236,7 @@ test(): int {
     var p = _pep_malloc(8);
     var q = p;
     var s = p + 1;
-    long bits = p as long;
+    long bits = unsafe_cast<long>(p);
     long minus_one = -1;
     int small = 7;
     var r = 0;

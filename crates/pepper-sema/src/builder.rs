@@ -323,6 +323,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 expr: Box::new(Expression::IntLiteral(*v as i64)),
                 ty: TypeName::new("byte"),
                 loc: loc(*span),
+                kind: CastKind::Synthesized,
             }),
             ast::Literal::Null => Ok(Expression::PointerLiteral),
         },
@@ -349,10 +350,11 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             operand: Box::new(expression(operand)?),
             loc: loc(*span),
         }),
-        ast::Expression::Cast { expr, ty, span } => Ok(Expression::Cast {
+        ast::Expression::Cast { expr, ty, keyword_span, .. } => Ok(Expression::Cast {
             expr: Box::new(expression(expr)?),
             ty: type_name_from(ty),
-            loc: loc(*span),
+            loc: loc(*keyword_span),
+            kind: CastKind::Static,
         }),
         // `a..b` is `_range(a, b, false)` and `a..>b` is `_range(a, b, true)`
         // (runtime/range.pep): a `Range<T>` value, its `T` inferred from the
@@ -420,6 +422,13 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                     loc: loc(*name_span),
                 });
             }
+            match function.as_ref() {
+                ast::Expression::TypeLiteral(ty) if ty.name == UNSAFE_CAST => return unsafe_cast(ty, arguments),
+                ast::Expression::SymbolRef { id, span } if id == UNSAFE_CAST => {
+                    return Err(Diagnostic::error("'unsafe_cast' needs the type to cast to: 'unsafe_cast<T>(value)'").at(loc(*span)));
+                }
+                _ => {}
+            }
             // Constructor-style call `Name<args>(ctor_args)` keeps the generic
             // target name; the args become the call arguments.
             let target = function.as_ref();
@@ -475,6 +484,40 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
         }))),
     }
 }
+/// The intrinsic `unsafe_cast<T>(value)` (`crate::casts`).
+const UNSAFE_CAST: &str = "unsafe_cast";
+
+/// `unsafe_cast<T>(value)`: a reinterpret cast of `value` to `T`, located at
+/// the `unsafe_cast` name.
+fn unsafe_cast(ty: &ast::TypeName, arguments: &[ast::Expression]) -> Result<Expression, Diagnostic> {
+    let at = loc(ast::Span { start: ty.span.start, end: ty.span.start + UNSAFE_CAST.len() });
+    if ty.generic_types.len() != 1 {
+        return Err(Diagnostic::error(format!(
+            "'unsafe_cast' takes 1 type argument, have {}",
+            ty.generic_types.len()
+        ))
+        .at(at));
+    }
+    let [value] = arguments else {
+        let which = if arguments.is_empty() { "few" } else { "many" };
+        return Err(Diagnostic::error(format!(
+            "too {} arguments to 'unsafe_cast': expected 1, have {}",
+            which,
+            arguments.len()
+        ))
+        .at(at));
+    };
+    if let ast::Expression::NamedArgument { name_span, .. } = value {
+        return Err(Diagnostic::error("'unsafe_cast' takes no named arguments").at(loc(*name_span)));
+    }
+    Ok(Expression::Cast {
+        expr: Box::new(expression(value)?),
+        ty: type_name_from(&ty.generic_types[0]),
+        loc: at,
+        kind: CastKind::Unsafe,
+    })
+}
+
 /// `[a, b, c]` is `_array_literal(a)._literal_append(b)._literal_append(c)`
 /// (runtime/array.pep; a long literal is a tree of such chains, see
 /// `literals.rs`). The element type is `element` when the literal

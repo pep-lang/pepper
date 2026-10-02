@@ -83,7 +83,7 @@ _pep_new_live_allocs_slot(): __ptr<long> {
     __ptr<u8> block = malloc(size + 64);
     memset(block, 0, size + 64);
     # Start at a cache line boundary.
-    __ptr<long> shards = block + (64 - (block as ulong) % 64) % 64;
+    __ptr<long> shards = block + (64 - unsafe_cast<ulong>(block) % 64) % 64;
     return shards;
 }
 

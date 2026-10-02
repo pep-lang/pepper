@@ -79,7 +79,7 @@ export struct _RegexMatcher {
     # returns only whether there is one (the slots are not meaningful).
     search(text: String, from: ulong, earliest: bool): long[]? {
         var size = text.size;
-        __ptr<u8> data = text._data as __ptr<u8>;
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(text._data);
         _current.count = 0;
         var position = from;
         var matched = false;

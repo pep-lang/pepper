@@ -216,7 +216,7 @@ text(f: Path): String {
 
 bytes_of(s: String): u8[] {
     var out = Array<u8>();
-    var p = s.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(s.c_str());
     ulong i = 0;
     while (i < s.size) {
         out.append(p[i]);

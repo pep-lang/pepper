@@ -145,8 +145,8 @@ _async_epoll_events(): __ptr<u8> {
 [Target(OS(Linux))]
 _async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     __ptr<u8> event = _pep_malloc(16);
-    (event as __ptr<uint>)[0] = _EPOLL_INTEREST;
-    ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0] = handle as ulong;
+    unsafe_cast<__ptr<uint>>(event)[0] = _EPOLL_INTEREST;
+    unsafe_cast<__ptr<ulong>>(event + _EPOLL_DATA_OFFSET)[0] = handle as ulong;
     var rc = epoll_ctl(epoll as int, 1, handle, event);  # EPOLL_CTL_ADD
     _pep_free(event);
     return rc == 0;
@@ -168,8 +168,8 @@ _async_epoll_create_bell(epoll: long): long {
         return -1;
     }
     __ptr<u8> event = _pep_malloc(16);
-    (event as __ptr<uint>)[0] = _EPOLL_INTEREST;
-    ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0] = _async_doorbell_key();
+    unsafe_cast<__ptr<uint>>(event)[0] = _EPOLL_INTEREST;
+    unsafe_cast<__ptr<ulong>>(event + _EPOLL_DATA_OFFSET)[0] = _async_doorbell_key();
     var rc = epoll_ctl(epoll as int, 1, bell, event);  # EPOLL_CTL_ADD
     _pep_free(event);
     if (rc != 0) {
@@ -211,13 +211,13 @@ _async_epoll_wait(epoll: long, events: __ptr<u8>, timeout: long): ulong {
 [Target(OS(Linux))]
 _async_epoll_event_handle(events: __ptr<u8>, index: ulong): ulong {
     var event = events + index * (_EPOLL_EVENT_SIZE as ulong);
-    return ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0];
+    return unsafe_cast<__ptr<ulong>>(event + _EPOLL_DATA_OFFSET)[0];
 }
 
 [Target(OS(Linux))]
 _async_epoll_event_interest(events: __ptr<u8>, index: ulong): int {
     var event = events + index * (_EPOLL_EVENT_SIZE as ulong);
-    var bits = (event as __ptr<uint>)[0];
+    var bits = unsafe_cast<__ptr<uint>>(event)[0];
     return _async_ready_mask(bits, _EPOLL_READABLE_EVENTS, _EPOLL_WRITABLE_EVENTS);
 }
 

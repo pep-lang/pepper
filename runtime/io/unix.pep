@@ -35,7 +35,7 @@ export _io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
     }
     var sockaddr = _SockAddr();
     var buffer = sockaddr._bytes;
-    var p = text.c_str() as __ptr<u8>;
+    var p = unsafe_cast<__ptr<u8>>(text.c_str());
     ulong i = 0;
     while (i < n) {
         buffer[2 + i] = p[i];
