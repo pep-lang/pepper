@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-539d85b4.js";
+            window.path_to_searchindex_js = "../searchindex-56fd62a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -300,6 +300,12 @@ fresh&lt;T&gt;(): Array&lt;T&gt; {
     return items;
 }
 
+# A closure in generic code is compiled with each use too: for `T = int`
+# it calls `larger&lt;int&gt;`.
+larger_later&lt;T&gt;(a: T, b: T): () =&gt; T {
+    return () =&gt; larger(a, b);
+}
+
 main(): int {
     # Type arguments come from the arguments, or can be written out.
     assert(larger(3, 9) == 9, "ints");
@@ -314,6 +320,8 @@ main(): int {
     squares.append(Square());
     assert(total_area&lt;Square&gt;(squares) == 4, "squares");
     assert(total_area(fresh&lt;Circle&gt;()) == 3, "a constructed Circle");
+    var pick = larger_later(4, 7);
+    assert(pick() == 7, "a closure calling a generic function");
     return 0;
 }
 </code></pre>
@@ -339,6 +347,10 @@ argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)
 <p>Inference works through closures in both directions. In
 <code>transform(words, (w) =&gt; w.size)</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
 the closure’s result gives <code>U</code>.</p>
+<p>A closure inside a generic function or method is compiled with each use of
+it, so the generic calls in its body take their type arguments from that
+use: in <code>larger_later&lt;T&gt;(a: T, b: T)</code> above, <code>() =&gt; larger(a, b)</code> calls
+<code>larger&lt;int&gt;</code> when <code>T</code> is <code>int</code>.</p>
 <p>Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>
 calls <code>shape.area()</code>, so it works with any <code>T</code> that has an <code>area()</code> method
