@@ -117,6 +117,34 @@ Without a `path`, it starts at the line: `3:3: error: expected ',' or '}'`.
 - Objects keep their keys in insertion order, so parsing a document and
   writing it back keeps its order.
 
+## Documents with comments
+
+`parse` skips a JSONC file's comments. To change a file people edit, such
+as a settings file, and write it back with its comments, read it with
+`json.parse_document(text)`, which returns a `Result<JsonDocument,
+JsonError>`:
+
+```pepper
+{{#include ../../examples/json-comments.pep}}
+```
+
+- `document.root` is the `JsonValue`; change it as any other.
+- Each comment belongs to a value, by its path from the root `$`
+  (`$.editor.tab_size`, `$.files[0]`): the comments on the lines before
+  it, and those on the line it ends, after its comma. Comments before a
+  closing bracket stay at the end of their array or object, and those
+  around the whole value stay before or after it.
+- `document.to_string()` writes the text indented, as `to_pretty_string`
+  does (`to_string(indent = 4)` for four spaces), with every comment back
+  in its place. A file in that layout reads and writes back unchanged.
+- A comment whose value is removed is dropped. One whose path later names
+  another value, such as an element shifted into its index, goes with
+  that value.
+- `document.comments(path)` returns the comments before a value, and
+  `document.set_comments(path, ["// ..."])` replaces them.
+- `parse_document` takes `path` and `max_depth` as `parse` does, and always
+  accepts JSONC.
+
 ## Structs
 
 `json.encode(value)` writes a struct as JSON text, and
@@ -209,8 +237,8 @@ main.pep:10:16: note: 'encode<Job>' is used by 'main' here
 
 ## Current limits
 
-- Comments are skipped when parsing JSONC; they are not kept in the value
-  or written back yet.
+- `parse` skips comments; only a `JsonDocument` keeps them, and
+  `decode` never does. A document is always written indented.
 - An enum always takes the external form above; an internal tag
   (`{"kind": "circle", ...}`) or no tag, chosen with attributes, is not
   supported yet.

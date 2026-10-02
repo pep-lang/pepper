@@ -98,6 +98,16 @@ export parse(
     return parser.run();
 }
 
+# Parses JSONC `text` like `parse` with `comments = true`, filing its
+# comments in `notes`.
+export _json_parse_commented(
+    text: String, notes: _JsonComments, path: String, max_depth: ulong
+): Result<JsonValue, JsonError> {
+    var parser = _JsonParser(text, true, path, max_depth);
+    parser._notes = Optional<_JsonComments>.some(notes);
+    return parser.run();
+}
+
 # The byte offset in `text`, which must parse, of the value at `value_path`
 # (`$.server.port`, as `_json_path_key` writes it), or none when it is not
 # there. Parses the text again, so it is only for errors.
@@ -109,22 +119,6 @@ export _json_locate(text: String, comments: bool, value_path: String): ulong? {
         return Optional<ulong>.some(parser._found as ulong);
     }
     return Optional<ulong>.none();
-}
-
-# `path.key`, or `path["key"]` when the key is not an identifier: how a
-# value's path in a document is written.
-export _json_path_key(path: String, key: String): String {
-    var plain = !key.is_empty;
-    for (var b in key.bytes()) {
-        var letter = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_';
-        if (!letter && !(b >= '0' && b <= '9')) {
-            plain = false;
-        }
-    }
-    if (plain) {
-        return $"{path}.{key}";
-    }
-    return $"{path}[{JsonValue.String(key).to_string()}]";
 }
 
 # Reads one value from `_text`. Each method that can fail returns false
@@ -150,6 +144,13 @@ struct _JsonParser {
     # once found (-1 until then).
     String _find;
     long _found;
+    # With `_json_parse_commented`: where the comments go, the comments
+    # read since the last value was filed, whether each began on the line
+    # the last value ended on, and whether a line break came since then.
+    _JsonComments? _notes;
+    Array<String> _pending;
+    Array<bool> _inline;
+    bool _newline;
 
     construct(text: String, comments: bool, path: String, max_depth: ulong) {
         _text = text;
@@ -163,6 +164,32 @@ struct _JsonParser {
         _no_key = "";
         _find = "";
         _found = -1;
+        _notes = Optional<_JsonComments>.none();
+        _pending = Array<String>();
+        _inline = Array<bool>();
+        _newline = false;
+    }
+
+    # Files the comments read since the last value under `path` in `kind`,
+    # only those on the last value's line when `inline_only`.
+    _file(kind: HashMap<String, Array<String>>, path: String, inline_only: bool) {
+        if (_pending.is_empty) {
+            return;
+        }
+        var filed = Array<String>();
+        var rest = Array<String>();
+        var rest_inline = Array<bool>();
+        for (var index in 0.._pending.count) {
+            if (!inline_only || _inline[index]) {
+                filed.append(_pending[index]);
+            } else {
+                rest.append(_pending[index]);
+                rest_inline.append(false);
+            }
+        }
+        _notes.value().add(kind, path, filed);
+        _pending = rest;
+        _inline = rest_inline;
     }
 
     run(): Result<JsonValue, JsonError> {
@@ -187,7 +214,10 @@ struct _JsonParser {
         var none = Optional<JsonValue>.none();
         var containers = Array<JsonValue>();
         var keys = Array<String>();
-        # With `_find`: each open container's path, and each array's index.
+        # With `_find` or `_notes`: each open container's path, and each
+        # array's index.
+        var keeping = _notes.is_some();
+        var tracking = keeping || !_find.is_empty;
         var paths = Array<String>();
         var indexes = Array<ulong>();
         var here = "$";
@@ -196,7 +226,7 @@ struct _JsonParser {
             if (!_skip_space()) {
                 return none;
             }
-            if (!_find.is_empty) {
+            if (tracking) {
                 if (containers.is_empty) {
                     here = "$";
                 } else if (containers.last() is Array) {
@@ -207,6 +237,9 @@ struct _JsonParser {
                 if (here == _find) {
                     _found = _position as long;
                     return none;
+                }
+                if (keeping) {
+                    _file(_notes.value().before, here, false);
                 }
             }
             var value = JsonValue.Null;
@@ -222,11 +255,14 @@ struct _JsonParser {
                     return none;
                 }
                 if (_peek() == (b == '[' ? ']' : '}')) {
+                    if (keeping) {
+                        _file(_notes.value().end, here, false);
+                    }
                     _position = _position + 1;
                     value = opened;
                 } else {
                     containers.append(opened);
-                    if (!_find.is_empty) {
+                    if (tracking) {
                         paths.append(here);
                         indexes.append(0);
                     }
@@ -249,6 +285,7 @@ struct _JsonParser {
             # Store the value in its container, then close every container
             # that ends after it.
             while (true) {
+                _newline = false;
                 if (containers.is_empty) {
                     if (!_skip_space()) {
                         return none;
@@ -257,17 +294,29 @@ struct _JsonParser {
                         _fail("expected the end of the text after the value");
                         return none;
                     }
+                    if (keeping) {
+                        _file(_notes.value().after, "$", true);
+                        _file(_notes.value().end, "", false);
+                    }
                     return Optional<JsonValue>.some(value);
                 }
                 var top = containers.last();
                 var is_array = top is Array;
+                # The path of the value just read, for its comments.
+                var stored = _no_key;
                 if (top is Array(items)) {
                     items.append(value);
-                    if (!_find.is_empty) {
+                    if (tracking) {
+                        if (keeping) {
+                            stored = $"{paths.last()}[{indexes.last()}]";
+                        }
                         indexes[indexes.count - 1] = indexes.last() + 1;
                     }
                 } else if (top is Object(members)) {
                     members[keys.last()] = value;
+                    if (keeping) {
+                        stored = _json_path_key(paths.last(), keys.last());
+                    }
                 }
                 if (!_skip_space()) {
                     return none;
@@ -279,6 +328,9 @@ struct _JsonParser {
                     _position = _position + 1;
                     if (!_skip_space()) {
                         return none;
+                    }
+                    if (keeping) {
+                        _file(_notes.value().after, stored, true);
                     }
                     if (_peek() == closing) {
                         if (!_comments) {
@@ -300,10 +352,14 @@ struct _JsonParser {
                     _fail(is_array ? "expected ',' or ']'" : "expected ',' or '}'");
                     return none;
                 }
+                if (keeping) {
+                    _file(_notes.value().after, stored, true);
+                    _file(_notes.value().end, paths.last(), false);
+                }
                 _position = _position + 1;
                 value = containers.pop();
                 keys.pop();
-                if (!_find.is_empty) {
+                if (tracking) {
                     paths.pop();
                     indexes.pop();
                 }
@@ -326,6 +382,9 @@ struct _JsonParser {
         while (_position < _size) {
             var b = _text.byte_at(_position);
             if (b == ' ' or b == '\t' or b == '\n' or b == '\r') {
+                if (b == '\n') {
+                    _newline = true;
+                }
                 _position = _position + 1;
             } else if (b == '/'
                 and _position + 1 < _size
@@ -346,6 +405,14 @@ struct _JsonParser {
                         return false;
                     }
                     _position = (end as ulong) + 2;
+                }
+                if (_notes.is_some()) {
+                    var size = _position - start;
+                    if (_text.byte_at(_position - 1) == '\r') {
+                        size = size - 1;
+                    }
+                    _pending.append(_text.substr_bytes(start, size));
+                    _inline.append(!_newline);
                 }
             } else {
                 return true;

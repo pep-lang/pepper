@@ -67,6 +67,7 @@ const PAGES: &[(&str, &str)] = &[
     ("json/module.pep", "The json module"),
     ("json/value.pep", "JsonValue"),
     ("json/parse.pep", "Parsing"),
+    ("json/document.pep", "Documents with comments"),
     ("json/convert.pep", "Struct conversion"),
     ("serialize/module.pep", "The serialize module"),
 ];

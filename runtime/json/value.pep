@@ -324,13 +324,17 @@ export enum JsonValue {
 # A step of `_json_write`: a value still to write at a nesting depth, an
 # object member's key to write before its value (after a comma unless it is
 # the first), the comma before an array's element, or the closing bracket
-# of a container.
+# of a container. With comments to keep, each step also carries the paths
+# their comments are filed under (empty otherwise): the value's (`lead` when
+# its comments go before it, false for a member's value, whose key has
+# them), the member or element before a comma, and a container and its
+# last element.
 [Value]
 enum _JsonStep {
-    Write(value: JsonValue, depth: ulong),
-    Key(key: String, depth: ulong, first: bool),
-    Comma(depth: ulong),
-    Close(bracket: String, depth: ulong),
+    Write(value: JsonValue, depth: ulong, path: String, lead: bool),
+    Key(key: String, depth: ulong, first: bool, path: String, previous: String),
+    Comma(depth: ulong, previous: String),
+    Close(bracket: String, depth: ulong, container: String, last: String),
 }
 
 # Writes `root` as JSON text. `layout` is 0 for compact text, or one more
@@ -339,6 +343,68 @@ _json_write(root: JsonValue, layout: int, ascii_only: bool): String {
     var writer = _JsonWriter(layout, ascii_only);
     writer.write(root);
     return writer.out.to_string();
+}
+
+# Writes `root` as indented JSON text with the comments in `notes`, each
+# where its path says. `layout` is as for `_json_write`, and not 0.
+export _json_write_commented(root: JsonValue, notes: _JsonComments, layout: int, ascii_only: bool): String {
+    var writer = _JsonWriter(layout, ascii_only);
+    writer._notes = Optional<_JsonComments>.some(notes);
+    writer.write(root);
+    return writer.out.to_string();
+}
+
+# The comments of a JSONC document, filed by the path of the value they
+# belong to (`$.server.port`, as `_json_path_key` writes it): those on the
+# lines before it (`before`), those after it on its own line (`after`), and
+# those before a container's closing bracket (`end`, by the container's
+# path, with "" for those after the whole document). Each comment is its
+# text, `//` or `/* */` included.
+export struct _JsonComments {
+    HashMap<String, Array<String>> before;
+    HashMap<String, Array<String>> after;
+    HashMap<String, Array<String>> end;
+
+    construct() {
+        before = HashMap<String, Array<String>>();
+        after = HashMap<String, Array<String>>();
+        end = HashMap<String, Array<String>>();
+    }
+
+    # Files `comments` under `path` in `kind`, after those already there.
+    add(kind: HashMap<String, Array<String>>, path: String, comments: Array<String>) {
+        if (comments.is_empty) {
+            return;
+        }
+        var filed = kind.try_get(path);
+        if (filed.is_some()) {
+            for (var comment in comments) {
+                filed.value().append(comment);
+            }
+        } else {
+            var copy = Array<String>();
+            for (var comment in comments) {
+                copy.append(comment);
+            }
+            kind.insert(path, copy);
+        }
+    }
+}
+
+# `path.key`, or `path["key"]` when the key is not an identifier: how a
+# value's path in a document is written.
+export _json_path_key(path: String, key: String): String {
+    var plain = !key.is_empty;
+    for (var b in key.bytes()) {
+        var letter = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_';
+        if (!letter && !(b >= '0' && b <= '9')) {
+            plain = false;
+        }
+    }
+    if (plain) {
+        return $"{path}.{key}";
+    }
+    return $"{path}[{JsonValue.String(key).to_string()}]";
 }
 
 # Writes JSON text into `out`. A string literal makes a new String each time
@@ -363,6 +429,11 @@ struct _JsonWriter {
     String _open_object;
     String _close_object;
     String _empty_object;
+    # The comments to write, for `_json_write_commented`.
+    _JsonComments? _notes;
+    String _space;
+    String _comma;
+    String _no_path;
 
     construct(layout: int, ascii_only: bool) {
         out = StringBuilder();
@@ -382,6 +453,48 @@ struct _JsonWriter {
         _open_object = "{";
         _close_object = "}";
         _empty_object = "{}";
+        _notes = Optional<_JsonComments>.none();
+        _space = " ";
+        _comma = ",";
+        _no_path = "";
+    }
+
+    # Writes the comments filed under `path` in `kind`: each followed by
+    # the indentation at `depth` (`before`), or each after a space.
+    _comments(kind: HashMap<String, Array<String>>, path: String, depth: ulong, leading: bool) {
+        var filed = kind.try_get(path);
+        if (filed.is_none()) {
+            return;
+        }
+        for (var comment in filed.value()) {
+            if (leading) {
+                out.append(comment);
+                out.append(_indents[depth]);
+            } else {
+                out.append(_space);
+                out.append(comment);
+            }
+        }
+    }
+
+    # Whether a container at `path` has comments before its closing
+    # bracket, so it is not written as `[]` or `{}`.
+    _has_end(path: String): bool {
+        return _notes.is_some() && _notes.value().end.contains(path);
+    }
+
+    # Writes the comments before the closing bracket of the container at
+    # `path`, each on its own line at `depth`.
+    _end_comments(path: String, depth: ulong) {
+        var filed = _notes.value().end.try_get(path);
+        if (filed.is_none()) {
+            return;
+        }
+        _reach(depth);
+        for (var comment in filed.value()) {
+            out.append(_indents[depth]);
+            out.append(comment);
+        }
     }
 
     # Makes sure `_indents` and `_commas` reach `depth`.
@@ -397,27 +510,52 @@ struct _JsonWriter {
     # explicit stack rather than the call stack: each container pushes its
     # closing bracket, then its elements in reverse.
     write(root: JsonValue) {
+        var keeping = _notes.is_some();
+        var root_path = keeping ? "$" : _no_path;
         var steps = Array<_JsonStep>();
-        steps.append(_JsonStep.Write(root, 0));
+        steps.append(_JsonStep.Write(root, 0, root_path, true));
         while (!steps.is_empty) {
             var step = steps.pop();
             match (step) {
-                Close(bracket, at) => {
-                    _reach(at);
+                Close(bracket, at, container, last) => {
+                    _reach(at + 1);
+                    if (keeping) {
+                        _comments(_notes.value().after, last, at, false);
+                        _end_comments(container, at + 1);
+                    }
                     out.append(_indents[at]);
                     out.append(bracket);
                 }
-                Comma(at) => {
+                Comma(at, previous) => {
                     _reach(at);
-                    out.append(_commas[at]);
+                    if (keeping) {
+                        out.append(_comma);
+                        _comments(_notes.value().after, previous, at, false);
+                        out.append(_indents[at]);
+                    } else {
+                        out.append(_commas[at]);
+                    }
                 }
-                Key(key, at, first) => {
+                Key(key, at, first, path, previous) => {
                     _reach(at);
-                    out.append(first ? _indents[at] : _commas[at]);
+                    if (keeping) {
+                        if (!first) {
+                            out.append(_comma);
+                            _comments(_notes.value().after, previous, at, false);
+                        }
+                        out.append(_indents[at]);
+                        _comments(_notes.value().before, path, at, true);
+                    } else {
+                        out.append(first ? _indents[at] : _commas[at]);
+                    }
                     quote(key);
                     out.append(_colon);
                 }
-                Write(value, at) => {
+                Write(value, at, path, lead) => {
+                    if (keeping && lead) {
+                        _reach(at);
+                        _comments(_notes.value().before, path, at, true);
+                    }
                     match (value) {
                         Null => {
                             out.append(_null);
@@ -442,38 +580,51 @@ struct _JsonWriter {
                             quote(text);
                         }
                         Array(items) => {
-                            if (items.is_empty) {
+                            if (items.is_empty && !_has_end(path)) {
                                 out.append(_empty_array);
+                            } else if (items.is_empty) {
+                                out.append(_open_array);
+                                steps.append(_JsonStep.Close(_close_array, at, path, _no_path));
                             } else {
                                 # The first element follows at once; each
                                 # other one follows its comma.
                                 _reach(at + 1);
                                 out.append(_open_array);
                                 out.append(_indents[at + 1]);
-                                steps.append(_JsonStep.Close(_close_array, at));
                                 var index = items.count;
+                                var last = keeping ? $"{path}[{index - 1}]" : _no_path;
+                                steps.append(_JsonStep.Close(_close_array, at, path, last));
                                 while (index > 1) {
                                     index = index - 1;
-                                    steps.append(_JsonStep.Write(items[index], at + 1));
-                                    steps.append(_JsonStep.Comma(at + 1));
+                                    var element = keeping ? $"{path}[{index}]" : _no_path;
+                                    var before = keeping ? $"{path}[{index - 1}]" : _no_path;
+                                    steps.append(_JsonStep.Write(items[index], at + 1, element, true));
+                                    steps.append(_JsonStep.Comma(at + 1, before));
                                 }
-                                steps.append(_JsonStep.Write(items[0], at + 1));
+                                var first = keeping ? $"{path}[0]" : _no_path;
+                                steps.append(_JsonStep.Write(items[0], at + 1, first, true));
                             }
                         }
                         Object(members) => {
-                            if (members.is_empty) {
+                            if (members.is_empty && !_has_end(path)) {
                                 out.append(_empty_object);
                             } else {
                                 out.append(_open_object);
-                                steps.append(_JsonStep.Close(_close_object, at));
+                                # The closing bracket's last member is known
+                                # once the members are pushed.
+                                var close = steps.count;
+                                steps.append(_JsonStep.Close(_close_object, at, path, _no_path));
                                 # Push the members, then reverse them, so
                                 # the first is written first.
                                 var low = steps.count;
                                 var first = true;
+                                var last = _no_path;
                                 for (var (key, member) in members) {
-                                    steps.append(_JsonStep.Key(key, at + 1, first));
-                                    steps.append(_JsonStep.Write(member, at + 1));
+                                    var at_key = keeping ? _json_path_key(path, key) : _no_path;
+                                    steps.append(_JsonStep.Key(key, at + 1, first, at_key, last));
+                                    steps.append(_JsonStep.Write(member, at + 1, at_key, false));
                                     first = false;
+                                    last = at_key;
                                 }
                                 var high = steps.count - 1;
                                 while (low < high) {
@@ -481,11 +632,18 @@ struct _JsonWriter {
                                     low = low + 1;
                                     high = high - 1;
                                 }
+                                if (keeping) {
+                                    steps[close] = _JsonStep.Close(_close_object, at, path, last);
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+        if (keeping) {
+            _comments(_notes.value().after, root_path, 0, false);
+            _end_comments("", 0);
         }
     }
 

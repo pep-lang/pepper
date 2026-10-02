@@ -118,6 +118,7 @@
   - [The json module](reference/json-module.md)
     - [JsonValue](reference/json-value.md)
     - [Parsing](reference/json-parse.md)
+    - [Documents with comments](reference/json-document.md)
     - [Struct conversion](reference/json-convert.md)
   - [The serialize module](reference/serialize-module.md)
     - [async/channel.pep](reference/async-channel.md)

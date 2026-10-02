@@ -1,6 +1,6 @@
 //! The `json` module: parsing every kind of value, numbers at the edges of
 //! the integer range, strings and their escapes, strict RFC 8259 errors with
-//! their line and column, JSONC, compact and indented output, editing a
+//! their line and column, JSONC and documents that keep its comments, compact and indented output, editing a
 //! value, and nesting deep enough that recursion would overflow. Each test
 //! returns 0 on success or a distinct negative code per check, and must
 //! leave no allocation behind.
@@ -209,6 +209,41 @@ test(): int {
     # A comma alone is still an error.
     if (json.parse("[,]", comments = true).is_ok()) { return -5; }
     if (json.parse("{,}", comments = true).is_ok()) { return -6; }
+    return 0;
+}
+"##),
+        0
+    );
+}
+
+#[test]
+fn keeps_the_comments_of_a_document() {
+    assert_eq!(
+        run(r##"
+import json;
+
+test(): int {
+    var text = "// top\n{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"list\": [\n    1, /* one */\n    2 // two\n  ],\n  \"empty\": {\n    // nothing\n  },\n  \"wrap\": true // last\n  // end of root\n} // after\n// tail";
+    var parsed = json.parse_document(text);
+    if (parsed.is_err()) { return -1; }
+    var document = parsed.value();
+    # Read and written unchanged, the text comes back as it was.
+    if (document.to_string() != text) { return -2; }
+    if (document.comments("$.tab_size")[0] != "// The editor.") { return -3; }
+    if (!document.comments("$.wrap").is_empty) { return -4; }
+    # A changed value keeps its comments; a removed one drops them.
+    document.root["wrap"] = json.JsonValue.Bool(false);
+    document.root.remove("list");
+    document.set_comments("$.wrap", ["/* changed */"]);
+    var changed = "// top\n{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"empty\": {\n    // nothing\n  },\n  /* changed */\n  \"wrap\": false // last\n  // end of root\n} // after\n// tail";
+    if (document.to_string() != changed) { return -5; }
+    # Unlayouted text comes out indented, comments in place.
+    var compact = json.parse_document("[1, // a\n2]").value();
+    if (compact.to_string(indent = 4) != "[\n    1, // a\n    2\n]") { return -6; }
+    var bad = json.parse_document("[1 /* never closed", path = "s.json");
+    if (bad.error().to_string() != "s.json:1:4: error: unterminated '/*' comment") { return -7; }
+    var plain = json.JsonDocument(json.JsonValue.Integer(1));
+    if (plain.to_string() != "1") { return -8; }
     return 0;
 }
 "##),

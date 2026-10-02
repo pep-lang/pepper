@@ -8,6 +8,8 @@
 ##
 ## - [JsonValue](json-value.md): `JsonValue`
 ## - [Parsing](json-parse.md): `parse`, `JsonError`
+## - [Documents with comments](json-document.md): `parse_document`,
+##   `JsonDocument`
 ## - [Struct conversion](json-convert.md): `encode`, `decode`, `to_json`,
 ##   `from_json`, `UnknownKeys`, with the attributes of the
 ##   [serialize](serialize-module.md) module
@@ -33,6 +35,7 @@
 
 import serialize;
 import "convert";
+import "document";
 import "parse";
 import "value";
 
@@ -44,3 +47,5 @@ export to_json;
 export from_json;
 export encode;
 export decode;
+export JsonDocument;
+export parse_document;
