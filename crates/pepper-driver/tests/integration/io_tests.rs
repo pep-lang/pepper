@@ -54,27 +54,37 @@ pub(crate) fn build(name: &str, source: &str) -> Result<PathBuf, String> {
     Ok(out)
 }
 
-/// Build and run `source`; return (exit code, stdout, stderr).
-fn run(name: &str, source: &str) -> (i32, String, String) {
-    let exe = build(name, source).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
-    let output = support::run_program(&mut Command::new(&exe), source).expect("spawn");
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    (output.status.code().unwrap_or(-1), stdout, stderr)
+/// Build and run `source`; panic with its output unless it exits 0, and
+/// return its stdout.
+pub(crate) fn assert_runs(name: &str, source: &str) -> String {
+    assert_runs_each(name, source, &[&[]]).pop().unwrap()
 }
 
-pub(crate) fn assert_runs(name: &str, source: &str) -> String {
-    let (code, stdout, stderr) = run(name, source);
-    // A failed assert prints its message (the second argument of the
-    // assert) as the last line of stdout, then aborts.
-    let failed = stdout.lines().last().unwrap_or("");
-    assert_eq!(
-        code, 0,
-        "{name} exited with {code}; failed assert: {failed:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
-    );
+/// [`assert_runs`], but the program, built once, runs once per set of extra
+/// environment variables in `runs`; returns each run's stdout. For settings
+/// the runtime reads when it starts (`PEP_CHECK_SYNC`, `PEPPER_IO_BACKEND`).
+pub(crate) fn assert_runs_each(name: &str, source: &str, runs: &[&[(&str, &str)]]) -> Vec<String> {
+    let exe = build(name, source).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
+    let outputs = runs
+        .iter()
+        .map(|env| {
+            let output = support::run_program(Command::new(&exe).envs(env.iter().copied()), source).expect("spawn");
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+            let code = output.status.code().unwrap_or(-1);
+            // A failed assert prints its message (the second argument of the
+            // assert) as the last line of stdout, then aborts.
+            let failed = stdout.lines().last().unwrap_or("");
+            assert_eq!(
+                code, 0,
+                "{name} {env:?} exited with {code}; failed assert: {failed:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+            );
+            stdout
+        })
+        .collect();
     // Keep a failing program's directory for inspection; drop a passing one.
     let _ = std::fs::remove_dir_all(source_dir(name));
-    stdout
+    outputs
 }
 
 const PATH_PROGRAM: &str = r##"
@@ -196,6 +206,9 @@ main(): int {
 }
 "##;
 
+/// On Unix, `path_functions_on_every_platform` runs the same program with
+/// the host's own rules among the others.
+#[cfg(windows)]
 #[test]
 fn path_functions() {
     assert_runs("path", PATH_PROGRAM);
@@ -889,13 +902,15 @@ fn file_closes_on_last_release() {
 fn io_is_a_module_not_prelude() {
     std::env::set_current_dir(repo_root()).unwrap();
     // Without an import, io is not loaded at all: Path is unknown.
+    // Sema leaves an unknown type to codegen, so this has to build.
     let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.to_string().size as int; }")
         .expect_err("Path visible without importing io");
     assert!(err.contains("Path"), "unexpected error: {err}");
     let _ = std::fs::remove_dir_all(source_dir("no_import"));
     // `import io` finds runtime/io through the runtime search path, and
-    // `import [..] from io` binds names unqualified.
-    assert_runs("import_names", IMPORT_NAMES_PROGRAM);
+    // `import [..] from io` binds names unqualified. Linked programs
+    // throughout this file run what it binds.
+    support::sema(IMPORT_NAMES_PROGRAM).expect("import [Path as P] from io");
     // The platform layer and helpers are not part of the module's API.
     let err = pepper_driver::compiler::check_with_runtime(
         "private.pep",
@@ -1025,17 +1040,15 @@ fn directory_and_line_streams() {
     assert!(out.contains("io-streams-ok"), "output: {out}");
 }
 
-fn all_programs() -> Vec<(&'static str, String)> {
+/// The io programs with `[Target]` blocks of their own, which only a
+/// compile for each OS checks; `runtime_compiles_on_other_platforms`
+/// covers the runtime's own platform layer.
+fn target_programs() -> Vec<(&'static str, String)> {
     vec![
         ("path", PATH_PROGRAM.to_string()),
         ("fs", fs_program("x")),
-        ("stdout", STDOUT_PROGRAM.to_string()),
         ("close", close_program("x")),
         ("enums", enums_program("x")),
-        ("import_names", IMPORT_NAMES_PROGRAM.to_string()),
-        ("print_trait", PRINT_TRAIT_PROGRAM.to_string()),
-        ("reader_trait", READER_TRAIT_PROGRAM.to_string()),
-        ("streams", streams_program("x")),
     ]
 }
 
@@ -1047,6 +1060,27 @@ pub(crate) const SIMULATED_HOSTS: [(&str, &str); 6] = [
     ("linux", "x86_64"),
     ("linux", "aarch64"),
 ];
+
+/// Pairs each program with every simulated OS, on one architecture per
+/// program, alternating from one program to the next. The architecture
+/// changes only the runtime's non-generic fiber switch and calling
+/// convention, which every program compiles, so building each program for
+/// both architectures of an OS checks nothing the alternation does not;
+/// what a program adds (its own `[Target]` blocks, its generic
+/// instantiations) depends on the OS. Halves the simulated compiles.
+fn simulated_cases<P: Clone>(programs: impl IntoIterator<Item = P>) -> Vec<((&'static str, &'static str), P)> {
+    programs
+        .into_iter()
+        .enumerate()
+        .flat_map(|(index, program)| {
+            SIMULATED_HOSTS
+                .iter()
+                .enumerate()
+                .filter(move |(host, _)| host % 2 == index % 2)
+                .map(move |(_, &host)| (host, program.clone()))
+        })
+        .collect()
+}
 
 /// Compile `source` with the host simulated as `os`/`arch` — the same
 /// platform filter, sema and LLVM codegen that host runs — and hand the
@@ -1096,7 +1130,7 @@ fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), Stri
 
 #[test]
 fn other_platforms_compile() {
-    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| all_programs().into_iter().map(move |p| (host, p))).collect();
+    let cases = simulated_cases(target_programs());
     let failures: Vec<String> = support::parallel_map(&cases, |((os, arch), (name, source))| {
         codegen_as(os, arch, name, source).err().map(|e| format!("{os}/{arch} {name}: {e}"))
     })
@@ -1104,6 +1138,72 @@ fn other_platforms_compile() {
     .flatten()
     .collect();
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Every platform layer of the runtime type-checks and generates valid IR
+/// on every simulated host. Codegen emits every non-generic function of
+/// each module a program loads, and the platform code is non-generic, so
+/// one program that loads async, io, os, process, tls and http reaches all
+/// of it: the fiber switch, the I/O driver and its doorbell, threads,
+/// locks, files, sockets, clocks and processes.
+#[test]
+fn runtime_compiles_on_other_platforms() {
+    let source = format!("import os;\nimport process;\n{}", crate::http_tests::HTTP_PROGRAM.replace("SECURE", "true"));
+    let failures: Vec<String> = support::parallel_map(&SIMULATED_HOSTS, |&(os, arch)| {
+        with_codegen_as(os, arch, "runtime_platform", &source, |generator, module| {
+            generator.generate(module).map_err(|d| module.sources.render(&d))?;
+            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
+            let ir = generator.module.to_string();
+            let mut expected = vec![match (os, arch) {
+                ("windows", _) => "@SwitchToFiber(",
+                (_, "aarch64") => "stp x19, x20",
+                _ => "pushq %rbp",
+            }];
+            expected.extend(match os {
+                "windows" => [
+                    "@NtDeviceIoControlFile(",
+                    "@PostQueuedCompletionStatus(",
+                    "@FlsAlloc(",
+                    "@AcquireSRWLockExclusive(",
+                    "@SleepConditionVariableSRW(",
+                    "CreateFileW",
+                    "@WSASocketW(",
+                    "QueryPerformanceCounter",
+                    "CreateProcessW",
+                ],
+                "macos" => [
+                    "@kevent(",
+                    "@pthread_key_create(",
+                    "@pthread_mutex_lock(",
+                    "@pthread_cond_timedwait_relative_np(",
+                    if arch == "x86_64" { "stat$INODE64" } else { "@lstat(" },
+                    "@fcntl(",
+                    "@socket(",
+                    "clock_gettime",
+                    "posix_spawnp",
+                ],
+                _ => [
+                    "@epoll_wait(",
+                    "@eventfd(",
+                    "@pthread_key_create(",
+                    "@pthread_mutex_lock(",
+                    "@pthread_cond_timedwait(",
+                    "@statx(",
+                    "@accept4(",
+                    "clock_gettime",
+                    "posix_spawnp",
+                ],
+            });
+            let missing: Vec<&str> = expected.into_iter().filter(|e| !ir.contains(e)).collect();
+            if missing.is_empty() { Ok(()) } else { Err(format!("IR does not reference {}", missing.join(", "))) }
+        })
+        .err()
+        .map(|e| format!("{os}/{arch}: {e}"))
+    })
+    .into_iter()
+    .flatten()
+    .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
 #[cfg(unix)]

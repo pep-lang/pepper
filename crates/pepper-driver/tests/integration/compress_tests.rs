@@ -1,24 +1,16 @@
 //! The `compress` module: CRC-32 and Adler-32, DEFLATE with its zlib and
 //! gzip framings at every level, streams made by zlib and Python's gzip,
-//! the streaming reader and writer, and corrupt input. Each test returns 0
+//! the streaming reader and writer, and corrupt input. Each check returns 0
 //! on success or a distinct negative code per check, and must leave no
 //! allocation behind.
 
-use crate::support::jit_census;
+use crate::support;
 
-fn run(source: &str) -> i32 {
-    let (result, leaked) = jit_census(source);
-    assert_eq!(leaked, 0, "allocations leaked or double-released");
-    result
-}
-
-#[test]
-fn computes_checksums() {
-    assert_eq!(
-        run(r##"
+const PROGRAM: &str = r##"
 import compress;
+import io;
 
-test(): int {
+computes_checksums(): int {
     if (compress.Crc32.of("123456789".bytes()) != 0xCBF43926) { return -1; }
     if (compress.Crc32.of(Array<u8>()) != 0) { return -2; }
     if (compress.Adler32.of("Wikipedia".bytes()) != 0x11E60398) { return -3; }
@@ -43,16 +35,6 @@ test(): int {
     if (compress.Adler32.of(big) != 0x149A302C) { return -7; }
     return 0;
 }
-"##),
-        0
-    );
-}
-
-#[test]
-fn round_trips_every_format_and_level() {
-    assert_eq!(
-        run(r##"
-import compress;
 
 # Bytes from a linear congruential generator: `unique` distinct values,
 # so the data ranges from compressible to not at all.
@@ -79,7 +61,7 @@ check(data: u8[]): int {
     return 0;
 }
 
-test(): int {
+round_trips_every_format_and_level(): int {
     var inputs = Array<u8[]>();
     inputs.append(Array<u8>());
     inputs.append("a".bytes());
@@ -106,18 +88,8 @@ test(): int {
     if (gzip[0] != 31 || gzip[1] != 139 || gzip[2] != 8) { return -1003; }
     return 0;
 }
-"##),
-        0
-    );
-}
 
-#[test]
-fn decodes_streams_from_other_encoders() {
-    assert_eq!(
-        run(r##"
-import compress;
-
-test(): int {
+decodes_streams_from_other_encoders(): int {
     # zlib.compress at level 9: dynamic Huffman codes.
     u8[] dynamic = [120, 218, 237, 203, 201, 1, 128, 32, 12, 5, 209, 86, 126, 5, 214, 226, 129, 6, 80, 131, 68, 133, 8, 10, 46, 213, 155, 34, 60, 114, 158, 55, 198, 19, 82, 225, 113, 197, 144, 229, 138, 112, 114, 99, 41, 97, 63, 32, 149, 50, 78, 205, 155, 125, 31, 76, 50, 119, 48, 13, 55, 220, 240, 223, 184, 183, 234, 194, 131, 65, 209, 197, 167, 135, 227, 74, 154, 94, 138, 216, 56, 21, 201, 250, 206, 71, 247, 1, 235, 114, 81, 179];
     var text = "The quick brown fox jumps over the lazy dog. ".repeat(20) + "Pack my box with five dozen liquor jugs.";
@@ -135,17 +107,6 @@ test(): int {
     if (compress.Gzip.decompress(multi).value() != "one two".bytes()) { return -5; }
     return 0;
 }
-"##),
-        0
-    );
-}
-
-#[test]
-fn reports_corrupt_data() {
-    assert_eq!(
-        run(r##"
-import compress;
-import io;
 
 # 0 when `result` is an invalid-input error whose message contains `text`.
 invalid(result: io.IoResult<u8[]>, text: String): int {
@@ -155,7 +116,7 @@ invalid(result: io.IoResult<u8[]>, text: String): int {
     return 0;
 }
 
-test(): int {
+reports_corrupt_data(): int {
     var data = "hello hello hello hello".bytes();
     var gzip = compress.Gzip.compress(data);
 
@@ -195,19 +156,8 @@ test(): int {
     if (invalid(compress.Deflate.decompress(Array<u8>()), "unexpected end") != 0) { return -11; }
     return 0;
 }
-"##),
-        0
-    );
-}
 
-#[test]
-fn streams_through_readers_and_writers() {
-    assert_eq!(
-        run(r##"
-import compress;
-import io;
-
-test(): int {
+streams_through_readers_and_writers(): int {
     # Enough output that the reader drops what it handed out.
     var data = Array<u8>();
     uint state = 7;
@@ -270,18 +220,8 @@ test(): int {
     if (partial.is_ok() || !partial.error().is_invalid_input()) { return -33; }
     return 0;
 }
-"##),
-        0
-    );
-}
 
-#[test]
-fn reads_and_writes_bytes_in_memory() {
-    assert_eq!(
-        run(r##"
-import io;
-
-test(): int {
+reads_and_writes_bytes_in_memory(): int {
     var reader = io.ByteReader("hello".bytes());
     var out = Array<u8>();
     if (reader.read(out, 2).value() != 2 || reader.remaining != 3) { return -1; }
@@ -294,7 +234,10 @@ test(): int {
     if (writer.bytes != "abcd1".bytes()) { return -4; }
     return 0;
 }
-"##),
-        0
-    );
+"##;
+
+/// Each check is a function of one program, compiled once.
+#[test]
+fn compression() {
+    support::jit_cases(PROGRAM, &["computes_checksums", "round_trips_every_format_and_level", "decodes_streams_from_other_encoders", "reports_corrupt_data", "streams_through_readers_and_writers", "reads_and_writes_bytes_in_memory"]);
 }

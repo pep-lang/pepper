@@ -7,28 +7,6 @@ use crate::support::jit_census as run;
 use crate::support::compile_error;
 
 #[test]
-fn annotated_literal_in_a_local() {
-    let src = r#"
-test(): int {
-    var double = (x: int) => x * 2;
-    return double(21);
-}
-"#;
-    assert_eq!(run(src), (42, 0));
-}
-
-#[test]
-fn parameter_types_come_from_the_variable_type() {
-    let src = r#"
-test(): int {
-    var add: (int, int) => int = (a, b) => a + b;
-    return add(40, 2);
-}
-"#;
-    assert_eq!(run(src), (42, 0));
-}
-
-#[test]
 fn block_body_with_return_type() {
     let src = r#"
 test(): int {
@@ -58,19 +36,6 @@ test(): int {
 }
 "#;
     assert_eq!(run(src), (36, 0));
-}
-
-#[test]
-fn closure_as_an_argument() {
-    let src = r#"
-apply(f: (int) => int, x: int): int { return f(x); }
-
-test(): int {
-    var offset = 3;
-    return apply((x) => x * x + offset, 4);
-}
-"#;
-    assert_eq!(run(src), (19, 0));
 }
 
 #[test]

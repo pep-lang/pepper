@@ -4,12 +4,11 @@
 //! over a raw `TcpStream`. HTTPS uses the TLS tests' certificate and runs
 //! where TLS does (Linux and macOS).
 
-use crate::io_tests::{SIMULATED_HOSTS, assert_runs, with_codegen_as};
-use crate::support;
+use crate::io_tests::assert_runs;
 use crate::tls_tests::with_test_certificate;
 
 /// The server and client; `SECURE` is replaced with `true` where TLS runs.
-const HTTP_PROGRAM: &str = r##"
+pub(crate) const HTTP_PROGRAM: &str = r##"
 import async;
 import http;
 import io;
@@ -233,22 +232,3 @@ fn http_over_loopback() {
     assert_runs("http_loopback", &http_program());
 }
 
-/// Every platform's build of the http module type-checks and produces valid
-/// IR.
-#[test]
-fn http_program_compiles_on_other_platforms() {
-    let source = HTTP_PROGRAM.replace("SECURE", "true");
-    let failures: Vec<String> = support::parallel_map(&SIMULATED_HOSTS, |(os, arch)| {
-        with_codegen_as(os, arch, "http_loopback", &source, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
-}

@@ -42,14 +42,12 @@ no count is kept here: a run is good when every `test result:` line says
 | `pepper-files` | runtime discovery (`src/runtime.rs`) |
 | `pepper-driver` | one integration test binary, `tests/integration/main.rs`, with a module per feature in `tests/integration/*_tests.rs` (add new ones there, not as new `tests/*.rs` binaries): most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` runs every corpus fixture (see below) |
 | `tools/lsp` | language server tests in `src/tests.rs` |
-| root `pepper` | `tests/parser_corpus.rs`: every `tests/**/*.pep` file must parse into a well-formed module |
 | `xtask` | unit tests in `src/main.rs` for the setup scripts' flag handling and generated cargo config |
 
-`tests/` also holds the `.pep` fixtures: standalone files at the root (`hello.pep`, `array.pep`, `string.pep`, `struct.pep`, `debug.pep`) and one `test.pep` per feature folder.
+`tests/` also holds the `.pep` fixtures: `hello.pep` at the root (the README's example) and one `test.pep` per feature folder.
 
 ## Corpus behavior
 
-- `tests/parser_corpus.rs` treats the corpus as the executable spec for the parser: every file must parse with at least one declaration. Adding a `.pep` file extends it automatically.
 - `crates/pepper-driver/tests/integration/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. Every fixture must exit 0; a new `tests/<Name>/test.pep` joins the run automatically.
 
 ## Diagnosing failures

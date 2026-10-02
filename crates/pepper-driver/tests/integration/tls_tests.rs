@@ -4,10 +4,10 @@
 //! puts their paths into the program.
 //!
 //! OpenSSL 3 must be installed on Linux and macOS; Windows uses SChannel.
-//! `tls_programs_compile_on_other_platforms` checks every platform's layer.
+//! `io_tests::runtime_compiles_on_other_platforms` checks every platform's
+//! TLS layer.
 
-use crate::io_tests::{SIMULATED_HOSTS, assert_runs, with_codegen_as};
-use crate::support;
+use crate::io_tests::assert_runs;
 
 /// A self-signed certificate (EC P-256, valid until 2126) for `localhost`
 /// and `127.0.0.1`, and its key. For these tests only: the key is public.
@@ -178,22 +178,3 @@ fn tls_over_loopback() {
     assert_runs("tls_loopback", &tls_program());
 }
 
-/// Every platform's TLS layer type-checks and produces valid IR.
-#[test]
-fn tls_programs_compile_on_other_platforms() {
-    let programs = [("loopback", TLS_PROGRAM)];
-    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| programs.into_iter().map(move |p| (host, p))).collect();
-    let failures: Vec<String> = support::parallel_map(&cases, |((os, arch), (name, source))| {
-        with_codegen_as(os, arch, &format!("tls_{name}"), source, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch} {name}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
-}

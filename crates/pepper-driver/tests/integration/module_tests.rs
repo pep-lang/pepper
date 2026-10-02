@@ -281,12 +281,6 @@ fn re_export_of_unknown_symbol_is_rejected() {
 }
 
 #[test]
-fn runtime_prelude_needs_no_import() {
-    let main = "test(): int { var s: String = \"abc\"; return s.length as int; }";
-    assert_eq!(run("prelude", &[("main.pep", main)]), 3);
-}
-
-#[test]
 fn modules_may_export_the_same_name() {
     // Each module's exports are its own (#244): `a.f` and `b.f`, and the two
     // `Point`s, are different declarations.
@@ -495,23 +489,6 @@ fn an_unsaved_root_imports_its_siblings() {
     let search_paths = pepper_driver::imports::search_paths(&[], &[]);
     let program = pepper_sema::program::load(root, &[], &search_paths, pepper_sema::program::Mode::Lenient).expect("load");
     assert!(program.check().is_ok(), "{:?}", program.check());
-}
-
-#[test]
-fn member_comparisons_in_arguments_need_no_import() {
-    let main = r#"
-struct P { var b: int; }
-two(x: bool, y: bool): int { return (x ? 1 : 0) + (y ? 1 : 0); }
-test(): int {
-    var a = P();
-    a.b = 1;
-    var c = 2;
-    var d = 3;
-    var e = 1;
-    return two(a.b < c, d > (e));
-}
-"#;
-    assert_eq!(run("comparisons", &[("main.pep", main)]), 2);
 }
 
 #[test]
@@ -1177,11 +1154,6 @@ fn a_module_nested_in_a_forced_module_has_its_own_exports() {
     // `sub` is a module of its own, not part of the forced one, so its
     // `assert` is its own and replaces nothing.
     assert_eq!(run_with("forced_nested_module", &files, &["--import", "alt"]), 1);
-}
-
-#[test]
-fn a_file_may_call_its_own_concrete_generic() {
-    assert_eq!(run("own_concrete_generic", &[("main.pep", "foo<int>(x: int): int { return x + 1; }\ntest(): int { return foo<int>(4); }")]), 5);
 }
 
 #[test]

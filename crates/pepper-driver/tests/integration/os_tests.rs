@@ -1,18 +1,10 @@
 //! The `os` module (runtime/os/) in linked programs: environment variables,
 //! the clocks and `Duration`, and what it reports about the machine and the
-//! user. Every other platform's layer is type-checked through simulated
-//! hosts.
+//! user. `io_tests::runtime_compiles_on_other_platforms` checks every other
+//! platform's layer.
 
 use crate::support;
-use crate::support::{jit_census, stdout_of};
-
-/// Runs `test()` in `source` (which imports `os`) through the JIT and
-/// returns its result, failing on a leak.
-fn value(source: &str) -> i32 {
-    let (result, leaked) = jit_census(source);
-    assert_eq!(leaked, 0, "leaked allocations");
-    result
-}
+use crate::support::stdout_of;
 
 const ENVIRONMENT_PROGRAM: &str = r#"
 import os;
@@ -58,12 +50,13 @@ fn environment_reads_set_empty_and_missing_variables() {
     assert_eq!(output.status.code(), Some(3), "{stdout}");
 }
 
-#[test]
-fn duration_arithmetic_comparison_and_text() {
-    let source = r#"
+/// Durations, the two clocks, and the machine and user, checked in one
+/// program that the JIT runs a function at a time.
+const CHECKS_PROGRAM: &str = r#"
+import io;
 import os;
 
-test(): int {
+duration_arithmetic_comparison_and_text(): int {
     var a = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
     if (a.milliseconds() != 2500 || a.seconds() != 2 || a.microseconds() != 2500000) { return 1; }
     if (a.nanoseconds() != 2500000000) { return 2; }
@@ -79,16 +72,8 @@ test(): int {
     if (os.Duration().to_string() != "0s" || $"{os.Duration.from_nanoseconds(1000000001)}" != "1.000000001s") { return 11; }
     return 0;
 }
-"#;
-    assert_eq!(value(source), 0);
-}
 
-#[test]
-fn instants_measure_forward() {
-    let source = r#"
-import os;
-
-test(): int {
+instants_measure_forward(): int {
     var start = os.Instant.now();
     var later = os.Instant.now();
     var elapsed = later - start;
@@ -100,16 +85,8 @@ test(): int {
     if (start.elapsed() < elapsed) { return 4; }
     return 0;
 }
-"#;
-    assert_eq!(value(source), 0);
-}
 
-#[test]
-fn system_time_counts_from_the_unix_epoch() {
-    let source = r#"
-import os;
-
-test(): int {
+system_time_counts_from_the_unix_epoch(): int {
     var now = os.SystemTime.now();
     # 2023-11-14 and 2200-01-01.
     if (now.unix_seconds() < 1700000000 || now.unix_seconds() > 7258118400) { return 1; }
@@ -125,19 +102,8 @@ test(): int {
     if (ten.elapsed().is_none()) { return 8; }
     return 0;
 }
-"#;
-    assert_eq!(value(source), 0);
-}
 
-#[test]
-fn machine_and_user() {
-    let source = r#"
-import os;
-
-test(): int {
-    var name = os.system_name();
-    if (name != "linux" && name != "macos" && name != "windows") { return 1; }
-    if (os.architecture() != "x64" && os.architecture() != "aarch64") { return 2; }
+machine_and_user(): int {
     if (os.hostname().is_empty) { return 3; }
     if (os.logical_cpus() < 1 || os.physical_cpus() < 1 || os.physical_cpus() > os.logical_cpus()) { return 4; }
     if (os.total_memory() < 16777216) { return 5; }
@@ -150,7 +116,10 @@ test(): int {
     return 0;
 }
 "#;
-    assert_eq!(value(&format!("import io;\n{source}")), 0);
+
+#[test]
+fn durations_clocks_and_machine() {
+    support::jit_cases(CHECKS_PROGRAM, &["duration_arithmetic_comparison_and_text", "instants_measure_forward", "system_time_counts_from_the_unix_epoch", "machine_and_user"]);
 }
 
 #[test]
@@ -166,38 +135,3 @@ fn system_name_and_architecture_match_the_host() {
     assert_eq!(stdout_of(&output), format!("{expected_os}\n{expected_case}\n{expected_arch}\n"));
 }
 
-/// The platform layer of every other OS type-checks and generates valid IR.
-#[test]
-fn os_compiles_for_other_platforms() {
-    let program = r#"
-import os;
-
-main(): int {
-    var home = os.environment("HOME");
-    var count = os.environment_variables().count;
-    var start = os.Instant.now();
-    var now = os.SystemTime.now();
-    print($"{os.system_name()} {os.system_os().name()} {os.system_version()} {os.architecture()} {os.hostname()}");
-    print($"{os.total_memory()} {os.page_size()} {os.user_name().value_or("")} {os.home_directory().is_some()}");
-    print($"{home.is_some()} {count} {now.unix_seconds()} {start.elapsed()}");
-    return 0;
-}
-"#;
-    let failures: Vec<String> = support::parallel_map(&crate::io_tests::SIMULATED_HOSTS, |&(os, arch)| {
-        crate::io_tests::with_codegen_as(os, arch, "os_platform", program, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            let expect = if os == "windows" { "QueryPerformanceCounter" } else { "clock_gettime" };
-            if !generator.module.to_string().contains(expect) {
-                return Err(format!("IR does not reference {expect}"));
-            }
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

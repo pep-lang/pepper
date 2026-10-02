@@ -105,20 +105,6 @@ test(): int {
 }
 
 #[test]
-fn default_trait_methods_dispatch_too() {
-    let (result, leaked) = run(&shapes(
-        r#"
-test(): int {
-    Shape s = Rect(2, 3);
-    return s.scaled(2);
-}
-"#,
-    ));
-    assert_eq!(result, 12);
-    assert_eq!(leaked, 0);
-}
-
-#[test]
 fn the_last_release_runs_the_concrete_destructor() {
     let (result, leaked) = run(&shapes(
         r#"

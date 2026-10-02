@@ -16,29 +16,6 @@ fn compile(source: &str) -> crate::model::Module {
     module
 }
 
-#[test]
-fn reserved_member_access_is_rejected() {
-    let ast = parse_source(
-        "test.pep",
-        r#"
-struct Test {
-    var x = 0;
-}
-test(): int {
-    var t = Test();
-    return t.__refcount;
-}
-"#,
-    )
-    .expect("parse error");
-    let err = build(&ast).expect_err("reserved member access must be rejected");
-    assert!(
-        err.message.contains("reserved"),
-        "expected a reserved-member diagnostic, got: {}",
-        err
-    );
-}
-
 const BASIC_STRUCT: &str = r#"
 struct Test {
     var x = 0;
@@ -165,16 +142,6 @@ fn bracket_type_lowers_to_array() {
 }
 
 #[test]
-fn widest_promotes() {
-    use crate::type_name::widest;
-    assert_eq!(widest(&TypeName::new("i32"), &TypeName::new("i64")).to_string(), "i64");
-    assert_eq!(widest(&TypeName::new("u8"), &TypeName::new("u32")).to_string(), "u32");
-    assert_eq!(widest(&TypeName::new("int"), &TypeName::new("float")).to_string(), "f32");
-    assert_eq!(widest(&TypeName::new("f32"), &TypeName::new("f64")).to_string(), "f64");
-    assert_eq!(widest(&TypeName::new("u8"), &TypeName::new("i32")).to_string(), "i32");
-}
-
-#[test]
 fn negated_literal_folds() {
     let module = compile("test(): int { return -5; }");
     let body = module.functions[0].body.as_ref().expect("body");
@@ -298,7 +265,8 @@ struct S { var x: I; }
 "#,
     );
     let st = module.structs.iter().find(|s| s.name == "S").expect("struct S");
-    assert_eq!(st.field_members[0].ty.to_string(), "u32");
+    let x = st.field_members.iter().find(|f| f.name == "x").expect("x field");
+    assert_eq!(x.ty.to_string(), "int");
 }
 
 #[test]

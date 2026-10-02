@@ -55,9 +55,6 @@ llvm20-1 = ["pepper-driver/llvm20-1"]
 llvm21-1 = ["pepper-driver/llvm21-1"]
 llvm22-1 = ["pepper-driver/llvm22-1"]
 
-[lib]
-path = "src/lib.rs"
-
 [[bin]]
 name = "pepper"
 path = "src/main.rs"

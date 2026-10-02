@@ -2,12 +2,11 @@
 //! `fiber_posix.pep` / `fiber_windows.pep`): programs are compiled, linked
 //! and run on the host. Each asserts internally and returns 0.
 //!
-//! `task_programs_compile_on_other_platforms` pushes them through sema and
-//! codegen with the host simulated as each other platform, so the Windows
-//! Fibers layer, the other architecture's context switch, and each OS's I/O
-//! driver (epoll, kqueue, IOCP) produce valid IR on any host.
+//! `io_tests::runtime_compiles_on_other_platforms` checks the Windows Fibers
+//! layer, each architecture's context switch, and each OS's I/O driver
+//! (epoll, kqueue, IOCP) under every simulated host.
 
-use crate::io_tests::{SIMULATED_HOSTS, assert_runs, with_codegen_as};
+use crate::io_tests::{assert_runs, assert_runs_each};
 use crate::support;
 
 /// Scheduling order, timers, joins, fiber reuse and deep stacks, and that a
@@ -1249,10 +1248,6 @@ main(): int {
 }
 "##;
 
-fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM), ("select", SELECT_PROGRAM), ("locals", LOCALS_PROGRAM)]
-}
-
 #[test]
 fn task_locals_are_per_task() {
     assert_runs("task_locals", LOCALS_PROGRAM);
@@ -1300,21 +1295,44 @@ fn tasks_take_turns_and_free_everything() {
     assert_runs("task_scheduling", SCHEDULING_PROGRAM);
 }
 
+/// The I/O backends a program runs on, as the environment of each run: the
+/// system's best by default, then `PEPPER_IO_BACKEND` naming the portable
+/// poll() backend (whose doorbell is a self-pipe, or a loopback UDP socket
+/// on Windows) and, on Linux, io_uring (whose doorbell is an eventfd with a
+/// poll request of its own). A backend named there that cannot start fails
+/// the run rather than falling back.
+fn backends() -> Vec<&'static [(&'static str, &'static str)]> {
+    let mut runs: Vec<&'static [(&'static str, &'static str)]> = vec![&[], &[("PEPPER_IO_BACKEND", "poll")]];
+    if cfg!(target_os = "linux") {
+        runs.push(&[("PEPPER_IO_BACKEND", "io_uring")]);
+    }
+    runs
+}
+
+/// The socket program on the system's best backend and, on Linux, io_uring
+/// chosen through `PEPPER_IO_BACKEND`; it prints the backend it ran on.
 #[test]
 fn sockets_park_their_task() {
-    let stdout = assert_runs("task_sockets", SOCKETS_PROGRAM);
-    let expected = if cfg!(target_os = "linux") {
+    let best = if cfg!(target_os = "linux") {
         "Epoll"
     } else if cfg!(target_os = "macos") {
         "Kqueue"
     } else {
         "Iocp"
     };
-    assert_eq!(stdout.lines().next(), Some(expected), "the system's best backend runs by default");
+    let mut runs: Vec<(&[(&str, &str)], &str)> = vec![(&[], best)];
+    if cfg!(target_os = "linux") {
+        runs.push((&[("PEPPER_IO_BACKEND", "io_uring")], "IoUring"));
+    }
+    let environments: Vec<_> = runs.iter().map(|(env, _)| *env).collect();
+    let outputs = assert_runs_each("task_sockets", SOCKETS_PROGRAM, &environments);
+    for ((env, expected), stdout) in runs.iter().zip(&outputs) {
+        assert_eq!(stdout.lines().next(), Some(*expected), "the backend run with {env:?}");
+    }
 }
 
 /// The same program on the portable poll() backend, the reference the
-/// others are checked against.
+/// others are checked against, chosen through `RuntimeOptions.backend`.
 #[test]
 fn sockets_park_their_task_with_poll() {
     let source = SOCKETS_PROGRAM.replace(
@@ -1325,58 +1343,19 @@ fn sockets_park_their_task_with_poll() {
     assert_eq!(stdout.lines().next(), Some("Poll"));
 }
 
-/// The socket, spawn, blocking and sync programs on io_uring (Linux), whose
-/// doorbell is an eventfd with a poll request of its own.
-#[cfg(target_os = "linux")]
-#[test]
-fn sockets_park_their_task_with_io_uring() {
-    let source = SOCKETS_PROGRAM.replace(
-        "async.run(() => {",
-        "async.run_with(async.RuntimeOptions().backend(async.Backend.IoUring), () => {",
-    );
-    let stdout = assert_runs("task_sockets_io_uring", &source);
-    assert_eq!(stdout.lines().next(), Some("IoUring"));
-    let source = SPAWN_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
-    assert_runs("task_spawn_io_uring", &source);
-    let source = BLOCKING_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
-    assert_runs("task_blocking_io_uring", &source);
-    let source = SYNC_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
-    assert_runs("task_sync_io_uring", &source);
-}
-
 #[test]
 fn spawned_tasks_run_on_any_worker() {
-    assert_runs("task_spawn", SPAWN_PROGRAM);
-}
-
-/// The same on the poll() backend, whose doorbell is a self-pipe (or a
-/// loopback UDP socket on Windows).
-#[test]
-fn spawned_tasks_run_on_any_worker_with_poll() {
-    let source = SPAWN_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
-    assert_runs("task_spawn_poll", &source);
+    assert_runs_each("task_spawn", SPAWN_PROGRAM, &backends());
 }
 
 #[test]
 fn blocking_calls_and_shared_sockets() {
-    assert_runs("task_blocking", BLOCKING_PROGRAM);
-}
-
-#[test]
-fn blocking_calls_and_shared_sockets_with_poll() {
-    let source = BLOCKING_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
-    assert_runs("task_blocking_poll", &source);
+    assert_runs_each("task_blocking", BLOCKING_PROGRAM, &backends());
 }
 
 #[test]
 fn sync_objects_park_tasks() {
-    assert_runs("task_sync", SYNC_PROGRAM);
-}
-
-#[test]
-fn sync_objects_park_tasks_with_poll() {
-    let source = SYNC_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
-    assert_runs("task_sync_poll", &source);
+    assert_runs_each("task_sync", SYNC_PROGRAM, &backends());
 }
 
 /// A scratch name unique to this test process.
@@ -1386,20 +1365,7 @@ fn scratch(program: &str, name: &str) -> String {
 
 #[test]
 fn files_park_their_task() {
-    assert_runs("task_files", &scratch(FILES_PROGRAM, "files"));
-}
-
-#[test]
-fn files_park_their_task_with_poll() {
-    let source = FILES_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
-    assert_runs("task_files_poll", &scratch(&source, "files_poll"));
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn files_park_their_task_with_io_uring() {
-    let source = FILES_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
-    assert_runs("task_files_io_uring", &scratch(&source, "files_io_uring"));
+    assert_runs_each("task_files", &scratch(FILES_PROGRAM, "files"), &backends());
 }
 
 #[test]
@@ -1436,45 +1402,3 @@ fn tasks_waiting_on_each_other_panic() {
     assert_panics("task_deadlock", DEADLOCK_PROGRAM, "every task is waiting for another task");
 }
 
-/// Every platform's fiber layer and I/O driver type-check and produce valid
-/// IR: Windows calls the Fibers API, the others define the naked switch and
-/// call epoll, kqueue or AFD poll through IOCP, each with its doorbell.
-#[test]
-fn task_programs_compile_on_other_platforms() {
-    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| programs().into_iter().map(move |p| (host, p))).collect();
-    let failures: Vec<String> = support::parallel_map(&cases, |((os, arch), (name, source))| {
-        with_codegen_as(os, arch, &format!("task_{name}"), source, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            let ir = generator.module.to_string();
-            let switch = match (*os, *arch) {
-                ("windows", _) => "@SwitchToFiber(",
-                (_, "aarch64") => "stp x19, x20",
-                _ => "pushq %rbp",
-            };
-            let driver = match *os {
-                "windows" => "@NtDeviceIoControlFile(",
-                "macos" => "@kevent(",
-                _ => "@epoll_wait(",
-            };
-            // The doorbell that wakes a worker from another thread.
-            let doorbell = match *os {
-                "windows" => "@PostQueuedCompletionStatus(",
-                "macos" => "@kevent(",
-                _ => "@eventfd(",
-            };
-            for expect in [switch, driver, doorbell] {
-                if !ir.contains(expect) {
-                    return Err(format!("IR does not contain {expect}"));
-                }
-            }
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch} {name}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

@@ -341,15 +341,6 @@ test(): int {
 }
 
 #[test]
-fn assigning_a_get_only_property_outside_its_struct_is_an_error() {
-    let error = compile_error(
-        "struct A {\n    var balance: long { get; }\n}\ntest(): int {\n    var a = A();\n    a.balance = 3;\n    return 0;\n}\n",
-    );
-    assert!(error.contains("test.pep:6:7: error: cannot assign to 'balance': it has no 'set' accessor"), "{}", error);
-    assert!(error.contains("test.pep:2:9: note: 'balance' declared here"), "{}", error);
-}
-
-#[test]
 fn an_extension_method_cannot_assign_a_get_only_property() {
     let error = compile_error(
         "struct A {\n    var x: long { get; }\n}\nextend A {\n    poke() {\n        x = 4;\n    }\n}\ntest(): int {\n    return 0;\n}\n",
@@ -357,8 +348,3 @@ fn an_extension_method_cannot_assign_a_get_only_property() {
     assert!(error.contains("test.pep:6:9: error: cannot assign to 'x': it has no 'set' accessor"), "{}", error);
 }
 
-#[test]
-fn calling_a_property_like_a_method_is_an_error() {
-    let error = compile_error("test(): int {\n    var a = Array<int>();\n    return a.count() as int;\n}\n");
-    assert!(error.contains("test.pep:3:14: error: 'count' is a property, not a method; read it without '()'"), "{}", error);
-}

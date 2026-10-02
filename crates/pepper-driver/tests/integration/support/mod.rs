@@ -152,3 +152,109 @@ pub fn jit_census(source: &str) -> (i32, i64) {
     let after = unsafe { live_allocs.call() };
     (result, after - before)
 }
+
+/// Compiles `source` with the runtime once and JIT-runs each of its
+/// `(): int` functions in `names`, which must each return 0 and leave no
+/// runtime allocation behind (see [`jit_census`]). For checks that each pay
+/// for an expensive import (`async`, `io`, `os`): one compile serves them
+/// all, and a failure names the function and what went wrong.
+pub fn jit_cases(source: &str, names: &[&str]) {
+    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:\n{}", e));
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    let ee = generator.jit_engine(&mut module).expect("jit");
+    let live_allocs = unsafe {
+        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs").expect("_pep_live_allocs")
+    };
+    let failures: Vec<String> = names
+        .iter()
+        .filter_map(|name| {
+            let before = unsafe { live_allocs.call() };
+            let result = CodeGenerator::jit_call_i32(&ee, name);
+            let leaked = unsafe { live_allocs.call() } - before;
+            match result {
+                Ok(0) if leaked == 0 => None,
+                Ok(0) => Some(format!("{name} leaked {leaked} allocations")),
+                Ok(code) => Some(format!("{name} returned {code}")),
+                Err(e) => Some(format!("{name}: {e}")),
+            }
+        })
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// (name, entry point) of every documentation example, sorted by name: a
+/// single `docs/examples/name.pep`, or a folder `name/` whose entry point is
+/// `main.pep`.
+pub fn docs_examples() -> Vec<(String, PathBuf)> {
+    let dir = repo_root().join("docs").join("examples");
+    let mut out: Vec<(String, PathBuf)> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("cannot read {}: {}", dir.display(), e))
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                let main = path.join("main.pep");
+                main.is_file().then_some((name, main))
+            } else {
+                name.strip_suffix(".pep").map(|stem| (stem.to_string(), path.clone()))
+            }
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Documentation examples that between them reach most of the compiler and
+/// runtime: tasks, threads and their locks, sockets, TLS and HTTP,
+/// processes, files and streams, generics, overloads, modules of several
+/// files, closures, enums, tuples, weak and value structs. Tests that would
+/// otherwise repeat a check over all of `docs/examples` use these.
+const DOCS_EXAMPLE_SAMPLE: &[&str] = &[
+    "cli-commands",
+    "compression-tar",
+    "enums-match-values",
+    "function-types-closures",
+    "generics-constrained-bodies",
+    "generics-overrides",
+    "hashing-custom",
+    "http-basics",
+    "interpolation-format",
+    "iteration-streams",
+    "maps-sorted",
+    "memory-weak",
+    "modules-same-name",
+    "networking-tls",
+    "os-environment",
+    "overloading-modules",
+    "processes-spawn",
+    "regex-basics",
+    "structs-operators",
+    "tasks-select-sockets",
+    "tasks-transfer",
+    "threads-channel",
+    "threads-local",
+    "threads-mutex",
+    "traits-values",
+    "tuples-match",
+    "tutorial-word-count",
+    "value-structs-basics",
+];
+
+/// The [`docs_examples`] named in [`DOCS_EXAMPLE_SAMPLE`].
+///
+/// Panics if a sampled example no longer exists, so a rename updates the
+/// sample instead of silently shrinking it.
+pub fn docs_example_sample() -> Vec<(String, PathBuf)> {
+    let all = docs_examples();
+    DOCS_EXAMPLE_SAMPLE
+        .iter()
+        .map(|name| {
+            all.iter()
+                .find(|(n, _)| n == name)
+                .cloned()
+                .unwrap_or_else(|| panic!("docs/examples has no '{name}'; update DOCS_EXAMPLE_SAMPLE"))
+        })
+        .collect()
+}

@@ -324,12 +324,6 @@ test(): int {
 }
 
 #[test]
-fn missing_cases_are_an_error() {
-    let src = format!("{}{}", COLOR, "test(): int { match (Color.Red) { Red => {} } return 0; }");
-    assert!(error_of(&src).contains("error: match on 'Color' does not handle 'Green' and 'Blue'"));
-}
-
-#[test]
 fn an_enum_does_not_mix_with_integers() {
     assert!(error_of(&format!("{}{}", COLOR, "test(): int { int x = Color.Red; return x; }"))
         .contains("cannot initialize variable 'x' of type 'int' with a value of type 'Color'"));

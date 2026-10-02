@@ -5,9 +5,7 @@
 use clap::Parser;
 use std::path::{Path, PathBuf};
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 const PROGRAM: &str = "struct Point {
     var x: int = 0;
@@ -67,9 +65,15 @@ fn ir(name: &str, extra: &[&str]) -> String {
     ir
 }
 
+/// `PROGRAM`'s IR with `-g`, compiled once for the tests that read it.
+fn g_ir() -> &'static str {
+    static IR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    IR.get_or_init(|| ir("g", &["-g"]))
+}
+
 #[test]
 fn g_emits_subprograms_and_line_locations() {
-    let ir = ir("lines", &["-g"]);
+    let ir = g_ir();
     assert!(ir.contains("!\"Debug Info Version\""), "no debug info version flag");
     assert!(ir.contains("distinct !DICompileUnit("), "no compile unit");
     // `total` is declared on line 6, and its body is on line 7.
@@ -90,7 +94,7 @@ fn g_emits_subprograms_and_line_locations() {
 
 #[test]
 fn g_describes_variables_and_struct_types() {
-    let ir = ir("variables", &["-g"]);
+    let ir = g_ir();
     // The runtime declares variables of the same names elsewhere.
     let line = |needle: &str| ir.lines().find(|l| l.contains(needle)).unwrap_or_else(|| panic!("no '{needle}' in the IR")).to_string();
     let has = |needle: &str, also: &str| ir.lines().any(|l| l.contains(needle) && l.contains(also));
@@ -113,7 +117,7 @@ fn g_describes_variables_and_struct_types() {
 /// types, which gdb loads with it.
 #[test]
 fn g_embeds_gdb_printers_on_linux() {
-    let ir = ir("printers", &["-g"]);
+    let ir = g_ir();
     let embedded = ir.contains("section \".debug_gdb_scripts\"");
     assert_eq!(embedded, cfg!(target_os = "linux"), "a .debug_gdb_scripts section only on Linux");
 }

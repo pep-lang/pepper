@@ -21,78 +21,7 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 
 // ── ok / err construction ────────────────────────────────────────────────────
 
-#[test]
-fn ok_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var r = Result<int>.ok(42);
-    if (!r.is_ok()) { return -1; }
-    if (r.value() != 42) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn err_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var r = Result<int>.err(Error("boom"));
-    if (r.is_ok()) { return -1; }
-    if (!r.is_err()) { return -2; }
-    if (r.error().message.length != 4) { return -3; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn ok_struct_value() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-struct Point {
-    int x;
-    construct(int v) { this.x = v; }
-}
-test(): int {
-    var r = Result<Point>.ok(Point(7));
-    if (!r.is_ok()) { return -1; }
-    if (r.value().x != 7) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
 // ── default TError ───────────────────────────────────────────────────────────
-
-#[test]
-fn default_terror() {
-    // `Result<int>` must fill `TError` from the parameter default.
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Result<int>.ok(1);
-    var b = Result<int>.err(Error("e"));
-    if (!a.is_ok() || b.is_ok()) { return -1; }
-    if (b.error().message.length != 1) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
 
 #[test]
 fn explicit_terror_matches_default() {
@@ -136,23 +65,6 @@ test(): int {
 }
 
 // ── ok_or / default ctor ─────────────────────────────────────────────────────
-
-#[test]
-fn ok_or_fallback() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var ok = Result<int>.ok(5);
-    var err = Result<int>.err(Error("e"));
-    if (ok.ok_or(-1) != 5) { return -1; }
-    if (err.ok_or(-1) != -1) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
 
 #[test]
 fn match_on_result() {

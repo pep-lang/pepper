@@ -3,65 +3,13 @@
 //! on the host. Each Pepper program asserts internally (a failed `assert`
 //! prints its message and aborts) and returns 0 on success.
 //!
-//! `other_platforms_compile` also pushes every program through the platform
-//! filter, sema and LLVM codegen with the host simulated as every other
-//! platform, so each platform layer type-checks and produces valid IR
-//! wherever the tests run.
+//! `io_tests::runtime_compiles_on_other_platforms` checks each platform's
+//! threads and locks under every simulated host.
 
-use clap::Parser;
-use pepper_codegen::CodeGenerator;
-use std::path::PathBuf;
 use std::process::Command;
 
+use crate::io_tests::{assert_runs, assert_runs_each, build, source_dir};
 use crate::support;
-use crate::support::repo_root;
-
-fn source_dir(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("pepper_async_{}_{}", name, std::process::id()))
-}
-
-/// Write `source` as `main.pep` in a fresh directory for `name`; return its
-/// path and the directory.
-fn write_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
-    let dir = source_dir(name);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let src = dir.join("main.pep");
-    std::fs::write(&src, source).unwrap();
-    (src, dir)
-}
-
-/// Compile, link and run `source`; panic with its output unless it exits 0.
-fn assert_runs(name: &str, source: &str) -> String {
-    assert_runs_with(name, source, &[])
-}
-
-/// [`assert_runs`] with extra environment variables for the program.
-fn assert_runs_with(name: &str, source: &str, env: &[(&str, &str)]) -> String {
-    // chdir so runtime discovery resolves like the CLI.
-    std::env::set_current_dir(repo_root()).unwrap();
-    let (src, dir) = write_source(name, source);
-    let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
-    let options = pepper_driver::Options::parse_from(vec![
-        "pepper".to_string(),
-        src.to_string_lossy().into_owned(),
-        "-o".to_string(),
-        exe.to_string_lossy().into_owned(),
-        "--build".to_string(),
-        dir.join("build").to_string_lossy().into_owned(),
-    ]);
-    let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
-    assert_eq!(code, 0);
-    let output = Command::new(&exe).envs(env.iter().copied()).output().expect("spawn");
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    let code = output.status.code().unwrap_or(-1);
-    // A failed assert prints its message as the last line of stdout.
-    let failed = stdout.lines().last().unwrap_or("");
-    assert_eq!(code, 0, "{name} exited with {code}; failed assert: {failed:?}\nstdout:\n{stdout}\nstderr:\n{stderr}");
-    let _ = std::fs::remove_dir_all(dir);
-    stdout
-}
 
 /// Spawned threads run their body, see themselves as `Thread.current()`,
 /// finish, and join; the main thread is named "main"; everything a thread
@@ -429,25 +377,13 @@ fn assert_panics(name: &str, source: &str, message: &str) {
 
 /// [`assert_panics`] with extra environment variables for the program.
 fn assert_panics_with(name: &str, source: &str, message: &str, env: &[(&str, &str)]) {
-    std::env::set_current_dir(repo_root()).unwrap();
-    let (src, dir) = write_source(name, source);
-    let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
-    let options = pepper_driver::Options::parse_from(vec![
-        "pepper".to_string(),
-        src.to_string_lossy().into_owned(),
-        "-o".to_string(),
-        exe.to_string_lossy().into_owned(),
-        "--build".to_string(),
-        dir.join("build").to_string_lossy().into_owned(),
-    ]);
-    let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
-    assert_eq!(code, 0);
-    let output = Command::new(&exe).envs(env.iter().copied()).output().expect("spawn");
+    let exe = build(name, source).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
+    let output = support::run_program(Command::new(&exe).envs(env.iter().copied()), source).expect("spawn");
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     assert!(!output.status.success(), "{name} was expected to panic\nstdout:\n{stdout}");
     let last = stdout.lines().last().unwrap_or("");
     assert!(last.contains(message), "{name}: expected a panic containing {message:?}, got {last:?}\nstdout:\n{stdout}");
-    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(source_dir(name));
 }
 
 /// `Mutex<T>`: N threads each add to a counter M times under the lock and
@@ -1147,16 +1083,11 @@ main(): int {
 }
 "#;
 
+/// The same program also passes `PEP_CHECK_SYNC=1`, which walks the locked
+/// value at every unlock: a program the compiler accepts passes it.
 #[test]
 fn mutex_of_values_that_are_not_thread_safe() {
-    assert_runs("mutex_confined", MUTEX_CONFINED_PROGRAM);
-}
-
-/// `PEP_CHECK_SYNC=1` walks the locked value at every unlock: a program
-/// the compiler accepts passes it.
-#[test]
-fn check_sync_passes_a_confined_program() {
-    assert_runs_with("check_sync_confined", MUTEX_CONFINED_PROGRAM, &[("PEP_CHECK_SYNC", "1")]);
+    assert_runs_each("mutex_confined", MUTEX_CONFINED_PROGRAM, &[&[], &[("PEP_CHECK_SYNC", "1")]]);
 }
 
 /// A reference into the locked value kept in raw memory, which the
@@ -1393,8 +1324,7 @@ main(): int {
 
 #[test]
 fn condition_waits_while_a_predicate_holds() {
-    assert_runs("wait_while", WAIT_WHILE_PROGRAM);
-    assert_runs_with("wait_while_check_sync", WAIT_WHILE_PROGRAM, &[("PEP_CHECK_SYNC", "1")]);
+    assert_runs_each("wait_while", WAIT_WHILE_PROGRAM, &[&[], &[("PEP_CHECK_SYNC", "1")]]);
 }
 
 #[test]
@@ -1432,79 +1362,3 @@ fn channels() {
     assert_runs("channel", CHANNEL_PROGRAM);
 }
 
-fn all_programs() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("threads", THREAD_PROGRAM),
-        ("thread_local", THREAD_LOCAL_PROGRAM),
-        ("cpus", CPUS_PROGRAM),
-        ("shared_counts", SHARED_COUNTS_PROGRAM),
-        ("exported_globals", EXPORTED_GLOBALS_PROGRAM),
-        ("closure_body", CLOSURE_BODY_PROGRAM),
-        ("shared_functions", SHARED_FUNCTIONS_PROGRAM),
-        ("c_function_pointers", C_FUNCTION_POINTERS_PROGRAM),
-        ("mutex", MUTEX_PROGRAM),
-        ("condition", CONDITION_PROGRAM),
-        ("once", ONCE_PROGRAM),
-        ("channel", CHANNEL_PROGRAM),
-        ("channel_copy", CHANNEL_COPY_PROGRAM),
-        ("mutex_confined", MUTEX_CONFINED_PROGRAM),
-    ]
-}
-
-const SIMULATED_HOSTS: [(&str, &str); 6] = [
-    ("windows", "x86_64"),
-    ("windows", "aarch64"),
-    ("macos", "x86_64"),
-    ("macos", "aarch64"),
-    ("linux", "x86_64"),
-    ("linux", "aarch64"),
-];
-
-/// Compile `source` with the host simulated as `os`/`arch` and check the
-/// generated module: valid IR that calls that platform's thread API.
-fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), String> {
-    std::env::set_current_dir(repo_root()).unwrap();
-    let (src, dir) = write_source(&format!("{name}_{os}_{arch}"), source);
-    let result = pepper_sema::with_simulated_host(os, arch, || {
-        let options = pepper_driver::Options::parse_from(vec!["pepper".to_string(), src.to_string_lossy().into_owned()]);
-        let mut module = pepper_driver::compiler::compile(&options, "main")?;
-        let ctx = inkwell::context::Context::create();
-        let mut generator = CodeGenerator::new(&ctx, "main");
-        generator.generate(&mut module).map_err(|d| module.sources.render(&d))?;
-        generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-        let ir = generator.module.to_string();
-        let expect = match os {
-            "windows" => "@FlsAlloc(",
-            _ => "@pthread_key_create(",
-        };
-        if !ir.contains(expect) {
-            return Err(format!("IR does not reference {expect}"));
-        }
-        // The sync programs also reach that platform's locks and timed waits.
-        if ["mutex", "condition", "once", "channel", "channel_copy", "mutex_confined"].contains(&name) {
-            let expect: &[&str] = match os {
-                "windows" => &["@AcquireSRWLockExclusive(", "@SleepConditionVariableSRW("],
-                "macos" => &["@pthread_mutex_lock(", "@pthread_cond_timedwait_relative_np("],
-                _ => &["@pthread_mutex_lock(", "@pthread_cond_timedwait("],
-            };
-            if let Some(missing) = expect.iter().find(|e| !ir.contains(*e)) {
-                return Err(format!("IR does not reference {missing}"));
-            }
-        }
-        Ok(())
-    });
-    let _ = std::fs::remove_dir_all(dir);
-    result
-}
-
-#[test]
-fn other_platforms_compile() {
-    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| all_programs().into_iter().map(move |p| (host, p))).collect();
-    let failures: Vec<String> = support::parallel_map(&cases, |&((os, arch), (name, source))| {
-        codegen_as(os, arch, name, source).err().map(|e| format!("{os}/{arch} {name}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

@@ -192,17 +192,6 @@ fn conversions_do_not_chain() {
 }
 
 #[test]
-fn a_plain_constructor_does_not_convert_but_is_suggested() {
-    let error = compile_error(
-        "struct Label {\n    String text;\n    construct(String text) { this.text = text; }\n}\n\
-         show(l: Label): int { return 0; }\n\
-         test(): int { return show(\"x\"); }\n",
-    );
-    assert!(error.contains("which has type 'Label'"), "{}", error);
-    assert!(error.contains("'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]"), "{}", error);
-}
-
-#[test]
 fn the_attribute_is_checked() {
     for (source, message) in [
         ("struct A {\n    [Implicit] construct() {}\n}\n", "'Implicit' constructor of 'A' must be callable with one argument"),

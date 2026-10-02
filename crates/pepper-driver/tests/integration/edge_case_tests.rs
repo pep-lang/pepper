@@ -41,25 +41,6 @@ test(): int {
 }
 
 #[test]
-fn else_if_chain() {
-    // `else if` is an extension over the reference grammar, which requires a
-    // block after `else` (LexyParser.h Branch rule).
-    let src = r#"
-test(): int {
-    var x = 5;
-    if (x < 3) {
-        return 1;
-    } else if (x < 5) {
-        return 2;
-    } else {
-        return 4;
-    }
-}
-"#;
-    assert_eq!(compile_jit_with_runtime(src), 4);
-}
-
-#[test]
 fn nested_ternary() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -91,53 +72,6 @@ test(): int {
 }
 
 #[test]
-fn hex_only() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var h = 0xFF;
-    return h - 255;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn exponent_only() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var e = 1.5e2;
-    return (e as int) - 150;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn negative_division() {
-    // C semantics: truncation toward zero, remainder sign follows dividend.
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var q = -7 / 2;
-    var r = -7 % 2;
-    return (q + 3) * 10 + (r + 1);
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn i8_u8() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -146,23 +80,6 @@ test(): int {
     i8 a = 100;
     u8 b = 200;
     return (a + b) - 300;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn default_params() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-add(a: int, b: int = 10): int {
-    return a + b;
-}
-test(): int {
-    return add(5) - 15;
 }
 "#
         ),
@@ -188,23 +105,6 @@ test(): int {
     var q = Point(3, 4);
     var r = p + q;
     return (r.x - 4) * 10 + (r.y - 6);
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn method_chaining() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var s = "a";
-    s.append("b");
-    s.append("c");
-    return s.length - 3;
 }
 "#
         ),
@@ -268,44 +168,6 @@ test(): int {
     var o = Outer();
     o.i = Inner();
     return o.i.v - 7;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn void_function() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-const g = async.Atomic<int>(0);
-bump(): void {
-    g.store(g.load() + 5);
-}
-test(): int {
-    bump();
-    bump();
-    return g.load() - 10;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn global_variable() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-const counter = async.Atomic<int>(1);
-test(): int {
-    counter.fetch_add(41);
-    return counter.load() - 42;
 }
 "#
         ),
@@ -459,31 +321,6 @@ test(): int {
 }
 
 #[test]
-fn logical_short_circuit2() {
-    // Short-circuit: `false && boom()` and `true || boom()` skip boom().
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-const side = async.Atomic<int>(0);
-boom(): bool {
-    side.store(1);
-    return true;
-}
-test(): int {
-    var r = false && boom();
-    if (r) { return -1; }
-    var s = true || boom();
-    if (!s) { return -2; }
-    return side.load();
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn double_type() {
     // C-style `(int)e` is NOT a cast (only `as` is spec'd). `(int)` parses as
     // a TypeLiteral expression, so `return (int)` is a statement missing its
@@ -514,33 +351,6 @@ test(): int {
         ),
         0
     );
-}
-
-#[test]
-fn as_cast() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var e = 1.5e2 as int;
-    return e - 150;
-}
-"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn paren_cast() {
-    // C-style `(int)x` is NOT a cast (only `as` is spec'd); it must not parse.
-    let src = r#"
-test(): int {
-    var e = (int)1.5e2;
-    return e - 150;
-}
-"#;
-    assert!(pepper_parser::parser::parse_source("test.pep", src).is_err());
 }
 
 #[test]

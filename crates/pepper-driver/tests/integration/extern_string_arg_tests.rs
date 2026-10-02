@@ -32,20 +32,6 @@ test(): int {
 }
 
 #[test]
-fn literal_to_pepper_function_is_still_a_string() {
-    let (result, leaked) = compile_jit_census(
-        r#"
-size_of(s: String): int { return s.size; }
-test(): int {
-    return size_of("four") - 4;
-}
-"#,
-    );
-    assert_eq!(result, 0);
-    assert_eq!(leaked, 0);
-}
-
-#[test]
 fn literal_to_char_pointer_is_a_c_string() {
     let (result, leaked) = compile_jit_census(
         r#"

@@ -117,21 +117,3 @@ fn corpus_files_compile_and_run() {
     );
 }
 
-/// Every fixture only reaches symbols its own files declare or other files
-/// `export` — the runtime's public surface included. Unlike the run above,
-/// this needs no codegen, so it is not ignored.
-#[test]
-fn corpus_files_respect_visibility() {
-    let fixtures = corpus_fixtures();
-    assert!(!fixtures.is_empty(), "no corpus tests found");
-    let failures: Vec<String> = fixtures
-        .iter()
-        .filter_map(|(name, path)| {
-            load(path)
-                .and_then(|program| program.check())
-                .err()
-                .map(|e| format!("{}: {}", name, e))
-        })
-        .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

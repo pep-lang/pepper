@@ -4,12 +4,10 @@
 //! loopback only. Each program asserts internally and returns 0; the harness
 //! reports its output on failure.
 //!
-//! `socket_programs_compile_on_other_platforms` pushes every program through
-//! sema and LLVM codegen with the host simulated as each other platform, so
-//! the Winsock and macOS layers type-check and produce valid IR on any host.
+//! `io_tests::runtime_compiles_on_other_platforms` checks the Winsock and
+//! macOS layers under every simulated host.
 
-use crate::io_tests::{SIMULATED_HOSTS, assert_runs, with_codegen_as};
-use crate::support;
+use crate::io_tests::assert_runs;
 
 /// Parsing and formatting of IP and socket addresses: pure Pepper, the same
 /// on every platform.
@@ -554,10 +552,6 @@ fn unix_program() -> String {
     UNIX_PROGRAM.replace("SOCKET", &format!("pepper_unix_{}.sock", std::process::id()))
 }
 
-fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("address", ADDRESS_PROGRAM), ("tcp", TCP_PROGRAM), ("udp", UDP_PROGRAM), ("threaded", THREADED_PROGRAM), ("unix", UNIX_PROGRAM)]
-}
-
 #[test]
 fn addresses_parse_and_format() {
     assert_runs("socket_address", ADDRESS_PROGRAM);
@@ -583,35 +577,3 @@ fn unix_sockets() {
     assert_runs("socket_unix", &unix_program());
 }
 
-/// Every platform's socket layer type-checks and produces valid IR that
-/// calls that platform's functions.
-#[test]
-fn socket_programs_compile_on_other_platforms() {
-    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| programs().into_iter().map(move |p| (host, p))).collect();
-    let failures: Vec<String> = support::parallel_map(&cases, |((os, arch), (name, source))| {
-        with_codegen_as(os, arch, &format!("socket_{name}"), source, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            if *name == "address" {
-                return Ok(());
-            }
-            let ir = generator.module.to_string();
-            let expect = match *os {
-                "windows" => "@WSASocketW(",
-                "linux" if *name == "tcp" => "@accept4(",
-                "macos" if *name == "tcp" => "@fcntl(",
-                _ => "@socket(",
-            };
-            if !ir.contains(expect) {
-                return Err(format!("IR does not reference {expect}"));
-            }
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch} {name}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

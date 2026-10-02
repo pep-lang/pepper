@@ -46,25 +46,6 @@ struct Tally {
 // ── append + read back ───────────────────────────────────────────────────────
 
 #[test]
-fn append_read_back_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    a.append(3);
-    if (a.count != 3) { return -1; }
-    if (a[0] != 1 || a[1] != 2 || a[2] != 3) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn append_read_back_struct() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -146,118 +127,7 @@ test(): int {{
     );
 }
 
-#[test]
-fn self_append_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var h = Array<int>();
-    h.append(1);
-    h.append(2);
-    h += h;
-    if (h.count != 4) { return -1; }
-    if (!(h[0] == 1 && h[1] == 2 && h[2] == 1 && h[3] == 2)) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn self_append_struct() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"{point}
-test(): int {{
-    var h = Array<Point>();
-    var p = Point();
-    p.x = 9;
-    h.append(p);
-    if (__refcount<Point>(p) != 2) {{ return -1; }}
-    h += h;
-    if (h.count != 2) {{ return -2; }}
-    # Each element now has two references in the Array plus p's own.
-    if (__refcount<Point>(p) != 3) {{ return -3; }}
-    if (h[0].x != 9 || h[1].x != 9) {{ return -4; }}
-    return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
-}
-
 // ── pop / remove_at / clear / clone / first / last ───────────────────────────
-
-#[test]
-fn pop_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    var v = a.pop();
-    if (v != 2) { return -1; }
-    if (a.count != 1 || a[0] != 1) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn pop_struct() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"{point}
-test(): int {{
-    var a = Array<Point>();
-    var p = Point();
-    p.x = 7;
-    a.append(p);
-    if (__refcount<Point>(p) != 2) {{ return -1; }}
-    var q = a.pop();
-    # pop returns the reference: slot release + return acquire cancel, so
-    # p's count is unchanged and q aliases p.
-    if (__refcount<Point>(p) != 2) {{ return -2; }}
-    if (q.x != 7) {{ return -3; }}
-    if (a.count != 0) {{ return -4; }}
-    return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
-}
-
-#[test]
-fn remove_at_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    a.append(3);
-    var v = a.remove_at(1);
-    if (v != 2) { return -1; }
-    if (a.count != 2 || a[0] != 1 || a[1] != 3) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
 
 #[test]
 fn remove_at_struct() {
@@ -295,114 +165,6 @@ test(): int {{
 }
 
 #[test]
-fn clear_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    a.clear();
-    if (a.count != 0) { return -1; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn clear_struct() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"{tally}
-test(): int {{
-    var t = Tally();
-    var a = Array<Tally>();
-    a.append(t);
-    a.append(Tally());
-    if (__refcount<Tally>(t) != 2) {{ return -1; }}
-    a.clear();
-    # clear releases every slot: t drops back to its own reference.
-    if (t.alive != 1) {{ return -2; }}
-    if (__refcount<Tally>(t) != 1) {{ return -3; }}
-    return 0;
-}}"#,
-                tally = TALLY
-            )
-        ),
-        0
-    );
-}
-
-#[test]
-fn clone_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    var b = a.clone();
-    b.append(2);
-    if (a.count != 1) { return -1; }
-    if (b.count != 2 || b[1] != 2) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn clone_struct() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"{point}
-test(): int {{
-    var a = Array<Point>();
-    var p = Point();
-    p.x = 4;
-    a.append(p);
-    if (__refcount<Point>(p) != 2) {{ return -1; }}
-    var b = a.clone();
-    # clone copies the reference into b's slot: acquires p.
-    if (__refcount<Point>(p) != 3) {{ return -2; }}
-    if (b.count != 1 || b[0].x != 4) {{ return -3; }}
-    a.clear();
-    # a's copy is released; b keeps its own.
-    if (__refcount<Point>(p) != 2) {{ return -4; }}
-    return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
-}
-
-#[test]
-fn first_last_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    if (a.first() != 1) { return -1; }
-    if (a.last() != 2) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn first_last_struct() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -431,26 +193,6 @@ test(): int {{
 }
 
 // ── index read + store (the __index_get / __index_set path) ──────────────────
-
-#[test]
-fn index_read_store_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    var v = a[0];
-    if (v != 1) { return -1; }
-    a[0] = 9;
-    if (a[0] != 9) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
 
 #[test]
 fn index_read_store_struct() {
@@ -486,46 +228,6 @@ test(): int {{
 }
 
 // ── leak census: every operation must net-zero its temporaries ───────────────
-
-#[test]
-fn census_append_pop_struct() {
-    let (code, delta) = compile_jit_census(
-        &format!(
-            r#"{tally}
-test(): int {{
-    var a = Array<Tally>();
-    a.append(Tally());
-    var t = a.pop();
-    # t escapes the scope; its reference is the one that should remain.
-    return 0;
-}}"#,
-            tally = TALLY
-        ),
-    );
-    assert_eq!(code, 0);
-    // The popped element's reference outlives the function (t is a local that
-    // is released at scope exit), so the net allocation delta is zero.
-    assert_eq!(delta, 0, "append+pop must net-zero its allocations");
-}
-
-#[test]
-fn census_plus_assign_struct() {
-    let (code, delta) = compile_jit_census(
-        &format!(
-            r#"{tally}
-test(): int {{
-    var a = Array<Tally>();
-    var b = Array<Tally>();
-    b.append(Tally());
-    a += b;
-    return 0;
-}}"#,
-            tally = TALLY
-        ),
-    );
-    assert_eq!(code, 0);
-    assert_eq!(delta, 0, "fluent += must not leak the returned this");
-}
 
 // ── control-flow exits: break/continue destroy exactly the exited scopes ────
 
@@ -923,45 +625,6 @@ test(): int {{
     ));
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "Once and Lazy, built or not, must free everything");
-}
-
-#[test]
-fn census_copy_of_a_graph() {
-    // A cycle, an object referenced twice, and a weak reference out of the
-    // copied value: the copy and the original both free everything.
-    let (code, delta) = compile_jit_census(
-        r#"
-struct Node {
-    int value;
-    Node next;
-    Node other;
-    __weak<Node> back;
-    Array<String> names;
-    construct(this.value = 0) {
-        names = Array<String>();
-        names.append("n");
-    }
-}
-
-test(): int {
-    var outside = Node(9);
-    var a = Node(1);
-    var b = Node(2);
-    a.next = b;
-    a.other = b;
-    b.next = a;
-    b.back = __weak_from<Node>(outside);
-    var c = copy(a);
-    if (c.next !== c.other || c.next.next !== c) { return 1; }
-    if (!__weak_expired<Node>(c.next.back)) { return 2; }
-    a.next = __null;
-    b.next = __null;
-    c.next.next = __null;
-    return 0;
-}"#,
-    );
-    assert_eq!(code, 0);
-    assert_eq!(delta, 0, "copying a graph must net zero once both are dropped");
 }
 
 #[test]

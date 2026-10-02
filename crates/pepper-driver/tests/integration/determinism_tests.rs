@@ -10,25 +10,6 @@ use std::path::{Path, PathBuf};
 use crate::support;
 use crate::support::repo_root;
 
-/// Every documentation example's entry point, sorted.
-fn examples() -> Vec<PathBuf> {
-    let dir = repo_root().join("docs").join("examples");
-    let mut out: Vec<PathBuf> = std::fs::read_dir(&dir)
-        .unwrap()
-        .flatten()
-        .map(|e| e.path())
-        .filter_map(|path| {
-            if path.is_dir() {
-                Some(path.join("main.pep")).filter(|main| main.is_file())
-            } else {
-                (path.extension().is_some_and(|e| e == "pep")).then_some(path)
-            }
-        })
-        .collect();
-    out.sort();
-    out
-}
-
 /// The LLVM IR of the program rooted at `entry`.
 fn ir(entry: &Path) -> String {
     let options = pepper_driver::Options::parse_from(["pepper".to_string(), entry.to_string_lossy().into_owned()]);
@@ -44,8 +25,9 @@ fn ir(entry: &Path) -> String {
 fn same_program_compiles_to_the_same_ir() {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
-    let examples = examples();
-    assert!(!examples.is_empty(), "no examples in docs/examples");
+    // Nondeterminism comes from the compiler's own state, not from any one
+    // program, so a sample that reaches most of the compiler suffices.
+    let examples: Vec<PathBuf> = support::docs_example_sample().into_iter().map(|(_, entry)| entry).collect();
     // The second round runs in the opposite order, so each program follows
     // different ones on its thread (thread-local counters) and every hash
     // map gets a different seed.

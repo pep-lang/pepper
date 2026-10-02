@@ -264,16 +264,6 @@ test(): int { var p = Point(1); return tag(p) + tag(p, p) + tag(5); }
 }
 
 #[test]
-fn a_file_s_private_set_is_its_own() {
-    let source = r#"
-helper(x: int): int { return 1; }
-helper(x: String): int { return 2; }
-test(): int { return helper(1) * 10 + helper("x"); }
-"#;
-    assert_eq!(value(source), 12);
-}
-
-#[test]
 fn method_calls_pick_the_member_their_arguments_match() {
     let source = r#"
 struct Meter {

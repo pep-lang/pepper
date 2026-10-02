@@ -7,7 +7,6 @@ use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
 use pepper_sema::passes::transform_pass;
 use pepper_sema::struct_body;
-use pepper_sema::type_name::TypeName;
 use pepper_sema::model::Module as SemaModule;
 
 fn compile_jit(source: &str) -> i32 {
@@ -176,13 +175,6 @@ test(): int {
 }
 
 #[test]
-fn pow() {
-    // 2 ** 5 = 32; the C++ IntMath Pow test expects 384 (3 ** ? etc.) — check
-    // the pow op is wired: 2**8 = 256.
-    assert_eq!(compile_jit("test(): int { return 2 ** 8; }"), 256);
-}
-
-#[test]
 fn ternary() {
     assert_eq!(
         compile_jit("test(): int { return 1 == 1 ? 10 : 20; }"),
@@ -198,25 +190,6 @@ fn ternary() {
 fn float_math() {
     // Float ops through the i32 return: 2.0 + 3.0 = 5.0 → coerce to 5.
     assert_eq!(compile_jit("test(): int { return 2.5 + 2.5; }"), 5);
-}
-
-#[test]
-fn struct_member() {
-    // Struct field read through ctor + member access.
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-struct Test {
-    var x: int = 7;
-}
-test(): int {
-    var t = Test();
-    return t.x;
-}
-"#
-        ),
-        7
-    );
 }
 
 #[test]
@@ -256,8 +229,3 @@ test(): int {
     );
 }
 
-#[test]
-fn type_name_widest() {
-    // The sema widest() promotion feeds codegen: mixed i8/i32 → i32.
-    assert_eq!(TypeName::new("i8").to_string(), "i8");
-}

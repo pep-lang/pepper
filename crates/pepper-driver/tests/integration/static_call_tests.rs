@@ -19,18 +19,6 @@ struct Maker {
 "#;
 
 #[test]
-fn static_call_on_struct_name_from_free_function() {
-    let source = format!(
-        "{MAKER}
-test(): int {{
-    var m = Maker.make(20);
-    return m.x + Maker.twice(1) - 22;
-}}"
-    );
-    assert_eq!(compile_jit_with_runtime(&source), 0);
-}
-
-#[test]
 fn static_call_on_struct_name_from_another_structs_method() {
     let source = format!(
         "{MAKER}

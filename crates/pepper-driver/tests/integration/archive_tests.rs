@@ -1,26 +1,18 @@
 //! The `archive` module: tar archives written and read back (long paths
 //! through the ustar prefix and pax headers), archives made by GNU tar and
 //! Python's tarfile, `.tar.gz` through `compress`, extraction with
-//! `strip_components`, unsafe paths, and damaged archives. Each test
+//! `strip_components`, unsafe paths, and damaged archives. Each check
 //! returns 0 on success or a distinct negative code per check, and must
 //! leave no allocation behind.
 
-use crate::support::{jit_census, scratch_name};
+use crate::support;
 
-fn run(source: &str) -> i32 {
-    let (result, leaked) = jit_census(source);
-    assert_eq!(leaked, 0, "allocations leaked or double-released");
-    result
-}
-
-#[test]
-fn writes_and_reads_back() {
-    assert_eq!(
-        run(r##"
+const PROGRAM: &str = r##"
 import archive;
+import compress;
 import io;
 
-test(): int {
+writes_and_reads_back(): int {
     var out = io.ByteWriter();
     var tar = archive.TarWriter(out);
     var split = "d/" + "x".repeat(140) + "/" + "y".repeat(90);
@@ -64,20 +56,8 @@ test(): int {
     if (reader.next_entry().value().is_some()) { return -12; }
     return 0;
 }
-"##),
-        0
-    );
-}
 
-#[test]
-fn reads_archives_from_other_tools() {
-    assert_eq!(
-        run(r##"
-import archive;
-import compress;
-import io;
-
-test(): int {
+reads_archives_from_other_tools(): int {
     # GNU format, gzipped: a directory, a 154-byte name ('L' header), a
     # file, a hard link and a symlink.
     u8[] gnu = [31, 139, 8, 0, 0, 0, 0, 0, 2, 3, 237, 215, 77, 10, 194, 48, 16, 5, 224, 172, 61, 69, 78, 208, 230, 111, 154, 173, 7, 232, 37, 34, 136, 138, 53, 45, 26, 193, 227, 27, 187, 16, 90, 20, 113, 145, 40, 205, 251, 54, 41, 165, 187, 215, 55, 100, 66, 63, 212, 44, 49, 17, 89, 162, 241, 140, 230, 231, 248, 44, 13, 41, 99, 173, 48, 227, 251, 134, 72, 50, 78, 44, 131, 235, 37, 184, 51, 231, 172, 80, 85, 93, 213, 235, 182, 247, 187, 246, 224, 143, 9, 243, 127, 145, 251, 51, 127, 165, 237, 228, 95, 136, 127, 139, 37, 203, 120, 139, 252, 147, 11, 177, 255, 254, 47, 85, 225, 22, 24, 44, 32, 255, 71, 169, 27, 99, 222, 207, 127, 169, 166, 243, 95, 107, 21, 63, 231, 2, 253, 79, 174, 139, 163, 159, 123, 119, 218, 174, 208, 133, 82, 251, 239, 18, 143, 218, 143, 253, 23, 205, 236, 254, 103, 73, 53, 232, 127, 14, 174, 27, 246, 14, 221, 47, 186, 255, 155, 159, 247, 127, 182, 255, 73, 169, 133, 102, 92, 230, 24, 78, 184, 255, 215, 151, 12, 251, 255, 87, 249, 199, 253, 79, 16, 227, 202, 101, 216, 1, 10, 207, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 233, 14, 67, 235, 92, 6, 0, 40, 0, 0];
@@ -106,21 +86,8 @@ test(): int {
     if (entry.path != "p/" + "é".repeat(120) || reader.read_all().value() != "pax".bytes()) { return -8; }
     return 0;
 }
-"##),
-        0
-    );
-}
 
-#[test]
-fn extracts_into_a_directory() {
-    let scratch = scratch_name("tar_extract");
-    assert_eq!(
-        run(&r##"
-import archive;
-import compress;
-import io;
-
-test(): int {
+extracts_into_a_directory(): int {
     var target = io.Directory.temp().join("SCRATCH");
     io.Directory.remove_all(target);
 
@@ -167,20 +134,8 @@ test(): int {
     io.Directory.remove_all(target);
     return 0;
 }
-"##
-        .replace("SCRATCH", &scratch)),
-        0
-    );
-}
 
-#[test]
-fn reports_damaged_archives() {
-    assert_eq!(
-        run(r##"
-import archive;
-import io;
-
-test(): int {
+reports_damaged_archives(): int {
     var out = io.ByteWriter();
     var tar = archive.TarWriter(out);
     tar.append_file("a.txt", "x".repeat(600).bytes());
@@ -210,7 +165,11 @@ test(): int {
     if (archive.TarReader(io.ByteReader(Array<u8>())).next_entry().value().is_some()) { return -4; }
     return 0;
 }
-"##),
-        0
-    );
+"##;
+
+/// Each check is a function of one program, compiled once.
+#[test]
+fn tar_archives() {
+    let program = PROGRAM.replace("SCRATCH", &support::scratch_name("tar_extract"));
+    support::jit_cases(&program, &["writes_and_reads_back", "reads_archives_from_other_tools", "extracts_into_a_directory", "reports_damaged_archives"]);
 }

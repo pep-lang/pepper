@@ -237,24 +237,3 @@ fn command_starts_children_and_collects_their_output() {
     assert_eq!(output.status.code(), Some(0));
 }
 
-/// The platform layer of every other OS type-checks and generates valid IR.
-#[test]
-fn process_compiles_for_other_platforms() {
-    let failures: Vec<String> = support::parallel_map(&crate::io_tests::SIMULATED_HOSTS, |&(os, arch)| {
-        crate::io_tests::with_codegen_as(os, arch, "process_platform", COMMAND_PROGRAM, |generator, module| {
-            generator.generate(module).map_err(|d| module.sources.render(&d))?;
-            generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
-            let expect = if os == "windows" { "CreateProcessW" } else { "posix_spawnp" };
-            if !generator.module.to_string().contains(expect) {
-                return Err(format!("IR does not reference {expect}"));
-            }
-            Ok(())
-        })
-        .err()
-        .map(|e| format!("{os}/{arch}: {e}"))
-    })
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}

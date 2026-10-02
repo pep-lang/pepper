@@ -1,101 +1,53 @@
 //! Atomic<T> semantics: every operation is exercised against a POD type and
-//! (where meaningful) a struct type. Each test returns 0 on success or a
-//! distinct negative code per check, so a failure pinpoints the exact broken
-//! invariant without hand-tracing IR.
+//! (where meaningful) a struct type. Each check function returns 0 on
+//! success or a distinct negative code per check, so a failure pinpoints the
+//! exact broken invariant without hand-tracing IR. The checks share one
+//! program, since each compile pays for `import async`.
 
 use pepper_codegen::CodeGenerator;
-use pepper_sema::model::Module as SemaModule;
 
-/// Build the full module (runtime prelude + test source) and run sema.
-fn build_module(source: &str) -> SemaModule {
-    pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile")
-}
+use crate::support;
 
-fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = build_module(source);
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
-}
+const PROGRAM: &str = r#"
+import async;
 
-// Atomic<T> needs a thread-safe struct T: `[Shared]`, with const fields.
-const POINT: &str = r#"
+# Atomic<T> needs a thread-safe struct T: `[Shared]`, with const fields.
 [Shared]
 struct Point {
     const x: int;
     construct(this.x = 0) {}
 }
-"#;
 
-// ── load / store ─────────────────────────────────────────────────────────────
+# ── load / store ────────────────────────────────────────────────────────────
 
-#[test]
-fn load_store_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+load_store_pod(): int {
     var a = async.Atomic<int>(41);
     if (a.load() != 41) { return -1; }
     a.store(99);
     if (a.load() != 99) { return -2; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn load_store_long() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+load_store_long(): int {
     var a = async.Atomic<long>(1234567890123);
     if (a.load() != 1234567890123) { return -1; }
     a.store(42);
     if (a.load() != 42) { return -2; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn load_store_struct() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"import async;
-{point}
-test(): int {{
+load_store_struct(): int {
     var a = async.Atomic<Point>();
     var p = Point(7);
     a.store(p);
     var q = a.load();
-    if (q.x != 7) {{ return -1; }}
+    if (q.x != 7) { return -1; }
     # Slot holds the ref, and load() returned an owned copy: p + slot + q.
-    if (__refcount<Point>(p) != 3) {{ return -2; }}
+    if (__refcount<Point>(p) != 3) { return -2; }
     return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
 }
 
-#[test]
-fn load_store_double() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+load_store_double(): int {
     var a = async.Atomic<double>(1.5);
     if (a.load() != 1.5) { return -1; }
     a.store(2.25);
@@ -104,48 +56,25 @@ test(): int {
     if (!b.compare_exchange(3.0, 4.0)) { return -3; }
     if (b.load() != 4.0) { return -4; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn store_replaces_struct_ref() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"import async;
-{point}
-test(): int {{
+store_replaces_struct_ref(): int {
     var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
-    if (__refcount<Point>(p1) != 2) {{ return -1; }}
+    if (__refcount<Point>(p1) != 2) { return -1; }
     var p2 = Point(2);
     a.store(p2);
     # Slot dropped p1's ref and took p2's.
-    if (__refcount<Point>(p1) != 1) {{ return -2; }}
-    if (__refcount<Point>(p2) != 2) {{ return -3; }}
-    if (a.load().x != 2) {{ return -4; }}
+    if (__refcount<Point>(p1) != 1) { return -2; }
+    if (__refcount<Point>(p2) != 2) { return -3; }
+    if (a.load().x != 2) { return -4; }
     return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
 }
 
-// ── compare_exchange ─────────────────────────────────────────────────────────
+# ── compare_exchange ────────────────────────────────────────────────────────
 
-#[test]
-fn cmpxchg_success_and_failure_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+cmpxchg_success_and_failure_pod(): int {
     var a = async.Atomic<int>(10);
     if (!a.compare_exchange(10, 20)) { return -1; }
     if (a.load() != 20) { return -2; }
@@ -153,99 +82,53 @@ test(): int {
     if (a.compare_exchange(10, 30)) { return -3; }
     if (a.load() != 20) { return -4; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn cmpxchg_struct_refcount() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"import async;
-{point}
-test(): int {{
+cmpxchg_struct_refcount(): int {
     var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
-    if (__refcount<Point>(p1) != 2) {{ return -1; }}
+    if (__refcount<Point>(p1) != 2) { return -1; }
     var p2 = Point(2);
     # Success: slot takes p2, drops p1.
-    if (!a.compare_exchange(p1, p2)) {{ return -2; }}
-    if (__refcount<Point>(p1) != 1) {{ return -3; }}
-    if (__refcount<Point>(p2) != 2) {{ return -4; }}
+    if (!a.compare_exchange(p1, p2)) { return -2; }
+    if (__refcount<Point>(p1) != 1) { return -3; }
+    if (__refcount<Point>(p2) != 2) { return -4; }
     # Failure: expected no longer matches (slot holds p2).
     var p3 = Point(3);
-    if (a.compare_exchange(p1, p3)) {{ return -5; }}
-    if (__refcount<Point>(p3) != 1) {{ return -6; }}
-    if (a.load().x != 2) {{ return -7; }}
+    if (a.compare_exchange(p1, p3)) { return -5; }
+    if (__refcount<Point>(p3) != 1) { return -6; }
+    if (a.load().x != 2) { return -7; }
     return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
 }
 
-// ── exchange ─────────────────────────────────────────────────────────────────
+# ── exchange ────────────────────────────────────────────────────────────────
 
-#[test]
-fn exchange_pod() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+exchange_pod(): int {
     var a = async.Atomic<int>(5);
     var old = a.exchange(8);
     if (old != 5) { return -1; }
     if (a.load() != 8) { return -2; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn exchange_struct_refcount() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"import async;
-{point}
-test(): int {{
+exchange_struct_refcount(): int {
     var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
     var p2 = Point(2);
     var old = a.exchange(p2);
-    if (old.x != 1) {{ return -1; }}
+    if (old.x != 1) { return -1; }
     # The returned old ref is owned by the caller: it must not be released.
-    if (__refcount<Point>(p1) != 2) {{ return -2; }}
-    if (__refcount<Point>(p2) != 2) {{ return -3; }}
-    if (a.load().x != 2) {{ return -4; }}
+    if (__refcount<Point>(p1) != 2) { return -2; }
+    if (__refcount<Point>(p2) != 2) { return -3; }
+    if (a.load().x != 2) { return -4; }
     return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
-    );
 }
 
-// ── fetch_* ──────────────────────────────────────────────────────────────────
+# ── fetch_* ─────────────────────────────────────────────────────────────────
 
-#[test]
-fn fetch_ops_int() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+fetch_ops_int(): int {
     var a = async.Atomic<int>(10);
     if (a.fetch_add(5) != 10 || a.load() != 15) { return -1; }
     if (a.fetch_sub(3) != 15 || a.load() != 12) { return -2; }
@@ -253,19 +136,9 @@ test(): int {
     if (a.fetch_or(5) != 12 || a.load() != 13) { return -4; }
     if (a.fetch_xor(13) != 13 || a.load() != 0) { return -5; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-#[test]
-fn fetch_ops_long() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-import async;
-test(): int {
+fetch_ops_long(): int {
     var a = async.Atomic<long>(100);
     if (a.fetch_add(50) != 100 || a.load() != 150) { return -1; }
     if (a.fetch_sub(30) != 150 || a.load() != 120) { return -2; }
@@ -273,122 +146,102 @@ test(): int {
     if (a.fetch_or(7) != 0 || a.load() != 7) { return -4; }
     if (a.fetch_xor(127) != 7 || a.load() != 120) { return -5; }
     return 0;
-}"#
-        ),
-        0
-    );
 }
 
-// ── is_lock_free ─────────────────────────────────────────────────────────────
+# ── is_lock_free ────────────────────────────────────────────────────────────
+
+is_lock_free(): int {
+    if (!async.Atomic<int>(0).is_lock_free()) { return -1; }
+    if (!async.Atomic<long>(0).is_lock_free()) { return -2; }
+    if (!async.Atomic<Point>().is_lock_free()) { return -3; }
+    return 0;
+}
+"#;
 
 #[test]
-fn is_lock_free() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            &format!(
-                r#"import async;
-{point}
-test(): int {{
-    if (!async.Atomic<int>(0).is_lock_free()) {{ return -1; }}
-    if (!async.Atomic<long>(0).is_lock_free()) {{ return -2; }}
-    if (!async.Atomic<Point>().is_lock_free()) {{ return -3; }}
-    return 0;
-}}"#,
-                point = POINT
-            )
-        ),
-        0
+fn atomic_operations() {
+    support::jit_cases(
+        PROGRAM,
+        &[
+            "load_store_pod",
+            "load_store_long",
+            "load_store_struct",
+            "load_store_double",
+            "store_replaces_struct_ref",
+            "cmpxchg_success_and_failure_pod",
+            "cmpxchg_struct_refcount",
+            "exchange_pod",
+            "exchange_struct_refcount",
+            "fetch_ops_int",
+            "fetch_ops_long",
+            "is_lock_free",
+        ],
     );
 }
 
 // ── multi-threaded contention ────────────────────────────────────────────────
 
+/// Host threads hammer two counters through JIT-compiled functions, one
+/// counter after the other: `fetch_add`, then a compare-exchange retry loop.
 #[test]
-fn fetch_add_contention() {
+fn contention() {
     const THREADS: i32 = 4;
-    const STEPS: i64 = 50_000;
-    let mut module = build_module(
+    let mut module = support::sema(
         r#"
 import async;
-const counter = async.Atomic<long>(0);
-test(): int { return 0; }
+const added = async.Atomic<long>(0);
+const swapped = async.Atomic<long>(0);
 
 add_one(): long {
-    return counter.fetch_add(1) + 1;
+    return added.fetch_add(1) + 1;
 }
 
-read_counter(): long {
-    return counter.load();
-}"#
-    );
+read_added(): long {
+    return added.load();
+}
+
+# CAS-retry increment: each call wins exactly one step of the counter.
+try_inc(): int {
+    var cur = swapped.load();
+    while (true) {
+        if (swapped.compare_exchange(cur, cur + 1)) { return 1; }
+        cur = swapped.load();
+    }
+}
+
+read_swapped(): long {
+    return swapped.load();
+}"#,
+    )
+    .expect("compile");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     // The engine borrows the generator's context: keep both alive until every
     // thread has joined, then they drop in order at scope exit.
     let ee = generator.jit_engine(&mut module).expect("jit");
-    let add_one = unsafe { ee.get_function::<unsafe extern "C" fn() -> i64>("add_one").expect("add_one").as_raw() };
-    let mut handles = Vec::new();
-    for _ in 0..THREADS {
-        handles.push(std::thread::spawn(move || {
-            let mut sum: i64 = 0;
-            for _ in 0..STEPS {
-                sum += unsafe { add_one() };
-            }
-            sum
-        }));
-    }
+    let function = |name: &str| unsafe { ee.get_function::<unsafe extern "C" fn() -> i64>(name).expect(name).as_raw() };
+
+    const ADD_STEPS: i64 = 50_000;
+    let add_one = function("add_one");
+    let handles: Vec<_> = (0..THREADS)
+        .map(|_| std::thread::spawn(move || (0..ADD_STEPS).map(|_| unsafe { add_one() }).sum::<i64>()))
+        .collect();
     let total: i64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
-    let read_counter = unsafe { ee.get_function::<unsafe extern "C" fn() -> i64>("read_counter").expect("read_counter").as_raw() };
-    let n = THREADS as i64 * STEPS;
-    let final_count = unsafe { read_counter() };
+    let n = THREADS as i64 * ADD_STEPS;
     // fetch_add returns the previous value: across all threads the returned
     // old values are exactly 0..n-1 (each once) iff no update was lost, so
     // the total is exact.
-    assert_eq!(final_count, n);
+    assert_eq!(unsafe { function("read_added")() }, n);
     assert_eq!(total, n * (n - 1) / 2 + n);
-}
 
-#[test]
-fn cas_contention() {
-    const THREADS: i32 = 4;
-    const STEPS: i64 = 25_000;
-    let mut module = build_module(
-        r#"
-import async;
-const counter = async.Atomic<long>(0);
-
-# CAS-retry increment: each call wins exactly one step of the counter.
-try_inc(): int {
-    var cur = counter.load();
-    while (true) {
-        if (counter.compare_exchange(cur, cur + 1)) { return 1; }
-        cur = counter.load();
-    }
-}
-
-read_counter(): long {
-    return counter.load();
-}"#
-    );
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    let ee = generator.jit_engine(&mut module).expect("jit");
+    const CAS_STEPS: i64 = 25_000;
     let try_inc = unsafe { ee.get_function::<unsafe extern "C" fn() -> i32>("try_inc").expect("try_inc").as_raw() };
-    let mut handles = Vec::new();
-    for _ in 0..THREADS {
-        handles.push(std::thread::spawn(move || {
-            let mut wins: i64 = 0;
-            for _ in 0..STEPS {
-                wins += unsafe { try_inc() } as i64;
-            }
-            wins
-        }));
-    }
-    let total_wins: i64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
-    let read_counter = unsafe { ee.get_function::<unsafe extern "C" fn() -> i64>("read_counter").expect("read_counter").as_raw() };
-    let final_count = unsafe { read_counter() };
+    let handles: Vec<_> = (0..THREADS)
+        .map(|_| std::thread::spawn(move || (0..CAS_STEPS).map(|_| unsafe { try_inc() } as i64).sum::<i64>()))
+        .collect();
+    let wins: i64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
     // Every call wins exactly one step, and the counter advances by exactly
     // one per win: any lost or duplicated update breaks final == wins.
-    assert_eq!(total_wins, THREADS as i64 * STEPS);
-    assert_eq!(final_count, THREADS as i64 * STEPS);
+    assert_eq!(wins, THREADS as i64 * CAS_STEPS);
+    assert_eq!(unsafe { function("read_swapped")() }, THREADS as i64 * CAS_STEPS);
 }

@@ -11,27 +11,6 @@ use std::process::Command;
 use crate::support;
 use crate::support::repo_root;
 
-/// (name, entry point) of every example.
-fn examples() -> Vec<(String, PathBuf)> {
-    let dir = repo_root().join("docs").join("examples");
-    let mut out: Vec<(String, PathBuf)> = std::fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("cannot read {}: {}", dir.display(), e))
-        .flatten()
-        .filter_map(|e| {
-            let path = e.path();
-            let name = e.file_name().to_string_lossy().into_owned();
-            if path.is_dir() {
-                let main = path.join("main.pep");
-                main.is_file().then_some((name, main))
-            } else {
-                name.strip_suffix(".pep").map(|stem| (stem.to_string(), path.clone()))
-            }
-        })
-        .collect();
-    out.sort();
-    out
-}
-
 /// Compile (with the options `extra`), link and run `entry`: Err with the
 /// compile error or the program's output when it fails.
 fn run(name: &str, entry: &Path, extra: &[&str]) -> Result<(), String> {
@@ -66,9 +45,13 @@ fn run(name: &str, entry: &Path, extra: &[&str]) -> Result<(), String> {
     Ok(())
 }
 
+/// Every example at the default `-O0` on Linux. Elsewhere a sample: the
+/// optimized pass below runs every example on every platform, and the
+/// unoptimized pipeline does not depend on the platform.
 #[test]
 fn documentation_examples_compile_and_run() {
-    run_examples(&[]);
+    let examples = if cfg!(target_os = "linux") { support::docs_examples() } else { support::docs_example_sample() };
+    run_examples(examples, &[]);
 }
 
 /// Every example again, optimized and with debug info: LLVM's verifier
@@ -76,16 +59,16 @@ fn documentation_examples_compile_and_run() {
 /// optimization creates.
 #[test]
 fn documentation_examples_compile_and_run_optimized_with_debug_info() {
-    run_examples(&["-O2", "-g"]);
+    run_examples(support::docs_examples(), &["-O2", "-g"]);
 }
 
-fn run_examples(extra: &[&str]) {
+fn run_examples(examples: Vec<(String, PathBuf)>, extra: &[&str]) {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     // `PEPPER_DOCS_EXAMPLE=structs` runs only the examples whose name
     // starts with `structs`.
     let only = std::env::var("PEPPER_DOCS_EXAMPLE").unwrap_or_default();
-    let examples: Vec<_> = examples().into_iter().filter(|(name, _)| name.starts_with(&only)).collect();
+    let examples: Vec<_> = examples.into_iter().filter(|(name, _)| name.starts_with(&only)).collect();
     assert!(!examples.is_empty(), "no examples in docs/examples");
     let failures: Vec<String> =
         support::parallel_map(&examples, |(name, entry)| run(name, entry, extra).err().map(|e| format!("docs/examples/{}: {}", name, e)))

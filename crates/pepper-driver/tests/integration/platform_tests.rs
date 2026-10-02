@@ -234,47 +234,6 @@ fn filtered_module(source: &str) -> SemaModule {
     module
 }
 
-#[test]
-fn extern_non_matching_dropped() {
-    // A non-matching extern is dropped from the filtered module (asserted on
-    // the model: an unreferenced LLVM declare would not fail MCJIT, so a JIT
-    // compile alone cannot observe the drop).
-    let predicate = if is_windows() { "[Target(!OS(Windows))]" } else { "[Target(OS(Windows))]" };
-    let module = filtered_module(&format!(
-        "{predicate} extern int missing_symbol();\n\
-         test(): int {{\n\
-         return 0;\n\
-         }}"
-    ));
-    assert!(module.externs.is_empty(), "non-matching extern was kept");
-}
-
-#[test]
-fn extern_matching_kept() {
-    // A matching extern survives filtering.
-    let predicate = if is_windows() { "[Target(OS(Windows))]" } else { "[Target(!OS(Windows))]" };
-    let module = filtered_module(&format!(
-        "{predicate} extern int present_symbol();\n\
-         test(): int {{\n\
-         return 0;\n\
-         }}"
-    ));
-    assert_eq!(module.externs.len(), 1, "matching extern was dropped");
-}
-
-#[test]
-fn extern_composite_predicate() {
-    // A composite `Target` argument selects on both OS and Arch.
-    let expected = if is_windows() && is_x64() { 1 } else { 0 };
-    let module = filtered_module(
-        "[Target(OS(Windows) && Arch(x64))] extern int composite_symbol();\n\
-         test(): int {\n\
-         return 0;\n\
-         }",
-    );
-    assert_eq!(module.externs.len(), expected, "composite predicate mismatch");
-}
-
 // ── JIT invocation of per-arch symbols ─────────────────────────────────────
 
 /// Bespoke per-arch host symbols: the Pepper test calls whichever matches the

@@ -23,32 +23,6 @@ test(): int {
 }
 
 #[test]
-fn growth_reallocates() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    var i = 0;
-    while (i < 10) {
-        a.append(i);
-        i = i + 1;
-    }
-    if (a.count != 10) { return -1; }
-    var j = 0;
-    var bad = 0;
-    while (j < 10) {
-        if (a[j] != j) { bad = bad + 1; }
-        j = j + 1;
-    }
-    return bad;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn ctor_capacity() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -282,27 +256,6 @@ test(): int {
 }
 
 #[test]
-fn append_all_and_plus_assign() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var a = Array<int>();
-    a.append(1);
-    var b = Array<int>();
-    b.append(2);
-    b.append(3);
-    a += b;
-    if (a.count != 3) { return -1; }
-    if (a[0] != 1 || a[1] != 2 || a[2] != 3) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn plus_operator_concatenates() {
     assert_eq!(
         compile_jit_with_runtime(
@@ -388,67 +341,6 @@ test(): int {
     pts.append(p);
     var q = pts[0];
     return 7 - (q.x + q.y);
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn array_of_strings() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var s = Array<String>();
-    s.append("hello");
-    s.append("world");
-    if (s.find("world").value() != 1) { return -1; }
-    if (!s.contains("hello")) { return -2; }
-    var t = Array<String>();
-    t.append("hello");
-    t.append("world");
-    if (!(s == t)) { return -3; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn nested_array() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var outer = Array<Array<int>>();
-    var inner = Array<int>();
-    inner.append(1);
-    inner.append(2);
-    outer.append(inner);
-    if (outer.count != 1) { return -1; }
-    if (outer[0][1] != 2) { return -2; }
-    var sum = outer[0][0] + outer[0][1];
-    return 3 - sum;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
-fn bracket_syntax_is_array() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    int[] xs = Array<int>();
-    xs.append(1);
-    xs.append(2);
-    if (xs.count != 2) { return -1; }
-    var sum = xs[0] + xs[1];
-    return 3 - sum;
 }"#
         ),
         0

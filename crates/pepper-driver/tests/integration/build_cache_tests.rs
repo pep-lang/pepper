@@ -48,7 +48,7 @@ fn compile_entry_with(
         "--build".to_string(),
         build.to_string_lossy().into_owned(),
     ];
-    // Not verifying overrides PEPPER_CACHE_VERIFY, which CI sets.
+    // Not verifying overrides PEPPER_CACHE_VERIFY, which some CI jobs set.
     args.push(if verify { "--verify-cache" } else { "--no-verify-cache" }.to_string());
     args.extend(extra.iter().map(|a| a.to_string()));
     let options = pepper_driver::Options::parse_from(args);
@@ -131,30 +131,18 @@ fn the_optimization_level_is_part_of_every_key() {
 }
 
 #[test]
-fn the_runtime_unit_is_shared_between_programs() {
-    let dir = scratch("shared");
-    let cache = dir.join("cache");
-    assert_eq!(outcome(&build("threads-basics", &cache, &dir.join("a")), "prelude"), Some(Outcome::Miss));
-    // Another program has the same runtime sources, so the same key.
-    let other = build("tutorial-hello", &cache, &dir.join("b"));
-    assert_eq!(outcome(&other, "prelude"), Some(Outcome::Hit), "{:?}", outcomes(&other));
-    assert_eq!(outcome(&other, "docs/examples/tutorial_hello"), Some(Outcome::Miss));
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
 fn a_module_unit_is_the_same_whichever_program_built_it_first() {
     // Both programs use `text/ascii`, whose code includes `Array<u8>`'s
     // methods. Its string constants once followed the order the program
-    // generated bodies in, so the second build's verification failed.
-    for (first, second) in [("text-encodings", "http-basics"), ("http-basics", "text-encodings")] {
-        let dir = scratch(&format!("module_unit_{}", first.replace('-', "_")));
-        let cache = dir.join("cache");
-        build(first, &cache, &dir.join("a"));
-        let objects = build(second, &cache, &dir.join("b"));
-        assert_eq!(outcome(&objects, "text/ascii"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+    // generated bodies in, so the second build's verification failed. One
+    // order is enough: verifying compares the two programs' code for the
+    // unit, which differs in both orders or in neither.
+    let dir = scratch("module_unit");
+    let cache = dir.join("cache");
+    build("text-encodings", &cache, &dir.join("a"));
+    let objects = build("http-basics", &cache, &dir.join("b"));
+    assert_eq!(outcome(&objects, "text/ascii"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -162,15 +150,13 @@ fn a_unit_of_several_files_lists_its_globals_whichever_program_built_it() {
     // io and async import each other, so they are one unit. `os` imports
     // async before io, so a program that imports os loads io's files later,
     // and the unit's globals once followed that load order: the second
-    // build's verification failed.
-    for (first, second) in [("iteration-streams", "os-environment"), ("os-environment", "iteration-streams")] {
-        let dir = scratch(&format!("cycle_unit_{}", first.replace('-', "_")));
-        let cache = dir.join("cache");
-        build(first, &cache, &dir.join("a"));
-        let objects = build(second, &cache, &dir.join("b"));
-        assert_eq!(outcome(&objects, "async/channel"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+    // build's verification failed. One order is enough, as above.
+    let dir = scratch("cycle_unit");
+    let cache = dir.join("cache");
+    build("iteration-streams", &cache, &dir.join("a"));
+    let objects = build("os-environment", &cache, &dir.join("b"));
+    assert_eq!(outcome(&objects, "async/channel"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

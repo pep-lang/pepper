@@ -133,24 +133,6 @@ test(): int {
 }
 
 #[test]
-fn compound_append_from_empty() {
-    assert_eq!(
-        compile_jit_with_runtime(
-            r#"
-test(): int {
-    var x = "";
-    x += "ab";
-    x += "cd";
-    if (!(x == "abcd")) { return -1; }
-    if (x.length != 4) { return -2; }
-    return 0;
-}"#
-        ),
-        0
-    );
-}
-
-#[test]
 fn plus_operator_concatenates() {
     assert_eq!(
         compile_jit_with_runtime(

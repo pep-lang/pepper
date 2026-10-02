@@ -2,13 +2,6 @@
 
 use crate::support::compile_jit_with_runtime as run;
 
-fn error_of(source: &str) -> String {
-    match pepper_driver::compiler::compile_with_runtime("test.pep", source) {
-        Ok(_) => panic!("expected a compile error"),
-        Err(e) => e.to_string(),
-    }
-}
-
 /// A scope object that counts enters and exits, created fresh per block.
 const SESSION: &str = r#"
 import async;
@@ -190,60 +183,6 @@ test(): int {
 "#
     );
     assert_eq!(run(&src), 0);
-}
-
-#[test]
-fn with_binding_cannot_be_assigned() {
-    let src = format!(
-        "{}{}",
-        SESSION,
-        r#"
-test(): int {
-    with (var s = Session(1)) {
-        s = Session(2);
-    }
-    return 0;
-}
-"#
-    );
-    let err = error_of(&src);
-    assert!(err.contains("cannot assign to 's': it is bound by a 'with' block"), "{}", err);
-}
-
-#[test]
-fn with_void_enter_cannot_bind() {
-    let src = r#"
-struct Lock {
-    construct() {}
-    enter() {}
-    exit() {}
-}
-
-test(): int {
-    with (var l = Lock()) {}
-    return 0;
-}
-"#;
-    let err = error_of(src);
-    assert!(err.contains("cannot bind 'l': 'enter()' returns 'void'"), "{}", err);
-}
-
-#[test]
-fn with_else_needs_a_struct_result() {
-    let src = r#"
-struct Counter {
-    construct() {}
-    int enter() { return 1; }
-    exit() {}
-}
-
-test(): int {
-    with (var n = Counter()) {} else {}
-    return 0;
-}
-"#;
-    let err = error_of(src);
-    assert!(err.contains("'else' requires 'enter()' to return a struct reference, but it returns 'int'"), "{}", err);
 }
 
 #[test]

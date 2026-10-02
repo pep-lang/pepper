@@ -165,44 +165,6 @@ test(): int {
 
 // ── Full pipeline: obj + link + spawn (entry `main`) ────────────────────────
 
-#[test]
-fn full_pipeline_link_and_spawn() {
-    let source = r#"
-main(): int {
-    return 0;
-}
-"#;
-    let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
-    let mut module: SemaModule = build(&ast).expect("build");
-    pepper_sema::apply_platform_filters(&mut module).expect("platform");
-    struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module).expect("sema");
-
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.generate(&mut module).expect("gen");
-
-    // Emit obj.
-    let build_dir = std::env::temp_dir().join(format!("pepper_link_test_{}", std::process::id()));
-    std::fs::create_dir_all(&build_dir).unwrap();
-    let obj_path = build_dir.join("test.o");
-    let out_path = build_dir.join(if cfg!(windows) { "test_bin.exe" } else { "test_bin" });
-
-    // Fix linkage and linker spellings as every driver build does.
-    pepper_codegen::partition::finish(&generator.module, &generator.owners).expect("finish");
-    let machine = pepper_codegen::target::host_machine().unwrap();
-    machine
-        .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
-        .unwrap();
-
-    // Link through the driver's own linker so this test exercises the real
-    // link path instead of a hand-rolled duplicate of it.
-    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[], false, None).expect("link");
-
-    let run = std::process::Command::new(&out_path).status().unwrap();
-    assert!(run.success(), "spawned binary failed");
-}
-
 // ── Nested blocks with returns ─────────────────────────────────────────────
 
 #[test]

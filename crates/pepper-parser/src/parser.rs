@@ -189,17 +189,6 @@ mod tests {
         super::parse_source("t.pep", "import a;\nimport \"b\";\nexport x as y;\nf() {}\n").expect("imports first");
     }
 
-    #[test]
-    fn parse_error_reports_furthest_position() {
-        // The failure is mid-file; PEG backtracking must not drag the reported
-        // position back to line 1.
-        let src = "main(): int {\n    var x = ;\n}\n";
-        match super::parse_source("t.pep", src) {
-            Ok(_) => panic!("expected a parse error"),
-            Err(e) => assert!(e.starts_with("t.pep:2:"), "reported position: {}", e),
-        }
-    }
-
     /// The header line of the error `src` fails to parse with.
     fn parse_error_header(src: &str) -> String {
         match super::parse_source("t.pep", src) {

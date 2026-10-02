@@ -6,9 +6,7 @@ use clap::Parser;
 use pepper_driver::cache::Outcome;
 use std::path::{Path, PathBuf};
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
-}
+use crate::support::repo_root;
 
 /// A fresh directory holding a program whose `main` calls into another file.
 fn project(name: &str) -> PathBuf {

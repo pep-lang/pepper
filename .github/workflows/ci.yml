@@ -283,13 +283,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
     timeout-minutes: 20
-    env:
-      # Every build the tests make checks its build-cache hits: a unit whose
-      # sources matched is generated anyway and must produce the cached code,
-      # so an input missing from a unit's cache key fails here instead of
-      # linking stale code. It doubles the cost of a warm build, so only this
-      # job pays it.
-      PEPPER_CACHE_VERIFY: 1
+    # build_cache_tests verify the cache (`--verify-cache`) on every
+    # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
+    # the other tests make too, which doubles the cost of each warm build.
 
     steps:
       - uses: actions/checkout@v7

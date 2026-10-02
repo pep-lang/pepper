@@ -1340,16 +1340,6 @@ fn result_void_has_no_value() {
 }
 
 #[test]
-fn result_unwrap_is_now_value() {
-    assert_eq!(
-        error_of("result_unwrap", "main(): int {\n    return Result<int>.ok(1).unwrap();\n}\n"),
-        "main.pep:2:30: error: no member named 'unwrap' in 'Result<int, Error>'\n\
-         \x20   2 |     return Result<int>.ok(1).unwrap();\n\
-         \x20     |                              ^~~~~~"
-    );
-}
-
-#[test]
 fn void_call_used_as_a_value() {
     assert_eq!(
         error_of("void_result_value", "main(): int {\n    var r = Result<void>.ok();\n    var x = r.value();\n    return 0;\n}\n"),
