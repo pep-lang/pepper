@@ -847,7 +847,12 @@ language side.
   constant of its field's type, and an attribute field of another type.
   `attribute_value` binds the arguments to the struct's `slots`: the
   constructor's parameters (`this.f`, or assigned to a field in its body)
-  or, without one, the fields in order.
+  or, without one, the fields in order. The built-in attributes are also
+  declared as `[Attribute]` structs in `runtime/attributes.pep`
+  (`is_built_in`: a struct named like one); `check_attributes` leaves their
+  arguments to the compiler's own checks, and `built_in_value` reads a
+  value through the same binding, except `Target`, which holds its
+  condition as written.
 
 ## 3. Sema transform passes (`crates/pepper-sema/src/passes/`)
 
@@ -1744,6 +1749,7 @@ diagnostics"). The mechanics:
 | --- | --- |
 | `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
+| `attributes.pep` | The built-in attributes (`Deprecated`, `Target`, `Link`, `Shared`, ...) as `[Attribute]` structs, so `static` blocks read their values (§2.8); the compiler acts on them by name. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. Both hash containers hold one `[Value] _HashTable<K, V>` inline; a `HashSet`'s values are the empty `_NoValue`, whose stores `sizeof<V>()` guards drop. |
 | `map.pep`, `ordered_map.pep` | `compare<T>` (the generic asks `<`; `compare<String>` overrides it) and the sorted `Map`/`Set` over one `[Value] _RedBlackTree<K, V>`: a CLRS red-black tree whose nodes live in parallel arrays addressed by index (0 is the black sentinel), so links are plain integers with no reference cycles, and removed nodes go on a free list. `OrderedMap` keeps entries in insertion-order arrays with a `_HashTable<K, ulong>` from key to position; removal leaves a hole that iteration skips, compacted once holes outnumber entries. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
@@ -2176,8 +2182,9 @@ structs, members, traits, extensions, aliases, globals, imports,
 re-exports, and blocks, and sema carries it on `attributes`. An attribute
 must be one of `static_blocks::BUILT_IN_ATTRIBUTES` or a struct marked
 `[Attribute]` (`check_attributes` reports any other), so a new built-in
-attribute goes in that list. To give one meaning, read it where it
-applies:
+attribute goes in that list, and gets a documented `[Attribute]` struct in
+`runtime/attributes.pep` describing its value (regenerate the reference).
+To give one meaning, read it where it applies:
 
 - `[Link("lib")]`, `[Link(lib = "lib", name = "sym")]` → `ExternDef::link`
   (validated by `passes::check_link_attributes`), read by

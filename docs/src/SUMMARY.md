@@ -123,6 +123,7 @@
     - [async/once.pep](reference/async-once.md)
     - [async/select.pep](reference/async-select.md)
     - [async/task_local.pep](reference/async-task_local.md)
+  - [attributes.pep](reference/attributes.md)
   - [copy.pep](reference/copy.md)
   - [handle.pep](reference/handle.md)
     - [http/client.pep](reference/http-client.md)

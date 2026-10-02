@@ -400,3 +400,46 @@ fn module_scope_block_errors() {
     let error = compile_error("static {\n    const FIELDS = reflect.properties<String>();\n}\n\ntest(): int {\n    return 0;\n}\n");
     assert!(error.starts_with("test.pep:2:11: error: 'FIELDS' is a compile-time list, which emitted code cannot use"), "{}", error);
 }
+
+#[test]
+fn built_in_attribute_values_come_from_the_runtime_declarations() {
+    let source = r#"
+[Deprecated("use 'fresh' instead", "fresh")]
+stale(): int { return 1; }
+
+[Target(!OS(Windows))]
+[NotCopyable("holds a handle")]
+struct Handle {
+    var fd: int;
+}
+
+struct Point {
+    [Deprecated("use 'y' instead")]
+    var x: int;
+    var y: int;
+}
+
+test(): int {
+    var text = "";
+    static (text) {
+        for (var f in reflect.functions_with<Deprecated>()) {
+            if (f.name == "stale") {
+                text = text + f.attribute<Deprecated>().message + "|" + f.attribute<Deprecated>().replacement + ";";
+            }
+        }
+        text = text + reflect.attribute<Handle, Target>().condition + ";" + reflect.attribute<Handle, NotCopyable>().reason + ";";
+        for (var field in reflect.properties<Point>()) {
+            if (field.has_attribute<Deprecated>()) {
+                text = text + $"{field.name}:{field.attribute<Deprecated>().replacement.is_empty}";
+            }
+        }
+    }
+    if (text != "use 'fresh' instead|fresh;!OS(Windows);holds a handle;x:true") {
+        print(text);
+        return 1;
+    }
+    return 0;
+}
+"#;
+    assert_eq!(jit_census(source), (0, 0));
+}

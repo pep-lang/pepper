@@ -1228,11 +1228,15 @@ impl Expander<'_> {
     /// The `[Attribute]` struct `ty` names, or the name of a built-in
     /// attribute.
     fn attribute_struct_named(&self, ty: &TypeName, span: ast::Span) -> Result<AttributeName> {
-        if let Some(st) = find_attribute_struct(self.module, &ty.name, self.file) {
+        let found = find_attribute_struct(self.module, &ty.name, self.file);
+        if let Some(st) = found
+            && !is_built_in(st)
+        {
             return Ok(AttributeName::Declared(st.name.clone()));
         }
-        if BUILT_IN_ATTRIBUTES.contains(&ty.name.as_str()) {
-            return Ok(AttributeName::BuiltIn(ty.name.clone()));
+        let base = ty.name.rsplit('.').next().unwrap_or(&ty.name);
+        if BUILT_IN_ATTRIBUTES.contains(&base) {
+            return Ok(AttributeName::BuiltIn(base.to_string(), found.is_some()));
         }
         Err(self.error(format!("'{}' is not an attribute; an attribute is a struct marked '[Attribute]'", demangle(&ty.display())), span))
     }
@@ -1241,7 +1245,7 @@ impl Expander<'_> {
     fn names_attribute(&self, attribute: &ast::Attribute, file: FileId, wanted: &AttributeName) -> bool {
         let Some(name) = attribute_name(attribute) else { return false };
         match wanted {
-            AttributeName::BuiltIn(built_in) => &name == built_in && find_attribute_struct(self.module, &name, file).is_none(),
+            AttributeName::BuiltIn(built_in, _) => &name == built_in && find_attribute_struct(self.module, &name, file).is_none_or(is_built_in),
             AttributeName::Declared(st) => find_attribute_struct(self.module, &name, file).is_some_and(|found| &found.name == st),
         }
     }
@@ -1260,7 +1264,10 @@ impl Expander<'_> {
         };
         match wanted {
             AttributeName::Declared(_) => attribute_value(self.module, found, file).map_err(|error| self.with_passes(error)),
-            AttributeName::BuiltIn(name) => Err(self.error(format!("the values of built-in attribute '{}' are not available yet; test it with 'has_attribute'", name), span)),
+            AttributeName::BuiltIn(name, true) => built_in_value(self.module, &name, found, file).map_err(|error| self.with_passes(error)),
+            AttributeName::BuiltIn(name, false) => {
+                Err(self.error(format!("built-in attribute '{}' is not declared in the runtime, so it has no value", name), span))
+            }
         }
     }
 }
@@ -1268,7 +1275,28 @@ impl Expander<'_> {
 enum AttributeName {
     /// An `[Attribute]` struct, by its name in the model.
     Declared(String),
-    BuiltIn(String),
+    /// A built-in attribute, and whether the runtime declares it
+    /// (`runtime/attributes.pep`), which gives it a value.
+    BuiltIn(String, bool),
+}
+
+/// `st` declares a built-in attribute: an `[Attribute]` struct named like
+/// one, as `runtime/attributes.pep` declares them.
+fn is_built_in(st: &StructDef) -> bool {
+    BUILT_IN_ATTRIBUTES.contains(&demangle_name(&st.name))
+}
+
+/// The value of built-in attribute `name` as written (`attribute`, in
+/// `file`), as the struct the runtime declares for it. `[Target(...)]`
+/// holds its condition as written; the others take their arguments as an
+/// `[Attribute]` struct of the user's does.
+fn built_in_value(module: &Module, name: &str, attribute: &ast::Attribute, file: FileId) -> Result<Value> {
+    if name != "Target" {
+        return attribute_value(module, attribute, file);
+    }
+    let st = find_attribute_struct(module, name, file).expect("the runtime declares 'Target'");
+    let condition = attribute.arguments().iter().map(|argument| argument.value.to_string()).collect::<Vec<_>>().join(", ");
+    Ok(Value::Attribute(Rc::new(Attribute { ty: st.name.clone(), fields: vec![("condition".to_string(), Value::String(condition))] })))
 }
 
 fn as_float(value: &Value) -> f64 {
@@ -1639,7 +1667,8 @@ pub fn check_attributes(module: &Module) {
     let mut check = |attributes: &[ast::Attribute], file: FileId| {
         for attribute in attributes {
             let Some(name) = attribute_name(attribute) else { continue };
-            if find_attribute_struct(module, &name, file).is_none() && BUILT_IN_ATTRIBUTES.contains(&name.as_str()) {
+            // The compiler checks a built-in attribute's arguments itself.
+            if find_attribute_struct(module, &name, file).is_none_or(is_built_in) && BUILT_IN_ATTRIBUTES.contains(&name.as_str()) {
                 continue;
             }
             if let Err(error) = attribute_value(module, attribute, file) {

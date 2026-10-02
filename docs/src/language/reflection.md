@@ -198,8 +198,16 @@ declaration records a compile-time value of that struct, which
   (`this.long_name = long_name;`), which is all its body may do.
 - An attribute that names neither a built-in attribute nor an `[Attribute]`
   struct is an error, at its name: `unknown attribute 'Optoin'`.
-- Built-in attributes (`Target`, `Shared`, `Deprecated`, ...) are visible
-  too: `field.has_attribute<Deprecated>()` tests for one.
+- Built-in attributes (`Target`, `Shared`, `Deprecated`, ...) are
+  `[Attribute]` structs too, declared in the runtime
+  ([attributes](../reference/attributes.md)), so a block reads them like
+  its own: `function.attribute<Deprecated>().message`. `Target` holds its
+  condition as written (`"!OS(Windows)"`). The compiler still checks and
+  acts on each one itself.
+
+```pepper
+{{#include ../../examples/reflection-built-in.pep}}
+```
 
 Attributes can go on structs, enums and their cases, fields, functions,
 methods, constructors, parameters and module-scope variables.
@@ -212,8 +220,6 @@ methods, constructors, parameters and module-scope variables.
 
 - Calling functions other than the `reflect` functions at compile time.
 - Reflecting methods and constructors (`reflect.methods<T>()`).
-- The values of built-in attributes: `attribute<Deprecated>()` is an error;
-  `has_attribute<Deprecated>()` works.
 - `get()` on a case of an enum whose cases carry values.
 - Limiting where an attribute may be used (`[AttributeTargets(...)]`).
 - Showing the code a block expands to, and tracing the blocks the compiler
