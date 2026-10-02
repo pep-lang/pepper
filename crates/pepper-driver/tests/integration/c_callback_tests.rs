@@ -86,3 +86,33 @@ test(): int {
 "#;
     assert_eq!(run(src), (10 + 200 + 2000 + 6, 0));
 }
+
+#[test]
+fn extern_functions_are_function_values() {
+    let src = r#"
+extern int abs(int x);
+extern ulong strlen(char* s);
+[Link(name = "labs")]
+extern long long_abs(long v);
+
+apply(f: (int) => int, x: int): int { return f(x); }
+
+struct Holder {
+    int bias;
+    construct(this.bias = 0) {}
+    absolute(): (int) => int { return abs; }
+}
+
+test(): int {
+    var f = abs;
+    var length = strlen;
+    var through: (long) => long = long_abs;
+    var shared_abs: shared (int) => int = abs;
+    var pointer: extern (int) => int = abs;
+    var text = "four";
+    var total = f(-1) + apply(abs, -2) + Holder().absolute()(-3) + shared_abs(-4) + pointer(-5);
+    return total * 100 + length(text.c_str()) * 10 + through(-6);
+}
+"#;
+    assert_eq!(run(src), (1546, 0));
+}

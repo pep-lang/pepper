@@ -41,6 +41,9 @@ function's type. Calling a function value calls the function:
   An [overloaded](overloading.md#overloaded-functions-as-values) name, or
   an overloaded method (`p.move`), needs a declared type instead, which
   picks the member.
+- An [`extern` function](c-interop.md) is a value too, of the type its C
+  prototype gives: `var f = abs;` is an `(int) => int`. A variadic one,
+  such as `snprintf`, is not.
 - A function-typed variable can be reassigned to any function of the same type.
 - A parameter of function type, such as `f: (int) => int`, lets the caller pass
   in the behavior. Generic functions can take function parameters too.
@@ -309,10 +312,9 @@ atomic, like a `[Shared]` struct's (see
 
 ## What is not supported yet
 
-- **Generic functions without type arguments and `extern` functions** cannot
-  be referenced as values. `larger` alone is not a value even where the
-  expected type would pick `larger<int>`. To use an `extern` function as a
-  value, wrap it in a closure: `(x: int) => abs(x)`.
+- **Generic functions without type arguments** cannot be referenced as
+  values. `larger` alone is not a value even where the expected type would
+  pick `larger<int>`.
 - **Generic methods** cannot be referenced as values: `b.map<long>` is not
   a value. Wrap the call in a closure: `(f: (int) => long) => b.map(f)`.
 - **Closures in trait default methods** cannot use `this` or the members of

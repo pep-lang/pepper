@@ -53,6 +53,17 @@ Some things to know about `extern` declarations:
 - An extern is linked by name. If no linked library defines it, the program
   compiles and then fails to link, with the linker reporting an undefined symbol. See
   [Linking](linking.md) for how to add libraries.
+- An extern is a [function value](function-types.md) too, of the function
+  type its prototype gives (`abs` is an `(int) => int`), so it can be stored
+  and passed like a Pepper function. Where a C function pointer type is
+  expected, it is the C function's own address (see
+  [Passing a Pepper function to C](#passing-a-pepper-function-to-c)). A
+  variadic extern (one ending in `...`, below) is not a value: wrap a call
+  to it in a closure.
+
+```pepper
+{{#include ../../examples/c-extern-values.pep}}
+```
 
 ## Passing strings
 
@@ -217,7 +228,7 @@ and pass a named function, or a closure that captures nothing:
 {{#include ../../examples/c-callbacks.pep}}
 ```
 
-- **What converts.** A named free function, a static method
+- **What converts.** A named free function, an `extern` function, a static method
   (`Order.descending`), or a closure literal that captures nothing, whose
   parameter and return types match the C function pointer type exactly. A
   closure literal takes its parameter types from the type, as it does from

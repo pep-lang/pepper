@@ -69,6 +69,8 @@ struct Declared {
     plain_structs: HashMap<String, TypeName>,
     /// Specialized generic function (`identity<int>`) → signature.
     generic_functions: HashMap<String, Signature>,
+    /// Variadic `extern` functions, which have no function type.
+    variadic_externs: Vec<String>,
     statics: StructTable,
 }
 
@@ -118,7 +120,8 @@ impl Declared {
             .filter(|f| !f.is_generic_func && f.name.contains('<') && module.is_defined(f))
             .map(|f| (f.name.clone(), Signature::of(f)))
             .collect();
-        Declared { methods, fields, constructors, plain_structs, generic_functions, statics: StructTable::build(module) }
+        let variadic_externs = module.externs.iter().filter(|e| e.is_variadic).map(|e| e.name.clone()).collect();
+        Declared { methods, fields, constructors, plain_structs, generic_functions, variadic_externs, statics: StructTable::build(module) }
     }
 
     fn method(&self, owner: &TypeName, name: &str) -> Option<&Signature> {
@@ -328,8 +331,18 @@ impl Replacer<'_> {
                 }
                 return;
             }
-            Expression::SymbolRef { loc, .. } if !receiver => {
+            Expression::SymbolRef { id, loc, .. } if !receiver => {
                 let loc = *loc;
+                if self.declared.variadic_externs.contains(id) && !self.locals.iter().flatten().any(|l| l == id) {
+                    crate::errors::report(
+                        Diagnostic::error(format!(
+                            "variadic extern '{}' cannot be a function value; wrap a call to it in a closure",
+                            id
+                        ))
+                        .at(loc),
+                    );
+                    return;
+                }
                 if let Some(owner) = self.named_struct(expr) {
                     self.replace(expr, Target::Call { function: owner.to_string() }, loc);
                 }

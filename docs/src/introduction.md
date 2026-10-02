@@ -64,7 +64,7 @@ programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, and
 themselves written in Pepper.
 Some that you will meet quickly:
 
-- Functions are values: a named function, a method (`p.norm`,
+- Functions are values: a named function, an `extern` C function, a method (`p.norm`,
   `Point.norm`), a constructor (`Point`), a generic function's
   specialization (`larger<int>`) or a closure such as `(x: int) => x * 2`
   can be stored, passed and called through a function type such as

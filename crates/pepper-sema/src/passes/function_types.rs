@@ -48,14 +48,19 @@ pub fn signature(function: &FunctionDef) -> TypeName {
 
 /// Free functions that can be referenced by name as values: concrete,
 /// non-generic definitions (generic references come with explicit
-/// specialization later).
+/// specialization later), and `extern` functions that are not variadic,
+/// whose function object's thunk calls the C function.
 pub fn referenceable_functions(module: &Module) -> Vec<(String, TypeName)> {
-    module
+    let functions = module
         .functions
         .iter()
         .filter(|f| !f.is_generic_func && !f.name.contains('<') && module.is_defined(f))
-        .map(|f| (f.name.clone(), signature(f)))
-        .collect()
+        .map(|f| (f.name.clone(), signature(f)));
+    let externs = module.externs.iter().filter(|e| !e.is_variadic).map(|e| {
+        let ret = if e.ty.is_auto() { TypeName::void() } else { e.ty.clone() };
+        (e.name.clone(), TypeName::function_type(ret, e.parameters.iter().map(|p| p.ty.clone()).collect()))
+    });
+    functions.chain(externs).collect()
 }
 
 /// Add a struct for every function type and weak reference type

@@ -394,6 +394,19 @@ fn bare_return_in_a_non_void_function() {
 }
 
 #[test]
+fn variadic_extern_as_a_function_value() {
+    assert_eq!(
+        error_of(
+            "variadic_extern_value",
+            "extern int snprintf(char* buffer, ulong size, char* format, ...);\nmain(): int {\n    var f = snprintf;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:13: error: variadic extern 'snprintf' cannot be a function value; wrap a call to it in a closure\n\
+         \x20   3 |     var f = snprintf;\n\
+         \x20     |             ^~~~~~~~"
+    );
+}
+
+#[test]
 fn unknown_escape_sequence() {
     assert_eq!(
         error_of("unknown_escape_sequence", "main(): int {\n    print(\"a\\qb\");\n    return 0;\n}\n"),

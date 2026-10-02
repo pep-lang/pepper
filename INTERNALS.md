@@ -1162,7 +1162,9 @@ How the language lowers:
 - **Function values**: `FunctionRef` produces a static function object
   (`__function_object.<name>`, or `__function_object.shared.<name>` for a
   `shared` function type) whose `__invoke` points at a thunk
-  (`__function_thunk.<name>`, one per function). Its strong count starts at
+  (`__function_thunk.<name>`, one per function; for an `extern` function,
+  which `function_types::referenceable_functions` lists unless it is
+  variadic, the thunk calls the C function). Its strong count starts at
   `STATIC_REFCOUNT`, so it is never freed. `codegen_invoke` loads `__invoke` and calls
   it with the signature of the static type. A callee of C function pointer
   type goes to `codegen_call_c_function` instead: an indirect call to the
