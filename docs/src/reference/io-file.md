@@ -912,7 +912,7 @@ Checks that the File is open, for use before an operation.
 #### read
 
 ```pepper
-read(buf: u8[], max: ulong): IoResult<ulong>
+read(buffer: u8[], max: ulong): IoResult<ulong>
 ```
 
 Reads up to `max` bytes from the current position and appends them
@@ -924,10 +924,10 @@ bytes before the end of the file (always so for pipes and terminals),
 and a single call moves at most about 2 GiB on POSIX or 1 GiB on
 Windows. Loop until it returns 0 to read everything, or use
 `read_all`. On POSIX an interrupted read (`EINTR`) is retried. On
-failure `buf` keeps its previous contents.
+failure `buffer` keeps its previous contents.
 
 **Parameters**
-- `buf` — the array the bytes are appended to
+- `buffer` — the array the bytes are appended to
 - `max` — the most bytes to read; 0 reads nothing and returns 0
 
 **Returns**
