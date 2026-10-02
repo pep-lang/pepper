@@ -246,8 +246,21 @@ and pass a named function, or a closure that captures nothing:
         |         ^~~~
   ```
 
-  Most C APIs that take a callback also take a `void*` context argument that
-  they hand back to it; pass what the callback needs through that.
+  This is a design decision, not a missing feature: a C function pointer is
+  a bare address, and giving each capturing closure an address of its own
+  would mean writing executable code at run time, which some platforms
+  forbid. A callback that needs state gets it another way:
+  - **The C function's context argument.** Most C APIs that take a callback
+    also take a `void*` context argument that they hand back to it; pass a
+    pointer to the data the callback needs through that.
+  - **A thread-local or module-scope value.** Set an
+    [`async.ThreadLocal<T>`](threads.md#per-thread-values-with-threadlocal) (or an `Atomic<T>`) before calling
+    C, and read it in the callback, which is a named function:
+
+    ```pepper
+    {{#include ../../examples/c-callback-state.pep}}
+    ```
+
   A function value held in a variable does not convert either, since it may
   be a closure.
 - **C types only.** C knows nothing of reference counts, so the parameter

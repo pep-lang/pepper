@@ -329,8 +329,10 @@ A plain function value's counts are plain increments; a `shared` one's are
 atomic, like a `[Shared]` struct's (see
 [Sharing function values between threads](#sharing-function-values-between-threads)).
 
-## What is not supported yet
+## C function pointers
 
-- **Closures that capture values as C callbacks.** A C function pointer
-  (`extern (P) => R`) takes a named function or a closure that captures
-  nothing; see [Calling C](c-interop.md#passing-a-pepper-function-to-c).
+A C function pointer type, `extern (P...) => R`, holds a bare address that C
+can call, not a function value: it takes a named function or a closure that
+captures nothing, and never a closure that captures values. That is by
+design; see [Passing a Pepper function to C](c-interop.md#passing-a-pepper-function-to-c)
+for how a callback gets the state it needs.
