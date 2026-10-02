@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -374,9 +374,113 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Pepper does not yet have a shorthand for propagation (such as Rust’s <code>?</code>
-operator), so each fallible call is checked with <code>if</code>, <code>is</code> or <code>match</code> as
-shown above.</p>
+<p>The <code>?</code> operator, below, writes each of these checks in one character.</p>
+<h2 id="propagating-errors-with-"><a class="header" href="#propagating-errors-with-">Propagating errors with <code>?</code></a></h2>
+<p><code>?</code> after a <code>Result</code> passes its error up, like Rust’s <code>?</code>: on an Ok result
+it is the value, and on an Err result it returns that error from the
+enclosing function at once. <code>var x = parse(s)?;</code> does what the <code>if (x.is_err()) { return ...err(x.error()); }</code> checks above do:</p>
+<pre><code class="language-pepper"># `?` propagates a failure: on an Err it returns that error from the
+# enclosing function, and on an Ok it is the value.
+struct ParseError {
+    String input;
+
+    construct(this.input = "") {}
+}
+
+parse_number(text: String): Result&lt;int, ParseError&gt; {
+    if (text.is_empty) {
+        return Result&lt;int, ParseError&gt;.err(ParseError(text));
+    }
+    var value = 0;
+    for (var c in text) {
+        var digit = "0123456789".find(c);
+        if (digit &lt; 0) {
+            return Result&lt;int, ParseError&gt;.err(ParseError(text));
+        }
+        value = value * 10 + (digit as int);
+    }
+    return Result&lt;int, ParseError&gt;.ok(value);
+}
+
+# Each `?` returns early with the error, so the sum is computed only when
+# both numbers parse.
+add_numbers(a: String, b: String): Result&lt;int, ParseError&gt; {
+    return Result&lt;int, ParseError&gt;.ok(parse_number(a)? + parse_number(b)?);
+}
+
+# A function with a different error type: the `[Implicit]` constructor
+# converts a ParseError on its way out.
+struct ConfigError {
+    String message;
+
+    [Implicit]
+    construct(e: ParseError) {
+        this.message = "bad number '" + e.input + "'";
+    }
+}
+
+read_limit(text: String): Result&lt;int, ConfigError&gt; {
+    var limit = parse_number(text)?;
+    if (limit == 0) {
+        return Result&lt;int, ConfigError&gt;.err(ConfigError(ParseError(text)));
+    }
+    return Result&lt;int, ConfigError&gt;.ok(limit);
+}
+
+first_name(names: Array&lt;String&gt;): String? {
+    if (names.is_empty) {
+        return Optional&lt;String&gt;.Empty;
+    }
+    return Optional&lt;String&gt;.Value(names[0]);
+}
+
+# On an Optional, `?` returns an Empty optional from a function that returns
+# one.
+first_length(names: Array&lt;String&gt;): ulong? {
+    return Optional&lt;ulong&gt;.Value(first_name(names)?.length);
+}
+
+main(): int {
+    assert(add_numbers("40", "2").value() == 42, "40 + 2");
+    assert(add_numbers("40", "4x2").error().input == "4x2", "the error is the second number's");
+
+    assert(read_limit("10").value() == 10, "a limit");
+    assert(read_limit("ten").error().message == "bad number 'ten'", "converted to a ConfigError");
+
+    assert(first_length(["Ada", "Grace"]).value() == 3, "Ada");
+    assert(first_length(Array&lt;String&gt;()).is_empty(), "no names");
+    return 0;
+}
+</code></pre>
+<p>The rules:</p>
+<ul>
+<li>The enclosing function must declare that it returns a <code>Result</code>, or the
+compiler reports <code>'?' requires the enclosing function to return a Result</code>. A closure that uses <code>?</code> writes its return type out:
+<code>(s: String): Result&lt;int&gt; =&gt; Result&lt;int&gt;.ok(parse(s)? + 1)</code>.</li>
+<li>The error type must be the function’s error type, or convert to it
+through an <code>[Implicit]</code> constructor (see <a href="structs.html#implicit-conversions">Implicit
+conversions</a>), as <code>ConfigError</code> does above, like
+Rust’s <code>From</code>. Otherwise the error is <code>cannot convert error type 'ParseError' to 'ConfigError'</code>.</li>
+<li>On a <code>Result&lt;void&gt;</code>, <code>?</code> yields nothing, so it stands as a statement:
+<code>remove(path)?;</code>.</li>
+<li>On an <code>Optional</code>, <code>?</code> works the same way in a function that returns an
+optional: an Empty optional returns Empty (see <a href="optionals.html#returning-early-with-">Optional
+values</a>).</li>
+<li>The early return is an ordinary <code>return</code>: locals are released and
+<code>with</code> blocks are exited as for any other.</li>
+</ul>
+<p>Each <code>?</code> in a statement runs before the rest of the statement, so two
+placements are errors:</p>
+<ul>
+<li>After a call in the same statement, as in <code>f() + g()?</code>, where <code>g()</code>
+would run before <code>f()</code>: <code>'?' cannot follow a call in the same statement</code>. Call <code>f()</code> in a statement of its own first. Reading
+variables and fields before a <code>?</code> is fine, and several <code>?</code>s run in the
+order written: <code>add(parse(a)?, parse(b)?)</code>.</li>
+<li>Where it might not run: the right operand of <code>&amp;&amp;</code> or <code>||</code>, a branch of
+<code>?:</code>, or a <code>match</code> arm. Use an <code>if</code> or <code>match</code> statement there.</li>
+</ul>
+<p>A <code>?</code> in a <code>while</code> condition runs on every iteration, before the condition
+is tested.</p>
 <h2 id="results-from-the-io-module"><a class="header" href="#results-from-the-io-module">Results from the io module</a></h2>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
@@ -485,7 +589,7 @@ of kinds and the platform codes each one covers.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -233,7 +233,39 @@ others privately, and your program can declare them again.</li>
 <li>An extern is linked by name. If no linked library defines it, the program
 compiles and then fails to link, with the linker reporting an undefined symbol. See
 <a href="linking.html">Linking</a> for how to add libraries.</li>
+<li>An extern is a <a href="function-types.html">function value</a> too, of the function
+type its prototype gives (<code>abs</code> is an <code>(int) =&gt; int</code>), so it can be stored
+and passed like a Pepper function. Where a C function pointer type is
+expected, it is the C function’s own address (see
+<a href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a>). A
+variadic extern (one ending in <code>...</code>, below) is not a value: wrap a call
+to it in a closure.</li>
 </ul>
+<pre><code class="language-pepper"># An extern function is a function value, like a Pepper function.
+extern int abs(int x);
+extern ulong strlen(char* s);
+
+apply(f: (int) =&gt; int, x: int): int {
+    return f(x);
+}
+
+main(): int {
+    # Its type comes from the prototype: `abs` is an `(int) =&gt; int`.
+    var absolute = abs;
+    assert(absolute(-3) == 3, "through a local");
+    assert(apply(abs, -4) == 4, "as an argument");
+
+    # A `char*` parameter is a `__ptr&lt;char&gt;` in the function type.
+    var length: (__ptr&lt;char&gt;) =&gt; ulong = strlen;
+    var word = "four";
+    assert(length(word.c_str()) == 4, "strlen");
+
+    # Where a C function pointer is expected, it is the C function itself.
+    var pointer: extern (int) =&gt; int = abs;
+    assert(pointer(-5) == 5, "C function pointer");
+    return 0;
+}
+</code></pre>
 <h2 id="passing-strings"><a class="header" href="#passing-strings">Passing strings</a></h2>
 <p>Pepper’s <a href="../reference/string.html"><code>String</code></a> is a reference-counted object, not
 a C string, so a <code>String</code> value cannot be passed where C expects <code>char*</code>.</p>
@@ -570,7 +602,7 @@ main(): int {
 </code></pre>
 <ul>
 <li>
-<p><strong>What converts.</strong> A named free function, a static method
+<p><strong>What converts.</strong> A named free function, an <code>extern</code> function, a static method
 (<code>Order.descending</code>), or a closure literal that captures nothing, whose
 parameter and return types match the C function pointer type exactly. A
 closure literal takes its parameter types from the type, as it does from
@@ -739,7 +771,7 @@ declaration visible to other Pepper files (see <a href="visibility.html">Visibil
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

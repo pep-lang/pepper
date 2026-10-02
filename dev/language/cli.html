@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -325,7 +325,7 @@ main(): int {
 
     # The arguments as `main(args: String[])` would receive them.
     var parsed = parser.try_parse(["pkg", "-v", "add", "--dev", "yaml"]);
-    assert(parsed.is_ok() &amp;&amp; parsed.value().is_none(), "parsed, no help asked for");
+    assert(parsed.is_ok() &amp;&amp; parsed.value().is_empty(), "parsed, no help asked for");
     assert(add.is_selected &amp;&amp; !update.is_selected, "the add command");
     assert(verbose.is_set &amp;&amp; dev.is_set &amp;&amp; name.value() == "yaml", "its values");
 
@@ -412,7 +412,7 @@ tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362</a>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

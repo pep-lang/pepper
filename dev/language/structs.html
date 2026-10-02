@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -723,15 +723,84 @@ and is used as a <code>HashMap</code> or <code>HashSet</code> key also needs a m
 operators should return <code>bool</code> too. Arithmetic, bitwise and compound
 assignment operators usually return the struct’s own type; a compound
 assignment usually changes <code>this</code> and returns it.</li>
-<li>The left operand decides: <code>a + b</code> uses the method on <code>a</code>’s type. An
-expression with a number on the left and a struct on the right, such as
-<code>2 * v</code>, is not supported.</li>
+<li>The left operand decides: <code>a + b</code> uses the method on <code>a</code>’s type. For a
+number on the left, such as <code>2 * v</code>, see
+<a href="#a-number-on-the-left">A number on the left</a>.</li>
 <li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) can only be declared
 in the <code>name: Type</code> form, <code>&lt;(other: V): bool</code>: in the C-style form the
 parser reads <code>bool &lt;</code> as the start of generic arguments.</li>
 </ul>
 <p>The result of an operator has the type its method returns, so with
 <code>-(other: V): int</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
+<h3 id="a-number-on-the-left"><a class="header" href="#a-number-on-the-left">A number on the left</a></h3>
+<p><code>2.0 * v</code> uses the operator of the left operand’s type, <code>double</code>, which a
+struct cannot change. Declare it in an
+<a href="traits-and-extensions.html#numbers-bool-and-enums">extension</a> of the
+number type instead, where <code>this</code> is the number:</p>
+<pre><code class="language-pepper"># A number on the left of an operator: `2 * v` with a struct `v`.
+struct Vector {
+    var x: double;
+    var y: double;
+
+    construct(this.x = 0.0, this.y = 0.0) {}
+
+    # `v * 2.0` calls `v.*(2.0)`.
+    *(scale: double): Vector {
+        return Vector(x * scale, y * scale);
+    }
+}
+
+# `2.0 * v` uses the operator of the left operand's type, so `double`
+# declares it in an extension; `this` is the number.
+extend double {
+    *(v: Vector): Vector {
+        return v * this;
+    }
+}
+
+# `2` is an `int`, which needs its own.
+extend int {
+    *(v: Vector): Vector {
+        return v * (this as double);
+    }
+}
+
+main(): int {
+    var v = Vector(1.0, 2.0);
+    var a = v * 2.0;
+    var b = 2.0 * v;
+    var c = 2 * v;
+    assert(a.x == 2.0 &amp;&amp; b.x == 2.0 &amp;&amp; c.y == 4.0, "both orders");
+    # Numbers on both sides still use the built-in operator.
+    assert(2 * 3 == 6, "built-in");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The number type is the left operand’s own: <code>2</code> is an <code>int</code> and <code>2.0</code> a
+<code>double</code>, so each needs its own extension (<code>extend int</code>, <code>extend double</code>).
+Without one, <code>2 * v</code> is <code>invalid operands to binary expression ('int' and 'Vector')</code>.</p>
+</li>
+<li>
+<p>The operator takes one operand, which may be any type except a number,
+<code>bool</code>, enum or pointer: numbers on both sides always use the built-in
+operator.</p>
+<pre><code class="language-text">main.pep:2:14: error: operator '+' of 'int' cannot take an operand of type 'int': the built-in operator applies
+    2 |     +(other: int): int { return 0; }
+      |              ^~~
+</code></pre>
+</li>
+<li>
+<p>Comparisons work the same way, and <code>2.0 != v</code> means <code>!(2.0 == v)</code> when
+the extension declares only <code>==</code>. Compound assignments (<code>n *= v</code>) do not
+apply, since the number cannot hold the result.</p>
+</li>
+<li>
+<p>The extension is visible like any other: where its file is imported, if it
+is exported.</p>
+</li>
+</ul>
 <h3 id="unary-operators"><a class="header" href="#unary-operators">Unary operators</a></h3>
 <p>A unary operator is a method with no parameters; its operand is <code>this</code>.</p>
 <div class="table-wrapper">
@@ -836,7 +905,7 @@ count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code
 <p>A struct never equals a number: unless the struct declares an <code>==</code> (or <code>!=</code>)
 taking one, comparing a struct value such as an <code>Optional</code> with an integer is
 an error (<code>cannot compare 'Optional&lt;ulong&gt;' with an integer</code>), since it could
-only ever compare the object itself. Test an optional with <code>is_none()</code> (or
+only ever compare the object itself. Test an optional with <code>is_empty()</code> (or
 <code>if (found)</code>) and read its value with <code>value()</code>.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it as a method named <code>[]</code>:</p>
@@ -845,7 +914,11 @@ only ever compare the object itself. Test an optional with <code>is_none()</code
 <li>With two parameters, <code>[](index: int, value: String): String</code>, it handles
 writes: <code>shelf[i] = value</code>. The second parameter is the value being stored.</li>
 </ul>
-<p>The C-style form, <code>String [](int index)</code>, is accepted too.</p>
+<p>The C-style form, <code>String [](int index)</code>, is accepted too. Only parameters
+without a default count, so either kind can end with a defaulted parameter,
+such as the <code>location: __ptr&lt;char&gt; = __caller_location()</code> that <code>Array</code> uses to
+report an out-of-range index at the caller’s line (see
+<a href="functions.html#assertions-and-panics">Assertions and panics</a>).</p>
 <p>A struct can have both. With both, compound assignment through an index
 (<code>counts[i] += 1</code>) reads with the first and writes with the second.
 <a href="../reference/array.html"><code>Array</code></a> and <a href="../reference/string.html"><code>String</code></a> are
@@ -902,7 +975,7 @@ indexed this way.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

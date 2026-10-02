@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,8 +183,8 @@
                     <main>
                         <h1 id="optional-values"><a class="header" href="#optional-values">Optional values</a></h1>
 <p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>, written <code>T?</code> for
-short: either <strong>Some</strong>,
-holding a <code>T</code>, or <strong>None</strong>, holding nothing. It plays the role of Rust’s
+short: either <strong>Value</strong>,
+holding a <code>T</code>, or <strong>Empty</strong>, holding nothing. It plays the role of Rust’s
 <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>. Use it instead of a null reference or a
 sentinel such as <code>-1</code> or <code>""</code>: the type tells the caller that the value can be
 absent, and reading it goes through a method that checks.</p>
@@ -200,52 +200,52 @@ struct Person {
 
 find_adult(people: Array&lt;Person&gt;): Optional&lt;Person&gt; {
     for (var p in people) {
-        if (p.age &gt;= 18) { return Optional&lt;Person&gt;.some(p); }
+        if (p.age &gt;= 18) { return Optional&lt;Person&gt;.Value(p); }
     }
-    return Optional&lt;Person&gt;.none();
+    return Optional&lt;Person&gt;.Empty;
 }
 
 # `ulong?` is shorthand for `Optional&lt;ulong&gt;`.
 index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
     while (i &lt; text.length) {
-        if (text[i] == wanted) { return Optional&lt;ulong&gt;.some(i); }
+        if (text[i] == wanted) { return Optional&lt;ulong&gt;.Value(i); }
         i = i + 1;
     }
-    return Optional&lt;ulong&gt;.none();
+    return Optional&lt;ulong&gt;.Empty;
 }
 
 main(): int {
     var people = Array&lt;Person&gt;();
     people.append(Person("ada", 12));
-    assert(find_adult(people).is_none(), "no adult yet");
+    assert(find_adult(people).is_empty(), "no adult yet");
 
     people.append(Person("grace", 45));
     var adult = find_adult(people);
-    assert(adult.is_some(), "grace is an adult");
+    assert(adult.is_value(), "grace is an adult");
     # An optional is a condition by itself: `if (adult)` tests is_some().
     if (!adult) { return 1; }
     assert(adult.value().name == "grace", "value() returns the Person");
 
     # Works for types that have no null, too.
     assert(index_of("pepper", "e").value() == 1, "first 'e' is at 1");
-    assert(index_of("pepper", "z").is_none(), "no 'z'");
+    assert(index_of("pepper", "z").is_empty(), "no 'z'");
 
     # value_or supplies a fallback instead of panicking.
-    assert(index_of("pepper", "z").value_or(99) == 99, "fallback for None");
+    assert(index_of("pepper", "z").value_or(99) == 99, "fallback for Empty");
 
-    # Optional is an enum with the cases None and Some(value).
-    var nothing = Optional&lt;int&gt;.None;
-    assert(nothing.is_none(), "the None case is None");
+    # Optional is an enum with the cases Empty and Value(value).
+    var nothing = Optional&lt;int&gt;.Empty;
+    assert(nothing.is_empty(), "the Empty case is empty");
     var first_p = match (index_of("pepper", "p")) {
-        None =&gt; -1,
-        Some(at) =&gt; at as int,
+        Empty =&gt; -1,
+        Value(at) =&gt; at as int,
     };
     assert(first_p == 0, "match on an optional");
 
-    # An optional slot that is not given a value starts as None.
+    # An optional slot that is not given a value starts as Empty.
     var later: String?;
-    assert(later.is_none(), "unassigned optionals are None");
+    assert(later.is_empty(), "unassigned optionals are Empty");
     return 0;
 }
 </code></pre>
@@ -257,13 +257,27 @@ applies to everything before it, so <code>int[]?</code> is an optional array, an
 <p>A C-style declaration inside a function body, such as <code>Node? n = m;</code>, is read
 as a declaration only when a name follows the <code>?</code> and then <code>=</code>, <code>;</code> or the end
 of the line; <code>a ? b : c</code> stays a conditional expression.</p>
-<h2 id="optional-slots-start-as-none"><a class="header" href="#optional-slots-start-as-none">Optional slots start as None</a></h2>
-<p>A variable or field of an optional type that is not given a value starts as
-None, not null:</p>
-<pre><code class="language-pepper">struct Node {
-    Token? leaf;   # None until assigned
+<h2 id="returning-early-with-"><a class="header" href="#returning-early-with-">Returning early with <code>?</code></a></h2>
+<p>In a function that returns an optional, <code>?</code> after an optional is its value,
+or, when it is Empty, returns Empty from the function at once, as <code>?</code> does
+with an error for <a href="results.html#propagating-errors-with-"><code>Result</code></a>:</p>
+<pre><code class="language-pepper">middle_name(person: Person): String? {
+    var names = person.full_name?.split(" ");
+    if (names.count &lt; 3) {
+        return Optional&lt;String&gt;.Empty;
+    }
+    return Optional&lt;String&gt;.Value(names[1]);
 }
-var count: int?;   # None
+</code></pre>
+<p>Using <code>?</code> on an optional in a function that does not return an optional is
+an error (<code>'?' requires the enclosing function to return an Optional</code>).</p>
+<h2 id="optional-slots-start-as-empty"><a class="header" href="#optional-slots-start-as-empty">Optional slots start as Empty</a></h2>
+<p>A variable or field of an optional type that is not given a value starts as
+Empty, not null:</p>
+<pre><code class="language-pepper">struct Node {
+    Token? leaf;   # Empty until assigned
+}
+var count: int?;   # Empty
 </code></pre>
 <h2 id="creating-and-checking-optionals"><a class="header" href="#creating-and-checking-optionals">Creating and checking optionals</a></h2>
 <div class="table-wrapper">
@@ -272,37 +286,36 @@ var count: int?;   # None
 <tr><th>Member</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Optional&lt;T&gt;.some(value)</code></td><td>Creates a Some optional holding <code>value</code>.</td></tr>
-<tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;.None</code></td><td>Create a None optional.</td></tr>
-<tr><td><code>Optional&lt;T&gt;.Some(value)</code></td><td>The case itself: the same as <code>some(value)</code>.</td></tr>
-<tr><td><code>is_some()</code>, <code>is_none()</code></td><td>Report which kind the optional is.</td></tr>
-<tr><td><code>!!</code> (truth test)</td><td>An optional is a condition by itself: <code>if (found)</code> is <code>if (found.is_some())</code>, and <code>!found</code> is <code>found.is_none()</code>.</td></tr>
-<tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on a None value</code> if the optional is None.</td></tr>
-<tr><td><code>value_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the optional is None. Never panics.</td></tr>
+<tr><td><code>Optional&lt;T&gt;.Value(value)</code></td><td>Creates a Value optional holding <code>value</code>.</td></tr>
+<tr><td><code>Optional&lt;T&gt;.Empty</code></td><td>An Empty optional.</td></tr>
+<tr><td><code>is_value()</code>, <code>is_empty()</code></td><td>Report which case the optional is.</td></tr>
+<tr><td><code>!!</code> (truth test)</td><td>An optional is a condition by itself: <code>if (found)</code> is <code>if (found.is_value())</code>, and <code>!found</code> is <code>found.is_empty()</code>.</td></tr>
+<tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on an Empty optional</code> if the optional is Empty.</td></tr>
+<tr><td><code>value_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the optional is Empty. Never panics.</td></tr>
 </tbody>
 </table>
 </div>
-<p>Use <code>value()</code> when a None would be a bug in your program, since it stops the
-program. When a missing value is an expected outcome, test it first (<code>if (found)</code>, <code>is_some()</code> or <code>is_none()</code>), or supply a fallback with <code>value_or</code>.
+<p>Use <code>value()</code> when an Empty optional would be a bug in your program, since it stops the
+program. When a missing value is an expected outcome, test it first (<code>if (found)</code>, <code>is_value()</code> or <code>is_empty()</code>), or supply a fallback with <code>value_or</code>.
 Testing the optional itself works because <code>Optional</code> declares the truth-test
 operator <code>!!</code> (see <a href="structs.html#truth-tests-and-conditions">Truth tests</a>).</p>
 <p><code>Optional&lt;T&gt;</code> works for every <code>T</code>, including types that have no null at all,
-such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
+such as <code>int</code> or <code>ulong</code>. For a struct type, a Value optional holds a
 reference to the object, like any other struct slot (see
 <a href="memory.html">Memory and reference counting</a>).</p>
-<p><code>Optional&lt;T&gt;</code> is an <a href="enums.html">enum</a> with the cases <code>None</code> and
-<code>Some(value)</code>, so <code>match</code> and <code>is</code> work on it too:</p>
+<p><code>Optional&lt;T&gt;</code> is an <a href="enums.html">enum</a> with the cases <code>Empty</code> and
+<code>Value(value)</code>, so <code>match</code> and <code>is</code> work on it too:</p>
 <pre><code class="language-pepper">var shown = match (name) {
-    None =&gt; "nobody",
-    Some(text) =&gt; text,
+    Empty =&gt; "nobody",
+    Value(text) =&gt; text,
 };
-if (name is Some(text)) { print(text); }
+if (name is Value(text)) { print(text); }
 </code></pre>
 <p>An optional is a <a href="enums.html#value-enums">value enum</a>: it lives inline in the
 variable, field or array element that holds it, so creating one allocates
 nothing, and copying one gives an independent optional. It is never null,
 and has no identity: compare two optionals with <code>==</code>, which compares
-whether each is Some and, if both are, their values; <code>===</code> on an optional
+whether each holds a value and, if both do, their values; <code>===</code> on an optional
 is an error.</p>
 <h2 id="optionals-in-the-standard-library"><a class="header" href="#optionals-in-the-standard-library">Optionals in the standard library</a></h2>
 <p>Standard library lookups that can come up empty return an optional rather
@@ -310,7 +323,7 @@ than a sentinel value:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>API</th><th>Returns</th><th>None when</th></tr>
+<tr><th>API</th><th>Returns</th><th>Empty when</th></tr>
 </thead>
 <tbody>
 <tr><td><code>Array&lt;T&gt;.find(item)</code></td><td><code>ulong?</code></td><td>no element equals <code>item</code></td></tr>
@@ -331,7 +344,7 @@ main(): int {
     var names = ["ada", "grace", "linus"];
     var at = names.find("grace");
     assert(at.value() == 1, "grace is at index 1");
-    assert(names.find("ken").is_none(), "ken is not in the array");
+    assert(names.find("ken").is_empty(), "ken is not in the array");
 
     # Path.parent, file_name, file_stem and extension return `Path?` or
     # `String?`: none when the path has no such part.
@@ -341,10 +354,10 @@ main(): int {
     assert(path.extension().value() == "md", "extension");
     assert(path.parent().value() == io.Path("docs"), "parent");
 
-    assert(io.Path("/").parent().is_none(), "a root has no parent");
-    assert(io.Path("notes").parent().is_none(), "nor does a bare name");
-    assert(io.Path("a/..").file_name().is_none(), "'..' is not a file name");
-    assert(io.Path("Makefile").extension().is_none(), "no dot, no extension");
+    assert(io.Path("/").parent().is_empty(), "a root has no parent");
+    assert(io.Path("notes").parent().is_empty(), "nor does a bare name");
+    assert(io.Path("a/..").file_name().is_empty(), "'..' is not a file name");
+    assert(io.Path("Makefile").extension().is_empty(), "no dot, no extension");
 
     # value_or supplies a default when none is an expected outcome.
     var ext = io.Path("Makefile").extension().value_or("txt");
@@ -356,8 +369,8 @@ main(): int {
 “not found”, and the <code>Path</code> methods above returned an empty <code>Path</code> or
 <code>String</code> (or <code>name.size</code> for <code>dot_index</code>). Code written against the old
 API must test the optional instead: <code>a.find(x) &gt;= 0</code> becomes
-<code>a.find(x).is_some()</code>, <code>p.parent().is_empty</code> becomes
-<code>p.parent().is_none()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
+<code>a.find(x).is_value()</code>, <code>p.parent().is_empty</code> becomes
+<code>p.parent().is_empty()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
 A comparison such as <code>a.find(x) == -1</code> still compiles but compares the
 optional object rather than an index, so search for these and rewrite them.
 <code>String.find</code> is unchanged and still returns <code>-1</code>.</p>
@@ -423,7 +436,7 @@ and <code>String.find</code> returns <code>-1</code>, for example.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

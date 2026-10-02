@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,7 +185,7 @@
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
 <p>Source: <code>runtime/internals.pep</code></p>
 <h2 id="assert"><a class="header" href="#assert">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: String)
+<pre><code class="language-pepper">assert(condition: bool, message: String, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
 <p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
 <p>The check always runs; there is no release mode that removes it. A
@@ -195,16 +195,17 @@ builds no <code>String</code>. Any other message is evaluated before the call.</
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
+<li><code>location</code> — where the failure is reported, <code>file:line:col</code>; leave it out to report this call (see <code>panic</code>)</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
+<li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;)
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
 <p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
 NUL-terminated C string. A string literal message picks this overload,
@@ -213,26 +214,40 @@ so an assertion that holds builds no <code>String</code>.</p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure, or <code>__null</code> for a generic message</li>
+<li><code>location</code> — where the failure is reported, <code>file:line:col</code>; leave it out to report this call (see <code>panic</code>)</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
+<li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="panic"><a class="header" href="#panic">panic</a></h2>
-<pre><code class="language-pepper">panic(message: String)
+<pre><code class="language-pepper">panic(message: String, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
 <p>Prints <code>message</code> and aborts the program. It never returns.</p>
-<p>Writes <code>message</code> and a newline to standard output, or “Assertion failed
-with no additional information” when <code>message</code> is null. Then it flushes
-every C output stream, so the message is not lost when stdout is a pipe,
-and calls C <code>abort()</code>. No destructors or releases run, and the process
-ends abnormally (SIGABRT on POSIX).</p>
+<p>Reports <code>message</code> as a panic and aborts.</p>
+<p>Flushes every C output stream, so output printed so far is not lost,
+then writes <code>location: panic: message</code> and a newline to standard error
+(“Assertion failed with no additional information” when <code>message</code> is
+null), and calls C <code>abort()</code>. No destructors or releases run, and the
+process ends abnormally (SIGABRT on POSIX).</p>
+<p><code>location</code> is <code>file:line:col</code>. Left out, it is this call’s location, the
+way a C++ <code>std::source_location</code> default argument works. A function
+that panics on its caller’s behalf takes a <code>location</code> parameter of its
+own with the same default and passes it on, so the panic names its
+caller’s line:</p>
+<pre><code>check_positive(value: int, location: __ptr&lt;char&gt; = __caller_location()) {
+    if (value &lt;= 0) {
+        panic("expected a positive value", location);
+    }
+}
+</code></pre>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print</li>
+<li><code>location</code> — where the panic is reported, or <code>__null</code> for none</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -242,15 +257,15 @@ ends abnormally (SIGABRT on POSIX).</p>
 <pre><code class="language-pepper">    panic("unreachable");
 </code></pre>
 <h2 id="panic-1"><a class="header" href="#panic-1">panic</a></h2>
-<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;)
+<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
-<p>Writes <code>message</code>, a NUL-terminated C string, and a newline to standard
-output (a generic message when it is <code>__null</code>), flushes every C output
-stream, and aborts, as <code>panic(String)</code> does. A string literal message
-picks this overload, so it allocates nothing.</p>
+<p>Reports <code>message</code>, a NUL-terminated C string (a generic message when it
+is <code>__null</code>), as a panic and aborts, as <code>panic(String)</code> does. A string
+literal message picks this overload, so it allocates nothing.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print, or <code>__null</code></li>
+<li><code>location</code> — where the panic is reported, or <code>__null</code> for none; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -311,7 +326,7 @@ picks this overload, so it allocates nothing.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,32 +187,31 @@
 <h2 id="optional-1"><a class="header" href="#optional-1">Optional</a></h2>
 <pre><code class="language-pepper">[Value] enum Optional&lt;T&gt;
 </code></pre>
-<p>A value of type <code>T</code> that may be absent: either Some, holding a <code>T</code>, or
-None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
+<p>A value of type <code>T</code> that may be absent: either Value, holding a <code>T</code>, or
+Empty, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</p>
 <p>Use it instead of a null reference or a sentinel (<code>-1</code>, <code>""</code>) wherever a
 value may be missing: the type says so, and reading the value goes through
 <code>value()</code>, which checks, or <code>value_or()</code>, which cannot fail. It works for
 every type, including those that have no null, such as <code>int</code>.</p>
 <p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
-optional type that is not given a value starts as None.</p>
-<p>Build one with the static <code>some</code> or <code>none</code> functions, or with its cases
-(<code>Optional&lt;int&gt;.Some(1)</code>, <code>Optional&lt;int&gt;.None</code>). Test it with <code>is_some()</code>
-or <code>is_none()</code>, as a condition by itself (<code>if (found)</code>), or with <code>match</code>
-and <code>is</code> on its cases (<code>if (found is Some(v))</code>).</p>
+optional type that is not given a value starts as Empty.</p>
+<p>Build one with its cases (<code>Optional&lt;int&gt;.Value(1)</code>, <code>Optional&lt;int&gt;.Empty</code>).
+Test it with <code>is_value()</code> or <code>is_empty()</code>, as a condition by itself (<code>if (found)</code>), or with <code>match</code>
+and <code>is</code> on its cases (<code>if (found is Value(v))</code>).</p>
 <p>An optional is a <a href="../language/value-structs.html">value enum</a>: it is stored
 inline in whatever holds it, with no allocation, and copying one gives an
 independent optional. It is never null, and has no identity, so compare
 optionals with <code>==</code>, not <code>===</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the value a Some optional holds</li>
+<li><code>T</code> — the type of the value a Value optional holds</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    find_even(values: Array&lt;int&gt;): int? {
         for (var v in values) {
-            if (v % 2 == 0) { return Optional&lt;int&gt;.some(v); }
+            if (v % 2 == 0) { return Optional&lt;int&gt;.Value(v); }
         }
-        return Optional&lt;int&gt;.none();
+        return Optional&lt;int&gt;.Empty;
     }
 
     main(): int {
@@ -225,13 +224,13 @@ optionals with <code>==</code>, not <code>===</code>.</p>
     }
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
-<h4 id="none"><a class="header" href="#none">None</a></h4>
-<pre><code class="language-pepper">None
+<h4 id="empty"><a class="header" href="#empty">Empty</a></h4>
+<pre><code class="language-pepper">Empty
 </code></pre>
 <p>Holds no value. It is the first case, so an optional that is never
-given a value is None.</p>
-<h4 id="some"><a class="header" href="#some">Some</a></h4>
-<pre><code class="language-pepper">Some(value: T)
+given a value is Empty.</p>
+<h4 id="value"><a class="header" href="#value">Value</a></h4>
+<pre><code class="language-pepper">Value(value: T)
 </code></pre>
 <p>Holds a value.</p>
 <p><strong>Parameters</strong></p>
@@ -239,99 +238,125 @@ given a value is None.</p>
 <li><code>value</code> — the value held</li>
 </ul>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
-<h4 id="some-1"><a class="header" href="#some-1">some</a></h4>
-<pre><code class="language-pepper">static some(value: T): Optional&lt;T&gt;
+<h4 id="some"><a class="header" href="#some">some</a></h4>
+<pre><code class="language-pepper">[Deprecated("use the case 'Value' instead", "Value")] static some(value: T): Optional&lt;T&gt;
 </code></pre>
-<p>Returns a Some optional holding <code>value</code>.</p>
-<p>For a struct <code>T</code> the optional acquires a reference to <code>value</code>.</p>
+<p>Deprecated: use the <code>Value</code> case, <code>Optional&lt;T&gt;.Value(value)</code>,
+instead.</p>
+<p>Returns a Value optional holding <code>value</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to hold</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a Some optional whose value is <code>value</code></li>
+<li>a Value optional whose value is <code>value</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var answer = Optional&lt;int&gt;.some(42);
+<h4 id="none"><a class="header" href="#none">none</a></h4>
+<pre><code class="language-pepper">[Deprecated("use the case 'Optional&lt;T&gt;.Empty' instead")] static none(): Optional&lt;T&gt;
 </code></pre>
-<h4 id="none-1"><a class="header" href="#none-1">none</a></h4>
-<pre><code class="language-pepper">static none(): Optional&lt;T&gt;
-</code></pre>
-<p>Returns a None optional, one holding no value.</p>
+<p>Deprecated: use the <code>Empty</code> case, <code>Optional&lt;T&gt;.Empty</code>, instead.</p>
+<p>Returns an Empty optional, one holding no value.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a None optional</li>
+<li>an Empty optional</li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var nothing = Optional&lt;String&gt;.none();
-</code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
-<pre><code class="language-pepper">is_some(): bool
+<h4 id="is_value"><a class="header" href="#is_value">is_value</a></h4>
+<pre><code class="language-pepper">is_value(): bool
 </code></pre>
 <p>Reports whether this optional holds a value.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the optional is Some</li>
+<li>true when the optional is Value</li>
 </ul>
-<h4 id="is_none"><a class="header" href="#is_none">is_none</a></h4>
-<pre><code class="language-pepper">is_none(): bool
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.Value(7);
+    if (found.is_value()) { print(found.value()); }   # prints 7
+</code></pre>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">is_empty(): bool
 </code></pre>
 <p>Reports whether this optional holds no value.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the optional is None</li>
+<li>true when the optional is Empty</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var missing = Optional&lt;int&gt;.Empty;
+    if (missing.is_empty()) { print("missing"); }
+</code></pre>
+<h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'is_value' instead", "is_value")] is_some(): bool
+</code></pre>
+<p>Deprecated: use <code>is_value</code> instead.</p>
+<p>Reports whether this optional holds a value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is Value</li>
+</ul>
+<h4 id="is_none"><a class="header" href="#is_none">is_none</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'is_empty' instead", "is_empty")] is_none(): bool
+</code></pre>
+<p>Deprecated: use <code>is_empty</code> instead.</p>
+<p>Reports whether this optional holds no value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is Empty</li>
 </ul>
 <h4 id="operator-"><a class="header" href="#operator-">operator !!</a></h4>
 <pre><code class="language-pepper">!!(): bool
 </code></pre>
 <p>Reports whether this optional holds a value: the truth test, so an
 optional can stand as a condition by itself.</p>
-<p><code>if (found)</code> means <code>if (found.is_some())</code>, <code>!found</code> means
-<code>found.is_none()</code>, and the same holds in <code>while</code>, <code>&amp;&amp;</code>, <code>||</code> and
+<p><code>if (found)</code> means <code>if (found.is_value())</code>, <code>!found</code> means
+<code>found.is_empty()</code>, and the same holds in <code>while</code>, <code>&amp;&amp;</code>, <code>||</code> and
 <code>?:</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the optional is Some</li>
+<li>true when the optional is Value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.some(7);
+<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.Value(7);
     if (found) { print(found.value()); }   # prints 7
 </code></pre>
-<h4 id="value"><a class="header" href="#value">value</a></h4>
-<pre><code class="language-pepper">value(): T
+<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<pre><code class="language-pepper">value(location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
-<p>Returns the value, panicking if this optional is None.</p>
+<p>Returns the value, panicking if this optional is Empty.</p>
 <p>For a struct <code>T</code> the caller gets its own reference; the optional keeps
 its reference too.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value of a Some optional</li>
+<li>the value of a Value optional</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if the optional is None (“Optional.value on a None value”)</li>
+<li>if the optional is Empty (“Optional.value on an Empty optional”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.some(42).value();   # 42
+<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.Value(42).value();   # 42
 </code></pre>
 <h4 id="value_or"><a class="header" href="#value_or">value_or</a></h4>
 <pre><code class="language-pepper">value_or(fallback: T): T
 </code></pre>
-<p>Returns the value, or <code>fallback</code> if this optional is None.</p>
+<p>Returns the value, or <code>fallback</code> if this optional is Empty.</p>
 <p>Never panics. <code>fallback</code> is evaluated by the caller whether or not it
 is used.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>fallback</code> — the value to return when the optional is None</li>
+<li><code>fallback</code> — the value to return when the optional is Empty</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value when the optional is Some, otherwise <code>fallback</code></li>
+<li>the value when the optional is Value, otherwise <code>fallback</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.none().value_or(-1);   # -1
+<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.Empty.value_or(-1);   # -1
 </code></pre>
 
                     </main>
@@ -385,7 +410,7 @@ is used.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

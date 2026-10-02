@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -256,6 +256,9 @@ main(): int {
 An <a href="overloading.html#overloaded-functions-as-values">overloaded</a> name, or
 an overloaded method (<code>p.move</code>), needs a declared type instead, which
 picks the member.</li>
+<li>An <a href="c-interop.html"><code>extern</code> function</a> is a value too, of the type its C
+prototype gives: <code>var f = abs;</code> is an <code>(int) =&gt; int</code>. A variadic one,
+such as <code>snprintf</code>, is not.</li>
 <li>A function-typed variable can be reassigned to any function of the same type.</li>
 <li>A parameter of function type, such as <code>f: (int) =&gt; int</code>, lets the caller pass
 in the behavior. Generic functions can take function parameters too.</li>
@@ -276,6 +279,22 @@ struct Point {
     shifted(dx: int): Point {
         return Point(x + dx, y);
     }
+
+    # Inside a method, a bare method name is `this.norm`.
+    norm_of_this(): () =&gt; int {
+        return norm;
+    }
+}
+
+struct Box&lt;T&gt; {
+    T value;
+    construct(v: T) {
+        value = v;
+    }
+
+    map&lt;U&gt;(f: (T) =&gt; U): Box&lt;U&gt; {
+        return Box&lt;U&gt;(f(value));
+    }
 }
 
 larger&lt;T&gt;(a: T, b: T): T {
@@ -292,6 +311,7 @@ main(): int {
     # A bound method: the method of one object, which it keeps alive.
     var norm = p.norm;
     assert(norm() == 7, "bound method");
+    assert(p.norm_of_this()() == 7, "bare method name");
 
     # An unbound method takes the object as its first argument.
     var norm_of: (Point) =&gt; int = Point.norm;
@@ -303,6 +323,17 @@ main(): int {
 
     # A generic function with its type arguments names one specialization.
     assert(combine(larger&lt;int&gt;, 2, 9) == 9, "generic function");
+
+    # Where a function type is expected, it picks the specialization.
+    assert(combine(larger, 4, 1) == 4, "inferred specialization");
+
+    # A generic method, with its type arguments written or picked by the
+    # function type.
+    var b = Box&lt;int&gt;(3);
+    var to_long = b.map&lt;long&gt;;
+    assert(to_long((x: int): long =&gt; x * 2).value == 6, "generic method");
+    var to_text: ((int) =&gt; String) =&gt; Box&lt;String&gt; = b.map;
+    assert(to_text((x: int) =&gt; "three").value == "three", "inferred generic method");
 
     var steps = Array&lt;(int) =&gt; Point&gt;();
     steps.append(p.shifted);
@@ -323,29 +354,57 @@ main(): int {
 <tr><td><code>Point</code></td><td><code>(int, int) =&gt; Point</code></td><td>the constructor</td></tr>
 <tr><td><code>Box&lt;int&gt;</code></td><td><code>(int) =&gt; Box&lt;int&gt;</code></td><td>the constructor of <code>Box&lt;int&gt;</code></td></tr>
 <tr><td><code>larger&lt;int&gt;</code></td><td><code>(int, int) =&gt; int</code></td><td>the specialization <code>larger&lt;int&gt;</code></td></tr>
+<tr><td><code>b.map&lt;long&gt;</code> (a generic method)</td><td><code>((int) =&gt; long) =&gt; Box&lt;long&gt;</code></td><td><code>b.map&lt;long&gt;(...)</code>, on the object <code>b</code> referred to</td></tr>
 </tbody>
 </table>
 </div>
 <ul>
-<li><strong>Bound methods.</strong> <code>p.norm</code> keeps a reference to the object, like a closure
+<li>
+<p><strong>Bound methods.</strong> <code>p.norm</code> keeps a reference to the object, like a closure
 <code>() =&gt; p.norm()</code> that captured <code>p</code>, so the object lives as long as the
 value does. The expression before the <code>.</code> is evaluated once, when the value
-is made. Inside a method, write <code>this.norm</code>; a bare <code>norm</code> is not a value.
-Storing <code>this.norm</code> in a field of <code>this</code> would be a reference cycle, and is
-an error, as for <a href="#this-in-methods">closures</a>.
+is made.
 A bound method is a function value, not the value the method returns:
 passing <code>p.name</code> where a <code>String</code> is expected is an error. Call it,
 <code>p.name()</code>. The methods of an enum whose cases carry nothing are not
-values at all (see <a href="enums.html#current-limits">enums</a>).</li>
-<li><strong>Traits and extensions.</strong> A method declared in an
+values at all (see <a href="enums.html#current-limits">enums</a>).</p>
+</li>
+<li>
+<p><strong>Inside a method.</strong> A bare method name is a value too, as a bare call
+is a call: <code>norm</code> means <code>this.norm</code>, and a static method’s bare name
+means <code>Point.origin</code>. This works in closures, extensions and trait default
+methods as well. A local or parameter of the same name hides the method.
+Storing <code>norm</code> (or <code>this.norm</code>) in a field of <code>this</code> would be a reference
+cycle, and is an error, as for <a href="#this-in-methods">closures</a>.</p>
+</li>
+<li>
+<p><strong>Traits and extensions.</strong> A method declared in an
 <a href="traits-and-extensions.html">extension</a> works the same way, and so does a
-method of a trait-typed value (<code>shape.area</code>), which calls through the trait.</li>
-<li><strong>Generic functions</strong> need their type arguments: <code>larger&lt;int&gt;</code>, not
-<code>larger</code>.</li>
-<li><strong>A type with a constructor that takes no arguments.</strong> <code>Box&lt;int&gt;</code> on its
+method of a trait-typed value (<code>shape.area</code>), which calls through the trait.</p>
+</li>
+<li>
+<p><strong>Generic functions.</strong> Where a function type is expected, the generic
+function’s name alone is enough: the expected type picks the
+specialization, as a call’s arguments do. <code>var f: (int, int) =&gt; int = larger;</code> and <code>combine(larger, 2, 9)</code> both mean <code>larger&lt;int&gt;</code>, and a type
+parameter that appears only in the return type is bound from the
+expected return type. With no function type to go by, as in <code>var f = larger;</code>, write the type arguments:</p>
+<pre><code class="language-text">main.pep:3:13: error: cannot infer the type arguments of 'larger' used as a value; write them (larger&lt;T&gt;) or give the value a function type
+</code></pre>
+</li>
+<li>
+<p><strong>Generic methods.</strong> A method with type parameters of its own is a
+value once they are known: written (<code>b.map&lt;long&gt;</code>,
+<code>Box&lt;int&gt;.map&lt;long&gt;</code>, <code>Box&lt;int&gt;.wrap&lt;int&gt;</code>) or picked by the function
+type it flows into, as for generic functions:
+<code>var m: ((int) =&gt; String) =&gt; Box&lt;String&gt; = b.map;</code> is <code>b.map&lt;String&gt;</code>.
+Without either, <code>var m = b.map;</code> is an error that asks for them.</p>
+</li>
+<li>
+<p><strong>A type with a constructor that takes no arguments.</strong> <code>Box&lt;int&gt;</code> on its
 own names the constructor only when the constructor needs at least one
 argument; otherwise it is a call, <code>Box&lt;int&gt;()</code>. The same goes for a generic
-function whose parameters all have defaults.</li>
+function whose parameters all have defaults.</p>
+</li>
 </ul>
 <h2 id="storing-and-returning-functions"><a class="header" href="#storing-and-returning-functions">Storing and returning functions</a></h2>
 <p>Function values go wherever other values go: struct fields, arrays,
@@ -565,7 +624,9 @@ a changing number, capture a struct that holds it, such as a <code>Counter</code
 <h3 id="this-in-methods"><a class="header" href="#this-in-methods"><code>this</code> in methods</a></h3>
 <p>A closure written in a method can use <code>this</code>, the struct’s fields and its
 methods. It captures <code>this</code> (one reference to the object), never a copy of
-the fields, so it sees the fields’ current values.</p>
+the fields, so it sees the fields’ current values. In a trait’s
+<a href="traits-and-extensions.html#default-method-bodies">default method</a>, a closure
+can use <code>this</code> and the trait’s methods the same way.</p>
 <p>Storing such a closure in a field of the same object would make the object
 and the closure keep each other alive forever (a reference cycle), so that
 direct case is an error:</p>
@@ -717,7 +778,8 @@ hides the function inside its scope. Inside a function with a parameter named
 <p>A function value is a reference, like a struct value, and follows the same
 reference-counting rules (see <a href="memory.html">Memory and reference counting</a>).
 Referring to a named function allocates nothing: every reference to <code>square</code>
-shares one static function object. A method, constructor or generic function
+shares one static function object, and so does a generic function named
+without its type arguments (<code>larger</code> as an <code>(int, int) =&gt; int</code>). A method, constructor or generic function
 value allocates one small object, like a closure; a bound method’s object
 holds a reference to its receiver.</p>
 <p>Creating a closure allocates one object holding the captured values, like
@@ -728,16 +790,6 @@ atomic, like a <code>[Shared]</code> struct’s (see
 <a href="#sharing-function-values-between-threads">Sharing function values between threads</a>).</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Generic functions without type arguments and <code>extern</code> functions</strong> cannot
-be referenced as values. <code>larger</code> alone is not a value even where the
-expected type would pick <code>larger&lt;int&gt;</code>. To use an <code>extern</code> function as a
-value, wrap it in a closure: <code>(x: int) =&gt; abs(x)</code>.</li>
-<li><strong>Generic methods</strong> cannot be referenced as values: <code>b.map&lt;long&gt;</code> is not
-a value. Wrap the call in a closure: <code>(f: (int) =&gt; long) =&gt; b.map(f)</code>.</li>
-<li><strong>A bare method name inside a method</strong> (<code>var f = norm;</code>) is not a value;
-write <code>this.norm</code>.</li>
-<li><strong>Closures in trait default methods</strong> cannot use <code>this</code> or the members of
-the struct yet.</li>
 <li><strong>Closures that capture values as C callbacks.</strong> A C function pointer
 (<code>extern (P) =&gt; R</code>) takes a named function or a closure that captures
 nothing; see <a href="c-interop.html#passing-a-pepper-function-to-c">Calling C</a>.</li>
@@ -794,7 +846,7 @@ nothing; see <a href="c-interop.html#passing-a-pepper-function-to-c">Calling C</
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

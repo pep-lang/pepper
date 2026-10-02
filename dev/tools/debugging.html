@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,8 +190,8 @@ WinDbg. The compiler then describes the program to the debugger, which can:</p>
 <li>show a backtrace with the source line of every Pepper frame;</li>
 <li>print parameters, locals, module-scope variables and struct fields.</li>
 </ul>
-<pre><code class="language-bash">pepper -g main.pep -o main        # Linux and macOS: DWARF in the executable
-pepper -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
+<pre><code class="language-bash">pepper build -g main.pep -o main        # Linux and macOS: DWARF in the executable
+pepper build -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
 </code></pre>
 <p><code>-g</code> and <code>-O</code> work together. Optimized code still steps and shows a
 backtrace, and a call the optimizer inlined still appears as its own frame.
@@ -219,7 +219,7 @@ main(): int {
 }
 </code></pre>
 <p>Stop on line 18, after <code>first</code> is assigned, and look around. In gdb:</p>
-<pre><code class="language-text">$ pepper -g debugging.pep -o debugging
+<pre><code class="language-text">$ pepper build -g debugging.pep -o debugging
 $ gdb ./debugging
 (gdb) break debugging.pep:18
 (gdb) run
@@ -254,23 +254,27 @@ fields. The fields include the <code>__refcount</code> and <code>__weakcount</co
 helps when chasing an ownership bug.</li>
 <li><strong>Numbers</strong> under their Pepper names (<code>int</code>, <code>ulong</code>, <code>u8</code>).</li>
 <li><strong>Enums.</strong> A plain enum shows its case by name. An enum with payloads
-shows as a struct holding its tag and its payload fields.</li>
+shows as a struct holding its tag, <code>__tag</code> (the case’s position), and its
+payload fields, each named <code>Case__value</code> (<code>Value__value</code>), which a
+debugger expression can name: <code>print found.Value__value</code>. A value enum
+(<code>[Value]</code>, such as <code>Optional</code> and <code>Result</code>) is that struct itself,
+held inline, with no reference counts.</li>
 <li><strong>Tuples</strong> as a struct with members <code>0</code>, <code>1</code>, and so on.</li>
 <li><strong>Trait values</strong> as the object they refer to and its vtable.</li>
 <li><strong>Generics.</strong> Each instantiation is its own type, such as <code>Array&lt;long&gt;</code>.</li>
 <li><strong>Module-scope variables</strong> under their names.</li>
 <li><strong><code>String</code>, <code>Array</code> and <code>Optional</code></strong> read naturally once the
 debugger loads Pepper’s formatters (see below): a <code>String</code> as its text,
-an <code>Array</code> as its count and elements, an <code>Optional</code> as <code>none</code> or <code>some</code>
-and its value. Each also shows its reference counts as <code>[ref count]</code>
-(strong references) and <code>[weak count]</code>.</li>
+an <code>Array</code> as its count and elements, an <code>Optional</code> as its case, <code>Empty</code>
+or <code>Value</code>, and its value. A <code>String</code> and an <code>Array</code> also show their
+reference counts as <code>[ref count]</code> (strong references) and <code>[weak count]</code>.</li>
 </ul>
 <p>Not yet supported: an enum with payloads shows its tag and every payload
 field, rather than the active case and its payload alone.</p>
 <h2 id="formatters-for-the-runtimes-types"><a class="header" href="#formatters-for-the-runtimes-types">Formatters for the runtime’s types</a></h2>
 <p>The runtime ships formatters for each debugger in <code>runtime/debuggers/</code>.
 The sessions below stop in a program holding <code>var name = "pepper";</code>, an
-<code>Array&lt;int&gt;</code> <code>values</code> of 3 and 4, and <code>var found = Optional&lt;int&gt;.some(7);</code>.</p>
+<code>Array&lt;int&gt;</code> <code>values</code> of 3 and 4, and <code>var found = Optional&lt;int&gt;.Value(7);</code>.</p>
 <ul>
 <li>
 <p><strong>gdb.</strong> On Linux a <code>-g</code> program carries <code>gdb_printers.py</code> in its
@@ -284,20 +288,23 @@ $1 = "pepper" = {[ref count] = 1, [weak count] = 1}
 (gdb) print values
 $2 = Array&lt;int&gt; of count 2 = {[ref count] = 1, [weak count] = 1, [0] = 3, [1] = 4}
 (gdb) print found
-$3 = some = {[ref count] = 1, [weak count] = 1, value = 7}
+$3 = Value = {value = 7}
 </code></pre>
 </li>
 <li>
 <p><strong>lldb.</strong> Import <code>lldb_formatters.py</code>, once per session or in
 <code>~/.lldbinit</code>:</p>
 <pre><code class="language-text">(lldb) command script import runtime/debuggers/lldb_formatters.py
-(lldb) frame variable name *values
+(lldb) frame variable name *values found
 (String *) name = 0x00005555555592c0 "pepper"
 (Array&lt;int&gt;) *values = count=2 {
   [ref count] = 1
   [weak count] = 1
   [0] = 3
   [1] = 4
+}
+(Optional&lt;int&gt;) found = Value {
+  value = 7
 }
 </code></pre>
 </li>
@@ -364,7 +371,7 @@ generics they instantiate from it.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

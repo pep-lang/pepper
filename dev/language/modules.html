@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -457,7 +457,7 @@ main(): int {
 <p>An identifier import looks for a folder <code>geometry/module.pep</code> on the <strong>search
 paths</strong>: first each directory you pass with <code>-I</code>, in order, then the runtime
 directory. If <code>geometry</code> lives in a <code>deps</code> folder, compile with:</p>
-<pre><code class="language-sh">pepper main.pep -I deps -o main
+<pre><code class="language-sh">pepper build main.pep -I deps -o main
 </code></pre>
 <p>An identifier import never looks next to the importing file. A module that is
 not found is reported with the places the compiler looked:</p>
@@ -483,9 +483,9 @@ itself (<code>export panic(...)</code>); re-exporting another function under a r
 export’s name is an error, since the runtime’s own files would keep calling
 their version. When the runtime’s function is <a href="overloading.html">overloaded</a>,
 the prelude module replaces only the overloads it declares, matched by
-parameter types: an <code>export assert(condition: bool, message: String)</code>
-replaces the <code>String</code> form, and a string literal message still calls the
-runtime’s <code>__ptr&lt;char&gt;</code> form.</p>
+parameter types, defaulted ones included: an <code>export assert(condition: bool, message: String, location: __ptr&lt;char&gt; = __caller_location())</code> replaces the
+<code>String</code> form, and a string literal message still calls the runtime’s
+<code>__ptr&lt;char&gt;</code> form.</p>
 <p>Only functions may be redefined this way. A struct, trait, type alias or
 variable that a prelude module exports under a name the runtime (or another
 prelude module) already exports is an error in the module loaded first, with
@@ -600,7 +600,7 @@ elsewhere (see <a href="platform-selection.html">Platform selection</a>):</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

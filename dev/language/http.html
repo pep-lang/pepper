@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -260,9 +260,9 @@ their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
     assert(Uri.decode(uri.path).value() == "/café", "decoded path");
     assert(uri.path_and_query() == "/caf%C3%A9?page=2", "what an HTTP request line names");
 
-    # Missing parts are None: a mailto URI has no authority.
+    # Missing parts are Empty: a mailto URI has no authority.
     var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.host.is_none() &amp;&amp; mail.path == "someone@example.com", "no authority");
+    assert(mail.host.is_empty() &amp;&amp; mail.path == "someone@example.com", "no authority");
 
     # A relative reference has no scheme, like a request target on a server.
     var target = Uri.parse("/items?page=2").value();
@@ -365,7 +365,7 @@ document every method.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

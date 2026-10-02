@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -220,12 +220,15 @@ debugger; you can leave it out. Run <code>cargo setup --check</code> at any time
 what is configured.</p>
 </li>
 </ol>
-<p>Now build the compiler:</p>
+<p>Now build the compiler, then the <code>pepper</code> command with it:</p>
 <pre><code class="language-sh">cargo build --release
+target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 </code></pre>
-<p>The compiler is <code>target/release/pepper</code> (<code>target\release\pepper.exe</code> on
-Windows). To check that everything works, run the test suite with
-<code>cargo test --workspace</code>.</p>
+<p>On Windows, name the output <code>target\release\pepper.exe</code>. The compiler is
+<code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
+so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
+<a href="../tools/pepper.html">The pepper command</a>). To check that everything works,
+run the test suite with <code>cargo test --workspace</code>.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -239,9 +242,9 @@ the process’s exit code, where 0 means success. <code>print</code> writes a va
 standard output, followed by a new line. Comments start with <code>#</code> and run to
 the end of the line.</p>
 <h2 id="compile-and-run-it"><a class="header" href="#compile-and-run-it">Compile and run it</a></h2>
-<p>Pass the source file to <code>pepper</code>. It compiles and links a native executable,
+<p>Pass the source file to <code>pepper build</code>. It compiles and links a native executable,
 but does not run it, so run the result yourself:</p>
-<pre><code class="language-sh">pepper hello.pep -o hello
+<pre><code class="language-sh">pepper build hello.pep -o hello
 ./hello
 </code></pre>
 <pre><code class="language-text">Hello, world!
@@ -252,7 +255,8 @@ the executable is written to the current directory, named after the source
 file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
 <p>The examples here write <code>pepper</code>; use the path to the binary you built, or add
 <code>target/release</code> to your <code>PATH</code>. From the repository root, you can also run
-the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>.</p>
+the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
+runs <code>pep-build</code> directly.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
@@ -325,6 +329,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
 <tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
 <tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
+<tr><td><code>-T passes</code></td><td>Print how long each pass of the checker took, summed over its runs, slowest first.</td></tr>
 <tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (its sources, and its imports’ declarations, unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
 <tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
@@ -365,7 +370,7 @@ the code yet: in a generic function or method nothing calls, on a
 the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
 built yourself (<code>cargo build --release -p pepper-lsp</code> builds
-<code>target/release/pepper-lsp</code>). The server restarts whenever that file
+<code>target/release/pep-lsp</code>). The server restarts whenever that file
 changes.</li>
 </ul>
 <p>To install the extension from the branch you have checked out instead of the
@@ -433,7 +438,7 @@ built-in type and function.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -468,15 +468,18 @@ main(): int {
 </code></pre>
 <ul>
 <li>Each element takes a case of its enum (<code>Rock</code>, <code>Word(text)</code>), a literal
-(<code>1</code>, <code>"x"</code>, <code>true</code>), another tuple pattern, <code>_</code> for any value, or a name.</li>
-<li>A name binds its element, unless the element is an enum with a case of
+(<code>1</code>, <code>"x"</code>, <code>true</code>), a <a href="enums.html#ranges-and-constants">range or a constant</a>
+(<code>0..9</code>, <code>LIMIT</code>), another tuple pattern, <code>_</code> for any value, or a name.</li>
+<li>A name binds its element, unless it names a module-scope constant, which
+the element is compared with, or the element is an enum with a case of
 that name, which it then matches. So in <code>(Circle, other)</code> over two shapes,
 <code>Circle</code> is a case and <code>other</code> holds the second shape.</li>
 <li>An arm’s patterns bind the same names, each at the same element: <code>(x, 0), (0, x)</code> is an error, since <code>x</code> would mean a different element depending
 on which pattern matched.</li>
 <li>The arms must handle every value unless there is an <code>else</code>. A missing
 value is named with an example: <code>match on '(Shape, int)' does not handle '(Line, _)'</code>. Only enum cases and <code>true</code>/<code>false</code> can be listed in full;
-other literals need a pattern with <code>_</code> or a name at that element.</li>
+other literals and ranges need a pattern with <code>_</code> or a name at that
+element.</li>
 <li>A pattern that the arms before it already cover is an error, and an
 <code>else</code> after arms that cover everything is a warning.</li>
 <li><code>value is (4, column)</code> tests one tuple pattern, and binds its names as
@@ -534,7 +537,7 @@ the whole condition of an <code>if</code> or <code>while</code>, as for enums.</
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

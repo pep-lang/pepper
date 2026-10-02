@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,7 @@
                         <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
 <p>This book lives in <code>docs/</code> and is rendered with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>.
 The standard library reference (<code>docs/src/reference/</code>) is generated from the
-runtime’s doc comments by <code>pepper-docgen</code>, a tool in this repository.</p>
+runtime’s doc comments by <code>pep-doc</code>, a tool in this repository.</p>
 <pre><code class="language-sh">cargo install mdbook --locked                 # once
 
 cargo run -p pepper-docgen -- serve           # live preview while writing
@@ -210,7 +210,7 @@ shows. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
 <p>Documentation is versioned with the compiler’s <a href="https://semver.org">semantic version</a>
-(<code>version</code> in the root <code>Cargo.toml</code>). <code>pepper-docgen build --version X.Y.Z</code>
+(<code>version</code> in the root <code>Cargo.toml</code>). <code>pep-doc build --version X.Y.Z</code>
 renders the book into <code>&lt;site&gt;/X.Y.Z/</code> and leaves every other version in the
 site alone; <code>versions.json</code> lists them for the version picker, and the site’s
 <code>index.html</code> opens the newest release. Builds from <code>main</code> publish as <code>dev</code>.</p>
@@ -267,7 +267,7 @@ comment standard in <code>AGENTS.md</code>, which <code>runtime_docs_tests.rs</c
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

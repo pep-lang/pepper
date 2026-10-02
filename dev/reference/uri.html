@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -221,7 +221,7 @@ has an empty query) differs from a missing one (<code>http://h/</code> has none)
 <h4 id="host"><a class="header" href="#host">host</a></h4>
 <pre><code class="language-pepper">var host: String?
 </code></pre>
-<p>The host, without the brackets of an IPv6 address; None when the URI
+<p>The host, without the brackets of an IPv6 address; Empty when the URI
 has no authority (no <code>//</code>), and empty for one such as <code>file:///tmp</code>.</p>
 <h4 id="port"><a class="header" href="#port">port</a></h4>
 <pre><code class="language-pepper">var port: u16?
@@ -264,7 +264,7 @@ followed by two hexadecimal digits.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.scheme == "mailto" &amp;&amp; mail.host.is_none(), "no authority");
+    assert(mail.scheme == "mailto" &amp;&amp; mail.host.is_empty(), "no authority");
     assert(mail.path == "someone@example.com", "the path holds the address");
     assert(Uri.parse("a b").is_err(), "a space must be encoded");
 </code></pre>
@@ -303,7 +303,7 @@ relative reference).</p>
 host (in brackets when it is an IPv6 address) and port.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the authority, such as <code>user@example.com:8443</code>, or None when <code>host</code> is None</li>
+<li>the authority, such as <code>user@example.com:8443</code>, or Empty when <code>host</code> is Empty</li>
 </ul>
 <h4 id="path_and_query"><a class="header" href="#path_and_query">path_and_query</a></h4>
 <pre><code class="language-pepper">path_and_query(): String
@@ -377,7 +377,7 @@ scheme is lowercased.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

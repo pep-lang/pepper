@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,8 @@
                     <main>
                         <h1 id="json"><a class="header" href="#json">JSON</a></h1>
 <p>The <code>json</code> module reads JSON text into a <code>JsonValue</code>, lets you look values
-up and change them, and writes them back as compact or indented text.</p>
+up and change them, and writes them back as compact or indented text. It
+also converts <a href="#structs">structs</a> to JSON and back.</p>
 <pre><code class="language-pepper"># JSON: parse text, look values up, change them, and write them back.
 import json;
 
@@ -346,12 +347,213 @@ JSON cannot spell, are written as <code>null</code>.</li>
 <li>Objects keep their keys in insertion order, so parsing a document and
 writing it back keeps its order.</li>
 </ul>
+<h2 id="documents-with-comments"><a class="header" href="#documents-with-comments">Documents with comments</a></h2>
+<p><code>parse</code> skips a JSONC file’s comments. To change a file people edit, such
+as a settings file, and write it back with its comments, read it with
+<code>json.parse_document(text)</code>, which returns a <code>Result&lt;JsonDocument, JsonError&gt;</code>:</p>
+<pre><code class="language-pepper"># JSON: change a JSONC settings file and write it back with its comments.
+import json;
+
+main(): int {
+    var text = "{\n  // Spaces per level.\n  \"tab_size\": 4,\n  \"font\": \"Mono\", // the editor's\n  \"wrap\": true\n}";
+    var parsed = json.parse_document(text, path = "settings.json");
+    if (parsed.is_err()) {
+        print(parsed.error().to_string());
+        return 1;
+    }
+    var document = parsed.value();
+    assert(document.to_string() == text, "unchanged text comes back as it was");
+
+    # Change the value; each comment stays with its value.
+    document.root["tab_size"] = json.JsonValue.Integer(2);
+    document.set_comments("$.wrap", ["// Wrap long lines."]);
+    assert(document.comments("$.tab_size")[0] == "// Spaces per level.", "by path");
+    print(document.to_string());
+    # {
+    #   // Spaces per level.
+    #   "tab_size": 2,
+    #   "font": "Mono", // the editor's
+    #   // Wrap long lines.
+    #   "wrap": true
+    # }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>document.root</code> is the <code>JsonValue</code>; change it as any other.</li>
+<li>Each comment belongs to a value, by its path from the root <code>$</code>
+(<code>$.editor.tab_size</code>, <code>$.files[0]</code>): the comments on the lines before
+it, and those on the line it ends, after its comma. Comments before a
+closing bracket stay at the end of their array or object, and those
+around the whole value stay before or after it.</li>
+<li><code>document.to_string()</code> writes the text indented, as <code>to_pretty_string</code>
+does (<code>to_string(indent = 4)</code> for four spaces), with every comment back
+in its place. A file in that layout reads and writes back unchanged.</li>
+<li>A comment whose value is removed is dropped. One whose path later names
+another value, such as an element shifted into its index, goes with
+that value.</li>
+<li><code>document.comments(path)</code> returns the comments before a value, and
+<code>document.set_comments(path, ["// ..."])</code> replaces them.</li>
+<li><code>parse_document</code> takes <code>path</code> and <code>max_depth</code> as <code>parse</code> does, and always
+accepts JSONC.</li>
+</ul>
+<h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
+<p><code>json.encode(value)</code> writes a struct as JSON text, and
+<code>json.decode&lt;T&gt;(text)</code> reads one back. There is no code to write per type:
+both walk the struct’s properties with <a href="reflection.html">reflection</a> while
+compiling, so the conversion costs what hand-written code would.</p>
+<pre><code class="language-pepper"># JSON: convert structs to JSON text and back, through reflection.
+import json;
+
+enum Mode {
+    Fast,
+    Safe,
+}
+
+struct Tls {
+    var cert: String;
+}
+
+struct ServerConfig {
+    var host: String;
+    [Required]
+    var port: int;
+    # The key is "max-connections", not the property's name.
+    [Name("max-connections")]
+    var max_connections: int;
+    # Never written or read.
+    [Ignore]
+    var started_at: long;
+    # `null` or missing when none.
+    var tls: Tls?;
+    var mode: Mode;
+    var tags: Array&lt;String&gt;;
+}
+
+main(): int {
+    var config = ServerConfig();
+    config.host = "localhost";
+    config.port = 8080;
+    config.max_connections = 64;
+    config.mode = Mode.Safe;
+    config.tags = ["web"];
+    var text = json.encode(config);
+    assert(
+        text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":64,\"tls\":null,\"mode\":\"Safe\",\"tags\":[\"web\"]}",
+        "properties in declaration order"
+    );
+
+    var decoded = json.decode&lt;ServerConfig&gt;("{\"port\": 443, \"tls\": {\"cert\": \"site.pem\"}}");
+    if (decoded.is_err()) {
+        print(decoded.error().to_string());
+        return 1;
+    }
+    var back = decoded.value();
+    assert(back.port == 443, "a number");
+    assert(back.tls.value().cert == "site.pem", "a nested struct");
+    assert(back.mode == Mode.Fast, "a missing key keeps its default");
+
+    # An error names where in the document it is, by path, line and column.
+    var bad = json.decode&lt;ServerConfig&gt;("{\"port\": 443, \"mode\": \"Slow\"}", path = "server.json");
+    assert(bad.error().to_string() == "server.json:1:23: error: $.mode: 'Slow' is not a case of 'Mode'", "a path");
+    var missing = json.decode&lt;ServerConfig&gt;("{}");
+    assert(missing.error().to_string() == "1:1: error: $: missing required key 'port'", "[Required]");
+    return 0;
+}
+</code></pre>
+<p>A struct’s public <a href="properties.html">properties</a> become an object’s members,
+in declaration order. Each property’s type converts as follows, and the
+same rules apply at the top level (<code>json.decode&lt;Array&lt;int&gt;&gt;("[1, 2]")</code>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pepper</th><th>JSON</th></tr>
+</thead>
+<tbody>
+<tr><td>an integer type (<code>int</code>, <code>u8</code>, <code>long</code>, …)</td><td>a number; reading one checks that it has no fraction and fits the type</td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td>a number</td></tr>
+<tr><td><code>bool</code></td><td><code>true</code>, <code>false</code></td></tr>
+<tr><td><code>String</code></td><td>a string</td></tr>
+<tr><td>an enum</td><td>a case that carries no values as its name (<code>"Safe"</code>); one that carries values as an object with the case’s name as its one key, holding the values by name (<code>{"Circle": {"radius": 2}}</code>)</td></tr>
+<tr><td><code>T?</code></td><td>the value, or <code>null</code> when none; a missing key reads as none</td></tr>
+<tr><td><code>Array&lt;T&gt;</code></td><td>an array</td></tr>
+<tr><td><code>HashMap&lt;String, V&gt;</code>, <code>OrderedMap&lt;String, V&gt;</code>, <code>Map&lt;String, V&gt;</code></td><td>an object</td></tr>
+<tr><td>a struct</td><td>an object, recursively</td></tr>
+<tr><td><code>json.JsonValue</code></td><td>itself, for parts of a document with no fixed shape</td></tr>
+</tbody>
+</table>
+</div>
+<p>A struct reference that holds nothing (a <code>String</code>, array, struct or
+reference enum field never assigned) is written as <code>null</code>, and <code>null</code> reads
+back as one, so a value round-trips. Reading a case’s value whose key is
+missing is an error: <code>$.shapes[0].Circle: missing value 'radius'</code>. <code>null</code> for a number, <code>bool</code> or enum is an error.</p>
+<h3 id="attributes"><a class="header" href="#attributes">Attributes</a></h3>
+<p>The <code>serialize</code> module’s attributes, which <code>json</code> uses (they need no
+import of their own), change how a property is converted:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[Name("key")]</code></td><td>writes and reads the property under <code>key</code></td></tr>
+<tr><td><code>[Ignore]</code></td><td>leaves the property out of both</td></tr>
+<tr><td><code>[Required]</code></td><td>makes a missing key an error when reading</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="reading"><a class="header" href="#reading">Reading</a></h3>
+<p><code>decode</code> makes a struct with its constructor that takes no arguments, then
+reads in each property it finds a key for. A missing key leaves its
+property at its default, unless the property is <code>[Required]</code>. It takes
+optional arguments, usually passed by name:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Argument</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>unknown_keys</code></td><td><code>UnknownKeys.Ignore</code></td><td>What to do with a key that names no property: skip it, or with <code>UnknownKeys.Reject</code>, fail naming it.</td></tr>
+<tr><td><code>comments</code></td><td><code>false</code></td><td>Accept JSONC, as <code>parse</code> does.</td></tr>
+<tr><td><code>path</code></td><td><code>""</code></td><td>The name of the text, which the error’s <code>to_string()</code> puts first.</td></tr>
+</tbody>
+</table>
+</div>
+<p>An error has a line and column as in <a href="#errors">Errors</a>. One in
+converting a value also has its <code>value_path</code>, where in the document the
+value is as a path from the root <code>$</code>, and its message starts with that
+path. The line and column are the value’s, or the enclosing object’s for a
+missing key:</p>
+<pre><code class="language-text">server.json:3:13: error: $.server.port: expected a number, found a string
+server.json:7:21: error: $.tags[2]: expected a string, found null
+server.json:4:24: error: $["max-connections"]: 70000 does not fit in 'u16'
+server.json:1:1: error: $: missing required key 'port'
+</code></pre>
+<p><code>json.to_json(value)</code> and <code>json.from_json&lt;T&gt;(value)</code> do the same
+conversions to and from a <code>JsonValue</code> rather than text (with no text, a
+<code>from_json</code> error has no line: <code>error: $.port: ...</code>), and
+<code>json.encode(value, indent = 2)</code> writes indented text.</p>
+<h3 id="types-it-cannot-convert"><a class="header" href="#types-it-cannot-convert">Types it cannot convert</a></h3>
+<p>A property whose type has no JSON form, such as a pointer, a function, or
+a <code>Result</code> (a result is not a value to send over the wire), is a compile
+error naming the property. Notes follow the conversion back to the call
+that asked for it:</p>
+<pre><code class="language-text">runtime/json/convert.pep:315:25: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
+...
+main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
+   10 |     var text = json.encode(job);
+      |                ^~~~~~~~~~~
+</code></pre>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>Comments are skipped when parsing JSONC; they are not kept in the value
-or written back yet.</li>
-<li>Converting between JSON and structs (<code>json.encode</code>, <code>json.decode&lt;T&gt;</code>)
-is not supported yet.</li>
+<li><code>parse</code> skips comments; only a <code>JsonDocument</code> keeps them, and
+<code>decode</code> never does. A document is always written indented.</li>
+<li>An enum always takes the external form above; an internal tag
+(<code>{"kind": "circle", ...}</code>) or no tag, chosen with attributes, is not
+supported yet.</li>
+<li>A struct’s own conversion cannot be customized yet: a type converts as
+its properties do.</li>
+<li>Map keys must be <code>String</code>s.</li>
 </ul>
 <p>The <a href="../reference/json-module.html">reference</a> lists every function.</p>
 
@@ -406,7 +608,7 @@ is not supported yet.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

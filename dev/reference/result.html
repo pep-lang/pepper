@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -309,13 +309,17 @@ nothing, so it only checks that the result is Ok.</p>
 <li>true when the result holds an error</li>
 </ul>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
-<pre><code class="language-pepper">value(): TValue
+<pre><code class="language-pepper">value(location: __ptr&lt;char&gt; = __caller_location()): TValue
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
 <p>For a struct <code>TValue</code> the caller gets its own reference; the result
 keeps its reference too.</p>
 <p>For <code>Result&lt;void&gt;</code> it returns nothing: calling it only checks that the
 result is Ok.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the value of an Ok result</li>
@@ -328,11 +332,15 @@ result is Ok.</p>
 <pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
 </code></pre>
 <h4 id="error-2"><a class="header" href="#error-2">error</a></h4>
-<pre><code class="language-pepper">error(): TError
+<pre><code class="language-pepper">error(location: __ptr&lt;char&gt; = __caller_location()): TError
 </code></pre>
 <p>Returns the failure value, panicking if this result is Ok.</p>
 <p>For a struct <code>TError</code> the caller gets its own reference; the result
 keeps its reference too.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the error of an Err result</li>
@@ -413,7 +421,7 @@ is used.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

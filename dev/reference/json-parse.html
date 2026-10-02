@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -206,15 +206,23 @@ empty when none was given.</p>
 <h4 id="line"><a class="header" href="#line">line</a></h4>
 <pre><code class="language-pepper">var line: ulong
 </code></pre>
-<p>The line of the error, from 1.</p>
+<p>The line of the error, from 1; 0 for an error from <code>from_json</code>, which
+has no text to point into.</p>
 <h4 id="column"><a class="header" href="#column">column</a></h4>
 <pre><code class="language-pepper">var column: ulong
 </code></pre>
-<p>The column of the error, from 1, counting bytes as clang does.</p>
+<p>The column of the error, from 1, counting bytes as clang does; 0
+when <code>line</code> is.</p>
 <h4 id="offset"><a class="header" href="#offset">offset</a></h4>
 <pre><code class="language-pepper">var offset: ulong
 </code></pre>
 <p>The byte offset of the error in the text, from 0.</p>
+<h4 id="value_path"><a class="header" href="#value_path">value_path</a></h4>
+<pre><code class="language-pepper">var value_path: String
+</code></pre>
+<p>Where in the document the value an error is about is, as a path from
+the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
+syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
@@ -234,7 +242,7 @@ empty when none was given.</p>
 </code></pre>
 <p>Returns the error as a compiler prints one:
 <code>path:line:column: error: message</code>, without the <code>path:</code> when there
-is no path.</p>
+is no path and without <code>line:column:</code> when <code>line</code> is 0.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the rendered error</li>
@@ -281,7 +289,7 @@ than recursing, and <code>max_depth</code> bounds it.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/async-channel.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/json-document.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -295,7 +303,7 @@ than recursing, and <code>max_depth</code> bounds it.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/async-channel.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/json-document.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -324,7 +332,7 @@ than recursing, and <code>max_depth</code> bounds it.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

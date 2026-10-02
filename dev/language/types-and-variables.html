@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -285,12 +285,12 @@ main(): int {
     assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 
     # The result is empty when the text is not a number of that type.
-    assert(int.parse("4 2").is_none(), "not an integer");
-    assert(byte.parse("256").is_none(), "too big for a byte");
+    assert(int.parse("4 2").is_empty(), "not an integer");
+    assert(byte.parse("256").is_empty(), "too big for a byte");
 
     # float and double read decimal notation.
     var ratio = double.parse("2.5e-1");
-    if (ratio.is_some()) {
+    if (ratio.is_value()) {
         assert(ratio.value() == 0.25, "an exponent");
     }
     return 0;
@@ -444,7 +444,7 @@ main(): int {
     var fields = "name,,age".split(",");
     assert(fields.count == 3 &amp;&amp; fields[1] == "", "an empty field");
     var header = "Content-Type: text/plain".split_once(": ");
-    if (header.is_some()) {
+    if (header.is_value()) {
         var (name, value) = header.value();
         assert(name == "Content-Type" &amp;&amp; value == "text/plain", "both halves");
     }
@@ -774,7 +774,7 @@ main(): int {
 <h2 id="integer-overflow"><a class="header" href="#integer-overflow">Integer overflow</a></h2>
 <p>Integer arithmetic whose result does not fit its type stops the program, as in
 Swift (and Rust’s debug builds), instead of wrapping around silently:</p>
-<pre><code class="language-text">main.pep:3:16: integer overflow in 'int' addition
+<pre><code class="language-text">main.pep:3:16: panic: integer overflow in 'int' addition
 </code></pre>
 <p>The message names the operator’s location and the type the operation ran at.
 These operations check:</p>
@@ -825,7 +825,7 @@ main(): int {
     assert(big.wrapping_add(1) == -2147483648, "wraps to the lowest int");
 
     # checked_ returns none on overflow.
-    assert(big.checked_add(1).is_none(), "no int is big + 1");
+    assert(big.checked_add(1).is_empty(), "no int is big + 1");
     assert(big.checked_sub(1).value() == 2147483646, "big - 1 fits");
 
     # saturating_ clamps to the type's range.
@@ -868,7 +868,7 @@ their cost and accepts the risk can remove kinds of check with
 </tbody>
 </table>
 </div>
-<pre><code class="language-bash">pepper -O main.pep --no-runtime-checks=overflow,shift
+<pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
 </code></pre>
 <p>Removing <code>bounds</code> or <code>null</code> gives up Pepper’s memory safety: an index out of
 range or a null reference then reads or writes arbitrary memory instead of
@@ -889,6 +889,9 @@ main(): int {
     # Exponentiation is right-associative: 2 ** 3 ** 2 is 2 ** 9.
     assert(2 ** 10 == 1024, "power");
     assert(2 ** 3 ** 2 == 512, "right-associative");
+    # With a floating-point operand, the result is floating point.
+    assert(2.0 ** -2 == 0.25, "float power");
+    assert(9 ** 0.5 == 3.0, "square root");
 
     # Comparison yields a bool.
     var small = 3 &lt; 5;
@@ -956,15 +959,20 @@ reads <code>items[0]</code> from an empty array.</p>
 <p>Unary operators nest: <code>-~x</code> is <code>-(~x)</code>, and <code>!!x</code> is <code>!(!x)</code>, which turns a
 number into a <code>bool</code>. A struct can define its own operators, the truth test
 <code>!!</code> included (see <a href="structs.html#operators">Operators</a>).</p>
-<p><code>**</code> raises an integer to an integer power, and is right-associative:
-<code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. The exponent can be any integer expression. A negative
-exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
-of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
-<p>Some operators have limits today:</p>
-<ul>
-<li><strong><code>**</code> works only on integers.</strong> A floating-point operand is a compile error
-(<code>unsupported op Pow</code>).</li>
-</ul>
+<p><code>**</code> raises a number to a power, and is right-associative: <code>2 ** 3 ** 2</code> is
+<code>2 ** 9</code>. On two integers the result is an integer, and the exponent can be
+any integer expression. A negative exponent gives the truncated real result: 1
+for a base of 1, 1 or -1 for a base of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
+<p>When either operand is a <code>float</code> or <code>double</code>, the result is floating point, by
+the usual conversions above: <code>2.0 ** 0.5</code> is the square root of 2, <code>2.0 ** -2</code>
+is 0.25, and <code>4 ** 0.5</code> is the <code>double</code> 2.0. An integer exponent of at most 32
+bits computes by repeated multiplication (LLVM’s <code>powi</code>), which is fast but may
+differ from C’s <code>pow</code> in the last bit; any other exponent calls <code>pow</code> itself.
+<code>**</code> on anything but numbers or a struct that defines it is an error:</p>
+<pre><code class="language-text">main.pep:3:15: error: invalid operands to binary expression ('__ptr&lt;int&gt;' and 'int')
+    3 |     var q = p ** 2;
+      |               ^~
+</code></pre>
 <p>Operators bind in this order, tightest first:</p>
 <ol>
 <li>Postfix: calls <code>f(x)</code>, indexing <code>a[i]</code>, member access <code>a.b</code>, <code>x++</code>, <code>x--</code></li>
@@ -1041,7 +1049,7 @@ chain as one level, so a sum of more than about 250 terms is a compile error
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

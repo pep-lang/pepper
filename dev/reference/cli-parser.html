@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -413,6 +413,28 @@ Run 'pepper --help' for more information.
 <ul>
 <li>true when the arguments were parsed, false after an error</li>
 </ul>
+<h2 id="closest"><a class="header" href="#closest">closest</a></h2>
+<pre><code class="language-pepper">closest(name: String, candidates: Array&lt;String&gt;): String?
+</code></pre>
+<p>Returns the candidate closest to a misspelled <code>name</code>, for a “did you
+mean” suggestion: the one the fewest single-byte insertions, deletions
+and substitutions turn <code>name</code> into, when that is at most 2. Of equally
+close candidates the first wins.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the name that matched nothing</li>
+<li><code>candidates</code> — the names it could have meant</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the closest candidate, or none when none is within 2 edits</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    names.append("build");
+    names.append("fmt");
+    var best = cli.closest("buidl", names);   # some("build")
+</code></pre>
 <h2 id="flag-1"><a class="header" href="#flag-1">Flag</a></h2>
 <pre><code class="language-pepper">struct Flag
 </code></pre>
@@ -564,7 +586,7 @@ argument lists; this constructor is for the runtime.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

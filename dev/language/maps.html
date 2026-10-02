@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -235,7 +235,7 @@ literal can initialize one.</p>
     # Order queries return an optional (key, value) tuple.
     assert(scores.first().value().0 == "alice", "smallest key");
     assert(scores.lower_bound("b").value().0 == "bob", "first key &gt;= b");
-    assert(scores.upper_bound("carol").is_none(), "nothing after carol");
+    assert(scores.upper_bound("carol").is_empty(), "nothing after carol");
 
     # A key range: from "a" up to, not including, "c".
     var in_range = 0;
@@ -337,10 +337,10 @@ when one is removed.</p>
     }
     assert(keys == "name license version ", "insertion order");
 
-    if (config.try_get("license") is Some(license)) {
+    if (config.try_get("license") is Value(license)) {
         assert(license == "MIT", "found");
     }
-    assert(config.try_get("author").is_none(), "absent");
+    assert(config.try_get("author").is_empty(), "absent");
     return 0;
 }
 </code></pre>
@@ -398,7 +398,7 @@ configuration file that should be written back as they were read.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

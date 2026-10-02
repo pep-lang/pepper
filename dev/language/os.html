@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,7 +197,7 @@ main(): int {
     # An optional: none when the variable is not set.
     var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
     assert(!runtime.is_empty, "a fallback when unset");
-    assert(os.environment("PEPPER_SURELY_NOT_SET").is_none(), "unset");
+    assert(os.environment("PEPPER_SURELY_NOT_SET").is_empty(), "unset");
 
     var count = 0;
     for (var (name, value) in os.environment_variables()) {
@@ -265,7 +265,7 @@ main(): int {
     assert(now.unix_seconds() &gt; 1700000000, "after November 2023");
     var tomorrow = now + os.Duration.from_seconds(86400);
     assert(tomorrow.duration_since(now).value() == os.Duration.from_seconds(86400), "a day later");
-    assert(now.duration_since(tomorrow).is_none(), "no negative durations");
+    assert(now.duration_since(tomorrow).is_empty(), "no negative durations");
     return 0;
 }
 </code></pre>
@@ -281,7 +281,7 @@ main(): int {
 
     var user = os.user_name().value_or("unknown");
     var home = os.home_directory();
-    print($"user {user}, home {home.is_some() ? home.value().to_string() : "unknown"}");
+    print($"user {user}, home {home.is_value() ? home.value().to_string() : "unknown"}");
     print($"temporary files go in {os.temp_directory()}");
 
     var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
@@ -367,7 +367,7 @@ supported yet.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

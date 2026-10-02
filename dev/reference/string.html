@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -331,7 +331,7 @@ this String sees the change. Runs in O(size + rhs.size).</p>
     s.append("ING");   # s == "TESTING"
 </code></pre>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: int): String
+<pre><code class="language-pepper">[](idx: int, location: __ptr&lt;char&gt; = __caller_location()): String
 </code></pre>
 <p>Returns the code point at code-point index <code>idx</code> as a new
 one-code-point String.</p>
@@ -343,6 +343,7 @@ visit every code point in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the code-point index; negative counts from the end</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -497,7 +498,7 @@ String, or -1 when it does not occur. An empty <code>needle</code> is found at
     assert("abc".rfind("x") == -1, "absent");
 </code></pre>
 <h4 id="split"><a class="header" href="#split">split</a></h4>
-<pre><code class="language-pepper">split(separator: String): String[]
+<pre><code class="language-pepper">split(separator: String, location: __ptr&lt;char&gt; = __caller_location()): String[]
 </code></pre>
 <p>Splits the String at every occurrence of <code>separator</code> and returns the
 pieces between them, in order. Adjacent separators give an empty
@@ -508,6 +509,7 @@ whole String. Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -523,7 +525,7 @@ whole String. Runs in O(size * separator.size).</p>
     assert(parts[2] == "", "an empty piece");
 </code></pre>
 <h4 id="split_once"><a class="header" href="#split_once">split_once</a></h4>
-<pre><code class="language-pepper">split_once(separator: String): (String, String)?
+<pre><code class="language-pepper">split_once(separator: String, location: __ptr&lt;char&gt; = __caller_location()): (String, String)?
 </code></pre>
 <p>Splits the String at the first occurrence of <code>separator</code>: the text
 before it and the text after it, or none when it does not occur.
@@ -531,6 +533,7 @@ Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -542,7 +545,7 @@ Runs in O(size * separator.size).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var header = "Host: example.com".split_once(": ");
-    assert(header.is_some(), "has a colon");
+    assert(header.is_value(), "has a colon");
     var (name, value) = header.value();
     assert(name == "Host" &amp;&amp; value == "example.com", "split");
 </code></pre>
@@ -567,7 +570,7 @@ String, and one part gives a copy of it. Runs in O(total size).</p>
     assert(", ".join(parts) == "a, b", "joined");
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
-<pre><code class="language-pepper">replace(from: String, to: String): String
+<pre><code class="language-pepper">replace(from: String, to: String, location: __ptr&lt;char&gt; = __caller_location()): String
 </code></pre>
 <p>Returns a copy of this String with every occurrence of <code>from</code> replaced
 by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size * from.size) plus the result’s
@@ -576,6 +579,7 @@ size.</p>
 <ul>
 <li><code>from</code> — the text to replace</li>
 <li><code>to</code> — the text to put in its place</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -690,7 +694,7 @@ a copy. O(1).</p>
 <li>this String</li>
 </ul>
 <h4 id="byte_at"><a class="header" href="#byte_at">byte_at</a></h4>
-<pre><code class="language-pepper">byte_at(index: ulong): byte
+<pre><code class="language-pepper">byte_at(index: ulong, location: __ptr&lt;char&gt; = __caller_location()): byte
 </code></pre>
 <p>Returns the byte at byte offset <code>index</code> of the UTF-8 data. O(1).</p>
 <p>The offset counts bytes, not code points, so a byte inside a
@@ -699,6 +703,7 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>index</code> — the byte offset, less than <code>size</code></li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -713,7 +718,7 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
     assert(s.byte_at(1) == '=', "second byte");
 </code></pre>
 <h4 id="substr_bytes"><a class="header" href="#substr_bytes">substr_bytes</a></h4>
-<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong): String
+<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong, location: __ptr&lt;char&gt; = __caller_location()): String
 </code></pre>
 <p>Returns a new String of the <code>size</code> bytes starting at byte offset
 <code>start</code>. Both arguments count bytes, not code points, so offsets from
@@ -722,6 +727,7 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <ul>
 <li><code>start</code> — the byte offset of the first byte to copy</li>
 <li><code>size</code> — the number of bytes to copy</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -1492,7 +1498,7 @@ a new one-code-point String.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

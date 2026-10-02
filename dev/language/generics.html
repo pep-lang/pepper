@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -293,6 +293,13 @@ total_area&lt;T&gt;(shapes: Array&lt;T&gt;): int {
     return sum;
 }
 
+# `T()` calls the type argument's constructor.
+fresh&lt;T&gt;(): Array&lt;T&gt; {
+    var items = Array&lt;T&gt;();
+    items.append(T());
+    return items;
+}
+
 main(): int {
     # Type arguments come from the arguments, or can be written out.
     assert(larger(3, 9) == 9, "ints");
@@ -306,6 +313,7 @@ main(): int {
     var squares = Array&lt;Square&gt;();
     squares.append(Square());
     assert(total_area&lt;Square&gt;(squares) == 4, "squares");
+    assert(total_area(fresh&lt;Circle&gt;()) == 3, "a constructed Circle");
     return 0;
 }
 </code></pre>
@@ -322,6 +330,9 @@ main.pep:1:1: note: declared here
     1 | make&lt;T&gt;(): Box&lt;T&gt; { return Box&lt;T&gt;(); }
       | ^~~~
 </code></pre>
+<p>A generic function used as a value, not called, takes its type arguments
+from the function type it is given: <code>var f: (int, int) =&gt; int = larger;</code> is
+<code>larger&lt;int&gt;</code> (see <a href="function-types.html#methods-constructors-and-generic-functions">Function types</a>).</p>
 <p>A parameter whose type is a trait takes its type arguments from the trait the
 argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)</code>, the call
 <code>total(Countdown(4))</code> infers <code>T = int</code> from <code>extend Countdown with Iterator&lt;int&gt;</code>.</p>
@@ -335,6 +346,10 @@ returning a number, and using it with a type that lacks one is a compile
 error inside <code>total_area</code>. To state the requirement up front, and have the
 compiler report it where the function is used, give <code>T</code> a
 <a href="#constraints">constraint</a>.</p>
+<p>That includes constructing one: <code>T()</code> (or <code>T(args)</code>) calls the type
+argument’s constructor, so <code>fresh&lt;Circle&gt;()</code> above makes a <code>Circle</code>. In a
+<a href="#inside-a-constrained-generic">constrained</a> generic, which offers only what
+its constraints declare, it is an error.</p>
 <h2 id="generic-methods"><a class="header" href="#generic-methods">Generic methods</a></h2>
 <p>A method can have type parameters of its own, in a struct, a generic struct,
 an extension, or a trait’s default method. They are inferred at each call like
@@ -910,7 +925,7 @@ or of a generic the file’s own function of that name hides.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

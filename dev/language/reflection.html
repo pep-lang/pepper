@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -322,11 +322,61 @@ when its type arguments are known: <code>describe&lt;Point&gt;</code> and <code>
 each get their own expansion. Code the block emits can call other generic
 functions, such as <code>describe(field.get(value))</code> for a field that is itself a
 struct, and those are specialized in turn. A mistake in a block is reported
-when some specialization uses it, with the pass it happened in:</p>
+when some specialization uses it, with the pass it happened in and, when a
+generic asked for that specialization, a note at each use that led to it
+(<code>'dump&lt;Point&gt;' is used by 'main' here</code>):</p>
 <pre><code class="language-text">main.pep:14:13: error: 'print' cannot be called at compile time
 main.pep:12:27: note: in pass 1 of 2 (member 'x')
 note: a 'static' block can call the 'reflect' functions and the methods of what they return; calling other functions at compile time is not supported yet
 main.pep:10:1: note: in the static block of 'dump&lt;Point&gt;'
+</code></pre>
+<h3 id="at-module-scope"><a class="header" href="#at-module-scope">At module scope</a></h3>
+<p>A <code>static</code> block outside any function runs once, while compiling. It has
+nothing to capture and emits no code; instead, each <code>const</code> declared at the
+top of the block becomes a module-scope constant holding what the block
+computed. Its other <code>var</code>s, and anything declared in its loops and
+branches, stay in the compiler. <code>export static</code> exports its constants, and
+attributes written above the block (<code>[Target(...)]</code>) apply to them too.</p>
+<pre><code class="language-pepper">export struct Pixel {
+    var red: u8;
+    var green: u8;
+    var blue: u8;
+    var alpha: u8;
+}
+
+export enum Channel {
+    Red,
+    Green,
+    Blue,
+    Alpha
+}
+
+# A module-scope `static` block runs once, while compiling. Each `const` at
+# its top becomes a module-scope constant holding what the block computed;
+# `export static` exports them.
+export static {
+    var bytes = 0;
+    for (var field in reflect.properties&lt;Pixel&gt;()) {
+        reflect.assert(reflect.is_same&lt;field.Type, u8&gt;(), $"'{field.name}' must be one byte");
+        bytes += 1;
+    }
+    const PIXEL_BYTES = bytes;
+    const LAST_CHANNEL = reflect.cases&lt;Channel&gt;()[reflect.cases&lt;Channel&gt;().count - 1].get();
+}
+</code></pre>
+<pre><code class="language-pepper">import "sizes";
+
+main(): int {
+    assert(PIXEL_BYTES == 4, "one byte per field of Pixel");
+    assert(LAST_CHANNEL == Channel.Alpha, "the last case of Channel");
+    return 0;
+}
+</code></pre>
+<p>A constant takes a number, <code>bool</code>, character or enum case; a
+<a href="types-and-variables.html#module-level-variables">module-scope variable</a> cannot be a <code>String</code>, since it must
+be thread-safe. At module scope, a case’s <code>get()</code> is the case itself, and a
+statement that would emit code is an error:</p>
+<pre><code class="language-text">main.pep:7:9: error: a module-scope 'static' block cannot emit code; declare a 'const' with what it computes
 </code></pre>
 <h3 id="what-the-compiler-can-evaluate"><a class="header" href="#what-the-compiler-can-evaluate">What the compiler can evaluate</a></h3>
 <p>Compile-time values are integers, floating-point numbers, <code>bool</code>, strings,
@@ -353,6 +403,7 @@ the compiler writes it as a literal.</p>
 <tr><td><code>reflect.cases&lt;E&gt;()</code></td><td>an enum’s cases, in order</td></tr>
 <tr><td><code>reflect.functions_with&lt;A&gt;()</code></td><td>every function in the program that carries attribute <code>A</code></td></tr>
 <tr><td><code>reflect.is_struct&lt;T&gt;()</code>, <code>is_enum&lt;T&gt;()</code>, <code>is_trait&lt;T&gt;()</code></td><td>what kind of type <code>T</code> is</td></tr>
+<tr><td><code>reflect.is_reference&lt;T&gt;()</code></td><td>whether <code>T</code> is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is <code>[Value]</code></td></tr>
 <tr><td><code>reflect.is_same&lt;A, B&gt;()</code></td><td>whether <code>A</code> and <code>B</code> are the same type (<code>int</code> and <code>i32</code> are)</td></tr>
 <tr><td><code>reflect.has_attribute&lt;T, A&gt;()</code>, <code>reflect.attribute&lt;T, A&gt;()</code></td><td>attribute <code>A</code> on struct or enum <code>T</code></td></tr>
 <tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling</td></tr>
@@ -370,14 +421,25 @@ the compiler writes it as a literal.</p>
 <li><code>name</code>, <code>index</code>, <code>is_last</code>, <code>is_const</code>, <code>is_property</code></li>
 <li><code>type_name</code>: its type as a string; <code>field.Type</code> is the type itself, usable
 wherever a type is written: <code>var copy: field.Type = ...</code>,
-<code>reflect.is_same&lt;field.Type, String&gt;()</code>, <code>parse&lt;field.Type&gt;(text)</code></li>
+<code>reflect.is_same&lt;field.Type, String&gt;()</code>, <code>parse&lt;field.Type&gt;(text)</code>. This
+works for a compile-time <code>var</code> holding a member too
+(<code>var first = case.values[0];</code> gives <code>first.Type</code>).</li>
 <li><code>has_attribute&lt;A&gt;()</code> and <code>attribute&lt;A&gt;()</code></li>
 <li><code>get(value)</code> and <code>set(value, x)</code>, which emit <code>value.name</code> and
 <code>value.name = x</code></li>
 </ul>
-<p>A <strong>case</strong> (from <code>cases</code>) has <code>name</code>, <code>value</code> (its integer value), <code>index</code>,
-<code>is_last</code>, <code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code>, and <code>get()</code>, which
-emits the case itself, for an enum whose cases carry no values.</p>
+<p>A <strong>case</strong> (from <code>cases</code>) has:</p>
+<ul>
+<li><code>name</code>, <code>value</code> (its integer value, or the tag of a case that can carry
+values), <code>index</code>, <code>is_last</code>, <code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code></li>
+<li><code>values</code>: the values the case carries, as members, in order; empty for a
+case that carries none. A value’s <code>get(v)</code> reads it from <code>v</code>, which must
+hold this case; <code>set</code> is an error, since a case’s values are fixed.</li>
+<li><code>matches(v)</code>, which emits a test of whether <code>v</code> holds this case</li>
+<li><code>get(values...)</code>, which emits the case made with those values:
+<code>case.get()</code> for a case that carries none, <code>case.get(r)</code> for
+<code>Circle(radius: int)</code></li>
+</ul>
 <p>A <strong>function</strong> (from <code>functions_with</code>) has <code>name</code>, <code>has_attribute&lt;A&gt;()</code>,
 <code>attribute&lt;A&gt;()</code>, and <code>call(arguments...)</code>, which emits a direct call.</p>
 <pre><code class="language-pepper">enum Level {
@@ -477,6 +539,56 @@ main(): int {
     return 0;
 }
 </code></pre>
+<pre><code class="language-pepper">enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+# `case.matches(value)` tests which case a value holds, and each of the
+# case's `values` reads its value with `get`.
+describe&lt;E&gt;(value: E): String {
+    var out = "";
+    static (out, value) {
+        for (var case in reflect.cases&lt;E&gt;()) {
+            if (case.matches(value)) {
+                out = case.name;
+                for (var item in case.values) {
+                    out = out + $" {item.name}={item.get(value)}";
+                }
+            }
+        }
+    }
+    return out;
+}
+
+# `case.get(values...)` makes a case; here, each value is `size`.
+square&lt;E&gt;(name: String, size: int): E {
+    var out: E;
+    static (out, name, size) {
+        for (var case in reflect.cases&lt;E&gt;()) {
+            if (name == case.name) {
+                if (case.values.count == 0) {
+                    out = case.get();
+                } else if (case.values.count == 1) {
+                    out = case.get(size);
+                } else if (case.values.count == 2) {
+                    out = case.get(size, size);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+main(): int {
+    assert(describe(Shape.Rect(3, 4)) == "Rect width=3 height=4", "a case's values");
+    assert(describe(Shape.Point) == "Point", "a case without values");
+    assert(describe(square&lt;Shape&gt;("Rect", 5)) == "Rect width=5 height=5", "a made case");
+    assert(describe(square&lt;Shape&gt;("Circle", 2)) == "Circle radius=2", "one value");
+    return 0;
+}
+</code></pre>
 <h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
 <p>An attribute is a struct marked <code>[Attribute]</code>. Writing it above a
 declaration records a compile-time value of that struct, which
@@ -535,11 +647,42 @@ or enums whose cases carry no values.</li>
 with an initializer may be left out. A constructor may take <code>this.field</code>
 parameters, or parameters its body assigns to fields
 (<code>this.long_name = long_name;</code>), which is all its body may do.</li>
+<li>An attribute from another module can be named through it, with or
+without arguments: <code>[serialize.Ignore]</code>, <code>[serialize.Name("key")]</code>.</li>
 <li>An attribute that names neither a built-in attribute nor an <code>[Attribute]</code>
 struct is an error, at its name: <code>unknown attribute 'Optoin'</code>.</li>
-<li>Built-in attributes (<code>Target</code>, <code>Shared</code>, <code>Deprecated</code>, …) are visible
-too: <code>field.has_attribute&lt;Deprecated&gt;()</code> tests for one.</li>
+<li>Built-in attributes (<code>Target</code>, <code>Shared</code>, <code>Deprecated</code>, …) are
+<code>[Attribute]</code> structs too, declared in the runtime
+(<a href="../reference/attributes.html">attributes</a>), so a block reads them like
+its own: <code>function.attribute&lt;Deprecated&gt;().message</code>. <code>Target</code> holds its
+condition as written (<code>"!OS(Windows)"</code>). The compiler still checks and
+acts on each one itself.</li>
 </ul>
+<pre><code class="language-pepper">struct Settings {
+    var width: int;
+    [Deprecated("use 'width' instead", "width")]
+    var size: int;
+}
+
+# Lists the deprecated fields of `T` with what replaces each, read from the
+# built-in `Deprecated` attribute like any `[Attribute]` struct.
+deprecated_fields&lt;T&gt;(): String {
+    var out = "";
+    static (out) {
+        for (var field in reflect.properties&lt;T&gt;()) {
+            if (field.has_attribute&lt;Deprecated&gt;()) {
+                out = out + $"{field.name} -&gt; {field.attribute&lt;Deprecated&gt;().replacement};";
+            }
+        }
+    }
+    return out;
+}
+
+main(): int {
+    assert(deprecated_fields&lt;Settings&gt;() == "size -&gt; width;", "one deprecated field");
+    return 0;
+}
+</code></pre>
 <p>Attributes can go on structs, enums and their cases, fields, functions,
 methods, constructors, parameters and module-scope variables.</p>
 <pre><code class="language-pepper">[Attribute]
@@ -579,11 +722,7 @@ main(): int {
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
 <li>Calling functions other than the <code>reflect</code> functions at compile time.</li>
-<li><code>static</code> blocks at module scope, to compute constants.</li>
 <li>Reflecting methods and constructors (<code>reflect.methods&lt;T&gt;()</code>).</li>
-<li>The values of built-in attributes: <code>attribute&lt;Deprecated&gt;()</code> is an error;
-<code>has_attribute&lt;Deprecated&gt;()</code> works.</li>
-<li><code>get()</code> on a case of an enum whose cases carry values.</li>
 <li>Limiting where an attribute may be used (<code>[AttributeTargets(...)]</code>).</li>
 <li>Showing the code a block expands to, and tracing the blocks the compiler
 runs.</li>
@@ -641,7 +780,7 @@ runs.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

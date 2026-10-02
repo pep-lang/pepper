@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -316,48 +316,75 @@ whole set. A re-export (<code>export area;</code>, <code>export * from "shapes"<
 on the exported members too; a set whose members are all private is
 re-exported whole.</p>
 <ul>
-<li><strong>Two modules’ sets do not merge.</strong> When two imported modules, or two
+<li>
+<p><strong>Two modules’ sets do not merge.</strong> When two imported modules, or two
 files outside any module, each export a set named <code>parse</code>, an
 unqualified <code>parse(…)</code> is an error (<code>'parse' is ambiguous: more than one import provides it</code>), even when their parameters differ. A qualifier
-(<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</li>
-<li><strong><code>extern</code> functions do not overload</strong>: a C function has one symbol. Wrap
-it in a Pepper function to give it company.</li>
+(<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</p>
+</li>
+<li>
+<p><strong><code>extern</code> functions do not overload</strong>, by design: an extern is a C
+function, which has one symbol, and keeping one extern per name keeps
+the binding to C one-to-one. To put a family of C functions such as
+<code>abs</code> and <code>llabs</code> behind one name, give each extern a name of its own
+(<code>[Link(name = ...)]</code> binds it to the C symbol) and overload Pepper
+functions that call them. With optimization on (<code>-O2</code>), LLVM inlines
+the small wrappers:</p>
+<pre><code class="language-pepper"># C's `abs` and `llabs` behind one Pepper name. An extern binds one C
+</code></pre>
+</li>
 </ul>
-<h2 id="how-a-call-picks-a-member"><a class="header" href="#how-a-call-picks-a-member">How a call picks a member</a></h2>
-<p>A member is <strong>viable</strong> when the call has between its required and total
+<h1 id="symbol-so-each-gets-its-own-name-and-pepper-functions-overload-them"><a class="header" href="#symbol-so-each-gets-its-own-name-and-pepper-functions-overload-them">symbol, so each gets its own name, and Pepper functions overload them.</a></h1>
+<p>[Link(name = “abs”)]
+extern int c_abs(int x);
+[Link(name = “llabs”)]
+extern long c_llabs(long x);</p>
+<p>magnitude(x: int): int { return c_abs(x); }
+magnitude(x: long): long { return c_llabs(x); }</p>
+<p>main(): int {
+assert(magnitude(-3) == 3, “int”);
+var big: long = -5000000000;
+assert(magnitude(big) == 5000000000, “long”);
+return 0;
+}</p>
+<pre><code>
+Overloading the extern itself is an error that says so (`extern 'abs'
+cannot be overloaded; rename it and overload Pepper functions named
+'abs' that call it`).
+
+## How a call picks a member
+
+A member is **viable** when the call has between its required and total
 number of parameters and each argument converts to its parameter. For each
-argument, the conversion has a rank, best first:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Rank</th><th>What converts</th></tr>
-</thead>
-<tbody>
-<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code></td></tr>
-<tr><td>promotion</td><td>an integer widening that loses nothing (<code>int</code> to <code>long</code>, <code>u8</code> to <code>int</code>; the narrower target ranks better, so a <code>short</code> picks <code>int</code> over <code>long</code>), <code>float</code> to <code>double</code>, an integer literal to any integer type it fits, a struct to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>, <code>__null</code> to a reference, a string literal to <code>String</code></td></tr>
-<tr><td>conversion</td><td>any other numeric conversion (<code>bool</code> included), and pointer conversions</td></tr>
-<tr><td>implicit constructor</td><td>a value to a struct whose <a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a> takes it</td></tr>
-</tbody>
-</table>
-</div>
-<p>One viable member is <strong>better</strong> than another when none of its arguments
+argument, the conversion has a rank, best first:
+
+| Rank | What converts |
+|------|---------------|
+| exact | the same type; a string literal to `__ptr&lt;char&gt;` |
+| promotion | an integer widening that loses nothing (`int` to `long`, `u8` to `int`; the narrower target ranks better, so a `short` picks `int` over `long`), `float` to `double`, an integer literal to any integer type it fits, a struct to a [trait it declares](traits-and-extensions.md#traits-as-types), `__null` to a reference, a string literal to `String` |
+| conversion | any other numeric conversion (`bool` included), and pointer conversions |
+| implicit constructor | a value to a struct whose [`[Implicit]` constructor](structs.md#implicit-conversions) takes it |
+
+One viable member is **better** than another when none of its arguments
 ranks worse and at least one ranks better, as in C++. Between two members
 whose arguments rank the same, a non-generic one is better than a generic
-one, and of two generic ones the <strong>more specialized</strong> is better: the one
-whose parameter types the other’s could take but not the reverse. So
-<code>describe&lt;A, B&gt;(pair: (A, B))</code> takes a tuple argument over
-<code>describe&lt;T&gt;(value: T)</code>, which takes anything else. The call picks the
+one, and of two generic ones the **more specialized** is better: the one
+whose parameter types the other's could take but not the reverse. So
+`describe&lt;A, B&gt;(pair: (A, B))` takes a tuple argument over
+`describe&lt;T&gt;(value: T)`, which takes anything else. The call picks the
 member that is better than every other viable one. When there is none, the
-call is an error that lists the candidates:</p>
-<pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
-    3 | main(): int { return f(1); }
-      |                      ^
+call is an error that lists the candidates:
+
+```text
+main.pep:3:22: error: call to 'f' is ambiguous
+  3 | main(): int { return f(1); }
+    |                      ^
 main.pep:1:1: note: candidate function
-    1 | f(x: long): int { return 1; }
-      | ^
+  1 | f(x: long): int { return 1; }
+    | ^
 main.pep:2:1: note: candidate function
-    2 | f(x: short): int { return 2; }
-      | ^
+  2 | f(x: short): int { return 2; }
+    | ^
 </code></pre>
 <p>An integer literal fits every integer type that holds its value equally
 well, so <code>f(1)</code> above is ambiguous; an <code>int</code> member would take it exactly.
@@ -472,6 +499,11 @@ main(): int {
 }
 </code></pre>
 <ul>
+<li>
+<p><strong>Unary and binary operators of one symbol</strong> are one set: a unary
+<code>-()</code> and a binary <code>-(other: Money)</code> are told apart by their number of
+parameters (see <a href="structs.html#unary-operators">Unary operators</a>).</p>
+</li>
 <li>
 <p><strong>A static method and an instance method may not share a name</strong>, since a
 bare <code>of(x)</code> inside a method could mean either:</p>
@@ -657,8 +689,6 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Unary operators</strong> cannot be declared at all yet.</li>
-<li><strong><code>extern</code> functions</strong> do not overload.</li>
 <li><strong>Overloads across modules</strong> do not merge: two modules’ sets of one name
 are ambiguous where both are imported, and a file’s own functions of a
 name hide an imported set of that name.</li>
@@ -715,7 +745,7 @@ name hide an imported set of that name.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

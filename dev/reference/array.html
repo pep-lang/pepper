@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -308,7 +308,7 @@ Does not change the elements or invalidate iterators.</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: ulong): T
+<pre><code class="language-pepper">[](idx: ulong, location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Returns the element at <code>idx</code>; this is the indexer read <code>a[idx]</code>.</p>
 <p>Runs in O(1). For a struct <code>T</code> the result is the stored reference
@@ -316,6 +316,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the zero-based position to read</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -329,7 +330,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <pre><code class="language-pepper">    var first = a[0];
 </code></pre>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: ulong, value: T): T
+<pre><code class="language-pepper">[](idx: ulong, value: T, location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Replaces the element at <code>idx</code> with <code>value</code>; this is the indexer write
 <code>a[idx] = value</code>.</p>
@@ -342,6 +343,7 @@ unchanged.</p>
 <ul>
 <li><code>idx</code> — the zero-based position to overwrite</li>
 <li><code>value</code> — the new element</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -375,7 +377,7 @@ Invalidates running iterators.</p>
     a.append(2);   # a holds [1, 2]
 </code></pre>
 <h4 id="insert"><a class="header" href="#insert">insert</a></h4>
-<pre><code class="language-pepper">insert(idx: ulong, item: T)
+<pre><code class="language-pepper">insert(idx: ulong, item: T, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
 <p>Inserts <code>item</code> at position <code>idx</code>, shifting the element there and every
 later element up by one.</p>
@@ -387,6 +389,7 @@ Invalidates running iterators.</p>
 <ul>
 <li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count</code></li>
 <li><code>item</code> — the element to insert</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -400,7 +403,7 @@ Invalidates running iterators.</p>
     a.insert(1, 2);   # a holds [1, 2, 3]
 </code></pre>
 <h4 id="remove_at"><a class="header" href="#remove_at">remove_at</a></h4>
-<pre><code class="language-pepper">remove_at(idx: ulong): T
+<pre><code class="language-pepper">remove_at(idx: ulong, location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Removes and returns the element at <code>idx</code>, shifting every later element
 down by one.</p>
@@ -411,6 +414,7 @@ capacity is unchanged. Invalidates running iterators.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the position of the element to remove</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -427,11 +431,15 @@ capacity is unchanged. Invalidates running iterators.</p>
     var x = a.remove_at(0);   # x == 1; a holds [2]
 </code></pre>
 <h4 id="pop"><a class="header" href="#pop">pop</a></h4>
-<pre><code class="language-pepper">pop(): T
+<pre><code class="language-pepper">pop(location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Removes and returns the last element.</p>
 <p>Runs in O(1). For a struct <code>T</code> the Array’s reference is transferred to
 the caller. The capacity is unchanged. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element that was last</li>
@@ -444,9 +452,13 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <pre><code class="language-pepper">    var top = a.pop();
 </code></pre>
 <h4 id="first"><a class="header" href="#first">first</a></h4>
-<pre><code class="language-pepper">first(): T
+<pre><code class="language-pepper">first(location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Returns the first element without removing it; the same as <code>a[0]</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element at index 0</li>
@@ -456,10 +468,14 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <li>if the Array is empty (“Array first on empty Array”)</li>
 </ul>
 <h4 id="last"><a class="header" href="#last">last</a></h4>
-<pre><code class="language-pepper">last(): T
+<pre><code class="language-pepper">last(location: __ptr&lt;char&gt; = __caller_location()): T
 </code></pre>
 <p>Returns the last element without removing it; the same as
 <code>a[a.count - 1]</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element at index <code>count - 1</code></li>
@@ -494,7 +510,7 @@ actual shrink invalidates them. The capacity is kept.</p>
     a.truncate(5);   # no effect when a has fewer than 5 elements
 </code></pre>
 <h4 id="swap"><a class="header" href="#swap">swap</a></h4>
-<pre><code class="language-pepper">swap(a: ulong, b: ulong)
+<pre><code class="language-pepper">swap(a: ulong, b: ulong, location: __ptr&lt;char&gt; = __caller_location())
 </code></pre>
 <p>Exchanges the elements at positions <code>a</code> and <code>b</code>.</p>
 <p>Runs in O(1). Reference counts are unchanged: the two references just
@@ -504,6 +520,7 @@ element, but still invalidates running iterators like every swap.</p>
 <ul>
 <li><code>a</code> — the position of the first element</li>
 <li><code>b</code> — the position of the second element</li>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -577,7 +594,7 @@ as a condition) and read the index with <code>value()</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = [3, 9, 4];
     var i = a.find(9);         # i.value() == 1
-    var missing = a.find(7);   # missing.is_none() == true
+    var missing = a.find(7);   # missing.is_empty() == true
 </code></pre>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">contains(item: T): bool
@@ -824,7 +841,7 @@ returning false.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

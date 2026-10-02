@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,7 +195,8 @@ installation the compiler was built with when there is one, and otherwise
 the first <code>clang</code> on your <code>PATH</code>.</p>
 <p>Every program is linked with:</p>
 <ul>
-<li><strong>Linux:</strong> the C library, which clang adds.</li>
+<li><strong>Linux:</strong> the C library, which clang adds, and the math library (<code>m</code>),
+which the Pepper compiler adds (a floating-point <code>**</code> calls its <code>pow</code>).</li>
 <li><strong>macOS:</strong> <code>libSystem</code>, which contains the C library, plus the SDK and
 platform-version flags. clang adds all of these, using the Xcode Command
 Line Tools.</li>
@@ -205,8 +206,8 @@ which the Pepper compiler adds. clang finds the Visual Studio and Windows SDK
 libraries itself, so you do not need a Developer Command Prompt.</li>
 </ul>
 <p>Any library file named <code>lib&lt;name&gt;.a</code> in the runtime directory is linked too.</p>
-<p>Anything else must be linked explicitly. On Linux, that includes the math
-library (<code>m</code>) for functions such as <code>pow</code>, and <code>pthread</code> on older systems.</p>
+<p>Anything else must be linked explicitly. On Linux, that includes <code>pthread</code>
+on older systems.</p>
 <h2 id="linking-a-library-from-the-source-link"><a class="header" href="#linking-a-library-from-the-source-link">Linking a library from the source: <code>[Link]</code></a></h2>
 <p>Attach <code>[Link("name")]</code> (or <code>[Link(lib = "name")]</code>) to an <code>extern</code>
 declaration to link the library that defines it. The compiler passes <code>-lname</code> to the linker, just like <code>-l</code> on the
@@ -252,13 +253,13 @@ comes from next to its declaration, so nobody building your program has to
 remember a command-line flag.</p>
 <h2 id="linking-a-library-from-the-command-line--l"><a class="header" href="#linking-a-library-from-the-command-line--l">Linking a library from the command line: <code>-l</code></a></h2>
 <p>The <code>-l</code> option links a library for one build:</p>
-<pre><code class="language-sh">pepper main.pep -l m -o main
+<pre><code class="language-sh">pepper build main.pep -l m -o main
 </code></pre>
 <p>Repeat it for more libraries (<code>-l m -l pthread</code>).</p>
 <p>A library the linker does not find on its own (one outside the system’s
 library directories, such as a Homebrew install on macOS) needs its folder
 on the search path. <code>-L dir</code> adds one, like <code>-L</code> for clang:</p>
-<pre><code class="language-sh">pepper main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
+<pre><code class="language-sh">pepper build main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
 </code></pre>
 <p>Repeat it for more folders. The folders are searched for <code>-l</code> libraries and
 <code>[Link]</code> libraries alike, in the order given, before the default ones.</p>
@@ -349,7 +350,7 @@ initializers. Unchanged objects come from the build cache in <code>.pep/cache/</
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

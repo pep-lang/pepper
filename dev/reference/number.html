@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,11 +197,11 @@ overflow), <code>saturating_add</code> (clamped to the type’s range) and
 <code>sub</code> and <code>mul</code> forms of each.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var port = int.parse("8080");
-    assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
-    assert(byte.parse("256").is_none(), "too big for a byte");
+    assert(port.is_value() &amp;&amp; port.value() == 8080, "parsed");
+    assert(byte.parse("256").is_empty(), "too big for a byte");
     int big = 2147483647;
     assert(big.wrapping_add(1) == -2147483648, "wraps around");
-    assert(big.checked_add(1).is_none(), "does not fit");
+    assert(big.checked_add(1).is_empty(), "does not fit");
 </code></pre>
 <p>Source: <code>runtime/number.pep</code></p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
@@ -967,7 +967,7 @@ prefixes (<code>0x</code>) or separators are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(int.parse("-42").value() == -42, "decimal");
     assert(int.parse("ff", 16).value() == 255, "hexadecimal");
-    assert(int.parse("12x").is_none(), "not a number");
+    assert(int.parse("12x").is_empty(), "not a number");
 </code></pre>
 <h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="wrapping_add-4"><a class="header" href="#wrapping_add-4">wrapping_add</a></h4>
@@ -1336,7 +1336,7 @@ are accepted.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(long.parse("-9000000000").value() == -9000000000, "decimal");
-    assert(long.parse("9223372036854775808").is_none(), "too big");
+    assert(long.parse("9223372036854775808").is_empty(), "too big");
 </code></pre>
 <h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="wrapping_add-6"><a class="header" href="#wrapping_add-6">wrapping_add</a></h4>
@@ -1520,7 +1520,7 @@ accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
+<pre><code class="language-pepper">    assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
 </code></pre>
 <h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="wrapping_add-7"><a class="header" href="#wrapping_add-7">wrapping_add</a></h4>
@@ -1701,7 +1701,7 @@ hexadecimal are accepted.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(float.parse("0.25").value() == 0.25, "decimal");
-    assert(float.parse("1e39").is_none(), "too big");
+    assert(float.parse("1e39").is_empty(), "too big");
 </code></pre>
 <h2 id="extend-double"><a class="header" href="#extend-double">extend double</a></h2>
 <pre><code class="language-pepper">extend double
@@ -1725,7 +1725,7 @@ hexadecimal are accepted.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
-    assert(double.parse("1.5.2").is_none(), "not a number");
+    assert(double.parse("1.5.2").is_empty(), "not a number");
 </code></pre>
 
                     </main>
@@ -1779,7 +1779,7 @@ hexadecimal are accepted.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

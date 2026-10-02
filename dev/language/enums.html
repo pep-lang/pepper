@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -515,8 +515,10 @@ block. A pattern is a case name (<code>Red</code>) or the case qualified by its 
 (<code>Light.Red</code>).</li>
 <li>A pattern for a case that carries values can <strong>bind</strong> them:
 <code>Rect(w, h)</code> declares <code>w</code> and <code>h</code> in its arm, holding the case’s values in
-order. The bindings are <code>const</code>. <code>_</code> skips a value. A pattern binds all of
-its case’s values or, written without parentheses (<code>Rect</code>), none.</li>
+order. The bindings are <code>const</code>. <code>_</code> skips a value. A pattern lists all of
+its case’s values or, written without parentheses (<code>Rect</code>), none.
+Each value can also be a pattern of its own (see
+<a href="#nested-patterns">Nested patterns</a>).</li>
 <li>Patterns that share an arm must bind the same names, with the same types
 (<code>Rect(w, _), Square(w)</code>).</li>
 <li>An <code>else =&gt; { ... }</code> arm, last, handles every case the other arms do not.</li>
@@ -630,7 +632,233 @@ between a value and a pattern, so it stays usable as a name
 using <code>==</code>. Literals cannot list every value, so such a <code>match</code> needs an
 <code>else</code> arm, except on a <code>bool</code> that handles both <code>true</code> and <code>false</code>.
 Matching the same literal twice is an error. A match on an enum takes its
-case names, not literals, and a match on <code>int</code> takes literals, not names.</li>
+case names, not literals, and a match on <code>int</code> takes literals, not names
+(except <a href="#ranges-and-constants">constants</a>).</li>
+</ul>
+<h2 id="nested-patterns"><a class="header" href="#nested-patterns">Nested patterns</a></h2>
+<p>The values in a case’s parentheses are patterns, as a tuple pattern’s
+elements are, so patterns nest to any depth:</p>
+<pre><code class="language-pepper"># Patterns nest: the values a case carries can be matched by patterns of
+# their own, as tuple elements can.
+enum Doc {
+    Text(text: String),
+    Line,
+    Pair(left: Doc, right: Doc),
+}
+
+describe(found: Optional&lt;Doc&gt;): String {
+    return match (found) {
+        Empty =&gt; "nothing",
+        # A literal compares the value: only an empty `Text`.
+        Value(Text("")) =&gt; "empty text",
+        # A case of the value's enum, binding its own values.
+        Value(Text(t)) =&gt; t,
+        Value(Line) =&gt; "a line",
+        # Deeper still, with `_` for a value that does not matter.
+        Value(Pair(Line, _)) =&gt; "a pair that starts with a line",
+        Value(Pair) =&gt; "a pair",
+    };
+}
+
+main(): int {
+    assert(describe(Optional&lt;Doc&gt;.Empty) == "nothing", "no document");
+    assert(describe(Optional&lt;Doc&gt;.Value(Doc.Text(""))) == "empty text", "a literal value");
+    assert(describe(Optional&lt;Doc&gt;.Value(Doc.Text("hi"))) == "hi", "a bound value");
+    assert(
+        describe(Optional&lt;Doc&gt;.Value(Doc.Pair(Doc.Line, Doc.Text("x")))) == "a pair that starts with a line",
+        "two levels deep"
+    );
+
+    # A bare name binds the value, unless the value's enum has a case of
+    # that name: here `Empty` is `Optional&lt;int&gt;`'s case.
+    var nested = Optional&lt;Optional&lt;int&gt;&gt;.Value(Optional&lt;int&gt;.Empty);
+    var depth = match (nested) {
+        Empty =&gt; 0,
+        Value(Empty) =&gt; 1,
+        Value(Value(n)) =&gt; 2 + n,
+    };
+    assert(depth == 1, "the inner Optional is empty");
+
+    # Ranges and guards work inside too, and so does `is`.
+    var count = Optional&lt;int&gt;.Value(7);
+    var size = match (count) {
+        Value(0) =&gt; "none",
+        Value(1..10) =&gt; "a few",
+        Value(n) if n &lt; 0 =&gt; "negative",
+        Value(_) =&gt; "many",
+        Empty =&gt; "unknown",
+    };
+    assert(size == "a few", "a range inside a case");
+    var pair = Doc.Pair(Doc.Text("left"), Doc.Line);
+    if (pair is Pair(Text(word), Line)) {
+        assert(word == "left", "is binds nested names");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each value takes <code>_</code>, a name, a case of its enum (with patterns of its
+own values: <code>Value(Pair(Line, _))</code>), a literal, a
+<a href="#ranges-and-constants">range or constant</a>, or a
+<a href="tuples.html#matching-tuples">tuple pattern</a>.</li>
+<li>A bare name binds the value, unless the value’s enum has a case of that
+name, which it then matches (<code>Value(Empty)</code>), or it names a module-scope
+constant. A name repeated in one pattern (<code>Pair(x, x)</code>) must be a case.</li>
+<li>A nested pattern handles part of its case: the arms must still handle
+every value. A case that only nested patterns handle is reported with the
+value they miss (<code>match on 'Optional&lt;Doc&gt;' does not handle 'Value(Line)'</code>), and a pattern whose values the earlier arms already
+match is an error.</li>
+<li>Patterns that share an arm bind the same names, each at the same place:
+<code>Pair(Text(t), Line), Pair(Text(t), Pair)</code> binds <code>t</code> from either, but
+<code>Pair(Text(t), _), Pair(_, Text(t))</code> is an error.</li>
+<li>A nested test reads a value only once the case around it matched, so the
+tests stop at the first part that does not match.</li>
+</ul>
+<h2 id="ranges-and-constants"><a class="header" href="#ranges-and-constants">Ranges and constants</a></h2>
+<p>A <code>match</code> on an integer or a character can compare with a <strong>range</strong> of
+values, and a <code>match</code> on an integer, a character or a <code>bool</code> with a
+module-scope <strong>constant</strong>:</p>
+<pre><code class="language-pepper"># Range and constant patterns: a `match` on an integer or a character
+# compares with ranges (`1..9`, `'a'..&gt;'z'`) and module-scope constants.
+const LIMIT = 100;
+
+size(n: int): String {
+    return match (n) {
+        0 =&gt; "none",
+        # `1..10` stops before 10; `10..&gt;99` includes 99.
+        1..10 =&gt; "a few",
+        10..&gt;99 =&gt; "many",
+        LIMIT =&gt; "the limit",
+        else =&gt; "out of range",
+    };
+}
+
+kind(c: char): String {
+    return match (c) {
+        'a'..&gt;'z', 'A'..&gt;'Z' =&gt; "letter",
+        '0'..&gt;'9' =&gt; "digit",
+        else =&gt; "other",
+    };
+}
+
+# Ranges that cover every value of the type need no `else`.
+half(b: u8): int {
+    return match (b) {
+        0..128 =&gt; 0,
+        128..&gt;255 =&gt; 1,
+    };
+}
+
+main(): int {
+    assert(size(0) == "none" &amp;&amp; size(9) == "a few" &amp;&amp; size(10) == "many", "ranges");
+    assert(size(100) == "the limit" &amp;&amp; size(-1) == "out of range", "a constant, then else");
+    assert(kind('q') == "letter" &amp;&amp; kind('7') == "digit" &amp;&amp; kind('!') == "other", "character ranges");
+    u8 high = 200;
+    assert(half(3) == 0 &amp;&amp; half(high) == 1, "every u8 is handled");
+
+    # In a tuple pattern, a range or a constant compares its element.
+    var pair = (LIMIT, true);
+    var which = match (pair) {
+        (0..LIMIT, _) =&gt; 1,
+        (LIMIT, true) =&gt; 2,
+        (_, _) =&gt; 3,
+    };
+    assert(which == 2, "the constant matches the first element");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>start..end</code> matches from <code>start</code> up to but not including <code>end</code>, and
+<code>start..&gt;end</code> includes <code>end</code>, as <a href="iteration.html">ranges</a> do elsewhere.
+Each bound is a literal (<code>-1</code>, <code>'z'</code>) or a constant (<code>MIN..MAX</code>).
+Ranges match integers and characters only, not <code>bool</code> or <code>String</code>.</li>
+<li>A name that is a module-scope constant (<code>const LIMIT = 100;</code>, declared in
+the file or imported, or <code>limits.MAX</code> through a module) compares the value
+with it, like a literal. A local variable is not a pattern; compare with
+it in a <a href="#guards">guard</a> instead (<code>n if n == limit</code>).</li>
+<li>Inside a <a href="tuples.html#matching-tuples">tuple pattern</a>, a range or a
+constant compares its element (<code>(0..LIMIT, _)</code>), and any other bare name
+binds it, as before.</li>
+<li>When every bound is a literal, the compiler knows which values a pattern
+matches: a pattern whose values the earlier arms already match is an
+error (<code>2..&gt;5</code> after <code>1..9</code>), and a <code>match</code> whose ranges and literals
+cover every value of its type (<code>0..128</code> and <code>128..&gt;255</code> for a <code>u8</code>) needs
+no <code>else</code>. A pattern with a constant bound covers nothing for this check.</li>
+<li>A <code>match</code> on an enum takes its cases, not ranges or constants, even a
+constant holding one of its cases.</li>
+</ul>
+<h2 id="guards"><a class="header" href="#guards">Guards</a></h2>
+<p>An arm can add a <strong>guard</strong> after its patterns, <code>if condition</code>: the arm runs
+only when one of its patterns matches and the condition holds. Otherwise
+the next arm is tried, as if this one had not matched.</p>
+<pre><code class="language-pepper"># A guard (`if condition`) after an arm's patterns: the arm runs only when a
+# pattern matches and the guard holds; otherwise the next arm is tried.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+describe(s: Shape): String {
+    return match (s) {
+        # The guard reads the names its patterns bind.
+        Circle(r) if r &gt; 10 =&gt; "a large circle",
+        Circle =&gt; "a circle",
+        Rect(w, h) if w == h =&gt; "a square",
+        Rect =&gt; "a rectangle",
+        Point =&gt; "a point",
+    };
+}
+
+# A guarded arm handles nothing for the check that every value is handled,
+# since its guard may fail: the `bool` match below still needs `false`.
+toll(heavy: bool, axles: int): int {
+    match (heavy) {
+        true if axles &gt; 4 =&gt; {
+            return 30;
+        }
+        true =&gt; {
+            return 20;
+        }
+        false =&gt; {
+            return 10;
+        }
+    }
+}
+
+main(): int {
+    assert(describe(Shape.Circle(20)) == "a large circle", "the guard holds");
+    assert(describe(Shape.Circle(2)) == "a circle", "the guard fails, the next arm runs");
+    assert(describe(Shape.Rect(3, 3)) == "a square", "equal sides");
+    assert(describe(Shape.Rect(3, 4)) == "a rectangle", "unequal sides");
+    assert(toll(true, 6) + toll(true, 2) + toll(false, 2) == 60, "each arm runs once");
+
+    # Guards work on tuples too.
+    var pair = (5, true);
+    var kind = match (pair) {
+        (n, true) if n &gt; 3 =&gt; 1,
+        (_, true) =&gt; 2,
+        (_, false) =&gt; 3,
+    };
+    assert(kind == 1, "the first arm's guard holds");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The guard reads the names the arm’s patterns bind (<code>Circle(r) if r &gt; 10</code>).
+With several patterns (<code>Word(s), Quoted(s) if s.length == 0</code>), it applies
+to the arm, whichever pattern matched.</li>
+<li>Guards work in <code>match</code> statements and <code>match</code> expressions, over enums,
+literals and tuples. <code>is</code> takes no guard: write <code>x is P &amp;&amp; condition</code>, or
+test the condition inside the <code>if</code>.</li>
+<li>A guarded arm handles nothing when the compiler checks that every case is
+handled, since its guard may fail: a <code>match</code> whose only arm for <code>Circle</code>
+has a guard does not handle <code>Circle</code>, and a later unguarded arm (or
+<code>else</code>) must. An <code>else</code> after guarded arms is not unreachable.</li>
+<li>A guarded arm for a case an earlier unguarded arm already handles is an
+error, like any case handled twice. Two guarded arms may name the same
+case.</li>
+<li>A closure in a guard cannot use a name the arm binds.</li>
 </ul>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
@@ -638,11 +866,7 @@ case names, not literals, and a match on <code>int</code> takes literals, not na
 enum cannot be generic yet. An enum whose cases carry values can declare
 indexers (<code>[]</code>), as a struct does; one whose cases carry nothing cannot
 declare operators or indexers yet, and has <code>==</code> and <code>!=</code> built in.</li>
-<li>A case’s values bind names only: a pattern cannot nest inside a case
-(<code>Some(Text(t))</code>) or compare its values (<code>Text("")</code>) yet. Patterns nest
-inside <a href="tuples.html#matching-tuples">tuple patterns</a> (<code>(Text(t), 0)</code>).
-Patterns cannot match ranges (<code>1..9</code>) or have guards yet. A literal
-pattern is a literal, not a named constant.</li>
+<li>A constant is a pattern only when it is declared at module scope.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>The methods of an enum whose cases carry nothing have no value form:
 <code>c.name</code> without the call is an error (“‘name’ is a method of ‘Color’:
@@ -706,7 +930,7 @@ which such an enum’s value is not.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

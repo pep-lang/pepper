@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,10 +188,15 @@ write them back as compact or indented text.</p>
 <p>Bring it in with <code>import json</code>. Parsing follows RFC 8259 strictly, and
 accepts JSONC (comments and trailing commas) on request. Objects keep
 their keys in the order they were written, so a document round-trips
-unchanged.</p>
+unchanged. <code>encode</code> and <code>decode</code> convert structs to JSON text and back.</p>
 <ul>
 <li><a href="json-value.html">JsonValue</a>: <code>JsonValue</code></li>
 <li><a href="json-parse.html">Parsing</a>: <code>parse</code>, <code>JsonError</code></li>
+<li><a href="json-document.html">Documents with comments</a>: <code>parse_document</code>,
+<code>JsonDocument</code></li>
+<li><a href="json-convert.html">Struct conversion</a>: <code>encode</code>, <code>decode</code>, <code>to_json</code>,
+<code>from_json</code>, <code>UnknownKeys</code>, with the attributes of the
+<a href="serialize-module.html">serialize</a> module</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import json;
@@ -263,7 +268,7 @@ unchanged.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

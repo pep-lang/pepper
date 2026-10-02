@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -431,6 +431,44 @@ trait’s methods calls it on <code>this</code>, and any other bare name means w
 means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through <code>this</code> explicitly only for the trait’s own methods.</p>
+<p>A closure in a default body can use <code>this</code> and the trait’s methods too. Each
+type that gets the default gets its own copy of the closure, which captures
+<code>this</code> as that type, as a closure in one of its own methods would (see
+<a href="function-types.html#this-in-methods"><code>this</code> in methods</a>):</p>
+<pre><code class="language-pepper"># A closure in a trait's default method can use `this` and the trait's
+# methods.
+trait Shape {
+    area(): int;
+
+    # Every type with Shape gets this method, and its own copy of the
+    # closure, which captures `this`.
+    scaled_area(): (int) =&gt; int {
+        return (factor: int) =&gt; area() * factor;
+    }
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int {
+        return side * side;
+    }
+}
+
+main(): int {
+    var square = Square(3);
+    var scale = square.scaled_area();
+    assert(scale(2) == 18, "closure in a default method");
+
+    # The closure keeps the square alive and sees its current side.
+    square.side = 4;
+    assert(scale(2) == 32, "sees the current value");
+    return 0;
+}
+</code></pre>
 <h3 id="numbers-bool-and-enums"><a class="header" href="#numbers-bool-and-enums">Numbers, <code>bool</code> and enums</a></h3>
 <p>A number type (<code>int</code>, <code>long</code>, <code>byte</code>, <code>char</code>, <code>float</code>, <code>double</code> and the
 rest), <code>bool</code>, or an enum whose cases carry no values can declare a trait
@@ -508,7 +546,9 @@ main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the co
 </li>
 <li>
 <p>An extension of a number type may also add methods without a trait
-(<code>extend int { ... }</code>). An enum declares its methods inside the enum, so
+(<code>extend int { ... }</code>), and operators for a number on the left of another
+type (<code>extend double { *(v: Vector): Vector { ... } }</code> makes <code>2.0 * v</code>
+work; see <a href="structs.html#a-number-on-the-left">A number on the left</a>). An enum declares its methods inside the enum, so
 an extension of one must name a trait.</p>
 </li>
 <li>
@@ -677,7 +717,7 @@ type instead.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

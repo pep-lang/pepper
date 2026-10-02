@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -202,14 +202,14 @@ main(): int {
     assert(text.Utf16.decode(utf16).value() == greeting, "round trip");
 
     # ASCII has no é: strict gives none, lossy writes '?'.
-    assert(text.Ascii.encode(greeting).is_none(), "not ASCII");
+    assert(text.Ascii.encode(greeting).is_empty(), "not ASCII");
     assert(text.Ascii.encode_lossy("é").count == 1, "one '?'");
 
     # Strict decoding rejects invalid bytes; lossy decoding replaces them.
     var bad = Array&lt;u8&gt;();
     bad.append(104);
     bad.append(255);
-    assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
     assert(text.Utf8.decode_lossy(bad) == "h\u{FFFD}", "replaced");
     return 0;
 }
@@ -291,7 +291,7 @@ the replacement character.</li>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

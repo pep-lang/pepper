@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -489,12 +489,53 @@ written: its braces are not a format.</li>
 in the order the program wrote it, even when standard output is a pipe.</p>
 <p>A <code>float</code> or <code>double</code> prints its shortest exact text (<code>print(0.5)</code> prints
 <code>0.5</code>), and a tuple its elements in parentheses (<code>(1, two)</code>).</p>
-<p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
+<h2 id="assertions-and-panics"><a class="header" href="#assertions-and-panics">Assertions and panics</a></h2>
+<p>For checks in your programs, the runtime provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
 <code>panic(message)</code>, which always stops it. Each is
 <a href="overloading.html">overloaded</a>: the message may be a <code>String</code>, built at run time
 (<code>assert(n &gt; 0, name + " must be positive")</code>), or a C string, which a string
 literal picks, so a literal message builds nothing when the assertion holds. See
 <a href="../reference/internals.html">Built-in functions</a>.</p>
+<p>A panic flushes what the program printed, writes the location of the failing
+call and the message to standard error, and aborts:</p>
+<pre><code class="language-text">main.pep:12:5: panic: count must be positive
+</code></pre>
+<p>The checks the compiler adds report the same way, at the expression that
+failed: an <a href="types-and-variables.html#integer-overflow">overflowing operator</a>, a
+null function value, a <code>match</code> on a null reference enum. So do the runtime’s
+checking methods, which report their caller’s line, not their own: indexing an
+<code>Array</code> or <code>String</code> out of range, <code>Array.pop()</code> on an empty array,
+<code>Optional.value()</code> on none, <code>Result.value()</code> on an error, and the like.</p>
+<p>They do it with an ordinary <a href="#default-parameter-values">default parameter</a>,
+<code>location: __ptr&lt;char&gt; = __caller_location()</code>. A call that leaves <code>location</code>
+out gets the place of that call, as <code>file:line:col</code>. Write the same parameter on
+a function of your own that checks its arguments, and pass <code>location</code> on to
+<code>assert</code> or <code>panic</code>, so a failure names the line that passed the bad value:</p>
+<pre><code class="language-pepper"># Reporting the caller's location with `__caller_location()`.
+
+# A check that names its caller's line when it fails, the way `assert`,
+# `panic`, `Array` indexing and `Optional.value()` do: the default is the
+# location of the call that leaves `location` out.
+check_positive(value: int, location: __ptr&lt;char&gt; = __caller_location()): int {
+    assert(value &gt; 0, "expected a positive value", location);
+    return value;
+}
+
+# The location is a C string, `file:line:col`.
+here(location: __ptr&lt;char&gt; = __caller_location()): String {
+    return String(location);
+}
+
+main(): int {
+    assert(check_positive(3) == 3, "positive");
+    var at = here();
+    assert(at.ends_with("functions-caller-location.pep:18:14"), "this call");
+    return 0;
+}
+</code></pre>
+<p>Written anywhere else, <code>__caller_location()</code> is its own location. A
+compiler-generated check with no single place to report, such as a call through
+a null trait value, prints the message alone.</p>
 <h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
 <p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program’s command-line arguments: element 0 is
 the program as it was started, and the arguments typed after it follow in
@@ -583,7 +624,7 @@ variable, pass to another function, or return, and a closure such as
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 

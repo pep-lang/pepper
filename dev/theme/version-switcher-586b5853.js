@@ -1,4 +1,4 @@
-// Version picker for the versioned site built by `pepper-docgen build`:
+// Version picker for the versioned site built by `pep-doc build`:
 // every version of the book lives in its own folder beside versions.json.
 (function () {
     "use strict";

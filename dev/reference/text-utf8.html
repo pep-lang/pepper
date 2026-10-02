@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-574b86cb.js";
+            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11a2ae4f.js"></script>
+        <script src="../toc-c45e05eb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -241,7 +241,7 @@ U+10FFFF.</p>
 
     var bad = Array&lt;u8&gt;();
     bad.append(255);
-    assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
 </code></pre>
 <h4 id="decode_lossy"><a class="header" href="#decode_lossy">decode_lossy</a></h4>
 <pre><code class="language-pepper">static decode_lossy(bytes: u8[]): String
@@ -284,7 +284,7 @@ from C memory may not be.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import text;
 
-    assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+    assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
 </code></pre>
 <h4 id="code_point_at"><a class="header" href="#code_point_at">code_point_at</a></h4>
 <pre><code class="language-pepper">static code_point_at(value: String, offset: ulong): (uint, ulong)
@@ -384,7 +384,7 @@ of <code>value</code>.</p>
         <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-81b39abc.js"></script>
+        <script src="../theme/version-switcher-586b5853.js"></script>
 
 
 
