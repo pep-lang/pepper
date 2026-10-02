@@ -216,7 +216,7 @@ A few things are useful once it is installed:
   the values an enum case declares.
 - The `pepper.lspPath` setting points the extension at a language server you
   built yourself (`cargo build --release -p pepper-lsp` builds
-  `target/release/pepper-lsp`). The server restarts whenever that file
+  `target/release/pep-lsp`). The server restarts whenever that file
   changes.
 
 To install the extension from the branch you have checked out instead of the

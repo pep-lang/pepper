@@ -2835,7 +2835,7 @@ impl LanguageServer for PepperLsp {
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
-                name: "pepper-lsp".to_string(),
+                name: "pep-lsp".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
         })
@@ -2846,7 +2846,7 @@ impl LanguageServer for PepperLsp {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        let started = format!("pepper-lsp {} started", env!("CARGO_PKG_VERSION"));
+        let started = format!("pep-lsp {} started", env!("CARGO_PKG_VERSION"));
         self.client.log_message(MessageType::INFO, started).await;
         // Analyses read imports from disk: ask the client, whatever editor
         // it is, to report `.pep` files that change.
@@ -3093,7 +3093,7 @@ fn main() {
     // The main thread's stack is fixed by the linker, so serve from a
     // thread that has `STACK_SIZE`, as the runtime's workers do.
     let server = std::thread::Builder::new()
-        .name("pepper-lsp".into())
+        .name("pep-lsp".into())
         .stack_size(STACK_SIZE)
         .spawn(|| {
             let runtime = tokio::runtime::Builder::new_multi_thread()

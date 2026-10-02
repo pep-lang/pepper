@@ -41,7 +41,7 @@ opening a PR, check each of these against the diff:
 
 CI enforces what it can: `runtime_docs_tests` fails on an undocumented
 public runtime declaration, `docs_examples_tests` compiles and runs every
-example, and `pepper-docgen check` fails when the reference is stale. It
+example, and `pep-doc check` fails when the reference is stale. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 

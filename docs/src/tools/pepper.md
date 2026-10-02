@@ -16,6 +16,19 @@ pepper --version                  # pepper's version; -v adds each command's
 is the program `pep-build`, so `pepper build` takes exactly the options the
 compiler does.
 
+## The commands in this repository
+
+| Command | Program | What it does |
+| --- | --- | --- |
+| `pepper build` | `pep-build` | Compiles a program (the compiler) |
+| `pepper fmt` | `pep-fmt` | Formats source ([Formatting with pep-fmt](pep-fmt.md)) |
+| `pepper lsp` | `pep-lsp` | Runs the language server, which editors start |
+| `pepper doc` | `pep-doc` | Generates the library reference and builds this book |
+
+`cargo build --release --workspace` builds `pep-build`, `pep-lsp` and `pep-doc` into
+`target/release`; `pep-fmt` and `pepper` are Pepper programs, built with
+`pep-build`.
+
 ## Building it
 
 Build the compiler with cargo, then build `pepper` with the compiler and put

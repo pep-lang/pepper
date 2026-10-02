@@ -1,4 +1,4 @@
-# Publishes the documentation site (docs/, rendered by `pepper-docgen build`)
+# Publishes the documentation site (docs/, rendered by `pep-doc build`)
 # to the gh-pages branch, one folder per version:
 #
 #   push to main       -> dev/      (the unreleased docs, replaced each time)

@@ -85,7 +85,7 @@ env:
 jobs:
   # Whether the PR touches anything the build or the tests read. A PR that
   # changes only prose (Markdown outside docs/src/SUMMARY.md and the generated
-  # docs/src/reference/, which `pepper-docgen check` reads, or agent skills
+  # docs/src/reference/, which `pep-doc check` reads, or agent skills
   # under .agents/ and .claude/) skips every test job below, and so does a
   # draft. docs/examples/ is code: docs_examples_tests compiles and runs it.
   changes:

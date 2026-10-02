@@ -1,4 +1,4 @@
-# Builds pepper-lsp and the vscode-pepper extension from the current checkout
+# Builds pep-lsp and the vscode-pepper extension from the current checkout
 # (any branch, merged or not) and installs the result into local VS Code.
 #
 #   scripts/install-vscode-extension.ps1          # build and install once
@@ -10,7 +10,7 @@
 # to the extension's own code still needs "Developer: Reload Window".
 #
 # For a tighter loop while editing the server, set `pepper.lspPath` to
-# target/release/pepper-lsp.exe instead: every `cargo build --release -p
+# target/release/pep-lsp.exe instead: every `cargo build --release -p
 # pepper-lsp` then restarts the server with no install step at all.
 param(
     [switch]$Watch,
@@ -45,7 +45,7 @@ function Install-PepperExtension {
         $target = if ($arch -eq "Arm64") { "win32-arm64" } else { "win32-x64" }
         $serverDir = Join-Path $ext "server/$target"
         New-Item -ItemType Directory -Force $serverDir | Out-Null
-        Copy-Item (Join-Path $repo "target/release/pepper-lsp.exe") $serverDir -Force
+        Copy-Item (Join-Path $repo "target/release/pep-lsp.exe") $serverDir -Force
 
         Push-Location $ext
         try {

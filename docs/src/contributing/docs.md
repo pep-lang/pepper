@@ -2,7 +2,7 @@
 
 This book lives in `docs/` and is rendered with [mdBook](https://rust-lang.github.io/mdBook/).
 The standard library reference (`docs/src/reference/`) is generated from the
-runtime's doc comments by `pepper-docgen`, a tool in this repository.
+runtime's doc comments by `pep-doc`, a tool in this repository.
 
 ```sh
 cargo install mdbook --locked                 # once
@@ -39,7 +39,7 @@ chapter.
 ## Versions
 
 Documentation is versioned with the compiler's [semantic version](https://semver.org)
-(`version` in the root `Cargo.toml`). `pepper-docgen build --version X.Y.Z`
+(`version` in the root `Cargo.toml`). `pep-doc build --version X.Y.Z`
 renders the book into `<site>/X.Y.Z/` and leaves every other version in the
 site alone; `versions.json` lists them for the version picker, and the site's
 `index.html` opens the newest release. Builds from `main` publish as `dev`.

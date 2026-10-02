@@ -1,4 +1,4 @@
-# Builds the pepper-lsp server (release) for every supported platform and
+# Builds the pep-lsp server (release) for every supported platform and
 # packages it with the VSCode extension into a single downloadable .vsix.
 #
 # The LSP crate depends only on pepper-parser, pepper-sema and pepper-files,
@@ -117,11 +117,11 @@ jobs:
         run: |
           dir="${CARGO_TARGET_DIR:-target}"
           [ -n "$RUST_TARGET" ] && dir="$dir/$RUST_TARGET"
-          echo "PEPPER_LSP_BIN=$dir/release/pepper-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"
+          echo "PEPPER_LSP_BIN=$dir/release/pep-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"
 
       # Release build, as required for the bundled server. No features: the
       # LSP crate never links LLVM, so -p selects exactly what to build.
-      - name: Build pepper-lsp (release)
+      - name: Build pep-lsp (release)
         shell: bash
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
@@ -139,7 +139,7 @@ jobs:
       - name: Upload server binary
         uses: actions/upload-artifact@v7
         with:
-          name: pepper-lsp-${{ matrix.target }}
+          name: pep-lsp-${{ matrix.target }}
           path: ${{ env.PEPPER_LSP_BIN }}
           if-no-files-found: error
 
@@ -171,24 +171,24 @@ jobs:
           path: servers
 
       # The extension resolves the bundled server at
-      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js). Every
+      # server/<platform>-<arch>/pep-lsp[.exe] (src/extension.js). Every
       # target is required.
       - name: Bundle servers into extension
         shell: bash
         run: |
           set -euo pipefail
           for target in win32-x64 linux-x64 darwin-x64 darwin-arm64; do
-            if [ ! -d "servers/pepper-lsp-$target" ]; then
-              echo "::error::no pepper-lsp server was built for $target"
+            if [ ! -d "servers/pep-lsp-$target" ]; then
+              echo "::error::no pep-lsp server was built for $target"
               exit 1
             fi
             mkdir -p "tools/vscode-pepper/server/$target"
-            cp "servers/pepper-lsp-$target/"* "tools/vscode-pepper/server/$target/"
+            cp "servers/pep-lsp-$target/"* "tools/vscode-pepper/server/$target/"
           done
           # Artifact download does not preserve file permissions (files arrive
           # 644), and vsce zips with the on-disk mode, so restore the exec bit
           # or the POSIX binaries would be installed non-executable.
-          chmod +x tools/vscode-pepper/server/*/pepper-lsp*
+          chmod +x tools/vscode-pepper/server/*/pep-lsp*
           find tools/vscode-pepper/server -type f -exec ls -l {} +
 
       # Bundle runtime dependencies so the vsix is self-contained.
@@ -232,7 +232,7 @@ jobs:
             printf '%s\n' \
               "VSCode extension for the Pepper language, built by the VSIX workflow." \
               "" \
-              "Bundles a pepper-lsp server for win32-x64, linux-x64," \
+              "Bundles a pep-lsp server for win32-x64, linux-x64," \
               "darwin-x64 and darwin-arm64; nothing else is needed to" \
               "install it on those platforms." \
               > "$RUNNER_TEMP/notes.md"

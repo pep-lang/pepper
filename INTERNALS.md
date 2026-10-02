@@ -32,9 +32,9 @@ names and the pass order come from that implementation.
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
-| `tools/lsp` | `pepper-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
-| `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pepper-lsp`. |
-| `tools/docgen` | `pepper-docgen`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
+| `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
+| `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
+| `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
 | `tools/pepper` | `pepper`, the entry point written in Pepper: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler). Tested by `pepper_entry_tests.rs`. |
@@ -1808,14 +1808,14 @@ diagnostics"). The mechanics:
   reference pages in `docs/src/reference/` and the reference part of
   `docs/src/SUMMARY.md` are **generated** by
   `cargo run -p pepper-docgen -- reference`. CI fails if they are stale
-  (`pepper-docgen -- check`). See `docs/src/contributing/docs.md` for the
+  (`cargo run -p pepper-docgen -- check`). See `docs/src/contributing/docs.md` for the
   book.
 
 ---
 
 ## 8. Language server and VS Code extension
 
-**`tools/lsp/src/main.rs`** (`pepper-lsp`, stdio, tower-lsp):
+**`tools/lsp/src/main.rs`** (`pep-lsp`, stdio, tower-lsp):
 
 - **Properties.** Hover and definition find a property by name
   (`infer::Kind::Property`); its accessor bodies are walked as methods
@@ -1980,7 +1980,7 @@ diagnostics"). The mechanics:
   closing brace (`missing_arms_fix`, `find_match`), binding a case's values
   by their declared names.
 - Runtime discovery is the same as the compiler's (section 2.2): from the
-  directory the server was started in, then from the `pepper-lsp`
+  directory the server was started in, then from the `pep-lsp`
   executable's directory, unless `PEPPER_RUNTIME` is set. In `Lenient`
   mode a missing runtime is not an error.
 - Tests: `tools/lsp/src/tests.rs` builds a module tree in a temp directory
@@ -2012,7 +2012,7 @@ The server comes from `pepper.lspPath` or from the bundled
 `syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for four
 targets (x64 Windows and Linux, x64 and arm64 macOS) and publishes it as
 a `vsix-v*` release; it runs only for a `vX.Y.Z` tag or a manual dispatch.
-`scripts/install-vscode-extension.ps1 [-Watch]` builds `pepper-lsp` in
+`scripts/install-vscode-extension.ps1 [-Watch]` builds `pep-lsp` in
 release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `code --install-extension` from the current branch.
 
@@ -2253,7 +2253,7 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   - `test-windows` runs on the self-hosted **`pepper-windows`** runner:
     provision LLVM (`ci-provision-llvm.sh`, cached), `cargo build
     --workspace --locked`, `cargo test --workspace --locked`, and
-    `pepper-docgen -- check`.
+    `cargo run -p pepper-docgen -- check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
     run the suite against the default LLVM. `test-linux` is required,
     through `test`; `test-macos` is not for now (it takes about twice as

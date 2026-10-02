@@ -12,3 +12,8 @@ pepper-files = { path = "../../crates/pepper-files" }
 tower-lsp.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
+
+# The binary is `pep-lsp`, run as `pepper lsp`; the package keeps its name.
+[[bin]]
+name = "pep-lsp"
+path = "src/main.rs"

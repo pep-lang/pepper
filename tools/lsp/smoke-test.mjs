@@ -1,9 +1,9 @@
-// Smoke test for pepper-lsp: raw JSON-RPC over stdio.
+// Smoke test for pep-lsp: raw JSON-RPC over stdio.
 // Usage: node tools/lsp/smoke-test.mjs <path-to-pep-file>
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const BIN = process.env.PEPPER_LSP_BIN || (process.platform === "win32" ? "target/debug/pepper-lsp.exe" : "target/debug/pepper-lsp");
+const BIN = process.env.PEPPER_LSP_BIN || (process.platform === "win32" ? "target/debug/pep-lsp.exe" : "target/debug/pep-lsp");
 const REPO_ROOT = process.env.PEPPER_REPO_ROOT || "D:/pepper";
 const targetFile = process.argv[2];
 const text = readFileSync(targetFile, "utf8");
@@ -77,7 +77,7 @@ async function diagnosticsFor(u, ms = 30000) {
 
 // ── Case 1: valid file → empty diagnostics, hover, document symbols ──────────
 const init = await request("initialize", { processId: null, rootUri: null, capabilities: {} });
-check("initialize returns serverInfo pepper-lsp", init?.serverInfo?.name === "pepper-lsp", init);
+check("initialize returns serverInfo pep-lsp", init?.serverInfo?.name === "pep-lsp", init);
 check("capabilities advertise hover", !!init?.capabilities?.hoverProvider);
 check("capabilities advertise completion", !!init?.capabilities?.completionProvider);
 check("capabilities advertise definition", !!init?.capabilities?.definitionProvider);
