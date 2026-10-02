@@ -30,18 +30,26 @@ pub fn run_program(command: &mut Command, source: &str) -> std::io::Result<Outpu
 /// it with the arguments and environment `configure` sets, and returns its
 /// output.
 pub fn run_linked(name: &str, source: &str, configure: impl FnOnce(&mut Command)) -> Output {
+    run_linked_with(name, source, &[], configure)
+}
+
+/// [`run_linked`], compiled with the extra command-line arguments `args`
+/// (`-O2`, `--no-runtime-checks=overflow`).
+pub fn run_linked_with(name: &str, source: &str, args: &[&str], configure: impl FnOnce(&mut Command)) -> Output {
     use clap::Parser;
     let dir = std::env::temp_dir().join(format!("pepper_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
     std::fs::write(&src_path, source).unwrap();
-    let options = pepper_driver::Options::parse_from(vec![
+    let mut argv = vec![
         "pepper".to_string(),
         src_path.to_string_lossy().into_owned(),
         "-o".to_string(),
         out_path.to_string_lossy().into_owned(),
-    ]);
+    ];
+    argv.extend(args.iter().map(|a| a.to_string()));
+    let options = pepper_driver::Options::parse_from(pepper_driver::options::normalize_args(argv.into_iter().map(std::ffi::OsString::from)));
     pepper_driver::run(options).expect("compile + link");
     let mut command = Command::new(&out_path);
     configure(&mut command);

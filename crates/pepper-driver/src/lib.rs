@@ -76,6 +76,10 @@ pub fn run(options: Options) -> Result<i32, String> {
         return run_emit_ast(&options);
     }
 
+    if let Some(warning) = options.runtime_checks_warning() {
+        report_warnings(&warning);
+    }
+
     if options.msvc {
         return Err("the MSVC linker path is not ported".to_string());
     }
@@ -99,6 +103,7 @@ pub fn run(options: Options) -> Result<i32, String> {
         generator.file_namespaces = namespaces;
         generator.debug_info = options.emit_debug;
         generator.opt_level = options.effective_opt_level()?;
+        generator.runtime_checks = options.effective_runtime_checks()?;
         generator.generate(&sema_module).map_err(|d| sema_module.sources.render(&d))?;
         timer.stage("codegen");
         let cpu = options.effective_cpu()?;
@@ -428,6 +433,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
         generator.file_namespaces = setup.namespaces.to_vec();
         generator.debug_info = setup.debug;
         generator.opt_level = setup.build.opt_level;
+        generator.runtime_checks = setup.build.runtime_checks;
         generator.unit = Some(pepper_codegen::partition::UnitFilter {
             unit_of_file: setup.unit_of_file.clone(),
             unit: job.unit,

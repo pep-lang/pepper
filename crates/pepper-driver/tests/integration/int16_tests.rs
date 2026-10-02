@@ -68,7 +68,7 @@ fn widening_casts_extend_by_signedness() {
     i16 a = -1;
     if ((a as long) != -1) { return 1; }
     if ((a as int) != -1) { return 2; }
-    if ((a as ulong) + 1 != 0) { return 3; }
+    if ((a as ulong).wrapping_add(1) != 0) { return 3; }
     if ((a as uint) != 4294967295) { return 4; }
     u16 b = 65535;
     if ((b as long) != 65535) { return 5; }
@@ -141,7 +141,7 @@ fn promotion_with_other_widths() {
     if (!(a - one < 0)) { return 2; }
     # u16 vs u32: unsigned 32-bit arithmetic.
     uint u = 0;
-    if (a + u - one != 4294967295) { return 3; }
+    if ((a + u).wrapping_sub(one) != 4294967295) { return 3; }
     # i16 vs u8 / char.
     i16 s = -300; u8 b = 200; char c = -100;
     if (s + b != -100) { return 4; }
@@ -152,7 +152,7 @@ fn promotion_with_other_widths() {
     long l = 10000000000;
     if (s + l != 9999999700) { return 7; }
     ulong ul = 1;
-    if ((s + ul) + 299 != 0) { return 8; }
+    if ((s + ul).wrapping_add(299) != 0) { return 8; }
     u16 m = 65535;
     if ((m + ul) != 65536) { return 9; }
     # i16 vs u16: both promote to int, no unsigned wrap.

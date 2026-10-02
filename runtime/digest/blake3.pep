@@ -294,13 +294,13 @@ export blake3(text: String): u8[] {
 # The quarter-round G on words `a`, `b`, `c` and `d` of `s`, mixing in the
 # message words `x` and `y`.
 _digest_blake3_mix(s: __ptr<uint>, a: ulong, b: ulong, c: ulong, d: ulong, x: uint, y: uint) {
-    s[a] = s[a] + s[b] + x;
+    s[a] = s[a].wrapping_add(s[b]).wrapping_add(x);
     s[d] = _digest_rotate_right(s[d] ^ s[a], 16);
-    s[c] = s[c] + s[d];
+    s[c] = s[c].wrapping_add(s[d]);
     s[b] = _digest_rotate_right(s[b] ^ s[c], 12);
-    s[a] = s[a] + s[b] + y;
+    s[a] = s[a].wrapping_add(s[b]).wrapping_add(y);
     s[d] = _digest_rotate_right(s[d] ^ s[a], 8);
-    s[c] = s[c] + s[d];
+    s[c] = s[c].wrapping_add(s[d]);
     s[b] = _digest_rotate_right(s[b] ^ s[c], 7);
 }
 

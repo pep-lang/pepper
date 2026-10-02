@@ -93,6 +93,9 @@ Some that you will meet quickly:
   the compiler keeping each locked value apart from the rest of the program
   (see
   [threads](language/threads.md#what-a-lock-body-may-do)).
+- Integer arithmetic that overflows panics instead of wrapping, at every
+  optimization level; `wrapping_add` and its siblings wrap on purpose (see
+  [integer overflow](language/types-and-variables.md#integer-overflow)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.

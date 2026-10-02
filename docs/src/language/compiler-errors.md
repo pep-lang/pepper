@@ -395,7 +395,8 @@ main.pep:3:15: error: cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe
 ## Errors while the program runs
 
 Some problems can only be found while the program runs, such as an array index
-out of range or a failed `assert`. These are not compiler errors: the program
+out of range, an [integer overflow](types-and-variables.md#integer-overflow), a
+division by zero, or a failed `assert`. These are not compiler errors: the program
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from `main`). See [`assert` and
 `panic`](../reference/internals.md).

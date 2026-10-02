@@ -34,7 +34,8 @@ is a 64-bit bit pattern: `u64 all = 0xFFFFFFFFFFFFFFFF;` sets every bit.
 
 Storing a value that does not fit in the destination keeps its low bits, as in
 C: a `u16` holding 65535 becomes 0 when you add 1 and store the result, and
-`70000 as u16` is 4464.
+`70000 as u16` is 4464. Arithmetic that overflows `int` or a wider type
+panics instead (see [Integer overflow](#integer-overflow)).
 
 A decimal literal larger than the largest `long` (9223372036854775807), or a
 hexadecimal literal with more than 64 bits, is an error:
@@ -376,13 +377,95 @@ conversions"), so code ported from C gives the same results:
   over its arms. The value converts from that type wherever it goes.
 - **Shifts** take the type of the (promoted) left operand. `>>` keeps the sign for
   signed types and fills with zeros for unsigned types.
-- **Overflow** of unsigned arithmetic wraps around. As in C, signed overflow,
-  division by zero, and shifting by the operand's width or more are not
-  defined; do not rely on what they do.
+- **Overflow** is where Pepper leaves C: it panics, for signed and unsigned
+  types alike (see [Integer overflow](#integer-overflow)).
 
 ```pepper
 {{#include ../../examples/types-arithmetic.pep}}
 ```
+
+## Integer overflow
+
+Integer arithmetic whose result does not fit its type stops the program, as in
+Swift (and Rust's debug builds), instead of wrapping around silently:
+
+```text
+main.pep:3:16: integer overflow in 'int' addition
+```
+
+The message names the operator's location and the type the operation ran at.
+These operations check:
+
+- `+`, `-`, `*` and `**`, unary `-`, `++` and `--`, and the compound
+  assignments (`+=`, `-=`, `*=`). Negating the most negative value of a signed
+  type overflows, and so does negating any nonzero unsigned value or
+  subtracting past 0 (`uint 0 - 1`).
+- `/` and `%` by zero (`division by zero`), and the most negative value of a
+  signed type divided by -1 (`MIN / -1` and `MIN % -1`), whose result does not
+  fit.
+- `<<` and `>>` by a count of at least the type's width, or a negative one:
+  `shift count out of range for 'int': must be from 0 to 31`.
+
+Arithmetic on types narrower than `int` runs at `int` (see above), so it
+overflows only past `int`'s range; storing the result back in the narrow type
+keeps its low bits, like any narrowing conversion. `x++` on a `u8` holding 255
+leaves 0, as `x += 1` does. Casts with `as` never check: `70000 as u16` is
+4464.
+
+When both operands are constants, an overflow is a compile error at the
+operator, and so is a division by a constant 0:
+
+```text
+main.pep:2:28: error: integer overflow in 'int' multiplication
+    2 |     var seconds = 100000 * 100000;
+      |                          ^
+```
+
+### Wrapping on purpose
+
+Hashes, checksums and random number generators rely on wrapping. Each integer
+type has methods that say what to do on overflow instead of panicking:
+
+| Method | On overflow |
+|---|---|
+| `wrapping_add(x)`, `wrapping_sub(x)`, `wrapping_mul(x)` | Wraps around: the result modulo 2^bits. |
+| `checked_add(x)`, `checked_sub(x)`, `checked_mul(x)` | Returns none (the result is a `T?`). |
+| `saturating_add(x)`, `saturating_sub(x)`, `saturating_mul(x)` | Clamps to the type's highest or lowest value. |
+| `overflowing_add(x)`, `overflowing_sub(x)`, `overflowing_mul(x)` | Returns the wrapped result and `true` as a `(T, bool)`. |
+
+```pepper
+{{#include ../../examples/types-overflow.pep}}
+```
+
+The methods work at their type's own width: `byte 200.checked_add(100)` is
+none, while `200 + 100` on two `byte`s is 300 at `int`.
+
+### Removing the checks
+
+The checks stay on at every optimization level. A build that has measured
+their cost and accepts the risk can remove kinds of check with
+`--no-runtime-checks`, a comma-separated list:
+
+| Name | Removes | Then |
+|---|---|---|
+| `overflow` | The overflow checks of `+`, `-`, `*`, `**`, unary `-`, `++`, `--` | Arithmetic wraps around (never undefined). |
+| `divide` | Division and remainder by zero, and `MIN / -1` | The result is undefined, as in C. |
+| `shift` | The shift count check | The count is masked to the type's width (`x << 33` on an `int` shifts by 1). |
+| `bounds` | `Array` and `String` index checks (`a[i]`, `byte_at`) | An index out of range reads or writes arbitrary memory. |
+| `null` | Calls through null function and trait values, and `match` on a null reference | The program crashes or misbehaves. |
+| `all` | Every check above | |
+
+```bash
+pepper -O main.pep --no-runtime-checks=overflow,shift
+```
+
+Removing `bounds` or `null` gives up Pepper's memory safety: an index out of
+range or a null reference then reads or writes arbitrary memory instead of
+panicking. The flag does nothing at `-O0`, the default, where every check stays
+on and the compiler warns
+`warning: '--no-runtime-checks' has no effect at -O0`. It applies from `-O1`
+up, `-g` included. The setting is part of the build cache's key, like the
+optimization level.
 
 ## Operators
 

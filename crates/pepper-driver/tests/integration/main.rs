@@ -54,6 +54,7 @@ mod method_inference_tests;
 mod module_tests;
 mod named_argument_tests;
 mod multidim_index_tests;
+mod overflow_tests;
 mod overload_tests;
 mod nested_array_tests;
 mod nested_hash_tests;

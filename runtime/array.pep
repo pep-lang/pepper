@@ -243,7 +243,7 @@ export struct Array<T> {
     ## @example
     ##     var first = a[0];
     [](idx: ulong): T {
-        assert(idx < _size, "Array index read out of bounds");
+        _pep_check_bounds(idx < _size, "Array index read out of bounds");
         return _data[idx];
     }
 
@@ -263,7 +263,7 @@ export struct Array<T> {
     ## @example
     ##     a[0] = 42;
     [](idx: ulong, value: T): T {
-        assert(idx < _size, "Array index write out of bounds");
+        _pep_check_bounds(idx < _size, "Array index write out of bounds");
         _version = _version + 1;
         _data[idx] = value;
         return _data[idx];

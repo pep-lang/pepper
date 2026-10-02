@@ -5,7 +5,9 @@
 //! unsignedness survives only when an unsigned operand is as wide as the
 //! promoted result; shifts take the type of the promoted left operand
 //! (C 6.5.7). C-undefined cases (signed overflow, div/mod by zero, shift >=
-//! width, INT_MIN/-1) are excluded by construction.
+//! width, INT_MIN/-1) are excluded by construction. Unsigned arithmetic that
+//! wraps in C panics in Pepper (#265), so those cases compute at the
+//! promoted type with `wrapping_add`/`wrapping_sub`/`wrapping_mul`.
 //!
 //! Each test is one program containing every case for a type pair; a case
 //! failure returns its 1-based index so the mismatch localizes without
@@ -1085,7 +1087,7 @@ fn m_bool_x_uint() {
     { bool a = false; uint b = 0; if ((a > b) != 0) { return 1; } }
     { bool a = false; uint b = 0; if ((a >= b) != 1) { return 1; } }
     { bool a = false; uint b = 1; if ((a + b) != 1) { return 1; } }
-    { bool a = false; uint b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { bool a = false; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { bool a = false; uint b = 1; if ((a * b) != 0) { return 1; } }
     { bool a = false; uint b = 1; if ((a / b) != 0) { return 1; } }
     { bool a = false; uint b = 1; if ((a % b) != 0) { return 1; } }
@@ -1101,7 +1103,7 @@ fn m_bool_x_uint() {
     { bool a = false; uint b = 1; if ((a > b) != 0) { return 1; } }
     { bool a = false; uint b = 1; if ((a >= b) != 0) { return 1; } }
     { bool a = false; uint b = 255; if ((a + b) != 255) { return 1; } }
-    { bool a = false; uint b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { bool a = false; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { bool a = false; uint b = 255; if ((a * b) != 0) { return 1; } }
     { bool a = false; uint b = 255; if ((a / b) != 0) { return 1; } }
     { bool a = false; uint b = 255; if ((a % b) != 0) { return 1; } }
@@ -1115,7 +1117,7 @@ fn m_bool_x_uint() {
     { bool a = false; uint b = 255; if ((a > b) != 0) { return 1; } }
     { bool a = false; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { bool a = false; uint b = 7; if ((a + b) != 7) { return 1; } }
-    { bool a = false; uint b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { bool a = false; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { bool a = false; uint b = 7; if ((a * b) != 0) { return 1; } }
     { bool a = false; uint b = 7; if ((a / b) != 0) { return 1; } }
     { bool a = false; uint b = 7; if ((a % b) != 0) { return 1; } }
@@ -1131,7 +1133,7 @@ fn m_bool_x_uint() {
     { bool a = false; uint b = 7; if ((a > b) != 0) { return 1; } }
     { bool a = false; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { bool a = false; uint b = 12345; if ((a + b) != 12345) { return 1; } }
-    { bool a = false; uint b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { bool a = false; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { bool a = false; uint b = 12345; if ((a * b) != 0) { return 1; } }
     { bool a = false; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { bool a = false; uint b = 12345; if ((a % b) != 0) { return 1; } }
@@ -1145,7 +1147,7 @@ fn m_bool_x_uint() {
     { bool a = false; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { bool a = false; uint b = 12345; if ((a >= b) != 0) { return 1; } }
     { bool a = false; uint b = 4294967295; if ((a + b) != 4294967295) { return 1; } }
-    { bool a = false; uint b = 4294967295; if ((a - b) != 1) { return 1; } }
+    { bool a = false; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { bool a = false; uint b = 4294967295; if ((a * b) != 0) { return 1; } }
     { bool a = false; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { bool a = false; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
@@ -1189,7 +1191,7 @@ fn m_bool_x_uint() {
     { bool a = true; uint b = 1; if ((a > b) != 0) { return 1; } }
     { bool a = true; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { bool a = true; uint b = 255; if ((a + b) != 256) { return 1; } }
-    { bool a = true; uint b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { bool a = true; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { bool a = true; uint b = 255; if ((a * b) != 255) { return 1; } }
     { bool a = true; uint b = 255; if ((a / b) != 0) { return 1; } }
     { bool a = true; uint b = 255; if ((a % b) != 1) { return 1; } }
@@ -1203,7 +1205,7 @@ fn m_bool_x_uint() {
     { bool a = true; uint b = 255; if ((a > b) != 0) { return 1; } }
     { bool a = true; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { bool a = true; uint b = 7; if ((a + b) != 8) { return 1; } }
-    { bool a = true; uint b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { bool a = true; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { bool a = true; uint b = 7; if ((a * b) != 7) { return 1; } }
     { bool a = true; uint b = 7; if ((a / b) != 0) { return 1; } }
     { bool a = true; uint b = 7; if ((a % b) != 1) { return 1; } }
@@ -1219,7 +1221,7 @@ fn m_bool_x_uint() {
     { bool a = true; uint b = 7; if ((a > b) != 0) { return 1; } }
     { bool a = true; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { bool a = true; uint b = 12345; if ((a + b) != 12346) { return 1; } }
-    { bool a = true; uint b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { bool a = true; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { bool a = true; uint b = 12345; if ((a * b) != 12345) { return 1; } }
     { bool a = true; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { bool a = true; uint b = 12345; if ((a % b) != 1) { return 1; } }
@@ -1232,8 +1234,8 @@ fn m_bool_x_uint() {
     { bool a = true; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { bool a = true; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { bool a = true; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { bool a = true; uint b = 4294967295; if ((a + b) != 0) { return 1; } }
-    { bool a = true; uint b = 4294967295; if ((a - b) != 2) { return 1; } }
+    { bool a = true; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { bool a = true; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { bool a = true; uint b = 4294967295; if ((a * b) != 4294967295) { return 1; } }
     { bool a = true; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { bool a = true; uint b = 4294967295; if ((a % b) != 1) { return 1; } }
@@ -5046,7 +5048,7 @@ fn m_char_x_uint() {
     { char a = 0; uint b = 0; if ((a > b) != 0) { return 1; } }
     { char a = 0; uint b = 0; if ((a >= b) != 1) { return 1; } }
     { char a = 0; uint b = 1; if ((a + b) != 1) { return 1; } }
-    { char a = 0; uint b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { char a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { char a = 0; uint b = 1; if ((a * b) != 0) { return 1; } }
     { char a = 0; uint b = 1; if ((a / b) != 0) { return 1; } }
     { char a = 0; uint b = 1; if ((a % b) != 0) { return 1; } }
@@ -5062,7 +5064,7 @@ fn m_char_x_uint() {
     { char a = 0; uint b = 1; if ((a > b) != 0) { return 1; } }
     { char a = 0; uint b = 1; if ((a >= b) != 0) { return 1; } }
     { char a = 0; uint b = 255; if ((a + b) != 255) { return 1; } }
-    { char a = 0; uint b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { char a = 0; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { char a = 0; uint b = 255; if ((a * b) != 0) { return 1; } }
     { char a = 0; uint b = 255; if ((a / b) != 0) { return 1; } }
     { char a = 0; uint b = 255; if ((a % b) != 0) { return 1; } }
@@ -5076,7 +5078,7 @@ fn m_char_x_uint() {
     { char a = 0; uint b = 255; if ((a > b) != 0) { return 1; } }
     { char a = 0; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { char a = 0; uint b = 7; if ((a + b) != 7) { return 1; } }
-    { char a = 0; uint b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { char a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { char a = 0; uint b = 7; if ((a * b) != 0) { return 1; } }
     { char a = 0; uint b = 7; if ((a / b) != 0) { return 1; } }
     { char a = 0; uint b = 7; if ((a % b) != 0) { return 1; } }
@@ -5092,7 +5094,7 @@ fn m_char_x_uint() {
     { char a = 0; uint b = 7; if ((a > b) != 0) { return 1; } }
     { char a = 0; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { char a = 0; uint b = 12345; if ((a + b) != 12345) { return 1; } }
-    { char a = 0; uint b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { char a = 0; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { char a = 0; uint b = 12345; if ((a * b) != 0) { return 1; } }
     { char a = 0; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { char a = 0; uint b = 12345; if ((a % b) != 0) { return 1; } }
@@ -5106,7 +5108,7 @@ fn m_char_x_uint() {
     { char a = 0; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { char a = 0; uint b = 12345; if ((a >= b) != 0) { return 1; } }
     { char a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 1; } }
-    { char a = 0; uint b = 4294967295; if ((a - b) != 1) { return 1; } }
+    { char a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { char a = 0; uint b = 4294967295; if ((a * b) != 0) { return 1; } }
     { char a = 0; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = 0; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
@@ -5150,7 +5152,7 @@ fn m_char_x_uint() {
     { char a = 1; uint b = 1; if ((a > b) != 0) { return 1; } }
     { char a = 1; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { char a = 1; uint b = 255; if ((a + b) != 256) { return 1; } }
-    { char a = 1; uint b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { char a = 1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { char a = 1; uint b = 255; if ((a * b) != 255) { return 1; } }
     { char a = 1; uint b = 255; if ((a / b) != 0) { return 1; } }
     { char a = 1; uint b = 255; if ((a % b) != 1) { return 1; } }
@@ -5164,7 +5166,7 @@ fn m_char_x_uint() {
     { char a = 1; uint b = 255; if ((a > b) != 0) { return 1; } }
     { char a = 1; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { char a = 1; uint b = 7; if ((a + b) != 8) { return 1; } }
-    { char a = 1; uint b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { char a = 1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { char a = 1; uint b = 7; if ((a * b) != 7) { return 1; } }
     { char a = 1; uint b = 7; if ((a / b) != 0) { return 1; } }
     { char a = 1; uint b = 7; if ((a % b) != 1) { return 1; } }
@@ -5180,7 +5182,7 @@ fn m_char_x_uint() {
     { char a = 1; uint b = 7; if ((a > b) != 0) { return 1; } }
     { char a = 1; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { char a = 1; uint b = 12345; if ((a + b) != 12346) { return 1; } }
-    { char a = 1; uint b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { char a = 1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { char a = 1; uint b = 12345; if ((a * b) != 12345) { return 1; } }
     { char a = 1; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { char a = 1; uint b = 12345; if ((a % b) != 1) { return 1; } }
@@ -5193,8 +5195,8 @@ fn m_char_x_uint() {
     { char a = 1; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { char a = 1; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { char a = 1; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { char a = 1; uint b = 4294967295; if ((a + b) != 0) { return 1; } }
-    { char a = 1; uint b = 4294967295; if ((a - b) != 2) { return 1; } }
+    { char a = 1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { char a = 1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { char a = 1; uint b = 4294967295; if ((a * b) != 4294967295) { return 1; } }
     { char a = 1; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = 1; uint b = 4294967295; if ((a % b) != 1) { return 1; } }
@@ -5207,8 +5209,8 @@ fn m_char_x_uint() {
     { char a = 1; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { char a = 1; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { char a = 1; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { char a = -1; uint b = 0; if ((a + b) != 4294967295) { return 1; } }
-    { char a = -1; uint b = 0; if ((a - b) != 4294967295) { return 1; } }
+    { char a = -1; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { char a = -1; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { char a = -1; uint b = 0; if ((a * b) != 0) { return 1; } }
     { char a = -1; uint b = 0; if ((a << b) != -1) { return 1; } }
     { char a = -1; uint b = 0; if ((a >> b) != -1) { return 1; } }
@@ -5221,9 +5223,9 @@ fn m_char_x_uint() {
     { char a = -1; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { char a = -1; uint b = 0; if ((a > b) != 1) { return 1; } }
     { char a = -1; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; uint b = 1; if ((a + b) != 0) { return 1; } }
-    { char a = -1; uint b = 1; if ((a - b) != 4294967294) { return 1; } }
-    { char a = -1; uint b = 1; if ((a * b) != 4294967295) { return 1; } }
+    { char a = -1; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { char a = -1; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
+    { char a = -1; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 1; } }
     { char a = -1; uint b = 1; if ((a / b) != 4294967295) { return 1; } }
     { char a = -1; uint b = 1; if ((a % b) != 0) { return 1; } }
     { char a = -1; uint b = 1; if ((a << b) != -2) { return 1; } }
@@ -5237,9 +5239,9 @@ fn m_char_x_uint() {
     { char a = -1; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -1; uint b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -1; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; uint b = 255; if ((a + b) != 254) { return 1; } }
-    { char a = -1; uint b = 255; if ((a - b) != 4294967040) { return 1; } }
-    { char a = -1; uint b = 255; if ((a * b) != 4294967041) { return 1; } }
+    { char a = -1; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { char a = -1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967040) { return 1; } }
+    { char a = -1; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { char a = -1; uint b = 255; if ((a / b) != 16843009) { return 1; } }
     { char a = -1; uint b = 255; if ((a % b) != 0) { return 1; } }
     { char a = -1; uint b = 255; if ((a & b) != 255) { return 1; } }
@@ -5251,9 +5253,9 @@ fn m_char_x_uint() {
     { char a = -1; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -1; uint b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -1; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; uint b = 7; if ((a + b) != 6) { return 1; } }
-    { char a = -1; uint b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { char a = -1; uint b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { char a = -1; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { char a = -1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 1; } }
+    { char a = -1; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { char a = -1; uint b = 7; if ((a / b) != 613566756) { return 1; } }
     { char a = -1; uint b = 7; if ((a % b) != 3) { return 1; } }
     { char a = -1; uint b = 7; if ((a << b) != -128) { return 1; } }
@@ -5267,9 +5269,9 @@ fn m_char_x_uint() {
     { char a = -1; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -1; uint b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -1; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; uint b = 12345; if ((a + b) != 12344) { return 1; } }
-    { char a = -1; uint b = 12345; if ((a - b) != 4294954950) { return 1; } }
-    { char a = -1; uint b = 12345; if ((a * b) != 4294954951) { return 1; } }
+    { char a = -1; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { char a = -1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954950) { return 1; } }
+    { char a = -1; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { char a = -1; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { char a = -1; uint b = 12345; if ((a % b) != 6000) { return 1; } }
     { char a = -1; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -5281,9 +5283,9 @@ fn m_char_x_uint() {
     { char a = -1; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -1; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -1; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; uint b = 4294967295; if ((a + b) != 4294967294) { return 1; } }
-    { char a = -1; uint b = 4294967295; if ((a - b) != 0) { return 1; } }
-    { char a = -1; uint b = 4294967295; if ((a * b) != 1) { return 1; } }
+    { char a = -1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { char a = -1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 1; } }
+    { char a = -1; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 1; } }
     { char a = -1; uint b = 4294967295; if ((a / b) != 1) { return 1; } }
     { char a = -1; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
     { char a = -1; uint b = 4294967295; if ((a & b) != 4294967295) { return 1; } }
@@ -5326,7 +5328,7 @@ fn m_char_x_uint() {
     { char a = 2; uint b = 1; if ((a > b) != 1) { return 1; } }
     { char a = 2; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { char a = 2; uint b = 255; if ((a + b) != 257) { return 1; } }
-    { char a = 2; uint b = 255; if ((a - b) != 4294967043) { return 1; } }
+    { char a = 2; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967043) { return 1; } }
     { char a = 2; uint b = 255; if ((a * b) != 510) { return 1; } }
     { char a = 2; uint b = 255; if ((a / b) != 0) { return 1; } }
     { char a = 2; uint b = 255; if ((a % b) != 2) { return 1; } }
@@ -5340,7 +5342,7 @@ fn m_char_x_uint() {
     { char a = 2; uint b = 255; if ((a > b) != 0) { return 1; } }
     { char a = 2; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { char a = 2; uint b = 7; if ((a + b) != 9) { return 1; } }
-    { char a = 2; uint b = 7; if ((a - b) != 4294967291) { return 1; } }
+    { char a = 2; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967291) { return 1; } }
     { char a = 2; uint b = 7; if ((a * b) != 14) { return 1; } }
     { char a = 2; uint b = 7; if ((a / b) != 0) { return 1; } }
     { char a = 2; uint b = 7; if ((a % b) != 2) { return 1; } }
@@ -5356,7 +5358,7 @@ fn m_char_x_uint() {
     { char a = 2; uint b = 7; if ((a > b) != 0) { return 1; } }
     { char a = 2; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { char a = 2; uint b = 12345; if ((a + b) != 12347) { return 1; } }
-    { char a = 2; uint b = 12345; if ((a - b) != 4294954953) { return 1; } }
+    { char a = 2; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954953) { return 1; } }
     { char a = 2; uint b = 12345; if ((a * b) != 24690) { return 1; } }
     { char a = 2; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { char a = 2; uint b = 12345; if ((a % b) != 2) { return 1; } }
@@ -5369,9 +5371,9 @@ fn m_char_x_uint() {
     { char a = 2; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { char a = 2; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { char a = 2; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { char a = 2; uint b = 4294967295; if ((a + b) != 1) { return 1; } }
-    { char a = 2; uint b = 4294967295; if ((a - b) != 3) { return 1; } }
-    { char a = 2; uint b = 4294967295; if ((a * b) != 4294967294) { return 1; } }
+    { char a = 2; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 1) { return 1; } }
+    { char a = 2; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 3) { return 1; } }
+    { char a = 2; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { char a = 2; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = 2; uint b = 4294967295; if ((a % b) != 2) { return 1; } }
     { char a = 2; uint b = 4294967295; if ((a & b) != 2) { return 1; } }
@@ -5383,8 +5385,8 @@ fn m_char_x_uint() {
     { char a = 2; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { char a = 2; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { char a = 2; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { char a = -2; uint b = 0; if ((a + b) != 4294967294) { return 1; } }
-    { char a = -2; uint b = 0; if ((a - b) != 4294967294) { return 1; } }
+    { char a = -2; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { char a = -2; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
     { char a = -2; uint b = 0; if ((a * b) != 0) { return 1; } }
     { char a = -2; uint b = 0; if ((a << b) != -2) { return 1; } }
     { char a = -2; uint b = 0; if ((a >> b) != -2) { return 1; } }
@@ -5397,9 +5399,9 @@ fn m_char_x_uint() {
     { char a = -2; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { char a = -2; uint b = 0; if ((a > b) != 1) { return 1; } }
     { char a = -2; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; uint b = 1; if ((a + b) != 4294967295) { return 1; } }
-    { char a = -2; uint b = 1; if ((a - b) != 4294967293) { return 1; } }
-    { char a = -2; uint b = 1; if ((a * b) != 4294967294) { return 1; } }
+    { char a = -2; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { char a = -2; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967293) { return 1; } }
+    { char a = -2; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { char a = -2; uint b = 1; if ((a / b) != 4294967294) { return 1; } }
     { char a = -2; uint b = 1; if ((a % b) != 0) { return 1; } }
     { char a = -2; uint b = 1; if ((a << b) != -4) { return 1; } }
@@ -5413,9 +5415,9 @@ fn m_char_x_uint() {
     { char a = -2; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -2; uint b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -2; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; uint b = 255; if ((a + b) != 253) { return 1; } }
-    { char a = -2; uint b = 255; if ((a - b) != 4294967039) { return 1; } }
-    { char a = -2; uint b = 255; if ((a * b) != 4294966786) { return 1; } }
+    { char a = -2; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 253) { return 1; } }
+    { char a = -2; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967039) { return 1; } }
+    { char a = -2; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294966786) { return 1; } }
     { char a = -2; uint b = 255; if ((a / b) != 16843008) { return 1; } }
     { char a = -2; uint b = 255; if ((a % b) != 254) { return 1; } }
     { char a = -2; uint b = 255; if ((a & b) != 254) { return 1; } }
@@ -5427,9 +5429,9 @@ fn m_char_x_uint() {
     { char a = -2; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -2; uint b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -2; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; uint b = 7; if ((a + b) != 5) { return 1; } }
-    { char a = -2; uint b = 7; if ((a - b) != 4294967287) { return 1; } }
-    { char a = -2; uint b = 7; if ((a * b) != 4294967282) { return 1; } }
+    { char a = -2; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 5) { return 1; } }
+    { char a = -2; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967287) { return 1; } }
+    { char a = -2; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967282) { return 1; } }
     { char a = -2; uint b = 7; if ((a / b) != 613566756) { return 1; } }
     { char a = -2; uint b = 7; if ((a % b) != 2) { return 1; } }
     { char a = -2; uint b = 7; if ((a << b) != -256) { return 1; } }
@@ -5443,9 +5445,9 @@ fn m_char_x_uint() {
     { char a = -2; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -2; uint b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -2; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; uint b = 12345; if ((a + b) != 12343) { return 1; } }
-    { char a = -2; uint b = 12345; if ((a - b) != 4294954949) { return 1; } }
-    { char a = -2; uint b = 12345; if ((a * b) != 4294942606) { return 1; } }
+    { char a = -2; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12343) { return 1; } }
+    { char a = -2; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954949) { return 1; } }
+    { char a = -2; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294942606) { return 1; } }
     { char a = -2; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { char a = -2; uint b = 12345; if ((a % b) != 5999) { return 1; } }
     { char a = -2; uint b = 12345; if ((a & b) != 12344) { return 1; } }
@@ -5457,9 +5459,9 @@ fn m_char_x_uint() {
     { char a = -2; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -2; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -2; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; uint b = 4294967295; if ((a + b) != 4294967293) { return 1; } }
-    { char a = -2; uint b = 4294967295; if ((a - b) != 4294967295) { return 1; } }
-    { char a = -2; uint b = 4294967295; if ((a * b) != 2) { return 1; } }
+    { char a = -2; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967293) { return 1; } }
+    { char a = -2; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
+    { char a = -2; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 2) { return 1; } }
     { char a = -2; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = -2; uint b = 4294967295; if ((a % b) != 4294967294) { return 1; } }
     { char a = -2; uint b = 4294967295; if ((a & b) != 4294967294) { return 1; } }
@@ -5502,7 +5504,7 @@ fn m_char_x_uint() {
     { char a = 7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { char a = 7; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { char a = 7; uint b = 255; if ((a + b) != 262) { return 1; } }
-    { char a = 7; uint b = 255; if ((a - b) != 4294967048) { return 1; } }
+    { char a = 7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967048) { return 1; } }
     { char a = 7; uint b = 255; if ((a * b) != 1785) { return 1; } }
     { char a = 7; uint b = 255; if ((a / b) != 0) { return 1; } }
     { char a = 7; uint b = 255; if ((a % b) != 7) { return 1; } }
@@ -5532,7 +5534,7 @@ fn m_char_x_uint() {
     { char a = 7; uint b = 7; if ((a > b) != 0) { return 1; } }
     { char a = 7; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { char a = 7; uint b = 12345; if ((a + b) != 12352) { return 1; } }
-    { char a = 7; uint b = 12345; if ((a - b) != 4294954958) { return 1; } }
+    { char a = 7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954958) { return 1; } }
     { char a = 7; uint b = 12345; if ((a * b) != 86415) { return 1; } }
     { char a = 7; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { char a = 7; uint b = 12345; if ((a % b) != 7) { return 1; } }
@@ -5545,9 +5547,9 @@ fn m_char_x_uint() {
     { char a = 7; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { char a = 7; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { char a = 7; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { char a = 7; uint b = 4294967295; if ((a + b) != 6) { return 1; } }
-    { char a = 7; uint b = 4294967295; if ((a - b) != 8) { return 1; } }
-    { char a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 1; } }
+    { char a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { char a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { char a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { char a = 7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = 7; uint b = 4294967295; if ((a % b) != 7) { return 1; } }
     { char a = 7; uint b = 4294967295; if ((a & b) != 7) { return 1; } }
@@ -5559,8 +5561,8 @@ fn m_char_x_uint() {
     { char a = 7; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { char a = 7; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { char a = 7; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { char a = -7; uint b = 0; if ((a + b) != 4294967289) { return 1; } }
-    { char a = -7; uint b = 0; if ((a - b) != 4294967289) { return 1; } }
+    { char a = -7; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 1; } }
+    { char a = -7; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { char a = -7; uint b = 0; if ((a * b) != 0) { return 1; } }
     { char a = -7; uint b = 0; if ((a << b) != -7) { return 1; } }
     { char a = -7; uint b = 0; if ((a >> b) != -7) { return 1; } }
@@ -5573,9 +5575,9 @@ fn m_char_x_uint() {
     { char a = -7; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { char a = -7; uint b = 0; if ((a > b) != 1) { return 1; } }
     { char a = -7; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; uint b = 1; if ((a + b) != 4294967290) { return 1; } }
-    { char a = -7; uint b = 1; if ((a - b) != 4294967288) { return 1; } }
-    { char a = -7; uint b = 1; if ((a * b) != 4294967289) { return 1; } }
+    { char a = -7; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 1; } }
+    { char a = -7; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 1; } }
+    { char a = -7; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { char a = -7; uint b = 1; if ((a / b) != 4294967289) { return 1; } }
     { char a = -7; uint b = 1; if ((a % b) != 0) { return 1; } }
     { char a = -7; uint b = 1; if ((a << b) != -14) { return 1; } }
@@ -5589,9 +5591,9 @@ fn m_char_x_uint() {
     { char a = -7; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -7; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; uint b = 255; if ((a + b) != 248) { return 1; } }
-    { char a = -7; uint b = 255; if ((a - b) != 4294967034) { return 1; } }
-    { char a = -7; uint b = 255; if ((a * b) != 4294965511) { return 1; } }
+    { char a = -7; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 248) { return 1; } }
+    { char a = -7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967034) { return 1; } }
+    { char a = -7; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294965511) { return 1; } }
     { char a = -7; uint b = 255; if ((a / b) != 16843008) { return 1; } }
     { char a = -7; uint b = 255; if ((a % b) != 249) { return 1; } }
     { char a = -7; uint b = 255; if ((a & b) != 249) { return 1; } }
@@ -5603,9 +5605,9 @@ fn m_char_x_uint() {
     { char a = -7; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -7; uint b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -7; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; uint b = 7; if ((a + b) != 0) { return 1; } }
-    { char a = -7; uint b = 7; if ((a - b) != 4294967282) { return 1; } }
-    { char a = -7; uint b = 7; if ((a * b) != 4294967247) { return 1; } }
+    { char a = -7; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { char a = -7; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967282) { return 1; } }
+    { char a = -7; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 1; } }
     { char a = -7; uint b = 7; if ((a / b) != 613566755) { return 1; } }
     { char a = -7; uint b = 7; if ((a % b) != 4) { return 1; } }
     { char a = -7; uint b = 7; if ((a << b) != -896) { return 1; } }
@@ -5619,9 +5621,9 @@ fn m_char_x_uint() {
     { char a = -7; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -7; uint b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -7; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; uint b = 12345; if ((a + b) != 12338) { return 1; } }
-    { char a = -7; uint b = 12345; if ((a - b) != 4294954944) { return 1; } }
-    { char a = -7; uint b = 12345; if ((a * b) != 4294880881) { return 1; } }
+    { char a = -7; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12338) { return 1; } }
+    { char a = -7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954944) { return 1; } }
+    { char a = -7; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { char a = -7; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { char a = -7; uint b = 12345; if ((a % b) != 5994) { return 1; } }
     { char a = -7; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -5633,9 +5635,9 @@ fn m_char_x_uint() {
     { char a = -7; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -7; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -7; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; uint b = 4294967295; if ((a + b) != 4294967288) { return 1; } }
-    { char a = -7; uint b = 4294967295; if ((a - b) != 4294967290) { return 1; } }
-    { char a = -7; uint b = 4294967295; if ((a * b) != 7) { return 1; } }
+    { char a = -7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 1; } }
+    { char a = -7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
+    { char a = -7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 1; } }
     { char a = -7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { char a = -7; uint b = 4294967295; if ((a % b) != 4294967289) { return 1; } }
     { char a = -7; uint b = 4294967295; if ((a & b) != 4294967289) { return 1; } }
@@ -5862,7 +5864,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 0; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 0; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 0; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 1; if ((a + b) != 0) { return 1; } }
+    { char a = -1; ulong b = 1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { char a = -1; ulong b = 1; if ((a % b) != 0) { return 1; } }
     { char a = -1; ulong b = 1; if ((a << b) != -2) { return 1; } }
     { char a = -1; ulong b = 1; if ((a >> b) != -1) { return 1; } }
@@ -5873,7 +5875,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 255; if ((a + b) != 254) { return 1; } }
+    { char a = -1; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
     { char a = -1; ulong b = 255; if ((a / b) != 72340172838076673) { return 1; } }
     { char a = -1; ulong b = 255; if ((a % b) != 0) { return 1; } }
     { char a = -1; ulong b = 255; if ((a & b) != 255) { return 1; } }
@@ -5883,7 +5885,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 7; if ((a + b) != 6) { return 1; } }
+    { char a = -1; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
     { char a = -1; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { char a = -1; ulong b = 7; if ((a % b) != 1) { return 1; } }
     { char a = -1; ulong b = 7; if ((a << b) != -128) { return 1; } }
@@ -5895,7 +5897,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 12345; if ((a + b) != 12344) { return 1; } }
+    { char a = -1; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
     { char a = -1; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { char a = -1; ulong b = 12345; if ((a % b) != 1635) { return 1; } }
     { char a = -1; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -5905,7 +5907,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775806) { return 1; } }
+    { char a = -1; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { char a = -1; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { char a = -1; ulong b = 9223372036854775807; if ((a % b) != 1) { return 1; } }
     { char a = -1; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -5915,7 +5917,7 @@ fn m_char_x_ulong() {
     { char a = -1; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { char a = -1; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { char a = -1; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { char a = -1; ulong b = 1099511627776; if ((a + b) != 1099511627775) { return 1; } }
+    { char a = -1; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
     { char a = -1; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { char a = -1; ulong b = 1099511627776; if ((a % b) != 1099511627775) { return 1; } }
     { char a = -1; ulong b = 1099511627776; if ((a << b) != -1) { return 1; } }
@@ -6044,7 +6046,7 @@ fn m_char_x_ulong() {
     { char a = -2; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -2; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -2; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; ulong b = 255; if ((a + b) != 253) { return 1; } }
+    { char a = -2; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
     { char a = -2; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { char a = -2; ulong b = 255; if ((a % b) != 254) { return 1; } }
     { char a = -2; ulong b = 255; if ((a & b) != 254) { return 1; } }
@@ -6054,7 +6056,7 @@ fn m_char_x_ulong() {
     { char a = -2; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -2; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -2; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; ulong b = 7; if ((a + b) != 5) { return 1; } }
+    { char a = -2; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
     { char a = -2; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { char a = -2; ulong b = 7; if ((a % b) != 0) { return 1; } }
     { char a = -2; ulong b = 7; if ((a << b) != -256) { return 1; } }
@@ -6066,7 +6068,7 @@ fn m_char_x_ulong() {
     { char a = -2; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -2; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -2; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; ulong b = 12345; if ((a + b) != 12343) { return 1; } }
+    { char a = -2; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
     { char a = -2; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { char a = -2; ulong b = 12345; if ((a % b) != 1634) { return 1; } }
     { char a = -2; ulong b = 12345; if ((a & b) != 12344) { return 1; } }
@@ -6076,9 +6078,9 @@ fn m_char_x_ulong() {
     { char a = -2; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -2; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -2; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775805) { return 1; } }
-    { char a = -2; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775807) { return 1; } }
-    { char a = -2; ulong b = 9223372036854775807; if ((a * b) != 2) { return 1; } }
+    { char a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { char a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775807) { return 1; } }
+    { char a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { char a = -2; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { char a = -2; ulong b = 9223372036854775807; if ((a % b) != 0) { return 1; } }
     { char a = -2; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -6088,7 +6090,7 @@ fn m_char_x_ulong() {
     { char a = -2; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { char a = -2; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { char a = -2; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { char a = -2; ulong b = 1099511627776; if ((a + b) != 1099511627774) { return 1; } }
+    { char a = -2; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
     { char a = -2; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { char a = -2; ulong b = 1099511627776; if ((a % b) != 1099511627774) { return 1; } }
     { char a = -2; ulong b = 1099511627776; if ((a << b) != -2) { return 1; } }
@@ -6172,7 +6174,7 @@ fn m_char_x_ulong() {
     { char a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { char a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { char a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { char a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { char a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { char a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { char a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { char a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -6219,7 +6221,7 @@ fn m_char_x_ulong() {
     { char a = -7; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { char a = -7; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { char a = -7; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; ulong b = 255; if ((a + b) != 248) { return 1; } }
+    { char a = -7; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
     { char a = -7; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { char a = -7; ulong b = 255; if ((a % b) != 249) { return 1; } }
     { char a = -7; ulong b = 255; if ((a & b) != 249) { return 1; } }
@@ -6229,7 +6231,7 @@ fn m_char_x_ulong() {
     { char a = -7; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { char a = -7; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { char a = -7; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; ulong b = 7; if ((a + b) != 0) { return 1; } }
+    { char a = -7; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { char a = -7; ulong b = 7; if ((a / b) != 2635249153387078801) { return 1; } }
     { char a = -7; ulong b = 7; if ((a % b) != 2) { return 1; } }
     { char a = -7; ulong b = 7; if ((a << b) != -896) { return 1; } }
@@ -6241,7 +6243,7 @@ fn m_char_x_ulong() {
     { char a = -7; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { char a = -7; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { char a = -7; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; ulong b = 12345; if ((a + b) != 12338) { return 1; } }
+    { char a = -7; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
     { char a = -7; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { char a = -7; ulong b = 12345; if ((a % b) != 1629) { return 1; } }
     { char a = -7; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -6251,8 +6253,8 @@ fn m_char_x_ulong() {
     { char a = -7; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { char a = -7; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { char a = -7; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775800) { return 1; } }
-    { char a = -7; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775802) { return 1; } }
+    { char a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
+    { char a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775802) { return 1; } }
     { char a = -7; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { char a = -7; ulong b = 9223372036854775807; if ((a % b) != 9223372036854775802) { return 1; } }
     { char a = -7; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -6262,7 +6264,7 @@ fn m_char_x_ulong() {
     { char a = -7; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { char a = -7; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { char a = -7; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { char a = -7; ulong b = 1099511627776; if ((a + b) != 1099511627769) { return 1; } }
+    { char a = -7; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
     { char a = -7; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { char a = -7; ulong b = 1099511627776; if ((a % b) != 1099511627769) { return 1; } }
     { char a = -7; ulong b = 1099511627776; if ((a << b) != -7) { return 1; } }
@@ -10875,7 +10877,7 @@ fn m_int_x_uint() {
     { int a = 0; uint b = 0; if ((a > b) != 0) { return 1; } }
     { int a = 0; uint b = 0; if ((a >= b) != 1) { return 1; } }
     { int a = 0; uint b = 1; if ((a + b) != 1) { return 1; } }
-    { int a = 0; uint b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { int a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { int a = 0; uint b = 1; if ((a * b) != 0) { return 1; } }
     { int a = 0; uint b = 1; if ((a / b) != 0) { return 1; } }
     { int a = 0; uint b = 1; if ((a % b) != 0) { return 1; } }
@@ -10891,7 +10893,7 @@ fn m_int_x_uint() {
     { int a = 0; uint b = 1; if ((a > b) != 0) { return 1; } }
     { int a = 0; uint b = 1; if ((a >= b) != 0) { return 1; } }
     { int a = 0; uint b = 255; if ((a + b) != 255) { return 1; } }
-    { int a = 0; uint b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { int a = 0; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { int a = 0; uint b = 255; if ((a * b) != 0) { return 1; } }
     { int a = 0; uint b = 255; if ((a / b) != 0) { return 1; } }
     { int a = 0; uint b = 255; if ((a % b) != 0) { return 1; } }
@@ -10905,7 +10907,7 @@ fn m_int_x_uint() {
     { int a = 0; uint b = 255; if ((a > b) != 0) { return 1; } }
     { int a = 0; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { int a = 0; uint b = 7; if ((a + b) != 7) { return 1; } }
-    { int a = 0; uint b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { int a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { int a = 0; uint b = 7; if ((a * b) != 0) { return 1; } }
     { int a = 0; uint b = 7; if ((a / b) != 0) { return 1; } }
     { int a = 0; uint b = 7; if ((a % b) != 0) { return 1; } }
@@ -10921,7 +10923,7 @@ fn m_int_x_uint() {
     { int a = 0; uint b = 7; if ((a > b) != 0) { return 1; } }
     { int a = 0; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { int a = 0; uint b = 12345; if ((a + b) != 12345) { return 1; } }
-    { int a = 0; uint b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { int a = 0; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { int a = 0; uint b = 12345; if ((a * b) != 0) { return 1; } }
     { int a = 0; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { int a = 0; uint b = 12345; if ((a % b) != 0) { return 1; } }
@@ -10935,7 +10937,7 @@ fn m_int_x_uint() {
     { int a = 0; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 0; uint b = 12345; if ((a >= b) != 0) { return 1; } }
     { int a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 1; } }
-    { int a = 0; uint b = 4294967295; if ((a - b) != 1) { return 1; } }
+    { int a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { int a = 0; uint b = 4294967295; if ((a * b) != 0) { return 1; } }
     { int a = 0; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = 0; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
@@ -10979,7 +10981,7 @@ fn m_int_x_uint() {
     { int a = 1; uint b = 1; if ((a > b) != 0) { return 1; } }
     { int a = 1; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { int a = 1; uint b = 255; if ((a + b) != 256) { return 1; } }
-    { int a = 1; uint b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { int a = 1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { int a = 1; uint b = 255; if ((a * b) != 255) { return 1; } }
     { int a = 1; uint b = 255; if ((a / b) != 0) { return 1; } }
     { int a = 1; uint b = 255; if ((a % b) != 1) { return 1; } }
@@ -10993,7 +10995,7 @@ fn m_int_x_uint() {
     { int a = 1; uint b = 255; if ((a > b) != 0) { return 1; } }
     { int a = 1; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { int a = 1; uint b = 7; if ((a + b) != 8) { return 1; } }
-    { int a = 1; uint b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { int a = 1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { int a = 1; uint b = 7; if ((a * b) != 7) { return 1; } }
     { int a = 1; uint b = 7; if ((a / b) != 0) { return 1; } }
     { int a = 1; uint b = 7; if ((a % b) != 1) { return 1; } }
@@ -11009,7 +11011,7 @@ fn m_int_x_uint() {
     { int a = 1; uint b = 7; if ((a > b) != 0) { return 1; } }
     { int a = 1; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { int a = 1; uint b = 12345; if ((a + b) != 12346) { return 1; } }
-    { int a = 1; uint b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { int a = 1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { int a = 1; uint b = 12345; if ((a * b) != 12345) { return 1; } }
     { int a = 1; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { int a = 1; uint b = 12345; if ((a % b) != 1) { return 1; } }
@@ -11022,8 +11024,8 @@ fn m_int_x_uint() {
     { int a = 1; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 1; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 1; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { int a = 1; uint b = 4294967295; if ((a + b) != 0) { return 1; } }
-    { int a = 1; uint b = 4294967295; if ((a - b) != 2) { return 1; } }
+    { int a = 1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { int a = 1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { int a = 1; uint b = 4294967295; if ((a * b) != 4294967295) { return 1; } }
     { int a = 1; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = 1; uint b = 4294967295; if ((a % b) != 1) { return 1; } }
@@ -11036,8 +11038,8 @@ fn m_int_x_uint() {
     { int a = 1; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { int a = 1; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { int a = 1; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { int a = -1; uint b = 0; if ((a + b) != 4294967295) { return 1; } }
-    { int a = -1; uint b = 0; if ((a - b) != 4294967295) { return 1; } }
+    { int a = -1; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { int a = -1; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { int a = -1; uint b = 0; if ((a * b) != 0) { return 1; } }
     { int a = -1; uint b = 0; if ((a << b) != -1) { return 1; } }
     { int a = -1; uint b = 0; if ((a >> b) != -1) { return 1; } }
@@ -11050,9 +11052,9 @@ fn m_int_x_uint() {
     { int a = -1; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { int a = -1; uint b = 0; if ((a > b) != 1) { return 1; } }
     { int a = -1; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; uint b = 1; if ((a + b) != 0) { return 1; } }
-    { int a = -1; uint b = 1; if ((a - b) != 4294967294) { return 1; } }
-    { int a = -1; uint b = 1; if ((a * b) != 4294967295) { return 1; } }
+    { int a = -1; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { int a = -1; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
+    { int a = -1; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 1; } }
     { int a = -1; uint b = 1; if ((a / b) != 4294967295) { return 1; } }
     { int a = -1; uint b = 1; if ((a % b) != 0) { return 1; } }
     { int a = -1; uint b = 1; if ((a << b) != -2) { return 1; } }
@@ -11066,9 +11068,9 @@ fn m_int_x_uint() {
     { int a = -1; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -1; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -1; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; uint b = 255; if ((a + b) != 254) { return 1; } }
-    { int a = -1; uint b = 255; if ((a - b) != 4294967040) { return 1; } }
-    { int a = -1; uint b = 255; if ((a * b) != 4294967041) { return 1; } }
+    { int a = -1; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { int a = -1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967040) { return 1; } }
+    { int a = -1; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { int a = -1; uint b = 255; if ((a / b) != 16843009) { return 1; } }
     { int a = -1; uint b = 255; if ((a % b) != 0) { return 1; } }
     { int a = -1; uint b = 255; if ((a & b) != 255) { return 1; } }
@@ -11080,9 +11082,9 @@ fn m_int_x_uint() {
     { int a = -1; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -1; uint b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -1; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; uint b = 7; if ((a + b) != 6) { return 1; } }
-    { int a = -1; uint b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { int a = -1; uint b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { int a = -1; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { int a = -1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 1; } }
+    { int a = -1; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { int a = -1; uint b = 7; if ((a / b) != 613566756) { return 1; } }
     { int a = -1; uint b = 7; if ((a % b) != 3) { return 1; } }
     { int a = -1; uint b = 7; if ((a << b) != -128) { return 1; } }
@@ -11096,9 +11098,9 @@ fn m_int_x_uint() {
     { int a = -1; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -1; uint b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -1; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; uint b = 12345; if ((a + b) != 12344) { return 1; } }
-    { int a = -1; uint b = 12345; if ((a - b) != 4294954950) { return 1; } }
-    { int a = -1; uint b = 12345; if ((a * b) != 4294954951) { return 1; } }
+    { int a = -1; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { int a = -1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954950) { return 1; } }
+    { int a = -1; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { int a = -1; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { int a = -1; uint b = 12345; if ((a % b) != 6000) { return 1; } }
     { int a = -1; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -11110,9 +11112,9 @@ fn m_int_x_uint() {
     { int a = -1; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -1; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -1; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; uint b = 4294967295; if ((a + b) != 4294967294) { return 1; } }
-    { int a = -1; uint b = 4294967295; if ((a - b) != 0) { return 1; } }
-    { int a = -1; uint b = 4294967295; if ((a * b) != 1) { return 1; } }
+    { int a = -1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { int a = -1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 1; } }
+    { int a = -1; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 1; } }
     { int a = -1; uint b = 4294967295; if ((a / b) != 1) { return 1; } }
     { int a = -1; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
     { int a = -1; uint b = 4294967295; if ((a & b) != 4294967295) { return 1; } }
@@ -11155,7 +11157,7 @@ fn m_int_x_uint() {
     { int a = 2; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = 2; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { int a = 2; uint b = 255; if ((a + b) != 257) { return 1; } }
-    { int a = 2; uint b = 255; if ((a - b) != 4294967043) { return 1; } }
+    { int a = 2; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967043) { return 1; } }
     { int a = 2; uint b = 255; if ((a * b) != 510) { return 1; } }
     { int a = 2; uint b = 255; if ((a / b) != 0) { return 1; } }
     { int a = 2; uint b = 255; if ((a % b) != 2) { return 1; } }
@@ -11169,7 +11171,7 @@ fn m_int_x_uint() {
     { int a = 2; uint b = 255; if ((a > b) != 0) { return 1; } }
     { int a = 2; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { int a = 2; uint b = 7; if ((a + b) != 9) { return 1; } }
-    { int a = 2; uint b = 7; if ((a - b) != 4294967291) { return 1; } }
+    { int a = 2; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967291) { return 1; } }
     { int a = 2; uint b = 7; if ((a * b) != 14) { return 1; } }
     { int a = 2; uint b = 7; if ((a / b) != 0) { return 1; } }
     { int a = 2; uint b = 7; if ((a % b) != 2) { return 1; } }
@@ -11185,7 +11187,7 @@ fn m_int_x_uint() {
     { int a = 2; uint b = 7; if ((a > b) != 0) { return 1; } }
     { int a = 2; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { int a = 2; uint b = 12345; if ((a + b) != 12347) { return 1; } }
-    { int a = 2; uint b = 12345; if ((a - b) != 4294954953) { return 1; } }
+    { int a = 2; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954953) { return 1; } }
     { int a = 2; uint b = 12345; if ((a * b) != 24690) { return 1; } }
     { int a = 2; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { int a = 2; uint b = 12345; if ((a % b) != 2) { return 1; } }
@@ -11198,9 +11200,9 @@ fn m_int_x_uint() {
     { int a = 2; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 2; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 2; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { int a = 2; uint b = 4294967295; if ((a + b) != 1) { return 1; } }
-    { int a = 2; uint b = 4294967295; if ((a - b) != 3) { return 1; } }
-    { int a = 2; uint b = 4294967295; if ((a * b) != 4294967294) { return 1; } }
+    { int a = 2; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 1) { return 1; } }
+    { int a = 2; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 3) { return 1; } }
+    { int a = 2; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { int a = 2; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = 2; uint b = 4294967295; if ((a % b) != 2) { return 1; } }
     { int a = 2; uint b = 4294967295; if ((a & b) != 2) { return 1; } }
@@ -11212,8 +11214,8 @@ fn m_int_x_uint() {
     { int a = 2; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { int a = 2; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { int a = 2; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { int a = -2; uint b = 0; if ((a + b) != 4294967294) { return 1; } }
-    { int a = -2; uint b = 0; if ((a - b) != 4294967294) { return 1; } }
+    { int a = -2; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { int a = -2; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
     { int a = -2; uint b = 0; if ((a * b) != 0) { return 1; } }
     { int a = -2; uint b = 0; if ((a << b) != -2) { return 1; } }
     { int a = -2; uint b = 0; if ((a >> b) != -2) { return 1; } }
@@ -11226,9 +11228,9 @@ fn m_int_x_uint() {
     { int a = -2; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { int a = -2; uint b = 0; if ((a > b) != 1) { return 1; } }
     { int a = -2; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; uint b = 1; if ((a + b) != 4294967295) { return 1; } }
-    { int a = -2; uint b = 1; if ((a - b) != 4294967293) { return 1; } }
-    { int a = -2; uint b = 1; if ((a * b) != 4294967294) { return 1; } }
+    { int a = -2; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { int a = -2; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967293) { return 1; } }
+    { int a = -2; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { int a = -2; uint b = 1; if ((a / b) != 4294967294) { return 1; } }
     { int a = -2; uint b = 1; if ((a % b) != 0) { return 1; } }
     { int a = -2; uint b = 1; if ((a << b) != -4) { return 1; } }
@@ -11242,9 +11244,9 @@ fn m_int_x_uint() {
     { int a = -2; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -2; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -2; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; uint b = 255; if ((a + b) != 253) { return 1; } }
-    { int a = -2; uint b = 255; if ((a - b) != 4294967039) { return 1; } }
-    { int a = -2; uint b = 255; if ((a * b) != 4294966786) { return 1; } }
+    { int a = -2; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 253) { return 1; } }
+    { int a = -2; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967039) { return 1; } }
+    { int a = -2; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294966786) { return 1; } }
     { int a = -2; uint b = 255; if ((a / b) != 16843008) { return 1; } }
     { int a = -2; uint b = 255; if ((a % b) != 254) { return 1; } }
     { int a = -2; uint b = 255; if ((a & b) != 254) { return 1; } }
@@ -11256,9 +11258,9 @@ fn m_int_x_uint() {
     { int a = -2; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -2; uint b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -2; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; uint b = 7; if ((a + b) != 5) { return 1; } }
-    { int a = -2; uint b = 7; if ((a - b) != 4294967287) { return 1; } }
-    { int a = -2; uint b = 7; if ((a * b) != 4294967282) { return 1; } }
+    { int a = -2; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 5) { return 1; } }
+    { int a = -2; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967287) { return 1; } }
+    { int a = -2; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967282) { return 1; } }
     { int a = -2; uint b = 7; if ((a / b) != 613566756) { return 1; } }
     { int a = -2; uint b = 7; if ((a % b) != 2) { return 1; } }
     { int a = -2; uint b = 7; if ((a << b) != -256) { return 1; } }
@@ -11272,9 +11274,9 @@ fn m_int_x_uint() {
     { int a = -2; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -2; uint b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -2; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; uint b = 12345; if ((a + b) != 12343) { return 1; } }
-    { int a = -2; uint b = 12345; if ((a - b) != 4294954949) { return 1; } }
-    { int a = -2; uint b = 12345; if ((a * b) != 4294942606) { return 1; } }
+    { int a = -2; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12343) { return 1; } }
+    { int a = -2; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954949) { return 1; } }
+    { int a = -2; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294942606) { return 1; } }
     { int a = -2; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { int a = -2; uint b = 12345; if ((a % b) != 5999) { return 1; } }
     { int a = -2; uint b = 12345; if ((a & b) != 12344) { return 1; } }
@@ -11286,9 +11288,9 @@ fn m_int_x_uint() {
     { int a = -2; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -2; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -2; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; uint b = 4294967295; if ((a + b) != 4294967293) { return 1; } }
-    { int a = -2; uint b = 4294967295; if ((a - b) != 4294967295) { return 1; } }
-    { int a = -2; uint b = 4294967295; if ((a * b) != 2) { return 1; } }
+    { int a = -2; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967293) { return 1; } }
+    { int a = -2; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
+    { int a = -2; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 2) { return 1; } }
     { int a = -2; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = -2; uint b = 4294967295; if ((a % b) != 4294967294) { return 1; } }
     { int a = -2; uint b = 4294967295; if ((a & b) != 4294967294) { return 1; } }
@@ -11331,7 +11333,7 @@ fn m_int_x_uint() {
     { int a = 7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = 7; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { int a = 7; uint b = 255; if ((a + b) != 262) { return 1; } }
-    { int a = 7; uint b = 255; if ((a - b) != 4294967048) { return 1; } }
+    { int a = 7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967048) { return 1; } }
     { int a = 7; uint b = 255; if ((a * b) != 1785) { return 1; } }
     { int a = 7; uint b = 255; if ((a / b) != 0) { return 1; } }
     { int a = 7; uint b = 255; if ((a % b) != 7) { return 1; } }
@@ -11361,7 +11363,7 @@ fn m_int_x_uint() {
     { int a = 7; uint b = 7; if ((a > b) != 0) { return 1; } }
     { int a = 7; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { int a = 7; uint b = 12345; if ((a + b) != 12352) { return 1; } }
-    { int a = 7; uint b = 12345; if ((a - b) != 4294954958) { return 1; } }
+    { int a = 7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954958) { return 1; } }
     { int a = 7; uint b = 12345; if ((a * b) != 86415) { return 1; } }
     { int a = 7; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { int a = 7; uint b = 12345; if ((a % b) != 7) { return 1; } }
@@ -11374,9 +11376,9 @@ fn m_int_x_uint() {
     { int a = 7; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 7; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 7; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { int a = 7; uint b = 4294967295; if ((a + b) != 6) { return 1; } }
-    { int a = 7; uint b = 4294967295; if ((a - b) != 8) { return 1; } }
-    { int a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 1; } }
+    { int a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { int a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { int a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { int a = 7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = 7; uint b = 4294967295; if ((a % b) != 7) { return 1; } }
     { int a = 7; uint b = 4294967295; if ((a & b) != 7) { return 1; } }
@@ -11388,8 +11390,8 @@ fn m_int_x_uint() {
     { int a = 7; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { int a = 7; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { int a = 7; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { int a = -7; uint b = 0; if ((a + b) != 4294967289) { return 1; } }
-    { int a = -7; uint b = 0; if ((a - b) != 4294967289) { return 1; } }
+    { int a = -7; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 1; } }
+    { int a = -7; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { int a = -7; uint b = 0; if ((a * b) != 0) { return 1; } }
     { int a = -7; uint b = 0; if ((a << b) != -7) { return 1; } }
     { int a = -7; uint b = 0; if ((a >> b) != -7) { return 1; } }
@@ -11402,9 +11404,9 @@ fn m_int_x_uint() {
     { int a = -7; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { int a = -7; uint b = 0; if ((a > b) != 1) { return 1; } }
     { int a = -7; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; uint b = 1; if ((a + b) != 4294967290) { return 1; } }
-    { int a = -7; uint b = 1; if ((a - b) != 4294967288) { return 1; } }
-    { int a = -7; uint b = 1; if ((a * b) != 4294967289) { return 1; } }
+    { int a = -7; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 1; } }
+    { int a = -7; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 1; } }
+    { int a = -7; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { int a = -7; uint b = 1; if ((a / b) != 4294967289) { return 1; } }
     { int a = -7; uint b = 1; if ((a % b) != 0) { return 1; } }
     { int a = -7; uint b = 1; if ((a << b) != -14) { return 1; } }
@@ -11418,9 +11420,9 @@ fn m_int_x_uint() {
     { int a = -7; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -7; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; uint b = 255; if ((a + b) != 248) { return 1; } }
-    { int a = -7; uint b = 255; if ((a - b) != 4294967034) { return 1; } }
-    { int a = -7; uint b = 255; if ((a * b) != 4294965511) { return 1; } }
+    { int a = -7; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 248) { return 1; } }
+    { int a = -7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967034) { return 1; } }
+    { int a = -7; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294965511) { return 1; } }
     { int a = -7; uint b = 255; if ((a / b) != 16843008) { return 1; } }
     { int a = -7; uint b = 255; if ((a % b) != 249) { return 1; } }
     { int a = -7; uint b = 255; if ((a & b) != 249) { return 1; } }
@@ -11432,9 +11434,9 @@ fn m_int_x_uint() {
     { int a = -7; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -7; uint b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -7; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; uint b = 7; if ((a + b) != 0) { return 1; } }
-    { int a = -7; uint b = 7; if ((a - b) != 4294967282) { return 1; } }
-    { int a = -7; uint b = 7; if ((a * b) != 4294967247) { return 1; } }
+    { int a = -7; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { int a = -7; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967282) { return 1; } }
+    { int a = -7; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 1; } }
     { int a = -7; uint b = 7; if ((a / b) != 613566755) { return 1; } }
     { int a = -7; uint b = 7; if ((a % b) != 4) { return 1; } }
     { int a = -7; uint b = 7; if ((a << b) != -896) { return 1; } }
@@ -11448,9 +11450,9 @@ fn m_int_x_uint() {
     { int a = -7; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -7; uint b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -7; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; uint b = 12345; if ((a + b) != 12338) { return 1; } }
-    { int a = -7; uint b = 12345; if ((a - b) != 4294954944) { return 1; } }
-    { int a = -7; uint b = 12345; if ((a * b) != 4294880881) { return 1; } }
+    { int a = -7; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12338) { return 1; } }
+    { int a = -7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954944) { return 1; } }
+    { int a = -7; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { int a = -7; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { int a = -7; uint b = 12345; if ((a % b) != 5994) { return 1; } }
     { int a = -7; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -11462,9 +11464,9 @@ fn m_int_x_uint() {
     { int a = -7; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -7; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -7; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; uint b = 4294967295; if ((a + b) != 4294967288) { return 1; } }
-    { int a = -7; uint b = 4294967295; if ((a - b) != 4294967290) { return 1; } }
-    { int a = -7; uint b = 4294967295; if ((a * b) != 7) { return 1; } }
+    { int a = -7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 1; } }
+    { int a = -7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
+    { int a = -7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 1; } }
     { int a = -7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = -7; uint b = 4294967295; if ((a % b) != 4294967289) { return 1; } }
     { int a = -7; uint b = 4294967295; if ((a & b) != 4294967289) { return 1; } }
@@ -11550,9 +11552,9 @@ fn m_int_x_uint() {
     { int a = 12345; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 12345; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 12345; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = 12345; uint b = 4294967295; if ((a + b) != 12344) { return 1; } }
-    { int a = 12345; uint b = 4294967295; if ((a - b) != 12346) { return 1; } }
-    { int a = 12345; uint b = 4294967295; if ((a * b) != 4294954951) { return 1; } }
+    { int a = 12345; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { int a = 12345; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 12346) { return 1; } }
+    { int a = 12345; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { int a = 12345; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = 12345; uint b = 4294967295; if ((a % b) != 12345) { return 1; } }
     { int a = 12345; uint b = 4294967295; if ((a & b) != 12345) { return 1; } }
@@ -11564,8 +11566,8 @@ fn m_int_x_uint() {
     { int a = 12345; uint b = 4294967295; if ((a <= b) != 1) { return 1; } }
     { int a = 12345; uint b = 4294967295; if ((a > b) != 0) { return 1; } }
     { int a = 12345; uint b = 4294967295; if ((a >= b) != 0) { return 1; } }
-    { int a = -12345; uint b = 0; if ((a + b) != 4294954951) { return 1; } }
-    { int a = -12345; uint b = 0; if ((a - b) != 4294954951) { return 1; } }
+    { int a = -12345; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294954951) { return 1; } }
+    { int a = -12345; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { int a = -12345; uint b = 0; if ((a * b) != 0) { return 1; } }
     { int a = -12345; uint b = 0; if ((a << b) != -12345) { return 1; } }
     { int a = -12345; uint b = 0; if ((a >> b) != -12345) { return 1; } }
@@ -11578,9 +11580,9 @@ fn m_int_x_uint() {
     { int a = -12345; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; uint b = 0; if ((a > b) != 1) { return 1; } }
     { int a = -12345; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; uint b = 1; if ((a + b) != 4294954952) { return 1; } }
-    { int a = -12345; uint b = 1; if ((a - b) != 4294954950) { return 1; } }
-    { int a = -12345; uint b = 1; if ((a * b) != 4294954951) { return 1; } }
+    { int a = -12345; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294954952) { return 1; } }
+    { int a = -12345; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294954950) { return 1; } }
+    { int a = -12345; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { int a = -12345; uint b = 1; if ((a / b) != 4294954951) { return 1; } }
     { int a = -12345; uint b = 1; if ((a % b) != 0) { return 1; } }
     { int a = -12345; uint b = 1; if ((a << b) != -24690) { return 1; } }
@@ -11594,9 +11596,9 @@ fn m_int_x_uint() {
     { int a = -12345; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; uint b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -12345; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; uint b = 255; if ((a + b) != 4294955206) { return 1; } }
-    { int a = -12345; uint b = 255; if ((a - b) != 4294954696) { return 1; } }
-    { int a = -12345; uint b = 255; if ((a * b) != 4291819321) { return 1; } }
+    { int a = -12345; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 4294955206) { return 1; } }
+    { int a = -12345; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294954696) { return 1; } }
+    { int a = -12345; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4291819321) { return 1; } }
     { int a = -12345; uint b = 255; if ((a / b) != 16842960) { return 1; } }
     { int a = -12345; uint b = 255; if ((a % b) != 151) { return 1; } }
     { int a = -12345; uint b = 255; if ((a & b) != 199) { return 1; } }
@@ -11608,9 +11610,9 @@ fn m_int_x_uint() {
     { int a = -12345; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; uint b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -12345; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; uint b = 7; if ((a + b) != 4294954958) { return 1; } }
-    { int a = -12345; uint b = 7; if ((a - b) != 4294954944) { return 1; } }
-    { int a = -12345; uint b = 7; if ((a * b) != 4294880881) { return 1; } }
+    { int a = -12345; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 4294954958) { return 1; } }
+    { int a = -12345; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294954944) { return 1; } }
+    { int a = -12345; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { int a = -12345; uint b = 7; if ((a / b) != 613564993) { return 1; } }
     { int a = -12345; uint b = 7; if ((a % b) != 0) { return 1; } }
     { int a = -12345; uint b = 7; if ((a << b) != -1580160) { return 1; } }
@@ -11624,9 +11626,9 @@ fn m_int_x_uint() {
     { int a = -12345; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; uint b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -12345; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; uint b = 12345; if ((a + b) != 0) { return 1; } }
-    { int a = -12345; uint b = 12345; if ((a - b) != 4294942606) { return 1; } }
-    { int a = -12345; uint b = 12345; if ((a * b) != 4142568271) { return 1; } }
+    { int a = -12345; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { int a = -12345; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294942606) { return 1; } }
+    { int a = -12345; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4142568271) { return 1; } }
     { int a = -12345; uint b = 12345; if ((a / b) != 347910) { return 1; } }
     { int a = -12345; uint b = 12345; if ((a % b) != 6001) { return 1; } }
     { int a = -12345; uint b = 12345; if ((a & b) != 1) { return 1; } }
@@ -11638,9 +11640,9 @@ fn m_int_x_uint() {
     { int a = -12345; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -12345; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; uint b = 4294967295; if ((a + b) != 4294954950) { return 1; } }
-    { int a = -12345; uint b = 4294967295; if ((a - b) != 4294954952) { return 1; } }
-    { int a = -12345; uint b = 4294967295; if ((a * b) != 12345) { return 1; } }
+    { int a = -12345; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294954950) { return 1; } }
+    { int a = -12345; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
+    { int a = -12345; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 12345) { return 1; } }
     { int a = -12345; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { int a = -12345; uint b = 4294967295; if ((a % b) != 4294954951) { return 1; } }
     { int a = -12345; uint b = 4294967295; if ((a & b) != 4294954951) { return 1; } }
@@ -11867,7 +11869,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 0; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 0; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 0; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 1; if ((a + b) != 0) { return 1; } }
+    { int a = -1; ulong b = 1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { int a = -1; ulong b = 1; if ((a % b) != 0) { return 1; } }
     { int a = -1; ulong b = 1; if ((a << b) != -2) { return 1; } }
     { int a = -1; ulong b = 1; if ((a >> b) != -1) { return 1; } }
@@ -11878,7 +11880,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 255; if ((a + b) != 254) { return 1; } }
+    { int a = -1; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
     { int a = -1; ulong b = 255; if ((a / b) != 72340172838076673) { return 1; } }
     { int a = -1; ulong b = 255; if ((a % b) != 0) { return 1; } }
     { int a = -1; ulong b = 255; if ((a & b) != 255) { return 1; } }
@@ -11888,7 +11890,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 7; if ((a + b) != 6) { return 1; } }
+    { int a = -1; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
     { int a = -1; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { int a = -1; ulong b = 7; if ((a % b) != 1) { return 1; } }
     { int a = -1; ulong b = 7; if ((a << b) != -128) { return 1; } }
@@ -11900,7 +11902,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 12345; if ((a + b) != 12344) { return 1; } }
+    { int a = -1; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
     { int a = -1; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { int a = -1; ulong b = 12345; if ((a % b) != 1635) { return 1; } }
     { int a = -1; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -11910,7 +11912,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775806) { return 1; } }
+    { int a = -1; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { int a = -1; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { int a = -1; ulong b = 9223372036854775807; if ((a % b) != 1) { return 1; } }
     { int a = -1; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -11920,7 +11922,7 @@ fn m_int_x_ulong() {
     { int a = -1; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { int a = -1; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { int a = -1; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { int a = -1; ulong b = 1099511627776; if ((a + b) != 1099511627775) { return 1; } }
+    { int a = -1; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
     { int a = -1; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { int a = -1; ulong b = 1099511627776; if ((a % b) != 1099511627775) { return 1; } }
     { int a = -1; ulong b = 1099511627776; if ((a << b) != -1) { return 1; } }
@@ -12049,7 +12051,7 @@ fn m_int_x_ulong() {
     { int a = -2; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -2; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -2; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; ulong b = 255; if ((a + b) != 253) { return 1; } }
+    { int a = -2; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
     { int a = -2; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { int a = -2; ulong b = 255; if ((a % b) != 254) { return 1; } }
     { int a = -2; ulong b = 255; if ((a & b) != 254) { return 1; } }
@@ -12059,7 +12061,7 @@ fn m_int_x_ulong() {
     { int a = -2; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -2; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -2; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; ulong b = 7; if ((a + b) != 5) { return 1; } }
+    { int a = -2; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
     { int a = -2; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { int a = -2; ulong b = 7; if ((a % b) != 0) { return 1; } }
     { int a = -2; ulong b = 7; if ((a << b) != -256) { return 1; } }
@@ -12071,7 +12073,7 @@ fn m_int_x_ulong() {
     { int a = -2; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -2; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -2; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; ulong b = 12345; if ((a + b) != 12343) { return 1; } }
+    { int a = -2; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
     { int a = -2; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { int a = -2; ulong b = 12345; if ((a % b) != 1634) { return 1; } }
     { int a = -2; ulong b = 12345; if ((a & b) != 12344) { return 1; } }
@@ -12081,9 +12083,9 @@ fn m_int_x_ulong() {
     { int a = -2; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -2; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -2; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775805) { return 1; } }
-    { int a = -2; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775807) { return 1; } }
-    { int a = -2; ulong b = 9223372036854775807; if ((a * b) != 2) { return 1; } }
+    { int a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { int a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775807) { return 1; } }
+    { int a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { int a = -2; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { int a = -2; ulong b = 9223372036854775807; if ((a % b) != 0) { return 1; } }
     { int a = -2; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -12093,7 +12095,7 @@ fn m_int_x_ulong() {
     { int a = -2; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { int a = -2; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { int a = -2; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { int a = -2; ulong b = 1099511627776; if ((a + b) != 1099511627774) { return 1; } }
+    { int a = -2; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
     { int a = -2; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { int a = -2; ulong b = 1099511627776; if ((a % b) != 1099511627774) { return 1; } }
     { int a = -2; ulong b = 1099511627776; if ((a << b) != -2) { return 1; } }
@@ -12177,7 +12179,7 @@ fn m_int_x_ulong() {
     { int a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { int a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { int a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { int a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { int a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { int a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -12224,7 +12226,7 @@ fn m_int_x_ulong() {
     { int a = -7; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { int a = -7; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { int a = -7; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; ulong b = 255; if ((a + b) != 248) { return 1; } }
+    { int a = -7; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
     { int a = -7; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { int a = -7; ulong b = 255; if ((a % b) != 249) { return 1; } }
     { int a = -7; ulong b = 255; if ((a & b) != 249) { return 1; } }
@@ -12234,7 +12236,7 @@ fn m_int_x_ulong() {
     { int a = -7; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { int a = -7; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { int a = -7; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; ulong b = 7; if ((a + b) != 0) { return 1; } }
+    { int a = -7; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { int a = -7; ulong b = 7; if ((a / b) != 2635249153387078801) { return 1; } }
     { int a = -7; ulong b = 7; if ((a % b) != 2) { return 1; } }
     { int a = -7; ulong b = 7; if ((a << b) != -896) { return 1; } }
@@ -12246,7 +12248,7 @@ fn m_int_x_ulong() {
     { int a = -7; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -7; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -7; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; ulong b = 12345; if ((a + b) != 12338) { return 1; } }
+    { int a = -7; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
     { int a = -7; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { int a = -7; ulong b = 12345; if ((a % b) != 1629) { return 1; } }
     { int a = -7; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -12256,8 +12258,8 @@ fn m_int_x_ulong() {
     { int a = -7; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -7; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -7; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775800) { return 1; } }
-    { int a = -7; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775802) { return 1; } }
+    { int a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
+    { int a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775802) { return 1; } }
     { int a = -7; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { int a = -7; ulong b = 9223372036854775807; if ((a % b) != 9223372036854775802) { return 1; } }
     { int a = -7; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -12267,7 +12269,7 @@ fn m_int_x_ulong() {
     { int a = -7; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { int a = -7; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { int a = -7; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { int a = -7; ulong b = 1099511627776; if ((a + b) != 1099511627769) { return 1; } }
+    { int a = -7; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
     { int a = -7; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { int a = -7; ulong b = 1099511627776; if ((a % b) != 1099511627769) { return 1; } }
     { int a = -7; ulong b = 1099511627776; if ((a << b) != -7) { return 1; } }
@@ -12353,7 +12355,7 @@ fn m_int_x_ulong() {
     { int a = 12345; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { int a = 12345; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { int a = 12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = 12345; ulong b = 9223372036854775807; if ((a * b) != 9223372036854763463) { return 1; } }
+    { int a = 12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { int a = 12345; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { int a = 12345; ulong b = 9223372036854775807; if ((a % b) != 12345) { return 1; } }
     { int a = 12345; ulong b = 9223372036854775807; if ((a & b) != 12345) { return 1; } }
@@ -12420,7 +12422,7 @@ fn m_int_x_ulong() {
     { int a = -12345; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { int a = -12345; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; ulong b = 12345; if ((a + b) != 0) { return 1; } }
+    { int a = -12345; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { int a = -12345; ulong b = 12345; if ((a / b) != 1494268454735483) { return 1; } }
     { int a = -12345; ulong b = 12345; if ((a % b) != 1636) { return 1; } }
     { int a = -12345; ulong b = 12345; if ((a & b) != 1) { return 1; } }
@@ -12430,8 +12432,8 @@ fn m_int_x_ulong() {
     { int a = -12345; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { int a = -12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; ulong b = 9223372036854775807; if ((a + b) != 9223372036854763462) { return 1; } }
-    { int a = -12345; ulong b = 9223372036854775807; if ((a - b) != 9223372036854763464) { return 1; } }
+    { int a = -12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854763462) { return 1; } }
+    { int a = -12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854763464) { return 1; } }
     { int a = -12345; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { int a = -12345; ulong b = 9223372036854775807; if ((a % b) != 9223372036854763464) { return 1; } }
     { int a = -12345; ulong b = 9223372036854775807; if ((a & b) != 9223372036854763463) { return 1; } }
@@ -12441,7 +12443,7 @@ fn m_int_x_ulong() {
     { int a = -12345; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { int a = -12345; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { int a = -12345; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { int a = -12345; ulong b = 1099511627776; if ((a + b) != 1099511615431) { return 1; } }
+    { int a = -12345; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511615431) { return 1; } }
     { int a = -12345; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { int a = -12345; ulong b = 1099511627776; if ((a % b) != 1099511615431) { return 1; } }
     { int a = -12345; ulong b = 1099511627776; if ((a << b) != -12345) { return 1; } }
@@ -19743,7 +19745,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 0; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 0; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 0; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 1; if ((a + b) != 0) { return 1; } }
+    { long a = -1; ulong b = 1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { long a = -1; ulong b = 1; if ((a % b) != 0) { return 1; } }
     { long a = -1; ulong b = 1; if ((a << b) != -2) { return 1; } }
     { long a = -1; ulong b = 1; if ((a >> b) != -1) { return 1; } }
@@ -19754,7 +19756,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 255; if ((a + b) != 254) { return 1; } }
+    { long a = -1; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
     { long a = -1; ulong b = 255; if ((a / b) != 72340172838076673) { return 1; } }
     { long a = -1; ulong b = 255; if ((a % b) != 0) { return 1; } }
     { long a = -1; ulong b = 255; if ((a & b) != 255) { return 1; } }
@@ -19764,7 +19766,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 7; if ((a + b) != 6) { return 1; } }
+    { long a = -1; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
     { long a = -1; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { long a = -1; ulong b = 7; if ((a % b) != 1) { return 1; } }
     { long a = -1; ulong b = 7; if ((a << b) != -128) { return 1; } }
@@ -19776,7 +19778,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 12345; if ((a + b) != 12344) { return 1; } }
+    { long a = -1; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
     { long a = -1; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { long a = -1; ulong b = 12345; if ((a % b) != 1635) { return 1; } }
     { long a = -1; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -19786,7 +19788,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775806) { return 1; } }
+    { long a = -1; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { long a = -1; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { long a = -1; ulong b = 9223372036854775807; if ((a % b) != 1) { return 1; } }
     { long a = -1; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -19796,7 +19798,7 @@ fn m_long_x_ulong() {
     { long a = -1; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { long a = -1; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { long a = -1; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { long a = -1; ulong b = 1099511627776; if ((a + b) != 1099511627775) { return 1; } }
+    { long a = -1; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
     { long a = -1; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { long a = -1; ulong b = 1099511627776; if ((a % b) != 1099511627775) { return 1; } }
     { long a = -1; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -19921,7 +19923,7 @@ fn m_long_x_ulong() {
     { long a = -2; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { long a = -2; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { long a = -2; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { long a = -2; ulong b = 255; if ((a + b) != 253) { return 1; } }
+    { long a = -2; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
     { long a = -2; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { long a = -2; ulong b = 255; if ((a % b) != 254) { return 1; } }
     { long a = -2; ulong b = 255; if ((a & b) != 254) { return 1; } }
@@ -19931,7 +19933,7 @@ fn m_long_x_ulong() {
     { long a = -2; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { long a = -2; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { long a = -2; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { long a = -2; ulong b = 7; if ((a + b) != 5) { return 1; } }
+    { long a = -2; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
     { long a = -2; ulong b = 7; if ((a / b) != 2635249153387078802) { return 1; } }
     { long a = -2; ulong b = 7; if ((a % b) != 0) { return 1; } }
     { long a = -2; ulong b = 7; if ((a << b) != -256) { return 1; } }
@@ -19943,7 +19945,7 @@ fn m_long_x_ulong() {
     { long a = -2; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { long a = -2; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { long a = -2; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { long a = -2; ulong b = 12345; if ((a + b) != 12343) { return 1; } }
+    { long a = -2; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
     { long a = -2; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { long a = -2; ulong b = 12345; if ((a % b) != 1634) { return 1; } }
     { long a = -2; ulong b = 12345; if ((a & b) != 12344) { return 1; } }
@@ -19953,9 +19955,9 @@ fn m_long_x_ulong() {
     { long a = -2; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = -2; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = -2; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = -2; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775805) { return 1; } }
-    { long a = -2; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775807) { return 1; } }
-    { long a = -2; ulong b = 9223372036854775807; if ((a * b) != 2) { return 1; } }
+    { long a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { long a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775807) { return 1; } }
+    { long a = -2; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { long a = -2; ulong b = 9223372036854775807; if ((a / b) != 2) { return 1; } }
     { long a = -2; ulong b = 9223372036854775807; if ((a % b) != 0) { return 1; } }
     { long a = -2; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -19965,7 +19967,7 @@ fn m_long_x_ulong() {
     { long a = -2; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { long a = -2; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { long a = -2; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { long a = -2; ulong b = 1099511627776; if ((a + b) != 1099511627774) { return 1; } }
+    { long a = -2; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
     { long a = -2; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { long a = -2; ulong b = 1099511627776; if ((a % b) != 1099511627774) { return 1; } }
     { long a = -2; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -20047,7 +20049,7 @@ fn m_long_x_ulong() {
     { long a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { long a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { long a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { long a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { long a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { long a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { long a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { long a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -20092,7 +20094,7 @@ fn m_long_x_ulong() {
     { long a = -7; ulong b = 1; if ((a <= b) != 0) { return 1; } }
     { long a = -7; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { long a = -7; ulong b = 1; if ((a >= b) != 1) { return 1; } }
-    { long a = -7; ulong b = 255; if ((a + b) != 248) { return 1; } }
+    { long a = -7; ulong b = 255; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
     { long a = -7; ulong b = 255; if ((a / b) != 72340172838076672) { return 1; } }
     { long a = -7; ulong b = 255; if ((a % b) != 249) { return 1; } }
     { long a = -7; ulong b = 255; if ((a & b) != 249) { return 1; } }
@@ -20102,7 +20104,7 @@ fn m_long_x_ulong() {
     { long a = -7; ulong b = 255; if ((a <= b) != 0) { return 1; } }
     { long a = -7; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { long a = -7; ulong b = 255; if ((a >= b) != 1) { return 1; } }
-    { long a = -7; ulong b = 7; if ((a + b) != 0) { return 1; } }
+    { long a = -7; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { long a = -7; ulong b = 7; if ((a / b) != 2635249153387078801) { return 1; } }
     { long a = -7; ulong b = 7; if ((a % b) != 2) { return 1; } }
     { long a = -7; ulong b = 7; if ((a << b) != -896) { return 1; } }
@@ -20114,7 +20116,7 @@ fn m_long_x_ulong() {
     { long a = -7; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { long a = -7; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { long a = -7; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { long a = -7; ulong b = 12345; if ((a + b) != 12338) { return 1; } }
+    { long a = -7; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
     { long a = -7; ulong b = 12345; if ((a / b) != 1494268454735484) { return 1; } }
     { long a = -7; ulong b = 12345; if ((a % b) != 1629) { return 1; } }
     { long a = -7; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -20124,8 +20126,8 @@ fn m_long_x_ulong() {
     { long a = -7; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = -7; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = -7; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = -7; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775800) { return 1; } }
-    { long a = -7; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775802) { return 1; } }
+    { long a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
+    { long a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775802) { return 1; } }
     { long a = -7; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { long a = -7; ulong b = 9223372036854775807; if ((a % b) != 9223372036854775802) { return 1; } }
     { long a = -7; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -20135,7 +20137,7 @@ fn m_long_x_ulong() {
     { long a = -7; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { long a = -7; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { long a = -7; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { long a = -7; ulong b = 1099511627776; if ((a + b) != 1099511627769) { return 1; } }
+    { long a = -7; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
     { long a = -7; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { long a = -7; ulong b = 1099511627776; if ((a % b) != 1099511627769) { return 1; } }
     { long a = -7; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -20219,7 +20221,7 @@ fn m_long_x_ulong() {
     { long a = 12345; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { long a = 12345; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { long a = 12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = 12345; ulong b = 9223372036854775807; if ((a * b) != 9223372036854763463) { return 1; } }
+    { long a = 12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { long a = 12345; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { long a = 12345; ulong b = 9223372036854775807; if ((a % b) != 12345) { return 1; } }
     { long a = 12345; ulong b = 9223372036854775807; if ((a & b) != 12345) { return 1; } }
@@ -20284,7 +20286,7 @@ fn m_long_x_ulong() {
     { long a = -12345; ulong b = 7; if ((a <= b) != 0) { return 1; } }
     { long a = -12345; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { long a = -12345; ulong b = 7; if ((a >= b) != 1) { return 1; } }
-    { long a = -12345; ulong b = 12345; if ((a + b) != 0) { return 1; } }
+    { long a = -12345; ulong b = 12345; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
     { long a = -12345; ulong b = 12345; if ((a / b) != 1494268454735483) { return 1; } }
     { long a = -12345; ulong b = 12345; if ((a % b) != 1636) { return 1; } }
     { long a = -12345; ulong b = 12345; if ((a & b) != 1) { return 1; } }
@@ -20294,8 +20296,8 @@ fn m_long_x_ulong() {
     { long a = -12345; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = -12345; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = -12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = -12345; ulong b = 9223372036854775807; if ((a + b) != 9223372036854763462) { return 1; } }
-    { long a = -12345; ulong b = 9223372036854775807; if ((a - b) != 9223372036854763464) { return 1; } }
+    { long a = -12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854763462) { return 1; } }
+    { long a = -12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854763464) { return 1; } }
     { long a = -12345; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { long a = -12345; ulong b = 9223372036854775807; if ((a % b) != 9223372036854763464) { return 1; } }
     { long a = -12345; ulong b = 9223372036854775807; if ((a & b) != 9223372036854763463) { return 1; } }
@@ -20305,7 +20307,7 @@ fn m_long_x_ulong() {
     { long a = -12345; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { long a = -12345; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { long a = -12345; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { long a = -12345; ulong b = 1099511627776; if ((a + b) != 1099511615431) { return 1; } }
+    { long a = -12345; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 1099511615431) { return 1; } }
     { long a = -12345; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { long a = -12345; ulong b = 1099511627776; if ((a % b) != 1099511615431) { return 1; } }
     { long a = -12345; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -20402,7 +20404,7 @@ fn m_long_x_ulong() {
     { long a = 1099511627776; ulong b = 9223372036854775807; if ((a >= b) != 0) { return 1; } }
     { long a = 1099511627776; ulong b = 1099511627776; if ((a + b) != 2199023255552) { return 1; } }
     { long a = 1099511627776; ulong b = 1099511627776; if ((a - b) != 0) { return 1; } }
-    { long a = 1099511627776; ulong b = 1099511627776; if ((a * b) != 0) { return 1; } }
+    { long a = 1099511627776; ulong b = 1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 0) { return 1; } }
     { long a = 1099511627776; ulong b = 1099511627776; if ((a / b) != 1) { return 1; } }
     { long a = 1099511627776; ulong b = 1099511627776; if ((a % b) != 0) { return 1; } }
     { long a = 1099511627776; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -20463,9 +20465,9 @@ fn m_long_x_ulong() {
     { long a = -1099511627776; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = -1099511627776; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = -1099511627776; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = -1099511627776; ulong b = 9223372036854775807; if ((a + b) != 9223370937343148031) { return 1; } }
-    { long a = -1099511627776; ulong b = 9223372036854775807; if ((a - b) != 9223370937343148033) { return 1; } }
-    { long a = -1099511627776; ulong b = 9223372036854775807; if ((a * b) != 1099511627776) { return 1; } }
+    { long a = -1099511627776; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223370937343148031) { return 1; } }
+    { long a = -1099511627776; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223370937343148033) { return 1; } }
+    { long a = -1099511627776; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 1099511627776) { return 1; } }
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a % b) != 9223370937343148033) { return 1; } }
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a & b) != 9223370937343148032) { return 1; } }
@@ -20475,8 +20477,8 @@ fn m_long_x_ulong() {
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a <= b) != 0) { return 1; } }
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a > b) != 1) { return 1; } }
     { long a = -1099511627776; ulong b = 9223372036854775807; if ((a >= b) != 1) { return 1; } }
-    { long a = -1099511627776; ulong b = 1099511627776; if ((a + b) != 0) { return 1; } }
-    { long a = -1099511627776; ulong b = 1099511627776; if ((a * b) != 0) { return 1; } }
+    { long a = -1099511627776; ulong b = 1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { long a = -1099511627776; ulong b = 1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 0) { return 1; } }
     { long a = -1099511627776; ulong b = 1099511627776; if ((a / b) != 16777215) { return 1; } }
     { long a = -1099511627776; ulong b = 1099511627776; if ((a % b) != 0) { return 1; } }
     { long a = -1099511627776; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -20546,7 +20548,7 @@ fn m_long_x_ulong() {
     { long a = 4611686018427387903; ulong b = 7; if ((a >= b) != 1) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a + b) != 4611686018427400248) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a - b) != 4611686018427375558) { return 1; } }
-    { long a = 4611686018427387903; ulong b = 12345; if ((a * b) != 4611686018427375559) { return 1; } }
+    { long a = 4611686018427387903; ulong b = 12345; if (((a as ulong).wrapping_mul(b as ulong)) != 4611686018427375559) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a / b) != 373567113683871) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a % b) != 408) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -20558,7 +20560,7 @@ fn m_long_x_ulong() {
     { long a = 4611686018427387903; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { long a = 4611686018427387903; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { long a = 4611686018427387903; ulong b = 9223372036854775807; if ((a * b) != 4611686018427387905) { return 1; } }
+    { long a = 4611686018427387903; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 4611686018427387905) { return 1; } }
     { long a = 4611686018427387903; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { long a = 4611686018427387903; ulong b = 9223372036854775807; if ((a % b) != 4611686018427387903) { return 1; } }
     { long a = 4611686018427387903; ulong b = 9223372036854775807; if ((a & b) != 4611686018427387903) { return 1; } }
@@ -22666,7 +22668,7 @@ fn m_u8_x_uint() {
     { u8 a = 0; uint b = 0; if ((a > b) != 0) { return 1; } }
     { u8 a = 0; uint b = 0; if ((a >= b) != 1) { return 1; } }
     { u8 a = 0; uint b = 1; if ((a + b) != 1) { return 1; } }
-    { u8 a = 0; uint b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { u8 a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { u8 a = 0; uint b = 1; if ((a * b) != 0) { return 1; } }
     { u8 a = 0; uint b = 1; if ((a / b) != 0) { return 1; } }
     { u8 a = 0; uint b = 1; if ((a % b) != 0) { return 1; } }
@@ -22682,7 +22684,7 @@ fn m_u8_x_uint() {
     { u8 a = 0; uint b = 1; if ((a > b) != 0) { return 1; } }
     { u8 a = 0; uint b = 1; if ((a >= b) != 0) { return 1; } }
     { u8 a = 0; uint b = 255; if ((a + b) != 255) { return 1; } }
-    { u8 a = 0; uint b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { u8 a = 0; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { u8 a = 0; uint b = 255; if ((a * b) != 0) { return 1; } }
     { u8 a = 0; uint b = 255; if ((a / b) != 0) { return 1; } }
     { u8 a = 0; uint b = 255; if ((a % b) != 0) { return 1; } }
@@ -22696,7 +22698,7 @@ fn m_u8_x_uint() {
     { u8 a = 0; uint b = 255; if ((a > b) != 0) { return 1; } }
     { u8 a = 0; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { u8 a = 0; uint b = 7; if ((a + b) != 7) { return 1; } }
-    { u8 a = 0; uint b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { u8 a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { u8 a = 0; uint b = 7; if ((a * b) != 0) { return 1; } }
     { u8 a = 0; uint b = 7; if ((a / b) != 0) { return 1; } }
     { u8 a = 0; uint b = 7; if ((a % b) != 0) { return 1; } }
@@ -22712,7 +22714,7 @@ fn m_u8_x_uint() {
     { u8 a = 0; uint b = 7; if ((a > b) != 0) { return 1; } }
     { u8 a = 0; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { u8 a = 0; uint b = 12345; if ((a + b) != 12345) { return 1; } }
-    { u8 a = 0; uint b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { u8 a = 0; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { u8 a = 0; uint b = 12345; if ((a * b) != 0) { return 1; } }
     { u8 a = 0; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { u8 a = 0; uint b = 12345; if ((a % b) != 0) { return 1; } }
@@ -22726,7 +22728,7 @@ fn m_u8_x_uint() {
     { u8 a = 0; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 0; uint b = 12345; if ((a >= b) != 0) { return 1; } }
     { u8 a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 1; } }
-    { u8 a = 0; uint b = 4294967295; if ((a - b) != 1) { return 1; } }
+    { u8 a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { u8 a = 0; uint b = 4294967295; if ((a * b) != 0) { return 1; } }
     { u8 a = 0; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { u8 a = 0; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
@@ -22770,7 +22772,7 @@ fn m_u8_x_uint() {
     { u8 a = 1; uint b = 1; if ((a > b) != 0) { return 1; } }
     { u8 a = 1; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { u8 a = 1; uint b = 255; if ((a + b) != 256) { return 1; } }
-    { u8 a = 1; uint b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { u8 a = 1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { u8 a = 1; uint b = 255; if ((a * b) != 255) { return 1; } }
     { u8 a = 1; uint b = 255; if ((a / b) != 0) { return 1; } }
     { u8 a = 1; uint b = 255; if ((a % b) != 1) { return 1; } }
@@ -22784,7 +22786,7 @@ fn m_u8_x_uint() {
     { u8 a = 1; uint b = 255; if ((a > b) != 0) { return 1; } }
     { u8 a = 1; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { u8 a = 1; uint b = 7; if ((a + b) != 8) { return 1; } }
-    { u8 a = 1; uint b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { u8 a = 1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { u8 a = 1; uint b = 7; if ((a * b) != 7) { return 1; } }
     { u8 a = 1; uint b = 7; if ((a / b) != 0) { return 1; } }
     { u8 a = 1; uint b = 7; if ((a % b) != 1) { return 1; } }
@@ -22800,7 +22802,7 @@ fn m_u8_x_uint() {
     { u8 a = 1; uint b = 7; if ((a > b) != 0) { return 1; } }
     { u8 a = 1; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a + b) != 12346) { return 1; } }
-    { u8 a = 1; uint b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { u8 a = 1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a * b) != 12345) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a % b) != 1) { return 1; } }
@@ -22813,8 +22815,8 @@ fn m_u8_x_uint() {
     { u8 a = 1; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 1; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { u8 a = 1; uint b = 4294967295; if ((a + b) != 0) { return 1; } }
-    { u8 a = 1; uint b = 4294967295; if ((a - b) != 2) { return 1; } }
+    { u8 a = 1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { u8 a = 1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { u8 a = 1; uint b = 4294967295; if ((a * b) != 4294967295) { return 1; } }
     { u8 a = 1; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { u8 a = 1; uint b = 4294967295; if ((a % b) != 1) { return 1; } }
@@ -22888,7 +22890,7 @@ fn m_u8_x_uint() {
     { u8 a = 255; uint b = 7; if ((a > b) != 1) { return 1; } }
     { u8 a = 255; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a + b) != 12600) { return 1; } }
-    { u8 a = 255; uint b = 12345; if ((a - b) != 4294955206) { return 1; } }
+    { u8 a = 255; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294955206) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a * b) != 3147975) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a % b) != 255) { return 1; } }
@@ -22901,9 +22903,9 @@ fn m_u8_x_uint() {
     { u8 a = 255; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 255; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { u8 a = 255; uint b = 4294967295; if ((a + b) != 254) { return 1; } }
-    { u8 a = 255; uint b = 4294967295; if ((a - b) != 256) { return 1; } }
-    { u8 a = 255; uint b = 4294967295; if ((a * b) != 4294967041) { return 1; } }
+    { u8 a = 255; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { u8 a = 255; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 256) { return 1; } }
+    { u8 a = 255; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { u8 a = 255; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { u8 a = 255; uint b = 4294967295; if ((a % b) != 255) { return 1; } }
     { u8 a = 255; uint b = 4294967295; if ((a & b) != 255) { return 1; } }
@@ -22946,7 +22948,7 @@ fn m_u8_x_uint() {
     { u8 a = 7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { u8 a = 7; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { u8 a = 7; uint b = 255; if ((a + b) != 262) { return 1; } }
-    { u8 a = 7; uint b = 255; if ((a - b) != 4294967048) { return 1; } }
+    { u8 a = 7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967048) { return 1; } }
     { u8 a = 7; uint b = 255; if ((a * b) != 1785) { return 1; } }
     { u8 a = 7; uint b = 255; if ((a / b) != 0) { return 1; } }
     { u8 a = 7; uint b = 255; if ((a % b) != 7) { return 1; } }
@@ -22976,7 +22978,7 @@ fn m_u8_x_uint() {
     { u8 a = 7; uint b = 7; if ((a > b) != 0) { return 1; } }
     { u8 a = 7; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a + b) != 12352) { return 1; } }
-    { u8 a = 7; uint b = 12345; if ((a - b) != 4294954958) { return 1; } }
+    { u8 a = 7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954958) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a * b) != 86415) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a % b) != 7) { return 1; } }
@@ -22989,9 +22991,9 @@ fn m_u8_x_uint() {
     { u8 a = 7; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 7; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { u8 a = 7; uint b = 4294967295; if ((a + b) != 6) { return 1; } }
-    { u8 a = 7; uint b = 4294967295; if ((a - b) != 8) { return 1; } }
-    { u8 a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 1; } }
+    { u8 a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { u8 a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { u8 a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { u8 a = 7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { u8 a = 7; uint b = 4294967295; if ((a % b) != 7) { return 1; } }
     { u8 a = 7; uint b = 4294967295; if ((a & b) != 7) { return 1; } }
@@ -23281,7 +23283,7 @@ fn m_u8_x_ulong() {
     { u8 a = 255; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { u8 a = 255; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 255; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { u8 a = 255; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775553) { return 1; } }
+    { u8 a = 255; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { u8 a = 255; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { u8 a = 255; ulong b = 9223372036854775807; if ((a % b) != 255) { return 1; } }
     { u8 a = 255; ulong b = 9223372036854775807; if ((a & b) != 255) { return 1; } }
@@ -23380,7 +23382,7 @@ fn m_u8_x_ulong() {
     { u8 a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { u8 a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { u8 a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { u8 a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { u8 a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { u8 a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { u8 a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { u8 a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -23431,7 +23433,7 @@ fn m_uint_x_bool() {
     { uint a = 0; bool b = false; if ((a > b) != 0) { return 1; } }
     { uint a = 0; bool b = false; if ((a >= b) != 1) { return 1; } }
     { uint a = 0; bool b = true; if ((a + b) != 1) { return 1; } }
-    { uint a = 0; bool b = true; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 0; bool b = true; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 0; bool b = true; if ((a * b) != 0) { return 1; } }
     { uint a = 0; bool b = true; if ((a / b) != 0) { return 1; } }
     { uint a = 0; bool b = true; if ((a % b) != 0) { return 1; } }
@@ -23580,7 +23582,7 @@ fn m_uint_x_bool() {
     { uint a = 4294967295; bool b = false; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; bool b = false; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; bool b = false; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; bool b = true; if ((a + b) != 0) { return 1; } }
+    { uint a = 4294967295; bool b = true; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
     { uint a = 4294967295; bool b = true; if ((a - b) != 4294967294) { return 1; } }
     { uint a = 4294967295; bool b = true; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 4294967295; bool b = true; if ((a / b) != 4294967295) { return 1; } }
@@ -23620,7 +23622,7 @@ fn m_uint_x_char() {
     { uint a = 0; char b = 0; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = 0; if ((a >= b) != 1) { return 1; } }
     { uint a = 0; char b = 1; if ((a + b) != 1) { return 1; } }
-    { uint a = 0; char b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 0; char b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 0; char b = 1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = 1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = 1; if ((a % b) != 0) { return 1; } }
@@ -23635,8 +23637,8 @@ fn m_uint_x_char() {
     { uint a = 0; char b = 1; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; char b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = 1; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; char b = -1; if ((a + b) != 4294967295) { return 1; } }
-    { uint a = 0; char b = -1; if ((a - b) != 1) { return 1; } }
+    { uint a = 0; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { uint a = 0; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { uint a = 0; char b = -1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = -1; if ((a % b) != 0) { return 1; } }
@@ -23650,7 +23652,7 @@ fn m_uint_x_char() {
     { uint a = 0; char b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = -1; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; char b = 2; if ((a + b) != 2) { return 1; } }
-    { uint a = 0; char b = 2; if ((a - b) != 4294967294) { return 1; } }
+    { uint a = 0; char b = 2; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
     { uint a = 0; char b = 2; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = 2; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = 2; if ((a % b) != 0) { return 1; } }
@@ -23665,8 +23667,8 @@ fn m_uint_x_char() {
     { uint a = 0; char b = 2; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; char b = 2; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = 2; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; char b = -2; if ((a + b) != 4294967294) { return 1; } }
-    { uint a = 0; char b = -2; if ((a - b) != 2) { return 1; } }
+    { uint a = 0; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { uint a = 0; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { uint a = 0; char b = -2; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = -2; if ((a % b) != 0) { return 1; } }
@@ -23680,7 +23682,7 @@ fn m_uint_x_char() {
     { uint a = 0; char b = -2; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = -2; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; char b = 7; if ((a + b) != 7) { return 1; } }
-    { uint a = 0; char b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { uint a = 0; char b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { uint a = 0; char b = 7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = 7; if ((a % b) != 0) { return 1; } }
@@ -23695,8 +23697,8 @@ fn m_uint_x_char() {
     { uint a = 0; char b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; char b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 0; char b = 7; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; char b = -7; if ((a + b) != 4294967289) { return 1; } }
-    { uint a = 0; char b = -7; if ((a - b) != 7) { return 1; } }
+    { uint a = 0; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 1; } }
+    { uint a = 0; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 7) { return 1; } }
     { uint a = 0; char b = -7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; char b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; char b = -7; if ((a % b) != 0) { return 1; } }
@@ -23739,9 +23741,9 @@ fn m_uint_x_char() {
     { uint a = 1; char b = 1; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; char b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 1; char b = -1; if ((a + b) != 0) { return 1; } }
-    { uint a = 1; char b = -1; if ((a - b) != 2) { return 1; } }
-    { uint a = 1; char b = -1; if ((a * b) != 4294967295) { return 1; } }
+    { uint a = 1; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 1; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
+    { uint a = 1; char b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 1; } }
     { uint a = 1; char b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 1; char b = -1; if ((a % b) != 1) { return 1; } }
     { uint a = 1; char b = -1; if ((a & b) != 1) { return 1; } }
@@ -23754,7 +23756,7 @@ fn m_uint_x_char() {
     { uint a = 1; char b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; char b = -1; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; char b = 2; if ((a + b) != 3) { return 1; } }
-    { uint a = 1; char b = 2; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 1; char b = 2; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 1; char b = 2; if ((a * b) != 2) { return 1; } }
     { uint a = 1; char b = 2; if ((a / b) != 0) { return 1; } }
     { uint a = 1; char b = 2; if ((a % b) != 1) { return 1; } }
@@ -23769,9 +23771,9 @@ fn m_uint_x_char() {
     { uint a = 1; char b = 2; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; char b = 2; if ((a > b) != 0) { return 1; } }
     { uint a = 1; char b = 2; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; char b = -2; if ((a + b) != 4294967295) { return 1; } }
-    { uint a = 1; char b = -2; if ((a - b) != 3) { return 1; } }
-    { uint a = 1; char b = -2; if ((a * b) != 4294967294) { return 1; } }
+    { uint a = 1; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { uint a = 1; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 3) { return 1; } }
+    { uint a = 1; char b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { uint a = 1; char b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 1; char b = -2; if ((a % b) != 1) { return 1; } }
     { uint a = 1; char b = -2; if ((a & b) != 0) { return 1; } }
@@ -23784,7 +23786,7 @@ fn m_uint_x_char() {
     { uint a = 1; char b = -2; if ((a > b) != 0) { return 1; } }
     { uint a = 1; char b = -2; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; char b = 7; if ((a + b) != 8) { return 1; } }
-    { uint a = 1; char b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { uint a = 1; char b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { uint a = 1; char b = 7; if ((a * b) != 7) { return 1; } }
     { uint a = 1; char b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; char b = 7; if ((a % b) != 1) { return 1; } }
@@ -23799,9 +23801,9 @@ fn m_uint_x_char() {
     { uint a = 1; char b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; char b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 1; char b = 7; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; char b = -7; if ((a + b) != 4294967290) { return 1; } }
-    { uint a = 1; char b = -7; if ((a - b) != 8) { return 1; } }
-    { uint a = 1; char b = -7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 1; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 1; } }
+    { uint a = 1; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { uint a = 1; char b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 1; char b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; char b = -7; if ((a % b) != 1) { return 1; } }
     { uint a = 1; char b = -7; if ((a & b) != 1) { return 1; } }
@@ -23843,9 +23845,9 @@ fn m_uint_x_char() {
     { uint a = 255; char b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; char b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 255; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; char b = -1; if ((a + b) != 254) { return 1; } }
-    { uint a = 255; char b = -1; if ((a - b) != 256) { return 1; } }
-    { uint a = 255; char b = -1; if ((a * b) != 4294967041) { return 1; } }
+    { uint a = 255; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { uint a = 255; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 256) { return 1; } }
+    { uint a = 255; char b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { uint a = 255; char b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 255; char b = -1; if ((a % b) != 255) { return 1; } }
     { uint a = 255; char b = -1; if ((a & b) != 255) { return 1; } }
@@ -23873,9 +23875,9 @@ fn m_uint_x_char() {
     { uint a = 255; char b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; char b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 255; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; char b = -2; if ((a + b) != 253) { return 1; } }
-    { uint a = 255; char b = -2; if ((a - b) != 257) { return 1; } }
-    { uint a = 255; char b = -2; if ((a * b) != 4294966786) { return 1; } }
+    { uint a = 255; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 253) { return 1; } }
+    { uint a = 255; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 257) { return 1; } }
+    { uint a = 255; char b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294966786) { return 1; } }
     { uint a = 255; char b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 255; char b = -2; if ((a % b) != 255) { return 1; } }
     { uint a = 255; char b = -2; if ((a & b) != 254) { return 1; } }
@@ -23903,9 +23905,9 @@ fn m_uint_x_char() {
     { uint a = 255; char b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; char b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 255; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; char b = -7; if ((a + b) != 248) { return 1; } }
-    { uint a = 255; char b = -7; if ((a - b) != 262) { return 1; } }
-    { uint a = 255; char b = -7; if ((a * b) != 4294965511) { return 1; } }
+    { uint a = 255; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 248) { return 1; } }
+    { uint a = 255; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 262) { return 1; } }
+    { uint a = 255; char b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294965511) { return 1; } }
     { uint a = 255; char b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 255; char b = -7; if ((a % b) != 255) { return 1; } }
     { uint a = 255; char b = -7; if ((a & b) != 249) { return 1; } }
@@ -23947,9 +23949,9 @@ fn m_uint_x_char() {
     { uint a = 7; char b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 7; char b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 7; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; char b = -1; if ((a + b) != 6) { return 1; } }
-    { uint a = 7; char b = -1; if ((a - b) != 8) { return 1; } }
-    { uint a = 7; char b = -1; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 7; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { uint a = 7; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { uint a = 7; char b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 7; char b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 7; char b = -1; if ((a % b) != 7) { return 1; } }
     { uint a = 7; char b = -1; if ((a & b) != 7) { return 1; } }
@@ -23977,9 +23979,9 @@ fn m_uint_x_char() {
     { uint a = 7; char b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 7; char b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 7; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; char b = -2; if ((a + b) != 5) { return 1; } }
-    { uint a = 7; char b = -2; if ((a - b) != 9) { return 1; } }
-    { uint a = 7; char b = -2; if ((a * b) != 4294967282) { return 1; } }
+    { uint a = 7; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 5) { return 1; } }
+    { uint a = 7; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 9) { return 1; } }
+    { uint a = 7; char b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294967282) { return 1; } }
     { uint a = 7; char b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 7; char b = -2; if ((a % b) != 7) { return 1; } }
     { uint a = 7; char b = -2; if ((a & b) != 6) { return 1; } }
@@ -24007,9 +24009,9 @@ fn m_uint_x_char() {
     { uint a = 7; char b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 7; char b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 7; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; char b = -7; if ((a + b) != 0) { return 1; } }
-    { uint a = 7; char b = -7; if ((a - b) != 14) { return 1; } }
-    { uint a = 7; char b = -7; if ((a * b) != 4294967247) { return 1; } }
+    { uint a = 7; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 7; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 14) { return 1; } }
+    { uint a = 7; char b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 1; } }
     { uint a = 7; char b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 7; char b = -7; if ((a % b) != 7) { return 1; } }
     { uint a = 7; char b = -7; if ((a & b) != 1) { return 1; } }
@@ -24051,9 +24053,9 @@ fn m_uint_x_char() {
     { uint a = 12345; char b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; char b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; char b = -1; if ((a + b) != 12344) { return 1; } }
-    { uint a = 12345; char b = -1; if ((a - b) != 12346) { return 1; } }
-    { uint a = 12345; char b = -1; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 12345; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { uint a = 12345; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 12346) { return 1; } }
+    { uint a = 12345; char b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 12345; char b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; char b = -1; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; char b = -1; if ((a & b) != 12345) { return 1; } }
@@ -24081,9 +24083,9 @@ fn m_uint_x_char() {
     { uint a = 12345; char b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; char b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; char b = -2; if ((a + b) != 12343) { return 1; } }
-    { uint a = 12345; char b = -2; if ((a - b) != 12347) { return 1; } }
-    { uint a = 12345; char b = -2; if ((a * b) != 4294942606) { return 1; } }
+    { uint a = 12345; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 12343) { return 1; } }
+    { uint a = 12345; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 12347) { return 1; } }
+    { uint a = 12345; char b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294942606) { return 1; } }
     { uint a = 12345; char b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; char b = -2; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; char b = -2; if ((a & b) != 12344) { return 1; } }
@@ -24111,9 +24113,9 @@ fn m_uint_x_char() {
     { uint a = 12345; char b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; char b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; char b = -7; if ((a + b) != 12338) { return 1; } }
-    { uint a = 12345; char b = -7; if ((a - b) != 12352) { return 1; } }
-    { uint a = 12345; char b = -7; if ((a * b) != 4294880881) { return 1; } }
+    { uint a = 12345; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 12338) { return 1; } }
+    { uint a = 12345; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 12352) { return 1; } }
+    { uint a = 12345; char b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { uint a = 12345; char b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; char b = -7; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; char b = -7; if ((a & b) != 12345) { return 1; } }
@@ -24139,7 +24141,7 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = 0; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; char b = 0; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; char b = 0; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = 1; if ((a + b) != 0) { return 1; } }
+    { uint a = 4294967295; char b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
     { uint a = 4294967295; char b = 1; if ((a - b) != 4294967294) { return 1; } }
     { uint a = 4294967295; char b = 1; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 4294967295; char b = 1; if ((a / b) != 4294967295) { return 1; } }
@@ -24155,9 +24157,9 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; char b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = -1; if ((a + b) != 4294967294) { return 1; } }
-    { uint a = 4294967295; char b = -1; if ((a - b) != 0) { return 1; } }
-    { uint a = 4294967295; char b = -1; if ((a * b) != 1) { return 1; } }
+    { uint a = 4294967295; char b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { uint a = 4294967295; char b = -1; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 1; } }
+    { uint a = 4294967295; char b = -1; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 1; } }
     { uint a = 4294967295; char b = -1; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -1; if ((a % b) != 0) { return 1; } }
     { uint a = 4294967295; char b = -1; if ((a & b) != 4294967295) { return 1; } }
@@ -24169,9 +24171,9 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = -1; if ((a <= b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 4294967295; char b = -1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = 2; if ((a + b) != 1) { return 1; } }
+    { uint a = 4294967295; char b = 2; if (((a as uint).wrapping_add(b as uint)) != 1) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a - b) != 4294967293) { return 1; } }
-    { uint a = 4294967295; char b = 2; if ((a * b) != 4294967294) { return 1; } }
+    { uint a = 4294967295; char b = 2; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a / b) != 2147483647) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a % b) != 1) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a << b) != 4294967292) { return 1; } }
@@ -24185,9 +24187,9 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = -2; if ((a + b) != 4294967293) { return 1; } }
-    { uint a = 4294967295; char b = -2; if ((a - b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = -2; if ((a * b) != 2) { return 1; } }
+    { uint a = 4294967295; char b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967293) { return 1; } }
+    { uint a = 4294967295; char b = -2; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
+    { uint a = 4294967295; char b = -2; if (((a as uint).wrapping_mul(b as uint)) != 2) { return 1; } }
     { uint a = 4294967295; char b = -2; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -2; if ((a % b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -2; if ((a & b) != 4294967294) { return 1; } }
@@ -24199,9 +24201,9 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = -2; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; char b = -2; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = 7; if ((a + b) != 6) { return 1; } }
+    { uint a = 4294967295; char b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; char b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 4294967295; char b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a / b) != 613566756) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a % b) != 3) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a << b) != 4294967168) { return 1; } }
@@ -24215,9 +24217,9 @@ fn m_uint_x_char() {
     { uint a = 4294967295; char b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; char b = -7; if ((a + b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; char b = -7; if ((a - b) != 6) { return 1; } }
-    { uint a = 4294967295; char b = -7; if ((a * b) != 7) { return 1; } }
+    { uint a = 4294967295; char b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 1; } }
+    { uint a = 4294967295; char b = -7; if (((a as uint).wrapping_sub(b as uint)) != 6) { return 1; } }
+    { uint a = 4294967295; char b = -7; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 1; } }
     { uint a = 4294967295; char b = -7; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; char b = -7; if ((a % b) != 6) { return 1; } }
     { uint a = 4294967295; char b = -7; if ((a & b) != 4294967289) { return 1; } }
@@ -24253,7 +24255,7 @@ fn m_uint_x_int() {
     { uint a = 0; int b = 0; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = 0; if ((a >= b) != 1) { return 1; } }
     { uint a = 0; int b = 1; if ((a + b) != 1) { return 1; } }
-    { uint a = 0; int b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 0; int b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 0; int b = 1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = 1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = 1; if ((a % b) != 0) { return 1; } }
@@ -24268,8 +24270,8 @@ fn m_uint_x_int() {
     { uint a = 0; int b = 1; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; int b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = 1; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; int b = -1; if ((a + b) != 4294967295) { return 1; } }
-    { uint a = 0; int b = -1; if ((a - b) != 1) { return 1; } }
+    { uint a = 0; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { uint a = 0; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { uint a = 0; int b = -1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = -1; if ((a % b) != 0) { return 1; } }
@@ -24283,7 +24285,7 @@ fn m_uint_x_int() {
     { uint a = 0; int b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = -1; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; int b = 2; if ((a + b) != 2) { return 1; } }
-    { uint a = 0; int b = 2; if ((a - b) != 4294967294) { return 1; } }
+    { uint a = 0; int b = 2; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 1; } }
     { uint a = 0; int b = 2; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = 2; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = 2; if ((a % b) != 0) { return 1; } }
@@ -24298,8 +24300,8 @@ fn m_uint_x_int() {
     { uint a = 0; int b = 2; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; int b = 2; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = 2; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; int b = -2; if ((a + b) != 4294967294) { return 1; } }
-    { uint a = 0; int b = -2; if ((a - b) != 2) { return 1; } }
+    { uint a = 0; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { uint a = 0; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { uint a = 0; int b = -2; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = -2; if ((a % b) != 0) { return 1; } }
@@ -24313,7 +24315,7 @@ fn m_uint_x_int() {
     { uint a = 0; int b = -2; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = -2; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; int b = 7; if ((a + b) != 7) { return 1; } }
-    { uint a = 0; int b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { uint a = 0; int b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { uint a = 0; int b = 7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = 7; if ((a % b) != 0) { return 1; } }
@@ -24328,8 +24330,8 @@ fn m_uint_x_int() {
     { uint a = 0; int b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; int b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = 7; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; int b = -7; if ((a + b) != 4294967289) { return 1; } }
-    { uint a = 0; int b = -7; if ((a - b) != 7) { return 1; } }
+    { uint a = 0; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 1; } }
+    { uint a = 0; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 7) { return 1; } }
     { uint a = 0; int b = -7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = -7; if ((a % b) != 0) { return 1; } }
@@ -24343,7 +24345,7 @@ fn m_uint_x_int() {
     { uint a = 0; int b = -7; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = -7; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; int b = 12345; if ((a + b) != 12345) { return 1; } }
-    { uint a = 0; int b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { uint a = 0; int b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { uint a = 0; int b = 12345; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = 12345; if ((a % b) != 0) { return 1; } }
@@ -24356,8 +24358,8 @@ fn m_uint_x_int() {
     { uint a = 0; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 0; int b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 0; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 0; int b = -12345; if ((a + b) != 4294954951) { return 1; } }
-    { uint a = 0; int b = -12345; if ((a - b) != 12345) { return 1; } }
+    { uint a = 0; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 4294954951) { return 1; } }
+    { uint a = 0; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 12345) { return 1; } }
     { uint a = 0; int b = -12345; if ((a * b) != 0) { return 1; } }
     { uint a = 0; int b = -12345; if ((a / b) != 0) { return 1; } }
     { uint a = 0; int b = -12345; if ((a % b) != 0) { return 1; } }
@@ -24400,9 +24402,9 @@ fn m_uint_x_int() {
     { uint a = 1; int b = 1; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; int b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 1; int b = -1; if ((a + b) != 0) { return 1; } }
-    { uint a = 1; int b = -1; if ((a - b) != 2) { return 1; } }
-    { uint a = 1; int b = -1; if ((a * b) != 4294967295) { return 1; } }
+    { uint a = 1; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 1; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
+    { uint a = 1; int b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 1; } }
     { uint a = 1; int b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = -1; if ((a % b) != 1) { return 1; } }
     { uint a = 1; int b = -1; if ((a & b) != 1) { return 1; } }
@@ -24415,7 +24417,7 @@ fn m_uint_x_int() {
     { uint a = 1; int b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = -1; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; int b = 2; if ((a + b) != 3) { return 1; } }
-    { uint a = 1; int b = 2; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 1; int b = 2; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 1; int b = 2; if ((a * b) != 2) { return 1; } }
     { uint a = 1; int b = 2; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = 2; if ((a % b) != 1) { return 1; } }
@@ -24430,9 +24432,9 @@ fn m_uint_x_int() {
     { uint a = 1; int b = 2; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; int b = 2; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = 2; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; int b = -2; if ((a + b) != 4294967295) { return 1; } }
-    { uint a = 1; int b = -2; if ((a - b) != 3) { return 1; } }
-    { uint a = 1; int b = -2; if ((a * b) != 4294967294) { return 1; } }
+    { uint a = 1; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 1; } }
+    { uint a = 1; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 3) { return 1; } }
+    { uint a = 1; int b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { uint a = 1; int b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = -2; if ((a % b) != 1) { return 1; } }
     { uint a = 1; int b = -2; if ((a & b) != 0) { return 1; } }
@@ -24445,7 +24447,7 @@ fn m_uint_x_int() {
     { uint a = 1; int b = -2; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = -2; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; int b = 7; if ((a + b) != 8) { return 1; } }
-    { uint a = 1; int b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { uint a = 1; int b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { uint a = 1; int b = 7; if ((a * b) != 7) { return 1; } }
     { uint a = 1; int b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = 7; if ((a % b) != 1) { return 1; } }
@@ -24460,9 +24462,9 @@ fn m_uint_x_int() {
     { uint a = 1; int b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; int b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = 7; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; int b = -7; if ((a + b) != 4294967290) { return 1; } }
-    { uint a = 1; int b = -7; if ((a - b) != 8) { return 1; } }
-    { uint a = 1; int b = -7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 1; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 1; } }
+    { uint a = 1; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { uint a = 1; int b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 1; int b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = -7; if ((a % b) != 1) { return 1; } }
     { uint a = 1; int b = -7; if ((a & b) != 1) { return 1; } }
@@ -24475,7 +24477,7 @@ fn m_uint_x_int() {
     { uint a = 1; int b = -7; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = -7; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; int b = 12345; if ((a + b) != 12346) { return 1; } }
-    { uint a = 1; int b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { uint a = 1; int b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { uint a = 1; int b = 12345; if ((a * b) != 12345) { return 1; } }
     { uint a = 1; int b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = 12345; if ((a % b) != 1) { return 1; } }
@@ -24488,9 +24490,9 @@ fn m_uint_x_int() {
     { uint a = 1; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; int b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 1; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; int b = -12345; if ((a + b) != 4294954952) { return 1; } }
-    { uint a = 1; int b = -12345; if ((a - b) != 12346) { return 1; } }
-    { uint a = 1; int b = -12345; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 1; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 4294954952) { return 1; } }
+    { uint a = 1; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 12346) { return 1; } }
+    { uint a = 1; int b = -12345; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 1; int b = -12345; if ((a / b) != 0) { return 1; } }
     { uint a = 1; int b = -12345; if ((a % b) != 1) { return 1; } }
     { uint a = 1; int b = -12345; if ((a & b) != 1) { return 1; } }
@@ -24532,9 +24534,9 @@ fn m_uint_x_int() {
     { uint a = 255; int b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; int b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 255; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; int b = -1; if ((a + b) != 254) { return 1; } }
-    { uint a = 255; int b = -1; if ((a - b) != 256) { return 1; } }
-    { uint a = 255; int b = -1; if ((a * b) != 4294967041) { return 1; } }
+    { uint a = 255; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { uint a = 255; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 256) { return 1; } }
+    { uint a = 255; int b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { uint a = 255; int b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 255; int b = -1; if ((a % b) != 255) { return 1; } }
     { uint a = 255; int b = -1; if ((a & b) != 255) { return 1; } }
@@ -24562,9 +24564,9 @@ fn m_uint_x_int() {
     { uint a = 255; int b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; int b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 255; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; int b = -2; if ((a + b) != 253) { return 1; } }
-    { uint a = 255; int b = -2; if ((a - b) != 257) { return 1; } }
-    { uint a = 255; int b = -2; if ((a * b) != 4294966786) { return 1; } }
+    { uint a = 255; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 253) { return 1; } }
+    { uint a = 255; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 257) { return 1; } }
+    { uint a = 255; int b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294966786) { return 1; } }
     { uint a = 255; int b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 255; int b = -2; if ((a % b) != 255) { return 1; } }
     { uint a = 255; int b = -2; if ((a & b) != 254) { return 1; } }
@@ -24592,9 +24594,9 @@ fn m_uint_x_int() {
     { uint a = 255; int b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 255; int b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 255; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 255; int b = -7; if ((a + b) != 248) { return 1; } }
-    { uint a = 255; int b = -7; if ((a - b) != 262) { return 1; } }
-    { uint a = 255; int b = -7; if ((a * b) != 4294965511) { return 1; } }
+    { uint a = 255; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 248) { return 1; } }
+    { uint a = 255; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 262) { return 1; } }
+    { uint a = 255; int b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294965511) { return 1; } }
     { uint a = 255; int b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 255; int b = -7; if ((a % b) != 255) { return 1; } }
     { uint a = 255; int b = -7; if ((a & b) != 249) { return 1; } }
@@ -24607,7 +24609,7 @@ fn m_uint_x_int() {
     { uint a = 255; int b = -7; if ((a > b) != 0) { return 1; } }
     { uint a = 255; int b = -7; if ((a >= b) != 0) { return 1; } }
     { uint a = 255; int b = 12345; if ((a + b) != 12600) { return 1; } }
-    { uint a = 255; int b = 12345; if ((a - b) != 4294955206) { return 1; } }
+    { uint a = 255; int b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294955206) { return 1; } }
     { uint a = 255; int b = 12345; if ((a * b) != 3147975) { return 1; } }
     { uint a = 255; int b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 255; int b = 12345; if ((a % b) != 255) { return 1; } }
@@ -24620,9 +24622,9 @@ fn m_uint_x_int() {
     { uint a = 255; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 255; int b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 255; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 255; int b = -12345; if ((a + b) != 4294955206) { return 1; } }
-    { uint a = 255; int b = -12345; if ((a - b) != 12600) { return 1; } }
-    { uint a = 255; int b = -12345; if ((a * b) != 4291819321) { return 1; } }
+    { uint a = 255; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 4294955206) { return 1; } }
+    { uint a = 255; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 12600) { return 1; } }
+    { uint a = 255; int b = -12345; if (((a as uint).wrapping_mul(b as uint)) != 4291819321) { return 1; } }
     { uint a = 255; int b = -12345; if ((a / b) != 0) { return 1; } }
     { uint a = 255; int b = -12345; if ((a % b) != 255) { return 1; } }
     { uint a = 255; int b = -12345; if ((a & b) != 199) { return 1; } }
@@ -24664,9 +24666,9 @@ fn m_uint_x_int() {
     { uint a = 7; int b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 7; int b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 7; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; int b = -1; if ((a + b) != 6) { return 1; } }
-    { uint a = 7; int b = -1; if ((a - b) != 8) { return 1; } }
-    { uint a = 7; int b = -1; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 7; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { uint a = 7; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { uint a = 7; int b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 7; int b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 7; int b = -1; if ((a % b) != 7) { return 1; } }
     { uint a = 7; int b = -1; if ((a & b) != 7) { return 1; } }
@@ -24694,9 +24696,9 @@ fn m_uint_x_int() {
     { uint a = 7; int b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 7; int b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 7; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; int b = -2; if ((a + b) != 5) { return 1; } }
-    { uint a = 7; int b = -2; if ((a - b) != 9) { return 1; } }
-    { uint a = 7; int b = -2; if ((a * b) != 4294967282) { return 1; } }
+    { uint a = 7; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 5) { return 1; } }
+    { uint a = 7; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 9) { return 1; } }
+    { uint a = 7; int b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294967282) { return 1; } }
     { uint a = 7; int b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 7; int b = -2; if ((a % b) != 7) { return 1; } }
     { uint a = 7; int b = -2; if ((a & b) != 6) { return 1; } }
@@ -24724,9 +24726,9 @@ fn m_uint_x_int() {
     { uint a = 7; int b = 7; if ((a <= b) != 1) { return 1; } }
     { uint a = 7; int b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 7; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 7; int b = -7; if ((a + b) != 0) { return 1; } }
-    { uint a = 7; int b = -7; if ((a - b) != 14) { return 1; } }
-    { uint a = 7; int b = -7; if ((a * b) != 4294967247) { return 1; } }
+    { uint a = 7; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 7; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 14) { return 1; } }
+    { uint a = 7; int b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 1; } }
     { uint a = 7; int b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 7; int b = -7; if ((a % b) != 7) { return 1; } }
     { uint a = 7; int b = -7; if ((a & b) != 1) { return 1; } }
@@ -24739,7 +24741,7 @@ fn m_uint_x_int() {
     { uint a = 7; int b = -7; if ((a > b) != 0) { return 1; } }
     { uint a = 7; int b = -7; if ((a >= b) != 0) { return 1; } }
     { uint a = 7; int b = 12345; if ((a + b) != 12352) { return 1; } }
-    { uint a = 7; int b = 12345; if ((a - b) != 4294954958) { return 1; } }
+    { uint a = 7; int b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954958) { return 1; } }
     { uint a = 7; int b = 12345; if ((a * b) != 86415) { return 1; } }
     { uint a = 7; int b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 7; int b = 12345; if ((a % b) != 7) { return 1; } }
@@ -24752,9 +24754,9 @@ fn m_uint_x_int() {
     { uint a = 7; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 7; int b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 7; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 7; int b = -12345; if ((a + b) != 4294954958) { return 1; } }
-    { uint a = 7; int b = -12345; if ((a - b) != 12352) { return 1; } }
-    { uint a = 7; int b = -12345; if ((a * b) != 4294880881) { return 1; } }
+    { uint a = 7; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 4294954958) { return 1; } }
+    { uint a = 7; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 12352) { return 1; } }
+    { uint a = 7; int b = -12345; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { uint a = 7; int b = -12345; if ((a / b) != 0) { return 1; } }
     { uint a = 7; int b = -12345; if ((a % b) != 7) { return 1; } }
     { uint a = 7; int b = -12345; if ((a & b) != 7) { return 1; } }
@@ -24796,9 +24798,9 @@ fn m_uint_x_int() {
     { uint a = 12345; int b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; int b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; int b = -1; if ((a + b) != 12344) { return 1; } }
-    { uint a = 12345; int b = -1; if ((a - b) != 12346) { return 1; } }
-    { uint a = 12345; int b = -1; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 12345; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { uint a = 12345; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 12346) { return 1; } }
+    { uint a = 12345; int b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 12345; int b = -1; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; int b = -1; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; int b = -1; if ((a & b) != 12345) { return 1; } }
@@ -24826,9 +24828,9 @@ fn m_uint_x_int() {
     { uint a = 12345; int b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; int b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; int b = -2; if ((a + b) != 12343) { return 1; } }
-    { uint a = 12345; int b = -2; if ((a - b) != 12347) { return 1; } }
-    { uint a = 12345; int b = -2; if ((a * b) != 4294942606) { return 1; } }
+    { uint a = 12345; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 12343) { return 1; } }
+    { uint a = 12345; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 12347) { return 1; } }
+    { uint a = 12345; int b = -2; if (((a as uint).wrapping_mul(b as uint)) != 4294942606) { return 1; } }
     { uint a = 12345; int b = -2; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; int b = -2; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; int b = -2; if ((a & b) != 12344) { return 1; } }
@@ -24856,9 +24858,9 @@ fn m_uint_x_int() {
     { uint a = 12345; int b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 12345; int b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 12345; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; int b = -7; if ((a + b) != 12338) { return 1; } }
-    { uint a = 12345; int b = -7; if ((a - b) != 12352) { return 1; } }
-    { uint a = 12345; int b = -7; if ((a * b) != 4294880881) { return 1; } }
+    { uint a = 12345; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 12338) { return 1; } }
+    { uint a = 12345; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 12352) { return 1; } }
+    { uint a = 12345; int b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294880881) { return 1; } }
     { uint a = 12345; int b = -7; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; int b = -7; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; int b = -7; if ((a & b) != 12345) { return 1; } }
@@ -24884,9 +24886,9 @@ fn m_uint_x_int() {
     { uint a = 12345; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 12345; int b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 12345; int b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; int b = -12345; if ((a + b) != 0) { return 1; } }
-    { uint a = 12345; int b = -12345; if ((a - b) != 24690) { return 1; } }
-    { uint a = 12345; int b = -12345; if ((a * b) != 4142568271) { return 1; } }
+    { uint a = 12345; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 12345; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 24690) { return 1; } }
+    { uint a = 12345; int b = -12345; if (((a as uint).wrapping_mul(b as uint)) != 4142568271) { return 1; } }
     { uint a = 12345; int b = -12345; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; int b = -12345; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; int b = -12345; if ((a & b) != 1) { return 1; } }
@@ -24912,7 +24914,7 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = 0; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = 0; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 0; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = 1; if ((a + b) != 0) { return 1; } }
+    { uint a = 4294967295; int b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
     { uint a = 4294967295; int b = 1; if ((a - b) != 4294967294) { return 1; } }
     { uint a = 4294967295; int b = 1; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 4294967295; int b = 1; if ((a / b) != 4294967295) { return 1; } }
@@ -24928,9 +24930,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = -1; if ((a + b) != 4294967294) { return 1; } }
-    { uint a = 4294967295; int b = -1; if ((a - b) != 0) { return 1; } }
-    { uint a = 4294967295; int b = -1; if ((a * b) != 1) { return 1; } }
+    { uint a = 4294967295; int b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
+    { uint a = 4294967295; int b = -1; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 1; } }
+    { uint a = 4294967295; int b = -1; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 1; } }
     { uint a = 4294967295; int b = -1; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -1; if ((a % b) != 0) { return 1; } }
     { uint a = 4294967295; int b = -1; if ((a & b) != 4294967295) { return 1; } }
@@ -24942,9 +24944,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = -1; if ((a <= b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -1; if ((a > b) != 0) { return 1; } }
     { uint a = 4294967295; int b = -1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = 2; if ((a + b) != 1) { return 1; } }
+    { uint a = 4294967295; int b = 2; if (((a as uint).wrapping_add(b as uint)) != 1) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a - b) != 4294967293) { return 1; } }
-    { uint a = 4294967295; int b = 2; if ((a * b) != 4294967294) { return 1; } }
+    { uint a = 4294967295; int b = 2; if (((a as uint).wrapping_mul(b as uint)) != 4294967294) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a / b) != 2147483647) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a % b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a << b) != 4294967292) { return 1; } }
@@ -24958,9 +24960,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = 2; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = -2; if ((a + b) != 4294967293) { return 1; } }
-    { uint a = 4294967295; int b = -2; if ((a - b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = -2; if ((a * b) != 2) { return 1; } }
+    { uint a = 4294967295; int b = -2; if (((a as uint).wrapping_add(b as uint)) != 4294967293) { return 1; } }
+    { uint a = 4294967295; int b = -2; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
+    { uint a = 4294967295; int b = -2; if (((a as uint).wrapping_mul(b as uint)) != 2) { return 1; } }
     { uint a = 4294967295; int b = -2; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -2; if ((a % b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -2; if ((a & b) != 4294967294) { return 1; } }
@@ -24972,9 +24974,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = -2; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = -2; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -2; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = 7; if ((a + b) != 6) { return 1; } }
+    { uint a = 4294967295; int b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; int b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 4294967295; int b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a / b) != 613566756) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a % b) != 3) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a << b) != 4294967168) { return 1; } }
@@ -24988,9 +24990,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = -7; if ((a + b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; int b = -7; if ((a - b) != 6) { return 1; } }
-    { uint a = 4294967295; int b = -7; if ((a * b) != 7) { return 1; } }
+    { uint a = 4294967295; int b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 1; } }
+    { uint a = 4294967295; int b = -7; if (((a as uint).wrapping_sub(b as uint)) != 6) { return 1; } }
+    { uint a = 4294967295; int b = -7; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 1; } }
     { uint a = 4294967295; int b = -7; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -7; if ((a % b) != 6) { return 1; } }
     { uint a = 4294967295; int b = -7; if ((a & b) != 4294967289) { return 1; } }
@@ -25002,9 +25004,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = -7; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = -7; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = 12345; if ((a + b) != 12344) { return 1; } }
+    { uint a = 4294967295; int b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a - b) != 4294954950) { return 1; } }
-    { uint a = 4294967295; int b = 12345; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 4294967295; int b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a / b) != 347911) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a % b) != 6000) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -25016,9 +25018,9 @@ fn m_uint_x_int() {
     { uint a = 4294967295; int b = 12345; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; int b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; int b = -12345; if ((a + b) != 4294954950) { return 1; } }
-    { uint a = 4294967295; int b = -12345; if ((a - b) != 12344) { return 1; } }
-    { uint a = 4294967295; int b = -12345; if ((a * b) != 12345) { return 1; } }
+    { uint a = 4294967295; int b = -12345; if (((a as uint).wrapping_add(b as uint)) != 4294954950) { return 1; } }
+    { uint a = 4294967295; int b = -12345; if (((a as uint).wrapping_sub(b as uint)) != 12344) { return 1; } }
+    { uint a = 4294967295; int b = -12345; if (((a as uint).wrapping_mul(b as uint)) != 12345) { return 1; } }
     { uint a = 4294967295; int b = -12345; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; int b = -12345; if ((a % b) != 12344) { return 1; } }
     { uint a = 4294967295; int b = -12345; if ((a & b) != 4294954951) { return 1; } }
@@ -26125,7 +26127,7 @@ fn m_uint_x_u8() {
     { uint a = 0; u8 b = 0; if ((a > b) != 0) { return 1; } }
     { uint a = 0; u8 b = 0; if ((a >= b) != 1) { return 1; } }
     { uint a = 0; u8 b = 1; if ((a + b) != 1) { return 1; } }
-    { uint a = 0; u8 b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 0; u8 b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 0; u8 b = 1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; u8 b = 1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; u8 b = 1; if ((a % b) != 0) { return 1; } }
@@ -26141,7 +26143,7 @@ fn m_uint_x_u8() {
     { uint a = 0; u8 b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; u8 b = 1; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; u8 b = 255; if ((a + b) != 255) { return 1; } }
-    { uint a = 0; u8 b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { uint a = 0; u8 b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { uint a = 0; u8 b = 255; if ((a * b) != 0) { return 1; } }
     { uint a = 0; u8 b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 0; u8 b = 255; if ((a % b) != 0) { return 1; } }
@@ -26155,7 +26157,7 @@ fn m_uint_x_u8() {
     { uint a = 0; u8 b = 255; if ((a > b) != 0) { return 1; } }
     { uint a = 0; u8 b = 255; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; u8 b = 7; if ((a + b) != 7) { return 1; } }
-    { uint a = 0; u8 b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { uint a = 0; u8 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { uint a = 0; u8 b = 7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; u8 b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; u8 b = 7; if ((a % b) != 0) { return 1; } }
@@ -26201,7 +26203,7 @@ fn m_uint_x_u8() {
     { uint a = 1; u8 b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; u8 b = 1; if ((a >= b) != 1) { return 1; } }
     { uint a = 1; u8 b = 255; if ((a + b) != 256) { return 1; } }
-    { uint a = 1; u8 b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { uint a = 1; u8 b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { uint a = 1; u8 b = 255; if ((a * b) != 255) { return 1; } }
     { uint a = 1; u8 b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 1; u8 b = 255; if ((a % b) != 1) { return 1; } }
@@ -26215,7 +26217,7 @@ fn m_uint_x_u8() {
     { uint a = 1; u8 b = 255; if ((a > b) != 0) { return 1; } }
     { uint a = 1; u8 b = 255; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; u8 b = 7; if ((a + b) != 8) { return 1; } }
-    { uint a = 1; u8 b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { uint a = 1; u8 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { uint a = 1; u8 b = 7; if ((a * b) != 7) { return 1; } }
     { uint a = 1; u8 b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; u8 b = 7; if ((a % b) != 1) { return 1; } }
@@ -26321,7 +26323,7 @@ fn m_uint_x_u8() {
     { uint a = 7; u8 b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 7; u8 b = 1; if ((a >= b) != 1) { return 1; } }
     { uint a = 7; u8 b = 255; if ((a + b) != 262) { return 1; } }
-    { uint a = 7; u8 b = 255; if ((a - b) != 4294967048) { return 1; } }
+    { uint a = 7; u8 b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967048) { return 1; } }
     { uint a = 7; u8 b = 255; if ((a * b) != 1785) { return 1; } }
     { uint a = 7; u8 b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 7; u8 b = 255; if ((a % b) != 7) { return 1; } }
@@ -26424,7 +26426,7 @@ fn m_uint_x_u8() {
     { uint a = 4294967295; u8 b = 0; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; u8 b = 0; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; u8 b = 0; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; u8 b = 1; if ((a + b) != 0) { return 1; } }
+    { uint a = 4294967295; u8 b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
     { uint a = 4294967295; u8 b = 1; if ((a - b) != 4294967294) { return 1; } }
     { uint a = 4294967295; u8 b = 1; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 4294967295; u8 b = 1; if ((a / b) != 4294967295) { return 1; } }
@@ -26440,9 +26442,9 @@ fn m_uint_x_u8() {
     { uint a = 4294967295; u8 b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; u8 b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; u8 b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; u8 b = 255; if ((a + b) != 254) { return 1; } }
+    { uint a = 4294967295; u8 b = 255; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a - b) != 4294967040) { return 1; } }
-    { uint a = 4294967295; u8 b = 255; if ((a * b) != 4294967041) { return 1; } }
+    { uint a = 4294967295; u8 b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a / b) != 16843009) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a % b) != 0) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a & b) != 255) { return 1; } }
@@ -26454,9 +26456,9 @@ fn m_uint_x_u8() {
     { uint a = 4294967295; u8 b = 255; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; u8 b = 255; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; u8 b = 7; if ((a + b) != 6) { return 1; } }
+    { uint a = 4294967295; u8 b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
     { uint a = 4294967295; u8 b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; u8 b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 4294967295; u8 b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 4294967295; u8 b = 7; if ((a / b) != 613566756) { return 1; } }
     { uint a = 4294967295; u8 b = 7; if ((a % b) != 3) { return 1; } }
     { uint a = 4294967295; u8 b = 7; if ((a << b) != 4294967168) { return 1; } }
@@ -26494,7 +26496,7 @@ fn m_uint_x_uint() {
     { uint a = 0; uint b = 0; if ((a > b) != 0) { return 1; } }
     { uint a = 0; uint b = 0; if ((a >= b) != 1) { return 1; } }
     { uint a = 0; uint b = 1; if ((a + b) != 1) { return 1; } }
-    { uint a = 0; uint b = 1; if ((a - b) != 4294967295) { return 1; } }
+    { uint a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 1; } }
     { uint a = 0; uint b = 1; if ((a * b) != 0) { return 1; } }
     { uint a = 0; uint b = 1; if ((a / b) != 0) { return 1; } }
     { uint a = 0; uint b = 1; if ((a % b) != 0) { return 1; } }
@@ -26510,7 +26512,7 @@ fn m_uint_x_uint() {
     { uint a = 0; uint b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 0; uint b = 1; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; uint b = 255; if ((a + b) != 255) { return 1; } }
-    { uint a = 0; uint b = 255; if ((a - b) != 4294967041) { return 1; } }
+    { uint a = 0; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967041) { return 1; } }
     { uint a = 0; uint b = 255; if ((a * b) != 0) { return 1; } }
     { uint a = 0; uint b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 0; uint b = 255; if ((a % b) != 0) { return 1; } }
@@ -26524,7 +26526,7 @@ fn m_uint_x_uint() {
     { uint a = 0; uint b = 255; if ((a > b) != 0) { return 1; } }
     { uint a = 0; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; uint b = 7; if ((a + b) != 7) { return 1; } }
-    { uint a = 0; uint b = 7; if ((a - b) != 4294967289) { return 1; } }
+    { uint a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 1; } }
     { uint a = 0; uint b = 7; if ((a * b) != 0) { return 1; } }
     { uint a = 0; uint b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 0; uint b = 7; if ((a % b) != 0) { return 1; } }
@@ -26540,7 +26542,7 @@ fn m_uint_x_uint() {
     { uint a = 0; uint b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 0; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; uint b = 12345; if ((a + b) != 12345) { return 1; } }
-    { uint a = 0; uint b = 12345; if ((a - b) != 4294954951) { return 1; } }
+    { uint a = 0; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954951) { return 1; } }
     { uint a = 0; uint b = 12345; if ((a * b) != 0) { return 1; } }
     { uint a = 0; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 0; uint b = 12345; if ((a % b) != 0) { return 1; } }
@@ -26554,7 +26556,7 @@ fn m_uint_x_uint() {
     { uint a = 0; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 0; uint b = 12345; if ((a >= b) != 0) { return 1; } }
     { uint a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 1; } }
-    { uint a = 0; uint b = 4294967295; if ((a - b) != 1) { return 1; } }
+    { uint a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 1; } }
     { uint a = 0; uint b = 4294967295; if ((a * b) != 0) { return 1; } }
     { uint a = 0; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { uint a = 0; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
@@ -26598,7 +26600,7 @@ fn m_uint_x_uint() {
     { uint a = 1; uint b = 1; if ((a > b) != 0) { return 1; } }
     { uint a = 1; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { uint a = 1; uint b = 255; if ((a + b) != 256) { return 1; } }
-    { uint a = 1; uint b = 255; if ((a - b) != 4294967042) { return 1; } }
+    { uint a = 1; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967042) { return 1; } }
     { uint a = 1; uint b = 255; if ((a * b) != 255) { return 1; } }
     { uint a = 1; uint b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 1; uint b = 255; if ((a % b) != 1) { return 1; } }
@@ -26612,7 +26614,7 @@ fn m_uint_x_uint() {
     { uint a = 1; uint b = 255; if ((a > b) != 0) { return 1; } }
     { uint a = 1; uint b = 255; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; uint b = 7; if ((a + b) != 8) { return 1; } }
-    { uint a = 1; uint b = 7; if ((a - b) != 4294967290) { return 1; } }
+    { uint a = 1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 1; } }
     { uint a = 1; uint b = 7; if ((a * b) != 7) { return 1; } }
     { uint a = 1; uint b = 7; if ((a / b) != 0) { return 1; } }
     { uint a = 1; uint b = 7; if ((a % b) != 1) { return 1; } }
@@ -26628,7 +26630,7 @@ fn m_uint_x_uint() {
     { uint a = 1; uint b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 1; uint b = 7; if ((a >= b) != 0) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a + b) != 12346) { return 1; } }
-    { uint a = 1; uint b = 12345; if ((a - b) != 4294954952) { return 1; } }
+    { uint a = 1; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954952) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a * b) != 12345) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a % b) != 1) { return 1; } }
@@ -26641,8 +26643,8 @@ fn m_uint_x_uint() {
     { uint a = 1; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 1; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 1; uint b = 4294967295; if ((a + b) != 0) { return 1; } }
-    { uint a = 1; uint b = 4294967295; if ((a - b) != 2) { return 1; } }
+    { uint a = 1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
+    { uint a = 1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 1; } }
     { uint a = 1; uint b = 4294967295; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 1; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { uint a = 1; uint b = 4294967295; if ((a % b) != 1) { return 1; } }
@@ -26716,7 +26718,7 @@ fn m_uint_x_uint() {
     { uint a = 255; uint b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 255; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a + b) != 12600) { return 1; } }
-    { uint a = 255; uint b = 12345; if ((a - b) != 4294955206) { return 1; } }
+    { uint a = 255; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294955206) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a * b) != 3147975) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a % b) != 255) { return 1; } }
@@ -26729,9 +26731,9 @@ fn m_uint_x_uint() {
     { uint a = 255; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 255; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 255; uint b = 4294967295; if ((a + b) != 254) { return 1; } }
-    { uint a = 255; uint b = 4294967295; if ((a - b) != 256) { return 1; } }
-    { uint a = 255; uint b = 4294967295; if ((a * b) != 4294967041) { return 1; } }
+    { uint a = 255; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
+    { uint a = 255; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 256) { return 1; } }
+    { uint a = 255; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { uint a = 255; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { uint a = 255; uint b = 4294967295; if ((a % b) != 255) { return 1; } }
     { uint a = 255; uint b = 4294967295; if ((a & b) != 255) { return 1; } }
@@ -26774,7 +26776,7 @@ fn m_uint_x_uint() {
     { uint a = 7; uint b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 7; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { uint a = 7; uint b = 255; if ((a + b) != 262) { return 1; } }
-    { uint a = 7; uint b = 255; if ((a - b) != 4294967048) { return 1; } }
+    { uint a = 7; uint b = 255; if (((a as uint).wrapping_sub(b as uint)) != 4294967048) { return 1; } }
     { uint a = 7; uint b = 255; if ((a * b) != 1785) { return 1; } }
     { uint a = 7; uint b = 255; if ((a / b) != 0) { return 1; } }
     { uint a = 7; uint b = 255; if ((a % b) != 7) { return 1; } }
@@ -26804,7 +26806,7 @@ fn m_uint_x_uint() {
     { uint a = 7; uint b = 7; if ((a > b) != 0) { return 1; } }
     { uint a = 7; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a + b) != 12352) { return 1; } }
-    { uint a = 7; uint b = 12345; if ((a - b) != 4294954958) { return 1; } }
+    { uint a = 7; uint b = 12345; if (((a as uint).wrapping_sub(b as uint)) != 4294954958) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a * b) != 86415) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a / b) != 0) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a % b) != 7) { return 1; } }
@@ -26817,9 +26819,9 @@ fn m_uint_x_uint() {
     { uint a = 7; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 7; uint b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 7; uint b = 4294967295; if ((a + b) != 6) { return 1; } }
-    { uint a = 7; uint b = 4294967295; if ((a - b) != 8) { return 1; } }
-    { uint a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
+    { uint a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 1; } }
+    { uint a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 7; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { uint a = 7; uint b = 4294967295; if ((a % b) != 7) { return 1; } }
     { uint a = 7; uint b = 4294967295; if ((a & b) != 7) { return 1; } }
@@ -26905,9 +26907,9 @@ fn m_uint_x_uint() {
     { uint a = 12345; uint b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 12345; uint b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 12345; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; uint b = 4294967295; if ((a + b) != 12344) { return 1; } }
-    { uint a = 12345; uint b = 4294967295; if ((a - b) != 12346) { return 1; } }
-    { uint a = 12345; uint b = 4294967295; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 12345; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
+    { uint a = 12345; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 12346) { return 1; } }
+    { uint a = 12345; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 12345; uint b = 4294967295; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; uint b = 4294967295; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; uint b = 4294967295; if ((a & b) != 12345) { return 1; } }
@@ -26933,7 +26935,7 @@ fn m_uint_x_uint() {
     { uint a = 4294967295; uint b = 0; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 0; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 0; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; uint b = 1; if ((a + b) != 0) { return 1; } }
+    { uint a = 4294967295; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 1; if ((a - b) != 4294967294) { return 1; } }
     { uint a = 4294967295; uint b = 1; if ((a * b) != 4294967295) { return 1; } }
     { uint a = 4294967295; uint b = 1; if ((a / b) != 4294967295) { return 1; } }
@@ -26949,9 +26951,9 @@ fn m_uint_x_uint() {
     { uint a = 4294967295; uint b = 1; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 1; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 1; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; uint b = 255; if ((a + b) != 254) { return 1; } }
+    { uint a = 4294967295; uint b = 255; if (((a as uint).wrapping_add(b as uint)) != 254) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a - b) != 4294967040) { return 1; } }
-    { uint a = 4294967295; uint b = 255; if ((a * b) != 4294967041) { return 1; } }
+    { uint a = 4294967295; uint b = 255; if (((a as uint).wrapping_mul(b as uint)) != 4294967041) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a / b) != 16843009) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a % b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a & b) != 255) { return 1; } }
@@ -26963,9 +26965,9 @@ fn m_uint_x_uint() {
     { uint a = 4294967295; uint b = 255; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 255; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; uint b = 7; if ((a + b) != 6) { return 1; } }
+    { uint a = 4294967295; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a - b) != 4294967288) { return 1; } }
-    { uint a = 4294967295; uint b = 7; if ((a * b) != 4294967289) { return 1; } }
+    { uint a = 4294967295; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a / b) != 613566756) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a % b) != 3) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a << b) != 4294967168) { return 1; } }
@@ -26979,9 +26981,9 @@ fn m_uint_x_uint() {
     { uint a = 4294967295; uint b = 7; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 7; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; uint b = 12345; if ((a + b) != 12344) { return 1; } }
+    { uint a = 4294967295; uint b = 12345; if (((a as uint).wrapping_add(b as uint)) != 12344) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a - b) != 4294954950) { return 1; } }
-    { uint a = 4294967295; uint b = 12345; if ((a * b) != 4294954951) { return 1; } }
+    { uint a = 4294967295; uint b = 12345; if (((a as uint).wrapping_mul(b as uint)) != 4294954951) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a / b) != 347911) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a % b) != 6000) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -26993,9 +26995,9 @@ fn m_uint_x_uint() {
     { uint a = 4294967295; uint b = 12345; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; uint b = 4294967295; if ((a + b) != 4294967294) { return 1; } }
+    { uint a = 4294967295; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 1; } }
     { uint a = 4294967295; uint b = 4294967295; if ((a - b) != 0) { return 1; } }
-    { uint a = 4294967295; uint b = 4294967295; if ((a * b) != 1) { return 1; } }
+    { uint a = 4294967295; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 4294967295; if ((a / b) != 1) { return 1; } }
     { uint a = 4294967295; uint b = 4294967295; if ((a % b) != 0) { return 1; } }
     { uint a = 4294967295; uint b = 4294967295; if ((a & b) != 4294967295) { return 1; } }
@@ -27285,7 +27287,7 @@ fn m_uint_x_ulong() {
     { uint a = 255; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 255; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 255; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 255; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775553) { return 1; } }
+    { uint a = 255; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { uint a = 255; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { uint a = 255; ulong b = 9223372036854775807; if ((a % b) != 255) { return 1; } }
     { uint a = 255; ulong b = 9223372036854775807; if ((a & b) != 255) { return 1; } }
@@ -27384,7 +27386,7 @@ fn m_uint_x_ulong() {
     { uint a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { uint a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { uint a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { uint a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { uint a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { uint a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -27485,7 +27487,7 @@ fn m_uint_x_ulong() {
     { uint a = 12345; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { uint a = 12345; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { uint a = 12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 12345; ulong b = 9223372036854775807; if ((a * b) != 9223372036854763463) { return 1; } }
+    { uint a = 12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { uint a = 12345; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { uint a = 12345; ulong b = 9223372036854775807; if ((a % b) != 12345) { return 1; } }
     { uint a = 12345; ulong b = 9223372036854775807; if ((a & b) != 12345) { return 1; } }
@@ -27586,7 +27588,7 @@ fn m_uint_x_ulong() {
     { uint a = 4294967295; ulong b = 12345; if ((a <= b) != 0) { return 1; } }
     { uint a = 4294967295; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { uint a = 4294967295; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { uint a = 4294967295; ulong b = 9223372036854775807; if ((a * b) != 9223372032559808513) { return 1; } }
+    { uint a = 4294967295; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372032559808513) { return 1; } }
     { uint a = 4294967295; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { uint a = 4294967295; ulong b = 9223372036854775807; if ((a % b) != 4294967295) { return 1; } }
     { uint a = 4294967295; ulong b = 9223372036854775807; if ((a & b) != 4294967295) { return 1; } }
@@ -27866,7 +27868,7 @@ fn m_ulong_x_char() {
     { ulong a = 0; char b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; char b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; char b = 1; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; char b = -1; if ((a - b) != 1) { return 1; } }
+    { ulong a = 0; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1) { return 1; } }
     { ulong a = 0; char b = -1; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; char b = -1; if ((a % b) != 0) { return 1; } }
@@ -27892,7 +27894,7 @@ fn m_ulong_x_char() {
     { ulong a = 0; char b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; char b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; char b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; char b = -2; if ((a - b) != 2) { return 1; } }
+    { ulong a = 0; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 0; char b = -2; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; char b = -2; if ((a % b) != 0) { return 1; } }
@@ -27918,7 +27920,7 @@ fn m_ulong_x_char() {
     { ulong a = 0; char b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; char b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; char b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; char b = -7; if ((a - b) != 7) { return 1; } }
+    { ulong a = 0; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 7) { return 1; } }
     { ulong a = 0; char b = -7; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; char b = -7; if ((a % b) != 0) { return 1; } }
@@ -27959,8 +27961,8 @@ fn m_ulong_x_char() {
     { ulong a = 1; char b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; char b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1; char b = -1; if ((a + b) != 0) { return 1; } }
-    { ulong a = 1; char b = -1; if ((a - b) != 2) { return 1; } }
+    { ulong a = 1; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 1; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 1; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; char b = -1; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; char b = -1; if ((a & b) != 1) { return 1; } }
@@ -27985,7 +27987,7 @@ fn m_ulong_x_char() {
     { ulong a = 1; char b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; char b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; char b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; char b = -2; if ((a - b) != 3) { return 1; } }
+    { ulong a = 1; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 3) { return 1; } }
     { ulong a = 1; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; char b = -2; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; char b = -2; if ((a & b) != 0) { return 1; } }
@@ -28010,7 +28012,7 @@ fn m_ulong_x_char() {
     { ulong a = 1; char b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; char b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; char b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; char b = -7; if ((a - b) != 8) { return 1; } }
+    { ulong a = 1; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 1; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; char b = -7; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; char b = -7; if ((a & b) != 1) { return 1; } }
@@ -28050,8 +28052,8 @@ fn m_ulong_x_char() {
     { ulong a = 255; char b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; char b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; char b = -1; if ((a + b) != 254) { return 1; } }
-    { ulong a = 255; char b = -1; if ((a - b) != 256) { return 1; } }
+    { ulong a = 255; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
+    { ulong a = 255; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 256) { return 1; } }
     { ulong a = 255; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; char b = -1; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; char b = -1; if ((a & b) != 255) { return 1; } }
@@ -28077,8 +28079,8 @@ fn m_ulong_x_char() {
     { ulong a = 255; char b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; char b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; char b = -2; if ((a + b) != 253) { return 1; } }
-    { ulong a = 255; char b = -2; if ((a - b) != 257) { return 1; } }
+    { ulong a = 255; char b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
+    { ulong a = 255; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 257) { return 1; } }
     { ulong a = 255; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; char b = -2; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; char b = -2; if ((a & b) != 254) { return 1; } }
@@ -28104,8 +28106,8 @@ fn m_ulong_x_char() {
     { ulong a = 255; char b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; char b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; char b = -7; if ((a + b) != 248) { return 1; } }
-    { ulong a = 255; char b = -7; if ((a - b) != 262) { return 1; } }
+    { ulong a = 255; char b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
+    { ulong a = 255; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 262) { return 1; } }
     { ulong a = 255; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; char b = -7; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; char b = -7; if ((a & b) != 249) { return 1; } }
@@ -28145,8 +28147,8 @@ fn m_ulong_x_char() {
     { ulong a = 7; char b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; char b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; char b = -1; if ((a + b) != 6) { return 1; } }
-    { ulong a = 7; char b = -1; if ((a - b) != 8) { return 1; } }
+    { ulong a = 7; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
+    { ulong a = 7; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 7; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; char b = -1; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; char b = -1; if ((a & b) != 7) { return 1; } }
@@ -28172,8 +28174,8 @@ fn m_ulong_x_char() {
     { ulong a = 7; char b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; char b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; char b = -2; if ((a + b) != 5) { return 1; } }
-    { ulong a = 7; char b = -2; if ((a - b) != 9) { return 1; } }
+    { ulong a = 7; char b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
+    { ulong a = 7; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 9) { return 1; } }
     { ulong a = 7; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; char b = -2; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; char b = -2; if ((a & b) != 6) { return 1; } }
@@ -28199,8 +28201,8 @@ fn m_ulong_x_char() {
     { ulong a = 7; char b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; char b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; char b = -7; if ((a + b) != 0) { return 1; } }
-    { ulong a = 7; char b = -7; if ((a - b) != 14) { return 1; } }
+    { ulong a = 7; char b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 7; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 14) { return 1; } }
     { ulong a = 7; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; char b = -7; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; char b = -7; if ((a & b) != 1) { return 1; } }
@@ -28240,8 +28242,8 @@ fn m_ulong_x_char() {
     { ulong a = 12345; char b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; char b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; char b = -1; if ((a + b) != 12344) { return 1; } }
-    { ulong a = 12345; char b = -1; if ((a - b) != 12346) { return 1; } }
+    { ulong a = 12345; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
+    { ulong a = 12345; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 12346) { return 1; } }
     { ulong a = 12345; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; char b = -1; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; char b = -1; if ((a & b) != 12345) { return 1; } }
@@ -28267,8 +28269,8 @@ fn m_ulong_x_char() {
     { ulong a = 12345; char b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; char b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; char b = -2; if ((a + b) != 12343) { return 1; } }
-    { ulong a = 12345; char b = -2; if ((a - b) != 12347) { return 1; } }
+    { ulong a = 12345; char b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
+    { ulong a = 12345; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 12347) { return 1; } }
     { ulong a = 12345; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; char b = -2; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; char b = -2; if ((a & b) != 12344) { return 1; } }
@@ -28294,8 +28296,8 @@ fn m_ulong_x_char() {
     { ulong a = 12345; char b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; char b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; char b = -7; if ((a + b) != 12338) { return 1; } }
-    { ulong a = 12345; char b = -7; if ((a - b) != 12352) { return 1; } }
+    { ulong a = 12345; char b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
+    { ulong a = 12345; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 12352) { return 1; } }
     { ulong a = 12345; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; char b = -7; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; char b = -7; if ((a & b) != 12345) { return 1; } }
@@ -28333,7 +28335,7 @@ fn m_ulong_x_char() {
     { ulong a = 9223372036854775807; char b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; char b = -1; if ((a + b) != 9223372036854775806) { return 1; } }
+    { ulong a = 9223372036854775807; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { ulong a = 9223372036854775807; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = -1; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; char b = -1; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -28356,8 +28358,8 @@ fn m_ulong_x_char() {
     { ulong a = 9223372036854775807; char b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; char b = -2; if ((a + b) != 9223372036854775805) { return 1; } }
-    { ulong a = 9223372036854775807; char b = -2; if ((a * b) != 2) { return 1; } }
+    { ulong a = 9223372036854775807; char b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { ulong a = 9223372036854775807; char b = -2; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { ulong a = 9223372036854775807; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = -2; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; char b = -2; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -28368,7 +28370,7 @@ fn m_ulong_x_char() {
     { ulong a = 9223372036854775807; char b = -2; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = -2; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; char b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; char b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -28381,7 +28383,7 @@ fn m_ulong_x_char() {
     { ulong a = 9223372036854775807; char b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; char b = -7; if ((a + b) != 9223372036854775800) { return 1; } }
+    { ulong a = 9223372036854775807; char b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
     { ulong a = 9223372036854775807; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; char b = -7; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; char b = -7; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -28421,8 +28423,8 @@ fn m_ulong_x_char() {
     { ulong a = 1099511627776; char b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; char b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; char b = -1; if ((a + b) != 1099511627775) { return 1; } }
-    { ulong a = 1099511627776; char b = -1; if ((a - b) != 1099511627777) { return 1; } }
+    { ulong a = 1099511627776; char b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
+    { ulong a = 1099511627776; char b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627777) { return 1; } }
     { ulong a = 1099511627776; char b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = -1; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; char b = -1; if ((a & b) != 1099511627776) { return 1; } }
@@ -28448,8 +28450,8 @@ fn m_ulong_x_char() {
     { ulong a = 1099511627776; char b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; char b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; char b = -2; if ((a + b) != 1099511627774) { return 1; } }
-    { ulong a = 1099511627776; char b = -2; if ((a - b) != 1099511627778) { return 1; } }
+    { ulong a = 1099511627776; char b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
+    { ulong a = 1099511627776; char b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627778) { return 1; } }
     { ulong a = 1099511627776; char b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = -2; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; char b = -2; if ((a & b) != 1099511627776) { return 1; } }
@@ -28475,8 +28477,8 @@ fn m_ulong_x_char() {
     { ulong a = 1099511627776; char b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; char b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; char b = -7; if ((a + b) != 1099511627769) { return 1; } }
-    { ulong a = 1099511627776; char b = -7; if ((a - b) != 1099511627783) { return 1; } }
+    { ulong a = 1099511627776; char b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
+    { ulong a = 1099511627776; char b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627783) { return 1; } }
     { ulong a = 1099511627776; char b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; char b = -7; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; char b = -7; if ((a & b) != 1099511627776) { return 1; } }
@@ -28524,7 +28526,7 @@ fn m_ulong_x_int() {
     { ulong a = 0; int b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; int b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; int b = 1; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; int b = -1; if ((a - b) != 1) { return 1; } }
+    { ulong a = 0; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1) { return 1; } }
     { ulong a = 0; int b = -1; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; int b = -1; if ((a % b) != 0) { return 1; } }
@@ -28550,7 +28552,7 @@ fn m_ulong_x_int() {
     { ulong a = 0; int b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; int b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; int b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; int b = -2; if ((a - b) != 2) { return 1; } }
+    { ulong a = 0; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 0; int b = -2; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; int b = -2; if ((a % b) != 0) { return 1; } }
@@ -28576,7 +28578,7 @@ fn m_ulong_x_int() {
     { ulong a = 0; int b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; int b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; int b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; int b = -7; if ((a - b) != 7) { return 1; } }
+    { ulong a = 0; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 7) { return 1; } }
     { ulong a = 0; int b = -7; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; int b = -7; if ((a % b) != 0) { return 1; } }
@@ -28600,7 +28602,7 @@ fn m_ulong_x_int() {
     { ulong a = 0; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; int b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; int b = -12345; if ((a - b) != 12345) { return 1; } }
+    { ulong a = 0; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12345) { return 1; } }
     { ulong a = 0; int b = -12345; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; int b = -12345; if ((a % b) != 0) { return 1; } }
@@ -28641,8 +28643,8 @@ fn m_ulong_x_int() {
     { ulong a = 1; int b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; int b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1; int b = -1; if ((a + b) != 0) { return 1; } }
-    { ulong a = 1; int b = -1; if ((a - b) != 2) { return 1; } }
+    { ulong a = 1; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 1; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 1; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; int b = -1; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; int b = -1; if ((a & b) != 1) { return 1; } }
@@ -28667,7 +28669,7 @@ fn m_ulong_x_int() {
     { ulong a = 1; int b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; int b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; int b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; int b = -2; if ((a - b) != 3) { return 1; } }
+    { ulong a = 1; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 3) { return 1; } }
     { ulong a = 1; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; int b = -2; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; int b = -2; if ((a & b) != 0) { return 1; } }
@@ -28692,7 +28694,7 @@ fn m_ulong_x_int() {
     { ulong a = 1; int b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; int b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; int b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; int b = -7; if ((a - b) != 8) { return 1; } }
+    { ulong a = 1; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 1; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; int b = -7; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; int b = -7; if ((a & b) != 1) { return 1; } }
@@ -28715,7 +28717,7 @@ fn m_ulong_x_int() {
     { ulong a = 1; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; int b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; int b = -12345; if ((a - b) != 12346) { return 1; } }
+    { ulong a = 1; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12346) { return 1; } }
     { ulong a = 1; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; int b = -12345; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; int b = -12345; if ((a & b) != 1) { return 1; } }
@@ -28755,8 +28757,8 @@ fn m_ulong_x_int() {
     { ulong a = 255; int b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; int b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; int b = -1; if ((a + b) != 254) { return 1; } }
-    { ulong a = 255; int b = -1; if ((a - b) != 256) { return 1; } }
+    { ulong a = 255; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
+    { ulong a = 255; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 256) { return 1; } }
     { ulong a = 255; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; int b = -1; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; int b = -1; if ((a & b) != 255) { return 1; } }
@@ -28782,8 +28784,8 @@ fn m_ulong_x_int() {
     { ulong a = 255; int b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; int b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; int b = -2; if ((a + b) != 253) { return 1; } }
-    { ulong a = 255; int b = -2; if ((a - b) != 257) { return 1; } }
+    { ulong a = 255; int b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
+    { ulong a = 255; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 257) { return 1; } }
     { ulong a = 255; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; int b = -2; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; int b = -2; if ((a & b) != 254) { return 1; } }
@@ -28809,8 +28811,8 @@ fn m_ulong_x_int() {
     { ulong a = 255; int b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; int b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; int b = -7; if ((a + b) != 248) { return 1; } }
-    { ulong a = 255; int b = -7; if ((a - b) != 262) { return 1; } }
+    { ulong a = 255; int b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
+    { ulong a = 255; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 262) { return 1; } }
     { ulong a = 255; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; int b = -7; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; int b = -7; if ((a & b) != 249) { return 1; } }
@@ -28833,7 +28835,7 @@ fn m_ulong_x_int() {
     { ulong a = 255; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 255; int b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 255; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 255; int b = -12345; if ((a - b) != 12600) { return 1; } }
+    { ulong a = 255; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12600) { return 1; } }
     { ulong a = 255; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; int b = -12345; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; int b = -12345; if ((a & b) != 199) { return 1; } }
@@ -28873,8 +28875,8 @@ fn m_ulong_x_int() {
     { ulong a = 7; int b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; int b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; int b = -1; if ((a + b) != 6) { return 1; } }
-    { ulong a = 7; int b = -1; if ((a - b) != 8) { return 1; } }
+    { ulong a = 7; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
+    { ulong a = 7; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 7; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; int b = -1; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; int b = -1; if ((a & b) != 7) { return 1; } }
@@ -28900,8 +28902,8 @@ fn m_ulong_x_int() {
     { ulong a = 7; int b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; int b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; int b = -2; if ((a + b) != 5) { return 1; } }
-    { ulong a = 7; int b = -2; if ((a - b) != 9) { return 1; } }
+    { ulong a = 7; int b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
+    { ulong a = 7; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 9) { return 1; } }
     { ulong a = 7; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; int b = -2; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; int b = -2; if ((a & b) != 6) { return 1; } }
@@ -28927,8 +28929,8 @@ fn m_ulong_x_int() {
     { ulong a = 7; int b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; int b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; int b = -7; if ((a + b) != 0) { return 1; } }
-    { ulong a = 7; int b = -7; if ((a - b) != 14) { return 1; } }
+    { ulong a = 7; int b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 7; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 14) { return 1; } }
     { ulong a = 7; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; int b = -7; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; int b = -7; if ((a & b) != 1) { return 1; } }
@@ -28951,7 +28953,7 @@ fn m_ulong_x_int() {
     { ulong a = 7; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; int b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; int b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 7; int b = -12345; if ((a - b) != 12352) { return 1; } }
+    { ulong a = 7; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12352) { return 1; } }
     { ulong a = 7; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; int b = -12345; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; int b = -12345; if ((a & b) != 7) { return 1; } }
@@ -28991,8 +28993,8 @@ fn m_ulong_x_int() {
     { ulong a = 12345; int b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; int b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; int b = -1; if ((a + b) != 12344) { return 1; } }
-    { ulong a = 12345; int b = -1; if ((a - b) != 12346) { return 1; } }
+    { ulong a = 12345; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
+    { ulong a = 12345; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 12346) { return 1; } }
     { ulong a = 12345; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; int b = -1; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; int b = -1; if ((a & b) != 12345) { return 1; } }
@@ -29018,8 +29020,8 @@ fn m_ulong_x_int() {
     { ulong a = 12345; int b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; int b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; int b = -2; if ((a + b) != 12343) { return 1; } }
-    { ulong a = 12345; int b = -2; if ((a - b) != 12347) { return 1; } }
+    { ulong a = 12345; int b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
+    { ulong a = 12345; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 12347) { return 1; } }
     { ulong a = 12345; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; int b = -2; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; int b = -2; if ((a & b) != 12344) { return 1; } }
@@ -29045,8 +29047,8 @@ fn m_ulong_x_int() {
     { ulong a = 12345; int b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; int b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; int b = -7; if ((a + b) != 12338) { return 1; } }
-    { ulong a = 12345; int b = -7; if ((a - b) != 12352) { return 1; } }
+    { ulong a = 12345; int b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
+    { ulong a = 12345; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 12352) { return 1; } }
     { ulong a = 12345; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; int b = -7; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; int b = -7; if ((a & b) != 12345) { return 1; } }
@@ -29070,8 +29072,8 @@ fn m_ulong_x_int() {
     { ulong a = 12345; int b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 12345; int b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 12345; int b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; int b = -12345; if ((a + b) != 0) { return 1; } }
-    { ulong a = 12345; int b = -12345; if ((a - b) != 24690) { return 1; } }
+    { ulong a = 12345; int b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 12345; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 24690) { return 1; } }
     { ulong a = 12345; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; int b = -12345; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; int b = -12345; if ((a & b) != 1) { return 1; } }
@@ -29109,7 +29111,7 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; int b = -1; if ((a + b) != 9223372036854775806) { return 1; } }
+    { ulong a = 9223372036854775807; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { ulong a = 9223372036854775807; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -1; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; int b = -1; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -29132,8 +29134,8 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; int b = -2; if ((a + b) != 9223372036854775805) { return 1; } }
-    { ulong a = 9223372036854775807; int b = -2; if ((a * b) != 2) { return 1; } }
+    { ulong a = 9223372036854775807; int b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { ulong a = 9223372036854775807; int b = -2; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { ulong a = 9223372036854775807; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -2; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; int b = -2; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -29144,7 +29146,7 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = -2; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -2; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; int b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; int b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -29157,7 +29159,7 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; int b = -7; if ((a + b) != 9223372036854775800) { return 1; } }
+    { ulong a = 9223372036854775807; int b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
     { ulong a = 9223372036854775807; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -7; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; int b = -7; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -29168,7 +29170,7 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = -7; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -7; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a - b) != 9223372036854763462) { return 1; } }
-    { ulong a = 9223372036854775807; int b = 12345; if ((a * b) != 9223372036854763463) { return 1; } }
+    { ulong a = 9223372036854775807; int b = 12345; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a / b) != 747134227367742) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a % b) != 817) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -29180,7 +29182,7 @@ fn m_ulong_x_int() {
     { ulong a = 9223372036854775807; int b = 12345; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; int b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; int b = -12345; if ((a + b) != 9223372036854763462) { return 1; } }
+    { ulong a = 9223372036854775807; int b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854763462) { return 1; } }
     { ulong a = 9223372036854775807; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; int b = -12345; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; int b = -12345; if ((a & b) != 9223372036854763463) { return 1; } }
@@ -29220,8 +29222,8 @@ fn m_ulong_x_int() {
     { ulong a = 1099511627776; int b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; int b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; int b = -1; if ((a + b) != 1099511627775) { return 1; } }
-    { ulong a = 1099511627776; int b = -1; if ((a - b) != 1099511627777) { return 1; } }
+    { ulong a = 1099511627776; int b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
+    { ulong a = 1099511627776; int b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627777) { return 1; } }
     { ulong a = 1099511627776; int b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = -1; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; int b = -1; if ((a & b) != 1099511627776) { return 1; } }
@@ -29247,8 +29249,8 @@ fn m_ulong_x_int() {
     { ulong a = 1099511627776; int b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; int b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; int b = -2; if ((a + b) != 1099511627774) { return 1; } }
-    { ulong a = 1099511627776; int b = -2; if ((a - b) != 1099511627778) { return 1; } }
+    { ulong a = 1099511627776; int b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
+    { ulong a = 1099511627776; int b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627778) { return 1; } }
     { ulong a = 1099511627776; int b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = -2; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; int b = -2; if ((a & b) != 1099511627776) { return 1; } }
@@ -29274,8 +29276,8 @@ fn m_ulong_x_int() {
     { ulong a = 1099511627776; int b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; int b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; int b = -7; if ((a + b) != 1099511627769) { return 1; } }
-    { ulong a = 1099511627776; int b = -7; if ((a - b) != 1099511627783) { return 1; } }
+    { ulong a = 1099511627776; int b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
+    { ulong a = 1099511627776; int b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627783) { return 1; } }
     { ulong a = 1099511627776; int b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = -7; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; int b = -7; if ((a & b) != 1099511627776) { return 1; } }
@@ -29299,8 +29301,8 @@ fn m_ulong_x_int() {
     { ulong a = 1099511627776; int b = 12345; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; int b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; int b = -12345; if ((a + b) != 1099511615431) { return 1; } }
-    { ulong a = 1099511627776; int b = -12345; if ((a - b) != 1099511640121) { return 1; } }
+    { ulong a = 1099511627776; int b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 1099511615431) { return 1; } }
+    { ulong a = 1099511627776; int b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511640121) { return 1; } }
     { ulong a = 1099511627776; int b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; int b = -12345; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; int b = -12345; if ((a & b) != 1099511627776) { return 1; } }
@@ -29348,7 +29350,7 @@ fn m_ulong_x_long() {
     { ulong a = 0; long b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; long b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; long b = 1; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; long b = -1; if ((a - b) != 1) { return 1; } }
+    { ulong a = 0; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1) { return 1; } }
     { ulong a = 0; long b = -1; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; long b = -1; if ((a % b) != 0) { return 1; } }
@@ -29374,7 +29376,7 @@ fn m_ulong_x_long() {
     { ulong a = 0; long b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; long b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; long b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; long b = -2; if ((a - b) != 2) { return 1; } }
+    { ulong a = 0; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 0; long b = -2; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; long b = -2; if ((a % b) != 0) { return 1; } }
@@ -29400,7 +29402,7 @@ fn m_ulong_x_long() {
     { ulong a = 0; long b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; long b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; long b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; long b = -7; if ((a - b) != 7) { return 1; } }
+    { ulong a = 0; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 7) { return 1; } }
     { ulong a = 0; long b = -7; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; long b = -7; if ((a % b) != 0) { return 1; } }
@@ -29424,7 +29426,7 @@ fn m_ulong_x_long() {
     { ulong a = 0; long b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; long b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; long b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; long b = -12345; if ((a - b) != 12345) { return 1; } }
+    { ulong a = 0; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12345) { return 1; } }
     { ulong a = 0; long b = -12345; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; long b = -12345; if ((a % b) != 0) { return 1; } }
@@ -29448,7 +29450,7 @@ fn m_ulong_x_long() {
     { ulong a = 0; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 0; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 0; long b = 1099511627776; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 0; long b = -1099511627776; if ((a - b) != 1099511627776) { return 1; } }
+    { ulong a = 0; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627776) { return 1; } }
     { ulong a = 0; long b = -1099511627776; if ((a * b) != 0) { return 1; } }
     { ulong a = 0; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 0; long b = -1099511627776; if ((a % b) != 0) { return 1; } }
@@ -29502,8 +29504,8 @@ fn m_ulong_x_long() {
     { ulong a = 1; long b = 1; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; long b = 1; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1; long b = -1; if ((a + b) != 0) { return 1; } }
-    { ulong a = 1; long b = -1; if ((a - b) != 2) { return 1; } }
+    { ulong a = 1; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 1; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 1; } }
     { ulong a = 1; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; long b = -1; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; long b = -1; if ((a & b) != 1) { return 1; } }
@@ -29528,7 +29530,7 @@ fn m_ulong_x_long() {
     { ulong a = 1; long b = 2; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; long b = 2; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; long b = 2; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; long b = -2; if ((a - b) != 3) { return 1; } }
+    { ulong a = 1; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 3) { return 1; } }
     { ulong a = 1; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; long b = -2; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; long b = -2; if ((a & b) != 0) { return 1; } }
@@ -29553,7 +29555,7 @@ fn m_ulong_x_long() {
     { ulong a = 1; long b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; long b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; long b = 7; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; long b = -7; if ((a - b) != 8) { return 1; } }
+    { ulong a = 1; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 1; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; long b = -7; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; long b = -7; if ((a & b) != 1) { return 1; } }
@@ -29576,7 +29578,7 @@ fn m_ulong_x_long() {
     { ulong a = 1; long b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; long b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; long b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; long b = -12345; if ((a - b) != 12346) { return 1; } }
+    { ulong a = 1; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12346) { return 1; } }
     { ulong a = 1; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; long b = -12345; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; long b = -12345; if ((a & b) != 1) { return 1; } }
@@ -29599,7 +29601,7 @@ fn m_ulong_x_long() {
     { ulong a = 1; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 1; long b = 1099511627776; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 1; long b = -1099511627776; if ((a - b) != 1099511627777) { return 1; } }
+    { ulong a = 1; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627777) { return 1; } }
     { ulong a = 1; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 1; long b = -1099511627776; if ((a % b) != 1) { return 1; } }
     { ulong a = 1; long b = -1099511627776; if ((a & b) != 0) { return 1; } }
@@ -29652,8 +29654,8 @@ fn m_ulong_x_long() {
     { ulong a = 255; long b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; long b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; long b = -1; if ((a + b) != 254) { return 1; } }
-    { ulong a = 255; long b = -1; if ((a - b) != 256) { return 1; } }
+    { ulong a = 255; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 254) { return 1; } }
+    { ulong a = 255; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 256) { return 1; } }
     { ulong a = 255; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; long b = -1; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; long b = -1; if ((a & b) != 255) { return 1; } }
@@ -29679,8 +29681,8 @@ fn m_ulong_x_long() {
     { ulong a = 255; long b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; long b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; long b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; long b = -2; if ((a + b) != 253) { return 1; } }
-    { ulong a = 255; long b = -2; if ((a - b) != 257) { return 1; } }
+    { ulong a = 255; long b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 253) { return 1; } }
+    { ulong a = 255; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 257) { return 1; } }
     { ulong a = 255; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; long b = -2; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; long b = -2; if ((a & b) != 254) { return 1; } }
@@ -29706,8 +29708,8 @@ fn m_ulong_x_long() {
     { ulong a = 255; long b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 255; long b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 255; long b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 255; long b = -7; if ((a + b) != 248) { return 1; } }
-    { ulong a = 255; long b = -7; if ((a - b) != 262) { return 1; } }
+    { ulong a = 255; long b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 248) { return 1; } }
+    { ulong a = 255; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 262) { return 1; } }
     { ulong a = 255; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; long b = -7; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; long b = -7; if ((a & b) != 249) { return 1; } }
@@ -29730,7 +29732,7 @@ fn m_ulong_x_long() {
     { ulong a = 255; long b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 255; long b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 255; long b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 255; long b = -12345; if ((a - b) != 12600) { return 1; } }
+    { ulong a = 255; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12600) { return 1; } }
     { ulong a = 255; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; long b = -12345; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; long b = -12345; if ((a & b) != 199) { return 1; } }
@@ -29753,7 +29755,7 @@ fn m_ulong_x_long() {
     { ulong a = 255; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 255; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 255; long b = 1099511627776; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 255; long b = -1099511627776; if ((a - b) != 1099511628031) { return 1; } }
+    { ulong a = 255; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511628031) { return 1; } }
     { ulong a = 255; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; long b = -1099511627776; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; long b = -1099511627776; if ((a & b) != 0) { return 1; } }
@@ -29805,8 +29807,8 @@ fn m_ulong_x_long() {
     { ulong a = 7; long b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; long b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; long b = -1; if ((a + b) != 6) { return 1; } }
-    { ulong a = 7; long b = -1; if ((a - b) != 8) { return 1; } }
+    { ulong a = 7; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 1; } }
+    { ulong a = 7; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 1; } }
     { ulong a = 7; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; long b = -1; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; long b = -1; if ((a & b) != 7) { return 1; } }
@@ -29832,8 +29834,8 @@ fn m_ulong_x_long() {
     { ulong a = 7; long b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 7; long b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 7; long b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; long b = -2; if ((a + b) != 5) { return 1; } }
-    { ulong a = 7; long b = -2; if ((a - b) != 9) { return 1; } }
+    { ulong a = 7; long b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 5) { return 1; } }
+    { ulong a = 7; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 9) { return 1; } }
     { ulong a = 7; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; long b = -2; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; long b = -2; if ((a & b) != 6) { return 1; } }
@@ -29859,8 +29861,8 @@ fn m_ulong_x_long() {
     { ulong a = 7; long b = 7; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; long b = 7; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; long b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 7; long b = -7; if ((a + b) != 0) { return 1; } }
-    { ulong a = 7; long b = -7; if ((a - b) != 14) { return 1; } }
+    { ulong a = 7; long b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 7; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 14) { return 1; } }
     { ulong a = 7; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; long b = -7; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; long b = -7; if ((a & b) != 1) { return 1; } }
@@ -29883,7 +29885,7 @@ fn m_ulong_x_long() {
     { ulong a = 7; long b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; long b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; long b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 7; long b = -12345; if ((a - b) != 12352) { return 1; } }
+    { ulong a = 7; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 12352) { return 1; } }
     { ulong a = 7; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; long b = -12345; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; long b = -12345; if ((a & b) != 7) { return 1; } }
@@ -29906,7 +29908,7 @@ fn m_ulong_x_long() {
     { ulong a = 7; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; long b = 1099511627776; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 7; long b = -1099511627776; if ((a - b) != 1099511627783) { return 1; } }
+    { ulong a = 7; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627783) { return 1; } }
     { ulong a = 7; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; long b = -1099511627776; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; long b = -1099511627776; if ((a & b) != 0) { return 1; } }
@@ -29958,8 +29960,8 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; long b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; long b = -1; if ((a + b) != 12344) { return 1; } }
-    { ulong a = 12345; long b = -1; if ((a - b) != 12346) { return 1; } }
+    { ulong a = 12345; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 12344) { return 1; } }
+    { ulong a = 12345; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 12346) { return 1; } }
     { ulong a = 12345; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = -1; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = -1; if ((a & b) != 12345) { return 1; } }
@@ -29985,8 +29987,8 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; long b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; long b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; long b = -2; if ((a + b) != 12343) { return 1; } }
-    { ulong a = 12345; long b = -2; if ((a - b) != 12347) { return 1; } }
+    { ulong a = 12345; long b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 12343) { return 1; } }
+    { ulong a = 12345; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 12347) { return 1; } }
     { ulong a = 12345; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = -2; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = -2; if ((a & b) != 12344) { return 1; } }
@@ -30012,8 +30014,8 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 12345; long b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 12345; long b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; long b = -7; if ((a + b) != 12338) { return 1; } }
-    { ulong a = 12345; long b = -7; if ((a - b) != 12352) { return 1; } }
+    { ulong a = 12345; long b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 12338) { return 1; } }
+    { ulong a = 12345; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 12352) { return 1; } }
     { ulong a = 12345; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = -7; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = -7; if ((a & b) != 12345) { return 1; } }
@@ -30037,8 +30039,8 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 12345; long b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 12345; long b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; long b = -12345; if ((a + b) != 0) { return 1; } }
-    { ulong a = 12345; long b = -12345; if ((a - b) != 24690) { return 1; } }
+    { ulong a = 12345; long b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 12345; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 24690) { return 1; } }
     { ulong a = 12345; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = -12345; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = -12345; if ((a & b) != 1) { return 1; } }
@@ -30061,7 +30063,7 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 12345; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 12345; long b = 1099511627776; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 12345; long b = -1099511627776; if ((a - b) != 1099511640121) { return 1; } }
+    { ulong a = 12345; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511640121) { return 1; } }
     { ulong a = 12345; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = -1099511627776; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = -1099511627776; if ((a & b) != 0) { return 1; } }
@@ -30072,7 +30074,7 @@ fn m_ulong_x_long() {
     { ulong a = 12345; long b = -1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 12345; long b = -1099511627776; if ((a >= b) != 0) { return 1; } }
     { ulong a = 12345; long b = 4611686018427387903; if ((a + b) != 4611686018427400248) { return 1; } }
-    { ulong a = 12345; long b = 4611686018427387903; if ((a * b) != 4611686018427375559) { return 1; } }
+    { ulong a = 12345; long b = 4611686018427387903; if (((a as ulong).wrapping_mul(b as ulong)) != 4611686018427375559) { return 1; } }
     { ulong a = 12345; long b = 4611686018427387903; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; long b = 4611686018427387903; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; long b = 4611686018427387903; if ((a & b) != 12345) { return 1; } }
@@ -30112,7 +30114,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -1; if ((a + b) != 9223372036854775806) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -30135,8 +30137,8 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -2; if ((a + b) != 9223372036854775805) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -2; if ((a * b) != 2) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775805) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -2; if (((a as ulong).wrapping_mul(b as ulong)) != 2) { return 1; } }
     { ulong a = 9223372036854775807; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -2; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; long b = -2; if ((a & b) != 9223372036854775806) { return 1; } }
@@ -30147,7 +30149,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = -2; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -2; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; long b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; long b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -30160,7 +30162,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -7; if ((a + b) != 9223372036854775800) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 1; } }
     { ulong a = 9223372036854775807; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -7; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; long b = -7; if ((a & b) != 9223372036854775801) { return 1; } }
@@ -30171,7 +30173,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = -7; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -7; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a - b) != 9223372036854763462) { return 1; } }
-    { ulong a = 9223372036854775807; long b = 12345; if ((a * b) != 9223372036854763463) { return 1; } }
+    { ulong a = 9223372036854775807; long b = 12345; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a / b) != 747134227367742) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a % b) != 817) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -30183,7 +30185,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = 12345; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -12345; if ((a + b) != 9223372036854763462) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854763462) { return 1; } }
     { ulong a = 9223372036854775807; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -12345; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; long b = -12345; if ((a & b) != 9223372036854763463) { return 1; } }
@@ -30205,8 +30207,8 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = 1099511627776; if ((a <= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 1099511627776; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 1099511627776; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -1099511627776; if ((a + b) != 9223370937343148031) { return 1; } }
-    { ulong a = 9223372036854775807; long b = -1099511627776; if ((a * b) != 1099511627776) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 9223370937343148031) { return 1; } }
+    { ulong a = 9223372036854775807; long b = -1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 1099511627776) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1099511627776; if ((a % b) != 9223372036854775807) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1099511627776; if ((a & b) != 9223370937343148032) { return 1; } }
@@ -30217,7 +30219,7 @@ fn m_ulong_x_long() {
     { ulong a = 9223372036854775807; long b = -1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = -1099511627776; if ((a >= b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; long b = 4611686018427387903; if ((a - b) != 4611686018427387904) { return 1; } }
-    { ulong a = 9223372036854775807; long b = 4611686018427387903; if ((a * b) != 4611686018427387905) { return 1; } }
+    { ulong a = 9223372036854775807; long b = 4611686018427387903; if (((a as ulong).wrapping_mul(b as ulong)) != 4611686018427387905) { return 1; } }
     { ulong a = 9223372036854775807; long b = 4611686018427387903; if ((a / b) != 2) { return 1; } }
     { ulong a = 9223372036854775807; long b = 4611686018427387903; if ((a % b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; long b = 4611686018427387903; if ((a & b) != 4611686018427387903) { return 1; } }
@@ -30259,8 +30261,8 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = 1; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 1; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; long b = -1; if ((a + b) != 1099511627775) { return 1; } }
-    { ulong a = 1099511627776; long b = -1; if ((a - b) != 1099511627777) { return 1; } }
+    { ulong a = 1099511627776; long b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627775) { return 1; } }
+    { ulong a = 1099511627776; long b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627777) { return 1; } }
     { ulong a = 1099511627776; long b = -1; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -1; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; long b = -1; if ((a & b) != 1099511627776) { return 1; } }
@@ -30286,8 +30288,8 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = 2; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 2; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 2; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; long b = -2; if ((a + b) != 1099511627774) { return 1; } }
-    { ulong a = 1099511627776; long b = -2; if ((a - b) != 1099511627778) { return 1; } }
+    { ulong a = 1099511627776; long b = -2; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627774) { return 1; } }
+    { ulong a = 1099511627776; long b = -2; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627778) { return 1; } }
     { ulong a = 1099511627776; long b = -2; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -2; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; long b = -2; if ((a & b) != 1099511627776) { return 1; } }
@@ -30313,8 +30315,8 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = 7; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 7; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; long b = -7; if ((a + b) != 1099511627769) { return 1; } }
-    { ulong a = 1099511627776; long b = -7; if ((a - b) != 1099511627783) { return 1; } }
+    { ulong a = 1099511627776; long b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 1099511627769) { return 1; } }
+    { ulong a = 1099511627776; long b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511627783) { return 1; } }
     { ulong a = 1099511627776; long b = -7; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -7; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; long b = -7; if ((a & b) != 1099511627776) { return 1; } }
@@ -30338,8 +30340,8 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = 12345; if ((a <= b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; long b = -12345; if ((a + b) != 1099511615431) { return 1; } }
-    { ulong a = 1099511627776; long b = -12345; if ((a - b) != 1099511640121) { return 1; } }
+    { ulong a = 1099511627776; long b = -12345; if (((a as ulong).wrapping_add(b as ulong)) != 1099511615431) { return 1; } }
+    { ulong a = 1099511627776; long b = -12345; if (((a as ulong).wrapping_sub(b as ulong)) != 1099511640121) { return 1; } }
     { ulong a = 1099511627776; long b = -12345; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -12345; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; long b = -12345; if ((a & b) != 1099511627776) { return 1; } }
@@ -30351,7 +30353,7 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = -12345; if ((a >= b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a + b) != 2199023255552) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a - b) != 0) { return 1; } }
-    { ulong a = 1099511627776; long b = 1099511627776; if ((a * b) != 0) { return 1; } }
+    { ulong a = 1099511627776; long b = 1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a / b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a % b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -30363,9 +30365,9 @@ fn m_ulong_x_long() {
     { ulong a = 1099511627776; long b = 1099511627776; if ((a <= b) != 1) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a > b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = 1099511627776; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 1099511627776; long b = -1099511627776; if ((a + b) != 0) { return 1; } }
-    { ulong a = 1099511627776; long b = -1099511627776; if ((a - b) != 2199023255552) { return 1; } }
-    { ulong a = 1099511627776; long b = -1099511627776; if ((a * b) != 0) { return 1; } }
+    { ulong a = 1099511627776; long b = -1099511627776; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 1; } }
+    { ulong a = 1099511627776; long b = -1099511627776; if (((a as ulong).wrapping_sub(b as ulong)) != 2199023255552) { return 1; } }
+    { ulong a = 1099511627776; long b = -1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -1099511627776; if ((a / b) != 0) { return 1; } }
     { ulong a = 1099511627776; long b = -1099511627776; if ((a % b) != 1099511627776) { return 1; } }
     { ulong a = 1099511627776; long b = -1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -30719,7 +30721,7 @@ fn m_ulong_x_u8() {
     { ulong a = 9223372036854775807; u8 b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 1; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 255; if ((a - b) != 9223372036854775552) { return 1; } }
-    { ulong a = 9223372036854775807; u8 b = 255; if ((a * b) != 9223372036854775553) { return 1; } }
+    { ulong a = 9223372036854775807; u8 b = 255; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 255; if ((a / b) != 36170086419038336) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 255; if ((a % b) != 127) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 255; if ((a & b) != 255) { return 1; } }
@@ -30732,7 +30734,7 @@ fn m_ulong_x_u8() {
     { ulong a = 9223372036854775807; u8 b = 255; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 255; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; u8 b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; u8 b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; u8 b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -31268,7 +31270,7 @@ fn m_ulong_x_uint() {
     { ulong a = 9223372036854775807; uint b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 1; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 255; if ((a - b) != 9223372036854775552) { return 1; } }
-    { ulong a = 9223372036854775807; uint b = 255; if ((a * b) != 9223372036854775553) { return 1; } }
+    { ulong a = 9223372036854775807; uint b = 255; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 255; if ((a / b) != 36170086419038336) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 255; if ((a % b) != 127) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 255; if ((a & b) != 255) { return 1; } }
@@ -31281,7 +31283,7 @@ fn m_ulong_x_uint() {
     { ulong a = 9223372036854775807; uint b = 255; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 255; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; uint b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; uint b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -31295,7 +31297,7 @@ fn m_ulong_x_uint() {
     { ulong a = 9223372036854775807; uint b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 7; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 12345; if ((a - b) != 9223372036854763462) { return 1; } }
-    { ulong a = 9223372036854775807; uint b = 12345; if ((a * b) != 9223372036854763463) { return 1; } }
+    { ulong a = 9223372036854775807; uint b = 12345; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 12345; if ((a / b) != 747134227367742) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 12345; if ((a % b) != 817) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -31308,7 +31310,7 @@ fn m_ulong_x_uint() {
     { ulong a = 9223372036854775807; uint b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 12345; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 4294967295; if ((a - b) != 9223372032559808512) { return 1; } }
-    { ulong a = 9223372036854775807; uint b = 4294967295; if ((a * b) != 9223372032559808513) { return 1; } }
+    { ulong a = 9223372036854775807; uint b = 4294967295; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372032559808513) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 4294967295; if ((a / b) != 2147483648) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 4294967295; if ((a % b) != 2147483647) { return 1; } }
     { ulong a = 9223372036854775807; uint b = 4294967295; if ((a & b) != 4294967295) { return 1; } }
@@ -31681,7 +31683,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 255; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 255; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 255; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 255; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775553) { return 1; } }
+    { ulong a = 255; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { ulong a = 255; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { ulong a = 255; ulong b = 9223372036854775807; if ((a % b) != 255) { return 1; } }
     { ulong a = 255; ulong b = 9223372036854775807; if ((a & b) != 255) { return 1; } }
@@ -31778,7 +31780,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 7; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 7; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 7; ulong b = 12345; if ((a >= b) != 0) { return 1; } }
-    { ulong a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { ulong a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 1; } }
     { ulong a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 1; } }
@@ -31877,7 +31879,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 12345; ulong b = 12345; if ((a <= b) != 1) { return 1; } }
     { ulong a = 12345; ulong b = 12345; if ((a > b) != 0) { return 1; } }
     { ulong a = 12345; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
-    { ulong a = 12345; ulong b = 9223372036854775807; if ((a * b) != 9223372036854763463) { return 1; } }
+    { ulong a = 12345; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { ulong a = 12345; ulong b = 9223372036854775807; if ((a / b) != 0) { return 1; } }
     { ulong a = 12345; ulong b = 9223372036854775807; if ((a % b) != 12345) { return 1; } }
     { ulong a = 12345; ulong b = 9223372036854775807; if ((a & b) != 12345) { return 1; } }
@@ -31931,7 +31933,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 9223372036854775807; ulong b = 1; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 1; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 255; if ((a - b) != 9223372036854775552) { return 1; } }
-    { ulong a = 9223372036854775807; ulong b = 255; if ((a * b) != 9223372036854775553) { return 1; } }
+    { ulong a = 9223372036854775807; ulong b = 255; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775553) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 255; if ((a / b) != 36170086419038336) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 255; if ((a % b) != 127) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 255; if ((a & b) != 255) { return 1; } }
@@ -31944,7 +31946,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 9223372036854775807; ulong b = 255; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 255; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 7; if ((a - b) != 9223372036854775800) { return 1; } }
-    { ulong a = 9223372036854775807; ulong b = 7; if ((a * b) != 9223372036854775801) { return 1; } }
+    { ulong a = 9223372036854775807; ulong b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 7; if ((a / b) != 1317624576693539401) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 7; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 7; if ((a >> b) != 72057594037927935) { return 1; } }
@@ -31958,7 +31960,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 9223372036854775807; ulong b = 7; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 7; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a - b) != 9223372036854763462) { return 1; } }
-    { ulong a = 9223372036854775807; ulong b = 12345; if ((a * b) != 9223372036854763463) { return 1; } }
+    { ulong a = 9223372036854775807; ulong b = 12345; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854763463) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a / b) != 747134227367742) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a % b) != 817) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a & b) != 12345) { return 1; } }
@@ -31971,7 +31973,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a > b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 12345; if ((a >= b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if ((a - b) != 0) { return 1; } }
-    { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if ((a * b) != 1) { return 1; } }
+    { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if ((a / b) != 1) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if ((a % b) != 0) { return 1; } }
     { ulong a = 9223372036854775807; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775807) { return 1; } }
@@ -32082,7 +32084,7 @@ fn m_ulong_x_ulong() {
     { ulong a = 1099511627776; ulong b = 9223372036854775807; if ((a >= b) != 0) { return 1; } }
     { ulong a = 1099511627776; ulong b = 1099511627776; if ((a + b) != 2199023255552) { return 1; } }
     { ulong a = 1099511627776; ulong b = 1099511627776; if ((a - b) != 0) { return 1; } }
-    { ulong a = 1099511627776; ulong b = 1099511627776; if ((a * b) != 0) { return 1; } }
+    { ulong a = 1099511627776; ulong b = 1099511627776; if (((a as ulong).wrapping_mul(b as ulong)) != 0) { return 1; } }
     { ulong a = 1099511627776; ulong b = 1099511627776; if ((a / b) != 1) { return 1; } }
     { ulong a = 1099511627776; ulong b = 1099511627776; if ((a % b) != 0) { return 1; } }
     { ulong a = 1099511627776; ulong b = 1099511627776; if ((a & b) != 1099511627776) { return 1; } }
@@ -33670,15 +33672,15 @@ fn u_uint() {
     let r = compile_jit_with_runtime(r#"test(): int {
     { uint a = 0; if (-a != 0) { return 1; } }
     { uint a = 0; if (~a != 4294967295) { return 2; } }
-    { uint a = 1; if (-a != 4294967295) { return 3; } }
+    { uint a = 1; if ((0 as uint).wrapping_sub(a) != 4294967295) { return 3; } }
     { uint a = 1; if (~a != 4294967294) { return 4; } }
-    { uint a = 255; if (-a != 4294967041) { return 5; } }
+    { uint a = 255; if ((0 as uint).wrapping_sub(a) != 4294967041) { return 5; } }
     { uint a = 255; if (~a != 4294967040) { return 6; } }
-    { uint a = 7; if (-a != 4294967289) { return 7; } }
+    { uint a = 7; if ((0 as uint).wrapping_sub(a) != 4294967289) { return 7; } }
     { uint a = 7; if (~a != 4294967288) { return 8; } }
-    { uint a = 12345; if (-a != 4294954951) { return 9; } }
+    { uint a = 12345; if ((0 as uint).wrapping_sub(a) != 4294954951) { return 9; } }
     { uint a = 12345; if (~a != 4294954950) { return 10; } }
-    { uint a = 4294967295; if (-a != 1) { return 11; } }
+    { uint a = 4294967295; if ((0 as uint).wrapping_sub(a) != 1) { return 11; } }
     { uint a = 4294967295; if (~a != 0) { return 12; } }
     return 0;
 }
@@ -39922,8 +39924,8 @@ fn m_i16_x_u16() {
 #[test]
 fn m_i16_x_uint() {
     let r = compile_jit_with_runtime(r#"test(): int {
-    { i16 a = -32768; uint b = 0; if ((a + b) != 4294934528) { return 1; } }
-    { i16 a = -32768; uint b = 0; if ((a - b) != 4294934528) { return 2; } }
+    { i16 a = -32768; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294934528) { return 1; } }
+    { i16 a = -32768; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294934528) { return 2; } }
     { i16 a = -32768; uint b = 0; if ((a * b) != 0) { return 3; } }
     { i16 a = -32768; uint b = 0; if ((a >> b) != -32768) { return 4; } }
     { i16 a = -32768; uint b = 0; if ((a & b) != 0) { return 5; } }
@@ -39935,9 +39937,9 @@ fn m_i16_x_uint() {
     { i16 a = -32768; uint b = 0; if ((a <= b) != 0) { return 11; } }
     { i16 a = -32768; uint b = 0; if ((a > b) != 1) { return 12; } }
     { i16 a = -32768; uint b = 0; if ((a >= b) != 1) { return 13; } }
-    { i16 a = -32768; uint b = 1; if ((a + b) != 4294934529) { return 14; } }
-    { i16 a = -32768; uint b = 1; if ((a - b) != 4294934527) { return 15; } }
-    { i16 a = -32768; uint b = 1; if ((a * b) != 4294934528) { return 16; } }
+    { i16 a = -32768; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294934529) { return 14; } }
+    { i16 a = -32768; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294934527) { return 15; } }
+    { i16 a = -32768; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294934528) { return 16; } }
     { i16 a = -32768; uint b = 1; if ((a / b) != 4294934528) { return 17; } }
     { i16 a = -32768; uint b = 1; if ((a % b) != 0) { return 18; } }
     { i16 a = -32768; uint b = 1; if ((a >> b) != -16384) { return 19; } }
@@ -39950,9 +39952,9 @@ fn m_i16_x_uint() {
     { i16 a = -32768; uint b = 1; if ((a <= b) != 0) { return 26; } }
     { i16 a = -32768; uint b = 1; if ((a > b) != 1) { return 27; } }
     { i16 a = -32768; uint b = 1; if ((a >= b) != 1) { return 28; } }
-    { i16 a = -32768; uint b = 7; if ((a + b) != 4294934535) { return 29; } }
-    { i16 a = -32768; uint b = 7; if ((a - b) != 4294934521) { return 30; } }
-    { i16 a = -32768; uint b = 7; if ((a * b) != 4294737920) { return 31; } }
+    { i16 a = -32768; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 4294934535) { return 29; } }
+    { i16 a = -32768; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294934521) { return 30; } }
+    { i16 a = -32768; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294737920) { return 31; } }
     { i16 a = -32768; uint b = 7; if ((a / b) != 613562075) { return 32; } }
     { i16 a = -32768; uint b = 7; if ((a % b) != 3) { return 33; } }
     { i16 a = -32768; uint b = 7; if ((a >> b) != -256) { return 34; } }
@@ -39965,9 +39967,9 @@ fn m_i16_x_uint() {
     { i16 a = -32768; uint b = 7; if ((a <= b) != 0) { return 41; } }
     { i16 a = -32768; uint b = 7; if ((a > b) != 1) { return 42; } }
     { i16 a = -32768; uint b = 7; if ((a >= b) != 1) { return 43; } }
-    { i16 a = -32768; uint b = 4294967295; if ((a + b) != 4294934527) { return 44; } }
-    { i16 a = -32768; uint b = 4294967295; if ((a - b) != 4294934529) { return 45; } }
-    { i16 a = -32768; uint b = 4294967295; if ((a * b) != 32768) { return 46; } }
+    { i16 a = -32768; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294934527) { return 44; } }
+    { i16 a = -32768; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294934529) { return 45; } }
+    { i16 a = -32768; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 32768) { return 46; } }
     { i16 a = -32768; uint b = 4294967295; if ((a / b) != 0) { return 47; } }
     { i16 a = -32768; uint b = 4294967295; if ((a % b) != 4294934528) { return 48; } }
     { i16 a = -32768; uint b = 4294967295; if ((a & b) != 4294934528) { return 49; } }
@@ -39979,8 +39981,8 @@ fn m_i16_x_uint() {
     { i16 a = -32768; uint b = 4294967295; if ((a <= b) != 1) { return 55; } }
     { i16 a = -32768; uint b = 4294967295; if ((a > b) != 0) { return 56; } }
     { i16 a = -32768; uint b = 4294967295; if ((a >= b) != 0) { return 57; } }
-    { i16 a = -7; uint b = 0; if ((a + b) != 4294967289) { return 58; } }
-    { i16 a = -7; uint b = 0; if ((a - b) != 4294967289) { return 59; } }
+    { i16 a = -7; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 58; } }
+    { i16 a = -7; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 59; } }
     { i16 a = -7; uint b = 0; if ((a * b) != 0) { return 60; } }
     { i16 a = -7; uint b = 0; if ((a >> b) != -7) { return 61; } }
     { i16 a = -7; uint b = 0; if ((a & b) != 0) { return 62; } }
@@ -39992,9 +39994,9 @@ fn m_i16_x_uint() {
     { i16 a = -7; uint b = 0; if ((a <= b) != 0) { return 68; } }
     { i16 a = -7; uint b = 0; if ((a > b) != 1) { return 69; } }
     { i16 a = -7; uint b = 0; if ((a >= b) != 1) { return 70; } }
-    { i16 a = -7; uint b = 1; if ((a + b) != 4294967290) { return 71; } }
-    { i16 a = -7; uint b = 1; if ((a - b) != 4294967288) { return 72; } }
-    { i16 a = -7; uint b = 1; if ((a * b) != 4294967289) { return 73; } }
+    { i16 a = -7; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 71; } }
+    { i16 a = -7; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 72; } }
+    { i16 a = -7; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 73; } }
     { i16 a = -7; uint b = 1; if ((a / b) != 4294967289) { return 74; } }
     { i16 a = -7; uint b = 1; if ((a % b) != 0) { return 75; } }
     { i16 a = -7; uint b = 1; if ((a >> b) != -4) { return 76; } }
@@ -40007,9 +40009,9 @@ fn m_i16_x_uint() {
     { i16 a = -7; uint b = 1; if ((a <= b) != 0) { return 83; } }
     { i16 a = -7; uint b = 1; if ((a > b) != 1) { return 84; } }
     { i16 a = -7; uint b = 1; if ((a >= b) != 1) { return 85; } }
-    { i16 a = -7; uint b = 7; if ((a + b) != 0) { return 86; } }
-    { i16 a = -7; uint b = 7; if ((a - b) != 4294967282) { return 87; } }
-    { i16 a = -7; uint b = 7; if ((a * b) != 4294967247) { return 88; } }
+    { i16 a = -7; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 86; } }
+    { i16 a = -7; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967282) { return 87; } }
+    { i16 a = -7; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 88; } }
     { i16 a = -7; uint b = 7; if ((a / b) != 613566755) { return 89; } }
     { i16 a = -7; uint b = 7; if ((a % b) != 4) { return 90; } }
     { i16 a = -7; uint b = 7; if ((a >> b) != -1) { return 91; } }
@@ -40022,9 +40024,9 @@ fn m_i16_x_uint() {
     { i16 a = -7; uint b = 7; if ((a <= b) != 0) { return 98; } }
     { i16 a = -7; uint b = 7; if ((a > b) != 1) { return 99; } }
     { i16 a = -7; uint b = 7; if ((a >= b) != 1) { return 100; } }
-    { i16 a = -7; uint b = 4294967295; if ((a + b) != 4294967288) { return 101; } }
-    { i16 a = -7; uint b = 4294967295; if ((a - b) != 4294967290) { return 102; } }
-    { i16 a = -7; uint b = 4294967295; if ((a * b) != 7) { return 103; } }
+    { i16 a = -7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 101; } }
+    { i16 a = -7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 102; } }
+    { i16 a = -7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 103; } }
     { i16 a = -7; uint b = 4294967295; if ((a / b) != 0) { return 104; } }
     { i16 a = -7; uint b = 4294967295; if ((a % b) != 4294967289) { return 105; } }
     { i16 a = -7; uint b = 4294967295; if ((a & b) != 4294967289) { return 106; } }
@@ -40036,8 +40038,8 @@ fn m_i16_x_uint() {
     { i16 a = -7; uint b = 4294967295; if ((a <= b) != 1) { return 112; } }
     { i16 a = -7; uint b = 4294967295; if ((a > b) != 0) { return 113; } }
     { i16 a = -7; uint b = 4294967295; if ((a >= b) != 0) { return 114; } }
-    { i16 a = -1; uint b = 0; if ((a + b) != 4294967295) { return 115; } }
-    { i16 a = -1; uint b = 0; if ((a - b) != 4294967295) { return 116; } }
+    { i16 a = -1; uint b = 0; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 115; } }
+    { i16 a = -1; uint b = 0; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 116; } }
     { i16 a = -1; uint b = 0; if ((a * b) != 0) { return 117; } }
     { i16 a = -1; uint b = 0; if ((a >> b) != -1) { return 118; } }
     { i16 a = -1; uint b = 0; if ((a & b) != 0) { return 119; } }
@@ -40049,9 +40051,9 @@ fn m_i16_x_uint() {
     { i16 a = -1; uint b = 0; if ((a <= b) != 0) { return 125; } }
     { i16 a = -1; uint b = 0; if ((a > b) != 1) { return 126; } }
     { i16 a = -1; uint b = 0; if ((a >= b) != 1) { return 127; } }
-    { i16 a = -1; uint b = 1; if ((a + b) != 0) { return 128; } }
-    { i16 a = -1; uint b = 1; if ((a - b) != 4294967294) { return 129; } }
-    { i16 a = -1; uint b = 1; if ((a * b) != 4294967295) { return 130; } }
+    { i16 a = -1; uint b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 128; } }
+    { i16 a = -1; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967294) { return 129; } }
+    { i16 a = -1; uint b = 1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 130; } }
     { i16 a = -1; uint b = 1; if ((a / b) != 4294967295) { return 131; } }
     { i16 a = -1; uint b = 1; if ((a % b) != 0) { return 132; } }
     { i16 a = -1; uint b = 1; if ((a >> b) != -1) { return 133; } }
@@ -40064,9 +40066,9 @@ fn m_i16_x_uint() {
     { i16 a = -1; uint b = 1; if ((a <= b) != 0) { return 140; } }
     { i16 a = -1; uint b = 1; if ((a > b) != 1) { return 141; } }
     { i16 a = -1; uint b = 1; if ((a >= b) != 1) { return 142; } }
-    { i16 a = -1; uint b = 7; if ((a + b) != 6) { return 143; } }
-    { i16 a = -1; uint b = 7; if ((a - b) != 4294967288) { return 144; } }
-    { i16 a = -1; uint b = 7; if ((a * b) != 4294967289) { return 145; } }
+    { i16 a = -1; uint b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 143; } }
+    { i16 a = -1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967288) { return 144; } }
+    { i16 a = -1; uint b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 145; } }
     { i16 a = -1; uint b = 7; if ((a / b) != 613566756) { return 146; } }
     { i16 a = -1; uint b = 7; if ((a % b) != 3) { return 147; } }
     { i16 a = -1; uint b = 7; if ((a >> b) != -1) { return 148; } }
@@ -40079,9 +40081,9 @@ fn m_i16_x_uint() {
     { i16 a = -1; uint b = 7; if ((a <= b) != 0) { return 155; } }
     { i16 a = -1; uint b = 7; if ((a > b) != 1) { return 156; } }
     { i16 a = -1; uint b = 7; if ((a >= b) != 1) { return 157; } }
-    { i16 a = -1; uint b = 4294967295; if ((a + b) != 4294967294) { return 158; } }
-    { i16 a = -1; uint b = 4294967295; if ((a - b) != 0) { return 159; } }
-    { i16 a = -1; uint b = 4294967295; if ((a * b) != 1) { return 160; } }
+    { i16 a = -1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 158; } }
+    { i16 a = -1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 159; } }
+    { i16 a = -1; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 160; } }
     { i16 a = -1; uint b = 4294967295; if ((a / b) != 1) { return 161; } }
     { i16 a = -1; uint b = 4294967295; if ((a % b) != 0) { return 162; } }
     { i16 a = -1; uint b = 4294967295; if ((a & b) != 4294967295) { return 163; } }
@@ -40108,7 +40110,7 @@ fn m_i16_x_uint() {
     { i16 a = 0; uint b = 0; if ((a > b) != 0) { return 184; } }
     { i16 a = 0; uint b = 0; if ((a >= b) != 1) { return 185; } }
     { i16 a = 0; uint b = 1; if ((a + b) != 1) { return 186; } }
-    { i16 a = 0; uint b = 1; if ((a - b) != 4294967295) { return 187; } }
+    { i16 a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 187; } }
     { i16 a = 0; uint b = 1; if ((a * b) != 0) { return 188; } }
     { i16 a = 0; uint b = 1; if ((a / b) != 0) { return 189; } }
     { i16 a = 0; uint b = 1; if ((a % b) != 0) { return 190; } }
@@ -40124,7 +40126,7 @@ fn m_i16_x_uint() {
     { i16 a = 0; uint b = 1; if ((a > b) != 0) { return 200; } }
     { i16 a = 0; uint b = 1; if ((a >= b) != 0) { return 201; } }
     { i16 a = 0; uint b = 7; if ((a + b) != 7) { return 202; } }
-    { i16 a = 0; uint b = 7; if ((a - b) != 4294967289) { return 203; } }
+    { i16 a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 203; } }
     { i16 a = 0; uint b = 7; if ((a * b) != 0) { return 204; } }
     { i16 a = 0; uint b = 7; if ((a / b) != 0) { return 205; } }
     { i16 a = 0; uint b = 7; if ((a % b) != 0) { return 206; } }
@@ -40140,7 +40142,7 @@ fn m_i16_x_uint() {
     { i16 a = 0; uint b = 7; if ((a > b) != 0) { return 216; } }
     { i16 a = 0; uint b = 7; if ((a >= b) != 0) { return 217; } }
     { i16 a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 218; } }
-    { i16 a = 0; uint b = 4294967295; if ((a - b) != 1) { return 219; } }
+    { i16 a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 219; } }
     { i16 a = 0; uint b = 4294967295; if ((a * b) != 0) { return 220; } }
     { i16 a = 0; uint b = 4294967295; if ((a / b) != 0) { return 221; } }
     { i16 a = 0; uint b = 4294967295; if ((a % b) != 0) { return 222; } }
@@ -40199,9 +40201,9 @@ fn m_i16_x_uint() {
     { i16 a = 7; uint b = 7; if ((a <= b) != 1) { return 275; } }
     { i16 a = 7; uint b = 7; if ((a > b) != 0) { return 276; } }
     { i16 a = 7; uint b = 7; if ((a >= b) != 1) { return 277; } }
-    { i16 a = 7; uint b = 4294967295; if ((a + b) != 6) { return 278; } }
-    { i16 a = 7; uint b = 4294967295; if ((a - b) != 8) { return 279; } }
-    { i16 a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 280; } }
+    { i16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 278; } }
+    { i16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 279; } }
+    { i16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 280; } }
     { i16 a = 7; uint b = 4294967295; if ((a / b) != 0) { return 281; } }
     { i16 a = 7; uint b = 4294967295; if ((a % b) != 7) { return 282; } }
     { i16 a = 7; uint b = 4294967295; if ((a & b) != 7) { return 283; } }
@@ -40259,9 +40261,9 @@ fn m_i16_x_uint() {
     { i16 a = 32767; uint b = 7; if ((a <= b) != 0) { return 335; } }
     { i16 a = 32767; uint b = 7; if ((a > b) != 1) { return 336; } }
     { i16 a = 32767; uint b = 7; if ((a >= b) != 1) { return 337; } }
-    { i16 a = 32767; uint b = 4294967295; if ((a + b) != 32766) { return 338; } }
-    { i16 a = 32767; uint b = 4294967295; if ((a - b) != 32768) { return 339; } }
-    { i16 a = 32767; uint b = 4294967295; if ((a * b) != 4294934529) { return 340; } }
+    { i16 a = 32767; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 32766) { return 338; } }
+    { i16 a = 32767; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 32768) { return 339; } }
+    { i16 a = 32767; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294934529) { return 340; } }
     { i16 a = 32767; uint b = 4294967295; if ((a / b) != 0) { return 341; } }
     { i16 a = 32767; uint b = 4294967295; if ((a % b) != 32767) { return 342; } }
     { i16 a = 32767; uint b = 4294967295; if ((a & b) != 32767) { return 343; } }
@@ -40310,9 +40312,9 @@ fn m_i16_x_ulong() {
     { i16 a = -32768; ulong b = 7; if ((a <= b) != 0) { return 26; } }
     { i16 a = -32768; ulong b = 7; if ((a > b) != 1) { return 27; } }
     { i16 a = -32768; ulong b = 7; if ((a >= b) != 1) { return 28; } }
-    { i16 a = -32768; ulong b = 9223372036854775807; if ((a + b) != 9223372036854743039) { return 29; } }
-    { i16 a = -32768; ulong b = 9223372036854775807; if ((a - b) != 9223372036854743041) { return 30; } }
-    { i16 a = -32768; ulong b = 9223372036854775807; if ((a * b) != 32768) { return 31; } }
+    { i16 a = -32768; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854743039) { return 29; } }
+    { i16 a = -32768; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854743041) { return 30; } }
+    { i16 a = -32768; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 32768) { return 31; } }
     { i16 a = -32768; ulong b = 9223372036854775807; if ((a / b) != 1) { return 32; } }
     { i16 a = -32768; ulong b = 9223372036854775807; if ((a % b) != 9223372036854743041) { return 33; } }
     { i16 a = -32768; ulong b = 9223372036854775807; if ((a & b) != 9223372036854743040) { return 34; } }
@@ -40340,7 +40342,7 @@ fn m_i16_x_ulong() {
     { i16 a = -7; ulong b = 1; if ((a <= b) != 0) { return 56; } }
     { i16 a = -7; ulong b = 1; if ((a > b) != 1) { return 57; } }
     { i16 a = -7; ulong b = 1; if ((a >= b) != 1) { return 58; } }
-    { i16 a = -7; ulong b = 7; if ((a + b) != 0) { return 59; } }
+    { i16 a = -7; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 59; } }
     { i16 a = -7; ulong b = 7; if ((a / b) != 2635249153387078801) { return 60; } }
     { i16 a = -7; ulong b = 7; if ((a % b) != 2) { return 61; } }
     { i16 a = -7; ulong b = 7; if ((a >> b) != -1) { return 62; } }
@@ -40351,8 +40353,8 @@ fn m_i16_x_ulong() {
     { i16 a = -7; ulong b = 7; if ((a <= b) != 0) { return 67; } }
     { i16 a = -7; ulong b = 7; if ((a > b) != 1) { return 68; } }
     { i16 a = -7; ulong b = 7; if ((a >= b) != 1) { return 69; } }
-    { i16 a = -7; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775800) { return 70; } }
-    { i16 a = -7; ulong b = 9223372036854775807; if ((a - b) != 9223372036854775802) { return 71; } }
+    { i16 a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 70; } }
+    { i16 a = -7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_sub(b as ulong)) != 9223372036854775802) { return 71; } }
     { i16 a = -7; ulong b = 9223372036854775807; if ((a / b) != 1) { return 72; } }
     { i16 a = -7; ulong b = 9223372036854775807; if ((a % b) != 9223372036854775802) { return 73; } }
     { i16 a = -7; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775801) { return 74; } }
@@ -40371,7 +40373,7 @@ fn m_i16_x_ulong() {
     { i16 a = -1; ulong b = 0; if ((a <= b) != 0) { return 87; } }
     { i16 a = -1; ulong b = 0; if ((a > b) != 1) { return 88; } }
     { i16 a = -1; ulong b = 0; if ((a >= b) != 1) { return 89; } }
-    { i16 a = -1; ulong b = 1; if ((a + b) != 0) { return 90; } }
+    { i16 a = -1; ulong b = 1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 90; } }
     { i16 a = -1; ulong b = 1; if ((a % b) != 0) { return 91; } }
     { i16 a = -1; ulong b = 1; if ((a >> b) != -1) { return 92; } }
     { i16 a = -1; ulong b = 1; if ((a & b) != 1) { return 93; } }
@@ -40381,7 +40383,7 @@ fn m_i16_x_ulong() {
     { i16 a = -1; ulong b = 1; if ((a <= b) != 0) { return 97; } }
     { i16 a = -1; ulong b = 1; if ((a > b) != 1) { return 98; } }
     { i16 a = -1; ulong b = 1; if ((a >= b) != 1) { return 99; } }
-    { i16 a = -1; ulong b = 7; if ((a + b) != 6) { return 100; } }
+    { i16 a = -1; ulong b = 7; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 100; } }
     { i16 a = -1; ulong b = 7; if ((a / b) != 2635249153387078802) { return 101; } }
     { i16 a = -1; ulong b = 7; if ((a % b) != 1) { return 102; } }
     { i16 a = -1; ulong b = 7; if ((a >> b) != -1) { return 103; } }
@@ -40392,7 +40394,7 @@ fn m_i16_x_ulong() {
     { i16 a = -1; ulong b = 7; if ((a <= b) != 0) { return 108; } }
     { i16 a = -1; ulong b = 7; if ((a > b) != 1) { return 109; } }
     { i16 a = -1; ulong b = 7; if ((a >= b) != 1) { return 110; } }
-    { i16 a = -1; ulong b = 9223372036854775807; if ((a + b) != 9223372036854775806) { return 111; } }
+    { i16 a = -1; ulong b = 9223372036854775807; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 111; } }
     { i16 a = -1; ulong b = 9223372036854775807; if ((a / b) != 2) { return 112; } }
     { i16 a = -1; ulong b = 9223372036854775807; if ((a % b) != 1) { return 113; } }
     { i16 a = -1; ulong b = 9223372036854775807; if ((a & b) != 9223372036854775807) { return 114; } }
@@ -40505,7 +40507,7 @@ fn m_i16_x_ulong() {
     { i16 a = 7; ulong b = 7; if ((a <= b) != 1) { return 221; } }
     { i16 a = 7; ulong b = 7; if ((a > b) != 0) { return 222; } }
     { i16 a = 7; ulong b = 7; if ((a >= b) != 1) { return 223; } }
-    { i16 a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 224; } }
+    { i16 a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 224; } }
     { i16 a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 225; } }
     { i16 a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 226; } }
     { i16 a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 227; } }
@@ -40563,7 +40565,7 @@ fn m_i16_x_ulong() {
     { i16 a = 32767; ulong b = 7; if ((a <= b) != 0) { return 279; } }
     { i16 a = 32767; ulong b = 7; if ((a > b) != 1) { return 280; } }
     { i16 a = 32767; ulong b = 7; if ((a >= b) != 1) { return 281; } }
-    { i16 a = 32767; ulong b = 9223372036854775807; if ((a * b) != 9223372036854743041) { return 282; } }
+    { i16 a = 32767; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854743041) { return 282; } }
     { i16 a = 32767; ulong b = 9223372036854775807; if ((a / b) != 0) { return 283; } }
     { i16 a = 32767; ulong b = 9223372036854775807; if ((a % b) != 32767) { return 284; } }
     { i16 a = 32767; ulong b = 9223372036854775807; if ((a & b) != 32767) { return 285; } }
@@ -43002,7 +43004,7 @@ fn m_u16_x_uint() {
     { u16 a = 0; uint b = 0; if ((a > b) != 0) { return 13; } }
     { u16 a = 0; uint b = 0; if ((a >= b) != 1) { return 14; } }
     { u16 a = 0; uint b = 1; if ((a + b) != 1) { return 15; } }
-    { u16 a = 0; uint b = 1; if ((a - b) != 4294967295) { return 16; } }
+    { u16 a = 0; uint b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 16; } }
     { u16 a = 0; uint b = 1; if ((a * b) != 0) { return 17; } }
     { u16 a = 0; uint b = 1; if ((a / b) != 0) { return 18; } }
     { u16 a = 0; uint b = 1; if ((a % b) != 0) { return 19; } }
@@ -43018,7 +43020,7 @@ fn m_u16_x_uint() {
     { u16 a = 0; uint b = 1; if ((a > b) != 0) { return 29; } }
     { u16 a = 0; uint b = 1; if ((a >= b) != 0) { return 30; } }
     { u16 a = 0; uint b = 7; if ((a + b) != 7) { return 31; } }
-    { u16 a = 0; uint b = 7; if ((a - b) != 4294967289) { return 32; } }
+    { u16 a = 0; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 32; } }
     { u16 a = 0; uint b = 7; if ((a * b) != 0) { return 33; } }
     { u16 a = 0; uint b = 7; if ((a / b) != 0) { return 34; } }
     { u16 a = 0; uint b = 7; if ((a % b) != 0) { return 35; } }
@@ -43034,7 +43036,7 @@ fn m_u16_x_uint() {
     { u16 a = 0; uint b = 7; if ((a > b) != 0) { return 45; } }
     { u16 a = 0; uint b = 7; if ((a >= b) != 0) { return 46; } }
     { u16 a = 0; uint b = 4294967295; if ((a + b) != 4294967295) { return 47; } }
-    { u16 a = 0; uint b = 4294967295; if ((a - b) != 1) { return 48; } }
+    { u16 a = 0; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 48; } }
     { u16 a = 0; uint b = 4294967295; if ((a * b) != 0) { return 49; } }
     { u16 a = 0; uint b = 4294967295; if ((a / b) != 0) { return 50; } }
     { u16 a = 0; uint b = 4294967295; if ((a % b) != 0) { return 51; } }
@@ -43078,7 +43080,7 @@ fn m_u16_x_uint() {
     { u16 a = 1; uint b = 1; if ((a > b) != 0) { return 89; } }
     { u16 a = 1; uint b = 1; if ((a >= b) != 1) { return 90; } }
     { u16 a = 1; uint b = 7; if ((a + b) != 8) { return 91; } }
-    { u16 a = 1; uint b = 7; if ((a - b) != 4294967290) { return 92; } }
+    { u16 a = 1; uint b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 92; } }
     { u16 a = 1; uint b = 7; if ((a * b) != 7) { return 93; } }
     { u16 a = 1; uint b = 7; if ((a / b) != 0) { return 94; } }
     { u16 a = 1; uint b = 7; if ((a % b) != 1) { return 95; } }
@@ -43093,8 +43095,8 @@ fn m_u16_x_uint() {
     { u16 a = 1; uint b = 7; if ((a <= b) != 1) { return 104; } }
     { u16 a = 1; uint b = 7; if ((a > b) != 0) { return 105; } }
     { u16 a = 1; uint b = 7; if ((a >= b) != 0) { return 106; } }
-    { u16 a = 1; uint b = 4294967295; if ((a + b) != 0) { return 107; } }
-    { u16 a = 1; uint b = 4294967295; if ((a - b) != 2) { return 108; } }
+    { u16 a = 1; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 0) { return 107; } }
+    { u16 a = 1; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 108; } }
     { u16 a = 1; uint b = 4294967295; if ((a * b) != 4294967295) { return 109; } }
     { u16 a = 1; uint b = 4294967295; if ((a / b) != 0) { return 110; } }
     { u16 a = 1; uint b = 4294967295; if ((a % b) != 1) { return 111; } }
@@ -43153,9 +43155,9 @@ fn m_u16_x_uint() {
     { u16 a = 7; uint b = 7; if ((a <= b) != 1) { return 164; } }
     { u16 a = 7; uint b = 7; if ((a > b) != 0) { return 165; } }
     { u16 a = 7; uint b = 7; if ((a >= b) != 1) { return 166; } }
-    { u16 a = 7; uint b = 4294967295; if ((a + b) != 6) { return 167; } }
-    { u16 a = 7; uint b = 4294967295; if ((a - b) != 8) { return 168; } }
-    { u16 a = 7; uint b = 4294967295; if ((a * b) != 4294967289) { return 169; } }
+    { u16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 6) { return 167; } }
+    { u16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 168; } }
+    { u16 a = 7; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 169; } }
     { u16 a = 7; uint b = 4294967295; if ((a / b) != 0) { return 170; } }
     { u16 a = 7; uint b = 4294967295; if ((a % b) != 7) { return 171; } }
     { u16 a = 7; uint b = 4294967295; if ((a & b) != 7) { return 172; } }
@@ -43213,9 +43215,9 @@ fn m_u16_x_uint() {
     { u16 a = 40000; uint b = 7; if ((a <= b) != 0) { return 224; } }
     { u16 a = 40000; uint b = 7; if ((a > b) != 1) { return 225; } }
     { u16 a = 40000; uint b = 7; if ((a >= b) != 1) { return 226; } }
-    { u16 a = 40000; uint b = 4294967295; if ((a + b) != 39999) { return 227; } }
-    { u16 a = 40000; uint b = 4294967295; if ((a - b) != 40001) { return 228; } }
-    { u16 a = 40000; uint b = 4294967295; if ((a * b) != 4294927296) { return 229; } }
+    { u16 a = 40000; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 39999) { return 227; } }
+    { u16 a = 40000; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 40001) { return 228; } }
+    { u16 a = 40000; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294927296) { return 229; } }
     { u16 a = 40000; uint b = 4294967295; if ((a / b) != 0) { return 230; } }
     { u16 a = 40000; uint b = 4294967295; if ((a % b) != 40000) { return 231; } }
     { u16 a = 40000; uint b = 4294967295; if ((a & b) != 40000) { return 232; } }
@@ -43273,9 +43275,9 @@ fn m_u16_x_uint() {
     { u16 a = 65535; uint b = 7; if ((a <= b) != 0) { return 284; } }
     { u16 a = 65535; uint b = 7; if ((a > b) != 1) { return 285; } }
     { u16 a = 65535; uint b = 7; if ((a >= b) != 1) { return 286; } }
-    { u16 a = 65535; uint b = 4294967295; if ((a + b) != 65534) { return 287; } }
-    { u16 a = 65535; uint b = 4294967295; if ((a - b) != 65536) { return 288; } }
-    { u16 a = 65535; uint b = 4294967295; if ((a * b) != 4294901761) { return 289; } }
+    { u16 a = 65535; uint b = 4294967295; if (((a as uint).wrapping_add(b as uint)) != 65534) { return 287; } }
+    { u16 a = 65535; uint b = 4294967295; if (((a as uint).wrapping_sub(b as uint)) != 65536) { return 288; } }
+    { u16 a = 65535; uint b = 4294967295; if (((a as uint).wrapping_mul(b as uint)) != 4294901761) { return 289; } }
     { u16 a = 65535; uint b = 4294967295; if ((a / b) != 0) { return 290; } }
     { u16 a = 65535; uint b = 4294967295; if ((a % b) != 65535) { return 291; } }
     { u16 a = 65535; uint b = 4294967295; if ((a & b) != 65535) { return 292; } }
@@ -43456,7 +43458,7 @@ fn m_u16_x_ulong() {
     { u16 a = 7; ulong b = 7; if ((a <= b) != 1) { return 158; } }
     { u16 a = 7; ulong b = 7; if ((a > b) != 0) { return 159; } }
     { u16 a = 7; ulong b = 7; if ((a >= b) != 1) { return 160; } }
-    { u16 a = 7; ulong b = 9223372036854775807; if ((a * b) != 9223372036854775801) { return 161; } }
+    { u16 a = 7; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 161; } }
     { u16 a = 7; ulong b = 9223372036854775807; if ((a / b) != 0) { return 162; } }
     { u16 a = 7; ulong b = 9223372036854775807; if ((a % b) != 7) { return 163; } }
     { u16 a = 7; ulong b = 9223372036854775807; if ((a & b) != 7) { return 164; } }
@@ -43571,7 +43573,7 @@ fn m_u16_x_ulong() {
     { u16 a = 65535; ulong b = 7; if ((a <= b) != 0) { return 273; } }
     { u16 a = 65535; ulong b = 7; if ((a > b) != 1) { return 274; } }
     { u16 a = 65535; ulong b = 7; if ((a >= b) != 1) { return 275; } }
-    { u16 a = 65535; ulong b = 9223372036854775807; if ((a * b) != 9223372036854710273) { return 276; } }
+    { u16 a = 65535; ulong b = 9223372036854775807; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854710273) { return 276; } }
     { u16 a = 65535; ulong b = 9223372036854775807; if ((a / b) != 0) { return 277; } }
     { u16 a = 65535; ulong b = 9223372036854775807; if ((a % b) != 65535) { return 278; } }
     { u16 a = 65535; ulong b = 9223372036854775807; if ((a & b) != 65535) { return 279; } }
@@ -43592,8 +43594,8 @@ fn m_u16_x_ulong() {
 #[test]
 fn m_uint_x_i16() {
     let r = compile_jit_with_runtime(r#"test(): int {
-    { uint a = 0; i16 b = -32768; if ((a + b) != 4294934528) { return 1; } }
-    { uint a = 0; i16 b = -32768; if ((a - b) != 32768) { return 2; } }
+    { uint a = 0; i16 b = -32768; if (((a as uint).wrapping_add(b as uint)) != 4294934528) { return 1; } }
+    { uint a = 0; i16 b = -32768; if (((a as uint).wrapping_sub(b as uint)) != 32768) { return 2; } }
     { uint a = 0; i16 b = -32768; if ((a * b) != 0) { return 3; } }
     { uint a = 0; i16 b = -32768; if ((a / b) != 0) { return 4; } }
     { uint a = 0; i16 b = -32768; if ((a % b) != 0) { return 5; } }
@@ -43606,8 +43608,8 @@ fn m_uint_x_i16() {
     { uint a = 0; i16 b = -32768; if ((a <= b) != 1) { return 12; } }
     { uint a = 0; i16 b = -32768; if ((a > b) != 0) { return 13; } }
     { uint a = 0; i16 b = -32768; if ((a >= b) != 0) { return 14; } }
-    { uint a = 0; i16 b = -7; if ((a + b) != 4294967289) { return 15; } }
-    { uint a = 0; i16 b = -7; if ((a - b) != 7) { return 16; } }
+    { uint a = 0; i16 b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967289) { return 15; } }
+    { uint a = 0; i16 b = -7; if (((a as uint).wrapping_sub(b as uint)) != 7) { return 16; } }
     { uint a = 0; i16 b = -7; if ((a * b) != 0) { return 17; } }
     { uint a = 0; i16 b = -7; if ((a / b) != 0) { return 18; } }
     { uint a = 0; i16 b = -7; if ((a % b) != 0) { return 19; } }
@@ -43620,8 +43622,8 @@ fn m_uint_x_i16() {
     { uint a = 0; i16 b = -7; if ((a <= b) != 1) { return 26; } }
     { uint a = 0; i16 b = -7; if ((a > b) != 0) { return 27; } }
     { uint a = 0; i16 b = -7; if ((a >= b) != 0) { return 28; } }
-    { uint a = 0; i16 b = -1; if ((a + b) != 4294967295) { return 29; } }
-    { uint a = 0; i16 b = -1; if ((a - b) != 1) { return 30; } }
+    { uint a = 0; i16 b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967295) { return 29; } }
+    { uint a = 0; i16 b = -1; if (((a as uint).wrapping_sub(b as uint)) != 1) { return 30; } }
     { uint a = 0; i16 b = -1; if ((a * b) != 0) { return 31; } }
     { uint a = 0; i16 b = -1; if ((a / b) != 0) { return 32; } }
     { uint a = 0; i16 b = -1; if ((a % b) != 0) { return 33; } }
@@ -43649,7 +43651,7 @@ fn m_uint_x_i16() {
     { uint a = 0; i16 b = 0; if ((a > b) != 0) { return 55; } }
     { uint a = 0; i16 b = 0; if ((a >= b) != 1) { return 56; } }
     { uint a = 0; i16 b = 7; if ((a + b) != 7) { return 57; } }
-    { uint a = 0; i16 b = 7; if ((a - b) != 4294967289) { return 58; } }
+    { uint a = 0; i16 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 58; } }
     { uint a = 0; i16 b = 7; if ((a * b) != 0) { return 59; } }
     { uint a = 0; i16 b = 7; if ((a / b) != 0) { return 60; } }
     { uint a = 0; i16 b = 7; if ((a % b) != 0) { return 61; } }
@@ -43665,7 +43667,7 @@ fn m_uint_x_i16() {
     { uint a = 0; i16 b = 7; if ((a > b) != 0) { return 71; } }
     { uint a = 0; i16 b = 7; if ((a >= b) != 0) { return 72; } }
     { uint a = 0; i16 b = 32767; if ((a + b) != 32767) { return 73; } }
-    { uint a = 0; i16 b = 32767; if ((a - b) != 4294934529) { return 74; } }
+    { uint a = 0; i16 b = 32767; if (((a as uint).wrapping_sub(b as uint)) != 4294934529) { return 74; } }
     { uint a = 0; i16 b = 32767; if ((a * b) != 0) { return 75; } }
     { uint a = 0; i16 b = 32767; if ((a / b) != 0) { return 76; } }
     { uint a = 0; i16 b = 32767; if ((a % b) != 0) { return 77; } }
@@ -43678,9 +43680,9 @@ fn m_uint_x_i16() {
     { uint a = 0; i16 b = 32767; if ((a <= b) != 1) { return 84; } }
     { uint a = 0; i16 b = 32767; if ((a > b) != 0) { return 85; } }
     { uint a = 0; i16 b = 32767; if ((a >= b) != 0) { return 86; } }
-    { uint a = 1; i16 b = -32768; if ((a + b) != 4294934529) { return 87; } }
-    { uint a = 1; i16 b = -32768; if ((a - b) != 32769) { return 88; } }
-    { uint a = 1; i16 b = -32768; if ((a * b) != 4294934528) { return 89; } }
+    { uint a = 1; i16 b = -32768; if (((a as uint).wrapping_add(b as uint)) != 4294934529) { return 87; } }
+    { uint a = 1; i16 b = -32768; if (((a as uint).wrapping_sub(b as uint)) != 32769) { return 88; } }
+    { uint a = 1; i16 b = -32768; if (((a as uint).wrapping_mul(b as uint)) != 4294934528) { return 89; } }
     { uint a = 1; i16 b = -32768; if ((a / b) != 0) { return 90; } }
     { uint a = 1; i16 b = -32768; if ((a % b) != 1) { return 91; } }
     { uint a = 1; i16 b = -32768; if ((a & b) != 0) { return 92; } }
@@ -43692,9 +43694,9 @@ fn m_uint_x_i16() {
     { uint a = 1; i16 b = -32768; if ((a <= b) != 1) { return 98; } }
     { uint a = 1; i16 b = -32768; if ((a > b) != 0) { return 99; } }
     { uint a = 1; i16 b = -32768; if ((a >= b) != 0) { return 100; } }
-    { uint a = 1; i16 b = -7; if ((a + b) != 4294967290) { return 101; } }
-    { uint a = 1; i16 b = -7; if ((a - b) != 8) { return 102; } }
-    { uint a = 1; i16 b = -7; if ((a * b) != 4294967289) { return 103; } }
+    { uint a = 1; i16 b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967290) { return 101; } }
+    { uint a = 1; i16 b = -7; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 102; } }
+    { uint a = 1; i16 b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 103; } }
     { uint a = 1; i16 b = -7; if ((a / b) != 0) { return 104; } }
     { uint a = 1; i16 b = -7; if ((a % b) != 1) { return 105; } }
     { uint a = 1; i16 b = -7; if ((a & b) != 1) { return 106; } }
@@ -43706,9 +43708,9 @@ fn m_uint_x_i16() {
     { uint a = 1; i16 b = -7; if ((a <= b) != 1) { return 112; } }
     { uint a = 1; i16 b = -7; if ((a > b) != 0) { return 113; } }
     { uint a = 1; i16 b = -7; if ((a >= b) != 0) { return 114; } }
-    { uint a = 1; i16 b = -1; if ((a + b) != 0) { return 115; } }
-    { uint a = 1; i16 b = -1; if ((a - b) != 2) { return 116; } }
-    { uint a = 1; i16 b = -1; if ((a * b) != 4294967295) { return 117; } }
+    { uint a = 1; i16 b = -1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 115; } }
+    { uint a = 1; i16 b = -1; if (((a as uint).wrapping_sub(b as uint)) != 2) { return 116; } }
+    { uint a = 1; i16 b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967295) { return 117; } }
     { uint a = 1; i16 b = -1; if ((a / b) != 0) { return 118; } }
     { uint a = 1; i16 b = -1; if ((a % b) != 1) { return 119; } }
     { uint a = 1; i16 b = -1; if ((a & b) != 1) { return 120; } }
@@ -43735,7 +43737,7 @@ fn m_uint_x_i16() {
     { uint a = 1; i16 b = 0; if ((a > b) != 1) { return 141; } }
     { uint a = 1; i16 b = 0; if ((a >= b) != 1) { return 142; } }
     { uint a = 1; i16 b = 7; if ((a + b) != 8) { return 143; } }
-    { uint a = 1; i16 b = 7; if ((a - b) != 4294967290) { return 144; } }
+    { uint a = 1; i16 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 144; } }
     { uint a = 1; i16 b = 7; if ((a * b) != 7) { return 145; } }
     { uint a = 1; i16 b = 7; if ((a / b) != 0) { return 146; } }
     { uint a = 1; i16 b = 7; if ((a % b) != 1) { return 147; } }
@@ -43751,7 +43753,7 @@ fn m_uint_x_i16() {
     { uint a = 1; i16 b = 7; if ((a > b) != 0) { return 157; } }
     { uint a = 1; i16 b = 7; if ((a >= b) != 0) { return 158; } }
     { uint a = 1; i16 b = 32767; if ((a + b) != 32768) { return 159; } }
-    { uint a = 1; i16 b = 32767; if ((a - b) != 4294934530) { return 160; } }
+    { uint a = 1; i16 b = 32767; if (((a as uint).wrapping_sub(b as uint)) != 4294934530) { return 160; } }
     { uint a = 1; i16 b = 32767; if ((a * b) != 32767) { return 161; } }
     { uint a = 1; i16 b = 32767; if ((a / b) != 0) { return 162; } }
     { uint a = 1; i16 b = 32767; if ((a % b) != 1) { return 163; } }
@@ -43764,9 +43766,9 @@ fn m_uint_x_i16() {
     { uint a = 1; i16 b = 32767; if ((a <= b) != 1) { return 170; } }
     { uint a = 1; i16 b = 32767; if ((a > b) != 0) { return 171; } }
     { uint a = 1; i16 b = 32767; if ((a >= b) != 0) { return 172; } }
-    { uint a = 7; i16 b = -32768; if ((a + b) != 4294934535) { return 173; } }
-    { uint a = 7; i16 b = -32768; if ((a - b) != 32775) { return 174; } }
-    { uint a = 7; i16 b = -32768; if ((a * b) != 4294737920) { return 175; } }
+    { uint a = 7; i16 b = -32768; if (((a as uint).wrapping_add(b as uint)) != 4294934535) { return 173; } }
+    { uint a = 7; i16 b = -32768; if (((a as uint).wrapping_sub(b as uint)) != 32775) { return 174; } }
+    { uint a = 7; i16 b = -32768; if (((a as uint).wrapping_mul(b as uint)) != 4294737920) { return 175; } }
     { uint a = 7; i16 b = -32768; if ((a / b) != 0) { return 176; } }
     { uint a = 7; i16 b = -32768; if ((a % b) != 7) { return 177; } }
     { uint a = 7; i16 b = -32768; if ((a & b) != 0) { return 178; } }
@@ -43778,9 +43780,9 @@ fn m_uint_x_i16() {
     { uint a = 7; i16 b = -32768; if ((a <= b) != 1) { return 184; } }
     { uint a = 7; i16 b = -32768; if ((a > b) != 0) { return 185; } }
     { uint a = 7; i16 b = -32768; if ((a >= b) != 0) { return 186; } }
-    { uint a = 7; i16 b = -7; if ((a + b) != 0) { return 187; } }
-    { uint a = 7; i16 b = -7; if ((a - b) != 14) { return 188; } }
-    { uint a = 7; i16 b = -7; if ((a * b) != 4294967247) { return 189; } }
+    { uint a = 7; i16 b = -7; if (((a as uint).wrapping_add(b as uint)) != 0) { return 187; } }
+    { uint a = 7; i16 b = -7; if (((a as uint).wrapping_sub(b as uint)) != 14) { return 188; } }
+    { uint a = 7; i16 b = -7; if (((a as uint).wrapping_mul(b as uint)) != 4294967247) { return 189; } }
     { uint a = 7; i16 b = -7; if ((a / b) != 0) { return 190; } }
     { uint a = 7; i16 b = -7; if ((a % b) != 7) { return 191; } }
     { uint a = 7; i16 b = -7; if ((a & b) != 1) { return 192; } }
@@ -43792,9 +43794,9 @@ fn m_uint_x_i16() {
     { uint a = 7; i16 b = -7; if ((a <= b) != 1) { return 198; } }
     { uint a = 7; i16 b = -7; if ((a > b) != 0) { return 199; } }
     { uint a = 7; i16 b = -7; if ((a >= b) != 0) { return 200; } }
-    { uint a = 7; i16 b = -1; if ((a + b) != 6) { return 201; } }
-    { uint a = 7; i16 b = -1; if ((a - b) != 8) { return 202; } }
-    { uint a = 7; i16 b = -1; if ((a * b) != 4294967289) { return 203; } }
+    { uint a = 7; i16 b = -1; if (((a as uint).wrapping_add(b as uint)) != 6) { return 201; } }
+    { uint a = 7; i16 b = -1; if (((a as uint).wrapping_sub(b as uint)) != 8) { return 202; } }
+    { uint a = 7; i16 b = -1; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 203; } }
     { uint a = 7; i16 b = -1; if ((a / b) != 0) { return 204; } }
     { uint a = 7; i16 b = -1; if ((a % b) != 7) { return 205; } }
     { uint a = 7; i16 b = -1; if ((a & b) != 7) { return 206; } }
@@ -43837,7 +43839,7 @@ fn m_uint_x_i16() {
     { uint a = 7; i16 b = 7; if ((a > b) != 0) { return 243; } }
     { uint a = 7; i16 b = 7; if ((a >= b) != 1) { return 244; } }
     { uint a = 7; i16 b = 32767; if ((a + b) != 32774) { return 245; } }
-    { uint a = 7; i16 b = 32767; if ((a - b) != 4294934536) { return 246; } }
+    { uint a = 7; i16 b = 32767; if (((a as uint).wrapping_sub(b as uint)) != 4294934536) { return 246; } }
     { uint a = 7; i16 b = 32767; if ((a * b) != 229369) { return 247; } }
     { uint a = 7; i16 b = 32767; if ((a / b) != 0) { return 248; } }
     { uint a = 7; i16 b = 32767; if ((a % b) != 7) { return 249; } }
@@ -43850,9 +43852,9 @@ fn m_uint_x_i16() {
     { uint a = 7; i16 b = 32767; if ((a <= b) != 1) { return 256; } }
     { uint a = 7; i16 b = 32767; if ((a > b) != 0) { return 257; } }
     { uint a = 7; i16 b = 32767; if ((a >= b) != 0) { return 258; } }
-    { uint a = 4294967295; i16 b = -32768; if ((a + b) != 4294934527) { return 259; } }
-    { uint a = 4294967295; i16 b = -32768; if ((a - b) != 32767) { return 260; } }
-    { uint a = 4294967295; i16 b = -32768; if ((a * b) != 32768) { return 261; } }
+    { uint a = 4294967295; i16 b = -32768; if (((a as uint).wrapping_add(b as uint)) != 4294934527) { return 259; } }
+    { uint a = 4294967295; i16 b = -32768; if (((a as uint).wrapping_sub(b as uint)) != 32767) { return 260; } }
+    { uint a = 4294967295; i16 b = -32768; if (((a as uint).wrapping_mul(b as uint)) != 32768) { return 261; } }
     { uint a = 4294967295; i16 b = -32768; if ((a / b) != 1) { return 262; } }
     { uint a = 4294967295; i16 b = -32768; if ((a % b) != 32767) { return 263; } }
     { uint a = 4294967295; i16 b = -32768; if ((a & b) != 4294934528) { return 264; } }
@@ -43864,9 +43866,9 @@ fn m_uint_x_i16() {
     { uint a = 4294967295; i16 b = -32768; if ((a <= b) != 0) { return 270; } }
     { uint a = 4294967295; i16 b = -32768; if ((a > b) != 1) { return 271; } }
     { uint a = 4294967295; i16 b = -32768; if ((a >= b) != 1) { return 272; } }
-    { uint a = 4294967295; i16 b = -7; if ((a + b) != 4294967288) { return 273; } }
-    { uint a = 4294967295; i16 b = -7; if ((a - b) != 6) { return 274; } }
-    { uint a = 4294967295; i16 b = -7; if ((a * b) != 7) { return 275; } }
+    { uint a = 4294967295; i16 b = -7; if (((a as uint).wrapping_add(b as uint)) != 4294967288) { return 273; } }
+    { uint a = 4294967295; i16 b = -7; if (((a as uint).wrapping_sub(b as uint)) != 6) { return 274; } }
+    { uint a = 4294967295; i16 b = -7; if (((a as uint).wrapping_mul(b as uint)) != 7) { return 275; } }
     { uint a = 4294967295; i16 b = -7; if ((a / b) != 1) { return 276; } }
     { uint a = 4294967295; i16 b = -7; if ((a % b) != 6) { return 277; } }
     { uint a = 4294967295; i16 b = -7; if ((a & b) != 4294967289) { return 278; } }
@@ -43878,9 +43880,9 @@ fn m_uint_x_i16() {
     { uint a = 4294967295; i16 b = -7; if ((a <= b) != 0) { return 284; } }
     { uint a = 4294967295; i16 b = -7; if ((a > b) != 1) { return 285; } }
     { uint a = 4294967295; i16 b = -7; if ((a >= b) != 1) { return 286; } }
-    { uint a = 4294967295; i16 b = -1; if ((a + b) != 4294967294) { return 287; } }
-    { uint a = 4294967295; i16 b = -1; if ((a - b) != 0) { return 288; } }
-    { uint a = 4294967295; i16 b = -1; if ((a * b) != 1) { return 289; } }
+    { uint a = 4294967295; i16 b = -1; if (((a as uint).wrapping_add(b as uint)) != 4294967294) { return 287; } }
+    { uint a = 4294967295; i16 b = -1; if (((a as uint).wrapping_sub(b as uint)) != 0) { return 288; } }
+    { uint a = 4294967295; i16 b = -1; if (((a as uint).wrapping_mul(b as uint)) != 1) { return 289; } }
     { uint a = 4294967295; i16 b = -1; if ((a / b) != 1) { return 290; } }
     { uint a = 4294967295; i16 b = -1; if ((a % b) != 0) { return 291; } }
     { uint a = 4294967295; i16 b = -1; if ((a & b) != 4294967295) { return 292; } }
@@ -43906,9 +43908,9 @@ fn m_uint_x_i16() {
     { uint a = 4294967295; i16 b = 0; if ((a <= b) != 0) { return 312; } }
     { uint a = 4294967295; i16 b = 0; if ((a > b) != 1) { return 313; } }
     { uint a = 4294967295; i16 b = 0; if ((a >= b) != 1) { return 314; } }
-    { uint a = 4294967295; i16 b = 7; if ((a + b) != 6) { return 315; } }
+    { uint a = 4294967295; i16 b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 315; } }
     { uint a = 4294967295; i16 b = 7; if ((a - b) != 4294967288) { return 316; } }
-    { uint a = 4294967295; i16 b = 7; if ((a * b) != 4294967289) { return 317; } }
+    { uint a = 4294967295; i16 b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 317; } }
     { uint a = 4294967295; i16 b = 7; if ((a / b) != 613566756) { return 318; } }
     { uint a = 4294967295; i16 b = 7; if ((a % b) != 3) { return 319; } }
     { uint a = 4294967295; i16 b = 7; if ((a << b) != 4294967168) { return 320; } }
@@ -43922,9 +43924,9 @@ fn m_uint_x_i16() {
     { uint a = 4294967295; i16 b = 7; if ((a <= b) != 0) { return 328; } }
     { uint a = 4294967295; i16 b = 7; if ((a > b) != 1) { return 329; } }
     { uint a = 4294967295; i16 b = 7; if ((a >= b) != 1) { return 330; } }
-    { uint a = 4294967295; i16 b = 32767; if ((a + b) != 32766) { return 331; } }
+    { uint a = 4294967295; i16 b = 32767; if (((a as uint).wrapping_add(b as uint)) != 32766) { return 331; } }
     { uint a = 4294967295; i16 b = 32767; if ((a - b) != 4294934528) { return 332; } }
-    { uint a = 4294967295; i16 b = 32767; if ((a * b) != 4294934529) { return 333; } }
+    { uint a = 4294967295; i16 b = 32767; if (((a as uint).wrapping_mul(b as uint)) != 4294934529) { return 333; } }
     { uint a = 4294967295; i16 b = 32767; if ((a / b) != 131076) { return 334; } }
     { uint a = 4294967295; i16 b = 32767; if ((a % b) != 3) { return 335; } }
     { uint a = 4294967295; i16 b = 32767; if ((a & b) != 32767) { return 336; } }
@@ -43960,7 +43962,7 @@ fn m_uint_x_u16() {
     { uint a = 0; u16 b = 0; if ((a > b) != 0) { return 13; } }
     { uint a = 0; u16 b = 0; if ((a >= b) != 1) { return 14; } }
     { uint a = 0; u16 b = 1; if ((a + b) != 1) { return 15; } }
-    { uint a = 0; u16 b = 1; if ((a - b) != 4294967295) { return 16; } }
+    { uint a = 0; u16 b = 1; if (((a as uint).wrapping_sub(b as uint)) != 4294967295) { return 16; } }
     { uint a = 0; u16 b = 1; if ((a * b) != 0) { return 17; } }
     { uint a = 0; u16 b = 1; if ((a / b) != 0) { return 18; } }
     { uint a = 0; u16 b = 1; if ((a % b) != 0) { return 19; } }
@@ -43976,7 +43978,7 @@ fn m_uint_x_u16() {
     { uint a = 0; u16 b = 1; if ((a > b) != 0) { return 29; } }
     { uint a = 0; u16 b = 1; if ((a >= b) != 0) { return 30; } }
     { uint a = 0; u16 b = 7; if ((a + b) != 7) { return 31; } }
-    { uint a = 0; u16 b = 7; if ((a - b) != 4294967289) { return 32; } }
+    { uint a = 0; u16 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967289) { return 32; } }
     { uint a = 0; u16 b = 7; if ((a * b) != 0) { return 33; } }
     { uint a = 0; u16 b = 7; if ((a / b) != 0) { return 34; } }
     { uint a = 0; u16 b = 7; if ((a % b) != 0) { return 35; } }
@@ -43992,7 +43994,7 @@ fn m_uint_x_u16() {
     { uint a = 0; u16 b = 7; if ((a > b) != 0) { return 45; } }
     { uint a = 0; u16 b = 7; if ((a >= b) != 0) { return 46; } }
     { uint a = 0; u16 b = 40000; if ((a + b) != 40000) { return 47; } }
-    { uint a = 0; u16 b = 40000; if ((a - b) != 4294927296) { return 48; } }
+    { uint a = 0; u16 b = 40000; if (((a as uint).wrapping_sub(b as uint)) != 4294927296) { return 48; } }
     { uint a = 0; u16 b = 40000; if ((a * b) != 0) { return 49; } }
     { uint a = 0; u16 b = 40000; if ((a / b) != 0) { return 50; } }
     { uint a = 0; u16 b = 40000; if ((a % b) != 0) { return 51; } }
@@ -44006,7 +44008,7 @@ fn m_uint_x_u16() {
     { uint a = 0; u16 b = 40000; if ((a > b) != 0) { return 59; } }
     { uint a = 0; u16 b = 40000; if ((a >= b) != 0) { return 60; } }
     { uint a = 0; u16 b = 65535; if ((a + b) != 65535) { return 61; } }
-    { uint a = 0; u16 b = 65535; if ((a - b) != 4294901761) { return 62; } }
+    { uint a = 0; u16 b = 65535; if (((a as uint).wrapping_sub(b as uint)) != 4294901761) { return 62; } }
     { uint a = 0; u16 b = 65535; if ((a * b) != 0) { return 63; } }
     { uint a = 0; u16 b = 65535; if ((a / b) != 0) { return 64; } }
     { uint a = 0; u16 b = 65535; if ((a % b) != 0) { return 65; } }
@@ -44050,7 +44052,7 @@ fn m_uint_x_u16() {
     { uint a = 1; u16 b = 1; if ((a > b) != 0) { return 103; } }
     { uint a = 1; u16 b = 1; if ((a >= b) != 1) { return 104; } }
     { uint a = 1; u16 b = 7; if ((a + b) != 8) { return 105; } }
-    { uint a = 1; u16 b = 7; if ((a - b) != 4294967290) { return 106; } }
+    { uint a = 1; u16 b = 7; if (((a as uint).wrapping_sub(b as uint)) != 4294967290) { return 106; } }
     { uint a = 1; u16 b = 7; if ((a * b) != 7) { return 107; } }
     { uint a = 1; u16 b = 7; if ((a / b) != 0) { return 108; } }
     { uint a = 1; u16 b = 7; if ((a % b) != 1) { return 109; } }
@@ -44066,7 +44068,7 @@ fn m_uint_x_u16() {
     { uint a = 1; u16 b = 7; if ((a > b) != 0) { return 119; } }
     { uint a = 1; u16 b = 7; if ((a >= b) != 0) { return 120; } }
     { uint a = 1; u16 b = 40000; if ((a + b) != 40001) { return 121; } }
-    { uint a = 1; u16 b = 40000; if ((a - b) != 4294927297) { return 122; } }
+    { uint a = 1; u16 b = 40000; if (((a as uint).wrapping_sub(b as uint)) != 4294927297) { return 122; } }
     { uint a = 1; u16 b = 40000; if ((a * b) != 40000) { return 123; } }
     { uint a = 1; u16 b = 40000; if ((a / b) != 0) { return 124; } }
     { uint a = 1; u16 b = 40000; if ((a % b) != 1) { return 125; } }
@@ -44080,7 +44082,7 @@ fn m_uint_x_u16() {
     { uint a = 1; u16 b = 40000; if ((a > b) != 0) { return 133; } }
     { uint a = 1; u16 b = 40000; if ((a >= b) != 0) { return 134; } }
     { uint a = 1; u16 b = 65535; if ((a + b) != 65536) { return 135; } }
-    { uint a = 1; u16 b = 65535; if ((a - b) != 4294901762) { return 136; } }
+    { uint a = 1; u16 b = 65535; if (((a as uint).wrapping_sub(b as uint)) != 4294901762) { return 136; } }
     { uint a = 1; u16 b = 65535; if ((a * b) != 65535) { return 137; } }
     { uint a = 1; u16 b = 65535; if ((a / b) != 0) { return 138; } }
     { uint a = 1; u16 b = 65535; if ((a % b) != 1) { return 139; } }
@@ -44140,7 +44142,7 @@ fn m_uint_x_u16() {
     { uint a = 7; u16 b = 7; if ((a > b) != 0) { return 193; } }
     { uint a = 7; u16 b = 7; if ((a >= b) != 1) { return 194; } }
     { uint a = 7; u16 b = 40000; if ((a + b) != 40007) { return 195; } }
-    { uint a = 7; u16 b = 40000; if ((a - b) != 4294927303) { return 196; } }
+    { uint a = 7; u16 b = 40000; if (((a as uint).wrapping_sub(b as uint)) != 4294927303) { return 196; } }
     { uint a = 7; u16 b = 40000; if ((a * b) != 280000) { return 197; } }
     { uint a = 7; u16 b = 40000; if ((a / b) != 0) { return 198; } }
     { uint a = 7; u16 b = 40000; if ((a % b) != 7) { return 199; } }
@@ -44154,7 +44156,7 @@ fn m_uint_x_u16() {
     { uint a = 7; u16 b = 40000; if ((a > b) != 0) { return 207; } }
     { uint a = 7; u16 b = 40000; if ((a >= b) != 0) { return 208; } }
     { uint a = 7; u16 b = 65535; if ((a + b) != 65542) { return 209; } }
-    { uint a = 7; u16 b = 65535; if ((a - b) != 4294901768) { return 210; } }
+    { uint a = 7; u16 b = 65535; if (((a as uint).wrapping_sub(b as uint)) != 4294901768) { return 210; } }
     { uint a = 7; u16 b = 65535; if ((a * b) != 458745) { return 211; } }
     { uint a = 7; u16 b = 65535; if ((a / b) != 0) { return 212; } }
     { uint a = 7; u16 b = 65535; if ((a % b) != 7) { return 213; } }
@@ -44181,7 +44183,7 @@ fn m_uint_x_u16() {
     { uint a = 4294967295; u16 b = 0; if ((a <= b) != 0) { return 234; } }
     { uint a = 4294967295; u16 b = 0; if ((a > b) != 1) { return 235; } }
     { uint a = 4294967295; u16 b = 0; if ((a >= b) != 1) { return 236; } }
-    { uint a = 4294967295; u16 b = 1; if ((a + b) != 0) { return 237; } }
+    { uint a = 4294967295; u16 b = 1; if (((a as uint).wrapping_add(b as uint)) != 0) { return 237; } }
     { uint a = 4294967295; u16 b = 1; if ((a - b) != 4294967294) { return 238; } }
     { uint a = 4294967295; u16 b = 1; if ((a * b) != 4294967295) { return 239; } }
     { uint a = 4294967295; u16 b = 1; if ((a / b) != 4294967295) { return 240; } }
@@ -44197,9 +44199,9 @@ fn m_uint_x_u16() {
     { uint a = 4294967295; u16 b = 1; if ((a <= b) != 0) { return 250; } }
     { uint a = 4294967295; u16 b = 1; if ((a > b) != 1) { return 251; } }
     { uint a = 4294967295; u16 b = 1; if ((a >= b) != 1) { return 252; } }
-    { uint a = 4294967295; u16 b = 7; if ((a + b) != 6) { return 253; } }
+    { uint a = 4294967295; u16 b = 7; if (((a as uint).wrapping_add(b as uint)) != 6) { return 253; } }
     { uint a = 4294967295; u16 b = 7; if ((a - b) != 4294967288) { return 254; } }
-    { uint a = 4294967295; u16 b = 7; if ((a * b) != 4294967289) { return 255; } }
+    { uint a = 4294967295; u16 b = 7; if (((a as uint).wrapping_mul(b as uint)) != 4294967289) { return 255; } }
     { uint a = 4294967295; u16 b = 7; if ((a / b) != 613566756) { return 256; } }
     { uint a = 4294967295; u16 b = 7; if ((a % b) != 3) { return 257; } }
     { uint a = 4294967295; u16 b = 7; if ((a << b) != 4294967168) { return 258; } }
@@ -44213,9 +44215,9 @@ fn m_uint_x_u16() {
     { uint a = 4294967295; u16 b = 7; if ((a <= b) != 0) { return 266; } }
     { uint a = 4294967295; u16 b = 7; if ((a > b) != 1) { return 267; } }
     { uint a = 4294967295; u16 b = 7; if ((a >= b) != 1) { return 268; } }
-    { uint a = 4294967295; u16 b = 40000; if ((a + b) != 39999) { return 269; } }
+    { uint a = 4294967295; u16 b = 40000; if (((a as uint).wrapping_add(b as uint)) != 39999) { return 269; } }
     { uint a = 4294967295; u16 b = 40000; if ((a - b) != 4294927295) { return 270; } }
-    { uint a = 4294967295; u16 b = 40000; if ((a * b) != 4294927296) { return 271; } }
+    { uint a = 4294967295; u16 b = 40000; if (((a as uint).wrapping_mul(b as uint)) != 4294927296) { return 271; } }
     { uint a = 4294967295; u16 b = 40000; if ((a / b) != 107374) { return 272; } }
     { uint a = 4294967295; u16 b = 40000; if ((a % b) != 7295) { return 273; } }
     { uint a = 4294967295; u16 b = 40000; if ((a & b) != 40000) { return 274; } }
@@ -44227,9 +44229,9 @@ fn m_uint_x_u16() {
     { uint a = 4294967295; u16 b = 40000; if ((a <= b) != 0) { return 280; } }
     { uint a = 4294967295; u16 b = 40000; if ((a > b) != 1) { return 281; } }
     { uint a = 4294967295; u16 b = 40000; if ((a >= b) != 1) { return 282; } }
-    { uint a = 4294967295; u16 b = 65535; if ((a + b) != 65534) { return 283; } }
+    { uint a = 4294967295; u16 b = 65535; if (((a as uint).wrapping_add(b as uint)) != 65534) { return 283; } }
     { uint a = 4294967295; u16 b = 65535; if ((a - b) != 4294901760) { return 284; } }
-    { uint a = 4294967295; u16 b = 65535; if ((a * b) != 4294901761) { return 285; } }
+    { uint a = 4294967295; u16 b = 65535; if (((a as uint).wrapping_mul(b as uint)) != 4294901761) { return 285; } }
     { uint a = 4294967295; u16 b = 65535; if ((a / b) != 65537) { return 286; } }
     { uint a = 4294967295; u16 b = 65535; if ((a % b) != 0) { return 287; } }
     { uint a = 4294967295; u16 b = 65535; if ((a & b) != 65535) { return 288; } }
@@ -44250,7 +44252,7 @@ fn m_uint_x_u16() {
 #[test]
 fn m_ulong_x_i16() {
     let r = compile_jit_with_runtime(r#"test(): int {
-    { ulong a = 0; i16 b = -32768; if ((a - b) != 32768) { return 1; } }
+    { ulong a = 0; i16 b = -32768; if (((a as ulong).wrapping_sub(b as ulong)) != 32768) { return 1; } }
     { ulong a = 0; i16 b = -32768; if ((a * b) != 0) { return 2; } }
     { ulong a = 0; i16 b = -32768; if ((a / b) != 0) { return 3; } }
     { ulong a = 0; i16 b = -32768; if ((a % b) != 0) { return 4; } }
@@ -44261,7 +44263,7 @@ fn m_ulong_x_i16() {
     { ulong a = 0; i16 b = -32768; if ((a <= b) != 1) { return 9; } }
     { ulong a = 0; i16 b = -32768; if ((a > b) != 0) { return 10; } }
     { ulong a = 0; i16 b = -32768; if ((a >= b) != 0) { return 11; } }
-    { ulong a = 0; i16 b = -7; if ((a - b) != 7) { return 12; } }
+    { ulong a = 0; i16 b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 7) { return 12; } }
     { ulong a = 0; i16 b = -7; if ((a * b) != 0) { return 13; } }
     { ulong a = 0; i16 b = -7; if ((a / b) != 0) { return 14; } }
     { ulong a = 0; i16 b = -7; if ((a % b) != 0) { return 15; } }
@@ -44272,7 +44274,7 @@ fn m_ulong_x_i16() {
     { ulong a = 0; i16 b = -7; if ((a <= b) != 1) { return 20; } }
     { ulong a = 0; i16 b = -7; if ((a > b) != 0) { return 21; } }
     { ulong a = 0; i16 b = -7; if ((a >= b) != 0) { return 22; } }
-    { ulong a = 0; i16 b = -1; if ((a - b) != 1) { return 23; } }
+    { ulong a = 0; i16 b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 1) { return 23; } }
     { ulong a = 0; i16 b = -1; if ((a * b) != 0) { return 24; } }
     { ulong a = 0; i16 b = -1; if ((a / b) != 0) { return 25; } }
     { ulong a = 0; i16 b = -1; if ((a % b) != 0) { return 26; } }
@@ -44325,7 +44327,7 @@ fn m_ulong_x_i16() {
     { ulong a = 0; i16 b = 32767; if ((a <= b) != 1) { return 73; } }
     { ulong a = 0; i16 b = 32767; if ((a > b) != 0) { return 74; } }
     { ulong a = 0; i16 b = 32767; if ((a >= b) != 0) { return 75; } }
-    { ulong a = 1; i16 b = -32768; if ((a - b) != 32769) { return 76; } }
+    { ulong a = 1; i16 b = -32768; if (((a as ulong).wrapping_sub(b as ulong)) != 32769) { return 76; } }
     { ulong a = 1; i16 b = -32768; if ((a / b) != 0) { return 77; } }
     { ulong a = 1; i16 b = -32768; if ((a % b) != 1) { return 78; } }
     { ulong a = 1; i16 b = -32768; if ((a & b) != 0) { return 79; } }
@@ -44335,7 +44337,7 @@ fn m_ulong_x_i16() {
     { ulong a = 1; i16 b = -32768; if ((a <= b) != 1) { return 83; } }
     { ulong a = 1; i16 b = -32768; if ((a > b) != 0) { return 84; } }
     { ulong a = 1; i16 b = -32768; if ((a >= b) != 0) { return 85; } }
-    { ulong a = 1; i16 b = -7; if ((a - b) != 8) { return 86; } }
+    { ulong a = 1; i16 b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 86; } }
     { ulong a = 1; i16 b = -7; if ((a / b) != 0) { return 87; } }
     { ulong a = 1; i16 b = -7; if ((a % b) != 1) { return 88; } }
     { ulong a = 1; i16 b = -7; if ((a & b) != 1) { return 89; } }
@@ -44345,8 +44347,8 @@ fn m_ulong_x_i16() {
     { ulong a = 1; i16 b = -7; if ((a <= b) != 1) { return 93; } }
     { ulong a = 1; i16 b = -7; if ((a > b) != 0) { return 94; } }
     { ulong a = 1; i16 b = -7; if ((a >= b) != 0) { return 95; } }
-    { ulong a = 1; i16 b = -1; if ((a + b) != 0) { return 96; } }
-    { ulong a = 1; i16 b = -1; if ((a - b) != 2) { return 97; } }
+    { ulong a = 1; i16 b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 96; } }
+    { ulong a = 1; i16 b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 2) { return 97; } }
     { ulong a = 1; i16 b = -1; if ((a / b) != 0) { return 98; } }
     { ulong a = 1; i16 b = -1; if ((a % b) != 1) { return 99; } }
     { ulong a = 1; i16 b = -1; if ((a & b) != 1) { return 100; } }
@@ -44398,7 +44400,7 @@ fn m_ulong_x_i16() {
     { ulong a = 1; i16 b = 32767; if ((a <= b) != 1) { return 146; } }
     { ulong a = 1; i16 b = 32767; if ((a > b) != 0) { return 147; } }
     { ulong a = 1; i16 b = 32767; if ((a >= b) != 0) { return 148; } }
-    { ulong a = 7; i16 b = -32768; if ((a - b) != 32775) { return 149; } }
+    { ulong a = 7; i16 b = -32768; if (((a as ulong).wrapping_sub(b as ulong)) != 32775) { return 149; } }
     { ulong a = 7; i16 b = -32768; if ((a / b) != 0) { return 150; } }
     { ulong a = 7; i16 b = -32768; if ((a % b) != 7) { return 151; } }
     { ulong a = 7; i16 b = -32768; if ((a & b) != 0) { return 152; } }
@@ -44408,8 +44410,8 @@ fn m_ulong_x_i16() {
     { ulong a = 7; i16 b = -32768; if ((a <= b) != 1) { return 156; } }
     { ulong a = 7; i16 b = -32768; if ((a > b) != 0) { return 157; } }
     { ulong a = 7; i16 b = -32768; if ((a >= b) != 0) { return 158; } }
-    { ulong a = 7; i16 b = -7; if ((a + b) != 0) { return 159; } }
-    { ulong a = 7; i16 b = -7; if ((a - b) != 14) { return 160; } }
+    { ulong a = 7; i16 b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 0) { return 159; } }
+    { ulong a = 7; i16 b = -7; if (((a as ulong).wrapping_sub(b as ulong)) != 14) { return 160; } }
     { ulong a = 7; i16 b = -7; if ((a / b) != 0) { return 161; } }
     { ulong a = 7; i16 b = -7; if ((a % b) != 7) { return 162; } }
     { ulong a = 7; i16 b = -7; if ((a & b) != 1) { return 163; } }
@@ -44419,8 +44421,8 @@ fn m_ulong_x_i16() {
     { ulong a = 7; i16 b = -7; if ((a <= b) != 1) { return 167; } }
     { ulong a = 7; i16 b = -7; if ((a > b) != 0) { return 168; } }
     { ulong a = 7; i16 b = -7; if ((a >= b) != 0) { return 169; } }
-    { ulong a = 7; i16 b = -1; if ((a + b) != 6) { return 170; } }
-    { ulong a = 7; i16 b = -1; if ((a - b) != 8) { return 171; } }
+    { ulong a = 7; i16 b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 6) { return 170; } }
+    { ulong a = 7; i16 b = -1; if (((a as ulong).wrapping_sub(b as ulong)) != 8) { return 171; } }
     { ulong a = 7; i16 b = -1; if ((a / b) != 0) { return 172; } }
     { ulong a = 7; i16 b = -1; if ((a % b) != 7) { return 173; } }
     { ulong a = 7; i16 b = -1; if ((a & b) != 7) { return 174; } }
@@ -44473,8 +44475,8 @@ fn m_ulong_x_i16() {
     { ulong a = 7; i16 b = 32767; if ((a <= b) != 1) { return 221; } }
     { ulong a = 7; i16 b = 32767; if ((a > b) != 0) { return 222; } }
     { ulong a = 7; i16 b = 32767; if ((a >= b) != 0) { return 223; } }
-    { ulong a = 9223372036854775807; i16 b = -32768; if ((a + b) != 9223372036854743039) { return 224; } }
-    { ulong a = 9223372036854775807; i16 b = -32768; if ((a * b) != 32768) { return 225; } }
+    { ulong a = 9223372036854775807; i16 b = -32768; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854743039) { return 224; } }
+    { ulong a = 9223372036854775807; i16 b = -32768; if (((a as ulong).wrapping_mul(b as ulong)) != 32768) { return 225; } }
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a / b) != 0) { return 226; } }
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a % b) != 9223372036854775807) { return 227; } }
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a & b) != 9223372036854743040) { return 228; } }
@@ -44484,7 +44486,7 @@ fn m_ulong_x_i16() {
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a <= b) != 1) { return 232; } }
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a > b) != 0) { return 233; } }
     { ulong a = 9223372036854775807; i16 b = -32768; if ((a >= b) != 0) { return 234; } }
-    { ulong a = 9223372036854775807; i16 b = -7; if ((a + b) != 9223372036854775800) { return 235; } }
+    { ulong a = 9223372036854775807; i16 b = -7; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775800) { return 235; } }
     { ulong a = 9223372036854775807; i16 b = -7; if ((a / b) != 0) { return 236; } }
     { ulong a = 9223372036854775807; i16 b = -7; if ((a % b) != 9223372036854775807) { return 237; } }
     { ulong a = 9223372036854775807; i16 b = -7; if ((a & b) != 9223372036854775801) { return 238; } }
@@ -44494,7 +44496,7 @@ fn m_ulong_x_i16() {
     { ulong a = 9223372036854775807; i16 b = -7; if ((a <= b) != 1) { return 242; } }
     { ulong a = 9223372036854775807; i16 b = -7; if ((a > b) != 0) { return 243; } }
     { ulong a = 9223372036854775807; i16 b = -7; if ((a >= b) != 0) { return 244; } }
-    { ulong a = 9223372036854775807; i16 b = -1; if ((a + b) != 9223372036854775806) { return 245; } }
+    { ulong a = 9223372036854775807; i16 b = -1; if (((a as ulong).wrapping_add(b as ulong)) != 9223372036854775806) { return 245; } }
     { ulong a = 9223372036854775807; i16 b = -1; if ((a / b) != 0) { return 246; } }
     { ulong a = 9223372036854775807; i16 b = -1; if ((a % b) != 9223372036854775807) { return 247; } }
     { ulong a = 9223372036854775807; i16 b = -1; if ((a & b) != 9223372036854775807) { return 248; } }
@@ -44519,7 +44521,7 @@ fn m_ulong_x_i16() {
     { ulong a = 9223372036854775807; i16 b = 0; if ((a > b) != 1) { return 267; } }
     { ulong a = 9223372036854775807; i16 b = 0; if ((a >= b) != 1) { return 268; } }
     { ulong a = 9223372036854775807; i16 b = 7; if ((a - b) != 9223372036854775800) { return 269; } }
-    { ulong a = 9223372036854775807; i16 b = 7; if ((a * b) != 9223372036854775801) { return 270; } }
+    { ulong a = 9223372036854775807; i16 b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 270; } }
     { ulong a = 9223372036854775807; i16 b = 7; if ((a / b) != 1317624576693539401) { return 271; } }
     { ulong a = 9223372036854775807; i16 b = 7; if ((a % b) != 0) { return 272; } }
     { ulong a = 9223372036854775807; i16 b = 7; if ((a >> b) != 72057594037927935) { return 273; } }
@@ -44533,7 +44535,7 @@ fn m_ulong_x_i16() {
     { ulong a = 9223372036854775807; i16 b = 7; if ((a > b) != 1) { return 281; } }
     { ulong a = 9223372036854775807; i16 b = 7; if ((a >= b) != 1) { return 282; } }
     { ulong a = 9223372036854775807; i16 b = 32767; if ((a - b) != 9223372036854743040) { return 283; } }
-    { ulong a = 9223372036854775807; i16 b = 32767; if ((a * b) != 9223372036854743041) { return 284; } }
+    { ulong a = 9223372036854775807; i16 b = 32767; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854743041) { return 284; } }
     { ulong a = 9223372036854775807; i16 b = 32767; if ((a / b) != 281483566907400) { return 285; } }
     { ulong a = 9223372036854775807; i16 b = 32767; if ((a % b) != 7) { return 286; } }
     { ulong a = 9223372036854775807; i16 b = 32767; if ((a & b) != 32767) { return 287; } }
@@ -44796,7 +44798,7 @@ fn m_ulong_x_u16() {
     { ulong a = 9223372036854775807; u16 b = 1; if ((a > b) != 1) { return 240; } }
     { ulong a = 9223372036854775807; u16 b = 1; if ((a >= b) != 1) { return 241; } }
     { ulong a = 9223372036854775807; u16 b = 7; if ((a - b) != 9223372036854775800) { return 242; } }
-    { ulong a = 9223372036854775807; u16 b = 7; if ((a * b) != 9223372036854775801) { return 243; } }
+    { ulong a = 9223372036854775807; u16 b = 7; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854775801) { return 243; } }
     { ulong a = 9223372036854775807; u16 b = 7; if ((a / b) != 1317624576693539401) { return 244; } }
     { ulong a = 9223372036854775807; u16 b = 7; if ((a % b) != 0) { return 245; } }
     { ulong a = 9223372036854775807; u16 b = 7; if ((a >> b) != 72057594037927935) { return 246; } }
@@ -44822,7 +44824,7 @@ fn m_ulong_x_u16() {
     { ulong a = 9223372036854775807; u16 b = 40000; if ((a > b) != 1) { return 266; } }
     { ulong a = 9223372036854775807; u16 b = 40000; if ((a >= b) != 1) { return 267; } }
     { ulong a = 9223372036854775807; u16 b = 65535; if ((a - b) != 9223372036854710272) { return 268; } }
-    { ulong a = 9223372036854775807; u16 b = 65535; if ((a * b) != 9223372036854710273) { return 269; } }
+    { ulong a = 9223372036854775807; u16 b = 65535; if (((a as ulong).wrapping_mul(b as ulong)) != 9223372036854710273) { return 269; } }
     { ulong a = 9223372036854775807; u16 b = 65535; if ((a / b) != 140739635871744) { return 270; } }
     { ulong a = 9223372036854775807; u16 b = 65535; if ((a % b) != 32767) { return 271; } }
     { ulong a = 9223372036854775807; u16 b = 65535; if ((a & b) != 65535) { return 272; } }

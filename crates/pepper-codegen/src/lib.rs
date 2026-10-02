@@ -3,6 +3,7 @@
 //! LoopGen, OperatorGen) for the Rust sema model.
 
 pub mod address;
+pub mod checks;
 pub mod context;
 pub mod debug;
 mod debug_types;
@@ -178,6 +179,12 @@ pub struct CodeGenerator<'ctx> {
     /// method (`__acquire`, a constructor's prologue) is declared for the
     /// debugger.
     debug_struct_loc: Loc,
+    /// Which runtime checks the code performs (`--no-runtime-checks`; see
+    /// [`checks`]).
+    pub runtime_checks: checks::RuntimeChecks,
+    /// Each source's name and line starts, for the location a failed check
+    /// prints.
+    check_files: Vec<(String, Vec<usize>)>,
 }
 /// Stands in, under the JIT, for a C function the process cannot resolve.
 extern "C" fn unresolved_c_function() {
@@ -230,6 +237,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             debug: None,
             debug_location: None,
             debug_struct_loc: Loc::NONE,
+            runtime_checks: checks::RuntimeChecks::ALL,
+            check_files: Vec::new(),
         }
     }
 
@@ -270,6 +279,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
+        self.index_check_files(&module.sources);
         if self.debug_info {
             let unit_name = self.debug_unit_name(module);
             let optimized = self.opt_level != target::OptLevel::O0;
@@ -1754,7 +1764,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let value = thunk.get_nth_param(0).expect("this").into_array_value();
         let object = self.object_pointer(value.into())?;
         // Calling through a null trait value panics, never jumps through null.
-        if self.functions.contains_key("_pep_assert") {
+        if self.runtime_checks.null && self.functions.contains_key("_pep_assert") {
             let is_set = self
                 .builder
                 .build_is_not_null(object, "is_set")
@@ -3092,7 +3102,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // unsignedness), non-numeric operands keep the lhs type.
                 // Reporting the declared lhs type would misclassify negative
                 // results as unsigned in casts.
-                if is_comparison(*op) || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                if is_comparison(*op) || op.is_overflow_test() || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                     // A comparison produces an i1, not the promoted operand
                     // type: naming the operand type makes `coerce` a no-op
                     // and apply_op sign-extends `true` into -1.
@@ -4002,8 +4012,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Ok(value)
             }
-            Expression::Binary { op, lhs, rhs, .. } => self.codegen_binary(op, lhs, rhs),
-            Expression::Unary { op, operand, .. } => self.codegen_unary(*op, operand),
+            Expression::Binary { op, lhs, rhs, loc } => self.codegen_binary(op, lhs, rhs, *loc),
+            Expression::Unary { op, operand, loc } => self.codegen_unary(*op, operand, *loc),
             Expression::Cast { expr, ty, kind, .. } => self.codegen_cast(expr, ty, *kind),
             Expression::Ternary {
                 condition,
@@ -4826,6 +4836,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_call(&mut self, name: &str, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
+        // Without the bounds check (`--no-runtime-checks=bounds`), an index
+        // check is not made at all: its condition is not evaluated.
+        // `_pep_assert` is the null check sema generates for a `match`.
+        if (name == "_pep_check_bounds" && !self.runtime_checks.bounds) || (name == "_pep_assert" && !self.runtime_checks.null) {
+            return Ok(self.context.i32_type().const_zero().into());
+        }
         // release<T>(v): no-op for POD values (nothing to free), dispatches
         // to T.__release for struct references.
         if name == "release" || name.starts_with("release<") {
@@ -4987,7 +5003,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let target = self.codegen_expr(callee)?.into_pointer_value();
         // Calling a null C function pointer panics, never jumps through null.
-        if self.functions.contains_key("_pep_assert") {
+        if self.runtime_checks.null && self.functions.contains_key("_pep_assert") {
             let is_set = self.builder.build_is_not_null(target, "fn_set").map_err(|e| e.to_string())?;
             let msg = self
                 .builder
@@ -5344,6 +5360,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let temp = self.owned_temp_type(&with.subject);
         let value = self.codegen_expr(&with.subject)?;
         if let Some(message) = &with.null_message
+            && self.runtime_checks.null
             && self.functions.contains_key("_pep_assert")
         {
             let is_set = self.builder.build_is_not_null(value.into_pointer_value(), "subject_set").map_err(|e| e.to_string())?;
@@ -5453,7 +5470,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let callee_temp = self.owned_temp_type(callee);
         let object = self.codegen_expr(callee)?.into_pointer_value();
         // Calling a null function value panics, never jumps through null.
-        if self.functions.contains_key("_pep_assert") {
+        if self.runtime_checks.null && self.functions.contains_key("_pep_assert") {
             let is_set = self.builder.build_is_not_null(object, "fn_set").map_err(|e| e.to_string())?;
             let msg = self
                 .builder
@@ -5805,7 +5822,15 @@ impl<'ctx> CodeGenerator<'ctx> {
         op: &BinaryOp,
         lhs: &Expression,
         rhs: &Expression,
+        loc: Loc,
     ) -> Result<BasicValueEnum<'ctx>, String> {
+        // A check's compile error points at the operator alone, not at the
+        // right operand the binary's location also covers.
+        let loc = match op.op_name().len() {
+            _ if loc.is_none() => loc,
+            0 => loc,
+            width => Loc::new(loc.file, pepper_parser::ast::Span { start: loc.span.start, end: (loc.span.start + width).min(loc.span.end.max(loc.span.start + 1)) }),
+        };
         // Assignment: store into the lhs address (OperatorGen.cpp:155-180).
         if op.is_assignment() {
             // An owned-rvalue rhs (e.g. `a[i] = f()`) is a temporary: the
@@ -5828,12 +5853,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             // The sema type name can be a pointer (`__ptr<char>` → i32 in
             // coerce) while the address's LLVM pointee is narrower (i8);
             // narrow to it so `_data[_size] = 0` stores one byte, not four.
-            let fit = |v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
+            let slot_ty = lhs_addr.llvm_ty;
+            let fit = |builder: &inkwell::builder::Builder<'ctx>, v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
                 if let (Some(BasicTypeEnum::IntType(target)), BasicValueEnum::IntValue(iv)) =
-                    (&lhs_addr.llvm_ty, &v)
+                    (&slot_ty, &v)
                 {
                     if iv.get_type().get_bit_width() > target.get_bit_width() {
-                        return match self.builder.build_int_truncate(*iv, *target, "narrow") {
+                        return match builder.build_int_truncate(*iv, *target, "narrow") {
                             Ok(t) => BasicValueEnum::IntValue(t),
                             Err(_) => v,
                         };
@@ -5841,7 +5867,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 v
             };
-            let coerced = fit(coerced);
+            let coerced = fit(&self.builder, coerced);
             // Compound assign: load lhs, apply the base op, store.
             if let Some(base_op) = op.base_assign_op() {
                 let lhs_val = lhs_addr
@@ -5855,7 +5881,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let result_ty = binary_result_type(&base_op, &lhs_name, &rhs_name);
                 let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
                 let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
-                let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None, None)?;
+                let result = match self.checked_operands(base_op, lhs_c, rhs_c, &result_ty, loc)? {
+                    Some(result) => result,
+                    None => apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None, None)?,
+                };
                 // C: `x op= e` converts the converted operands to the usual
                 // conversion type (e.g. `int += 2.5` adds at f64), then the
                 // result is converted back to the lhs's type for the store.
@@ -5865,7 +5894,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     result
                 };
-                let fitted = fit(result);
+                let fitted = fit(&self.builder, result);
                 if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                     // Compound store into a struct-reference slot transfers
                     // ownership like any other index store.
@@ -6011,7 +6040,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         let ptr_elem_name = self
             .value_sema_type(lhs)
             .and_then(|ty| ty.strip_suffix('*').map(str::to_string));
-        let result = apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem, ptr_elem_name.as_deref())?;
+        let result = match self.checked_operands(*op, lhs_c, rhs_c, &result_ty, loc)? {
+            Some(result) => result,
+            None => apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem, ptr_elem_name.as_deref())?,
+        };
         // Owned-rvalue operands are temporaries: released once the op has
         // consumed them.
         if let Some(ty) = lhs_temp {
@@ -6118,7 +6150,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
-    fn codegen_unary(&mut self, op: UnaryOp, operand: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+    /// `lhs op rhs` through [`Self::checked_int_binary`] when both are
+    /// integers; `None` when `op` has no check or the operands are not.
+    fn checked_operands(&mut self, op: BinaryOp, lhs: BasicValueEnum<'ctx>, rhs: BasicValueEnum<'ctx>, ty: &str, loc: Loc) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        let result = match (lhs, rhs) {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => self.checked_int_binary(op, l, r, ty, loc),
+            _ => Ok(None),
+        };
+        self.locate(&result, loc);
+        result
+    }
+
+    fn codegen_unary(&mut self, op: UnaryOp, operand: &Expression, loc: Loc) -> Result<BasicValueEnum<'ctx>, String> {
         use UnaryOp::*;
         match op {
             Neg => {
@@ -6136,7 +6179,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     _ => value,
                 };
+                // `-x` is `0 - x`, so negating the most negative value of a
+                // signed type (or any nonzero unsigned value) overflows.
+                let promoted = self.value_sema_type(operand).map(|t| llvm_ops::result_type(&t, &t));
                 let result = match value {
+                    BasicValueEnum::IntValue(v) if v.get_type().get_bit_width() >= 8 => {
+                        let unsigned = promoted.as_deref().is_some_and(llvm_ops::is_unsigned_int_type);
+                        let zero = v.get_type().const_zero();
+                        let negated = self.checked_arithmetic(BinaryOp::Sub, zero, v, unsigned, loc, Some("negation"))?;
+                        Ok(BasicValueEnum::IntValue(negated))
+                    }
                     BasicValueEnum::IntValue(v) => Ok(BasicValueEnum::IntValue(
                         self.builder.build_int_neg(v, "neg").map_err(|e| e.to_string())?,
                     )),
@@ -6196,6 +6248,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| "inc load".to_string())?;
                 let inc = matches!(op, PreInc | PostInc);
                 let new_val = match old {
+                    // `x++` is `x += 1`: a type narrower than `int` steps at
+                    // `int` and the store keeps the low bits, so only `int`
+                    // and wider can overflow.
+                    BasicValueEnum::IntValue(v) if v.get_type().get_bit_width() >= 32 => {
+                        let unsigned = llvm_ops::is_unsigned_int_type(&pepper_sema::enums::stored_as(&addr.ty));
+                        let one = v.get_type().const_int(1, false);
+                        let (base, name) = if inc { (BinaryOp::Add, "increment") } else { (BinaryOp::Sub, "decrement") };
+                        let stepped = self.checked_arithmetic(base, v, one, unsigned, loc, Some(name))?;
+                        BasicValueEnum::IntValue(stepped)
+                    }
                     BasicValueEnum::IntValue(v) => {
                         let one = v.get_type().const_int(1, false);
                         let v2 = if inc {
@@ -6764,7 +6826,11 @@ fn is_float_valued(expr: &Expression) -> bool {
 /// *left* operand, so an unsigned shift amount must not turn a signed `>>`
 /// into a logical shift.
 fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
-    if matches!(op, BinaryOp::LShift | BinaryOp::RShift) {
+    if op.is_overflow_test() {
+        // `__add_overflows(a, b)` tests at the operands' own width: a
+        // `byte` sum overflows past 255, not past the promoted int's range.
+        pepper_sema::enums::stored_as(lhs_name).to_string()
+    } else if matches!(op, BinaryOp::LShift | BinaryOp::RShift) {
         llvm_ops::result_type(lhs_name, lhs_name)
     } else if matches!(op, BinaryOp::Add | BinaryOp::Sub)
         && (lhs_name.ends_with('*') || rhs_name.ends_with('*'))

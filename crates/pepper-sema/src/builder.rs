@@ -452,6 +452,20 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                     });
                 }
             };
+            // The arithmetic intrinsics (`__wrapping_add(a, b)`, ...) are
+            // operators without syntax.
+            if let Some(op) = BinaryOp::intrinsic(&function)
+                && let [lhs, rhs] = arguments.as_slice()
+                && !matches!(lhs, ast::Expression::NamedArgument { .. })
+                && !matches!(rhs, ast::Expression::NamedArgument { .. })
+            {
+                return Ok(Expression::Binary {
+                    op,
+                    lhs: Box::new(expression(lhs)?),
+                    rhs: Box::new(expression(rhs)?),
+                    loc: loc(target.span()),
+                });
+            }
             record_literal_args(loc(target.span()), arguments);
             Ok(Expression::FunctionCall {
                 function,

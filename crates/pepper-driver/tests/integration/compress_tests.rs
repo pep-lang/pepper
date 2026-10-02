@@ -43,7 +43,7 @@ noise(count: ulong, unique: uint): u8[] {
     uint state = 12345;
     ulong index = 0;
     while (index < count) {
-        state = state * 1103515245 + 12345;
+        state = state.wrapping_mul(1103515245).wrapping_add(12345);
         data.append(((state >> 16) % unique) as u8);
         index += 1;
     }
@@ -162,7 +162,7 @@ streams_through_readers_and_writers(): int {
     var data = Array<u8>();
     uint state = 7;
     while (data.count < 400000) {
-        state = state * 1103515245 + 12345;
+        state = state.wrapping_mul(1103515245).wrapping_add(12345);
         data.append(97 + ((state >> 16) % 8) as u8);
     }
     var formats = [compress.Format.Raw, compress.Format.Zlib, compress.Format.Gzip];

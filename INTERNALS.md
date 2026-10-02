@@ -29,7 +29,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
-| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
+| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pepper-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
@@ -123,7 +123,10 @@ the runtime's own instances, so it is checked whole (`compiler::merge`).
 `--import`, `-l`, `-L`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
 [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
 `--emit-llvm`, `--emit-ast`, and
-`--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
+`--no-runtime`, `--no-runtime-checks=<list>` (`effective_runtime_checks`:
+a `checks::RuntimeChecks`, every check on at `-O0` with a warning,
+`runtime_checks_warning`; part of `cache::Build` and so of the cache key),
+`--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
 and build, sema passes, codegen and emission, link), and `-T cache`, which
 prints how the cache supplied each unit's object (`hit`, `hit (same code)`
@@ -1019,7 +1022,25 @@ How the language lowers:
   extern is declared returning `i32` and LLVM would not recognize the
   builtin; so a constant-size copy optimizes to loads and stores.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
-  `__is_pod`, and `__default<T>`. `call_function` declares unknown
+  `__is_pod`, and `__default<T>`. Without the `bounds` or `null` runtime
+  check, a call to `_pep_check_bounds` (the runtime's index check) or
+  `_pep_assert` (the null checks) is dropped, arguments and all.
+- **Runtime checks** (`checks.rs`, #265): `codegen_binary` and
+  `codegen_unary` send integer `+ - * / % ** << >>`, unary `-`, `++` and
+  `--` through `checked_int_binary` / `checked_arithmetic`, which use
+  `llvm.{s,u}{add,sub,mul}.with.overflow` and `panic_if`: a branch to a
+  `check.fail` block calling `_pep_panic("file:line:col: integer overflow in
+  'int' addition")` (`llvm.trap` without the runtime). Two constant operands
+  are checked at compile time instead, an error at the operator.
+  `CodeGenerator::runtime_checks` turns kinds off: overflow then wraps, a
+  shift count is masked, a division is plain `sdiv`/`udiv`. Narrow types
+  compute at `int` (C promotion), so only `int` and wider overflow.
+  The arithmetic intrinsics `__wrapping_add/sub/mul(a, b)` and
+  `__add/sub/mul_overflows(a, b)` are `BinaryOp` variants that the builder
+  makes from those calls (`BinaryOp::intrinsic`); the overflow tests work at
+  the lhs's own width and give `bool`. The integer types' `wrapping_`,
+  `checked_`, `saturating_` and `overflowing_` methods (`runtime/number.pep`)
+  are written with them. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.
 - **Intrinsic nodes** in `codegen_expr_unlocated`: `SizeOf`, `Default` (zero
   or null), `IsPod` (true unless the type is a reference or a tuple holding

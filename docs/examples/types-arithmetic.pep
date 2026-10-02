@@ -21,7 +21,7 @@ main(): int {
     uint one = 1;
     assert(!(minus_one < one), "-1 converts to 4294967295 when compared with a uint");
     uint zero = 0;
-    assert(zero - 1 == 4294967295, "unsigned arithmetic wraps");
+    assert(zero.wrapping_sub(1) == 4294967295, "zero - 1 would panic; wrapping_sub wraps");
 
     # Mixing an integer with a floating-point value gives floating point.
     int whole = 3;

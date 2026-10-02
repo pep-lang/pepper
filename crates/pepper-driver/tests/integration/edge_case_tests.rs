@@ -177,13 +177,14 @@ test(): int {
 
 #[test]
 fn int_overflow_wrap() {
-    // LLVM add wraps: INT_MAX + 1 == INT_MIN.
+    // `+` panics on overflow (#265); `wrapping_add` wraps: INT_MAX + 1 ==
+    // INT_MIN.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
     var m = 2147483647;
-    return (m + 1) - (-2147483648);
+    return m.wrapping_add(1) - (-2147483648);
 }
 "#
         ),
@@ -888,14 +889,16 @@ test(): int {
         1
     );
     // A u32 operand keeps its unsignedness (C-style: as wide as the
-    // promoted result), so `-(u32)` stays an unsigned value.
+    // promoted result), so `-(u32)` stays an unsigned value: negating a
+    // nonzero one overflows (#265), so only `wrapping_sub` gives 2^32 - 1.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
     u32 b = 1;
-    u32 n = -b;
-    return (n == 4294967295) ? 0 : 1;
+    u32 zero = 0;
+    u32 n = -zero;
+    return (n == 0 && zero.wrapping_sub(b) == 4294967295) ? 0 : 1;
 }
 "#
         ),

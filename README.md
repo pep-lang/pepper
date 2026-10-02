@@ -227,6 +227,7 @@ cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default 
 cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
+cargo run -- tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
@@ -262,8 +263,16 @@ body recompiles only that file: the files importing it are reused. A file
 whose text did not change is not even parsed again, and when nothing changed
 the compiler checks nothing and does not link again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
-`PEPPER_CACHE_DIR`. The optimization level and target CPU are part of every object's key, so
+`PEPPER_CACHE_DIR`. The optimization level, target CPU and removed runtime checks are part of every object's key, so
 switching between `-O0` and `-O2` never reuses the other level's objects.
+
+Integer overflow, division by zero, an oversized shift, an index out of
+range and a call through a null reference panic at run time, at every
+optimization level. `--no-runtime-checks=<list>` removes the kinds a build
+names (`overflow`, `divide`, `shift`, `bounds`, `null`, or `all`) from `-O1`
+up; at `-O0` it is ignored with a warning. Removing `bounds` or `null` gives
+up memory safety (see the book's
+[Integer overflow](docs/src/language/types-and-variables.md#integer-overflow)).
 
 `-O` runs LLVM's standard `default<O2>` pipeline (what clang runs at `-O2`)
 over each file's object; `-O1` and `-O3` run theirs. At `-O2` and `-O3` the

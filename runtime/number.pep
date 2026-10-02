@@ -1,14 +1,25 @@
-## Reading numbers from text: every number type has a static `parse`.
+## Reading numbers from text, and arithmetic that says what to do on
+## overflow.
 ##
-## `int.parse("42")` gives an `int?`, empty when the text is not a number
-## of that type. The integer types take a base from 2 to 36; `float` and
-## `double` read decimal notation. Each spelling of a type is the same
-## type, so `i32.parse` is `int.parse`.
+## Every number type has a static `parse`: `int.parse("42")` gives an
+## `int?`, empty when the text is not a number of that type. The integer
+## types take a base from 2 to 36; `float` and `double` read decimal
+## notation. Each spelling of a type is the same type, so `i32.parse` is
+## `int.parse`.
+##
+## Integer `+`, `-` and `*` panic on overflow. Each integer type also has
+## `wrapping_add` (the result modulo 2^bits), `checked_add` (none on
+## overflow), `saturating_add` (clamped to the type's range) and
+## `overflowing_add` (the wrapped result and whether it overflowed), with
+## `sub` and `mul` forms of each.
 ##
 ## @example
 ##     var port = int.parse("8080");
 ##     assert(port.is_some() && port.value() == 8080, "parsed");
 ##     assert(byte.parse("256").is_none(), "too big for a byte");
+##     int big = 2147483647;
+##     assert(big.wrapping_add(1) == -2147483648, "wraps around");
+##     assert(big.checked_add(1).is_none(), "does not fit");
 
 extern double strtod(char* text, char** end);
 extern float strtof(char* text, char** end);
@@ -63,7 +74,8 @@ _parse_signed(text: String, base: int, lowest: ulong, highest: ulong): (bool, lo
         return (false, 0);
     }
     # The most negative long's magnitude, 2^63, wraps to itself here.
-    return (true, negative ? 0 - (magnitude as long) : magnitude as long);
+    var value = magnitude as long;
+    return (true, negative ? (0 as long).wrapping_sub(value) : value);
 }
 
 # Parses an optional `+` then digits in `base`, for an unsigned type whose
@@ -140,6 +152,132 @@ export extend char {
         }
         return Optional<char>.some(value as char);
     }
+
+    ## Returns `this + other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `char`
+    wrapping_add(other: char): char {
+        return __wrapping_add(this, other) as char;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `char`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: char): char? {
+        if (__add_overflows(this, other)) {
+            return Optional<char>.none();
+        }
+        return Optional<char>.some(__wrapping_add(this, other) as char);
+    }
+
+    ## Returns `this + other`, clamped to the highest or lowest `char` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `char` to it
+    saturating_add(other: char): char {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as char;
+        }
+        return other > 0 ? 127 : -128;
+    }
+
+    ## Returns `this + other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: char): (char, bool) {
+        return (__wrapping_add(this, other) as char, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `char`
+    wrapping_sub(other: char): char {
+        return __wrapping_sub(this, other) as char;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `char`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: char): char? {
+        if (__sub_overflows(this, other)) {
+            return Optional<char>.none();
+        }
+        return Optional<char>.some(__wrapping_sub(this, other) as char);
+    }
+
+    ## Returns `this - other`, clamped to the highest or lowest `char` on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `char` to it
+    saturating_sub(other: char): char {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as char;
+        }
+        return other < 0 ? 127 : -128;
+    }
+
+    ## Returns `this - other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: char): (char, bool) {
+        return (__wrapping_sub(this, other) as char, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `char`
+    wrapping_mul(other: char): char {
+        return __wrapping_mul(this, other) as char;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `char`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: char): char? {
+        if (__mul_overflows(this, other)) {
+            return Optional<char>.none();
+        }
+        return Optional<char>.some(__wrapping_mul(this, other) as char);
+    }
+
+    ## Returns `this * other`, clamped to the highest or lowest `char` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `char` to it
+    saturating_mul(other: char): char {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as char;
+        }
+        return (this < 0) == (other < 0) ? 127 : -128;
+    }
+
+    ## Returns `this * other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: char): (char, bool) {
+        return (__wrapping_mul(this, other) as char, __mul_overflows(this, other));
+    }
 }
 
 export extend byte {
@@ -162,6 +300,132 @@ export extend byte {
             return Optional<byte>.none();
         }
         return Optional<byte>.some(value as byte);
+    }
+
+    ## Returns `this + other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `byte`
+    wrapping_add(other: byte): byte {
+        return __wrapping_add(this, other) as byte;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `byte`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: byte): byte? {
+        if (__add_overflows(this, other)) {
+            return Optional<byte>.none();
+        }
+        return Optional<byte>.some(__wrapping_add(this, other) as byte);
+    }
+
+    ## Returns `this + other`, clamped to the highest `byte` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `byte` to it
+    saturating_add(other: byte): byte {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as byte;
+        }
+        return 255;
+    }
+
+    ## Returns `this + other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: byte): (byte, bool) {
+        return (__wrapping_add(this, other) as byte, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `byte`
+    wrapping_sub(other: byte): byte {
+        return __wrapping_sub(this, other) as byte;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `byte`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: byte): byte? {
+        if (__sub_overflows(this, other)) {
+            return Optional<byte>.none();
+        }
+        return Optional<byte>.some(__wrapping_sub(this, other) as byte);
+    }
+
+    ## Returns `this - other`, clamped to 0 on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `byte` to it
+    saturating_sub(other: byte): byte {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as byte;
+        }
+        return 0;
+    }
+
+    ## Returns `this - other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: byte): (byte, bool) {
+        return (__wrapping_sub(this, other) as byte, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^8: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `byte`
+    wrapping_mul(other: byte): byte {
+        return __wrapping_mul(this, other) as byte;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `byte`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: byte): byte? {
+        if (__mul_overflows(this, other)) {
+            return Optional<byte>.none();
+        }
+        return Optional<byte>.some(__wrapping_mul(this, other) as byte);
+    }
+
+    ## Returns `this * other`, clamped to the highest `byte` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `byte` to it
+    saturating_mul(other: byte): byte {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as byte;
+        }
+        return 255;
+    }
+
+    ## Returns `this * other` modulo 2^8, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: byte): (byte, bool) {
+        return (__wrapping_mul(this, other) as byte, __mul_overflows(this, other));
     }
 }
 
@@ -186,6 +450,132 @@ export extend short {
         }
         return Optional<short>.some(value as short);
     }
+
+    ## Returns `this + other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `short`
+    wrapping_add(other: short): short {
+        return __wrapping_add(this, other) as short;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `short`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: short): short? {
+        if (__add_overflows(this, other)) {
+            return Optional<short>.none();
+        }
+        return Optional<short>.some(__wrapping_add(this, other) as short);
+    }
+
+    ## Returns `this + other`, clamped to the highest or lowest `short` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `short` to it
+    saturating_add(other: short): short {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as short;
+        }
+        return other > 0 ? 32767 : -32768;
+    }
+
+    ## Returns `this + other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: short): (short, bool) {
+        return (__wrapping_add(this, other) as short, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `short`
+    wrapping_sub(other: short): short {
+        return __wrapping_sub(this, other) as short;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `short`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: short): short? {
+        if (__sub_overflows(this, other)) {
+            return Optional<short>.none();
+        }
+        return Optional<short>.some(__wrapping_sub(this, other) as short);
+    }
+
+    ## Returns `this - other`, clamped to the highest or lowest `short` on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `short` to it
+    saturating_sub(other: short): short {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as short;
+        }
+        return other < 0 ? 32767 : -32768;
+    }
+
+    ## Returns `this - other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: short): (short, bool) {
+        return (__wrapping_sub(this, other) as short, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `short`
+    wrapping_mul(other: short): short {
+        return __wrapping_mul(this, other) as short;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `short`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: short): short? {
+        if (__mul_overflows(this, other)) {
+            return Optional<short>.none();
+        }
+        return Optional<short>.some(__wrapping_mul(this, other) as short);
+    }
+
+    ## Returns `this * other`, clamped to the highest or lowest `short` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `short` to it
+    saturating_mul(other: short): short {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as short;
+        }
+        return (this < 0) == (other < 0) ? 32767 : -32768;
+    }
+
+    ## Returns `this * other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: short): (short, bool) {
+        return (__wrapping_mul(this, other) as short, __mul_overflows(this, other));
+    }
 }
 
 export extend ushort {
@@ -208,6 +598,132 @@ export extend ushort {
             return Optional<ushort>.none();
         }
         return Optional<ushort>.some(value as ushort);
+    }
+
+    ## Returns `this + other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `ushort`
+    wrapping_add(other: ushort): ushort {
+        return __wrapping_add(this, other) as ushort;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `ushort`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: ushort): ushort? {
+        if (__add_overflows(this, other)) {
+            return Optional<ushort>.none();
+        }
+        return Optional<ushort>.some(__wrapping_add(this, other) as ushort);
+    }
+
+    ## Returns `this + other`, clamped to the highest `ushort` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `ushort` to it
+    saturating_add(other: ushort): ushort {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as ushort;
+        }
+        return 65535;
+    }
+
+    ## Returns `this + other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: ushort): (ushort, bool) {
+        return (__wrapping_add(this, other) as ushort, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `ushort`
+    wrapping_sub(other: ushort): ushort {
+        return __wrapping_sub(this, other) as ushort;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `ushort`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: ushort): ushort? {
+        if (__sub_overflows(this, other)) {
+            return Optional<ushort>.none();
+        }
+        return Optional<ushort>.some(__wrapping_sub(this, other) as ushort);
+    }
+
+    ## Returns `this - other`, clamped to 0 on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `ushort` to it
+    saturating_sub(other: ushort): ushort {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as ushort;
+        }
+        return 0;
+    }
+
+    ## Returns `this - other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: ushort): (ushort, bool) {
+        return (__wrapping_sub(this, other) as ushort, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^16: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `ushort`
+    wrapping_mul(other: ushort): ushort {
+        return __wrapping_mul(this, other) as ushort;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `ushort`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: ushort): ushort? {
+        if (__mul_overflows(this, other)) {
+            return Optional<ushort>.none();
+        }
+        return Optional<ushort>.some(__wrapping_mul(this, other) as ushort);
+    }
+
+    ## Returns `this * other`, clamped to the highest `ushort` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `ushort` to it
+    saturating_mul(other: ushort): ushort {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as ushort;
+        }
+        return 65535;
+    }
+
+    ## Returns `this * other` modulo 2^16, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: ushort): (ushort, bool) {
+        return (__wrapping_mul(this, other) as ushort, __mul_overflows(this, other));
     }
 }
 
@@ -234,6 +750,132 @@ export extend int {
         }
         return Optional<int>.some(value as int);
     }
+
+    ## Returns `this + other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `int`
+    wrapping_add(other: int): int {
+        return __wrapping_add(this, other) as int;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `int`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: int): int? {
+        if (__add_overflows(this, other)) {
+            return Optional<int>.none();
+        }
+        return Optional<int>.some(__wrapping_add(this, other) as int);
+    }
+
+    ## Returns `this + other`, clamped to the highest or lowest `int` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `int` to it
+    saturating_add(other: int): int {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as int;
+        }
+        return other > 0 ? 2147483647 : -2147483648;
+    }
+
+    ## Returns `this + other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: int): (int, bool) {
+        return (__wrapping_add(this, other) as int, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `int`
+    wrapping_sub(other: int): int {
+        return __wrapping_sub(this, other) as int;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `int`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: int): int? {
+        if (__sub_overflows(this, other)) {
+            return Optional<int>.none();
+        }
+        return Optional<int>.some(__wrapping_sub(this, other) as int);
+    }
+
+    ## Returns `this - other`, clamped to the highest or lowest `int` on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `int` to it
+    saturating_sub(other: int): int {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as int;
+        }
+        return other < 0 ? 2147483647 : -2147483648;
+    }
+
+    ## Returns `this - other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: int): (int, bool) {
+        return (__wrapping_sub(this, other) as int, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `int`
+    wrapping_mul(other: int): int {
+        return __wrapping_mul(this, other) as int;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `int`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: int): int? {
+        if (__mul_overflows(this, other)) {
+            return Optional<int>.none();
+        }
+        return Optional<int>.some(__wrapping_mul(this, other) as int);
+    }
+
+    ## Returns `this * other`, clamped to the highest or lowest `int` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `int` to it
+    saturating_mul(other: int): int {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as int;
+        }
+        return (this < 0) == (other < 0) ? 2147483647 : -2147483648;
+    }
+
+    ## Returns `this * other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: int): (int, bool) {
+        return (__wrapping_mul(this, other) as int, __mul_overflows(this, other));
+    }
 }
 
 export extend uint {
@@ -256,6 +898,132 @@ export extend uint {
             return Optional<uint>.none();
         }
         return Optional<uint>.some(value as uint);
+    }
+
+    ## Returns `this + other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `uint`
+    wrapping_add(other: uint): uint {
+        return __wrapping_add(this, other) as uint;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `uint`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: uint): uint? {
+        if (__add_overflows(this, other)) {
+            return Optional<uint>.none();
+        }
+        return Optional<uint>.some(__wrapping_add(this, other) as uint);
+    }
+
+    ## Returns `this + other`, clamped to the highest `uint` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `uint` to it
+    saturating_add(other: uint): uint {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as uint;
+        }
+        return 4294967295;
+    }
+
+    ## Returns `this + other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: uint): (uint, bool) {
+        return (__wrapping_add(this, other) as uint, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `uint`
+    wrapping_sub(other: uint): uint {
+        return __wrapping_sub(this, other) as uint;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `uint`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: uint): uint? {
+        if (__sub_overflows(this, other)) {
+            return Optional<uint>.none();
+        }
+        return Optional<uint>.some(__wrapping_sub(this, other) as uint);
+    }
+
+    ## Returns `this - other`, clamped to 0 on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `uint` to it
+    saturating_sub(other: uint): uint {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as uint;
+        }
+        return 0;
+    }
+
+    ## Returns `this - other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: uint): (uint, bool) {
+        return (__wrapping_sub(this, other) as uint, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^32: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `uint`
+    wrapping_mul(other: uint): uint {
+        return __wrapping_mul(this, other) as uint;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `uint`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: uint): uint? {
+        if (__mul_overflows(this, other)) {
+            return Optional<uint>.none();
+        }
+        return Optional<uint>.some(__wrapping_mul(this, other) as uint);
+    }
+
+    ## Returns `this * other`, clamped to the highest `uint` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `uint` to it
+    saturating_mul(other: uint): uint {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as uint;
+        }
+        return 4294967295;
+    }
+
+    ## Returns `this * other` modulo 2^32, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: uint): (uint, bool) {
+        return (__wrapping_mul(this, other) as uint, __mul_overflows(this, other));
     }
 }
 
@@ -281,6 +1049,132 @@ export extend long {
         }
         return Optional<long>.some(value);
     }
+
+    ## Returns `this + other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `long`
+    wrapping_add(other: long): long {
+        return __wrapping_add(this, other) as long;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `long`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: long): long? {
+        if (__add_overflows(this, other)) {
+            return Optional<long>.none();
+        }
+        return Optional<long>.some(__wrapping_add(this, other) as long);
+    }
+
+    ## Returns `this + other`, clamped to the highest or lowest `long` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `long` to it
+    saturating_add(other: long): long {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as long;
+        }
+        return other > 0 ? 9223372036854775807 : (-9223372036854775807 - 1);
+    }
+
+    ## Returns `this + other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: long): (long, bool) {
+        return (__wrapping_add(this, other) as long, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `long`
+    wrapping_sub(other: long): long {
+        return __wrapping_sub(this, other) as long;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `long`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: long): long? {
+        if (__sub_overflows(this, other)) {
+            return Optional<long>.none();
+        }
+        return Optional<long>.some(__wrapping_sub(this, other) as long);
+    }
+
+    ## Returns `this - other`, clamped to the highest or lowest `long` on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `long` to it
+    saturating_sub(other: long): long {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as long;
+        }
+        return other < 0 ? 9223372036854775807 : (-9223372036854775807 - 1);
+    }
+
+    ## Returns `this - other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: long): (long, bool) {
+        return (__wrapping_sub(this, other) as long, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `long`
+    wrapping_mul(other: long): long {
+        return __wrapping_mul(this, other) as long;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `long`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: long): long? {
+        if (__mul_overflows(this, other)) {
+            return Optional<long>.none();
+        }
+        return Optional<long>.some(__wrapping_mul(this, other) as long);
+    }
+
+    ## Returns `this * other`, clamped to the highest or lowest `long` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `long` to it
+    saturating_mul(other: long): long {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as long;
+        }
+        return (this < 0) == (other < 0) ? 9223372036854775807 : (-9223372036854775807 - 1);
+    }
+
+    ## Returns `this * other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: long): (long, bool) {
+        return (__wrapping_mul(this, other) as long, __mul_overflows(this, other));
+    }
 }
 
 export extend ulong {
@@ -303,6 +1197,132 @@ export extend ulong {
             return Optional<ulong>.none();
         }
         return Optional<ulong>.some(value);
+    }
+
+    ## Returns `this + other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, wrapped to a `ulong`
+    wrapping_add(other: ulong): ulong {
+        return __wrapping_add(this, other) as ulong;
+    }
+
+    ## Returns `this + other`, or none when the sum does not fit a
+    ## `ulong`.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or none on overflow
+    checked_add(other: ulong): ulong? {
+        if (__add_overflows(this, other)) {
+            return Optional<ulong>.none();
+        }
+        return Optional<ulong>.some(__wrapping_add(this, other) as ulong);
+    }
+
+    ## Returns `this + other`, clamped to the highest `ulong` on overflow.
+    ##
+    ## @param other the value to add
+    ## @returns the sum, or the nearest `ulong` to it
+    saturating_add(other: ulong): ulong {
+        if (!__add_overflows(this, other)) {
+            return __wrapping_add(this, other) as ulong;
+        }
+        return 0xFFFFFFFFFFFFFFFF;
+    }
+
+    ## Returns `this + other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to add
+    ## @returns the wrapped sum, and true when it overflowed
+    overflowing_add(other: ulong): (ulong, bool) {
+        return (__wrapping_add(this, other) as ulong, __add_overflows(this, other));
+    }
+
+    ## Returns `this - other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, wrapped to a `ulong`
+    wrapping_sub(other: ulong): ulong {
+        return __wrapping_sub(this, other) as ulong;
+    }
+
+    ## Returns `this - other`, or none when the difference does not fit a
+    ## `ulong`.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or none on overflow
+    checked_sub(other: ulong): ulong? {
+        if (__sub_overflows(this, other)) {
+            return Optional<ulong>.none();
+        }
+        return Optional<ulong>.some(__wrapping_sub(this, other) as ulong);
+    }
+
+    ## Returns `this - other`, clamped to 0 on overflow.
+    ##
+    ## @param other the value to subtract
+    ## @returns the difference, or the nearest `ulong` to it
+    saturating_sub(other: ulong): ulong {
+        if (!__sub_overflows(this, other)) {
+            return __wrapping_sub(this, other) as ulong;
+        }
+        return 0;
+    }
+
+    ## Returns `this - other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to subtract
+    ## @returns the wrapped difference, and true when it overflowed
+    overflowing_sub(other: ulong): (ulong, bool) {
+        return (__wrapping_sub(this, other) as ulong, __sub_overflows(this, other));
+    }
+
+    ## Returns `this * other` modulo 2^64: on overflow the result wraps
+    ## around instead of panicking. For hashes, checksums and random number
+    ## generators, which rely on wrapping.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, wrapped to a `ulong`
+    wrapping_mul(other: ulong): ulong {
+        return __wrapping_mul(this, other) as ulong;
+    }
+
+    ## Returns `this * other`, or none when the product does not fit a
+    ## `ulong`.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or none on overflow
+    checked_mul(other: ulong): ulong? {
+        if (__mul_overflows(this, other)) {
+            return Optional<ulong>.none();
+        }
+        return Optional<ulong>.some(__wrapping_mul(this, other) as ulong);
+    }
+
+    ## Returns `this * other`, clamped to the highest `ulong` on overflow.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the product, or the nearest `ulong` to it
+    saturating_mul(other: ulong): ulong {
+        if (!__mul_overflows(this, other)) {
+            return __wrapping_mul(this, other) as ulong;
+        }
+        return 0xFFFFFFFFFFFFFFFF;
+    }
+
+    ## Returns `this * other` modulo 2^64, and whether the operation
+    ## overflowed.
+    ##
+    ## @param other the value to multiply by
+    ## @returns the wrapped product, and true when it overflowed
+    overflowing_mul(other: ulong): (ulong, bool) {
+        return (__wrapping_mul(this, other) as ulong, __mul_overflows(this, other));
     }
 }
 

@@ -45,10 +45,20 @@ export assert(condition: bool, message: __ptr<char>) {
     }
 }
 
-# The allocation-free form of `assert` that compiler-generated checks (index
-# bounds, null function and trait values) lower to: `message` is a
-# NUL-terminated C string, or `__null`.
+# The allocation-free form of `assert` that compiler-generated null checks
+# (function and trait values, `match` subjects) lower to: `message` is a
+# NUL-terminated C string, or `__null`. A build with
+# `--no-runtime-checks=null` drops them.
 export _pep_assert(condition: bool, message: __ptr<char>) {
+    if (!condition) {
+        _pep_panic(message);
+    }
+}
+
+# The index check of `Array` and `String` indexing: `_pep_assert`, except
+# that the compiler drops each call, condition and all, from a build with
+# `--no-runtime-checks=bounds`.
+export _pep_check_bounds(condition: bool, message: __ptr<char>) {
     if (!condition) {
         _pep_panic(message);
     }
@@ -218,7 +228,7 @@ export _pep_panic(message: __ptr<char>) {
 export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
     if (data == __null || length == 0) { return -3750763034362895579; }
     __ptr<u8> bytes = data as __ptr<u8>;
-    ulong h = (-3750763034362895579 as ulong) ^ length;
+    ulong h = 0xcbf29ce484222325 ^ length;
     ulong i = 0;
     while (i + 8 <= length) {
         h = _pep_hash_step(h, _pep_hash_word(bytes, i, 8));
@@ -227,8 +237,8 @@ export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
     if (i < length) {
         h = _pep_hash_step(h, _pep_hash_word(bytes, i, length - i));
     }
-    h = (h ^ (h >> 33)) * 0xff51afd7ed558ccd;
-    h = (h ^ (h >> 33)) * 0xc4ceb9fe1a85ec53;
+    h = __wrapping_mul(h ^ (h >> 33), 0xff51afd7ed558ccd);
+    h = __wrapping_mul(h ^ (h >> 33), 0xc4ceb9fe1a85ec53);
     return h ^ (h >> 33);
 }
 
@@ -245,7 +255,7 @@ _pep_hash_word(bytes: __ptr<u8>, start: ulong, count: ulong): ulong {
 
 # One step of `_pep_hash_bytes`: mixes `word` into `h`.
 _pep_hash_step(h: ulong, word: ulong): ulong {
-    var mixed = (h ^ word) * 0x9e3779b97f4a7c15;
+    var mixed = __wrapping_mul(h ^ word, 0x9e3779b97f4a7c15);
     return mixed ^ (mixed >> 32);
 }
 

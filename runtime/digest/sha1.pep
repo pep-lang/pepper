@@ -123,7 +123,7 @@ export struct Sha1 {
                 f = b ^ c ^ d;
                 k = 0xca62c1d6;
             }
-            uint temp = _digest_rotate_left(a, 5) + f + e + k + w[t];
+            uint temp = _digest_rotate_left(a, 5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(w[t]);
             e = d;
             d = c;
             c = _digest_rotate_left(b, 30);
@@ -131,11 +131,11 @@ export struct Sha1 {
             a = temp;
             t += 1;
         }
-        h[0] = h[0] + a;
-        h[1] = h[1] + b;
-        h[2] = h[2] + c;
-        h[3] = h[3] + d;
-        h[4] = h[4] + e;
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
     }
 }
 

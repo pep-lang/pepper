@@ -42,6 +42,18 @@ pub enum BinaryOp {
     BitAndAssign,
     BitOrAssign,
     BitXorAssign,
+    /// `__wrapping_add(a, b)` and its `sub`/`mul` forms: the operation
+    /// modulo 2^width, never an overflow panic (#265). No syntax spells
+    /// these; the runtime's `wrapping_add` methods call the intrinsics.
+    WrappingAdd,
+    WrappingSub,
+    WrappingMul,
+    /// `__add_overflows(a, b)` and its `sub`/`mul` forms: whether the
+    /// operation overflows the operands' own type (not the promoted one), as
+    /// a `bool`.
+    AddOverflows,
+    SubOverflows,
+    MulOverflows,
 }
 
 impl BinaryOp {
@@ -79,6 +91,12 @@ impl BinaryOp {
             BinaryOp::BitAndAssign => "&=",
             BinaryOp::BitOrAssign => "|=",
             BinaryOp::BitXorAssign => "^=",
+            BinaryOp::WrappingAdd
+            | BinaryOp::WrappingSub
+            | BinaryOp::WrappingMul
+            | BinaryOp::AddOverflows
+            | BinaryOp::SubOverflows
+            | BinaryOp::MulOverflows => "",
         };
         base.to_string()
     }
@@ -115,6 +133,26 @@ impl BinaryOp {
                 | BinaryOp::BitOrAssign
                 | BinaryOp::BitXorAssign
         )
+    }
+
+    /// The arithmetic intrinsic a call to `name` stands for
+    /// (`__wrapping_add` → [`BinaryOp::WrappingAdd`]).
+    pub fn intrinsic(name: &str) -> Option<BinaryOp> {
+        Some(match name {
+            "__wrapping_add" => BinaryOp::WrappingAdd,
+            "__wrapping_sub" => BinaryOp::WrappingSub,
+            "__wrapping_mul" => BinaryOp::WrappingMul,
+            "__add_overflows" => BinaryOp::AddOverflows,
+            "__sub_overflows" => BinaryOp::SubOverflows,
+            "__mul_overflows" => BinaryOp::MulOverflows,
+            _ => return None,
+        })
+    }
+
+    /// The overflow tests (`__add_overflows` ...): their result type is
+    /// `bool`, and they work at the lhs's own type.
+    pub fn is_overflow_test(&self) -> bool {
+        matches!(self, BinaryOp::AddOverflows | BinaryOp::SubOverflows | BinaryOp::MulOverflows)
     }
 
     /// Comparison ops (`==`, `!=`, `<`, `<=`, `>`, `>=`, identical): their

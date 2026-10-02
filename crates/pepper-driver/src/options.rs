@@ -53,6 +53,16 @@ pub struct Options {
     #[arg(short = 'm', value_name = "OPTION", allow_hyphen_values = true)]
     pub machine: Vec<String>,
 
+    /// Remove kinds of runtime check from an optimized build, as a
+    /// comma-separated list: `overflow` (integer overflow; arithmetic then
+    /// wraps), `divide` (division by zero and `MIN / -1`; then undefined),
+    /// `shift` (a count of at least the width; then masked), `bounds`
+    /// (array and string indexing) and `null` (calls and matches through a
+    /// null reference), or `all`. Removing `bounds` or `null` gives up
+    /// memory safety. Ignored, with a warning, at `-O0`.
+    #[arg(long = "no-runtime-checks", value_name = "CHECKS", value_parser = parse_runtime_checks)]
+    pub no_runtime_checks: Option<pepper_codegen::checks::RuntimeChecks>,
+
     /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
@@ -110,6 +120,11 @@ pub struct Options {
     pub msvc: bool,
 }
 
+/// The checks `--no-runtime-checks=<list>` leaves on.
+fn parse_runtime_checks(list: &str) -> Result<pepper_codegen::checks::RuntimeChecks, String> {
+    pepper_codegen::checks::RuntimeChecks::without(list)
+}
+
 /// The command line with a bare `-O` spelled `-O2`, so `-O` may come
 /// before a source file without taking it as its level.
 pub fn normalize_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<std::ffi::OsString> {
@@ -136,7 +151,26 @@ impl Options {
             Some(_) => false,
             None => matches!(opt_level, OptLevel::O2 | OptLevel::O3),
         };
-        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug, cpu: self.effective_cpu()? })
+        let runtime_checks = self.effective_runtime_checks()?;
+        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug, cpu: self.effective_cpu()?, runtime_checks })
+    }
+
+    /// The runtime checks the code performs: every one at `-O0`, else all
+    /// but those `--no-runtime-checks` removes.
+    pub fn effective_runtime_checks(&self) -> Result<pepper_codegen::checks::RuntimeChecks, String> {
+        use pepper_codegen::target::OptLevel;
+        match self.no_runtime_checks {
+            Some(checks) if self.effective_opt_level()? != OptLevel::O0 => Ok(checks),
+            _ => Ok(pepper_codegen::checks::RuntimeChecks::ALL),
+        }
+    }
+
+    /// The warning `--no-runtime-checks` at `-O0` gets: debug builds keep
+    /// every check.
+    pub fn runtime_checks_warning(&self) -> Option<String> {
+        let ignored = self.no_runtime_checks.is_some_and(|c| c != pepper_codegen::checks::RuntimeChecks::ALL)
+            && self.effective_opt_level().is_ok_and(|level| level == pepper_codegen::target::OptLevel::O0);
+        ignored.then(|| "warning: '--no-runtime-checks' has no effect at -O0".to_string())
     }
 
     /// The CPU `-march`, `-mcpu`, `-mtune` and `-m<feature>` choose for the

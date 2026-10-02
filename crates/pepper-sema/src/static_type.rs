@@ -257,7 +257,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::Binary { op, lhs, rhs, .. } => {
             if op.is_assignment() {
                 of(lhs, table, current)
-            } else if op.is_comparison() || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+            } else if op.is_comparison() || op.is_overflow_test() || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                 Some(TypeName::bool_())
             } else {
                 // An operator overload has its method's return type; numeric

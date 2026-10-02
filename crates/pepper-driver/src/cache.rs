@@ -81,6 +81,8 @@ pub struct Build {
     pub cpu: Cpu,
     /// Debug info (`-g`).
     pub debug: bool,
+    /// The runtime checks the code performs (`--no-runtime-checks`).
+    pub runtime_checks: pepper_codegen::checks::RuntimeChecks,
 }
 
 impl Build {
@@ -90,7 +92,7 @@ impl Build {
     }
 
     /// How the options appear in the cache: `O2-x86-64@generic`,
-    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`. A CPU name that is not a plain file name (from
+    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`, `O2-nrc-overflow-x86-64@generic`. A CPU name that is not a plain file name (from
     /// `-march=native`'s features, say) is hashed.
     fn name(&self) -> String {
         let cpu = self.cpu.key();
@@ -99,7 +101,10 @@ impl Build {
         } else {
             blake3::hash(cpu.as_bytes()).to_hex()[..16].to_string()
         };
-        format!("O{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, cpu)
+        // `-nrc-overflow-shift`: the checks `--no-runtime-checks` removed.
+        let removed: String = self.runtime_checks.removed().iter().map(|name| format!("-{}", name)).collect();
+        let removed = if removed.is_empty() { String::new() } else { format!("-nrc{}", removed) };
+        format!("O{}{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, removed, cpu)
     }
 }
 

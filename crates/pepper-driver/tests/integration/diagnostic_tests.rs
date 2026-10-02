@@ -4598,3 +4598,23 @@ fn bound_method_passed_as_a_value() {
          \x20     |                    ^"
     );
 }
+
+#[test]
+fn constant_overflow_is_an_error_at_the_operator() {
+    assert_eq!(
+        error_of("constant_overflow", "main(): int {\n    var seconds = 100000 * 100000;\n    return 0;\n}\n"),
+        "main.pep:2:26: error: integer overflow in 'int' multiplication\n\
+         \x20   2 |     var seconds = 100000 * 100000;\n\
+         \x20     |                          ^"
+    );
+}
+
+#[test]
+fn constant_division_by_zero_is_an_error_at_the_operator() {
+    assert_eq!(
+        error_of("constant_division_by_zero", "main(): int {\n    var x = 10;\n    x %= 0;\n    return x;\n}\n"),
+        "main.pep:3:7: error: division by zero\n\
+         \x20   3 |     x %= 0;\n\
+         \x20     |       ^~"
+    );
+}

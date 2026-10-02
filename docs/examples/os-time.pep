@@ -4,7 +4,7 @@ main(): int {
     # Measure with the monotonic clock: subtracting two instants gives a
     # Duration.
     var start = os.Instant.now();
-    var total = 0;
+    long total = 0;
     for (var i in 0..100000) {
         total = total + i;
     }

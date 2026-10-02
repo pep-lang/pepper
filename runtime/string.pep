@@ -306,10 +306,10 @@ export struct String {
         # promotes to unsigned (a negative idx would wrap to ~2^64).
         if (_length > 0) {
             while (idx < 0) {
-                idx += _length;
+                idx = (idx + (_length as long)) as int;
             }
         }
-        assert(idx < _length, "String[] idx must be < length");
+        _pep_check_bounds(idx < _length, "String[] idx must be < length");
         ulong begin = _pep_utf8_char_offset(_data, _size, idx);
         return String(_data + begin, 0, 1);
     }
@@ -702,7 +702,7 @@ export struct String {
     ##     var s = "a=b";
     ##     assert(s.byte_at(1) == '=', "second byte");
     byte_at(index: ulong): byte {
-        assert(index < _size, "String byte_at index out of bounds");
+        _pep_check_bounds(index < _size, "String byte_at index out of bounds");
         return _data[index] as byte;
     }
 
@@ -966,7 +966,7 @@ export struct String {
 export to_string(value: long): String {
     if (value < 0) {
         # Negate as unsigned: -value overflows for the most negative long.
-        return _decimal(0 - (value as ulong), true);
+        return _decimal((0 as ulong).wrapping_sub(value as ulong), true);
     }
     return _decimal(value as ulong, false);
 }
@@ -1521,7 +1521,7 @@ export _pep_format<T>(value: T, fill: String, align: int, width: ulong): String 
 # overload per integer type, as for `to_string`.
 _pep_radix(value: long, base: ulong, upper: bool, plus: bool): String {
     if (value < 0) {
-        return _digits(0 - (value as ulong), true, plus, base, upper);
+        return _digits((0 as ulong).wrapping_sub(value as ulong), true, plus, base, upper);
     }
     return _digits(value as ulong, false, plus, base, upper);
 }

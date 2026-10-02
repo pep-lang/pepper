@@ -2,18 +2,29 @@
 
 # number.pep
 
-Reading numbers from text: every number type has a static `parse`.
+Reading numbers from text, and arithmetic that says what to do on
+overflow.
 
-`int.parse("42")` gives an `int?`, empty when the text is not a number
-of that type. The integer types take a base from 2 to 36; `float` and
-`double` read decimal notation. Each spelling of a type is the same
-type, so `i32.parse` is `int.parse`.
+Every number type has a static `parse`: `int.parse("42")` gives an
+`int?`, empty when the text is not a number of that type. The integer
+types take a base from 2 to 36; `float` and `double` read decimal
+notation. Each spelling of a type is the same type, so `i32.parse` is
+`int.parse`.
+
+Integer `+`, `-` and `*` panic on overflow. Each integer type also has
+`wrapping_add` (the result modulo 2^bits), `checked_add` (none on
+overflow), `saturating_add` (clamped to the type's range) and
+`overflowing_add` (the wrapped result and whether it overflowed), with
+`sub` and `mul` forms of each.
 
 **Example**
 ```pepper
     var port = int.parse("8080");
     assert(port.is_some() && port.value() == 8080, "parsed");
     assert(byte.parse("256").is_none(), "too big for a byte");
+    int big = 2147483647;
+    assert(big.wrapping_add(1) == -2147483648, "wraps around");
+    assert(big.checked_add(1).is_none(), "does not fit");
 ```
 
 Source: `runtime/number.pep`
@@ -52,6 +63,188 @@ are accepted.
     assert(i8.parse("-128").value() == -128, "the lowest");
 ```
 
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: char): char
+```
+
+Returns `this + other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `char`
+
+#### checked_add
+
+```pepper
+checked_add(other: char): char?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`char`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: char): char
+```
+
+Returns `this + other`, clamped to the highest or lowest `char` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `char` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: char): (char, bool)
+```
+
+Returns `this + other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: char): char
+```
+
+Returns `this - other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `char`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: char): char?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`char`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: char): char
+```
+
+Returns `this - other`, clamped to the highest or lowest `char` on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `char` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: char): (char, bool)
+```
+
+Returns `this - other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: char): char
+```
+
+Returns `this * other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `char`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: char): char?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`char`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: char): char
+```
+
+Returns `this * other`, clamped to the highest or lowest `char` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `char` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: char): (char, bool)
+```
+
+Returns `this * other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
+
 ## extend byte
 
 ```pepper
@@ -85,6 +278,188 @@ accepted.
 ```pepper
     assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 ```
+
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: byte): byte
+```
+
+Returns `this + other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `byte`
+
+#### checked_add
+
+```pepper
+checked_add(other: byte): byte?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`byte`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: byte): byte
+```
+
+Returns `this + other`, clamped to the highest `byte` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `byte` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: byte): (byte, bool)
+```
+
+Returns `this + other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: byte): byte
+```
+
+Returns `this - other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `byte`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: byte): byte?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`byte`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: byte): byte
+```
+
+Returns `this - other`, clamped to 0 on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `byte` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: byte): (byte, bool)
+```
+
+Returns `this - other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: byte): byte
+```
+
+Returns `this * other` modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `byte`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: byte): byte?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`byte`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: byte): byte
+```
+
+Returns `this * other`, clamped to the highest `byte` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `byte` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: byte): (byte, bool)
+```
+
+Returns `this * other` modulo 2^8, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
 
 ## extend short
 
@@ -120,6 +495,188 @@ separators are accepted.
     assert(short.parse("-300").value() == -300, "decimal");
 ```
 
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: short): short
+```
+
+Returns `this + other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `short`
+
+#### checked_add
+
+```pepper
+checked_add(other: short): short?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`short`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: short): short
+```
+
+Returns `this + other`, clamped to the highest or lowest `short` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `short` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: short): (short, bool)
+```
+
+Returns `this + other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: short): short
+```
+
+Returns `this - other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `short`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: short): short?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`short`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: short): short
+```
+
+Returns `this - other`, clamped to the highest or lowest `short` on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `short` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: short): (short, bool)
+```
+
+Returns `this - other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: short): short
+```
+
+Returns `this * other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `short`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: short): short?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`short`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: short): short
+```
+
+Returns `this * other`, clamped to the highest or lowest `short` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `short` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: short): (short, bool)
+```
+
+Returns `this * other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
+
 ## extend ushort
 
 ```pepper
@@ -153,6 +710,188 @@ accepted.
 ```pepper
     assert(ushort.parse("8080").value() == 8080, "a port");
 ```
+
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: ushort): ushort
+```
+
+Returns `this + other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `ushort`
+
+#### checked_add
+
+```pepper
+checked_add(other: ushort): ushort?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`ushort`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: ushort): ushort
+```
+
+Returns `this + other`, clamped to the highest `ushort` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `ushort` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: ushort): (ushort, bool)
+```
+
+Returns `this + other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: ushort): ushort
+```
+
+Returns `this - other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `ushort`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: ushort): ushort?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`ushort`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: ushort): ushort
+```
+
+Returns `this - other`, clamped to 0 on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `ushort` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: ushort): (ushort, bool)
+```
+
+Returns `this - other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: ushort): ushort
+```
+
+Returns `this * other` modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `ushort`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: ushort): ushort?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`ushort`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: ushort): ushort
+```
+
+Returns `this * other`, clamped to the highest `ushort` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `ushort` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: ushort): (ushort, bool)
+```
+
+Returns `this * other` modulo 2^16, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
 
 ## extend int
 
@@ -190,6 +929,188 @@ prefixes (`0x`) or separators are accepted.
     assert(int.parse("12x").is_none(), "not a number");
 ```
 
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: int): int
+```
+
+Returns `this + other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `int`
+
+#### checked_add
+
+```pepper
+checked_add(other: int): int?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`int`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: int): int
+```
+
+Returns `this + other`, clamped to the highest or lowest `int` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `int` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: int): (int, bool)
+```
+
+Returns `this + other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: int): int
+```
+
+Returns `this - other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `int`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: int): int?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`int`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: int): int
+```
+
+Returns `this - other`, clamped to the highest or lowest `int` on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `int` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: int): (int, bool)
+```
+
+Returns `this - other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: int): int
+```
+
+Returns `this * other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `int`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: int): int?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`int`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: int): int
+```
+
+Returns `this * other`, clamped to the highest or lowest `int` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `int` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: int): (int, bool)
+```
+
+Returns `this * other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
+
 ## extend uint
 
 ```pepper
@@ -223,6 +1144,188 @@ accepted.
 ```pepper
     assert(uint.parse("4294967295").value() == 4294967295, "the highest");
 ```
+
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: uint): uint
+```
+
+Returns `this + other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `uint`
+
+#### checked_add
+
+```pepper
+checked_add(other: uint): uint?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`uint`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: uint): uint
+```
+
+Returns `this + other`, clamped to the highest `uint` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `uint` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: uint): (uint, bool)
+```
+
+Returns `this + other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: uint): uint
+```
+
+Returns `this - other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `uint`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: uint): uint?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`uint`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: uint): uint
+```
+
+Returns `this - other`, clamped to 0 on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `uint` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: uint): (uint, bool)
+```
+
+Returns `this - other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: uint): uint
+```
+
+Returns `this * other` modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `uint`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: uint): uint?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`uint`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: uint): uint
+```
+
+Returns `this * other`, clamped to the highest `uint` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `uint` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: uint): (uint, bool)
+```
+
+Returns `this * other` modulo 2^32, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
 
 ## extend long
 
@@ -259,6 +1362,188 @@ are accepted.
     assert(long.parse("9223372036854775808").is_none(), "too big");
 ```
 
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: long): long
+```
+
+Returns `this + other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `long`
+
+#### checked_add
+
+```pepper
+checked_add(other: long): long?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`long`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: long): long
+```
+
+Returns `this + other`, clamped to the highest or lowest `long` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `long` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: long): (long, bool)
+```
+
+Returns `this + other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: long): long
+```
+
+Returns `this - other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `long`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: long): long?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`long`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: long): long
+```
+
+Returns `this - other`, clamped to the highest or lowest `long` on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `long` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: long): (long, bool)
+```
+
+Returns `this - other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: long): long
+```
+
+Returns `this * other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `long`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: long): long?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`long`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: long): long
+```
+
+Returns `this * other`, clamped to the highest or lowest `long` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `long` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: long): (long, bool)
+```
+
+Returns `this * other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
+
 ## extend ulong
 
 ```pepper
@@ -292,6 +1577,188 @@ accepted.
 ```pepper
     assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
 ```
+
+### Methods
+
+#### wrapping_add
+
+```pepper
+wrapping_add(other: ulong): ulong
+```
+
+Returns `this + other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, wrapped to a `ulong`
+
+#### checked_add
+
+```pepper
+checked_add(other: ulong): ulong?
+```
+
+Returns `this + other`, or none when the sum does not fit a
+`ulong`.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or none on overflow
+
+#### saturating_add
+
+```pepper
+saturating_add(other: ulong): ulong
+```
+
+Returns `this + other`, clamped to the highest `ulong` on overflow.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the sum, or the nearest `ulong` to it
+
+#### overflowing_add
+
+```pepper
+overflowing_add(other: ulong): (ulong, bool)
+```
+
+Returns `this + other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to add
+
+**Returns**
+- the wrapped sum, and true when it overflowed
+
+#### wrapping_sub
+
+```pepper
+wrapping_sub(other: ulong): ulong
+```
+
+Returns `this - other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, wrapped to a `ulong`
+
+#### checked_sub
+
+```pepper
+checked_sub(other: ulong): ulong?
+```
+
+Returns `this - other`, or none when the difference does not fit a
+`ulong`.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or none on overflow
+
+#### saturating_sub
+
+```pepper
+saturating_sub(other: ulong): ulong
+```
+
+Returns `this - other`, clamped to 0 on overflow.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the difference, or the nearest `ulong` to it
+
+#### overflowing_sub
+
+```pepper
+overflowing_sub(other: ulong): (ulong, bool)
+```
+
+Returns `this - other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to subtract
+
+**Returns**
+- the wrapped difference, and true when it overflowed
+
+#### wrapping_mul
+
+```pepper
+wrapping_mul(other: ulong): ulong
+```
+
+Returns `this * other` modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, wrapped to a `ulong`
+
+#### checked_mul
+
+```pepper
+checked_mul(other: ulong): ulong?
+```
+
+Returns `this * other`, or none when the product does not fit a
+`ulong`.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or none on overflow
+
+#### saturating_mul
+
+```pepper
+saturating_mul(other: ulong): ulong
+```
+
+Returns `this * other`, clamped to the highest `ulong` on overflow.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the product, or the nearest `ulong` to it
+
+#### overflowing_mul
+
+```pepper
+overflowing_mul(other: ulong): (ulong, bool)
+```
+
+Returns `this * other` modulo 2^64, and whether the operation
+overflowed.
+
+**Parameters**
+- `other` — the value to multiply by
+
+**Returns**
+- the wrapped product, and true when it overflowed
 
 ## extend float
 

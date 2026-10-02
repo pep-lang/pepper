@@ -18,8 +18,9 @@
 //! Left out on purpose: `nonnull` (a struct reference may be null),
 //! `dereferenceable` (an object can be freed during a call that received
 //! it, as with `std::shared_ptr`), `noalias` parameters (two parameters may
-//! refer to one object), and `nsw`/`nuw` (integer overflow wraps until it
-//! traps, #265). LLVM infers `memory(...)`, `willreturn` and `nocapture`
+//! refer to one object), and `nsw`/`nuw` (checked arithmetic goes through
+//! `llvm.*.with.overflow`, see [`crate::checks`], and arithmetic built with
+//! `--no-runtime-checks=overflow` wraps). LLVM infers `memory(...)`, `willreturn` and `nocapture`
 //! itself, across the whole program with link-time optimization.
 
 use inkwell::attributes::{Attribute, AttributeLoc};

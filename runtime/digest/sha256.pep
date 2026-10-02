@@ -108,7 +108,7 @@ export struct Sha256 {
             uint w2 = w[t - 2];
             uint s0 = _digest_rotate_right(w15, 7) ^ _digest_rotate_right(w15, 18) ^ (w15 >> 3);
             uint s1 = _digest_rotate_right(w2, 17) ^ _digest_rotate_right(w2, 19) ^ (w2 >> 10);
-            w[t] = w[t - 16] + s0 + w[t - 7] + s1;
+            w[t] = w[t - 16].wrapping_add(s0).wrapping_add(w[t - 7]).wrapping_add(s1);
             t += 1;
         }
         var h = _state._data;
@@ -124,28 +124,28 @@ export struct Sha256 {
         while (t < 64) {
             uint sum1 = _digest_rotate_right(e, 6) ^ _digest_rotate_right(e, 11) ^ _digest_rotate_right(e, 25);
             uint choose = (e & f) ^ (~e & g);
-            uint temp1 = hh + sum1 + choose + k[t] + w[t];
+            uint temp1 = hh.wrapping_add(sum1).wrapping_add(choose).wrapping_add(k[t]).wrapping_add(w[t]);
             uint sum0 = _digest_rotate_right(a, 2) ^ _digest_rotate_right(a, 13) ^ _digest_rotate_right(a, 22);
             uint majority = (a & b) ^ (a & c) ^ (b & c);
-            uint temp2 = sum0 + majority;
+            uint temp2 = sum0.wrapping_add(majority);
             hh = g;
             g = f;
             f = e;
-            e = d + temp1;
+            e = d.wrapping_add(temp1);
             d = c;
             c = b;
             b = a;
-            a = temp1 + temp2;
+            a = temp1.wrapping_add(temp2);
             t += 1;
         }
-        h[0] = h[0] + a;
-        h[1] = h[1] + b;
-        h[2] = h[2] + c;
-        h[3] = h[3] + d;
-        h[4] = h[4] + e;
-        h[5] = h[5] + f;
-        h[6] = h[6] + g;
-        h[7] = h[7] + hh;
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+        h[5] = h[5].wrapping_add(f);
+        h[6] = h[6].wrapping_add(g);
+        h[7] = h[7].wrapping_add(hh);
     }
 }
 
