@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d2a303d.js";
+            window.path_to_searchindex_js = "../searchindex-c4646bbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -1041,6 +1041,8 @@ floating-point number. Values from 1e-4 up to 1e16 print in decimal;
 others use an exponent (<code>"1e+16"</code>, <code>"1.5e-05"</code>). The special values are
 <code>"nan"</code>, <code>"inf"</code> and <code>"-inf"</code>. For a fixed number of fraction digits,
 interpolate with a precision instead: <code>$"{value:.2}"</code>.</p>
+<p>The digits come from the Ryu algorithm, which takes a fixed, small
+number of steps per value.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the number to convert</li>
