@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -526,8 +526,8 @@ main(): int {
                 var message = $"hello from {k}";
                 stream.write_all(message);
                 var buffer = Array&lt;u8&gt;();
-                stream.read_exact(buffer, message.size());
-                return buffer.count();
+                stream.read_exact(buffer, message.size);
+                return buffer.count;
             }));
             i = i + 1;
         }
@@ -670,7 +670,7 @@ main(): int {
             var reply = Array&lt;u8&gt;();
             while (client.read(reply, 64).value() &gt; 0) {
             }
-            assert(reply.count() == 5, "greeted");
+            assert(reply.count == 5, "greeted");
             i = i + 1;
         }
     });
@@ -700,7 +700,7 @@ main(): int {
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 64).value() &gt; 0) {
             }
-            return reply.count();
+            return reply.count;
         });
 
         var (stream, peer) = listener.accept().value();
@@ -818,7 +818,7 @@ main(): int {
             async.sleep(1000000);   # returns at once when cancelled
         });
     });
-    assert(polls.count() &gt; 0, "the poller ran until cancelled");
+    assert(polls.count &gt; 0, "the poller ran until cancelled");
     return 0;
 }
 </code></pre>

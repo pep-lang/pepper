@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -278,7 +278,7 @@ the result advances this iterator. Every type that declares
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    for (var size in names.iterate().map((name) =&gt; name.size())) {
+    for (var size in names.iterate().map((name) =&gt; name.size)) {
         print(size);
     }
 </code></pre>
@@ -310,7 +310,7 @@ gets this method.</p>
 <p>Returns an iterator over the elements paired with their positions:
 <code>(0, first)</code>, <code>(1, second)</code>, and so on.</p>
 <p>Lazy, like <code>map</code>. Destructure the pair in the loop to name both parts.
-The positions count in <code>ulong</code>, like <code>Array.count()</code>; name another
+The positions count in <code>ulong</code>, like <code>Array.count</code>; name another
 integer type to count in it (<code>enumerate&lt;int&gt;()</code>). Every type that
 declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
 <p><strong>Type parameters</strong></p>

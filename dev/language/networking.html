@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,7 +209,7 @@ main(): int {
 
     # A host name goes to the system resolver; an IP address is used as is.
     var local = io.resolve("localhost", 80).value();
-    assert(local.count() &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
+    assert(local.count &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
     return 0;
 }
 </code></pre>
@@ -252,7 +252,7 @@ main(): int {
     var request = Array&lt;u8&gt;();
     while (server.read(request, 4096).value() &gt; 0) {
     }
-    assert(request.count() == 4, "the whole request arrived");
+    assert(request.count == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
     server.write_all("pong");
@@ -469,7 +469,7 @@ main(): int {
             stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 4096).value() &gt; 0) {}
-            assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+            assert(reply.count == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
             server.join();
         }
     );

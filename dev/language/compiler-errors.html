@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -300,7 +300,7 @@ the code it replaces:</p>
 <tr><td><code>io.TcpStream.write_string(String)</code>, <code>io.UnixStream.write_string(String)</code>, <code>tls.TlsStream.write_string(String)</code></td><td><code>write_all(String)</code></td></tr>
 <tr><td><code>io.File.seek(Offset, int)</code></td><td><code>io.File.seek(io.SeekFrom)</code></td></tr>
 <tr><td><code>io.File.std_file(int, String)</code></td><td><code>io.File.std_file(io.StdStream, String)</code></td></tr>
-<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
+<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td>the <code>capacity</code> property</td></tr>
 <tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>

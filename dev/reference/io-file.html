@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -713,7 +713,7 @@ one first flushes what <code>print</code> has buffered.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.read_bytes(Path("image.png"));
     if (r.is_ok()) {
-        var n = r.value().count();
+        var n = r.value().count;
     }
 </code></pre>
 <h4 id="read_to_string"><a class="header" href="#read_to_string">read_to_string</a></h4>
@@ -919,7 +919,7 @@ as part of the text.</p>
 </code></pre>
 <p>Writes bytes from <code>data</code> at the current position (or at the end, in
 append mode) with a single system call, and advances the position.</p>
-<p>The write may be partial: it can write fewer than <code>data.count()</code>
+<p>The write may be partial: it can write fewer than <code>data.count</code>
 bytes, and one call moves at most about 2 GiB on POSIX or 1 GiB on
 Windows. Use <code>write_all</code> to write everything. On POSIX an interrupted
 write (<code>EINTR</code>) is retried.</p>
@@ -929,13 +929,13 @@ write (<code>EINTR</code>) is retried.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes written, which may be less than <code>data.count()</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
+<li>the number of bytes written, which may be less than <code>data.count</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
 </ul>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Writes all of <code>data</code>, repeating the write until every byte is
-written. Advances the position by <code>data.count()</code>.</p>
+written. Advances the position by <code>data.count</code>.</p>
 <p>If an error occurs part of <code>data</code> may already have been written.</p>
 <p><strong>Parameters</strong></p>
 <ul>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,7 +199,7 @@ and always succeeds.</p>
 
     main(): int {
         var bytes = text.Utf8.encode("héllo");
-        assert(bytes.count() == 6, "é takes two bytes");
+        assert(bytes.count == 6, "é takes two bytes");
         assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
         return 0;
     }

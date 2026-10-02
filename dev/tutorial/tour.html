@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -328,7 +328,7 @@ not need to import them:</p>
     # Array&lt;T&gt; is a growable list. int[] is another way to write Array&lt;int&gt;.
     var scores = [90, 72];
     scores.append(85);
-    assert(scores.count() == 3, "three scores");
+    assert(scores.count == 3, "three scores");
     assert(scores[0] == 90, "indexing starts at 0");
     scores[1] = 75;
     assert(scores.contains(85), "contains");
@@ -344,14 +344,14 @@ not need to import them:</p>
     assert(scores[0] == 75 &amp;&amp; scores[2] == 90, "sorted ascending");
 
     int[] none = Array&lt;int&gt;();
-    assert(none.empty(), "a new array is empty");
+    assert(none.is_empty, "a new array is empty");
 
     # String holds UTF-8 text.
     var name = "Pepper";
     var greeting = "Hello, " + name;
     greeting += "!";
     assert(greeting == "Hello, Pepper!", "+ and += join strings");
-    assert(greeting.length() == 14, "length counts characters");
+    assert(greeting.length == 14, "length counts characters");
     assert(greeting.starts_with("Hello"), "starts_with");
     assert(greeting.substr(7, 6) == "Pepper", "substr(start, count)");
     assert(greeting.find("Pepper") == 7, "find returns an offset, or -1");
@@ -360,19 +360,19 @@ not need to import them:</p>
     # HashMap&lt;K, V&gt; maps keys to values.
     var ages = ["Ada": 36];
     ages.insert("Alan", 41);
-    assert(ages.count() == 2, "two entries");
+    assert(ages.count == 2, "two entries");
     assert(ages["Ada"] == 36, "look up by key");
     assert(ages.contains("Alan"), "contains");
     assert(ages["Grace"] == 0, "a missing key reads as the default value");
     assert(!ages.contains("Grace"), "reading does not insert");
     ages.remove("Ada");
-    assert(ages.count() == 1, "removed");
+    assert(ages.count == 1, "removed");
 
     # HashSet&lt;K&gt; keeps each key once.
     var seen = HashSet&lt;String&gt;();
     seen.insert("apple");
     seen.insert("apple");
-    assert(seen.count() == 1, "duplicates are ignored");
+    assert(seen.count == 1, "duplicates are ignored");
     return 0;
 }
 </code></pre>
@@ -384,7 +384,7 @@ a new array and a new map.</li>
 reading past the end stops the program with an error rather than reading
 stray memory. <code>sort</code> takes a function that compares two elements, such as
 the closure <code>(a, b) =&gt; a - b</code>.</li>
-<li><a href="../reference/string.html"><code>String</code></a> holds UTF-8 text. <code>length()</code> counts
+<li><a href="../reference/string.html"><code>String</code></a> holds UTF-8 text. The <code>length</code> property counts
 characters (code points), and <code>s[i]</code> is the character at index <code>i</code>, as a
 one-character string. Strings compare by content with <code>==</code>.</li>
 <li><a href="../reference/hash.html"><code>HashMap&lt;K, V&gt;</code></a> maps keys to values. Reading a key
@@ -401,7 +401,7 @@ to <code>n - 1</code>. See <a href="../language/iteration.html">Iteration</a>.</
 what went wrong.</p>
 <pre><code class="language-pepper"># Converts a string of decimal digits to an int, or explains why it cannot.
 parse_number(text: String): Result&lt;int&gt; {
-    if text.empty() {
+    if text.is_empty {
         return Result&lt;int&gt;.err(Error("expected a number, found nothing"));
     }
     var value = 0;
@@ -457,7 +457,7 @@ export struct WordCounter {
     }
 
     add(word: String) {
-        if !word.empty() {
+        if !word.is_empty {
             if !this.counts.contains(word) {
                 this.order.append(word);
             }

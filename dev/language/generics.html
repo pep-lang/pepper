@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -216,7 +216,7 @@ struct Stack&lt;T&gt; {
     }
 
     is_empty(): bool {
-        return items.empty();
+        return items.is_empty;
     }
 }
 
@@ -330,7 +330,7 @@ main.pep:1:1: note: declared here
 argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)</code>, the call
 <code>total(Countdown(4))</code> infers <code>T = int</code> from <code>extend Countdown with Iterator&lt;int&gt;</code>.</p>
 <p>Inference works through closures in both directions. In
-<code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
+<code>transform(words, (w) =&gt; w.size)</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
 the closure’s result gives <code>U</code>.</p>
 <p>Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>

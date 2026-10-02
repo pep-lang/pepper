@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,7 +227,7 @@ main(): int {
     # count check guards the index.
     var readings = Array&lt;int&gt;();
     var starts_high = false;
-    if (readings.count() &gt; 0 &amp;&amp; readings[0] &gt; 100) {
+    if (readings.count &gt; 0 &amp;&amp; readings[0] &gt; 100) {
         starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");
@@ -260,7 +260,7 @@ one, runs when none was true:</p>
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit, as in C: the right operand is evaluated only when
 the left one does not already decide the result. A guard can therefore come
 first in the same condition:</p>
-<pre><code class="language-pepper">if items.count() &gt; 0 &amp;&amp; items[0] &gt; 100 {
+<pre><code class="language-pepper">if items.count &gt; 0 &amp;&amp; items[0] &gt; 100 {
     print("starts high");
 }
 </code></pre>

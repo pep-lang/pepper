@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-778b03c5.js"></script>
+        <script src="toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,7 +222,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests and tuple patterns), tuples
+structs with constructors, destructors, methods and <a href="#properties">properties</a>, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests and tuple patterns), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
@@ -634,7 +634,7 @@ not need to import them:</p>
     # Array&lt;T&gt; is a growable list. int[] is another way to write Array&lt;int&gt;.
     var scores = [90, 72];
     scores.append(85);
-    assert(scores.count() == 3, "three scores");
+    assert(scores.count == 3, "three scores");
     assert(scores[0] == 90, "indexing starts at 0");
     scores[1] = 75;
     assert(scores.contains(85), "contains");
@@ -650,14 +650,14 @@ not need to import them:</p>
     assert(scores[0] == 75 &amp;&amp; scores[2] == 90, "sorted ascending");
 
     int[] none = Array&lt;int&gt;();
-    assert(none.empty(), "a new array is empty");
+    assert(none.is_empty, "a new array is empty");
 
     # String holds UTF-8 text.
     var name = "Pepper";
     var greeting = "Hello, " + name;
     greeting += "!";
     assert(greeting == "Hello, Pepper!", "+ and += join strings");
-    assert(greeting.length() == 14, "length counts characters");
+    assert(greeting.length == 14, "length counts characters");
     assert(greeting.starts_with("Hello"), "starts_with");
     assert(greeting.substr(7, 6) == "Pepper", "substr(start, count)");
     assert(greeting.find("Pepper") == 7, "find returns an offset, or -1");
@@ -666,19 +666,19 @@ not need to import them:</p>
     # HashMap&lt;K, V&gt; maps keys to values.
     var ages = ["Ada": 36];
     ages.insert("Alan", 41);
-    assert(ages.count() == 2, "two entries");
+    assert(ages.count == 2, "two entries");
     assert(ages["Ada"] == 36, "look up by key");
     assert(ages.contains("Alan"), "contains");
     assert(ages["Grace"] == 0, "a missing key reads as the default value");
     assert(!ages.contains("Grace"), "reading does not insert");
     ages.remove("Ada");
-    assert(ages.count() == 1, "removed");
+    assert(ages.count == 1, "removed");
 
     # HashSet&lt;K&gt; keeps each key once.
     var seen = HashSet&lt;String&gt;();
     seen.insert("apple");
     seen.insert("apple");
-    assert(seen.count() == 1, "duplicates are ignored");
+    assert(seen.count == 1, "duplicates are ignored");
     return 0;
 }
 </code></pre>
@@ -690,7 +690,7 @@ a new array and a new map.</li>
 reading past the end stops the program with an error rather than reading
 stray memory. <code>sort</code> takes a function that compares two elements, such as
 the closure <code>(a, b) =&gt; a - b</code>.</li>
-<li><a href="#string"><code>String</code></a> holds UTF-8 text. <code>length()</code> counts
+<li><a href="#string"><code>String</code></a> holds UTF-8 text. The <code>length</code> property counts
 characters (code points), and <code>s[i]</code> is the character at index <code>i</code>, as a
 one-character string. Strings compare by content with <code>==</code>.</li>
 <li><a href="#hashmap-and-hashset"><code>HashMap&lt;K, V&gt;</code></a> maps keys to values. Reading a key
@@ -707,7 +707,7 @@ to <code>n - 1</code>. See <a href="#iteration">Iteration</a>.</li>
 what went wrong.</p>
 <pre><code class="language-pepper"># Converts a string of decimal digits to an int, or explains why it cannot.
 parse_number(text: String): Result&lt;int&gt; {
-    if text.empty() {
+    if text.is_empty {
         return Result&lt;int&gt;.err(Error("expected a number, found nothing"));
     }
     var value = 0;
@@ -763,7 +763,7 @@ export struct WordCounter {
     }
 
     add(word: String) {
-        if !word.empty() {
+        if !word.is_empty {
             if !this.counts.contains(word) {
                 this.order.append(word);
             }
@@ -1047,12 +1047,12 @@ Text is a <code>String</code>, and a single character of it is a one-code-point 
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
 value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
 literal’s NUL-terminated bytes (see <a href="#passing-strings">Passing strings</a>). <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
-<code>length()</code> counts code points, <code>size()</code> counts bytes, and <code>s[i]</code> gives the code
+the <code>length</code> property counts code points, <code>size</code> counts bytes, and <code>s[i]</code> gives the code
 point at index <code>i</code> as a one-code-point <code>String</code>.</p>
 <pre><code class="language-pepper"># String literals are String values.
 main(): int {
     var language = "Pepper";
-    assert(language.length() == 6, "6 code points");
+    assert(language.length == 6, "6 code points");
 
     # + makes a new String; == compares contents.
     var message = "Hello, " + language;
@@ -1061,8 +1061,8 @@ main(): int {
 
     # Strings are UTF-8. length() counts code points, size() counts bytes.
     var word = "héllo";
-    assert(word.length() == 5, "5 code points");
-    assert(word.size() == 6, "6 bytes: 'é' takes 2");
+    assert(word.length == 5, "5 code points");
+    assert(word.size == 6, "6 bytes: 'é' takes 2");
     assert(word[1] == "é", "indexing yields a one-code-point String");
 
     # A String is a reference: both names see an append.
@@ -1107,7 +1107,7 @@ main(): int {
 
     # lines() splits on "\n" or "\r\n"; trim_end() drops trailing whitespace.
     var lines = "one  \r\ntwo\n".lines();
-    assert(lines.count() == 2, "no empty line after the final newline");
+    assert(lines.count == 2, "no empty line after the final newline");
     assert(lines[0].trim_end() == "one", "trim_end");
 
     # trim() drops whitespace at both ends; lower() and upper() change ASCII case.
@@ -1141,7 +1141,7 @@ main(): int {
 
     # split cuts at every separator; split_once at the first, if any.
     var fields = "name,,age".split(",");
-    assert(fields.count() == 3 &amp;&amp; fields[1] == "", "an empty field");
+    assert(fields.count == 3 &amp;&amp; fields[1] == "", "an empty field");
     var header = "Content-Type: text/plain".split_once(": ");
     if (header.is_some()) {
         var (name, value) = header.value();
@@ -1349,7 +1349,7 @@ unsigned, the operation is unsigned: comparing <code>int -1</code> with <code>ui
 <li><strong>Division</strong> of integers truncates toward zero (<code>-7 / 2</code> is -3), and <code>%</code> takes
 the sign of the left operand (<code>-7 % 3</code> is -1).</li>
 <li><strong>Conditionals.</strong> <code>c ? a : b</code> with numeric arms of different types has
-their common type by the same rules (<code>c ? 0 : s.length()</code> is a <code>long</code>), and
+their common type by the same rules (<code>c ? 0 : s.length</code> is a <code>long</code>), and
 so does a <a href="#match-expressions-is-and-literal-patterns"><code>match</code> expression</a>
 over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
@@ -1479,7 +1479,7 @@ main(): int {
 </table>
 </div>
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
-one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
+one does not decide the result, so <code>items.count &gt; 0 &amp;&amp; items[0] == 1</code> never
 reads <code>items[0]</code> from an empty array.</p>
 <p>Unary operators nest: <code>-~x</code> is <code>-(~x)</code>, and <code>!!x</code> is <code>!(!x)</code>, which turns a
 number into a <code>bool</code>. A struct can define its own operators, the truth test
@@ -1535,7 +1535,7 @@ main(): int {
     # Any expression fits between the braces, strings included.
     var sizes = [2, 5];
     assert($"total {sizes[0] + sizes[1]}" == "total 7", "arithmetic and index");
-    assert($"{name.size()} letters" == "6 letters", "call");
+    assert($"{name.size} letters" == "6 letters", "call");
     assert($"{count &gt; 1 ? "many" : "one"}" == "many", "ternary with strings");
 
     # Doubled braces are literal braces; escapes work as in any string.
@@ -1816,17 +1816,17 @@ main(): int {
 
     # UTF-8 is what a String holds; decode checks the bytes.
     var utf8 = text.Utf8.encode(greeting);
-    assert(utf8.count() == 11, "é takes two bytes, 🙂 four");
+    assert(utf8.count == 11, "é takes two bytes, 🙂 four");
     assert(text.Utf8.decode(utf8).value() == greeting, "round trip");
 
     # UTF-16: two bytes per unit, little-endian unless asked otherwise.
     var utf16 = text.Utf16.encode(greeting);
-    assert(utf16.count() == 16, "🙂 takes a surrogate pair");
+    assert(utf16.count == 16, "🙂 takes a surrogate pair");
     assert(text.Utf16.decode(utf16).value() == greeting, "round trip");
 
     # ASCII has no é: strict gives none, lossy writes '?'.
     assert(text.Ascii.encode(greeting).is_none(), "not ASCII");
-    assert(text.Ascii.encode_lossy("é").count() == 1, "one '?'");
+    assert(text.Ascii.encode_lossy("é").count == 1, "one '?'");
 
     # Strict decoding rejects invalid bytes; lossy decoding replaces them.
     var bad = Array&lt;u8&gt;();
@@ -1891,7 +1891,7 @@ main(): int {
     var swapped = regex.Regex("(\\w+)@(\\w+)").replace_all("ann@home bob@work", "$2:$1");
     assert(swapped == "home:ann work:bob", "groups swapped");
     var parts = regex.Regex("\\s*,\\s*").split("a , b,c");
-    assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
+    assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 
     # Flags go inside the pattern: (?i) ignores case.
     assert(regex.Regex("(?i)^hello").is_match("HeLLo there"), "any case");
@@ -2070,13 +2070,13 @@ main(): int {
     # A chain of calls may break before each `.`.
     for (var word in words
         .iterate()
-        .filter((w) =&gt; w.length() &gt; 4)) {  # comments are fine anywhere
+        .filter((w) =&gt; w.length &gt; 4)) {  # comments are fine anywhere
         long_words += 1;
     }
     assert(long_words == 1, "one word is longer than four characters");
 
     # So may a call's arguments.
-    assert(volume + words[0].length() == 64,
+    assert(volume + words[0].length == 64,
         "60 + 4");
     return 0;
 }
@@ -2144,7 +2144,7 @@ main(): int {
     # count check guards the index.
     var readings = Array&lt;int&gt;();
     var starts_high = false;
-    if (readings.count() &gt; 0 &amp;&amp; readings[0] &gt; 100) {
+    if (readings.count &gt; 0 &amp;&amp; readings[0] &gt; 100) {
         starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");
@@ -2177,7 +2177,7 @@ one, runs when none was true:</p>
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit, as in C: the right operand is evaluated only when
 the left one does not already decide the result. A guard can therefore come
 first in the same condition:</p>
-<pre><code class="language-pepper">if items.count() &gt; 0 &amp;&amp; items[0] &gt; 100 {
+<pre><code class="language-pepper">if items.count &gt; 0 &amp;&amp; items[0] &gt; 100 {
     print("starts high");
 }
 </code></pre>
@@ -2609,12 +2609,12 @@ anywhere, after flushing what was printed. Both are in the
 
 # args holds the program name, then each command-line argument.
 main(args: String[]): int {
-    if (args.count() &gt; 2) {
+    if (args.count &gt; 2) {
         print("usage: greet [NAME]");
         process.exit(2);  # ends the program here, with status 2
     }
     var name = "world";
-    if (args.count() == 2) {
+    if (args.count == 2) {
         name = args[1];
     }
     print("Hello, " + name + "!");
@@ -2964,7 +2964,7 @@ total(values: long[]): long {
 main(): int {
     # An array literal is an Array of its elements' type.
     var primes = [2, 3, 5, 7];
-    assert(primes.count() == 4 &amp;&amp; primes[3] == 7, "an Array&lt;int&gt;");
+    assert(primes.count == 4 &amp;&amp; primes[3] == 7, "an Array&lt;int&gt;");
 
     # A trailing comma lets a long literal put one element per line.
     var operators = [
@@ -2985,12 +2985,12 @@ main(): int {
 
     # An array literal where a HashSet is expected makes a set.
     HashSet&lt;String&gt; keywords = ["if", "else", "if"];
-    assert(keywords.count() == 2, "duplicates are kept once");
+    assert(keywords.count == 2, "duplicates are kept once");
 
     # [] and [:] are empty, where the type is declared.
     long[] none = [];
     HashMap&lt;String, int&gt; nobody = [:];
-    assert(none.empty() &amp;&amp; nobody.count() == 0, "empty collections");
+    assert(none.is_empty &amp;&amp; nobody.count == 0, "empty collections");
     return 0;
 }
 </code></pre>
@@ -3856,7 +3856,7 @@ struct Money {
 
     # Static methods overload among themselves.
     static of(cents: long): Money { return Money(cents); }
-    static of(text: String): Money { return Money(text.size() as long); }
+    static of(text: String): Money { return Money(text.size as long); }
 
     # Operators are methods, so they overload by operand type too.
     +(other: Money): Money { return add(other); }
@@ -3983,7 +3983,7 @@ them exactly as a call picks among functions:</p>
     }
 
     construct(text: String) {
-        length = text.length() as int;
+        length = text.length as int;
     }
 }
 
@@ -4742,6 +4742,205 @@ writes: <code>shelf[i] = value</code>. The second parameter is the value being s
 <a href="#array"><code>Array</code></a> and <a href="#string"><code>String</code></a> are
 indexed this way.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="properties"><a class="header" href="#properties">Properties</a></h1>
+<p>A property is a struct member that is read and written like a field
+(<code>account.name</code>, <code>account.name = "Savings"</code>) but whose <code>get</code> and <code>set</code>
+accessors can run code. A property that needs somewhere to keep its value
+gets it from the compiler: its <strong>implied storage</strong>, reachable as <code>field</code>
+inside its accessors. You declare a separate private field only when you
+want one.</p>
+<h2 id="declaring-properties"><a class="header" href="#declaring-properties">Declaring properties</a></h2>
+<p>A property is a field declaration followed by an accessor block instead of
+<code>;</code>:</p>
+<pre><code class="language-pepper"># A property is read and written like a field, but its `get` and `set`
+# accessors can run code.
+struct Account {
+    # An auto property: implied storage, read and written by anyone.
+    var owner: String { get; set; }
+
+    # Read-only outside the struct: only Account's own code assigns it.
+    var balance: long { get; }
+
+    # A custom `set` over implied storage: `field` is the storage and
+    # `value` is the new value.
+    var name: String {
+        get;
+        set {
+            assert(!value.is_empty, "an account name cannot be empty");
+            field = value;
+        }
+    } = "unnamed";
+
+    # Computed: no accessor is omitted and none uses `field`, so it takes
+    # no space.
+    var is_empty: bool {
+        get {
+            return balance == 0;
+        }
+    }
+
+    # Explicit storage, when you want it.
+    var _deposits: ulong;
+    var deposits: ulong {
+        get {
+            return _deposits;
+        }
+    }
+
+    # An initializer initializes the implied storage.
+    var limit: long { get; set; } = 100;
+
+    construct(this.owner = "") {}
+
+    deposit(amount: long) {
+        balance += amount;   # Account's own code may set a get-only property
+        _deposits += 1;
+    }
+}
+
+main(): int {
+    var account = Account("Ann");
+    assert(account.owner == "Ann", "a constructor parameter can set a property");
+    assert(account.is_empty, "a computed property runs its get");
+
+    account.owner = "Bob";
+    account.name = "Savings";
+    assert(account.name == "Savings", "the set stored the name");
+
+    account.deposit(30);
+    account.deposit(12);
+    assert(account.balance == 42 &amp;&amp; account.deposits == 2, "methods update the storage");
+    assert(!account.is_empty, "the computed property follows the balance");
+
+    # `account.balance = 0;` would not compile: 'balance' has no 'set'.
+
+    account.limit += 50;   # a get, then a set
+    assert(account.limit == 150, "compound assignment reads and writes");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>get;</code> and <code>set;</code> with no body are the defaults: <code>get</code> returns the
+storage, and <code>set</code> stores the new value in it. Either may have a body
+instead.</li>
+<li>A property has implied storage when an accessor is omitted (<code>get;</code> or
+<code>set;</code>) or an accessor body uses <code>field</code>. Otherwise it is <strong>computed</strong>: it
+takes no space, and its <code>get</code> runs every time it is read.</li>
+<li>An initializer after the accessors (<code>var limit: long { get; set; } = 100;</code>)
+initializes the storage, so it needs a property that has storage. It does
+not run <code>set</code>.</li>
+<li>Inside an accessor, <code>field</code> is the storage, and inside <code>set</code>, <code>value</code> is
+the new value (a by-value parameter). Both are contextual: outside
+accessors they are ordinary names, so a local or a member called <code>field</code>
+or <code>value</code> elsewhere keeps working. Inside an accessor, a bare <code>field</code>
+always means the storage; reach a member of that name as <code>this.field</code>.</li>
+<li>A property must have a <code>get</code>: <code>{ set; }</code> alone is an error.</li>
+<li>A property is declared with <code>var</code> and an explicit type; it cannot be
+<code>const</code>. There are no <code>static</code> properties.</li>
+</ul>
+<h2 id="reading-and-writing"><a class="header" href="#reading-and-writing">Reading and writing</a></h2>
+<ul>
+<li><code>p.count</code> calls <code>get</code>, and <code>p.count = x</code> calls <code>set</code>. A default accessor is
+not a call at all: an auto property (<code>{ get; set; }</code>) compiles to the same
+loads and stores as a field.</li>
+<li><code>p.count += 1</code>, <code>p.count++</code> and the other compound assignments are a <code>get</code>
+and then a <code>set</code>. <code>p</code> is evaluated once.</li>
+<li>A constructor parameter <code>this.name</code> assigns the property, through its <code>set</code>
+when it has one. A field initializer and the struct’s own field
+initialization do not.</li>
+<li>Inside the struct’s methods, a property is reached by its bare name, like a
+field: <code>balance += amount;</code> is <code>this.balance += amount;</code>.</li>
+<li>A property’s accessors are ordinary method calls for
+<a href="#memory-and-reference-counting">reference counting</a>: <code>get</code> returns a temporary that owns one
+reference, and <code>value</code> is a by-value parameter, acquired on entry and
+released on exit.</li>
+</ul>
+<h2 id="read-only-properties"><a class="header" href="#read-only-properties">Read-only properties</a></h2>
+<p><code>{ get; }</code> alone makes a property read-only <strong>outside the struct</strong>: assigning
+it from other code is an error at the property’s name.</p>
+<pre><code class="language-text">main.pep:6:7: error: cannot assign to 'balance': it has no 'set' accessor
+    6 |     a.balance = 3;
+      |       ^~~~~~~
+main.pep:2:9: note: 'balance' declared here
+    2 |     var balance: long { get; }
+      |         ^~~~~~~
+</code></pre>
+<p>The struct’s own constructors and methods may assign a get-only property
+with implied storage; that writes the storage directly. An extension’s
+methods are not the struct’s own code: they cannot assign it either.</p>
+<h2 id="properties-in-traits-and-extensions"><a class="header" href="#properties-in-traits-and-extensions">Properties in traits and extensions</a></h2>
+<p>A <a href="#traits-and-extensions">trait</a> can require a property, <code>var area: double { get; }</code> or <code>{ get; set; }</code>, with no accessor bodies. A struct meets
+the requirement with a property of the same name and type (auto or
+computed), or with a plain field. Reading or writing the property through a
+trait value calls the struct’s accessors.</p>
+<p>An <a href="#traits-and-extensions">extension</a> can add <strong>computed</strong> properties
+only, since it cannot add storage to the struct:</p>
+<pre><code class="language-pepper"># A trait can require a property; a struct meets it with a property of the
+# same name and type.
+trait Shape {
+    var area: double { get; }
+    var label: String { get; set; }
+}
+
+struct Square {
+    var side: double { get; set; } = 1.0;
+    var area: double {
+        get {
+            return side * side;
+        }
+    }
+    var label: String { get; set; } = "square";
+}
+
+extend Square with Shape;
+
+# An extension can add computed properties, which need no storage.
+extend Square {
+    var perimeter: double {
+        get {
+            return side * 4.0;
+        }
+    }
+}
+
+describe(shape: Shape): String {
+    shape.label = "seen";
+    return $"{shape.label}: {shape.area}";
+}
+
+main(): int {
+    var square = Square();
+    square.side = 3.0;
+    assert(square.area == 9.0, "the computed area follows the side");
+    assert(square.perimeter == 12.0, "an extension's property reads like any other");
+    assert(describe(square) == "seen: 9.0", "a trait value reaches the struct's accessors");
+    assert(square.label == "seen", "the set through the trait reached the struct");
+    return 0;
+}
+</code></pre>
+<p>An extension property that would need storage is an error:</p>
+<pre><code class="language-text">main.pep:5:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'
+</code></pre>
+<h2 id="properties-of-shared-structs"><a class="header" href="#properties-of-shared-structs">Properties of <code>[Shared]</code> structs</a></h2>
+<p>The fields of a <a href="#threads-and-shared-data"><code>[Shared]</code> struct</a> are <code>const</code>, so the storage
+of its properties is too:</p>
+<ul>
+<li>A property with implied storage must be <code>{ get; }</code>, and only the
+struct’s constructors assign it. A <code>set</code>, with or without a body, is an
+error at <code>set</code>, with a note at <code>[Shared]</code>.</li>
+<li>A computed <code>get</code> over the struct’s <code>const</code> fields is allowed, as any method
+is.</li>
+</ul>
+<p>Accessors that store into a thread-safe member (an <code>Atomic&lt;int&gt;</code>, or a
+value behind a <code>Mutex</code>) are not supported yet.</p>
+<h2 id="how-properties-compile"><a class="header" href="#how-properties-compile">How properties compile</a></h2>
+<p>The compiler lowers a property to plain members: a field for its storage
+(named after the property when its <code>get</code> is the default, <code>__field_name</code>
+otherwise), a getter method <code>__get_name()</code> and, with a <code>set</code>, a setter
+<code>__set_name(value)</code>. Every read and write of the property becomes a storage
+access or an accessor call once the receiver’s type is known. The accessor
+methods appear in debuggers and in profiles under those names.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="value-structs"><a class="header" href="#value-structs">Value structs</a></h1>
 <p>A struct is normally a <a href="#values-and-references">reference</a> to an
 object on the heap. A struct marked <code>[Value]</code> is a <em>value</em> instead, like a
@@ -5005,12 +5204,12 @@ main(): int {
     var visits = HashMap&lt;Point, int&gt;();
     visits[Point(1, 2)] = 1;
     visits[Point(1, 2)] = visits[Point(1, 2)] + 1;   # the same key
-    assert(visits.count() == 1, "one entry");
+    assert(visits.count == 1, "one entry");
     assert(visits[Point(1, 2)] == 2, "found by content");
     assert(Point(1, 2) != Point(2, 1), "!= is the negation of ==");
 
     HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
-    assert(people.count() == 1, "equal people are one member");
+    assert(people.count == 1, "equal people are one member");
     assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
     assert(!people.contains(Person("Ada", 2)), "a different id");
     return 0;
@@ -5479,7 +5678,7 @@ keyword(word: String): int {
 length_of(word: String): int {
     return match (word) {
         "" =&gt; 0,
-        else =&gt; word.length(),
+        else =&gt; word.length,
     };
 }
 
@@ -5526,7 +5725,7 @@ must handle every case unless there is an <code>else</code>. The value has the f
 arm’s type, and every other arm’s value must convert to it. When the arms
 are numbers of different types, the value has their common type, as C’s
 <code>? :</code> does (<code>int</code> and <code>long</code> give <code>long</code>), and converts from it wherever
-it goes (<code>0</code> or a <code>long</code> <code>length()</code>, returned as an <code>int</code>). A closure in
+it goes (<code>0</code> or a <code>long</code> <code>length</code>, returned as an <code>int</code>). A closure in
 an arm’s value cannot use a name the arm binds; use a <code>match</code> statement
 there.</li>
 <li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case
@@ -6010,7 +6209,7 @@ note: only a variable that holds the one reference to a new value can hand it ov
 <p>A moved variable cannot be read again until it is assigned a new value,
 including on the next pass through a loop:</p>
 <pre><code class="language-text">main.pep:8:12: error: 'a' is used after its value was moved
-    8 |     return a.count();
+    8 |     return a.count;
       |            ^
 main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
     7 |     names.replace(move(a));
@@ -6079,7 +6278,7 @@ struct Stack&lt;T&gt; {
     }
 
     is_empty(): bool {
-        return items.empty();
+        return items.is_empty;
     }
 }
 
@@ -6193,7 +6392,7 @@ main.pep:1:1: note: declared here
 argument’s type declares: given <code>total&lt;T&gt;(items: Iterator&lt;T&gt;)</code>, the call
 <code>total(Countdown(4))</code> infers <code>T = int</code> from <code>extend Countdown with Iterator&lt;int&gt;</code>.</p>
 <p>Inference works through closures in both directions. In
-<code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
+<code>transform(words, (w) =&gt; w.size)</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
 the closure’s result gives <code>U</code>.</p>
 <p>Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>
@@ -6760,7 +6959,7 @@ main(): int {
 
     var names = Names();        # construct through the alias
     names.append("Ada");
-    assert(names.count() == 1, "Names is Array&lt;String&gt;");
+    assert(names.count == 1, "Names is Array&lt;String&gt;");
 
     var p = Team();
     p.best = s;
@@ -7363,7 +7562,7 @@ main(): int {
 
     # Modifying the array after the loop is fine.
     nums.append(100);
-    assert(nums.count() == 4, "appended after the loop");
+    assert(nums.count == 4, "appended after the loop");
     return 0;
 }
 </code></pre>
@@ -7393,7 +7592,7 @@ a single code point, the same value that indexing gives you (<code>word[i]</code
     var count = 0;
     var copy = "";
     for (var c in word) {
-        assert(c.length() == 1, "each piece is one code point");
+        assert(c.length == 1, "each piece is one code point");
         copy.append(c);
         count = count + 1;
     }
@@ -7435,8 +7634,8 @@ includes <code>b</code>. Looping over one is how you count:</p>
     # The bounds give the type: count() is a ulong, so i is too.
     var names = ["Ada", "Grace", "Edsger"];
     ulong letters = 0;
-    for (var i in 0..names.count()) {
-        letters += names[i].size();
+    for (var i in 0..names.count) {
+        letters += names[i].size;
     }
     assert(letters == 14, "letters in every name");
 
@@ -7459,7 +7658,7 @@ includes <code>b</code>. Looping over one is how you count:</p>
 <ul>
 <li>
 <p><strong>The bounds give the type.</strong> A range’s element type is inferred from its
-bounds like a generic call’s type argument, so <code>0..names.count()</code> counts in
+bounds like a generic call’s type argument, so <code>0..names.count</code> counts in
 <code>ulong</code>. The bounds must be integers; anything else is an error at the
 operator:</p>
 <pre><code class="language-text">main.pep:2:22: error: range bounds must be integers, not 'String'
@@ -7481,7 +7680,7 @@ there without overflowing.</p>
 </li>
 <li>
 <p><strong>A range is a value</strong>, a <a href="#rangepep"><code>Range&lt;T&gt;</code></a>. It has
-<code>contains(x)</code> and <code>is_empty()</code>, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
+<code>contains(x)</code> and the <code>is_empty</code> property, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
 <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>. Looping over one allocates
 nothing; the optimizer turns it into a plain counting loop.</p>
 </li>
@@ -7564,7 +7763,7 @@ main(): int {
     for (var name in people.iterate().filter((p) =&gt; p.age &gt;= 18).map((p) =&gt; p.name)) {
         names.append(name);
     }
-    assert(names.count() == 2, "two adults");
+    assert(names.count == 2, "two adults");
     assert(names[0] == "Ada", "Ada first");
     assert(names[1] == "Cyd", "then Cyd");
 
@@ -7591,7 +7790,7 @@ main(): int {
 
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) =&gt; p.age).to_array();
-    assert(ages.count() == 3 &amp;&amp; ages[2] == 40, "every age");
+    assert(ages.count == 3 &amp;&amp; ages[2] == 40, "every age");
     return 0;
 }
 </code></pre>
@@ -7636,7 +7835,7 @@ main(): int {
     for (var line in file.lines()) {
         lines.append(line.value());
     }
-    assert(lines.count() == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
+    assert(lines.count == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
 
     # Adapters work on streams too: number the lines.
     var again = File.open(dir.join("notes.txt")).value();
@@ -8014,7 +8213,7 @@ main(): int {
     var doubled = match (parsed) { Ok(n) =&gt; n * 2, Err(e) =&gt; 0 };
     assert(doubled == 14, "match binds the value");
     if (bad is Err(e)) {
-        assert(e.message.length() &gt; 0, "is binds the error");
+        assert(e.message.length &gt; 0, "is binds the error");
     }
 
     # An operation with no value to return uses void.
@@ -8101,7 +8300,7 @@ digit_value(String c): int {
 }
 
 parse_number(String s): Result&lt;int, ParseError&gt; {
-    if (s.length() == 0) {
+    if (s.length == 0) {
         return Result&lt;int, ParseError&gt;.err(ParseError(s, 0));
     }
     var value = 0;
@@ -8247,7 +8446,7 @@ find_adult(people: Array&lt;Person&gt;): Optional&lt;Person&gt; {
 # `ulong?` is shorthand for `Optional&lt;ulong&gt;`.
 index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
-    while (i &lt; text.length()) {
+    while (i &lt; text.length) {
         if (text[i] == wanted) { return Optional&lt;ulong&gt;.some(i); }
         i = i + 1;
     }
@@ -8393,9 +8592,9 @@ main(): int {
 </code></pre>
 <p><strong>Breaking change.</strong> <code>Array.find</code> used to return a <code>long</code> that was <code>-1</code> for
 “not found”, and the <code>Path</code> methods above returned an empty <code>Path</code> or
-<code>String</code> (or <code>name.size()</code> for <code>dot_index</code>). Code written against the old
+<code>String</code> (or <code>name.size</code> for <code>dot_index</code>). Code written against the old
 API must test the optional instead: <code>a.find(x) &gt;= 0</code> becomes
-<code>a.find(x).is_some()</code>, <code>p.parent().is_empty()</code> becomes
+<code>a.find(x).is_some()</code>, <code>p.parent().is_empty</code> becomes
 <code>p.parent().is_none()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
 A comparison such as <code>a.find(x) == -1</code> still compiles but compares the
 optional object rather than an index, so search for these and rewrite them.
@@ -8507,7 +8706,7 @@ main(): int {
     assert(p.describe() == "point", "method from an exported extension");
     assert(norm_of(p) == 25, "an exported function may use private helpers");
     assert(points_made.load() == 2, "exported module variable");
-    assert(platform_name().length() &gt; 0, "exported, with an attribute");
+    assert(platform_name().length &gt; 0, "exported, with an attribute");
     return 0;
 }
 </code></pre>
@@ -8534,6 +8733,9 @@ naming one from another file reports <code>'name' is private to file.pep</code>.
 <p>Fields and methods declared inside a struct’s body are reached through the
 struct, so they share the struct’s visibility: if you can use the struct, you
 can use all of its members.</p>
+<p>To let other code read a value but not write it, make it a
+<a href="#properties">property</a> with only a <code>get</code>: <code>var balance: long { get; }</code>
+can be assigned only by the struct’s own constructors and methods.</p>
 <p>Methods added by an extension share the <strong>extension’s</strong> visibility instead. In
 the example, <code>norm()</code> is added by a private extension, so only <code>lib.pep</code> can
 call it, even though <code>Point</code> itself is exported:</p>
@@ -9630,7 +9832,7 @@ channel: dropping it, or ending the threads that use it, does not.</li>
 <li><code>for (var v in channel)</code> receives until the channel is closed and empty.
 Several threads can loop over one channel; each value goes to one of them.</li>
 <li>Values from one sender arrive in the order they were sent.</li>
-<li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
+<li>The <code>count</code> property and <code>is_closed()</code> report the channel’s state, which other
 threads may change right after.</li>
 </ul>
 <p><code>send</code> and <code>try_send</code> take a <strong>new</strong> value, which nothing on the sending
@@ -9662,7 +9864,7 @@ const letters = async.Atomic&lt;long&gt;(0);
 count_letters() {
     for (var order in orders) {
         for (var item in order.items) {
-            letters.fetch_add(item.length() as long);
+            letters.fetch_add(item.length as long);
         }
     }
 }
@@ -9919,7 +10121,7 @@ main(): int {
     var next = Array&lt;String&gt;();
     next.append("third");
     var old = log.replace(move(next));
-    print($"{old.count()}");     # 2
+    print($"{old.count}");     # 2
     print(old[1]);               # second
     return 0;
 }
@@ -10013,7 +10215,7 @@ work() {
         with (var queue = jobs.lock()) {
             # Waits while the predicate holds; spurious wakeups are handled.
             # The predicate is given the locked value: it cannot capture it.
-            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
             done.fetch_add(queue.remove_at(0));
             taken = taken + 1;
         }
@@ -10035,7 +10237,7 @@ main(): int {
 
     with (var queue = jobs.lock()) {
         # Gives up after 10 milliseconds: nothing is queued.
-        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
         assert(!ready, "the time ran out");
     }
     return 0;
@@ -10073,7 +10275,7 @@ add_names(prefix: String) {
             list.append("worker");            # a new String: fine
             list.append(prefix + "!");        # `+` returns a new String: fine
             list.append(copy(prefix));        # a copy of an outside value: fine
-            var n = list.count();             # a number leaves freely
+            var n = list.count;             # a number leaves freely
             if (list.contains(prefix)) {      # comparing keeps nothing
                 n = n + 1;
             }
@@ -10085,7 +10287,7 @@ add_names(prefix: String) {
 # Part of the locked value leaves the block only as a copy.
 first_name(): String {
     with (var list = names.lock()) {
-        if (list.count() &gt; 0) {
+        if (list.count &gt; 0) {
             return list[0].copy();
         }
     }
@@ -10101,14 +10303,14 @@ main(): int {
     var first = first_name();
     first.append(" (mine)");   # changing the copy leaves the list alone
     with (var list = names.lock()) {
-        assert(list.count() == 18, "every name was added");
+        assert(list.count == 18, "every name was added");
         assert(list[0] == "worker", "the locked String is unchanged");
     }
 
     # replace swaps in a new value and hands back the old one, which the
     # caller then owns outright.
     var old = names.replace(Array&lt;String&gt;());
-    assert(old.count() == 18, "the old list");
+    assert(old.count == 18, "the old list");
 
     # A thread's own value that is not thread-safe is reached through `with`.
     var scratch = async.ThreadLocal&lt;String&gt;();
@@ -10631,8 +10833,8 @@ main(): int {
                 var message = $"hello from {k}";
                 stream.write_all(message);
                 var buffer = Array&lt;u8&gt;();
-                stream.read_exact(buffer, message.size());
-                return buffer.count();
+                stream.read_exact(buffer, message.size);
+                return buffer.count;
             }));
             i = i + 1;
         }
@@ -10775,7 +10977,7 @@ main(): int {
             var reply = Array&lt;u8&gt;();
             while (client.read(reply, 64).value() &gt; 0) {
             }
-            assert(reply.count() == 5, "greeted");
+            assert(reply.count == 5, "greeted");
             i = i + 1;
         }
     });
@@ -10805,7 +11007,7 @@ main(): int {
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 64).value() &gt; 0) {
             }
-            return reply.count();
+            return reply.count;
         });
 
         var (stream, peer) = listener.accept().value();
@@ -10923,7 +11125,7 @@ main(): int {
             async.sleep(1000000);   # returns at once when cancelled
         });
     });
-    assert(polls.count() &gt; 0, "the poller ran until cancelled");
+    assert(polls.count &gt; 0, "the poller ran until cancelled");
     return 0;
 }
 </code></pre>
@@ -10982,7 +11184,7 @@ main(): int {
 
     # A host name goes to the system resolver; an IP address is used as is.
     var local = io.resolve("localhost", 80).value();
-    assert(local.count() &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
+    assert(local.count &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
     return 0;
 }
 </code></pre>
@@ -11025,7 +11227,7 @@ main(): int {
     var request = Array&lt;u8&gt;();
     while (server.read(request, 4096).value() &gt; 0) {
     }
-    assert(request.count() == 4, "the whole request arrived");
+    assert(request.count == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
     server.write_all("pong");
@@ -11242,7 +11444,7 @@ main(): int {
             stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
             while (stream.read(reply, 4096).value() &gt; 0) {}
-            assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+            assert(reply.count == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
             server.join();
         }
     );
@@ -11469,7 +11671,7 @@ import process;
 # Runs a copy of this program as a child, so the example needs no other
 # program on any system: the child's first argument says what to do.
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         io.File.stdout().write_all("hello from " + args[1]);
         io.File.stderr().write_all("a warning");
         return 3;
@@ -11523,7 +11725,7 @@ the <a href="#file">file</a> read and write methods apply.</p>
 import process;
 
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         # The child: read standard input to the end, and write it back in
         # capitals.
         var text = io.File.stdin().read_string().value();
@@ -11573,7 +11775,7 @@ import os;
 import process;
 
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         io.File.stdout().write_all(os.environment("GREETING").value_or("unset"));
         return 0;
     }
@@ -11625,7 +11827,7 @@ from name to value.</p>
 main(): int {
     # An optional: none when the variable is not set.
     var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
-    assert(!runtime.empty(), "a fallback when unset");
+    assert(!runtime.is_empty, "a fallback when unset");
     assert(os.environment("PEPPER_SURELY_NOT_SET").is_none(), "unset");
 
     var count = 0;
@@ -11837,12 +12039,12 @@ main(): int {
     # constructor, which copies it.
     __ptr&lt;char&gt; greeting = "hello";
     assert(strlen(greeting) == 5, "a literal in a __ptr&lt;char&gt; is a C string");
-    assert(String("hello").size() == 5, "String(literal) copies its bytes");
+    assert(String("hello").size == 5, "String(literal) copies its bytes");
 
     # A String value goes through c_str().
     var name = "Pepper";
     name += " and C";
-    assert(strlen(name.c_str()) == name.size(), "c_str() is the String's bytes");
+    assert(strlen(name.c_str()) == name.size, "c_str() is the String's bytes");
 
     # A char* result is a __ptr&lt;char&gt;. Copy it into a String with the
     # constructor: the byte size and the number of code points.
@@ -12571,7 +12773,7 @@ the code it replaces:</p>
 <tr><td><code>io.TcpStream.write_string(String)</code>, <code>io.UnixStream.write_string(String)</code>, <code>tls.TlsStream.write_string(String)</code></td><td><code>write_all(String)</code></td></tr>
 <tr><td><code>io.File.seek(Offset, int)</code></td><td><code>io.File.seek(io.SeekFrom)</code></td></tr>
 <tr><td><code>io.File.std_file(int, String)</code></td><td><code>io.File.std_file(io.StdStream, String)</code></td></tr>
-<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
+<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td>the <code>capacity</code> property</td></tr>
 <tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
@@ -12962,15 +13164,15 @@ struct Stack&lt;T&gt; {
     ## @panics if the stack is empty
     ## @see Stack.push
     pop(): T {
-        assert(items.count() &gt; 0, "pop() on an empty Stack");
-        return items.remove_at(items.count() - 1);
+        assert(items.count &gt; 0, "pop() on an empty Stack");
+        return items.remove_at(items.count - 1);
     }
 
     ## Returns the number of elements.
     ##
     ## @returns how many elements the stack holds
     count(): ulong {
-        return items.count();
+        return items.count;
     }
 }
 
@@ -13059,12 +13261,12 @@ struct TemperatureLog {
     }
 
     average(): int {
-        return _is_empty() ? 0 : _total / (_readings.count() as int);
+        return _is_empty() ? 0 : _total / (_readings.count as int);
     }
 
     # A private method starts with `_` too.
     _is_empty(): bool {
-        return _readings.count() == 0;
+        return _readings.count == 0;
     }
 }
 
@@ -13216,8 +13418,8 @@ total = first_value_that_is_long_enough
     + third_value_that_is_long_and_longer_still;
 var count = words
     .iterate()
-    .filter((w) =&gt; w.length() &gt; 4)
-    .map((w) =&gt; w.length() * 2)
+    .filter((w) =&gt; w.length &gt; 4)
+    .map((w) =&gt; w.length * 2)
     .count_them_all();
 </code></pre>
 <p>Comments and string literals are never reflowed, so a line can stay longer
@@ -13523,9 +13725,9 @@ does.</p>
 (<code>"text"</code>) are <code>String</code> values.</p>
 <p>Two measures describe a String, and each API says which one it uses:</p>
 <ul>
-<li><strong>Code points</strong> (Unicode characters): <code>length()</code>, <code>empty()</code>,
+<li><strong>Code points</strong> (Unicode characters): <code>length</code>, <code>is_empty</code>,
 the indexer <code>s[i]</code>, <code>substr</code>, and iteration.</li>
-<li><strong>Bytes</strong> of UTF-8: <code>size()</code>, <code>find</code>, <code>starts_with</code>, and
+<li><strong>Bytes</strong> of UTF-8: <code>size</code>, <code>find</code>, <code>starts_with</code>, and
 <code>ends_with</code>. The byte size is the authoritative length, so the data may
 contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
@@ -13542,8 +13744,8 @@ a compiler intrinsic whose braces name its arguments by position (see
 the String interpolation chapter).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "héllo";
-    assert(s.length() == 5, "5 code points");
-    assert(s.size() == 6, "6 bytes: 'é' is 2");
+    assert(s.length == 5, "5 code points");
+    assert(s.size == 6, "6 bytes: 'é' is 2");
     s.append(" world");
     assert(s.find("world") == 7, "find returns a byte offset");
     assert(s[1] == "é", "the indexer counts code points");
@@ -13551,6 +13753,28 @@ the String interpolation chapter).</p>
         print(c);   # one code point per line
     }
 </code></pre>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="length"><a class="header" href="#length">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of Unicode code points. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>size</code></li>
+</ul>
+<h4 id="size"><a class="header" href="#size">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8, not counting the NUL
+terminator. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>length</code></li>
+</ul>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the String has no code points. O(1).</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="string-2"><a class="header" href="#string-2">String()</a></h4>
 <pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
@@ -13576,7 +13800,7 @@ trusted, not checked against the data. Runs in O(size).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var empty = String();
     var s = "abc";
-    var copy = String(s.c_str(), s.size(), s.length());
+    var copy = String(s.c_str(), s.size, s.length);
 </code></pre>
 <h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
 <h4 id="length_of"><a class="header" href="#length_of">length_of</a></h4>
@@ -13601,33 +13825,21 @@ whole count 0.</p>
 <pre><code class="language-pepper">bytes(): u8[]
 </code></pre>
 <p>Returns a new array holding the String’s UTF-8 bytes, without a
-terminating NUL. Runs in O(size()).</p>
+terminating NUL. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new array of <code>size()</code> bytes</li>
+<li>a new array of <code>size</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var data = "hi".bytes();
-    assert(data.count() == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
+    assert(data.count == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
 </code></pre>
-<h4 id="length"><a class="header" href="#length">length</a></h4>
-<pre><code class="language-pepper">length(): ulong
-</code></pre>
-<p>Returns the number of Unicode code points. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in code points, not bytes</li>
-</ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>size</code></li>
-</ul>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
 <pre><code class="language-pepper">grow(new_size: ulong)
 </code></pre>
 <p>Extends the byte buffer to <code>new_size</code> bytes and fills the new bytes
-with zeros. Does nothing when <code>new_size</code> is not greater than <code>size()</code>.</p>
-<p>A low-level primitive for <code>append</code>. It updates <code>size()</code> but not <code>length()</code>,
+with zeros. Does nothing when <code>new_size</code> is not greater than <code>size</code>.</p>
+<p>A low-level primitive for <code>append</code>. It updates <code>size</code> but not <code>length</code>,
 so the zero bytes it adds are not counted as code points until the
 caller overwrites them and fixes the length. When it grows the buffer,
 it invalidates running iterators and may reallocate the buffer, which invalidates
@@ -13639,11 +13851,11 @@ pointers from <code>c_str()</code>. Runs in O(new_size).</p>
 <h4 id="append"><a class="header" href="#append">append</a></h4>
 <pre><code class="language-pepper">append(rhs: String)
 </code></pre>
-<p>Appends the content of <code>rhs</code> to this String in place, updating <code>size()</code>
-and <code>length()</code>.</p>
+<p>Appends the content of <code>rhs</code> to this String in place, updating <code>size</code>
+and <code>length</code>.</p>
 <p>Always invalidates running iterators, even when <code>rhs</code> is empty, so
 appending during iteration panics. It may reallocate the buffer. Every reference to
-this String sees the change. Runs in O(size() + rhs.size()).</p>
+this String sees the change. Runs in O(size + rhs.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append; it is not modified</li>
@@ -13658,7 +13870,7 @@ this String sees the change. Runs in O(size() + rhs.size()).</p>
 <p>Returns the code point at code-point index <code>idx</code> as a new
 one-code-point String.</p>
 <p>A negative <code>idx</code> counts from the end (<code>s[-1]</code> is the last code point).
-<code>length()</code> is added until the index is non-negative, so any negative
+<code>length</code> is added until the index is non-negative, so any negative
 index wraps, and <code>s[-7]</code> of a 3-code-point String is <code>s[2]</code>. Runs in
 O(idx) because it walks the UTF-8 bytes. Use <code>for (var c in s)</code> to
 visit every code point in O(size).</p>
@@ -13672,7 +13884,7 @@ visit every code point in O(size).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx</code> is not less than <code>length()</code> after the negative index is normalized, which includes any index into an empty String</li>
+<li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized, which includes any index into an empty String</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "TEST";
@@ -13683,8 +13895,8 @@ visit every code point in O(size).</p>
 <pre><code class="language-pepper">==(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> have the same content, compared
-byte by byte. Strings with different <code>length()</code> are unequal without
-comparing bytes. Runs in O(size()).</p>
+byte by byte. Strings with different <code>length</code> are unequal without
+comparing bytes. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -13711,19 +13923,6 @@ shares, and invalidates running iterators.</p>
 <pre><code class="language-pepper">    var s = "a";
     s += "b";   # s == "ab"
 </code></pre>
-<h4 id="size"><a class="header" href="#size">size</a></h4>
-<pre><code class="language-pepper">size(): ulong
-</code></pre>
-<p>Returns the number of bytes of UTF-8, not counting the NUL
-terminator. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in bytes, not code points</li>
-</ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>length</code></li>
-</ul>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): StringIterator
 </code></pre>
@@ -13743,14 +13942,6 @@ panic.</p>
         n = n + 1;   # 5 iterations
     }
 </code></pre>
-<h4 id="empty"><a class="header" href="#empty">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the String has no code points. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>length()</code> is 0</li>
-</ul>
 <h4 id="c_str"><a class="header" href="#c_str">c_str</a></h4>
 <pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
 </code></pre>
@@ -13767,7 +13958,7 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <pre><code class="language-pepper">copy(copies: Copies = __null): String
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
-later changes to either String do not affect the other. Runs in O(size()).</p>
+later changes to either String do not affect the other. Runs in O(size).</p>
 <p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
 implementation), which passes <code>copies</code>.</p>
 <p><strong>Parameters</strong></p>
@@ -13801,7 +13992,7 @@ when it does not occur.</p>
 <code>substr</code>, convert it with <code>String.length_of(s.c_str(), offset)</code>.
 An empty <code>needle</code> is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(size() * needle.size()).</p>
+valid UTF-8. Runs in O(size * needle.size).</p>
 <p>With <code>from</code>, the search starts at that byte offset, which must be a
 code point boundary (an offset <code>find</code> returned, plus a match’s size,
 is one); an offset past the end, or inside a code point, finds
@@ -13826,7 +14017,7 @@ nothing. The result still counts from the start of the String.</p>
 </code></pre>
 <p>Returns the byte offset of the last place <code>needle</code> occurs in this
 String, or -1 when it does not occur. An empty <code>needle</code> is found at
-<code>size()</code>. Runs in O(size() * needle.size()).</p>
+<code>size</code>. Runs in O(size * needle.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -13847,7 +14038,7 @@ pieces between them, in order. Adjacent separators give an empty
 piece, and so does a separator at either end: <code>"a,,b".split(",")</code> is
 <code>["a", "", "b"]</code> and <code>",a".split(",")</code> is <code>["", "a"]</code>. A String
 without <code>separator</code>, the empty String included, gives one piece: the
-whole String. Runs in O(size() * separator.size()).</p>
+whole String. Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
@@ -13862,7 +14053,7 @@ whole String. Runs in O(size() * separator.size()).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var parts = "a,b,,c".split(",");
-    assert(parts.count() == 4, "four pieces");
+    assert(parts.count == 4, "four pieces");
     assert(parts[2] == "", "an empty piece");
 </code></pre>
 <h4 id="split_once"><a class="header" href="#split_once">split_once</a></h4>
@@ -13870,7 +14061,7 @@ whole String. Runs in O(size() * separator.size()).</p>
 </code></pre>
 <p>Splits the String at the first occurrence of <code>separator</code>: the text
 before it and the text after it, or none when it does not occur.
-Runs in O(size() * separator.size()).</p>
+Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
@@ -13913,7 +14104,7 @@ String, and one part gives a copy of it. Runs in O(total size).</p>
 <pre><code class="language-pepper">replace(from: String, to: String): String
 </code></pre>
 <p>Returns a copy of this String with every occurrence of <code>from</code> replaced
-by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size() * from.size()) plus the result’s
+by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size * from.size) plus the result’s
 size.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -13936,7 +14127,7 @@ size.</p>
 </code></pre>
 <p>Returns whether <code>needle</code> occurs in this String (<code>find(needle) &gt;= 0</code>).
 Because of that, an empty String contains nothing, not even <code>""</code>.
-Runs in O(size() * needle.size()).</p>
+Runs in O(size * needle.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -13949,27 +14140,27 @@ Runs in O(size() * needle.size()).</p>
 <pre><code class="language-pepper">starts_with(prefix: String): bool
 </code></pre>
 <p>Returns whether this String begins with the bytes of <code>prefix</code>. An
-empty <code>prefix</code> always matches. Runs in O(prefix.size()).</p>
+empty <code>prefix</code> always matches. Runs in O(prefix.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>prefix</code> — the text to test for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the first <code>prefix.size()</code> bytes equal <code>prefix</code></li>
+<li>true when the first <code>prefix.size</code> bytes equal <code>prefix</code></li>
 </ul>
 <h4 id="ends_with"><a class="header" href="#ends_with">ends_with</a></h4>
 <pre><code class="language-pepper">ends_with(suffix: String): bool
 </code></pre>
 <p>Returns whether this String ends with the bytes of <code>suffix</code>. An empty
-<code>suffix</code> always matches. Runs in O(suffix.size()).</p>
+<code>suffix</code> always matches. Runs in O(suffix.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>suffix</code> — the text to test for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the last <code>suffix.size()</code> bytes equal <code>suffix</code></li>
+<li>true when the last <code>suffix.size</code> bytes equal <code>suffix</code></li>
 </ul>
 <h4 id="substr"><a class="header" href="#substr">substr</a></h4>
 <pre><code class="language-pepper">substr(start: ulong, count: ulong): String
@@ -13977,7 +14168,7 @@ empty <code>prefix</code> always matches. Runs in O(prefix.size()).</p>
 <p>Returns a new String of up to <code>count</code> code points starting at
 code-point index <code>start</code>. Both arguments count code points, not bytes.</p>
 <p><code>count</code> is clamped to the code points that remain. When <code>start</code> is at
-or past <code>length()</code>, the result is an empty String. Runs in O(size()).</p>
+or past <code>length</code>, the result is an empty String. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>start</code> — the code-point index of the first code point to copy</li>
@@ -13997,7 +14188,7 @@ or past <code>length()</code>, the result is an empty String. Runs in O(size()).
 <pre><code class="language-pepper">!=(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> differ in content, the negation
-of <code>==</code>. Runs in O(size()).</p>
+of <code>==</code>. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -14010,7 +14201,7 @@ of <code>==</code>. Runs in O(size()).</p>
 <pre><code class="language-pepper">+(rhs: String): String
 </code></pre>
 <p>Returns a new String that holds this String followed by <code>rhs</code>. Neither
-operand is modified. Runs in O(size() + rhs.size()).</p>
+operand is modified. Runs in O(size + rhs.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append to the copy</li>
@@ -14041,7 +14232,7 @@ multi-byte code point is returned as it is. Compare the result with a
 character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>index</code> — the byte offset, less than <code>size()</code></li>
+<li><code>index</code> — the byte offset, less than <code>size</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -14049,7 +14240,7 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>index</code> is not less than <code>size()</code> (“String byte_at index out of bounds”)</li>
+<li>if <code>index</code> is not less than <code>size</code> (“String byte_at index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "a=b";
@@ -14072,21 +14263,21 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>start + size</code> is greater than <code>size()</code> (“String substr_bytes range out of bounds”)</li>
+<li>if <code>start + size</code> is greater than <code>size</code> (“String substr_bytes range out of bounds”)</li>
 <li>if <code>start</code> or <code>start + size</code> falls inside a multi-byte code point (“String substr_bytes splits a code point”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "key=value";
     var eq = s.find("=") as ulong;
     assert(s.substr_bytes(0, eq) == "key", "before '='");
-    assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+    assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
 </code></pre>
 <h4 id="compare"><a class="header" href="#compare">compare</a></h4>
 <pre><code class="language-pepper">compare(other: String): int
 </code></pre>
 <p>Compares this String with <code>other</code> byte by byte, for sorting. For
 valid UTF-8 this is code-point order; a String that is a prefix of the
-other orders first. Runs in O(min(size(), other.size())).</p>
+other orders first. Runs in O(min(size, other.size)).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>other</code> — the String to compare with</li>
@@ -14155,7 +14346,7 @@ other orders first. Runs in O(min(size(), other.size())).</p>
 </code></pre>
 <p>Returns a new String without the whitespace at the end: spaces, tabs,
 carriage returns, line feeds, vertical tabs and form feeds (ASCII
-only). Runs in O(size()).</p>
+only). Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the trailing whitespace removed</li>
@@ -14169,7 +14360,7 @@ only). Runs in O(size()).</p>
 </code></pre>
 <p>Returns a new String without the whitespace at the start: spaces,
 tabs, carriage returns, line feeds, vertical tabs and form feeds
-(ASCII only). Runs in O(size()).</p>
+(ASCII only). Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the leading whitespace removed</li>
@@ -14181,7 +14372,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <pre><code class="language-pepper">trim(): String
 </code></pre>
 <p>Returns a new String without the whitespace at either end, as
-<code>trim_start</code> and <code>trim_end</code> do. Runs in O(size()).</p>
+<code>trim_start</code> and <code>trim_end</code> do. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the leading and trailing whitespace removed</li>
@@ -14195,7 +14386,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <p>Returns a new String with the ASCII letters <code>A</code> to <code>Z</code> changed to <code>a</code>
 to <code>z</code>. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).</p>
+O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String in lowercase</li>
@@ -14210,7 +14401,7 @@ O(size()).</p>
 <p>Returns a new String with the ASCII letters <code>a</code> to <code>z</code> changed to <code>A</code>
 to <code>Z</code>. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).</p>
+O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String in uppercase</li>
@@ -14225,14 +14416,14 @@ O(size()).</p>
 endings. A line ends at <code>"\n"</code> or <code>"\r\n"</code>. A final line with no
 ending is included, but the end of the String after a final line
 ending does not start another line, so <code>"a\nb\n"</code> and <code>"a\nb"</code> both
-give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size()).</p>
+give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new Array with one new String per line</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var lines = "first\r\nsecond\n\nfourth".lines();
-    assert(lines.count() == 4, "four lines");
+    assert(lines.count == 4, "four lines");
     assert(lines[1] == "second", "\\r\\n removed");
     assert(lines[2] == "", "an empty line");
 </code></pre>
@@ -14241,14 +14432,14 @@ give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size
 </code></pre>
 <p>Returns a new String that holds this String <code>count</code> times in a row.
 <code>count</code> 0, or an empty String, gives an empty String. Runs in
-O(size() * count).</p>
+O(size * count).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>count</code> — how many copies to join</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new String of <code>size() * count</code> bytes</li>
+<li>a new String of <code>size * count</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
@@ -14682,6 +14873,20 @@ when it is full, so appending is amortized O(piece size). Call
     out.append("line ").append(to_string(3)).append("\n");
     var text = out.to_string();   # "line 3\n"
 </code></pre>
+<h3 id="properties-1-1"><a class="header" href="#properties-1-1">Properties</a></h3>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8 appended so far. O(1).</p>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of code points appended so far. O(1).</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether nothing has been appended since the builder was
+created or last cleared. O(1).</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="stringbuilder-1"><a class="header" href="#stringbuilder-1">StringBuilder()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
@@ -14697,7 +14902,7 @@ bytes before it has to grow.</p>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
 <p>Appends the text of <code>text</code> and returns this builder, so calls can be
-chained. Runs in amortized O(text.size()).</p>
+chained. Runs in amortized O(text.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the String to append; it is not modified</li>
@@ -14710,31 +14915,6 @@ chained. Runs in amortized O(text.size()).</p>
 <pre><code class="language-pepper">    var b = StringBuilder();
     b.append("a").append("b");   # b.to_string() == "ab"
 </code></pre>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
-<pre><code class="language-pepper">size(): ulong
-</code></pre>
-<p>Returns the number of bytes of UTF-8 appended so far. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the size in bytes</li>
-</ul>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
-<pre><code class="language-pepper">length(): ulong
-</code></pre>
-<p>Returns the number of code points appended so far. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in code points</li>
-</ul>
-<h4 id="empty-1"><a class="header" href="#empty-1">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether nothing has been appended since the builder was
-created or last cleared. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>size()</code> is 0</li>
-</ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
@@ -14743,7 +14923,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
-is unchanged. Runs in O(size()).</p>
+is unchanged. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String</li>
@@ -14838,6 +15018,20 @@ next step of such a loop panics with “Array modified during iteration”.</p>
         return total;   # 7
     }
 </code></pre>
+<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of elements in the Array.</p>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of elements the Array can hold before its buffer
+must be reallocated.</p>
+<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the Array has no elements.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="array-2"><a class="header" href="#array-2">Array()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
@@ -14849,10 +15043,10 @@ element is added. Preallocating avoids the reallocations <code>append</code>
 would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>capacity</code> — the number of element slots to allocate up front; <code>count()</code> is still 0</li>
+<li><code>capacity</code> — the number of element slots to allocate up front; <code>count</code> is still 0</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count() == 0, a.capacity() == 16
+<pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
 </code></pre>
 <h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
@@ -14873,31 +15067,6 @@ panic.</p>
         total = total + x;
     }
 </code></pre>
-<h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">count(): ulong
-</code></pre>
-<p>Returns the number of elements in the Array.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the element count; 0 for an empty Array</li>
-</ul>
-<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of elements the Array can hold before its buffer
-must be reallocated.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the allocated slot count, which is at least <code>count()</code></li>
-</ul>
-<h4 id="empty-2"><a class="header" href="#empty-2">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Reports whether the Array has no elements.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
 <h4 id="reserve"><a class="header" href="#reserve">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: ulong)
 </code></pre>
@@ -14917,7 +15086,7 @@ existing elements, which costs O(count).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.reserve(8);   # a.capacity() &gt;= 8
+    a.reserve(8);   # a.capacity &gt;= 8
     a.reserve(2);   # no effect: capacity never shrinks
 </code></pre>
 <h4 id="grow-1"><a class="header" href="#grow-1">grow</a></h4>
@@ -14947,7 +15116,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array index read out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array index read out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var first = a[0];
@@ -14973,7 +15142,7 @@ unchanged.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array index write out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array index write out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    a[0] = 42;
@@ -15004,17 +15173,17 @@ Invalidates running iterators.</p>
 <p>Inserts <code>item</code> at position <code>idx</code>, shifting the element there and every
 later element up by one.</p>
 <p>Runs in O(count - idx), plus a reallocation when the buffer is full.
-<code>idx == count()</code> appends. For a struct <code>T</code> the Array acquires a
+<code>idx == count</code> appends. For a struct <code>T</code> the Array acquires a
 reference to <code>item</code>; shifted elements keep their reference counts.
 Invalidates running iterators.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count()</code></li>
+<li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count</code></li>
 <li><code>item</code> — the element to insert</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt;= count()</code> does not hold (“Array insert index out of bounds”)</li>
+<li>if <code>idx &lt;= count</code> does not hold (“Array insert index out of bounds”)</li>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -15042,7 +15211,7 @@ capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array remove index out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array remove index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
@@ -15083,10 +15252,10 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <pre><code class="language-pepper">last(): T
 </code></pre>
 <p>Returns the last element without removing it; the same as
-<code>a[a.count() - 1]</code>.</p>
+<code>a[a.count - 1]</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the element at index <code>count() - 1</code></li>
+<li>the element at index <code>count - 1</code></li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -15106,7 +15275,7 @@ Array.</p>
 </code></pre>
 <p>Shortens the Array to its first <code>count</code> elements, removing the rest.</p>
 <p>Runs in O(removed elements). For a struct <code>T</code> each removed element’s
-reference is released. A <code>count</code> at or above the current <code>count()</code>
+reference is released. A <code>count</code> at or above the current <code>count</code>
 does nothing (the Array never grows) and leaves iterators valid; an
 actual shrink invalidates them. The capacity is kept.</p>
 <p><strong>Parameters</strong></p>
@@ -15131,8 +15300,8 @@ element, but still invalidates running iterators like every swap.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>a &lt; count()</code> does not hold (“Array swap index out of bounds”)</li>
-<li>if <code>b &lt; count()</code> does not hold (“Array swap index out of bounds”)</li>
+<li>if <code>a &lt; count</code> does not hold (“Array swap index out of bounds”)</li>
+<li>if <code>b &lt; count</code> does not hold (“Array swap index out of bounds”)</li>
 </ul>
 <h4 id="reverse"><a class="header" href="#reverse">reverse</a></h4>
 <pre><code class="language-pepper">reverse()
@@ -15155,7 +15324,7 @@ order.</p>
 <code>b</code>, 0 when their order does not matter, and a positive number when
 <code>a</code> belongs after <code>b</code>, the convention <code>String.compare</code> follows. It is
 a merge sort: O(count log count) calls to <code>compare</code>, plus a scratch
-buffer of <code>count()</code> slots. Elements move between the two buffers
+buffer of <code>count</code> slots. Elements move between the two buffers
 without changing any reference count. Invalidates running iterators
 when there are two or more elements.</p>
 <p><code>compare</code> must not modify the Array: its elements are spread over
@@ -15244,7 +15413,7 @@ Array’s running iterators when <code>rhs</code> is not empty.</p>
 <p>Runs in O(count). The copy is shallow: for a struct <code>T</code> both Arrays
 refer to the same element objects (each acquired once more), but adding
 or removing elements in one does not affect the other. The new Array’s
-capacity equals this Array’s <code>count()</code>.</p>
+capacity equals this Array’s <code>count</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent Array with the same elements</li>
@@ -15283,7 +15452,7 @@ copying the elements.</p>
 <p>Reports whether both Arrays have the same count and pairwise equal
 elements, compared with <code>==</code> as <code>find</code> does.</p>
 <p>Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. <code>capacity()</code> is not compared.</p>
+equal. <code>capacity</code> is not compared.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array to compare with</li>
@@ -15453,7 +15622,7 @@ argument is released afterwards.</p>
 <p>Returns a 64-bit hash of a String’s bytes, so equal strings hash equally
 wherever they are stored. Keeps equal <code>String</code> keys of a <code>HashMap</code> or
 <code>HashSet</code> in one bucket.</p>
-<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) 8 bytes
+<p>Hashes the <code>size</code> bytes of the String (not the NUL terminator) 8 bytes
 at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 (0xcbf29ce484222325).</p>
 <p><strong>Parameters</strong></p>
@@ -15497,8 +15666,22 @@ never shrinks.</p>
     assert(ages["ada"] == 36, "lookup");
     assert(ages.get("grace") == 0, "a missing key reads as the default");
     assert(ages.remove("alan"), "removed");
-    assert(ages.count() == 1, "one entry left");
+    assert(ages.count == 1, "one entry left");
 </code></pre>
+<h3 id="properties-3"><a class="header" href="#properties-3">Properties</a></h3>
+<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of entries in the map. O(1).</p>
+<h4 id="is_empty-3"><a class="header" href="#is_empty-3">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the map has no entries. O(1).</p>
+<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of slots in the table, a power of two and at least 8.
+The map grows before its entries and tombstones reach half of it. O(1).</p>
 <h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
@@ -15525,39 +15708,14 @@ three arrays of that many slots.</p>
 costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.</p>
-<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
-<pre><code class="language-pepper">count(): int
-</code></pre>
-<p>Returns the number of entries in the map. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of live key-value pairs</li>
-</ul>
-<h4 id="empty-3"><a class="header" href="#empty-3">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the map has no entries. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of slots in the table, a power of two and at least 8.
-The map grows before its entries and tombstones reach half of it. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current slot count</li>
-</ul>
 <h4 id="cap"><a class="header" href="#cap">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+<pre><code class="language-pepper">[Deprecated("use the 'capacity' property instead")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the same as <code>capacity()</code></li>
+<li>the same as <code>capacity</code></li>
 </ul>
 <h4 id="clear-2"><a class="header" href="#clear-2">clear</a></h4>
 <pre><code class="language-pepper">clear()
@@ -15736,8 +15894,22 @@ may change, and writing to them breaks the set.</p>
     seen["b"] = "b";   # the same as seen.insert("b")
     assert(seen.contains("a"), "member");
     assert(!seen.insert("a"), "already a member");
-    assert(seen.count() == 2, "two members");
+    assert(seen.count == 2, "two members");
 </code></pre>
+<h3 id="properties-1-2"><a class="header" href="#properties-1-2">Properties</a></h3>
+<h4 id="count-1-1"><a class="header" href="#count-1-1">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of members in the set. O(1).</p>
+<h4 id="is_empty-1-1"><a class="header" href="#is_empty-1-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the set has no members. O(1).</p>
+<h4 id="capacity-1-1"><a class="header" href="#capacity-1-1">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of slots in the table, a power of two and at least 8.
+O(1).</p>
 <h3 id="constructors-2"><a class="header" href="#constructors-2">Constructors</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
@@ -15772,39 +15944,14 @@ a set is expected, so an array literal can initialize one.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
 costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves members to new slots.</p>
-<h4 id="count-1-1"><a class="header" href="#count-1-1">count</a></h4>
-<pre><code class="language-pepper">count(): int
-</code></pre>
-<p>Returns the number of members in the set. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of members</li>
-</ul>
-<h4 id="empty-1-1"><a class="header" href="#empty-1-1">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the set has no members. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
-<h4 id="capacity-1-1"><a class="header" href="#capacity-1-1">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of slots in the table, a power of two and at least 8.
-O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current slot count</li>
-</ul>
 <h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+<pre><code class="language-pepper">[Deprecated("use the 'capacity' property instead")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the same as <code>capacity()</code></li>
+<li>the same as <code>capacity</code></li>
 </ul>
 <h4 id="clear-1-1"><a class="header" href="#clear-1-1">clear</a></h4>
 <pre><code class="language-pepper">clear()
@@ -16120,7 +16267,7 @@ the result advances this iterator. Every type that declares
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    for (var size in names.iterate().map((name) =&gt; name.size())) {
+    for (var size in names.iterate().map((name) =&gt; name.size)) {
         print(size);
     }
 </code></pre>
@@ -16152,7 +16299,7 @@ gets this method.</p>
 <p>Returns an iterator over the elements paired with their positions:
 <code>(0, first)</code>, <code>(1, second)</code>, and so on.</p>
 <p>Lazy, like <code>map</code>. Destructure the pair in the loop to name both parts.
-The positions count in <code>ulong</code>, like <code>Array.count()</code>; name another
+The positions count in <code>ulong</code>, like <code>Array.count</code>; name another
 integer type to count in it (<code>enumerate&lt;int&gt;()</code>). Every type that
 declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
 <p><strong>Type parameters</strong></p>
@@ -16568,7 +16715,7 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <p>The default error type of <code>Result</code>: a human-readable message.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
-    var n = r.error().message.length();   # 4
+    var n = r.error().message.length;   # 4
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">message</a></h4>
@@ -16613,7 +16760,7 @@ nothing, so it only checks that the result is Ok.</p>
         if (a.value() != 42) { return 1; }
         var b = Result&lt;int&gt;.err(Error("boom"));
         if (!b.is_err()) { return 2; }
-        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length() };   # 4
+        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length };   # 4
         return b.ok_or(0);   # 0
     }
 </code></pre>
@@ -17419,7 +17566,7 @@ nothing needs to exist. A part that may be missing comes back as an
 optional, as in Rust: <code>parent()</code> of a root is none.</p>
 <p>Breaking change: <code>parent()</code>, <code>file_name()</code>, <code>file_stem()</code>, <code>extension()</code>
 and <code>dot_index()</code> used to return an empty Path or String (or
-<code>name.size()</code>) for “none”; they now return <code>Path?</code>, <code>String?</code> and
+<code>name.size</code>) for “none”; they now return <code>Path?</code>, <code>String?</code> and
 <code>ulong?</code>.</p>
 <p>Separators: on POSIX only <code>/</code> separates components (<code>\</code> is an ordinary
 byte of a name). On Windows both <code>/</code> and <code>\</code> separate, and a path may
@@ -17439,6 +17586,12 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
+<h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
+<h4 id="is_empty-4"><a class="header" href="#is_empty-4">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the path has no text at all. File-system operations
+on the empty path fail.</p>
 <h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
@@ -17456,7 +17609,7 @@ takes a <code>Path</code> also accepts text.</p>
 <pre><code class="language-pepper">    import io;
 
     var p = io.Path("/usr/lib");
-    var empty = io.Path();   # is_empty() is true
+    var empty = io.Path();   # is_empty is true
     var q: io.Path = "docs";   # converted implicitly
 </code></pre>
 <h3 id="static-methods-5"><a class="header" href="#static-methods-5">Static methods</a></h3>
@@ -17474,7 +17627,7 @@ takes a <code>Path</code> also accepts text.</p>
 <p>Returns the byte offset of the dot that starts the extension in the
 file name <code>name</code>: the last <code>.</code> that is not the first byte. A leading
 dot (<code>.bashrc</code>) starts the name, not an extension.</p>
-<p>Breaking change: this used to return <code>name.size()</code> for “no
+<p>Breaking change: this used to return <code>name.size</code> for “no
 extension”; it now returns none.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -17492,15 +17645,6 @@ extension”; it now returns none.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the path as a String</li>
-</ul>
-<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
-<pre><code class="language-pepper">is_empty(): bool
-</code></pre>
-<p>Returns whether the path has no text at all. File-system operations
-on the empty path fail.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when the path’s text is <code>""</code></li>
 </ul>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
@@ -18378,7 +18522,7 @@ one first flushes what <code>print</code> has buffered.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.read_bytes(Path("image.png"));
     if (r.is_ok()) {
-        var n = r.value().count();
+        var n = r.value().count;
     }
 </code></pre>
 <h4 id="read_to_string"><a class="header" href="#read_to_string">read_to_string</a></h4>
@@ -18584,7 +18728,7 @@ as part of the text.</p>
 </code></pre>
 <p>Writes bytes from <code>data</code> at the current position (or at the end, in
 append mode) with a single system call, and advances the position.</p>
-<p>The write may be partial: it can write fewer than <code>data.count()</code>
+<p>The write may be partial: it can write fewer than <code>data.count</code>
 bytes, and one call moves at most about 2 GiB on POSIX or 1 GiB on
 Windows. Use <code>write_all</code> to write everything. On POSIX an interrupted
 write (<code>EINTR</code>) is retried.</p>
@@ -18594,13 +18738,13 @@ write (<code>EINTR</code>) is retried.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes written, which may be less than <code>data.count()</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
+<li>the number of bytes written, which may be less than <code>data.count</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
 </ul>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Writes all of <code>data</code>, repeating the write until every byte is
-written. Advances the position by <code>data.count()</code>.</p>
+written. Advances the position by <code>data.count</code>.</p>
 <p>If an error occurs part of <code>data</code> may already have been written.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -18829,7 +18973,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 
     var list = io.Directory.open(io.Path("src")).value().entries().value();
     ulong i = 0;
-    while (i &lt; list.count()) {
+    while (i &lt; list.count) {
         if (list[i].is_file) {
             print(list[i].Name);
         }
@@ -18904,7 +19048,7 @@ afresh.</p>
     var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
         var d = io.Directory.open(dir).value();
-        var count = d.entries().value().count();
+        var count = d.entries().value().count;
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 </code></pre>
@@ -19098,7 +19242,7 @@ at a time instead, loop over the <code>Directory</code> itself (see <code>iterat
 
     var list = io.Directory.open(io.Path(".")).value().entries();
     if (list.is_ok()) {
-        var n = list.value().count();
+        var n = list.value().count;
     }
 </code></pre>
 <h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
@@ -19895,7 +20039,7 @@ gets the connection.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var buffer = Array&lt;u8&gt;();
-    var n = stream.read(buffer, 4096).value();   # buffer.count() == n
+    var n = stream.read(buffer, 4096).value();   # buffer.count == n
 </code></pre>
 <h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
 <pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
@@ -19915,7 +20059,7 @@ gets the connection.</p>
 </code></pre>
 <p>Sends bytes from <code>data</code> with a single system call, waiting until the
 system can take at least some of them.</p>
-<p>The send may be partial: it can send fewer than <code>data.count()</code> bytes.
+<p>The send may be partial: it can send fewer than <code>data.count</code> bytes.
 Use <code>write_all</code> to send everything.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -19923,7 +20067,7 @@ Use <code>write_all</code> to send everything.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes sent, which may be less than <code>data.count()</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
+<li>the number of bytes sent, which may be less than <code>data.count</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
 </ul>
 <h4 id="write_all-2"><a class="header" href="#write_all-2">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
@@ -22953,6 +23097,12 @@ threads.</p>
         return 0;
     }
 </code></pre>
+<h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
+<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of values waiting to be received. Other threads may
+change it as soon as it returns.</p>
 <h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
@@ -23058,15 +23208,6 @@ end. Closing a closed channel does nothing.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true once the channel is closed, even while values are still queued</li>
-</ul>
-<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
-<pre><code class="language-pepper">count(): ulong
-</code></pre>
-<p>Returns the number of values waiting to be received. Other threads may
-change it as soon as it returns.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of queued values</li>
 </ul>
 <h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): ChannelIterator&lt;T&gt;
@@ -23470,7 +23611,7 @@ value from outside.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var queue = jobs.lock()) {
-        not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count() == 0);
+        not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count == 0);
         var job = queue.remove_at(0);
     }
 </code></pre>
@@ -24203,20 +24344,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
+<h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
+<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of field names.</p>
 <h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
 <h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
-<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
-<pre><code class="language-pepper">count(): ulong
-</code></pre>
-<p>Returns the number of field names.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of names; a name with several values counts once</li>
-</ul>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -24750,7 +24888,7 @@ error is yielded and ends it.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var total = 0;
     for (var chunk in stream.chunks(4096)) {
-        total += chunk.value().count();
+        total += chunk.value().count;
     }
 </code></pre>
 <h2 id="writer"><a class="header" href="#writer">Writer</a></h2>
@@ -25203,7 +25341,7 @@ system can take at least some of them. The send may be partial; use
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes sent, which may be less than <code>data.count()</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
+<li>the number of bytes sent, which may be less than <code>data.count</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
 </ul>
 <h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
@@ -25638,6 +25776,12 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
+<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h4 id="is_empty-5"><a class="header" href="#is_empty-5">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the range holds no numbers, whatever the iteration has
+reached.</p>
 <h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
@@ -25686,15 +25830,6 @@ reached.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if <code>start &lt;= value</code> and <code>value</code> is before <code>end</code> (or equal to it, for a closed range)</li>
-</ul>
-<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
-<pre><code class="language-pepper">is_empty(): bool
-</code></pre>
-<p>Returns whether the range holds no numbers, whatever the iteration has
-reached.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true if <code>start</code> is past the end of the range</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/regex/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="regexmodulepep"><a class="header" href="#regexmodulepep">regex/module.pep</a></h1>
@@ -25867,7 +26002,7 @@ at the character before it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to search</li>
-<li><code>start</code> — the byte offset to search from, at most <code>text.size()</code></li>
+<li><code>start</code> — the byte offset to search from, at most <code>text.size</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -25875,7 +26010,7 @@ at the character before it.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>start</code> is greater than <code>text.size()</code></li>
+<li>if <code>start</code> is greater than <code>text.size</code></li>
 </ul>
 <h4 id="find_all"><a class="header" href="#find_all">find_all</a></h4>
 <pre><code class="language-pepper">find_all(text: String): Matches
@@ -25896,7 +26031,7 @@ skipped, so <code>a*</code> finds <code>a</code> twice in <code>"aba"</code>, no
 
     var total = 0;
     for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
-        total += number.text().size();   # 1, then 2, then 3
+        total += number.text().size;   # 1, then 2, then 3
     }
 </code></pre>
 <h4 id="replace-2"><a class="header" href="#replace-2">replace</a></h4>
@@ -25969,7 +26104,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 <pre><code class="language-pepper">    import regex;
 
     var parts = regex.Regex(",\\s*").split("a, b,c");
-    assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
+    assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
 <h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
@@ -26140,7 +26275,7 @@ points below 128 have an ASCII byte.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import text;
 
-    assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
+    assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
 <h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
@@ -26225,7 +26360,7 @@ and always succeeds.</p>
 
     main(): int {
         var bytes = text.Utf8.encode("héllo");
-        assert(bytes.count() == 6, "é takes two bytes");
+        assert(bytes.count == 6, "é takes two bytes");
         assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
         return 0;
     }
@@ -26246,7 +26381,7 @@ is written, and one read is kept as part of the text.</p>
 <pre><code class="language-pepper">    import text;
 
     var bytes = text.Utf16.encode("hi");
-    assert(bytes.count() == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
+    assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
 <h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
@@ -26317,7 +26452,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new array of <code>value.size()</code> bytes</li>
+<li>a new array of <code>value.size</code> bytes</li>
 </ul>
 <h4 id="is_valid"><a class="header" href="#is_valid">is_valid</a></h4>
 <pre><code class="language-pepper">static is_valid(bytes: u8[]): bool

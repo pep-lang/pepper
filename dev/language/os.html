@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,7 +196,7 @@ from name to value.</p>
 main(): int {
     # An optional: none when the variable is not set.
     var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
-    assert(!runtime.empty(), "a fallback when unset");
+    assert(!runtime.is_empty, "a fallback when unset");
     assert(os.environment("PEPPER_SURELY_NOT_SET").is_none(), "unset");
 
     var count = 0;

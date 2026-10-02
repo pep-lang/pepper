@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -225,6 +225,20 @@ next step of such a loop panics with “Array modified during iteration”.</p>
         return total;   # 7
     }
 </code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of elements in the Array.</p>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of elements the Array can hold before its buffer
+must be reallocated.</p>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the Array has no elements.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="array-2"><a class="header" href="#array-2">Array()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
@@ -236,10 +250,10 @@ element is added. Preallocating avoids the reallocations <code>append</code>
 would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>capacity</code> — the number of element slots to allocate up front; <code>count()</code> is still 0</li>
+<li><code>capacity</code> — the number of element slots to allocate up front; <code>count</code> is still 0</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count() == 0, a.capacity() == 16
+<pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
@@ -260,31 +274,6 @@ panic.</p>
         total = total + x;
     }
 </code></pre>
-<h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">count(): ulong
-</code></pre>
-<p>Returns the number of elements in the Array.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the element count; 0 for an empty Array</li>
-</ul>
-<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of elements the Array can hold before its buffer
-must be reallocated.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the allocated slot count, which is at least <code>count()</code></li>
-</ul>
-<h4 id="empty"><a class="header" href="#empty">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Reports whether the Array has no elements.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
 <h4 id="reserve"><a class="header" href="#reserve">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: ulong)
 </code></pre>
@@ -304,7 +293,7 @@ existing elements, which costs O(count).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.reserve(8);   # a.capacity() &gt;= 8
+    a.reserve(8);   # a.capacity &gt;= 8
     a.reserve(2);   # no effect: capacity never shrinks
 </code></pre>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
@@ -334,7 +323,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array index read out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array index read out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var first = a[0];
@@ -360,7 +349,7 @@ unchanged.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array index write out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array index write out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    a[0] = 42;
@@ -391,17 +380,17 @@ Invalidates running iterators.</p>
 <p>Inserts <code>item</code> at position <code>idx</code>, shifting the element there and every
 later element up by one.</p>
 <p>Runs in O(count - idx), plus a reallocation when the buffer is full.
-<code>idx == count()</code> appends. For a struct <code>T</code> the Array acquires a
+<code>idx == count</code> appends. For a struct <code>T</code> the Array acquires a
 reference to <code>item</code>; shifted elements keep their reference counts.
 Invalidates running iterators.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count()</code></li>
+<li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count</code></li>
 <li><code>item</code> — the element to insert</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt;= count()</code> does not hold (“Array insert index out of bounds”)</li>
+<li>if <code>idx &lt;= count</code> does not hold (“Array insert index out of bounds”)</li>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -429,7 +418,7 @@ capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx &lt; count()</code> does not hold (“Array remove index out of bounds”)</li>
+<li>if <code>idx &lt; count</code> does not hold (“Array remove index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;();
@@ -470,10 +459,10 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <pre><code class="language-pepper">last(): T
 </code></pre>
 <p>Returns the last element without removing it; the same as
-<code>a[a.count() - 1]</code>.</p>
+<code>a[a.count - 1]</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the element at index <code>count() - 1</code></li>
+<li>the element at index <code>count - 1</code></li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -493,7 +482,7 @@ Array.</p>
 </code></pre>
 <p>Shortens the Array to its first <code>count</code> elements, removing the rest.</p>
 <p>Runs in O(removed elements). For a struct <code>T</code> each removed element’s
-reference is released. A <code>count</code> at or above the current <code>count()</code>
+reference is released. A <code>count</code> at or above the current <code>count</code>
 does nothing (the Array never grows) and leaves iterators valid; an
 actual shrink invalidates them. The capacity is kept.</p>
 <p><strong>Parameters</strong></p>
@@ -518,8 +507,8 @@ element, but still invalidates running iterators like every swap.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>a &lt; count()</code> does not hold (“Array swap index out of bounds”)</li>
-<li>if <code>b &lt; count()</code> does not hold (“Array swap index out of bounds”)</li>
+<li>if <code>a &lt; count</code> does not hold (“Array swap index out of bounds”)</li>
+<li>if <code>b &lt; count</code> does not hold (“Array swap index out of bounds”)</li>
 </ul>
 <h4 id="reverse"><a class="header" href="#reverse">reverse</a></h4>
 <pre><code class="language-pepper">reverse()
@@ -542,7 +531,7 @@ order.</p>
 <code>b</code>, 0 when their order does not matter, and a positive number when
 <code>a</code> belongs after <code>b</code>, the convention <code>String.compare</code> follows. It is
 a merge sort: O(count log count) calls to <code>compare</code>, plus a scratch
-buffer of <code>count()</code> slots. Elements move between the two buffers
+buffer of <code>count</code> slots. Elements move between the two buffers
 without changing any reference count. Invalidates running iterators
 when there are two or more elements.</p>
 <p><code>compare</code> must not modify the Array: its elements are spread over
@@ -631,7 +620,7 @@ Array’s running iterators when <code>rhs</code> is not empty.</p>
 <p>Runs in O(count). The copy is shallow: for a struct <code>T</code> both Arrays
 refer to the same element objects (each acquired once more), but adding
 or removing elements in one does not affect the other. The new Array’s
-capacity equals this Array’s <code>count()</code>.</p>
+capacity equals this Array’s <code>count</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent Array with the same elements</li>
@@ -670,7 +659,7 @@ copying the elements.</p>
 <p>Reports whether both Arrays have the same count and pairwise equal
 elements, compared with <code>==</code> as <code>find</code> does.</p>
 <p>Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. <code>capacity()</code> is not compared.</p>
+equal. <code>capacity</code> is not compared.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array to compare with</li>

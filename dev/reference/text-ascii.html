@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,7 @@ points below 128 have an ASCII byte.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import text;
 
-    assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
+    assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>

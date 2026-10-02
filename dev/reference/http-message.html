@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,20 +199,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of field names.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">count(): ulong
-</code></pre>
-<p>Returns the number of field names.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of names; a name with several values counts once</li>
-</ul>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>

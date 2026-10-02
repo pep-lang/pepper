@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,7 +196,7 @@ import process;
 # Runs a copy of this program as a child, so the example needs no other
 # program on any system: the child's first argument says what to do.
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         io.File.stdout().write_all("hello from " + args[1]);
         io.File.stderr().write_all("a warning");
         return 3;
@@ -250,7 +250,7 @@ the <a href="../reference/io-file.html">file</a> read and write methods apply.</
 import process;
 
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         # The child: read standard input to the end, and write it back in
         # capitals.
         var text = io.File.stdin().read_string().value();
@@ -300,7 +300,7 @@ import os;
 import process;
 
 main(args: String[]): int {
-    if (args.count() &gt; 1) {
+    if (args.count &gt; 1) {
         io.File.stdout().write_all(os.environment("GREETING").value_or("unset"));
         return 0;
     }

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,7 +208,7 @@ find_adult(people: Array&lt;Person&gt;): Optional&lt;Person&gt; {
 # `ulong?` is shorthand for `Optional&lt;ulong&gt;`.
 index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
-    while (i &lt; text.length()) {
+    while (i &lt; text.length) {
         if (text[i] == wanted) { return Optional&lt;ulong&gt;.some(i); }
         i = i + 1;
     }
@@ -354,9 +354,9 @@ main(): int {
 </code></pre>
 <p><strong>Breaking change.</strong> <code>Array.find</code> used to return a <code>long</code> that was <code>-1</code> for
 “not found”, and the <code>Path</code> methods above returned an empty <code>Path</code> or
-<code>String</code> (or <code>name.size()</code> for <code>dot_index</code>). Code written against the old
+<code>String</code> (or <code>name.size</code> for <code>dot_index</code>). Code written against the old
 API must test the optional instead: <code>a.find(x) &gt;= 0</code> becomes
-<code>a.find(x).is_some()</code>, <code>p.parent().is_empty()</code> becomes
+<code>a.find(x).is_some()</code>, <code>p.parent().is_empty</code> becomes
 <code>p.parent().is_none()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
 A comparison such as <code>a.find(x) == -1</code> still compiles but compares the
 optional object rather than an index, so search for these and rewrite them.

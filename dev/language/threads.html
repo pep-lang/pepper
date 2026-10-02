@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -575,7 +575,7 @@ channel: dropping it, or ending the threads that use it, does not.</li>
 <li><code>for (var v in channel)</code> receives until the channel is closed and empty.
 Several threads can loop over one channel; each value goes to one of them.</li>
 <li>Values from one sender arrive in the order they were sent.</li>
-<li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
+<li>The <code>count</code> property and <code>is_closed()</code> report the channel’s state, which other
 threads may change right after.</li>
 </ul>
 <p><code>send</code> and <code>try_send</code> take a <strong>new</strong> value, which nothing on the sending
@@ -607,7 +607,7 @@ const letters = async.Atomic&lt;long&gt;(0);
 count_letters() {
     for (var order in orders) {
         for (var item in order.items) {
-            letters.fetch_add(item.length() as long);
+            letters.fetch_add(item.length as long);
         }
     }
 }
@@ -864,7 +864,7 @@ main(): int {
     var next = Array&lt;String&gt;();
     next.append("third");
     var old = log.replace(move(next));
-    print($"{old.count()}");     # 2
+    print($"{old.count}");     # 2
     print(old[1]);               # second
     return 0;
 }
@@ -958,7 +958,7 @@ work() {
         with (var queue = jobs.lock()) {
             # Waits while the predicate holds; spurious wakeups are handled.
             # The predicate is given the locked value: it cannot capture it.
-            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
             done.fetch_add(queue.remove_at(0));
             taken = taken + 1;
         }
@@ -980,7 +980,7 @@ main(): int {
 
     with (var queue = jobs.lock()) {
         # Gives up after 10 milliseconds: nothing is queued.
-        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
         assert(!ready, "the time ran out");
     }
     return 0;
@@ -1018,7 +1018,7 @@ add_names(prefix: String) {
             list.append("worker");            # a new String: fine
             list.append(prefix + "!");        # `+` returns a new String: fine
             list.append(copy(prefix));        # a copy of an outside value: fine
-            var n = list.count();             # a number leaves freely
+            var n = list.count;             # a number leaves freely
             if (list.contains(prefix)) {      # comparing keeps nothing
                 n = n + 1;
             }
@@ -1030,7 +1030,7 @@ add_names(prefix: String) {
 # Part of the locked value leaves the block only as a copy.
 first_name(): String {
     with (var list = names.lock()) {
-        if (list.count() &gt; 0) {
+        if (list.count &gt; 0) {
             return list[0].copy();
         }
     }
@@ -1046,14 +1046,14 @@ main(): int {
     var first = first_name();
     first.append(" (mine)");   # changing the copy leaves the list alone
     with (var list = names.lock()) {
-        assert(list.count() == 18, "every name was added");
+        assert(list.count == 18, "every name was added");
         assert(list[0] == "worker", "the locked String is unchanged");
     }
 
     # replace swaps in a new value and hands back the old one, which the
     # caller then owns outright.
     var old = names.replace(Array&lt;String&gt;());
-    assert(old.count() == 18, "the old list");
+    assert(old.count == 18, "the old list");
 
     # A thread's own value that is not thread-safe is reached through `with`.
     var scratch = async.ThreadLocal&lt;String&gt;();

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -228,6 +228,12 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the range holds no numbers, whatever the iteration has
+reached.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
@@ -276,15 +282,6 @@ reached.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if <code>start &lt;= value</code> and <code>value</code> is before <code>end</code> (or equal to it, for a closed range)</li>
-</ul>
-<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
-<pre><code class="language-pepper">is_empty(): bool
-</code></pre>
-<p>Returns whether the range holds no numbers, whatever the iteration has
-reached.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true if <code>start</code> is past the end of the range</li>
 </ul>
 
                     </main>

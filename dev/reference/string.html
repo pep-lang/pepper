@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,9 +191,9 @@
 (<code>"text"</code>) are <code>String</code> values.</p>
 <p>Two measures describe a String, and each API says which one it uses:</p>
 <ul>
-<li><strong>Code points</strong> (Unicode characters): <code>length()</code>, <code>empty()</code>,
+<li><strong>Code points</strong> (Unicode characters): <code>length</code>, <code>is_empty</code>,
 the indexer <code>s[i]</code>, <code>substr</code>, and iteration.</li>
-<li><strong>Bytes</strong> of UTF-8: <code>size()</code>, <code>find</code>, <code>starts_with</code>, and
+<li><strong>Bytes</strong> of UTF-8: <code>size</code>, <code>find</code>, <code>starts_with</code>, and
 <code>ends_with</code>. The byte size is the authoritative length, so the data may
 contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
@@ -210,8 +210,8 @@ a compiler intrinsic whose braces name its arguments by position (see
 the String interpolation chapter).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "héllo";
-    assert(s.length() == 5, "5 code points");
-    assert(s.size() == 6, "6 bytes: 'é' is 2");
+    assert(s.length == 5, "5 code points");
+    assert(s.size == 6, "6 bytes: 'é' is 2");
     s.append(" world");
     assert(s.find("world") == 7, "find returns a byte offset");
     assert(s[1] == "é", "the indexer counts code points");
@@ -219,6 +219,28 @@ the String interpolation chapter).</p>
         print(c);   # one code point per line
     }
 </code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="length"><a class="header" href="#length">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of Unicode code points. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>size</code></li>
+</ul>
+<h4 id="size"><a class="header" href="#size">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8, not counting the NUL
+terminator. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>length</code></li>
+</ul>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the String has no code points. O(1).</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="string-2"><a class="header" href="#string-2">String()</a></h4>
 <pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
@@ -244,7 +266,7 @@ trusted, not checked against the data. Runs in O(size).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var empty = String();
     var s = "abc";
-    var copy = String(s.c_str(), s.size(), s.length());
+    var copy = String(s.c_str(), s.size, s.length);
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="length_of"><a class="header" href="#length_of">length_of</a></h4>
@@ -269,33 +291,21 @@ whole count 0.</p>
 <pre><code class="language-pepper">bytes(): u8[]
 </code></pre>
 <p>Returns a new array holding the String’s UTF-8 bytes, without a
-terminating NUL. Runs in O(size()).</p>
+terminating NUL. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new array of <code>size()</code> bytes</li>
+<li>a new array of <code>size</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var data = "hi".bytes();
-    assert(data.count() == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
+    assert(data.count == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
 </code></pre>
-<h4 id="length"><a class="header" href="#length">length</a></h4>
-<pre><code class="language-pepper">length(): ulong
-</code></pre>
-<p>Returns the number of Unicode code points. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in code points, not bytes</li>
-</ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>size</code></li>
-</ul>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
 <pre><code class="language-pepper">grow(new_size: ulong)
 </code></pre>
 <p>Extends the byte buffer to <code>new_size</code> bytes and fills the new bytes
-with zeros. Does nothing when <code>new_size</code> is not greater than <code>size()</code>.</p>
-<p>A low-level primitive for <code>append</code>. It updates <code>size()</code> but not <code>length()</code>,
+with zeros. Does nothing when <code>new_size</code> is not greater than <code>size</code>.</p>
+<p>A low-level primitive for <code>append</code>. It updates <code>size</code> but not <code>length</code>,
 so the zero bytes it adds are not counted as code points until the
 caller overwrites them and fixes the length. When it grows the buffer,
 it invalidates running iterators and may reallocate the buffer, which invalidates
@@ -307,11 +317,11 @@ pointers from <code>c_str()</code>. Runs in O(new_size).</p>
 <h4 id="append"><a class="header" href="#append">append</a></h4>
 <pre><code class="language-pepper">append(rhs: String)
 </code></pre>
-<p>Appends the content of <code>rhs</code> to this String in place, updating <code>size()</code>
-and <code>length()</code>.</p>
+<p>Appends the content of <code>rhs</code> to this String in place, updating <code>size</code>
+and <code>length</code>.</p>
 <p>Always invalidates running iterators, even when <code>rhs</code> is empty, so
 appending during iteration panics. It may reallocate the buffer. Every reference to
-this String sees the change. Runs in O(size() + rhs.size()).</p>
+this String sees the change. Runs in O(size + rhs.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append; it is not modified</li>
@@ -326,7 +336,7 @@ this String sees the change. Runs in O(size() + rhs.size()).</p>
 <p>Returns the code point at code-point index <code>idx</code> as a new
 one-code-point String.</p>
 <p>A negative <code>idx</code> counts from the end (<code>s[-1]</code> is the last code point).
-<code>length()</code> is added until the index is non-negative, so any negative
+<code>length</code> is added until the index is non-negative, so any negative
 index wraps, and <code>s[-7]</code> of a 3-code-point String is <code>s[2]</code>. Runs in
 O(idx) because it walks the UTF-8 bytes. Use <code>for (var c in s)</code> to
 visit every code point in O(size).</p>
@@ -340,7 +350,7 @@ visit every code point in O(size).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>idx</code> is not less than <code>length()</code> after the negative index is normalized, which includes any index into an empty String</li>
+<li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized, which includes any index into an empty String</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "TEST";
@@ -351,8 +361,8 @@ visit every code point in O(size).</p>
 <pre><code class="language-pepper">==(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> have the same content, compared
-byte by byte. Strings with different <code>length()</code> are unequal without
-comparing bytes. Runs in O(size()).</p>
+byte by byte. Strings with different <code>length</code> are unequal without
+comparing bytes. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -379,19 +389,6 @@ shares, and invalidates running iterators.</p>
 <pre><code class="language-pepper">    var s = "a";
     s += "b";   # s == "ab"
 </code></pre>
-<h4 id="size"><a class="header" href="#size">size</a></h4>
-<pre><code class="language-pepper">size(): ulong
-</code></pre>
-<p>Returns the number of bytes of UTF-8, not counting the NUL
-terminator. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in bytes, not code points</li>
-</ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>length</code></li>
-</ul>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): StringIterator
 </code></pre>
@@ -411,14 +408,6 @@ panic.</p>
         n = n + 1;   # 5 iterations
     }
 </code></pre>
-<h4 id="empty"><a class="header" href="#empty">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the String has no code points. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>length()</code> is 0</li>
-</ul>
 <h4 id="c_str"><a class="header" href="#c_str">c_str</a></h4>
 <pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
 </code></pre>
@@ -435,7 +424,7 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <pre><code class="language-pepper">copy(copies: Copies = __null): String
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
-later changes to either String do not affect the other. Runs in O(size()).</p>
+later changes to either String do not affect the other. Runs in O(size).</p>
 <p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
 implementation), which passes <code>copies</code>.</p>
 <p><strong>Parameters</strong></p>
@@ -469,7 +458,7 @@ when it does not occur.</p>
 <code>substr</code>, convert it with <code>String.length_of(s.c_str(), offset)</code>.
 An empty <code>needle</code> is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(size() * needle.size()).</p>
+valid UTF-8. Runs in O(size * needle.size).</p>
 <p>With <code>from</code>, the search starts at that byte offset, which must be a
 code point boundary (an offset <code>find</code> returned, plus a match’s size,
 is one); an offset past the end, or inside a code point, finds
@@ -494,7 +483,7 @@ nothing. The result still counts from the start of the String.</p>
 </code></pre>
 <p>Returns the byte offset of the last place <code>needle</code> occurs in this
 String, or -1 when it does not occur. An empty <code>needle</code> is found at
-<code>size()</code>. Runs in O(size() * needle.size()).</p>
+<code>size</code>. Runs in O(size * needle.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -515,7 +504,7 @@ pieces between them, in order. Adjacent separators give an empty
 piece, and so does a separator at either end: <code>"a,,b".split(",")</code> is
 <code>["a", "", "b"]</code> and <code>",a".split(",")</code> is <code>["", "a"]</code>. A String
 without <code>separator</code>, the empty String included, gives one piece: the
-whole String. Runs in O(size() * separator.size()).</p>
+whole String. Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
@@ -530,7 +519,7 @@ whole String. Runs in O(size() * separator.size()).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var parts = "a,b,,c".split(",");
-    assert(parts.count() == 4, "four pieces");
+    assert(parts.count == 4, "four pieces");
     assert(parts[2] == "", "an empty piece");
 </code></pre>
 <h4 id="split_once"><a class="header" href="#split_once">split_once</a></h4>
@@ -538,7 +527,7 @@ whole String. Runs in O(size() * separator.size()).</p>
 </code></pre>
 <p>Splits the String at the first occurrence of <code>separator</code>: the text
 before it and the text after it, or none when it does not occur.
-Runs in O(size() * separator.size()).</p>
+Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
@@ -581,7 +570,7 @@ String, and one part gives a copy of it. Runs in O(total size).</p>
 <pre><code class="language-pepper">replace(from: String, to: String): String
 </code></pre>
 <p>Returns a copy of this String with every occurrence of <code>from</code> replaced
-by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size() * from.size()) plus the result’s
+by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size * from.size) plus the result’s
 size.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -604,7 +593,7 @@ size.</p>
 </code></pre>
 <p>Returns whether <code>needle</code> occurs in this String (<code>find(needle) &gt;= 0</code>).
 Because of that, an empty String contains nothing, not even <code>""</code>.
-Runs in O(size() * needle.size()).</p>
+Runs in O(size * needle.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -617,27 +606,27 @@ Runs in O(size() * needle.size()).</p>
 <pre><code class="language-pepper">starts_with(prefix: String): bool
 </code></pre>
 <p>Returns whether this String begins with the bytes of <code>prefix</code>. An
-empty <code>prefix</code> always matches. Runs in O(prefix.size()).</p>
+empty <code>prefix</code> always matches. Runs in O(prefix.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>prefix</code> — the text to test for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the first <code>prefix.size()</code> bytes equal <code>prefix</code></li>
+<li>true when the first <code>prefix.size</code> bytes equal <code>prefix</code></li>
 </ul>
 <h4 id="ends_with"><a class="header" href="#ends_with">ends_with</a></h4>
 <pre><code class="language-pepper">ends_with(suffix: String): bool
 </code></pre>
 <p>Returns whether this String ends with the bytes of <code>suffix</code>. An empty
-<code>suffix</code> always matches. Runs in O(suffix.size()).</p>
+<code>suffix</code> always matches. Runs in O(suffix.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>suffix</code> — the text to test for</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true when the last <code>suffix.size()</code> bytes equal <code>suffix</code></li>
+<li>true when the last <code>suffix.size</code> bytes equal <code>suffix</code></li>
 </ul>
 <h4 id="substr"><a class="header" href="#substr">substr</a></h4>
 <pre><code class="language-pepper">substr(start: ulong, count: ulong): String
@@ -645,7 +634,7 @@ empty <code>prefix</code> always matches. Runs in O(prefix.size()).</p>
 <p>Returns a new String of up to <code>count</code> code points starting at
 code-point index <code>start</code>. Both arguments count code points, not bytes.</p>
 <p><code>count</code> is clamped to the code points that remain. When <code>start</code> is at
-or past <code>length()</code>, the result is an empty String. Runs in O(size()).</p>
+or past <code>length</code>, the result is an empty String. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>start</code> — the code-point index of the first code point to copy</li>
@@ -665,7 +654,7 @@ or past <code>length()</code>, the result is an empty String. Runs in O(size()).
 <pre><code class="language-pepper">!=(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> differ in content, the negation
-of <code>==</code>. Runs in O(size()).</p>
+of <code>==</code>. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -678,7 +667,7 @@ of <code>==</code>. Runs in O(size()).</p>
 <pre><code class="language-pepper">+(rhs: String): String
 </code></pre>
 <p>Returns a new String that holds this String followed by <code>rhs</code>. Neither
-operand is modified. Runs in O(size() + rhs.size()).</p>
+operand is modified. Runs in O(size + rhs.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append to the copy</li>
@@ -709,7 +698,7 @@ multi-byte code point is returned as it is. Compare the result with a
 character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>index</code> — the byte offset, less than <code>size()</code></li>
+<li><code>index</code> — the byte offset, less than <code>size</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -717,7 +706,7 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>index</code> is not less than <code>size()</code> (“String byte_at index out of bounds”)</li>
+<li>if <code>index</code> is not less than <code>size</code> (“String byte_at index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "a=b";
@@ -740,21 +729,21 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>start + size</code> is greater than <code>size()</code> (“String substr_bytes range out of bounds”)</li>
+<li>if <code>start + size</code> is greater than <code>size</code> (“String substr_bytes range out of bounds”)</li>
 <li>if <code>start</code> or <code>start + size</code> falls inside a multi-byte code point (“String substr_bytes splits a code point”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "key=value";
     var eq = s.find("=") as ulong;
     assert(s.substr_bytes(0, eq) == "key", "before '='");
-    assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+    assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
 </code></pre>
 <h4 id="compare"><a class="header" href="#compare">compare</a></h4>
 <pre><code class="language-pepper">compare(other: String): int
 </code></pre>
 <p>Compares this String with <code>other</code> byte by byte, for sorting. For
 valid UTF-8 this is code-point order; a String that is a prefix of the
-other orders first. Runs in O(min(size(), other.size())).</p>
+other orders first. Runs in O(min(size, other.size)).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>other</code> — the String to compare with</li>
@@ -823,7 +812,7 @@ other orders first. Runs in O(min(size(), other.size())).</p>
 </code></pre>
 <p>Returns a new String without the whitespace at the end: spaces, tabs,
 carriage returns, line feeds, vertical tabs and form feeds (ASCII
-only). Runs in O(size()).</p>
+only). Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the trailing whitespace removed</li>
@@ -837,7 +826,7 @@ only). Runs in O(size()).</p>
 </code></pre>
 <p>Returns a new String without the whitespace at the start: spaces,
 tabs, carriage returns, line feeds, vertical tabs and form feeds
-(ASCII only). Runs in O(size()).</p>
+(ASCII only). Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the leading whitespace removed</li>
@@ -849,7 +838,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <pre><code class="language-pepper">trim(): String
 </code></pre>
 <p>Returns a new String without the whitespace at either end, as
-<code>trim_start</code> and <code>trim_end</code> do. Runs in O(size()).</p>
+<code>trim_start</code> and <code>trim_end</code> do. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String with the leading and trailing whitespace removed</li>
@@ -863,7 +852,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <p>Returns a new String with the ASCII letters <code>A</code> to <code>Z</code> changed to <code>a</code>
 to <code>z</code>. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).</p>
+O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String in lowercase</li>
@@ -878,7 +867,7 @@ O(size()).</p>
 <p>Returns a new String with the ASCII letters <code>a</code> to <code>z</code> changed to <code>A</code>
 to <code>Z</code>. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).</p>
+O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String in uppercase</li>
@@ -893,14 +882,14 @@ O(size()).</p>
 endings. A line ends at <code>"\n"</code> or <code>"\r\n"</code>. A final line with no
 ending is included, but the end of the String after a final line
 ending does not start another line, so <code>"a\nb\n"</code> and <code>"a\nb"</code> both
-give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size()).</p>
+give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new Array with one new String per line</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var lines = "first\r\nsecond\n\nfourth".lines();
-    assert(lines.count() == 4, "four lines");
+    assert(lines.count == 4, "four lines");
     assert(lines[1] == "second", "\\r\\n removed");
     assert(lines[2] == "", "an empty line");
 </code></pre>
@@ -909,14 +898,14 @@ give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size
 </code></pre>
 <p>Returns a new String that holds this String <code>count</code> times in a row.
 <code>count</code> 0, or an empty String, gives an empty String. Runs in
-O(size() * count).</p>
+O(size * count).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>count</code> — how many copies to join</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new String of <code>size() * count</code> bytes</li>
+<li>a new String of <code>size * count</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
@@ -1350,6 +1339,20 @@ when it is full, so appending is amortized O(piece size). Call
     out.append("line ").append(to_string(3)).append("\n");
     var text = out.to_string();   # "line 3\n"
 </code></pre>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8 appended so far. O(1).</p>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of code points appended so far. O(1).</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether nothing has been appended since the builder was
+created or last cleared. O(1).</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="stringbuilder-1"><a class="header" href="#stringbuilder-1">StringBuilder()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
@@ -1365,7 +1368,7 @@ bytes before it has to grow.</p>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
 <p>Appends the text of <code>text</code> and returns this builder, so calls can be
-chained. Runs in amortized O(text.size()).</p>
+chained. Runs in amortized O(text.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the String to append; it is not modified</li>
@@ -1378,31 +1381,6 @@ chained. Runs in amortized O(text.size()).</p>
 <pre><code class="language-pepper">    var b = StringBuilder();
     b.append("a").append("b");   # b.to_string() == "ab"
 </code></pre>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
-<pre><code class="language-pepper">size(): ulong
-</code></pre>
-<p>Returns the number of bytes of UTF-8 appended so far. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the size in bytes</li>
-</ul>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
-<pre><code class="language-pepper">length(): ulong
-</code></pre>
-<p>Returns the number of code points appended so far. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the length in code points</li>
-</ul>
-<h4 id="empty-1"><a class="header" href="#empty-1">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether nothing has been appended since the builder was
-created or last cleared. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>size()</code> is 0</li>
-</ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
@@ -1411,7 +1389,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
-is unchanged. Runs in O(size()).</p>
+is unchanged. Runs in O(size).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String</li>

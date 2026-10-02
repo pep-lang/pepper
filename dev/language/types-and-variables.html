@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -347,12 +347,12 @@ Text is a <code>String</code>, and a single character of it is a one-code-point 
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
 value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
 literal’s NUL-terminated bytes (see <a href="c-interop.html#passing-strings">Passing strings</a>). <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
-<code>length()</code> counts code points, <code>size()</code> counts bytes, and <code>s[i]</code> gives the code
+the <code>length</code> property counts code points, <code>size</code> counts bytes, and <code>s[i]</code> gives the code
 point at index <code>i</code> as a one-code-point <code>String</code>.</p>
 <pre><code class="language-pepper"># String literals are String values.
 main(): int {
     var language = "Pepper";
-    assert(language.length() == 6, "6 code points");
+    assert(language.length == 6, "6 code points");
 
     # + makes a new String; == compares contents.
     var message = "Hello, " + language;
@@ -361,8 +361,8 @@ main(): int {
 
     # Strings are UTF-8. length() counts code points, size() counts bytes.
     var word = "héllo";
-    assert(word.length() == 5, "5 code points");
-    assert(word.size() == 6, "6 bytes: 'é' takes 2");
+    assert(word.length == 5, "5 code points");
+    assert(word.size == 6, "6 bytes: 'é' takes 2");
     assert(word[1] == "é", "indexing yields a one-code-point String");
 
     # A String is a reference: both names see an append.
@@ -407,7 +407,7 @@ main(): int {
 
     # lines() splits on "\n" or "\r\n"; trim_end() drops trailing whitespace.
     var lines = "one  \r\ntwo\n".lines();
-    assert(lines.count() == 2, "no empty line after the final newline");
+    assert(lines.count == 2, "no empty line after the final newline");
     assert(lines[0].trim_end() == "one", "trim_end");
 
     # trim() drops whitespace at both ends; lower() and upper() change ASCII case.
@@ -441,7 +441,7 @@ main(): int {
 
     # split cuts at every separator; split_once at the first, if any.
     var fields = "name,,age".split(",");
-    assert(fields.count() == 3 &amp;&amp; fields[1] == "", "an empty field");
+    assert(fields.count == 3 &amp;&amp; fields[1] == "", "an empty field");
     var header = "Content-Type: text/plain".split_once(": ");
     if (header.is_some()) {
         var (name, value) = header.value();
@@ -649,7 +649,7 @@ unsigned, the operation is unsigned: comparing <code>int -1</code> with <code>ui
 <li><strong>Division</strong> of integers truncates toward zero (<code>-7 / 2</code> is -3), and <code>%</code> takes
 the sign of the left operand (<code>-7 % 3</code> is -1).</li>
 <li><strong>Conditionals.</strong> <code>c ? a : b</code> with numeric arms of different types has
-their common type by the same rules (<code>c ? 0 : s.length()</code> is a <code>long</code>), and
+their common type by the same rules (<code>c ? 0 : s.length</code> is a <code>long</code>), and
 so does a <a href="enums.html#match-expressions-is-and-literal-patterns"><code>match</code> expression</a>
 over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
@@ -779,7 +779,7 @@ main(): int {
 </table>
 </div>
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
-one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
+one does not decide the result, so <code>items.count &gt; 0 &amp;&amp; items[0] == 1</code> never
 reads <code>items[0]</code> from an empty array.</p>
 <p>Unary operators nest: <code>-~x</code> is <code>-(~x)</code>, and <code>!!x</code> is <code>!(!x)</code>, which turns a
 number into a <code>bool</code>. A struct can define its own operators, the truth test

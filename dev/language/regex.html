@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,7 +209,7 @@ main(): int {
     var swapped = regex.Regex("(\\w+)@(\\w+)").replace_all("ann@home bob@work", "$2:$1");
     assert(swapped == "home:ann work:bob", "groups swapped");
     var parts = regex.Regex("\\s*,\\s*").split("a , b,c");
-    assert(parts.count() == 3 &amp;&amp; parts[1] == "b", "three pieces");
+    assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 
     # Flags go inside the pattern: (?i) ignores case.
     assert(regex.Regex("(?i)^hello").is_match("HeLLo there"), "any case");

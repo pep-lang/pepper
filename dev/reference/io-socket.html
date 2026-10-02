@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -527,7 +527,7 @@ gets the connection.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var buffer = Array&lt;u8&gt;();
-    var n = stream.read(buffer, 4096).value();   # buffer.count() == n
+    var n = stream.read(buffer, 4096).value();   # buffer.count == n
 </code></pre>
 <h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
 <pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
@@ -547,7 +547,7 @@ gets the connection.</p>
 </code></pre>
 <p>Sends bytes from <code>data</code> with a single system call, waiting until the
 system can take at least some of them.</p>
-<p>The send may be partial: it can send fewer than <code>data.count()</code> bytes.
+<p>The send may be partial: it can send fewer than <code>data.count</code> bytes.
 Use <code>write_all</code> to send everything.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -555,7 +555,7 @@ Use <code>write_all</code> to send everything.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes sent, which may be less than <code>data.count()</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
+<li>the number of bytes sent, which may be less than <code>data.count</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
 </ul>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;

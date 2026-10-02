@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,7 +212,7 @@ total(values: long[]): long {
 main(): int {
     # An array literal is an Array of its elements' type.
     var primes = [2, 3, 5, 7];
-    assert(primes.count() == 4 &amp;&amp; primes[3] == 7, "an Array&lt;int&gt;");
+    assert(primes.count == 4 &amp;&amp; primes[3] == 7, "an Array&lt;int&gt;");
 
     # A trailing comma lets a long literal put one element per line.
     var operators = [
@@ -233,12 +233,12 @@ main(): int {
 
     # An array literal where a HashSet is expected makes a set.
     HashSet&lt;String&gt; keywords = ["if", "else", "if"];
-    assert(keywords.count() == 2, "duplicates are kept once");
+    assert(keywords.count == 2, "duplicates are kept once");
 
     # [] and [:] are empty, where the type is declared.
     long[] none = [];
     HashMap&lt;String, int&gt; nobody = [:];
-    assert(none.empty() &amp;&amp; nobody.count() == 0, "empty collections");
+    assert(none.is_empty &amp;&amp; nobody.count == 0, "empty collections");
     return 0;
 }
 </code></pre>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -264,7 +264,7 @@ main(): int {
 
     # Modifying the array after the loop is fine.
     nums.append(100);
-    assert(nums.count() == 4, "appended after the loop");
+    assert(nums.count == 4, "appended after the loop");
     return 0;
 }
 </code></pre>
@@ -294,7 +294,7 @@ a single code point, the same value that indexing gives you (<code>word[i]</code
     var count = 0;
     var copy = "";
     for (var c in word) {
-        assert(c.length() == 1, "each piece is one code point");
+        assert(c.length == 1, "each piece is one code point");
         copy.append(c);
         count = count + 1;
     }
@@ -336,8 +336,8 @@ includes <code>b</code>. Looping over one is how you count:</p>
     # The bounds give the type: count() is a ulong, so i is too.
     var names = ["Ada", "Grace", "Edsger"];
     ulong letters = 0;
-    for (var i in 0..names.count()) {
-        letters += names[i].size();
+    for (var i in 0..names.count) {
+        letters += names[i].size;
     }
     assert(letters == 14, "letters in every name");
 
@@ -360,7 +360,7 @@ includes <code>b</code>. Looping over one is how you count:</p>
 <ul>
 <li>
 <p><strong>The bounds give the type.</strong> A range’s element type is inferred from its
-bounds like a generic call’s type argument, so <code>0..names.count()</code> counts in
+bounds like a generic call’s type argument, so <code>0..names.count</code> counts in
 <code>ulong</code>. The bounds must be integers; anything else is an error at the
 operator:</p>
 <pre><code class="language-text">main.pep:2:22: error: range bounds must be integers, not 'String'
@@ -382,7 +382,7 @@ there without overflowing.</p>
 </li>
 <li>
 <p><strong>A range is a value</strong>, a <a href="../reference/range.html"><code>Range&lt;T&gt;</code></a>. It has
-<code>contains(x)</code> and <code>is_empty()</code>, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
+<code>contains(x)</code> and the <code>is_empty</code> property, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
 <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>. Looping over one allocates
 nothing; the optimizer turns it into a plain counting loop.</p>
 </li>
@@ -465,7 +465,7 @@ main(): int {
     for (var name in people.iterate().filter((p) =&gt; p.age &gt;= 18).map((p) =&gt; p.name)) {
         names.append(name);
     }
-    assert(names.count() == 2, "two adults");
+    assert(names.count == 2, "two adults");
     assert(names[0] == "Ada", "Ada first");
     assert(names[1] == "Cyd", "then Cyd");
 
@@ -492,7 +492,7 @@ main(): int {
 
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) =&gt; p.age).to_array();
-    assert(ages.count() == 3 &amp;&amp; ages[2] == 40, "every age");
+    assert(ages.count == 3 &amp;&amp; ages[2] == 40, "every age");
     return 0;
 }
 </code></pre>
@@ -537,7 +537,7 @@ main(): int {
     for (var line in file.lines()) {
         lines.append(line.value());
     }
-    assert(lines.count() == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
+    assert(lines.count == 3 &amp;&amp; lines[1] == "second", "three lines, \\r\\n removed");
 
     # Adapters work on streams too: number the lines.
     var again = File.open(dir.join("notes.txt")).value();

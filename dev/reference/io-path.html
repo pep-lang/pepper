@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,7 +196,7 @@ nothing needs to exist. A part that may be missing comes back as an
 optional, as in Rust: <code>parent()</code> of a root is none.</p>
 <p>Breaking change: <code>parent()</code>, <code>file_name()</code>, <code>file_stem()</code>, <code>extension()</code>
 and <code>dot_index()</code> used to return an empty Path or String (or
-<code>name.size()</code>) for “none”; they now return <code>Path?</code>, <code>String?</code> and
+<code>name.size</code>) for “none”; they now return <code>Path?</code>, <code>String?</code> and
 <code>ulong?</code>.</p>
 <p>Separators: on POSIX only <code>/</code> separates components (<code>\</code> is an ordinary
 byte of a name). On Windows both <code>/</code> and <code>\</code> separate, and a path may
@@ -216,6 +216,12 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the path has no text at all. File-system operations
+on the empty path fail.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
@@ -233,7 +239,7 @@ takes a <code>Path</code> also accepts text.</p>
 <pre><code class="language-pepper">    import io;
 
     var p = io.Path("/usr/lib");
-    var empty = io.Path();   # is_empty() is true
+    var empty = io.Path();   # is_empty is true
     var q: io.Path = "docs";   # converted implicitly
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
@@ -251,7 +257,7 @@ takes a <code>Path</code> also accepts text.</p>
 <p>Returns the byte offset of the dot that starts the extension in the
 file name <code>name</code>: the last <code>.</code> that is not the first byte. A leading
 dot (<code>.bashrc</code>) starts the name, not an extension.</p>
-<p>Breaking change: this used to return <code>name.size()</code> for “no
+<p>Breaking change: this used to return <code>name.size</code> for “no
 extension”; it now returns none.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -269,15 +275,6 @@ extension”; it now returns none.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the path as a String</li>
-</ul>
-<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
-<pre><code class="language-pepper">is_empty(): bool
-</code></pre>
-<p>Returns whether the path has no text at all. File-system operations
-on the empty path fail.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when the path’s text is <code>""</code></li>
 </ul>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool

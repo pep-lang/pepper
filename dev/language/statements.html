@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -219,13 +219,13 @@ main(): int {
     # A chain of calls may break before each `.`.
     for (var word in words
         .iterate()
-        .filter((w) =&gt; w.length() &gt; 4)) {  # comments are fine anywhere
+        .filter((w) =&gt; w.length &gt; 4)) {  # comments are fine anywhere
         long_words += 1;
     }
     assert(long_words == 1, "one word is longer than four characters");
 
     # So may a call's arguments.
-    assert(volume + words[0].length() == 64,
+    assert(volume + words[0].length == 64,
         "60 + 4");
     return 0;
 }

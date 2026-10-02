@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -238,7 +238,7 @@ argument is released afterwards.</p>
 <p>Returns a 64-bit hash of a String’s bytes, so equal strings hash equally
 wherever they are stored. Keeps equal <code>String</code> keys of a <code>HashMap</code> or
 <code>HashSet</code> in one bucket.</p>
-<p>Hashes the <code>size()</code> bytes of the String (not the NUL terminator) 8 bytes
+<p>Hashes the <code>size</code> bytes of the String (not the NUL terminator) 8 bytes
 at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 (0xcbf29ce484222325).</p>
 <p><strong>Parameters</strong></p>
@@ -282,8 +282,22 @@ never shrinks.</p>
     assert(ages["ada"] == 36, "lookup");
     assert(ages.get("grace") == 0, "a missing key reads as the default");
     assert(ages.remove("alan"), "removed");
-    assert(ages.count() == 1, "one entry left");
+    assert(ages.count == 1, "one entry left");
 </code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of entries in the map. O(1).</p>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the map has no entries. O(1).</p>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of slots in the table, a power of two and at least 8.
+The map grows before its entries and tombstones reach half of it. O(1).</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
@@ -310,39 +324,14 @@ three arrays of that many slots.</p>
 costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.</p>
-<h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">count(): int
-</code></pre>
-<p>Returns the number of entries in the map. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of live key-value pairs</li>
-</ul>
-<h4 id="empty"><a class="header" href="#empty">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the map has no entries. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
-<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of slots in the table, a power of two and at least 8.
-The map grows before its entries and tombstones reach half of it. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current slot count</li>
-</ul>
 <h4 id="cap"><a class="header" href="#cap">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+<pre><code class="language-pepper">[Deprecated("use the 'capacity' property instead")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the same as <code>capacity()</code></li>
+<li>the same as <code>capacity</code></li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">clear()
@@ -521,8 +510,22 @@ may change, and writing to them breaks the set.</p>
     seen["b"] = "b";   # the same as seen.insert("b")
     assert(seen.contains("a"), "member");
     assert(!seen.insert("a"), "already a member");
-    assert(seen.count() == 2, "two members");
+    assert(seen.count == 2, "two members");
 </code></pre>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of members in the set. O(1).</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the set has no members. O(1).</p>
+<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: ulong { get; }
+</code></pre>
+<p>The number of slots in the table, a power of two and at least 8.
+O(1).</p>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
@@ -557,39 +560,14 @@ a set is expected, so an array literal can initialize one.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
 costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves members to new slots.</p>
-<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
-<pre><code class="language-pepper">count(): int
-</code></pre>
-<p>Returns the number of members in the set. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the number of members</li>
-</ul>
-<h4 id="empty-1"><a class="header" href="#empty-1">empty</a></h4>
-<pre><code class="language-pepper">empty(): bool
-</code></pre>
-<p>Returns whether the set has no members. O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when <code>count()</code> is 0</li>
-</ul>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
-<pre><code class="language-pepper">capacity(): ulong
-</code></pre>
-<p>Returns the number of slots in the table, a power of two and at least 8.
-O(1).</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the current slot count</li>
-</ul>
 <h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+<pre><code class="language-pepper">[Deprecated("use the 'capacity' property instead")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the same as <code>capacity()</code></li>
+<li>the same as <code>capacity</code></li>
 </ul>
 <h4 id="clear-1"><a class="header" href="#clear-1">clear</a></h4>
 <pre><code class="language-pepper">clear()

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -272,7 +272,7 @@ main(): int {
     assert(p.describe() == "point", "method from an exported extension");
     assert(norm_of(p) == 25, "an exported function may use private helpers");
     assert(points_made.load() == 2, "exported module variable");
-    assert(platform_name().length() &gt; 0, "exported, with an attribute");
+    assert(platform_name().length &gt; 0, "exported, with an attribute");
     return 0;
 }
 </code></pre>
@@ -299,6 +299,9 @@ naming one from another file reports <code>'name' is private to file.pep</code>.
 <p>Fields and methods declared inside a struct’s body are reached through the
 struct, so they share the struct’s visibility: if you can use the struct, you
 can use all of its members.</p>
+<p>To let other code read a value but not write it, make it a
+<a href="properties.html">property</a> with only a <code>get</code>: <code>var balance: long { get; }</code>
+can be assigned only by the struct’s own constructors and methods.</p>
 <p>Methods added by an extension share the <strong>extension’s</strong> visibility instead. In
 the example, <code>norm()</code> is added by a private extension, so only <code>lib.pep</code> can
 call it, even though <code>Point</code> itself is exported:</p>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -218,12 +218,12 @@ struct TemperatureLog {
     }
 
     average(): int {
-        return _is_empty() ? 0 : _total / (_readings.count() as int);
+        return _is_empty() ? 0 : _total / (_readings.count as int);
     }
 
     # A private method starts with `_` too.
     _is_empty(): bool {
-        return _readings.count() == 0;
+        return _readings.count == 0;
     }
 }
 

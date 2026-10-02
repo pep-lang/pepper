@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -246,8 +246,8 @@ total = first_value_that_is_long_enough
     + third_value_that_is_long_and_longer_still;
 var count = words
     .iterate()
-    .filter((w) =&gt; w.length() &gt; 4)
-    .map((w) =&gt; w.length() * 2)
+    .filter((w) =&gt; w.length &gt; 4)
+    .map((w) =&gt; w.length * 2)
     .count_them_all();
 </code></pre>
 <p>Comments and string literals are never reflowed, so a line can stay longer

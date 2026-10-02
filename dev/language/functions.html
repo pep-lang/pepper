@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -508,12 +508,12 @@ anywhere, after flushing what was printed. Both are in the
 
 # args holds the program name, then each command-line argument.
 main(args: String[]): int {
-    if (args.count() &gt; 2) {
+    if (args.count &gt; 2) {
         print("usage: greet [NAME]");
         process.exit(2);  # ends the program here, with status 2
     }
     var name = "world";
-    if (args.count() == 2) {
+    if (args.count == 2) {
         name = args[1];
     }
     print("Hello, " + name + "!");

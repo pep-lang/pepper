@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,7 +199,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 
     var list = io.Directory.open(io.Path("src")).value().entries().value();
     ulong i = 0;
-    while (i &lt; list.count()) {
+    while (i &lt; list.count) {
         if (list[i].is_file) {
             print(list[i].Name);
         }
@@ -274,7 +274,7 @@ afresh.</p>
     var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
         var d = io.Directory.open(dir).value();
-        var count = d.entries().value().count();
+        var count = d.entries().value().count;
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 </code></pre>
@@ -468,7 +468,7 @@ at a time instead, loop over the <code>Directory</code> itself (see <code>iterat
 
     var list = io.Directory.open(io.Path(".")).value().entries();
     if (list.is_ok()) {
-        var n = list.value().count();
+        var n = list.value().count;
     }
 </code></pre>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fcdb9163.js";
+            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-778b03c5.js"></script>
+        <script src="../toc-7cac40fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,7 +190,7 @@
 <p>The default error type of <code>Result</code>: a human-readable message.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
-    var n = r.error().message.length();   # 4
+    var n = r.error().message.length;   # 4
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">message</a></h4>
@@ -235,7 +235,7 @@ nothing, so it only checks that the result is Ok.</p>
         if (a.value() != 42) { return 1; }
         var b = Result&lt;int&gt;.err(Error("boom"));
         if (!b.is_err()) { return 2; }
-        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length() };   # 4
+        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length };   # 4
         return b.ok_or(0);   # 0
     }
 </code></pre>
