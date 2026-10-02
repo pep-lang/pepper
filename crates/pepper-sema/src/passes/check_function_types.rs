@@ -305,7 +305,7 @@ impl<'a> Checker<'a> {
             if !known || actual.is_auto() || actual.is_pointer() {
                 return;
             }
-            let message = format!("{} expects a function of type '{}', but was given a value of type '{}'", (slot.what)(), expected.display(), actual.display());
+            let message = (slot.mismatch)(&expected.display(), &actual.display());
             self.report(message, value, slot);
         } else if !same_type(&actual, expected) && same_type(&actual.with_sharing(false), &expected.with_sharing(false)) {
             // Same signature, but a plain value where a `shared` one is
@@ -314,7 +314,7 @@ impl<'a> Checker<'a> {
             let message = (slot.mismatch)(&expected.display(), &actual.display());
             self.report(message, value, slot);
         } else if !same_type(&actual, expected) {
-            let message = format!("{} expects a function of type '{}', but was given a function of type '{}'", (slot.what)(), expected.display(), actual.display());
+            let message = (slot.mismatch)(&expected.display(), &actual.display());
             self.report(message, value, slot);
         }
     }
@@ -486,7 +486,8 @@ impl<'a> Checker<'a> {
                     if let Some(fn_ty) = static_type::of(callee, &self.table, current).filter(|t| t.is_function_type()) {
                         if args.len() != fn_ty.function_params().len() {
                             let message = format!(
-                                "a function of type '{}' takes {} argument(s), but {} were given",
+                                "too {} arguments to function of type '{}': expected {}, have {}",
+                                if args.len() > fn_ty.function_params().len() { "many" } else { "few" },
                                 fn_ty.display(),
                                 fn_ty.function_params().len(),
                                 args.len()

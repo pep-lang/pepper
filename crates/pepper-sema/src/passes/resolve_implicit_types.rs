@@ -1166,8 +1166,12 @@ fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Opt
         }
         // Calls through function values: `f(x)` on a local, parameter,
         // global or field of function type, and `obj.callback(x)`.
-        if let Expression::FunctionCall { function, args, .. } = e {
-            if let Some((callee, _)) = scopes.value_callee(function, current) {
+        if let Expression::FunctionCall { function, args, loc } = e {
+            if let Some((mut callee, _)) = scopes.value_callee(function, current) {
+                // The callee stands for the name the call spells.
+                if let Expression::SymbolRef { loc: at, .. } | Expression::MemberRef { loc: at, .. } = &mut callee {
+                    *at = *loc;
+                }
                 *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
                 return;
             }

@@ -269,7 +269,7 @@ test(): int {
     return 0;
 }
 "#));
-    assert!(err.contains("variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'"), "{}", err);
+    assert!(err.contains("cannot initialize variable 'f' of type '(String) => int' with a value of type '(int) => int'"), "{}", err);
 }
 
 #[test]
@@ -280,7 +280,7 @@ test(): int {
     return apply(point_x, 1);
 }
 "#));
-    assert!(err.contains("argument 1 of 'apply' expects a function of type '(int) => int', but was given a function of type '(Point) => int'"), "{}", err);
+    assert!(err.contains("cannot pass a value of type '(Point) => int' as argument 1 of 'apply', which has type '(int) => int'"), "{}", err);
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn mismatched_assignment_and_return_are_errors() {
 pick(): (int) => int { return make_point; }
 test(): int { return 0; }
 "#));
-    assert!(err.contains("the return value of 'pick' expects a function of type '(int) => int', but was given a function of type '(int) => Point'"), "{}", err);
+    assert!(err.contains("cannot return a value of type '(int) => Point' from 'pick', which returns '(int) => int'"), "{}", err);
     let err = compile_error(&format!("{}{}", FUNCTIONS, r#"
 test(): int {
     var f = square;
@@ -298,7 +298,7 @@ test(): int {
     return 0;
 }
 "#));
-    assert!(err.contains("assignment expects a function of type '(int) => int', but was given a function of type '(Point) => int'"), "{}", err);
+    assert!(err.contains("cannot assign a value of type '(Point) => int' to a variable of type '(int) => int'"), "{}", err);
 }
 
 #[test]
@@ -309,7 +309,7 @@ test(): int {
     return f(1, 2);
 }
 "#));
-    assert!(err.contains("a function of type '(int) => int' takes 1 argument(s), but 2 were given"), "{}", err);
+    assert!(err.contains("too many arguments to function of type '(int) => int': expected 1, have 2"), "{}", err);
 }
 
 #[test]
@@ -320,7 +320,7 @@ test(): int {
     return apply(5, 1);
 }
 "#));
-    assert!(err.contains("argument 1 of 'apply' expects a function of type '(int) => int'"), "{}", err);
+    assert!(err.contains("cannot pass a value of type 'i32' as argument 1 of 'apply', which has type '(int) => int'"), "{}", err);
 }
 
 /// A `shared` value used as a plain one is wrapped in a plain adapter that

@@ -193,12 +193,17 @@ main(): int {
 }
 ```
 
-```
-error: variable 'f' expects a function of type (String) => int, but was given a function of type (int) => int
-a function of type (String) => int takes 1 argument(s), but 2 were given
+```text
+main.pep:4:30: error: cannot initialize variable 'f' of type '(String) => int' with a value of type '(int) => int'
+    4 |     var f: (String) => int = square;   # error
+      |                              ^~~~~~
+main.pep:5:12: error: too many arguments to function of type '(String) => int': expected 1, have 2
+    5 |     return f(1, 2);                    # error
+      |            ^
 ```
 
-These two errors do not show a source location yet.
+The compiler reports [one error at a time](compiler-errors.md#one-error-at-a-time),
+so the second appears once the first is fixed.
 
 ## Sharing function values between threads
 

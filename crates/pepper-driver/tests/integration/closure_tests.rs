@@ -341,7 +341,7 @@ test(): int {
 }
 "#,
     );
-    assert!(err.contains("variable 'f' expects a function of type '(int) => int', but was given a function of type '(String) => int'"), "{}", err);
+    assert!(err.contains("cannot initialize variable 'f' of type '(int) => int' with a value of type '(String) => int'"), "{}", err);
 }
 
 #[test]

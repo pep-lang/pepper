@@ -264,9 +264,33 @@ fn function_type_mismatch() {
             "function_type_mismatch",
             "square(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n"
         ),
-        "main.pep:3:30: error: variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'\n\
+        "main.pep:3:30: error: cannot initialize variable 'f' of type '(String) => int' with a value of type '(int) => int'\n\
          \x20   3 |     var f: (String) => int = square;\n\
          \x20     |                              ^~~~~~"
+    );
+}
+
+/// A call through a function value with the wrong number of arguments is
+/// located at the callee's name (#378).
+#[test]
+fn function_value_argument_count() {
+    assert_eq!(
+        error_of(
+            "function_value_argument_count",
+            "square(x: int): int { return x * x; }\nmain(): int {\n    var f = square;\n    return f(1, 2);\n}\n"
+        ),
+        "main.pep:4:12: error: too many arguments to function of type '(int) => int': expected 1, have 2\n\
+         \x20   4 |     return f(1, 2);\n\
+         \x20     |            ^"
+    );
+    assert_eq!(
+        error_of(
+            "function_field_argument_count",
+            "struct S {\n    var f: (int) => int;\n    construct() { this.f = (x: int): int => x; }\n    run(): int { return f(); }\n}\nmain(): int { return S().run(); }\n"
+        ),
+        "main.pep:4:25: error: too few arguments to function of type '(int) => int': expected 1, have 0\n\
+         \x20   4 |     run(): int { return f(); }\n\
+         \x20     |                         ^"
     );
 }
 

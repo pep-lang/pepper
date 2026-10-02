@@ -4945,7 +4945,8 @@ impl<'ctx> CodeGenerator<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         if args.len() != fn_ty.function_params().len() {
             return Err(format!(
-                "a function of type {} takes {} argument(s), but {} were given",
+                "too {} arguments to function of type '{}': expected {}, have {}",
+                if args.len() > fn_ty.function_params().len() { "many" } else { "few" },
                 fn_ty.display(),
                 fn_ty.function_params().len(),
                 args.len()
@@ -5413,7 +5414,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         if args.len() != fn_ty.function_params().len() {
             return Err(format!(
-                "a function of type '{}' takes {} argument(s), but {} were given",
+                "too {} arguments to function of type '{}': expected {}, have {}",
+                if args.len() > fn_ty.function_params().len() { "many" } else { "few" },
                 fn_ty.display(),
                 fn_ty.function_params().len(),
                 args.len()
