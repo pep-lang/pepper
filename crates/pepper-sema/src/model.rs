@@ -574,6 +574,10 @@ pub struct MatchArmTest {
     /// binds its element unless the element is an enum with a case of that
     /// name, which only the element's type decides.
     pub element_names: Vec<ElementName>,
+    /// The arm has a guard (`A(x) if x > 0`): the test is the left side of
+    /// `MatchArm(...) && guard`, and its patterns cover nothing for
+    /// exhaustiveness, since the guard may fail.
+    pub guarded: bool,
 }
 
 /// A bare name inside a tuple pattern; see [`MatchArmTest::element_names`].

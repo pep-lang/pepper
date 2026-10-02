@@ -687,13 +687,13 @@ export struct Formatter {
         return result;
     }
 
-    # `A, B => { ... }` or `else => { ... }`.
+    # `A, B => { ... }`, `A(x) if x > 0 => { ... }` or `else => { ... }`.
     _match_arm(item: syntax.Node): Doc {
         var result = concat();
         ulong i = 0;
         while (i < item.count) {
             var child = item.child(i);
-            if (child.is_token("=>")) {
+            if (child.is_token("=>") or child.is_token("if")) {
                 result.add(text(" ")).add(_leaf(child)).add(text(" "));
             } else {
                 if (i > 0 and item.child(i - 1).is_token(",")) {

@@ -1355,6 +1355,11 @@ struct Parser {
                     _take(arm);
                     arm.add(_pattern());
                 }
+                # A guard: `if condition`.
+                if (!_failed and _at_word("if")) {
+                    _take(arm);
+                    arm.add(_expression());
+                }
             }
             if (_failed) {
                 return node;
@@ -1398,6 +1403,11 @@ struct Parser {
                 while (!_failed and _at(",")) {
                     _take(arm);
                     arm.add(_pattern());
+                }
+                # A guard: `if condition`.
+                if (!_failed and _at_word("if")) {
+                    _take(arm);
+                    arm.add(_expression());
                 }
             }
             if (_failed) {

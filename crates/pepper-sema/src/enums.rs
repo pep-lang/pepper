@@ -969,10 +969,23 @@ fn typed_path(path: &Expression, subjects: &HashMap<String, TypeName>) -> Option
     }
 }
 
-/// A binding inside a `match` expression's arm value: the payload field, or
-/// `?:` on the tag when alternatives bind it.
-fn lower_case_value(value: &CaseValue) -> Option<Expression> {
-    let (subject, picks) = case_picks(value, &HashMap::new())?;
+/// The arm test a condition holds: `MatchArm(...)`, or the left side of a
+/// guarded arm's `MatchArm(...) && guard`.
+pub fn arm_test(condition: &Expression) -> Option<&MatchArmTest> {
+    match condition {
+        Expression::MatchArm(test) => Some(test),
+        Expression::Binary { op: BinaryOp::LogicalAnd, lhs, .. } => match lhs.as_ref() {
+            Expression::MatchArm(test) if test.guarded => Some(test),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A binding inside a `match` expression's arm value or an arm's guard: the
+/// payload field, or `?:` on the tag when alternatives bind it.
+fn lower_case_value(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option<Expression> {
+    let (subject, picks) = case_picks(value, subjects)?;
     let at = value.loc;
     let (last, rest) = picks.split_last()?;
     let mut chain = case_field(&subject, &last.0, last.1, at);
@@ -1005,11 +1018,17 @@ fn lower_statement(
         Statement::Block(inner) => lower_block(inner, enums, subjects, coverage),
         Statement::Expression(e) => lower_expressions(e, enums, subjects, coverage),
         Statement::Branch(branch) => {
-            if let Expression::MatchArm(test) = &branch.condition {
+            if let Some(test) = arm_test(&branch.condition) {
                 let test = test.clone();
                 let mut cases = vec![];
                 if let Some(condition) = lower_arm(&test, enums, subjects, coverage, &mut cases) {
-                    branch.condition = condition;
+                    match &mut branch.condition {
+                        Expression::Binary { lhs, rhs, .. } => {
+                            **lhs = condition;
+                            lower_expressions(rhs, enums, subjects, coverage);
+                        }
+                        other => *other = condition,
+                    }
                 }
                 // A bare element name that is a case binds nothing: drop the
                 // local the builder declared for it.
@@ -1057,7 +1076,7 @@ fn lower_expressions(
             return;
         }
         Expression::CaseValue(value) => {
-            if let Some(lowered) = lower_case_value(value) {
+            if let Some(lowered) = lower_case_value(value, subjects) {
                 *expr = lowered;
             }
             return;
@@ -1191,7 +1210,10 @@ fn lower_arm(
             }
             (_, None) => enum_test(p, &matched, &subject, subject_loc)?,
         };
-        entry.handled.insert(p.case.clone(), p.loc);
+        // A guarded arm may not run, so it handles nothing.
+        if !test.guarded {
+            entry.handled.insert(p.case.clone(), p.loc);
+        }
         condition = Some(match condition {
             None => equal,
             Some(c) => Expression::Binary { op: BinaryOp::LogicalOr, lhs: Box::new(c), rhs: Box::new(equal), loc: p.loc },
@@ -1344,7 +1366,7 @@ fn check_arm_types(block: &mut Block, table: &crate::static_type::StructTable, c
         let mut arms: Vec<&Expression> = vec![];
         let mut at = &with.body;
         while let Expression::Ternary { condition, true_expr, false_expr } = at {
-            if !matches!(condition.as_ref(), Expression::MatchArm(_)) {
+            if arm_test(condition).is_none() {
                 break;
             }
             arms.push(true_expr);
@@ -1557,7 +1579,9 @@ fn lower_tuple_arm(
             );
             return None;
         }
-        coverage.rows.push(space);
+        if !test.guarded {
+            coverage.rows.push(space);
+        }
         let tested = tested.unwrap_or(Expression::BoolLiteral(true));
         condition = Some(match condition {
             None => tested,

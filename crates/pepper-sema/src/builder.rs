@@ -1013,7 +1013,8 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
 /// the subject's type is known. A `match` with no arms still gets one test,
 /// with no patterns, so its exhaustiveness is checked.
 fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
-    let arms: Vec<(&[ast::Pattern], &ast::Block)> = m.arms.iter().map(|a| (a.patterns.as_slice(), &a.body)).collect();
+    let arms: Vec<(&[ast::Pattern], Option<&ast::Expression>, &ast::Block)> =
+        m.arms.iter().map(|a| (a.patterns.as_slice(), a.guard.as_ref(), &a.body)).collect();
     let else_arm = m.else_arm.as_ref().map(|(span, b)| (loc(*span), block(b))).map(|(l, b)| b.map(|b| (l, b))).transpose()?;
     lower_match_statement(&m.value, m.keyword_span, &arms, else_arm, false)
 }
@@ -1033,7 +1034,7 @@ fn next_match() -> usize {
 fn lower_match_statement(
     value: &ast::Expression,
     keyword: ast::Span,
-    arms: &[(&[ast::Pattern], &ast::Block)],
+    arms: &[(&[ast::Pattern], Option<&ast::Expression>, &ast::Block)],
     else_arm: Option<(Loc, Block)>,
     partial: bool,
 ) -> Result<Statement, Diagnostic> {
@@ -1053,15 +1054,13 @@ fn lower_match_statement(
     };
     let site = MatchSite { id: n, keyword: loc(keyword), else_arm: else_arm.as_ref().map(|(l, _)| *l), partial, no_bindings: false };
     let subject_ref = Expression::SymbolRef { id: subject.clone(), ty: TypeName::auto(), loc: at };
-    let test = |patterns: Vec<CasePattern>, element_names: Vec<ElementName>| {
-        Expression::MatchArm(Box::new(MatchArmTest { subject: subject_ref.clone(), patterns, site: site.clone(), element_names }))
-    };
     let mut chain: Option<Block> = else_arm.map(|(_, b)| b);
-    let mut lowered: Vec<(Vec<CasePattern>, Vec<ElementName>, Block)> = vec![];
-    for (patterns, body) in arms {
+    let mut lowered: Vec<(Expression, Block)> = vec![];
+    for (patterns, guard, body) in arms {
         let cases = patterns.iter().map(|p| case_pattern(p, &subject_ref)).collect::<Result<Vec<_>, _>>()?;
         let mut body = block(body)?;
         let (bindings, element_names) = match_bindings(patterns, &subject_ref)?;
+        let test = arm_test(&subject_ref, cases, &site, element_names, *guard, &bindings)?;
         let locals = bindings.into_iter().map(|(name, value, at)| {
             Statement::Declaration(Declaration::Variable(VariableDef {
                 name,
@@ -1076,14 +1075,14 @@ fn lower_match_statement(
             }))
         });
         body.items.splice(0..0, locals);
-        lowered.push((cases, element_names, body));
+        lowered.push((test, body));
     }
     if lowered.is_empty() {
-        lowered.push((vec![], vec![], Block { name: String::new(), items: vec![], attributes: vec![] }));
+        let test = arm_test(&subject_ref, vec![], &site, vec![], None, &[])?;
+        lowered.push((test, Block { name: String::new(), items: vec![], attributes: vec![] }));
     }
-    for (patterns, element_names, body) in lowered.into_iter().rev() {
-        let branch =
-            Statement::Branch(Branch { condition: test(patterns, element_names), if_block: body, else_block: chain.take() });
+    for (condition, body) in lowered.into_iter().rev() {
+        let branch = Statement::Branch(Branch { condition, if_block: body, else_block: chain.take() });
         chain = Some(Block { name: String::new(), items: vec![branch], attributes: vec![] });
     }
     let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
@@ -1098,7 +1097,7 @@ fn is_branch(branch: &ast::Branch) -> Result<Option<Statement>, Diagnostic> {
         return Ok(None);
     };
     let else_arm = branch.else_block.as_ref().map(block).transpose()?.map(|b| (Loc::NONE, b));
-    let arms = [(std::slice::from_ref(pattern.as_ref()), &branch.if_block)];
+    let arms = [(std::slice::from_ref(pattern.as_ref()), None, &branch.if_block)];
     lower_match_statement(value, *keyword_span, &arms, else_arm, true).map(Some)
 }
 
@@ -1110,7 +1109,7 @@ fn is_loop(wh: &ast::While) -> Result<Option<Statement>, Diagnostic> {
         return Ok(None);
     };
     let stop = Block { name: String::new(), items: vec![Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Break })], attributes: vec![] };
-    let arms = [(std::slice::from_ref(pattern.as_ref()), &wh.block)];
+    let arms = [(std::slice::from_ref(pattern.as_ref()), None, &wh.block)];
     let body = lower_match_statement(value, *keyword_span, &arms, Some((Loc::NONE, stop)), true)?;
     Ok(Some(Statement::While(While {
         condition: Expression::BoolLiteral(true),
@@ -1147,14 +1146,14 @@ fn match_expression(m: &ast::MatchExpression) -> Result<Expression, Diagnostic> 
         let patterns = arm.patterns.iter().map(|p| case_pattern(p, &subject)).collect::<Result<Vec<_>, _>>()?;
         let mut value = expression(&arm.value)?;
         let (bindings, element_names) = match_bindings(&arm.patterns, &subject)?;
-        bind_in_expression(&mut value, &bindings)?;
-        arms.push((patterns, element_names, value));
+        bind_in_expression(&mut value, &bindings, ArmPart::Value)?;
+        let test = arm_test(&subject, patterns, &site, element_names, arm.guard.as_ref(), &bindings)?;
+        arms.push((test, value));
     }
     if arms.is_empty() {
-        arms.push((vec![], vec![], Expression::NoMatch));
+        arms.push((arm_test(&subject, vec![], &site, vec![], None, &[])?, Expression::NoMatch));
     }
-    for (patterns, element_names, value) in arms.into_iter().rev() {
-        let test = Expression::MatchArm(Box::new(MatchArmTest { subject: subject.clone(), patterns, site: site.clone(), element_names }));
+    for (test, value) in arms.into_iter().rev() {
         chain = Expression::Ternary { condition: Box::new(test), true_expr: Box::new(value), false_expr: Box::new(chain) };
     }
     Ok(Expression::WithSubject(Box::new(WithSubject { id: n, subject: expression(&m.value)?, body: chain, null_message: None, loc: at })))
@@ -1181,7 +1180,13 @@ fn is_expression(value: &ast::Expression, pattern: &ast::Pattern, keyword: ast::
     let at = loc(value.span());
     let site = MatchSite { id: n, keyword: loc(keyword), else_arm: None, partial: true, no_bindings: true };
     let subject = Expression::Subject { id: n, ty: TypeName::auto(), loc: at };
-    let test = MatchArmTest { subject: subject.clone(), patterns: vec![case_pattern(pattern, &subject)?], site, element_names };
+    let test = MatchArmTest {
+        subject: subject.clone(),
+        patterns: vec![case_pattern(pattern, &subject)?],
+        site,
+        element_names,
+        guarded: false,
+    };
     Ok(Expression::WithSubject(Box::new(WithSubject {
         id: n,
         subject: expression(value)?,
@@ -1189,6 +1194,33 @@ fn is_expression(value: &ast::Expression, pattern: &ast::Pattern, keyword: ast::
         null_message: None,
         loc: at,
     })))
+}
+
+/// The test of one arm: `MatchArm(subject is patterns)`, and with a guard
+/// `MatchArm(...) && guard`, where each name the arm binds reads its value in
+/// the guard as it does in a `match` expression's arm value.
+fn arm_test(
+    subject: &Expression,
+    patterns: Vec<CasePattern>,
+    site: &MatchSite,
+    element_names: Vec<ElementName>,
+    guard: Option<&ast::Expression>,
+    bindings: &[(String, Expression, Loc)],
+) -> Result<Expression, Diagnostic> {
+    let test = Expression::MatchArm(Box::new(MatchArmTest {
+        subject: subject.clone(),
+        patterns,
+        site: site.clone(),
+        element_names,
+        guarded: guard.is_some(),
+    }));
+    let Some(guard) = guard else {
+        return Ok(test);
+    };
+    let at = loc(guard.span());
+    let mut guard = expression(guard)?;
+    bind_in_expression(&mut guard, bindings, ArmPart::Guard)?;
+    Ok(Expression::Binary { op: BinaryOp::LogicalAnd, lhs: Box::new(test), rhs: Box::new(guard), loc: at })
 }
 
 /// A pattern of an arm over `subject`. A literal pattern carries the test
@@ -1277,15 +1309,24 @@ fn pattern_names<'p>(p: &'p ast::Pattern, subject: &Expression) -> Vec<(String, 
     out
 }
 
+/// Where [`bind_in_expression`] replaces an arm's names.
+#[derive(Clone, Copy)]
+enum ArmPart {
+    /// A `match` expression's arm value.
+    Value,
+    /// An arm's guard.
+    Guard,
+}
+
 /// Replace each name an arm binds with the value it reads, in a `match`
-/// expression's arm value. A closure there may not use one: it would outlive
-/// the value it reads.
-fn bind_in_expression(value: &mut Expression, bindings: &[(String, Expression, Loc)]) -> Result<(), Diagnostic> {
+/// expression's arm value or an arm's guard. A closure there may not use
+/// one: it would outlive the value it reads.
+fn bind_in_expression(value: &mut Expression, bindings: &[(String, Expression, Loc)], part: ArmPart) -> Result<(), Diagnostic> {
     if bindings.is_empty() {
         return Ok(());
     }
     let mut error = None;
-    fn visit(e: &mut Expression, bindings: &[(String, Expression, Loc)], error: &mut Option<Diagnostic>) {
+    fn visit(e: &mut Expression, bindings: &[(String, Expression, Loc)], part: ArmPart, error: &mut Option<Diagnostic>) {
         if let Expression::SymbolRef { id, loc: at, .. } = e
             && let Some((_, v, _)) = bindings.iter().find(|(n, _, _)| n == id)
         {
@@ -1301,11 +1342,15 @@ fn bind_in_expression(value: &mut Expression, bindings: &[(String, Expression, L
                     && error.is_none()
                     && let Some((name, _, bound)) = bindings.iter().find(|(n, _, _)| n == id)
                 {
-                    *error = Some(
-                        Diagnostic::error(format!(
+                    let message = match part {
+                        ArmPart::Value => format!(
                             "a closure cannot use '{}', bound by an arm of a 'match' expression; use a 'match' statement",
                             name
-                        ))
+                        ),
+                        ArmPart::Guard => format!("a closure in a guard cannot use '{}', bound by the arm's patterns", name),
+                    };
+                    *error = Some(
+                        Diagnostic::error(message)
                         .at(*at)
                         .with_note(format!("'{}' is bound here", name), Some(*bound)),
                     );
@@ -1314,10 +1359,10 @@ fn bind_in_expression(value: &mut Expression, bindings: &[(String, Expression, L
             return;
         }
         for child in crate::passes::children_mut(e) {
-            visit(child, bindings, error);
+            visit(child, bindings, part, error);
         }
     }
-    visit(value, bindings, &mut error);
+    visit(value, bindings, part, &mut error);
     error.map_or(Ok(()), Err)
 }
 

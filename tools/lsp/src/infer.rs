@@ -339,6 +339,7 @@ fn walk<'a>(mut stack: Vec<Node<'a>>, mut visit: impl FnMut(Item<'a>)) {
                         stack.push(Node::Expression(&m.value));
                         for arm in &m.arms {
                             visit(Item::Patterns(&arm.patterns, &m.value));
+                            stack.extend(arm.guard.iter().map(Node::Expression));
                             stack.push(Node::Block(&arm.body));
                         }
                         stack.extend(m.else_arm.iter().map(|(_, b)| Node::Block(b)));
@@ -378,6 +379,7 @@ fn walk<'a>(mut stack: Vec<Node<'a>>, mut visit: impl FnMut(Item<'a>)) {
                         stack.push(Node::Expression(&m.value));
                         for arm in &m.arms {
                             visit(Item::Patterns(&arm.patterns, &m.value));
+                            stack.extend(arm.guard.iter().map(Node::Expression));
                             stack.push(Node::Expression(&arm.value));
                         }
                         stack.extend(m.else_arm.iter().map(|(_, v)| Node::Expression(v)));

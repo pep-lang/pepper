@@ -153,6 +153,7 @@ fn symbols(expr: &ast::Expression, f: &mut dyn FnMut(&str)) {
         }),
         E::Match(m) => {
             symbols(&m.value, f);
+            m.arms.iter().filter_map(|arm| arm.guard.as_ref()).for_each(|g| symbols(g, f));
             m.arms.iter().for_each(|arm| symbols(&arm.value, f));
             if let Some((_, value)) = &m.else_arm {
                 symbols(value, f);

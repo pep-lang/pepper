@@ -229,6 +229,31 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   Matching the same literal twice is an error. A match on an enum takes its
   case names, not literals, and a match on `int` takes literals, not names.
 
+## Guards
+
+An arm can add a **guard** after its patterns, `if condition`: the arm runs
+only when one of its patterns matches and the condition holds. Otherwise
+the next arm is tried, as if this one had not matched.
+
+```pepper
+{{#include ../../examples/enums-guards.pep}}
+```
+
+- The guard reads the names the arm's patterns bind (`Circle(r) if r > 10`).
+  With several patterns (`Word(s), Quoted(s) if s.length == 0`), it applies
+  to the arm, whichever pattern matched.
+- Guards work in `match` statements and `match` expressions, over enums,
+  literals and tuples. `is` takes no guard: write `x is P && condition`, or
+  test the condition inside the `if`.
+- A guarded arm handles nothing when the compiler checks that every case is
+  handled, since its guard may fail: a `match` whose only arm for `Circle`
+  has a guard does not handle `Circle`, and a later unguarded arm (or
+  `else`) must. An `else` after guarded arms is not unreachable.
+- A guarded arm for a case an earlier unguarded arm already handles is an
+  error, like any case handled twice. Two guarded arms may name the same
+  case.
+- A closure in a guard cannot use a name the arm binds.
+
 ## Current limits
 
 - An enum whose cases carry nothing cannot be generic. The methods of any
@@ -238,8 +263,8 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
 - A case's values bind names only: a pattern cannot nest inside a case
   (`Value(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
   inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).
-  Patterns cannot match ranges (`1..9`) or have guards yet. A literal
-  pattern is a literal, not a named constant.
+  Patterns cannot match ranges (`1..9`) yet. A literal pattern is a
+  literal, not a named constant.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:
   `c.name` without the call is an error ("'name' is a method of 'Color':

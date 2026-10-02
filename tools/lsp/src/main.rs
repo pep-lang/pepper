@@ -364,11 +364,14 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                 }
                 ast::Statement::Match(m) => {
                     for arm in &m.arms {
-                        if arm.body.span.start <= offset && offset < arm.body.span.end {
-                            // The names the arm's patterns bind.
+                        // The names the arm's patterns bind, in its guard and
+                        // its block.
+                        if arm.span.start <= offset && offset < arm.body.span.end {
                             for (name, span) in arm.patterns.iter().flat_map(|p| p.bound_names()) {
                                 out.push(Symbol { name, name_span: span, ty: String::new() });
                             }
+                        }
+                        if arm.body.span.start <= offset && offset < arm.body.span.end {
                             collect_locals_upto(&arm.body, offset, out);
                         }
                     }
@@ -773,7 +776,8 @@ fn scope_locals(module: &ast::Module, offset: usize) -> Vec<Symbol> {
 fn push_match_bindings(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>) {
     infer::each_in_block(block, |item| {
         if let infer::Item::Expression(ast::Expression::Match(m)) = item {
-            for arm in m.arms.iter().filter(|a| expr_start(&a.value) <= offset && offset < a.value.span().end) {
+            // The arm's guard and value see them.
+            for arm in m.arms.iter().filter(|a| a.span.start <= offset && offset < a.value.span().end) {
                 // Not the hidden names `String.format`'s lowering binds.
                 for (name, name_span) in arm.patterns.iter().flat_map(|p| p.bound_names()).filter(|(n, _)| !n.starts_with("_pep_")) {
                     out.push(Symbol { name, name_span, ty: String::new() });
@@ -814,7 +818,7 @@ fn closure_in_block(block: &ast::Block, offset: usize) -> Option<&ast::ClosureLi
                 .or_else(|| closure_in_block(&w.block, offset))
                 .or_else(|| w.else_block.as_ref().and_then(|e| closure_in_block(e, offset))),
             ast::Statement::Static(s) => closure_in_block(&s.block, offset),
-            ast::Statement::Match(m) => in_expr(&m.value).or_else(|| {
+            ast::Statement::Match(m) => in_expr(&m.value).or_else(|| m.arms.iter().filter_map(|a| a.guard.as_ref()).find_map(in_expr)).or_else(|| {
                 m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b)).find_map(|b| closure_in_block(b, offset))
             }),
             _ => None,
@@ -841,7 +845,10 @@ fn closure_in_expression(expr: &ast::Expression, offset: usize) -> Option<&ast::
         ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => elements.iter().collect(),
         ast::Expression::MapLiteral { entries, .. } => entries.iter().flat_map(|(k, v)| [k, v]).collect(),
         ast::Expression::Match(m) => {
-            std::iter::once(&m.value).chain(m.arms.iter().map(|a| &a.value)).chain(m.else_arm.as_ref().map(|(_, v)| v)).collect()
+            std::iter::once(&m.value)
+                .chain(m.arms.iter().flat_map(|a| a.guard.iter().chain(std::iter::once(&a.value))))
+                .chain(m.else_arm.as_ref().map(|(_, v)| v))
+                .collect()
         }
         _ => vec![],
     };
@@ -881,7 +888,7 @@ fn expr_at<'a>(expr: &'a ast::Expression, offset: usize) -> Option<&'a ast::Expr
         ast::Expression::Unary { operand, .. } => expr_at(operand, offset),
         ast::Expression::Is { value, .. } => expr_at(value, offset).or(Some(expr)),
         ast::Expression::Match(m) => expr_at(&m.value, offset)
-            .or_else(|| m.arms.iter().find_map(|a| expr_at(&a.value, offset)))
+            .or_else(|| m.arms.iter().find_map(|a| a.guard.as_ref().and_then(|g| expr_at(g, offset)).or_else(|| expr_at(&a.value, offset))))
             .or_else(|| m.else_arm.as_ref().and_then(|(_, v)| expr_at(v, offset)))
             .or(Some(expr)),
         ast::Expression::Closure(c) => find_expr_in_block(&c.body, offset).or(Some(expr)),
@@ -1046,6 +1053,9 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                 if let Some(found) = expr_at(&m.value, offset) {
                     return Some(found);
                 }
+                if let Some(found) = m.arms.iter().filter_map(|a| a.guard.as_ref()).find_map(|g| expr_at(g, offset)) {
+                    return Some(found);
+                }
                 let arms = m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b));
                 for body in arms {
                     if let Some(found) = find_expr_in_block(body, offset) {
@@ -1084,7 +1094,9 @@ fn missing_arms_fix(uri: &Url, text: &str, program: &Program, error: &diag::Diag
             _ => None,
         })
     })?;
-    let handled: Vec<&str> = found.arms.iter().flat_map(|a| &a.patterns).map(|p| p.case.as_str()).collect();
+    // A guarded arm may not run, so it handles nothing.
+    let handled: Vec<&str> =
+        found.arms.iter().filter(|a| a.guard.is_none()).flat_map(|a| &a.patterns).map(|p| p.case.as_str()).collect();
     // A case that carries values gets a binding for each, named as declared.
     let missing: Vec<String> = cases
         .cases

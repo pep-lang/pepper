@@ -3250,6 +3250,29 @@ fn tuple_match_unreachable_else_warns() {
     );
 }
 
+#[test]
+fn closure_in_a_guard_cannot_use_a_binding() {
+    assert_eq!(
+        error_of("closure_in_a_guard", "enum Shape { Circle(r: int), Point }\ntest(): int {\n    return match (Shape.Point) {\n        Circle(r) if (() => r)() > 1 => 1,\n        else => 2,\n    };\n}\n"),
+        "main.pep:4:29: error: a closure in a guard cannot use 'r', bound by the arm's patterns\n\
+         \x20   4 |         Circle(r) if (() => r)() > 1 => 1,\n\
+         \x20     |                             ^\n\
+         main.pep:4:16: note: 'r' is bound here\n\
+         \x20   4 |         Circle(r) if (() => r)() > 1 => 1,\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn guard_needs_a_condition() {
+    assert_eq!(
+        error_of("guard_needs_a_condition", "test(): int {\n    return match (1) {\n        1 if => 1,\n        else => 2,\n    };\n}\n"),
+        "main.pep:3:14: error: expected expression or a condition\n\
+         \x20   3 |         1 if => 1,\n\
+         \x20     |              ^"
+    );
+}
+
 /// Source nested past `MAX_NESTING` fails at the token that crosses the
 /// limit: an opening parenthesis, or the operator of a long chain.
 #[test]

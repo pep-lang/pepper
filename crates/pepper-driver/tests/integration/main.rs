@@ -34,6 +34,7 @@ mod digest_tests;
 mod docs_examples_tests;
 mod edge_case_tests;
 mod enum_tests;
+mod pattern_tests;
 mod extern_string_arg_tests;
 mod function_reference_tests;
 mod function_value_tests;

@@ -485,6 +485,9 @@ macro_rules! scope_walker {
                             for p in &$($m)? arm.patterns {
                                 self.visit_pattern(p);
                             }
+                            if let Some(guard) = &$($m)? arm.guard {
+                                self.visit_expression(guard);
+                            }
                             self.walk_block(&$($m)? arm.body);
                             self.scopes_mut().pop();
                         }
@@ -557,6 +560,9 @@ macro_rules! scope_walker {
                             self.scopes_mut().push(Scope::Values(HashSet::new()));
                             for p in &$($m)? arm.patterns {
                                 self.visit_pattern(p);
+                            }
+                            if let Some(guard) = &$($m)? arm.guard {
+                                self.visit_expression(guard);
                             }
                             self.visit_expression(&$($m)? arm.value);
                             self.scopes_mut().pop();

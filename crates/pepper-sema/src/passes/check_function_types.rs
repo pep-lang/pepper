@@ -558,7 +558,7 @@ impl<'a> Checker<'a> {
                 // common type), so the false arm must convert to it. A
                 // `match` expression's arms (a chain of these) are checked
                 // by `enums::check_arm_types`.
-                Expression::Ternary { condition, true_expr, false_expr } if !matches!(**condition, Expression::MatchArm(_)) => {
+                Expression::Ternary { condition, true_expr, false_expr } if crate::enums::arm_test(condition).is_none() => {
                     let Some(true_type) = static_type::of(true_expr, &self.table, current) else { continue };
                     let mismatch = |expected: &str, actual: &str| format!("incompatible operand types ('{}' and '{}')", expected, actual);
                     let what = || "an operand of '?:'".to_string();

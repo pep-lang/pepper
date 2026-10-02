@@ -433,6 +433,14 @@ fn pep_fmt_formats_match_expressions_is_tests_and_literal_patterns() {
 }
 
 #[test]
+fn pep_fmt_formats_guards() {
+    assert_formats(
+        "f(s:Shape):int {\n    var w=match(s){Circle(r)if r>10=>1,else=>0};\n    match (s) {\n        Rect(a,b)  if  a==b=>{ return 1; }\n        else=>{ return w; }\n    }\n}\n",
+        "f(s: Shape): int {\n    var w = match (s) {\n        Circle(r) if r > 10 => 1,\n        else => 0\n    };\n    match (s) {\n        Rect(a, b) if a == b => { return 1; }\n        else => { return w; }\n    }\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_spaces_collection_literals() {
     assert_formats(
         "main(): int {\n    var a = [1,2 , 3];\n    var m = [\"a\" :1, \"b\":[2]];\n    HashMap<String, int> e = [ : ];\n    return 0;\n}\n",

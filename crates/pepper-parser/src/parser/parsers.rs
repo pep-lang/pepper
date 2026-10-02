@@ -872,6 +872,7 @@ fn find_mutation(e: &Expression) -> Option<(Span, &'static str)> {
         Expression::Tuple { elements, .. } | Expression::ArrayLiteral { elements, .. } => first(elements),
         Expression::MapLiteral { entries, .. } => first(entries.iter().flat_map(|(k, v)| [k, v])),
         Expression::Match(m) => find_mutation(&m.value)
+            .or_else(|| first(m.arms.iter().filter_map(|arm| arm.guard.as_ref())))
             .or_else(|| first(m.arms.iter().map(|arm| &arm.value)))
             .or_else(|| m.else_arm.as_ref().and_then(|(_, value)| find_mutation(value))),
         Expression::Is { value, .. } | Expression::NamedArgument { value, .. } => find_mutation(value),
@@ -1449,6 +1450,7 @@ fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Spa
         elements.push(name_pattern("_".to_string(), tuple_span));
     }
     let arm = MatchValueArm {
+        guard: None,
         patterns: vec![Pattern {
             literal: None,
             elements: Some(elements),
@@ -2902,10 +2904,11 @@ fn match_statement(input: &mut &str) -> Result<Match> {
             ws(input)?;
             patterns.push(pattern(input)?);
         }
+        let guard = match_guard(input)?;
         match_arrow(input)?;
         let body = block(input, vec![])?;
         let span = Span { start: arm_start, end: body.span.end };
-        arms.push(MatchArm { patterns, body, span });
+        arms.push(MatchArm { patterns, guard, body, span });
     }
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
@@ -2953,10 +2956,11 @@ fn match_expression(input: &mut &str) -> Result<Expression> {
                 ws(input)?;
                 patterns.push(pattern(input)?);
             }
+            let guard = match_guard(input)?;
             match_arrow(input)?;
             let value = expression(input).map_err(|_| cut_expecting(input, "expression"))?;
             let span = Span { start: arm_start, end: value.span().end };
-            arms.push(MatchValueArm { patterns, value, span });
+            arms.push(MatchValueArm { patterns, guard, value, span });
         }
         ws(input)?;
         if input.starts_with(',') {
@@ -2971,6 +2975,18 @@ fn match_expression(input: &mut &str) -> Result<Expression> {
     *input = &input[1..];
     let span = Span { start, end: pos(input) };
     Ok(Expression::Match(Box::new(MatchExpression { value, arms, else_arm, keyword_span, span })))
+}
+
+/// An arm's guard, `if condition`, between its patterns and its `=>`.
+fn match_guard(input: &mut &str) -> Result<Option<Expression>> {
+    ws(input)?;
+    if !keyword(input, "if") {
+        return Ok(None);
+    }
+    ws(input)?;
+    // Not an assignment: its `=` would take the arm's `=>`.
+    let condition = nested(input, ternary).map_err(|_| cut_expecting(input, "a condition"))?;
+    Ok(Some(condition))
 }
 
 /// The `=>` between a match arm's patterns and its block, and the space after it.
@@ -5144,6 +5160,7 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
         }
         Statement::Match(m) => {
             ptr_check_expr(&m.value)?;
+            m.arms.iter().try_for_each(|arm| arm.guard.as_ref().map_or(Ok(()), ptr_check_expr))?;
             m.arms.iter().try_for_each(|arm| ptr_check_block(&arm.body))?;
             m.else_arm.as_ref().map_or(Ok(()), |(_, b)| ptr_check_block(b))
         }
@@ -5190,6 +5207,7 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
         }
         Expression::Match(m) => {
             ptr_check_expr(&m.value)?;
+            m.arms.iter().try_for_each(|arm| arm.guard.as_ref().map_or(Ok(()), ptr_check_expr))?;
             m.arms.iter().try_for_each(|arm| ptr_check_expr(&arm.value))?;
             m.else_arm.as_ref().map_or(Ok(()), |(_, v)| ptr_check_expr(v))
         }

@@ -329,6 +329,9 @@ pub struct MatchExpression {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchValueArm {
     pub patterns: Vec<Pattern>,
+    /// The arm's guard (`if r > 10`): the arm is taken only when a pattern
+    /// matches and the guard holds.
+    pub guard: Option<Expression>,
     pub value: Expression,
     pub span: Span,
 }
@@ -894,6 +897,9 @@ pub struct Match {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchArm {
     pub patterns: Vec<Pattern>,
+    /// The arm's guard (`if r > 10`): the arm is taken only when a pattern
+    /// matches and the guard holds.
+    pub guard: Option<Expression>,
     pub body: Block,
     pub span: Span,
 }
@@ -1204,7 +1210,7 @@ impl Display for Expression {
             Expression::Match(m) => {
                 write!(f, "match ({}) {{", m.value)?;
                 for arm in &m.arms {
-                    write!(f, " {} => {},", join(&arm.patterns, ", "), arm.value)?;
+                    write!(f, " {}{} => {},", join(&arm.patterns, ", "), guard_text(&arm.guard), arm.value)?;
                 }
                 if let Some((_, value)) = &m.else_arm {
                     write!(f, " else => {},", value)?;
@@ -1576,13 +1582,18 @@ impl Display for Match {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "match ({}) {{", self.value)?;
         for arm in &self.arms {
-            write!(f, " {} => {}", join(&arm.patterns, ", "), arm.body)?;
+            write!(f, " {}{} => {}", join(&arm.patterns, ", "), guard_text(&arm.guard), arm.body)?;
         }
         if let Some((_, block)) = &self.else_arm {
             write!(f, " else => {}", block)?;
         }
         write!(f, " }}")
     }
+}
+
+/// An arm's guard as written, with the space before it: ` if r > 10`.
+fn guard_text(guard: &Option<Expression>) -> String {
+    guard.as_ref().map_or(String::new(), |g| format!(" if {}", g))
 }
 
 impl Display for Pattern {

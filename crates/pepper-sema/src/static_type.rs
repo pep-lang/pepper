@@ -162,6 +162,12 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::StaticCase { ty, .. } => Some(ty.clone()),
         Expression::Subject { ty, .. } if !ty.is_auto() => Some(ty.clone()),
         Expression::WithSubject(with) => of(&with.body, table, current),
+        // A value a `match` pattern binds: its payload field's type.
+        Expression::CaseValue(value) => {
+            let subject = of(&value.subject, table, current)?;
+            let field = |name: &str| table.lookup(&subject)?.fields.iter().find(|(f, _)| f == name).map(|(_, ty)| ty.clone());
+            crate::enums::case_value_type(value, &subject, field).ok().flatten()
+        }
         Expression::MemberRef { lhs, name, .. }
             if of(lhs, table, current).is_some_and(|t| t.tuple_element(name).is_some()) =>
         {
