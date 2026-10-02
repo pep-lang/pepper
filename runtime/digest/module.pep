@@ -1,0 +1,44 @@
+## Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.
+##
+## Bring it in with `import digest`. Each hash has an incremental hasher
+## (`update` any number of times, then `finish`) and a one-shot function,
+## and both take bytes (`u8[]`) or a `String` (its UTF-8 bytes). A digest
+## is a `u8[]`; `to_hex` writes it as text.
+##
+## - [SHA-256](digest-sha256.md): `Sha256`, `sha256`
+## - [SHA-1](digest-sha1.md): `Sha1`, `sha1`, for formats that need it,
+##   such as git object ids
+## - [BLAKE3](digest-blake3.md): `Blake3`, `blake3`
+## - [Hexadecimal](digest-hex.md): `to_hex`
+##
+## The implementations are portable Pepper with no link dependency; they
+## are not hardened against timing side channels, which matters only when
+## hashing secrets.
+##
+## For the hash tables of `HashMap` and `HashSet`, use `hash<T>` instead:
+## it is much faster, but neither cryptographic nor stable between
+## versions.
+##
+## @example
+##     import digest;
+##
+##     main(): int {
+##         var id = digest.to_hex(digest.sha256("hello"));
+##         assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
+##         return 0;
+##     }
+
+# This file only gathers the module's public API from its other files.
+
+import "blake3";
+import "hex";
+import "sha1";
+import "sha256";
+
+export Sha256;
+export sha256;
+export Sha1;
+export sha1;
+export Blake3;
+export blake3;
+export to_hex;

@@ -59,6 +59,11 @@ const PAGES: &[(&str, &str)] = &[
     ("archive/tar.pep", "Tar archives"),
     ("cli/module.pep", "The cli module"),
     ("cli/parser.pep", "Parser"),
+    ("digest/module.pep", "The digest module"),
+    ("digest/sha256.pep", "SHA-256"),
+    ("digest/sha1.pep", "SHA-1"),
+    ("digest/blake3.pep", "BLAKE3"),
+    ("digest/hex.pep", "Hexadecimal"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

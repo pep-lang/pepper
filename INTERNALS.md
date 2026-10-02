@@ -174,8 +174,11 @@ with no extension, and `module_name()` is the output's stem.
 - **`modules::link`** binds every file's imports and `export x as y`
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
-  declaration it denotes. It also gives each file's **private** top-level
-  declarations, and every reference to them, a mangled name
+  declaration it denotes. The type arguments of a generic method call
+  (`b.run<S>(...)`), which the parser keeps in the member name, are
+  rewritten the same way (`member_type`). It also gives each file's
+  **private** top-level declarations, and every reference to them, a
+  mangled name
   (`pepper_parser::namespace::mangle`: `helper@io/file`), keyed on the
   file's `ProgramFile::namespace`, which `load` computes with
   `ModuleRoots::namespace_of` (module name plus path inside the module;
@@ -1638,12 +1641,13 @@ diagnostics"). The mechanics:
 | `process/` | The `process` module (`import process`): `command.pep` (`Command`, `Stream`, `Output`; `run()` reads standard output in the calling task and standard error on its own thread), `child.pep` (`Child`, `ExitStatus`; `wait()` runs the blocking wait through `run_blocking`, encoding the status in one `long`), `current.pep` (`arguments`, `exit`, `id`, `executable_path`, working directory), over a `_process_sys_*` layer in `sys_posix.pep` (`posix_spawnp` with file actions; close-on-exec pipes; macOS adds `POSIX_SPAWN_CLOEXEC_DEFAULT`; the inherited `environ` comes from the `os` module) and `sys_windows.pep` (`CreateProcessW` with the C runtime's argument quoting and a UTF-16 environment block; the child's inheritable handles exist only under `_process_spawn_lock`). `arguments` and `exit` are declared as `_process_arguments`/`_process_exit` and re-exported under their names, because the deprecated prelude functions in `runtime/process.pep` still hold those names until per-module export namespaces (#244). |
 | `os/` | The `os` module (`import os`): `environment.pep` (`environment`, `environment_variables`; read-only, since `setenv` races with `getenv` on POSIX), `time.pep` (`Duration`, `Instant`, `SystemTime`: value structs counting nanoseconds), `machine.pep` (system name and version, architecture, host name, processor counts forwarded to `async`, memory, page size) and `user.pep` (user name, home and temporary directories), over a `_os_sys_*` layer in `sys_posix.pep` (`getenv`; `environ` through `dlsym` on Linux and `_NSGetEnviron` on macOS; `clock_gettime`; `uname`/`sysctlbyname`; `getpwuid_r`, reading `pw_name` and `pw_dir` at their per-OS offsets) and `sys_windows.pep` (`GetEnvironmentVariableW`, `QueryPerformanceCounter`, `GetSystemTimePreciseAsFileTime`, `RtlGetVersion` from ntdll, `GetUserNameW` from advapi32). The `process` module takes the inherited environment from `_os_environment_entries` and, on POSIX, `_os_environ`. |
 | `cli/` | The `cli` module (`import cli`): `parser.pep` (`Parser`, and the handles `Flag`, `Argument`, `ArgumentList`). Each declaration is a private `_CliArgument` record (names, help, kind: flag, single or list, required, default, and the values and count a parse fills in) that the parser lists and its handle shares, so parsing writes what the handle reads. `_parse` walks the arguments once, left to right, and hands the rest to a subcommand's own `Parser` when it meets the command's name (recursion one level per declared command, never per input). Errors are `Result` errors; the parser that failed records its usage on the top-level parser for `parse` to print. Suggestions for misspelled options and commands use a byte edit distance (`_cli_edit_distance`, at most 2). |
+| `digest/` | The `digest` module (`import digest`): `sha256.pep` (`Sha256`), `sha1.pep` (`Sha1`), `blake3.pep` (`Blake3`) and `hex.pep` (`to_hex`), each with its one-shot function, in portable Pepper with no link dependency. `words.pep` holds the shared helpers: word loads and stores, rotations, and `_DigestBuffer`, the 64-byte block buffering and Merkle-Damgård padding SHA-1 and SHA-256 share, generic over the `_DigestCompressor` trait so each hasher's `_compress` is called directly. `Blake3` is the reference implementation's algorithm one block at a time (no SIMD): the chunk state, a stack of subtree chaining values merged by the trailing zero bits of the chunk count, and a precomputed message schedule in place of permuting the words each round. |
 
 - **Loading.** Every top-level `runtime/*.pep` is a prelude file. Its
   `export`s are visible in every program without an import. `runtime/io` is
   found as a module because the runtime directory is on the search path.
 - **Naming convention for internals.** Names prefixed `_pep_` (core),
-  `_io_` (io module), `_async_` (async module), `_process_` (process module), `_regex_` (regex module), `_os_` (os module), `_cli_` (cli module), `_compress_` (compress module) and `_tar_` (archive module) are internals. They are `export`ed so other runtime
+  `_io_` (io module), `_async_` (async module), `_process_` (process module), `_regex_` (regex module), `_os_` (os module), `_cli_` (cli module), `_compress_` (compress module), `_tar_` (archive module) and `_digest_` (digest module) are internals. They are `export`ed so other runtime
   files can use them. They are exempt from the documentation standard, and
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).

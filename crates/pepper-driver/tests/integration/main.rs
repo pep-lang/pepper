@@ -30,6 +30,7 @@ mod corpus_tests;
 mod debug_info_tests;
 mod determinism_tests;
 mod diagnostic_tests;
+mod digest_tests;
 mod docs_examples_tests;
 mod edge_case_tests;
 mod enum_tests;

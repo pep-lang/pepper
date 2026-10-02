@@ -1527,6 +1527,18 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
             return;
         }
         self.walk_expression(expr);
+        // `x.run<S>(...)`: the parser keeps a generic method's type
+        // arguments in the member name, so they are resolved here like any
+        // other type (a private `S` takes its mangled name).
+        if let Expression::MemberAccess { name, name_span, .. } = expr
+            && name.contains('<')
+            && let Some(mut ty) = member_type(name, *name_span)
+        {
+            for g in &mut ty.generic_types {
+                self.visit_type_name(g);
+            }
+            *name = ty.to_string();
+        }
     }
 
     fn visit_symbol(&mut self, id: &mut String, span: Span) {
@@ -1563,4 +1575,15 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
         }
         self.walk_type_name(ty);
     }
+}
+
+/// A generic method's member name (`run<S>`) as a type, every part at
+/// `span`, or `None` when it does not spell back the same way (a function
+/// or tuple type argument), which is left as written.
+fn member_type(name: &str, span: Span) -> Option<TypeName> {
+    fn convert(ty: &crate::type_name::TypeName, span: Span) -> TypeName {
+        TypeName { name: ty.name.clone(), generic_types: ty.sub_types.iter().map(|t| convert(t, span)).collect(), span, labels: vec![] }
+    }
+    let ty = convert(&crate::passes::gather_generics::parse_type_string(name), span);
+    (ty.to_string() == name).then_some(ty)
 }

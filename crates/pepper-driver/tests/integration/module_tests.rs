@@ -212,6 +212,25 @@ fn files_of_a_module_may_import_each_other() {
 }
 
 #[test]
+fn generic_method_type_arguments_name_private_types() {
+    // `b.run<S>(...)` in a module file: `S` is private to the file, so it
+    // must resolve to the file's own `S`, the type its extension declares.
+    let files = [
+        ("pair/module.pep", "import \"s\";\nexport S;"),
+        (
+            "pair/w.pep",
+            "export trait Go { go(x: int): int; }\nexport struct B { run<T: Go>(h: T): int { return h.go(1); } }",
+        ),
+        (
+            "pair/s.pep",
+            "import \"w\";\nexport struct S { var b: B; construct() { b = B(); } go(x: int): int { return x + 1; } test(): int { return b.run<S>(this) + b.run<Wrapped<S>>(Wrapped<S>(this)); } }\nextend S with Go;\nstruct Wrapped<T> { var item: T; construct(item: T) { this.item = item; } go(x: int): int { return 40; } }\nextend Wrapped<T> with Go;",
+        ),
+        ("main.pep", "import pair;\ntest(): int { return pair.S().test(); }"),
+    ];
+    assert_eq!(run("method_type_args", &files), 42);
+}
+
+#[test]
 fn file_exports_are_not_module_exports() {
     // `shapes.pep` exports `area`, but only `module.pep`'s exports and
     // re-exports are the module's (it re-exports `area` as `rect_area`).
