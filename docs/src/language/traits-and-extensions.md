@@ -146,6 +146,15 @@ means where the trait is declared (a top-level function or variable), even
 when a conforming type happens to have a method or field of that name. Call
 through `this` explicitly only for the trait's own methods.
 
+A closure in a default body can use `this` and the trait's methods too. Each
+type that gets the default gets its own copy of the closure, which captures
+`this` as that type, as a closure in one of its own methods would (see
+[`this` in methods](function-types.md#this-in-methods)):
+
+```pepper
+{{#include ../../examples/traits-default-closures.pep}}
+```
+
 ### Numbers, `bool` and enums
 
 A number type (`int`, `long`, `byte`, `char`, `float`, `double` and the

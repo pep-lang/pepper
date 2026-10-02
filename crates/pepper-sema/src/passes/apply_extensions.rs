@@ -58,6 +58,7 @@ fn conform(
         .map(|(param, arg)| (param.name.clone(), arg.clone()))
         .collect();
     type_map.push(("this".to_string(), st.ty.clone()));
+    type_map.push((crate::passes::closures::TRAIT_SELF.to_string(), st.ty.clone()));
     for required in &def.methods {
         // `copies` gives every struct that declares a trait this member.
         if required.name == crate::passes::copies::COPY_TRAIT_METHOD {

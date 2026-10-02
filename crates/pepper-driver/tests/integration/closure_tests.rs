@@ -424,3 +424,57 @@ test(): int {
 "#;
     assert_eq!(run(src), (6, 0));
 }
+
+#[test]
+fn closures_in_trait_default_methods_use_this() {
+    let src = r#"
+trait Shape {
+    area(): int;
+    doubler(): () => int { return () => area() * 2; }
+    tripler(): () => int { return () => this.area() * 3; }
+    nested(): () => () => int { return () => () => area() + 1; }
+}
+
+struct Square {
+    int side;
+    construct(this.side = 0) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+struct Rect {
+    int w;
+    int h;
+    construct(this.w = 0, this.h = 0) {}
+}
+
+extend Rect with Shape {
+    area(): int { return w * h; }
+}
+
+trait Scaled<T> {
+    factor(): T;
+    scale(): (T) => T { return (x: T) => x * factor(); }
+}
+
+extend Square with Scaled<long> {
+    factor(): long { return 10; }
+}
+
+extend int with Shape {
+    area(): int { return this; }
+}
+
+test(): int {
+    var square = Square(3);
+    Shape shape = Rect(1, 4);
+    var seven = 7;
+    var total = square.doubler()() + square.tripler()() + square.nested()()() + shape.tripler()() + seven.doubler()();
+    return total * 10 + (square.scale()(4) as int);
+}
+"#;
+    // 18 + 27 + 10 + 12 + 14 = 81; 40.
+    assert_eq!(run(src), (850, 0));
+}

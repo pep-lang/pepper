@@ -69,6 +69,11 @@ pub(crate) fn reset_counter() {
     NAMESPACES.with(|n| n.borrow_mut().clear());
 }
 
+/// The type parameter a closure in a trait's default method has for the
+/// struct the method is copied into (`apply_extensions` maps it to that
+/// struct, as it maps `this`).
+pub const TRAIT_SELF: &str = "__This";
+
 /// Whether `name` (a struct name or type string) is a synthesized closure.
 pub fn is_closure_struct(name: &str) -> bool {
     name.starts_with(CLOSURE_PREFIX)
@@ -89,8 +94,6 @@ struct Context {
     statics: HashSet<String>,
     /// The function being lifted from is static: it has no `this`.
     in_static: bool,
-    /// A trait's default method: `this` has no single struct type yet.
-    in_trait: bool,
 }
 
 /// The names of `st`'s static methods, those its extensions declare
@@ -196,12 +199,6 @@ impl<'a> Lifter<'a> {
                 .at(loc),
             );
             return;
-        }
-        if self.ctx.in_trait {
-            crate::errors::report(
-                Diagnostic::error("a closure in a trait's default method cannot use 'this' or the members of the struct yet")
-                    .at(loc),
-            );
         }
         for frame in &mut self.frames {
             frame.uses_this = true;
@@ -654,7 +651,6 @@ pub fn lift_closures(module: &mut Module) {
                 methods,
                 statics: static_methods(st, module),
                 in_static: false,
-                in_trait: false,
             }
         })
         .collect();
@@ -679,7 +675,6 @@ pub fn lift_closures(module: &mut Module) {
                 methods,
                 statics: target.map(|st| static_methods(st, module)).unwrap_or_default(),
                 in_static: false,
-                in_trait: false,
             }
         })
         .collect();
@@ -718,12 +713,15 @@ pub fn lift_closures(module: &mut Module) {
         }
     }
     for tr in &mut module.traits {
-        let ctx = Context {
-            generics: tr.generic_params.clone(),
-            in_trait: true,
-            this_ty: Some(TypeName::new("this")),
-            ..Context::default()
-        };
+        // `this` has no single struct type in a trait's default method: its
+        // closures are generic over the conforming type, [`TRAIT_SELF`],
+        // which each copy of the method into a struct names. They see the
+        // trait's methods, as the method does, and no fields.
+        let mut generics = tr.generic_params.clone();
+        generics.push(GenericParam::named(TRAIT_SELF));
+        let methods: HashSet<String> = tr.methods.iter().map(|m| crate::passes::overloads::set_name(&m.name).to_string()).collect();
+        let statics = tr.methods.iter().filter(|m| m.is_static).map(|m| crate::passes::overloads::set_name(&m.name).to_string()).collect();
+        let ctx = Context { generics, this_ty: Some(TypeName::new(TRAIT_SELF)), methods, statics, ..Context::default() };
         for method in &mut tr.methods {
             let before = lifted.len();
             lift_function(method, &ctx, &mut lifted);

@@ -190,7 +190,9 @@ a changing number, capture a struct that holds it, such as a `Counter` or an
 
 A closure written in a method can use `this`, the struct's fields and its
 methods. It captures `this` (one reference to the object), never a copy of
-the fields, so it sees the fields' current values.
+the fields, so it sees the fields' current values. In a trait's
+[default method](traits-and-extensions.md#default-method-bodies), a closure
+can use `this` and the trait's methods the same way.
 
 Storing such a closure in a field of the same object would make the object
 and the closure keep each other alive forever (a reference cycle), so that
@@ -329,8 +331,6 @@ atomic, like a `[Shared]` struct's (see
 
 ## What is not supported yet
 
-- **Closures in trait default methods** cannot use `this` or the members of
-  the struct yet.
 - **Closures that capture values as C callbacks.** A C function pointer
   (`extern (P) => R`) takes a named function or a closure that captures
   nothing; see [Calling C](c-interop.md#passing-a-pepper-function-to-c).

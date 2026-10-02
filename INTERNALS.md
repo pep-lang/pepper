@@ -742,6 +742,11 @@ turns every closure literal into a synthesized struct
 `__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
 over the enclosing code's type parameters, and a `MakeClosure` creation
 expression, so the new structs get their bodies below like any other.
+A closure in a trait's default method is generic over the trait's
+parameters and `closures::TRAIT_SELF` (`__This`), the type of its `__this`;
+`apply_extensions` (and `value_types` for numbers and enums) maps
+`__This` to the conforming type along with `this` when it copies the
+method, so each conformer specializes its own closure.
 Closures that passes make later (`function_references`, `shared_functions`'
 adapters) are named after the declaration whose code makes them instead
 (`closures::owned_closure_name`: `__closure_<escaped owner>_<k>@<namespace>`,
