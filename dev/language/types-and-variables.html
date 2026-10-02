@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0096562c.js";
+            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-aa7f5379.js"></script>
@@ -254,7 +254,8 @@ main(): int {
 </code></pre>
 <p>Storing a value that does not fit in the destination keeps its low bits, as in
 C: a <code>u16</code> holding 65535 becomes 0 when you add 1 and store the result, and
-<code>70000 as u16</code> is 4464.</p>
+<code>70000 as u16</code> is 4464. Arithmetic that overflows <code>int</code> or a wider type
+panics instead (see <a href="#integer-overflow">Integer overflow</a>).</p>
 <p>A decimal literal larger than the largest <code>long</code> (9223372036854775807), or a
 hexadecimal literal with more than 64 bits, is an error:</p>
 <pre><code class="language-text">main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
@@ -720,9 +721,8 @@ so does a <a href="enums.html#match-expressions-is-and-literal-patterns"><code>m
 over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
 signed types and fills with zeros for unsigned types.</li>
-<li><strong>Overflow</strong> of unsigned arithmetic wraps around. As in C, signed overflow,
-division by zero, and shifting by the operand’s width or more are not
-defined; do not rely on what they do.</li>
+<li><strong>Overflow</strong> is where Pepper leaves C: it panics, for signed and unsigned
+types alike (see <a href="#integer-overflow">Integer overflow</a>).</li>
 </ul>
 <pre><code class="language-pepper"># Arithmetic follows C's rules for promotion and conversion.
 main(): int {
@@ -747,7 +747,7 @@ main(): int {
     uint one = 1;
     assert(!(minus_one &lt; one), "-1 converts to 4294967295 when compared with a uint");
     uint zero = 0;
-    assert(zero - 1 == 4294967295, "unsigned arithmetic wraps");
+    assert(zero.wrapping_sub(1) == 4294967295, "zero - 1 would panic; wrapping_sub wraps");
 
     # Mixing an integer with a floating-point value gives floating point.
     int whole = 3;
@@ -771,6 +771,112 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="integer-overflow"><a class="header" href="#integer-overflow">Integer overflow</a></h2>
+<p>Integer arithmetic whose result does not fit its type stops the program, as in
+Swift (and Rust’s debug builds), instead of wrapping around silently:</p>
+<pre><code class="language-text">main.pep:3:16: integer overflow in 'int' addition
+</code></pre>
+<p>The message names the operator’s location and the type the operation ran at.
+These operations check:</p>
+<ul>
+<li><code>+</code>, <code>-</code>, <code>*</code> and <code>**</code>, unary <code>-</code>, <code>++</code> and <code>--</code>, and the compound
+assignments (<code>+=</code>, <code>-=</code>, <code>*=</code>). Negating the most negative value of a signed
+type overflows, and so does negating any nonzero unsigned value or
+subtracting past 0 (<code>uint 0 - 1</code>).</li>
+<li><code>/</code> and <code>%</code> by zero (<code>division by zero</code>), and the most negative value of a
+signed type divided by -1 (<code>MIN / -1</code> and <code>MIN % -1</code>), whose result does not
+fit.</li>
+<li><code>&lt;&lt;</code> and <code>&gt;&gt;</code> by a count of at least the type’s width, or a negative one:
+<code>shift count out of range for 'int': must be from 0 to 31</code>.</li>
+</ul>
+<p>Arithmetic on types narrower than <code>int</code> runs at <code>int</code> (see above), so it
+overflows only past <code>int</code>’s range; storing the result back in the narrow type
+keeps its low bits, like any narrowing conversion. <code>x++</code> on a <code>u8</code> holding 255
+leaves 0, as <code>x += 1</code> does. Casts with <code>as</code> never check: <code>70000 as u16</code> is
+4464.</p>
+<p>When both operands are constants, an overflow is a compile error at the
+operator, and so is a division by a constant 0:</p>
+<pre><code class="language-text">main.pep:2:28: error: integer overflow in 'int' multiplication
+    2 |     var seconds = 100000 * 100000;
+      |                          ^
+</code></pre>
+<h3 id="wrapping-on-purpose"><a class="header" href="#wrapping-on-purpose">Wrapping on purpose</a></h3>
+<p>Hashes, checksums and random number generators rely on wrapping. Each integer
+type has methods that say what to do on overflow instead of panicking:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>On overflow</th></tr>
+</thead>
+<tbody>
+<tr><td><code>wrapping_add(x)</code>, <code>wrapping_sub(x)</code>, <code>wrapping_mul(x)</code></td><td>Wraps around: the result modulo 2^bits.</td></tr>
+<tr><td><code>checked_add(x)</code>, <code>checked_sub(x)</code>, <code>checked_mul(x)</code></td><td>Returns none (the result is a <code>T?</code>).</td></tr>
+<tr><td><code>saturating_add(x)</code>, <code>saturating_sub(x)</code>, <code>saturating_mul(x)</code></td><td>Clamps to the type’s highest or lowest value.</td></tr>
+<tr><td><code>overflowing_add(x)</code>, <code>overflowing_sub(x)</code>, <code>overflowing_mul(x)</code></td><td>Returns the wrapped result and <code>true</code> as a <code>(T, bool)</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># Arithmetic that overflows panics; these methods say what to do instead.
+main(): int {
+    int big = 2147483647;
+
+    # big + 1 would stop the program: "integer overflow in 'int' addition".
+    # wrapping_ wraps around, as C's unsigned arithmetic does.
+    assert(big.wrapping_add(1) == -2147483648, "wraps to the lowest int");
+
+    # checked_ returns none on overflow.
+    assert(big.checked_add(1).is_none(), "no int is big + 1");
+    assert(big.checked_sub(1).value() == 2147483646, "big - 1 fits");
+
+    # saturating_ clamps to the type's range.
+    assert(big.saturating_mul(2) == 2147483647, "clamped to the highest int");
+    byte level = 10;
+    assert(level.saturating_sub(20) == 0, "a byte stops at 0");
+
+    # overflowing_ returns the wrapped result and whether it overflowed.
+    var (product, overflowed) = big.overflowing_mul(2);
+    assert(product == -2 &amp;&amp; overflowed, "wrapped, and overflowed");
+
+    # A hash multiplies with wrapping on purpose (FNV-1a).
+    ulong hash = 0xcbf29ce484222325;
+    var text = "pepper";
+    for (var i in 0..text.size) {
+        hash = (hash ^ (text.byte_at(i) as ulong)).wrapping_mul(0x100000001b3);
+    }
+    assert(hash == 0xac11131d51a77079, "the FNV-1a hash of 'pepper'");
+    return 0;
+}
+</code></pre>
+<p>The methods work at their type’s own width: <code>byte 200.checked_add(100)</code> is
+none, while <code>200 + 100</code> on two <code>byte</code>s is 300 at <code>int</code>.</p>
+<h3 id="removing-the-checks"><a class="header" href="#removing-the-checks">Removing the checks</a></h3>
+<p>The checks stay on at every optimization level. A build that has measured
+their cost and accepts the risk can remove kinds of check with
+<code>--no-runtime-checks</code>, a comma-separated list:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Removes</th><th>Then</th></tr>
+</thead>
+<tbody>
+<tr><td><code>overflow</code></td><td>The overflow checks of <code>+</code>, <code>-</code>, <code>*</code>, <code>**</code>, unary <code>-</code>, <code>++</code>, <code>--</code></td><td>Arithmetic wraps around (never undefined).</td></tr>
+<tr><td><code>divide</code></td><td>Division and remainder by zero, and <code>MIN / -1</code></td><td>The result is undefined, as in C.</td></tr>
+<tr><td><code>shift</code></td><td>The shift count check</td><td>The count is masked to the type’s width (<code>x &lt;&lt; 33</code> on an <code>int</code> shifts by 1).</td></tr>
+<tr><td><code>bounds</code></td><td><code>Array</code> and <code>String</code> index checks (<code>a[i]</code>, <code>byte_at</code>)</td><td>An index out of range reads or writes arbitrary memory.</td></tr>
+<tr><td><code>null</code></td><td>Calls through null function and trait values, and <code>match</code> on a null reference</td><td>The program crashes or misbehaves.</td></tr>
+<tr><td><code>all</code></td><td>Every check above</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-bash">pepper -O main.pep --no-runtime-checks=overflow,shift
+</code></pre>
+<p>Removing <code>bounds</code> or <code>null</code> gives up Pepper’s memory safety: an index out of
+range or a null reference then reads or writes arbitrary memory instead of
+panicking. The flag does nothing at <code>-O0</code>, the default, where every check stays
+on and the compiler warns
+<code>warning: '--no-runtime-checks' has no effect at -O0</code>. It applies from <code>-O1</code>
+up, <code>-g</code> included. The setting is part of the build cache’s key, like the
+optimization level.</p>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <pre><code class="language-pepper"># Operators on numbers and booleans.
 main(): int {

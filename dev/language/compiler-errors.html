@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0096562c.js";
+            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-aa7f5379.js"></script>
@@ -497,7 +497,8 @@ an integer, or to a pointer of another type, needs
 </code></pre>
 <h2 id="errors-while-the-program-runs"><a class="header" href="#errors-while-the-program-runs">Errors while the program runs</a></h2>
 <p>Some problems can only be found while the program runs, such as an array index
-out of range or a failed <code>assert</code>. These are not compiler errors: the program
+out of range, an <a href="types-and-variables.html#integer-overflow">integer overflow</a>, a
+division by zero, or a failed <code>assert</code>. These are not compiler errors: the program
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="../reference/internals.html"><code>assert</code> and
 <code>panic</code></a>.</p>

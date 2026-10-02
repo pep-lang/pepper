@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0096562c.js";
+            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-aa7f5379.js"></script>
@@ -183,15 +183,25 @@
                     <main>
                         <!-- Generated from runtime/number.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="numberpep"><a class="header" href="#numberpep">number.pep</a></h1>
-<p>Reading numbers from text: every number type has a static <code>parse</code>.</p>
-<p><code>int.parse("42")</code> gives an <code>int?</code>, empty when the text is not a number
-of that type. The integer types take a base from 2 to 36; <code>float</code> and
-<code>double</code> read decimal notation. Each spelling of a type is the same
-type, so <code>i32.parse</code> is <code>int.parse</code>.</p>
+<p>Reading numbers from text, and arithmetic that says what to do on
+overflow.</p>
+<p>Every number type has a static <code>parse</code>: <code>int.parse("42")</code> gives an
+<code>int?</code>, empty when the text is not a number of that type. The integer
+types take a base from 2 to 36; <code>float</code> and <code>double</code> read decimal
+notation. Each spelling of a type is the same type, so <code>i32.parse</code> is
+<code>int.parse</code>.</p>
+<p>Integer <code>+</code>, <code>-</code> and <code>*</code> panic on overflow. Each integer type also has
+<code>wrapping_add</code> (the result modulo 2^bits), <code>checked_add</code> (none on
+overflow), <code>saturating_add</code> (clamped to the type’s range) and
+<code>overflowing_add</code> (the wrapped result and whether it overflowed), with
+<code>sub</code> and <code>mul</code> forms of each.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var port = int.parse("8080");
     assert(port.is_some() &amp;&amp; port.value() == 8080, "parsed");
     assert(byte.parse("256").is_none(), "too big for a byte");
+    int big = 2147483647;
+    assert(big.wrapping_add(1) == -2147483648, "wraps around");
+    assert(big.checked_add(1).is_none(), "does not fit");
 </code></pre>
 <p>Source: <code>runtime/number.pep</code></p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
@@ -221,6 +231,163 @@ are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="wrapping_add"><a class="header" href="#wrapping_add">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: char): char
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>char</code></li>
+</ul>
+<h4 id="checked_add"><a class="header" href="#checked_add">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: char): char?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>char</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add"><a class="header" href="#saturating_add">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: char): char
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest or lowest <code>char</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>char</code> to it</li>
+</ul>
+<h4 id="overflowing_add"><a class="header" href="#overflowing_add">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: char): (char, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub"><a class="header" href="#wrapping_sub">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: char): char
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>char</code></li>
+</ul>
+<h4 id="checked_sub"><a class="header" href="#checked_sub">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: char): char?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>char</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub"><a class="header" href="#saturating_sub">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: char): char
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to the highest or lowest <code>char</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>char</code> to it</li>
+</ul>
+<h4 id="overflowing_sub"><a class="header" href="#overflowing_sub">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: char): (char, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul"><a class="header" href="#wrapping_mul">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: char): char
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>char</code></li>
+</ul>
+<h4 id="checked_mul"><a class="header" href="#checked_mul">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: char): char?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>char</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul"><a class="header" href="#saturating_mul">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: char): char
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest or lowest <code>char</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>char</code> to it</li>
+</ul>
+<h4 id="overflowing_mul"><a class="header" href="#overflowing_mul">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: char): (char, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
 <pre><code class="language-pepper">extend byte
 </code></pre>
@@ -248,6 +415,163 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 </code></pre>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="wrapping_add-1"><a class="header" href="#wrapping_add-1">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: byte): byte
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>byte</code></li>
+</ul>
+<h4 id="checked_add-1"><a class="header" href="#checked_add-1">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: byte): byte?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>byte</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-1"><a class="header" href="#saturating_add-1">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: byte): byte
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest <code>byte</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>byte</code> to it</li>
+</ul>
+<h4 id="overflowing_add-1"><a class="header" href="#overflowing_add-1">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: byte): (byte, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-1"><a class="header" href="#wrapping_sub-1">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: byte): byte
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>byte</code></li>
+</ul>
+<h4 id="checked_sub-1"><a class="header" href="#checked_sub-1">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: byte): byte?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>byte</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-1"><a class="header" href="#saturating_sub-1">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: byte): byte
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to 0 on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>byte</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-1"><a class="header" href="#overflowing_sub-1">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: byte): (byte, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-1"><a class="header" href="#wrapping_mul-1">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: byte): byte
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^8: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>byte</code></li>
+</ul>
+<h4 id="checked_mul-1"><a class="header" href="#checked_mul-1">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: byte): byte?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>byte</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-1"><a class="header" href="#saturating_mul-1">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: byte): byte
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest <code>byte</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>byte</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-1"><a class="header" href="#overflowing_mul-1">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: byte): (byte, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^8, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
 <pre><code class="language-pepper">extend short
 </code></pre>
@@ -275,6 +599,163 @@ separators are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(short.parse("-300").value() == -300, "decimal");
 </code></pre>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="wrapping_add-2"><a class="header" href="#wrapping_add-2">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: short): short
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>short</code></li>
+</ul>
+<h4 id="checked_add-2"><a class="header" href="#checked_add-2">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: short): short?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>short</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-2"><a class="header" href="#saturating_add-2">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: short): short
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest or lowest <code>short</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>short</code> to it</li>
+</ul>
+<h4 id="overflowing_add-2"><a class="header" href="#overflowing_add-2">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: short): (short, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-2"><a class="header" href="#wrapping_sub-2">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: short): short
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>short</code></li>
+</ul>
+<h4 id="checked_sub-2"><a class="header" href="#checked_sub-2">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: short): short?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>short</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-2"><a class="header" href="#saturating_sub-2">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: short): short
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to the highest or lowest <code>short</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>short</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-2"><a class="header" href="#overflowing_sub-2">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: short): (short, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-2"><a class="header" href="#wrapping_mul-2">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: short): short
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>short</code></li>
+</ul>
+<h4 id="checked_mul-2"><a class="header" href="#checked_mul-2">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: short): short?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>short</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-2"><a class="header" href="#saturating_mul-2">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: short): short
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest or lowest <code>short</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>short</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-2"><a class="header" href="#overflowing_mul-2">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: short): (short, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-ushort"><a class="header" href="#extend-ushort">extend ushort</a></h2>
 <pre><code class="language-pepper">extend ushort
 </code></pre>
@@ -302,6 +783,163 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(ushort.parse("8080").value() == 8080, "a port");
 </code></pre>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="wrapping_add-3"><a class="header" href="#wrapping_add-3">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>ushort</code></li>
+</ul>
+<h4 id="checked_add-3"><a class="header" href="#checked_add-3">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: ushort): ushort?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>ushort</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-3"><a class="header" href="#saturating_add-3">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest <code>ushort</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>ushort</code> to it</li>
+</ul>
+<h4 id="overflowing_add-3"><a class="header" href="#overflowing_add-3">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: ushort): (ushort, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-3"><a class="header" href="#wrapping_sub-3">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>ushort</code></li>
+</ul>
+<h4 id="checked_sub-3"><a class="header" href="#checked_sub-3">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: ushort): ushort?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>ushort</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-3"><a class="header" href="#saturating_sub-3">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to 0 on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>ushort</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-3"><a class="header" href="#overflowing_sub-3">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: ushort): (ushort, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-3"><a class="header" href="#wrapping_mul-3">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^16: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>ushort</code></li>
+</ul>
+<h4 id="checked_mul-3"><a class="header" href="#checked_mul-3">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: ushort): ushort?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>ushort</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-3"><a class="header" href="#saturating_mul-3">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: ushort): ushort
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest <code>ushort</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>ushort</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-3"><a class="header" href="#overflowing_mul-3">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: ushort): (ushort, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^16, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-int"><a class="header" href="#extend-int">extend int</a></h2>
 <pre><code class="language-pepper">extend int
 </code></pre>
@@ -331,6 +969,163 @@ prefixes (<code>0x</code>) or separators are accepted.</p>
     assert(int.parse("ff", 16).value() == 255, "hexadecimal");
     assert(int.parse("12x").is_none(), "not a number");
 </code></pre>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="wrapping_add-4"><a class="header" href="#wrapping_add-4">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: int): int
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>int</code></li>
+</ul>
+<h4 id="checked_add-4"><a class="header" href="#checked_add-4">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: int): int?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>int</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-4"><a class="header" href="#saturating_add-4">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: int): int
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest or lowest <code>int</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>int</code> to it</li>
+</ul>
+<h4 id="overflowing_add-4"><a class="header" href="#overflowing_add-4">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: int): (int, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-4"><a class="header" href="#wrapping_sub-4">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: int): int
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>int</code></li>
+</ul>
+<h4 id="checked_sub-4"><a class="header" href="#checked_sub-4">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: int): int?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>int</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-4"><a class="header" href="#saturating_sub-4">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: int): int
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to the highest or lowest <code>int</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>int</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-4"><a class="header" href="#overflowing_sub-4">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: int): (int, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-4"><a class="header" href="#wrapping_mul-4">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: int): int
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>int</code></li>
+</ul>
+<h4 id="checked_mul-4"><a class="header" href="#checked_mul-4">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: int): int?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>int</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-4"><a class="header" href="#saturating_mul-4">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: int): int
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest or lowest <code>int</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>int</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-4"><a class="header" href="#overflowing_mul-4">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: int): (int, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-uint"><a class="header" href="#extend-uint">extend uint</a></h2>
 <pre><code class="language-pepper">extend uint
 </code></pre>
@@ -358,6 +1153,163 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(uint.parse("4294967295").value() == 4294967295, "the highest");
 </code></pre>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="wrapping_add-5"><a class="header" href="#wrapping_add-5">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: uint): uint
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>uint</code></li>
+</ul>
+<h4 id="checked_add-5"><a class="header" href="#checked_add-5">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: uint): uint?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>uint</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-5"><a class="header" href="#saturating_add-5">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: uint): uint
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest <code>uint</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>uint</code> to it</li>
+</ul>
+<h4 id="overflowing_add-5"><a class="header" href="#overflowing_add-5">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: uint): (uint, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-5"><a class="header" href="#wrapping_sub-5">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: uint): uint
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>uint</code></li>
+</ul>
+<h4 id="checked_sub-5"><a class="header" href="#checked_sub-5">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: uint): uint?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>uint</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-5"><a class="header" href="#saturating_sub-5">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: uint): uint
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to 0 on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>uint</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-5"><a class="header" href="#overflowing_sub-5">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: uint): (uint, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-5"><a class="header" href="#wrapping_mul-5">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: uint): uint
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^32: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>uint</code></li>
+</ul>
+<h4 id="checked_mul-5"><a class="header" href="#checked_mul-5">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: uint): uint?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>uint</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-5"><a class="header" href="#saturating_mul-5">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: uint): uint
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest <code>uint</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>uint</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-5"><a class="header" href="#overflowing_mul-5">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: uint): (uint, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^32, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-long"><a class="header" href="#extend-long">extend long</a></h2>
 <pre><code class="language-pepper">extend long
 </code></pre>
@@ -386,6 +1338,163 @@ are accepted.</p>
 <pre><code class="language-pepper">    assert(long.parse("-9000000000").value() == -9000000000, "decimal");
     assert(long.parse("9223372036854775808").is_none(), "too big");
 </code></pre>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="wrapping_add-6"><a class="header" href="#wrapping_add-6">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: long): long
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>long</code></li>
+</ul>
+<h4 id="checked_add-6"><a class="header" href="#checked_add-6">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: long): long?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>long</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-6"><a class="header" href="#saturating_add-6">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: long): long
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest or lowest <code>long</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>long</code> to it</li>
+</ul>
+<h4 id="overflowing_add-6"><a class="header" href="#overflowing_add-6">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: long): (long, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-6"><a class="header" href="#wrapping_sub-6">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: long): long
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>long</code></li>
+</ul>
+<h4 id="checked_sub-6"><a class="header" href="#checked_sub-6">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: long): long?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>long</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-6"><a class="header" href="#saturating_sub-6">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: long): long
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to the highest or lowest <code>long</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>long</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-6"><a class="header" href="#overflowing_sub-6">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: long): (long, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-6"><a class="header" href="#wrapping_mul-6">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: long): long
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>long</code></li>
+</ul>
+<h4 id="checked_mul-6"><a class="header" href="#checked_mul-6">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: long): long?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>long</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-6"><a class="header" href="#saturating_mul-6">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: long): long
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest or lowest <code>long</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>long</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-6"><a class="header" href="#overflowing_mul-6">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: long): (long, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-ulong"><a class="header" href="#extend-ulong">extend ulong</a></h2>
 <pre><code class="language-pepper">extend ulong
 </code></pre>
@@ -413,6 +1522,163 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
 </code></pre>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h4 id="wrapping_add-7"><a class="header" href="#wrapping_add-7">wrapping_add</a></h4>
+<pre><code class="language-pepper">wrapping_add(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, wrapped to a <code>ulong</code></li>
+</ul>
+<h4 id="checked_add-7"><a class="header" href="#checked_add-7">checked_add</a></h4>
+<pre><code class="language-pepper">checked_add(other: ulong): ulong?
+</code></pre>
+<p>Returns <code>this + other</code>, or none when the sum does not fit a
+<code>ulong</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or none on overflow</li>
+</ul>
+<h4 id="saturating_add-7"><a class="header" href="#saturating_add-7">saturating_add</a></h4>
+<pre><code class="language-pepper">saturating_add(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this + other</code>, clamped to the highest <code>ulong</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or the nearest <code>ulong</code> to it</li>
+</ul>
+<h4 id="overflowing_add-7"><a class="header" href="#overflowing_add-7">overflowing_add</a></h4>
+<pre><code class="language-pepper">overflowing_add(other: ulong): (ulong, bool)
+</code></pre>
+<p>Returns <code>this + other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped sum, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_sub-7"><a class="header" href="#wrapping_sub-7">wrapping_sub</a></h4>
+<pre><code class="language-pepper">wrapping_sub(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, wrapped to a <code>ulong</code></li>
+</ul>
+<h4 id="checked_sub-7"><a class="header" href="#checked_sub-7">checked_sub</a></h4>
+<pre><code class="language-pepper">checked_sub(other: ulong): ulong?
+</code></pre>
+<p>Returns <code>this - other</code>, or none when the difference does not fit a
+<code>ulong</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or none on overflow</li>
+</ul>
+<h4 id="saturating_sub-7"><a class="header" href="#saturating_sub-7">saturating_sub</a></h4>
+<pre><code class="language-pepper">saturating_sub(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this - other</code>, clamped to 0 on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, or the nearest <code>ulong</code> to it</li>
+</ul>
+<h4 id="overflowing_sub-7"><a class="header" href="#overflowing_sub-7">overflowing_sub</a></h4>
+<pre><code class="language-pepper">overflowing_sub(other: ulong): (ulong, bool)
+</code></pre>
+<p>Returns <code>this - other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped difference, and true when it overflowed</li>
+</ul>
+<h4 id="wrapping_mul-7"><a class="header" href="#wrapping_mul-7">wrapping_mul</a></h4>
+<pre><code class="language-pepper">wrapping_mul(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^64: on overflow the result wraps
+around instead of panicking. For hashes, checksums and random number
+generators, which rely on wrapping.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, wrapped to a <code>ulong</code></li>
+</ul>
+<h4 id="checked_mul-7"><a class="header" href="#checked_mul-7">checked_mul</a></h4>
+<pre><code class="language-pepper">checked_mul(other: ulong): ulong?
+</code></pre>
+<p>Returns <code>this * other</code>, or none when the product does not fit a
+<code>ulong</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or none on overflow</li>
+</ul>
+<h4 id="saturating_mul-7"><a class="header" href="#saturating_mul-7">saturating_mul</a></h4>
+<pre><code class="language-pepper">saturating_mul(other: ulong): ulong
+</code></pre>
+<p>Returns <code>this * other</code>, clamped to the highest <code>ulong</code> on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, or the nearest <code>ulong</code> to it</li>
+</ul>
+<h4 id="overflowing_mul-7"><a class="header" href="#overflowing_mul-7">overflowing_mul</a></h4>
+<pre><code class="language-pepper">overflowing_mul(other: ulong): (ulong, bool)
+</code></pre>
+<p>Returns <code>this * other</code> modulo 2^64, and whether the operation
+overflowed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the wrapped product, and true when it overflowed</li>
+</ul>
 <h2 id="extend-float"><a class="header" href="#extend-float">extend float</a></h2>
 <pre><code class="language-pepper">extend float
 </code></pre>
