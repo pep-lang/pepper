@@ -702,7 +702,8 @@ pub fn resolve_implicit_types(module: &mut Module) {
         let synced = crate::passes::closures::sync_closures(module);
         let bound = crate::passes::overloads::bind_function_values(module);
         let specialized = crate::passes::type_arguments::bind_generic_function_values(module);
-        if !resolve_once(module) && !synced && !bound && !specialized {
+        let methods = crate::passes::generic_methods::bind_generic_method_values(module);
+        if !resolve_once(module) && !synced && !bound && !specialized && !methods {
             break;
         }
     }

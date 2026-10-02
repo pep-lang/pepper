@@ -65,6 +65,7 @@ too:
 | `Point` | `(int, int) => Point` | the constructor |
 | `Box<int>` | `(int) => Box<int>` | the constructor of `Box<int>` |
 | `larger<int>` | `(int, int) => int` | the specialization `larger<int>` |
+| `b.map<long>` (a generic method) | `((int) => long) => Box<long>` | `b.map<long>(...)`, on the object `b` referred to |
 
 - **Bound methods.** `p.norm` keeps a reference to the object, like a closure
   `() => p.norm()` that captured `p`, so the object lives as long as the
@@ -94,6 +95,12 @@ too:
   ```text
   main.pep:3:13: error: cannot infer the type arguments of 'larger' used as a value; write them (larger<T>) or give the value a function type
   ```
+- **Generic methods.** A method with type parameters of its own is a
+  value once they are known: written (`b.map<long>`,
+  `Box<int>.map<long>`, `Box<int>.wrap<int>`) or picked by the function
+  type it flows into, as for generic functions:
+  `var m: ((int) => String) => Box<String> = b.map;` is `b.map<String>`.
+  Without either, `var m = b.map;` is an error that asks for them.
 - **A type with a constructor that takes no arguments.** `Box<int>` on its
   own names the constructor only when the constructor needs at least one
   argument; otherwise it is a call, `Box<int>()`. The same goes for a generic
@@ -322,8 +329,6 @@ atomic, like a `[Shared]` struct's (see
 
 ## What is not supported yet
 
-- **Generic methods** cannot be referenced as values: `b.map<long>` is not
-  a value. Wrap the call in a closure: `(f: (int) => long) => b.map(f)`.
 - **Closures in trait default methods** cannot use `this` or the members of
   the struct yet.
 - **Closures that capture values as C callbacks.** A C function pointer

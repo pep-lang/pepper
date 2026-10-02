@@ -735,11 +735,18 @@ struct Parser {
                     return node;
                 }
                 # `x.map<long>(f)`: type arguments written right after the
-                # name, with `(` right after the `>`.
+                # name, with `(` right after the `>`; or `x.map<long>` as a
+                # value, the expression ending after the `>`.
                 if (_at("<") and _adjacent(0)) {
                     ulong position = _position;
                     var arguments = _type_arguments();
-                    if (!_failed and _at("(") and _adjacent(0)) {
+                    var ends = _at(";")
+                        or _at(",")
+                        or _at(")")
+                        or _at("]")
+                        or _at("}")
+                        or _peek().kind == TokenKind.End;
+                    if (!_failed and ((_at("(") and _adjacent(0)) or ends)) {
                         node.add(arguments);
                     } else {
                         _restore(position);

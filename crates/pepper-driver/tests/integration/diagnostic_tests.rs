@@ -384,6 +384,22 @@ fn with_else_on_int() {
 }
 
 #[test]
+fn generic_method_value_without_type_arguments() {
+    assert_eq!(
+        error_of(
+            "generic_method_value",
+            "struct Box<T> {\n    T value;\n    construct(v: T) { value = v; }\n    map<U>(f: (T) => U): Box<U> { return Box<U>(f(value)); }\n}\nmain(): int {\n    var m = Box<int>(1).map;\n    return 0;\n}\n"
+        ),
+        "main.pep:7:25: error: cannot infer the type arguments of method 'map' of 'Box<int>' used as a value; write them (map<U>) or give the value a function type\n\
+         \x20   7 |     var m = Box<int>(1).map;\n\
+         \x20     |                         ^~~\n\
+         main.pep:4:5: note: declared here\n\
+         \x20   4 |     map<U>(f: (T) => U): Box<U> { return Box<U>(f(value)); }\n\
+         \x20     |     ^~~"
+    );
+}
+
+#[test]
 fn generic_function_value_without_type_arguments() {
     assert_eq!(
         error_of(

@@ -399,6 +399,34 @@ pub fn check_type_arguments(module: &Module) {
                 let Some(base) = st.generic_methods.iter().find(|m| m.name == name) else { return };
                 (method, args, loc, base)
             }
+            // A generic method as a value that no function type specialized
+            // (`generic_methods::bind_generic_method_values`).
+            Expression::MemberRef { lhs, name, loc } if has_methods && !name.contains('<') => {
+                if !module.structs.iter().any(|s| s.generic_methods.iter().any(|m| m.name == *name)) {
+                    return;
+                }
+                let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
+                let Some(owner) = crate::static_type::of(lhs, statics, current) else { return };
+                let key = owner.to_string();
+                let Some(st) = module.structs.iter().find(|s| s.ty.is_spelled(key.trim_end_matches('*'))) else { return };
+                if st.method_members.iter().any(|m| m.name == *name) || st.field_members.iter().any(|f| f.name == *name) {
+                    return;
+                }
+                let Some(base) = st.generic_methods.iter().find(|m| m.name == *name) else { return };
+                let all = base.generic_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "cannot infer the type arguments of method '{}' of '{}' used as a value; write them ({}<{}>) or give the value a function type",
+                        name,
+                        owner.display(),
+                        name,
+                        all
+                    ))
+                    .at(*loc)
+                    .with_note("declared here", Some(base.loc)),
+                );
+                return;
+            }
             _ => return,
         };
         // An argument naming nothing gives no type to infer from;

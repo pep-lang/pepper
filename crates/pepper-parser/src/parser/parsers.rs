@@ -2026,12 +2026,14 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             let name_span = Span { start: pos(input) - name.len(), end: pos(input) };
             // `x.map<long>(f)`: a generic method called with its type
             // arguments, written with `<` right after the name and `(`
-            // right after the `>`. Anything else is a comparison:
-            // `f(a.b < c, d > (e))`.
+            // right after the `>`; or `x.map<long>` as a value, the `>`
+            // ending the expression (`;`, `,`, `)`, `]` or `}` next).
+            // Anything else is a comparison: `f(a.b < c, d > (e))`.
             if input.starts_with('<') {
                 let mut probe: &str = name_start;
                 if let Ok(ty) = probe_type_name(&mut probe) {
-                    if !ty.generic_types.is_empty() && probe.starts_with('(') {
+                    let ends = probe.trim_start().is_empty() || probe.trim_start().starts_with([';', ',', ')', ']', '}']);
+                    if !ty.generic_types.is_empty() && (probe.starts_with('(') || ends) {
                         name = ty.to_string();
                         *input = probe;
                     }
@@ -5792,6 +5794,29 @@ mod tests {
         // `1.5` is still a float, and `t.0` a tuple element.
         assert!(matches!(parse_expr("1.5"), Expression::Literal { value: Literal::Float(_), .. }));
         assert!(matches!(parse_expr("t.0"), Expression::MemberAccess { .. }));
+    }
+
+    #[test]
+    fn generic_method_as_a_value() {
+        // `b.map<long>` with the expression ending after the `>`.
+        for src in ["b.map<long>", "f(b.map<long>, 1)", "[b.map<long> ]"] {
+            let mut found = None;
+            fn find(e: &Expression, found: &mut Option<String>) {
+                match e {
+                    Expression::MemberAccess { name, .. } => *found = Some(name.clone()),
+                    Expression::FunctionCall { arguments, .. } => arguments.iter().for_each(|a| find(a, found)),
+                    Expression::ArrayLiteral { elements, .. } => elements.iter().for_each(|a| find(a, found)),
+                    _ => {}
+                }
+            }
+            find(&parse_expr(src), &mut found);
+            assert_eq!(found.as_deref(), Some("map<long>"), "{src}");
+        }
+        // Comparisons stay comparisons.
+        let Expression::FunctionCall { arguments, .. } = parse_expr("f(a.b < c, d > e)") else { panic!("call") };
+        assert!(matches!(&arguments[0], Expression::Binary { op, .. } if op == "<"));
+        let Expression::FunctionCall { arguments, .. } = parse_expr("f(a.b<c, d>e)") else { panic!("call") };
+        assert!(matches!(&arguments[0], Expression::Binary { op, .. } if op == "<"));
     }
 
     #[test]

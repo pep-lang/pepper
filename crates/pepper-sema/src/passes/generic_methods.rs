@@ -2,7 +2,9 @@
 //!
 //! A struct keeps its generic methods in `generic_methods`, which no other
 //! pass compiles. A call `x.map<long>(f)` (the type arguments written, or
-//! inferred by `resolve_implicit_types` from the arguments) makes
+//! inferred by `resolve_implicit_types` from the arguments), or the method
+//! as a value (`x.map<long>`, written or inferred from the expected
+//! function type), makes
 //! [`specialize_methods`] add `map<long>`, the method with `U` replaced, to
 //! `method_members` of `x`'s struct, where it is compiled like any method.
 //! A generic struct's specialization (`Box<int>`) gets its own copies of the
@@ -11,6 +13,7 @@
 
 use crate::model::*;
 use crate::type_name::TypeName;
+use std::collections::HashMap;
 
 /// Whether any struct declares a generic method.
 pub fn has_generic_methods(module: &Module) -> bool {
@@ -27,13 +30,17 @@ pub fn specialize_methods(module: &mut Module) -> bool {
     let mut wanted: Vec<(TypeName, String, Loc, Vec<Loc>)> = vec![];
     {
         let mut visit = |e: &Expression, current: Option<&TypeName>| {
-            if let Expression::MethodCall { this, method, args, loc } = e {
-                if method.contains('<') {
-                    let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
-                    if let Some(owner) = crate::static_type::of(this, statics, current) {
-                        if !owner.contains_auto() {
-                            wanted.push((owner, method.clone(), *loc, args.iter().map(Expression::loc).collect()));
-                        }
+            // A call, or the method as a value (`b.map<long>`).
+            let (this, method, loc, args) = match e {
+                Expression::MethodCall { this, method, args, loc } => (this, method, loc, args.iter().map(Expression::loc).collect()),
+                Expression::MemberRef { lhs, name, loc } => (lhs, name, loc, vec![]),
+                _ => return,
+            };
+            if method.contains('<') {
+                let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
+                if let Some(owner) = crate::static_type::of(this, statics, current) {
+                    if !owner.contains_auto() {
+                        wanted.push((owner, method.clone(), *loc, args));
                     }
                 }
             }
@@ -116,4 +123,60 @@ fn specialize(base: &FunctionDef, spec: &TypeName) -> FunctionDef {
     }
     crate::passes::specialize_functions::rewrite_static_calls(&mut method, &type_map, &[]);
     method
+}
+
+/// Name each generic method written as a value without type arguments
+/// where a function type is expected (`var m: ((int) => long) => Box<long>
+/// = b.map;`) by the specialization that type picks (`b.map<long>`), which
+/// [`specialize_methods`] then adds. An unbound method (`Box<int>.map`)
+/// takes its receiver as the first parameter, which picks nothing. Runs in
+/// `resolve_implicit_types`' loop; returns whether it named any.
+pub fn bind_generic_method_values(module: &mut Module) -> bool {
+    if !has_generic_methods(module) {
+        return false;
+    }
+    let generic_names: std::collections::HashSet<String> =
+        module.structs.iter().flat_map(|s| s.generic_methods.iter().map(|m| m.name.clone())).collect();
+    let mut candidate = false;
+    crate::passes::closures::for_each_expression_mut(module, &mut |e| {
+        candidate |= matches!(e, Expression::MemberRef { name, .. } if generic_names.contains(name.as_str()));
+    });
+    if !candidate {
+        return false;
+    }
+    let statics = crate::static_type::StructTable::build(module);
+    let mut bound: HashMap<(String, Loc), String> = HashMap::new();
+    crate::passes::closures::for_each_site(module, &mut |expr, expected, current| {
+        let Expression::MemberRef { lhs, name, loc } = expr else { return };
+        if !generic_names.contains(name.as_str()) {
+            return;
+        }
+        let Some(expected) = expected.filter(|t| t.is_callable() && !t.contains_auto()) else { return };
+        let Some(owner) = crate::static_type::of(lhs, &statics, current).filter(|t| !t.contains_auto()) else { return };
+        let key = owner.to_string();
+        let Some(st) = module.structs.iter().find(|s| s.ty.is_spelled(key.trim_end_matches('*'))) else { return };
+        if st.method_members.iter().any(|m| m.name == *name) {
+            return;
+        }
+        let Some(base) = st.generic_methods.iter().find(|m| m.name == *name) else { return };
+        let signature = crate::passes::type_arguments::GenericSignature::of(base);
+        // `Box<int>.map`: the receiver comes first.
+        let mut expected = expected.clone();
+        if !base.is_static && expected.function_params().len() == base.parameters.len() + 1 {
+            expected.sub_types.remove(1);
+        }
+        let Some(args) = signature.infer_from_function_type(&base.ty, &expected) else { return };
+        bound.insert((name.clone(), *loc), crate::passes::type_arguments::specialization(name, args));
+    });
+    if bound.is_empty() {
+        return false;
+    }
+    crate::passes::closures::for_each_expression_mut(module, &mut |e| {
+        if let Expression::MemberRef { name, loc, .. } = e {
+            if let Some(specialized) = bound.get(&(name.clone(), *loc)) {
+                *name = specialized.clone();
+            }
+        }
+    });
+    true
 }

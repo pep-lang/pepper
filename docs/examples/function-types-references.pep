@@ -18,6 +18,17 @@ struct Point {
     }
 }
 
+struct Box<T> {
+    T value;
+    construct(v: T) {
+        value = v;
+    }
+
+    map<U>(f: (T) => U): Box<U> {
+        return Box<U>(f(value));
+    }
+}
+
 larger<T>(a: T, b: T): T {
     return a > b ? a : b;
 }
@@ -47,6 +58,14 @@ main(): int {
 
     # Where a function type is expected, it picks the specialization.
     assert(combine(larger, 4, 1) == 4, "inferred specialization");
+
+    # A generic method, with its type arguments written or picked by the
+    # function type.
+    var b = Box<int>(3);
+    var to_long = b.map<long>;
+    assert(to_long((x: int): long => x * 2).value == 6, "generic method");
+    var to_text: ((int) => String) => Box<String> = b.map;
+    assert(to_text((x: int) => "three").value == "three", "inferred generic method");
 
     var steps = Array<(int) => Point>();
     steps.append(p.shifted);
