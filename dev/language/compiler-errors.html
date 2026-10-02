@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d9543143.js";
+            window.path_to_searchindex_js = "../searchindex-2785b6a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65b09c31.js"></script>
@@ -437,6 +437,10 @@ main.pep:2:9: note: previous definition is here
     2 |     var n = 1;
       |         ^
 </code></pre>
+<p>The same holds for top-level types: two structs, traits, enums or type
+aliases of one name in a file, or exported by two
+<a href="modules.html#the-runtime-prelude-and---import">prelude modules</a>, report
+<code>redefinition of 'Point'</code>.</p>
 <p><strong>Looping over something that cannot be iterated</strong> (see
 <a href="iteration.html">Iteration</a>):</p>
 <pre><code class="language-text">main.pep:3:19: error: type 'int' is not iterable: implement Iterable&lt;T&gt; (iterate()) or Iterator&lt;T&gt; (next() and current())

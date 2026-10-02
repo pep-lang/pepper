@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d9543143.js";
+            window.path_to_searchindex_js = "../searchindex-2785b6a3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-65b09c31.js"></script>
@@ -486,6 +486,15 @@ the prelude module replaces only the overloads it declares, matched by
 parameter types: an <code>export assert(condition: bool, message: String)</code>
 replaces the <code>String</code> form, and a string literal message still calls the
 runtime’s <code>__ptr&lt;char&gt;</code> form.</p>
+<p>Only functions may be redefined this way. A struct, trait, type alias or
+variable that a prelude module exports under a name the runtime (or another
+prelude module) already exports is an error in the module loaded first, with
+a note at the other:</p>
+<pre><code class="language-text">alt/module.pep:1:15: error: redefinition of 'MapIterator'
+    1 | export struct MapIterator&lt;K, V&gt; { var key: K; var value: V; }
+      |               ^~~~~~~~~~~
+runtime/iterator.pep:182:15: note: also exported here
+</code></pre>
 <h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
 <ul>
 <li><strong>Qualified names work wherever a name does</strong>: in expressions
