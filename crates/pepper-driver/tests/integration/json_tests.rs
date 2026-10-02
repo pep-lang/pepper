@@ -559,3 +559,129 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn converts_tagged_and_untagged_enums() {
+    assert_eq!(
+        run(r##"
+import json;
+
+[Tag("kind")]
+enum Shape {
+    [Name("circle")]
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+[Tag("type", content = "data")]
+enum Event {
+    Click(x: int, y: int),
+    Close,
+}
+
+[Untagged]
+enum Size {
+    Box(width: int, height: int),
+    Fixed(px: int),
+    Auto,
+    Fill,
+}
+
+enum Mode {
+    [Name("read-only")]
+    ReadOnly,
+    [Name("cmd")]
+    Command(line: String),
+}
+
+struct Scene {
+    var shapes: Array<Shape>;
+    var events: Array<Event>;
+    var sizes: Array<Size>;
+    var modes: Array<Mode>;
+}
+
+shape_error(text: String): String {
+    return json.decode<Shape>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
+}
+
+event_error(text: String): String {
+    return json.decode<Event>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
+}
+
+size_error(text: String): String {
+    return json.decode<Size>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
+}
+
+test(): int {
+    var scene = Scene();
+    scene.shapes = [Shape.Circle(2), Shape.Rect(3, 4), Shape.Point];
+    scene.events = [Event.Click(1, 2), Event.Close];
+    scene.sizes = [Size.Box(1, 2), Size.Fixed(8), Size.Auto, Size.Fill];
+    scene.modes = [Mode.ReadOnly, Mode.Command("ls")];
+    var text = json.encode(scene);
+    var expected = "{\"shapes\":[{\"kind\":\"circle\",\"radius\":2},{\"kind\":\"Rect\",\"width\":3,\"height\":4},{\"kind\":\"Point\"}],\"events\":[{\"type\":\"Click\",\"data\":{\"x\":1,\"y\":2}},{\"type\":\"Close\"}],\"sizes\":[{\"width\":1,\"height\":2},{\"px\":8},\"Auto\",\"Fill\"],\"modes\":[\"read-only\",{\"cmd\":{\"line\":\"ls\"}}]}";
+    if (text != expected) { print(text); return -1; }
+    var decoded = json.decode<Scene>(text, unknown_keys = json.UnknownKeys.Reject);
+    if (decoded.is_err()) { print(decoded.error().to_string()); return -2; }
+    if (json.encode(decoded.value()) != text) { print(json.encode(decoded.value())); return -3; }
+    if (decoded.value().sizes[1] is Fixed(px)) {
+        if (px != 8) { return -4; }
+    } else {
+        return -4;
+    }
+    if (!(decoded.value().sizes[3] is Fill)) { return -5; }
+
+    # Untagged reads the first case that fits; extra keys skip a case only
+    # when unknown keys are rejected.
+    var loose = json.decode<Size>("{\"px\": 3, \"z\": 1}");
+    if (loose.value() is Fixed(px)) {
+        if (px != 3) { return -6; }
+    } else {
+        return -6;
+    }
+
+    if (shape_error("[]") != "1:1: error: $: expected an object, found an array") { return -10; }
+    if (shape_error("{\"radius\": 2}") != "1:1: error: $: missing tag 'kind'") { return -11; }
+    if (shape_error("{\"kind\": 3}") != "1:10: error: $.kind: expected a string, found a number") { return -12; }
+    if (shape_error("{\"kind\": \"Hex\"}") != "1:10: error: $.kind: 'Hex' is not a case of 'Shape'") { return -13; }
+    if (shape_error("{\"kind\": \"Circle\"}") != "1:10: error: $.kind: 'Circle' is not a case of 'Shape'") { return -14; }
+    if (shape_error("{\"kind\": \"circle\"}") != "1:1: error: $: missing value 'radius'") { return -15; }
+    if (shape_error("{\"kind\": \"circle\", \"radius\": 1, \"z\": 0}") != "1:38: error: $.z: unknown key 'z'") { return -16; }
+    if (shape_error("{\"kind\": \"Point\", \"z\": 0}") != "1:24: error: $.z: unknown key 'z'") { return -17; }
+    if (event_error("{\"type\": \"Click\", \"data\": 1}") != "1:27: error: $.data: expected an object, found a number") { return -18; }
+    if (event_error("{\"type\": \"Click\", \"data\": {\"x\": 1, \"y\": 2}, \"z\": 0}") != "1:50: error: $.z: unknown key 'z'") { return -19; }
+    if (size_error("{\"px\": \"x\"}") != "1:1: error: $: found an object, which matches no case of 'Size'") { return -20; }
+    if (size_error("\"Huge\"") != "1:1: error: $: found a string, which matches no case of 'Size'") { return -21; }
+    if (size_error("{\"px\": 3, \"z\": 1}") != "1:1: error: $: found an object, which matches no case of 'Size'") { return -22; }
+    return 0;
+}
+"##),
+        0
+    );
+}
+
+#[test]
+fn rejects_an_enum_tag_that_names_a_value() {
+    let error = crate::support::compile_error(
+        r##"
+import json;
+
+[Tag("radius")]
+enum Shape {
+    Circle(radius: int),
+}
+
+test(): int {
+    var text = json.encode(Shape.Circle(1));
+    return 0;
+}
+"##,
+    );
+    assert!(
+        error.contains("'encode' cannot convert case 'Circle' of 'Shape': its value 'radius' has the name of the tag"),
+        "{}",
+        error
+    );
+}

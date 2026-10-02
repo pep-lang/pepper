@@ -18,7 +18,7 @@ export enum UnknownKeys {
 ##
 ## `T` may be a number type, `bool`, `String`, an enum (a case that carries
 ## no values as its name, `"Point"`; one that carries values as
-## `{"Circle": {"radius": 2}}`), `Optional<U>` (the value, or `null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
+## `{"Circle": {"radius": 2}}`; `[Tag]` and `[Untagged]` choose other forms), `Optional<U>` (the value, or `null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
 ## `Map`) as an object, `JsonValue` itself, or a struct, whose public
 ## properties become an object's members in declaration order. Element and
 ## property types follow the same rules, so structs nest.
@@ -272,20 +272,63 @@ _to_json<T>(value: T): JsonValue {
             reflect.assert(
                 !reflect.name<T>().starts_with("Result<"), $"'encode' cannot convert type '{reflect.name<T>()}' to JSON"
             );
-            # A case that carries nothing is its name; one that carries
-            # values is `{"Case": {"value": ...}}`. A reference enum's slot
+            # By default a case that carries nothing is its name and one that
+            # carries values is `{"Case": {"value": ...}}`; `[Tag]` and
+            # `[Untagged]` choose the other forms. A reference enum's slot
             # may hold no value, written as `null`.
+            var untagged = reflect.has_attribute<T, serialize.Untagged>();
+            var tag_key = "";
+            var content_key = "";
+            if (reflect.has_attribute<T, serialize.Tag>()) {
+                tag_key = reflect.attribute<T, serialize.Tag>().key;
+                content_key = reflect.attribute<T, serialize.Tag>().content;
+            }
+            reflect.assert(
+                !untagged || tag_key.is_empty,
+                $"'encode' cannot convert '{reflect.name<T>()}': it is both 'Tag' and 'Untagged'"
+            );
             if (reflect.is_reference<T>()) {
                 present = !_json_object_or_null(value).is_null();
             }
             for (var case in reflect.cases<T>()) {
+                var case_name = case.name;
+                if (case.has_attribute<serialize.Name>()) {
+                    case_name = case.attribute<serialize.Name>().value;
+                }
+                if (content_key.is_empty) {
+                    for (var item in case.values) {
+                        reflect.assert(
+                            item.name != tag_key,
+                            $"'encode' cannot convert case '{case.name}' of '{reflect.name<T>()}': its value '{item.name}' has the name of the tag"
+                        );
+                    }
+                }
                 if (present && case.matches(value)) {
-                    if (case.values.is_empty) {
-                        out = JsonValue.String(case.name);
-                    } else {
-                        out = _json_case_object(case.name);
+                    if (!tag_key.is_empty) {
+                        out = _json_tagged_object(tag_key, case_name);
+                        if (!case.values.is_empty) {
+                            if (content_key.is_empty) {
+                                for (var item in case.values) {
+                                    _json_put(out, item.name, _to_json(item.get(value)));
+                                }
+                            } else {
+                                _json_put(out, content_key, JsonValue.object());
+                                for (var item in case.values) {
+                                    _json_put(_json_member(out, content_key), item.name, _to_json(item.get(value)));
+                                }
+                            }
+                        }
+                    } else if (case.values.is_empty) {
+                        out = JsonValue.String(case_name);
+                    } else if (untagged) {
+                        out = JsonValue.object();
                         for (var item in case.values) {
-                            _json_put(_json_member(out, case.name), item.name, _to_json(item.get(value)));
+                            _json_put(out, item.name, _to_json(item.get(value)));
+                        }
+                    } else {
+                        out = _json_case_object(case_name);
+                        for (var item in case.values) {
+                            _json_put(_json_member(out, case_name), item.name, _to_json(item.get(value)));
                         }
                     }
                 }
@@ -492,8 +535,14 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 !reflect.name<T>().starts_with("Result<"),
                 $"'decode' cannot convert type '{reflect.name<T>()}' from JSON"
             );
-            if (_json_case_name(value).is_empty && !(reflect.is_reference<T>() && value.is_null())) {
-                error = Optional<JsonError>.Value(_json_mismatch(path, "a string or an object with one key", value));
+            if (!(reflect.is_reference<T>() && value.is_null())) {
+                if (reflect.has_attribute<T, serialize.Tag>()) {
+                    error = _json_tag_error(value, path, reflect.attribute<T, serialize.Tag>().key);
+                } else if (!reflect.has_attribute<T, serialize.Untagged>() && _json_case_name(value).is_empty) {
+                    error = Optional<JsonError>.Value(
+                        _json_mismatch(path, "a string or an object with one key", value)
+                    );
+                }
             }
         } else if (reflect.is_struct<T>()) {
             if (value.as_object().is_empty() && !value.is_null()) {
@@ -525,31 +574,70 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                     found = true;
                 }
             }
-            var name = _json_case_name(value);
-            var payload = _json_member(value, name);
-            var case_path = _json_path_key(path, name);
+            var untagged = reflect.has_attribute<T, serialize.Untagged>();
+            var tag_key = "";
+            var content_key = "";
+            if (reflect.has_attribute<T, serialize.Tag>()) {
+                tag_key = reflect.attribute<T, serialize.Tag>().key;
+                content_key = reflect.attribute<T, serialize.Tag>().content;
+            }
+            reflect.assert(
+                !untagged || tag_key.is_empty,
+                $"'decode' cannot convert '{reflect.name<T>()}': it is both 'Tag' and 'Untagged'"
+            );
+            # The case `value` names, the object its values are read from,
+            # and that object's path, in the enum's form.
+            var name = _json_case_tag(value, tag_key);
+            var payload = _json_case_payload(value, name, tag_key, content_key, untagged);
+            var case_path = _json_case_path(path, name, tag_key, content_key, untagged);
             for (var case in reflect.cases<T>()) {
-                if (name == case.name) {
-                    found = true;
+                var case_name = case.name;
+                if (case.has_attribute<serialize.Name>()) {
+                    case_name = case.attribute<serialize.Name>().value;
+                }
+                if (content_key.is_empty) {
+                    for (var item in case.values) {
+                        reflect.assert(
+                            item.name != tag_key,
+                            $"'decode' cannot convert case '{case.name}' of '{reflect.name<T>()}': its value '{item.name}' has the name of the tag"
+                        );
+                    }
+                }
+                # An untagged enum tries each case until one reads.
+                if (_json_case_tried(untagged, found, name, case_name)) {
+                    if (!untagged) {
+                        found = true;
+                    }
                     if (case.values.is_empty) {
-                        if (value.as_string().is_empty()) {
+                        if (untagged) {
+                            found = value.as_string().is_value() && name == case_name;
+                            if (found) {
+                                out = case.get();
+                            }
+                        } else if (tag_key.is_empty && value.as_string().is_empty()) {
                             error = Optional<JsonError>.Value(
                                 _json_error(
                                     path,
-                                    $"case '{case.name}' carries no values; write it as the string \"{case.name}\""
+                                    $"case '{case_name}' carries no values; write it as the string \"{case_name}\""
                                 )
                             );
                         } else {
                             out = case.get();
+                            if (!tag_key.is_empty && unknown_keys == UnknownKeys.Reject) {
+                                known.append(tag_key);
+                                error = _json_unknown_key(value, known, path);
+                            }
                         }
-                    } else if (value.as_string().is_value()) {
+                    } else if (!untagged && tag_key.is_empty && value.as_string().is_value()) {
                         error = Optional<JsonError>.Value(
                             _json_error(
-                                path, $"case '{case.name}' carries values; write it as {{\"{case.name}\": {{...}}}}"
+                                path, $"case '{case_name}' carries values; write it as {{\"{case_name}\": {{...}}}}"
                             )
                         );
                     } else if (payload.as_object().is_empty()) {
-                        error = Optional<JsonError>.Value(_json_mismatch(case_path, "an object", payload));
+                        if (!untagged) {
+                            error = Optional<JsonError>.Value(_json_mismatch(case_path, "an object", payload));
+                        }
                     } else {
                         # `case.get(...)` takes every value at once, so each
                         # count has its own call; a failed value records its
@@ -622,18 +710,40 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                         for (var item in case.values) {
                             known.append(item.name);
                         }
-                        if (failures.count > 0) {
+                        if (!tag_key.is_empty && content_key.is_empty) {
+                            known.append(tag_key);
+                        }
+                        if (untagged) {
+                            # A case that fails to read leaves the next to
+                            # try.
+                            found = failures.count == 0
+                                && (unknown_keys == UnknownKeys.Ignore
+                                    || _json_unknown_key(payload, known, case_path).is_empty());
+                            failures.clear();
+                            known.clear();
+                        } else if (failures.count > 0) {
                             error = Optional<JsonError>.Value(failures[0]);
                         } else if (unknown_keys == UnknownKeys.Reject) {
                             error = _json_unknown_key(payload, known, case_path);
+                            if (error.is_empty() && !content_key.is_empty) {
+                                error = _json_unknown_tag_key(value, tag_key, content_key, path);
+                            }
                         }
                     }
                 }
             }
             if (!found) {
-                error = Optional<JsonError>.Value(
-                    _json_error(path, $"'{name}' is not a case of '{reflect.name<T>()}'")
-                );
+                if (untagged) {
+                    error = Optional<JsonError>.Value(
+                        _json_error(path, $"found {_json_kind(value)}, which matches no case of '{reflect.name<T>()}'")
+                    );
+                } else {
+                    error = Optional<JsonError>.Value(
+                        _json_error(
+                            _json_case_tag_path(path, tag_key), $"'{name}' is not a case of '{reflect.name<T>()}'"
+                        )
+                    );
+                }
             }
         } else if (reflect.is_struct<T>()) {
             out = _json_new(out, value.is_null());
@@ -737,6 +847,91 @@ _json_case_object(name: String): JsonValue {
     var object = JsonValue.object();
     object[name] = JsonValue.object();
     return object;
+}
+
+# `{"key": "name"}`, a tagged case without its values.
+_json_tagged_object(key: String, name: String): JsonValue {
+    var object = JsonValue.object();
+    object[key] = JsonValue.String(name);
+    return object;
+}
+
+# Empty when `value` is an object holding a string under `key`, the tag of a
+# `[Tag]` enum, else the error.
+_json_tag_error(value: JsonValue, path: String, key: String): JsonError? {
+    if (value.as_object().is_empty()) {
+        return Optional<JsonError>.Value(_json_mismatch(path, "an object", value));
+    }
+    if (!value.contains(key)) {
+        return Optional<JsonError>.Value(_json_error(path, $"missing tag '{key}'"));
+    }
+    var tag = value[key];
+    if (tag.as_string().is_empty()) {
+        return Optional<JsonError>.Value(_json_mismatch(_json_path_key(path, key), "a string", tag));
+    }
+    return Optional<JsonError>.Empty;
+}
+
+# The case `value` names: under `tag_key` when the enum has a `[Tag]`, else
+# as `_json_case_name` reads it.
+_json_case_tag(value: JsonValue, tag_key: String): String {
+    if (tag_key.is_empty) {
+        return _json_case_name(value);
+    }
+    var tag = value[tag_key].as_string();
+    if (tag.is_value()) {
+        return tag.value();
+    }
+    return "";
+}
+
+# The object a case's values are read from: beside the tag, under the
+# content key, under the case's name, or `value` itself when untagged.
+_json_case_payload(value: JsonValue, name: String, tag_key: String, content_key: String, untagged: bool): JsonValue {
+    if (untagged || (!tag_key.is_empty && content_key.is_empty)) {
+        return value;
+    }
+    if (!tag_key.is_empty) {
+        return value[content_key];
+    }
+    return value[name];
+}
+
+# The path of `_json_case_payload`'s object.
+_json_case_path(path: String, name: String, tag_key: String, content_key: String, untagged: bool): String {
+    if (untagged || (!tag_key.is_empty && content_key.is_empty)) {
+        return path;
+    }
+    if (!tag_key.is_empty) {
+        return _json_path_key(path, content_key);
+    }
+    return _json_path_key(path, name);
+}
+
+# The path of the tag, for an error about its case name.
+_json_case_tag_path(path: String, tag_key: String): String {
+    if (tag_key.is_empty) {
+        return path;
+    }
+    return _json_path_key(path, tag_key);
+}
+
+# Whether to read case `case_name`: the case `value` names, or for an
+# untagged enum, every case until one reads.
+_json_case_tried(untagged: bool, found: bool, name: String, case_name: String): bool {
+    if (untagged) {
+        return !found;
+    }
+    return name == case_name;
+}
+
+# The first key of object `value` other than the tag and content keys, as
+# an error.
+_json_unknown_tag_key(value: JsonValue, tag_key: String, content_key: String, path: String): JsonError? {
+    var known = Array<String>();
+    known.append(tag_key);
+    known.append(content_key);
+    return _json_unknown_key(value, known, path);
 }
 
 # The case `value` names: a string, or the one key of an object; empty for

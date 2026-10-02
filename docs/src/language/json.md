@@ -166,7 +166,7 @@ same rules apply at the top level (`json.decode<Array<int>>("[1, 2]")`):
 | `float`, `double` | a number |
 | `bool` | `true`, `false` |
 | `String` | a string |
-| an enum | a case that carries no values as its name (`"Safe"`); one that carries values as an object with the case's name as its one key, holding the values by name (`{"Circle": {"radius": 2}}`) |
+| an enum | a case that carries no values as its name (`"Safe"`); one that carries values as an object with the case's name as its one key, holding the values by name (`{"Circle": {"radius": 2}}`); [attributes](#attributes) choose other forms |
 | `T?` | the value, or `null` when none; a missing key reads as none |
 | `Array<T>` | an array |
 | `HashMap<String, V>`, `OrderedMap<String, V>`, `Map<String, V>` | an object |
@@ -188,6 +188,28 @@ import of their own), change how a property is converted:
 | `[Name("key")]` | writes and reads the property under `key` |
 | `[Ignore]` | leaves the property out of both |
 | `[Required]` | makes a missing key an error when reading |
+
+On an enum and its cases, they choose how a case is written:
+
+| Attribute | Effect |
+|-----------|--------|
+| `[Name("key")]` on a case | writes and reads the case under `key` instead of its own name |
+| `[Tag("kind")]` on an enum | writes each case as an object naming it under `kind`, with its values beside the tag: `{"kind": "Circle", "radius": 2}`, `{"kind": "Point"}` |
+| `[Tag("kind", content = "data")]` on an enum | puts the values in an object under `data` instead: `{"kind": "Circle", "data": {"radius": 2}}` |
+| `[Untagged]` on an enum | writes no tag: a case's values as an object (`{"radius": 2}`), and a case that carries none as its name (`"Point"`) |
+
+```pepper
+{{#include ../../examples/json-enum-forms.pep}}
+```
+
+Reading an `[Untagged]` enum tries each case in order and takes the first
+that reads without an error (with `UnknownKeys.Reject`, an extra key is
+an error too), so a case whose values include another's goes first. When
+none reads, the error says so: `$: found an object, which matches no case
+of 'Size'`. A `[Tag]` enum's errors name its tag: `$: missing tag 'kind'`,
+`$.kind: 'Hex' is not a case of 'Shape'`. A tag with the name of one of a
+case's values is a compile error, since both would be written under one
+key.
 
 ### Reading
 
@@ -239,9 +261,6 @@ main.pep:10:16: note: 'encode<Job>' is used by 'main' here
 
 - `parse` skips comments; only a `JsonDocument` keeps them, and
   `decode` never does. A document is always written indented.
-- An enum always takes the external form above; an internal tag
-  (`{"kind": "circle", ...}`) or no tag, chosen with attributes, is not
-  supported yet.
 - A struct's own conversion cannot be customized yet: a type converts as
   its properties do.
 - Map keys must be `String`s.
