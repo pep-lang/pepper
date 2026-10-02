@@ -184,30 +184,41 @@ test(): int {
     assert_eq!(pepper_codegen::CodeGenerator::jit_call_i32(&ee, "test"), Ok(7));
 }
 
-/// A fresh folder `<dir>/libs` holding a static library `name` (`lib<name>.a`,
-/// or `<name>.lib` on Windows) whose `<name>()` returns 42, and a program
-/// in `<dir>` declaring that function under `attribute`, which exits 0 when
-/// the call returns 42. Returns `(dir, libs)`.
+/// A fresh folder `<dir>/libs` holding a library `name` whose `<name>()`
+/// returns 42, and a program in `<dir>` declaring that function under
+/// `attribute`, which exits 0 when the call returns 42. Returns
+/// `(dir, libs)`.
+///
+/// Elsewhere the library is a static `lib<name>.a`. Windows runners have no
+/// archiver on `PATH` (no `lib.exe` outside a Developer Command Prompt, and
+/// LLVM's `llvm-lib` only in some installs), so there it is a DLL beside the
+/// program, built with the same link driver, and its import library
+/// `<name>.lib` in `libs`.
 fn search_probe(name: &str, attribute: &str) -> (PathBuf, PathBuf) {
     let dir = std::env::temp_dir().join(format!("pepper_{}_{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let libs = dir.join("libs");
     std::fs::create_dir_all(&libs).unwrap();
     let c_path = dir.join(format!("{name}.c"));
-    let object = dir.join(format!("{name}.o"));
-    std::fs::write(&c_path, format!("int {name}(void) {{ return 42; }}\n")).unwrap();
     let clang = pepper_driver::linker::link_driver();
-    let status = Command::new(&clang).arg("-c").arg(&c_path).arg("-o").arg(&object).status().expect("run clang");
-    assert!(status.success(), "clang -c failed");
     let status = if cfg!(windows) {
-        // llvm-lib ships beside clang in the LLVM the compiler uses.
-        let beside = clang.with_file_name("llvm-lib.exe");
-        let archiver = if beside.is_file() { beside } else { PathBuf::from("llvm-lib") };
-        Command::new(archiver).arg(format!("/out:{}", libs.join(format!("{name}.lib")).display())).arg(&object).status().expect("run llvm-lib")
+        std::fs::write(&c_path, format!("__declspec(dllexport) int {name}(void) {{ return 42; }}\n")).unwrap();
+        Command::new(&clang)
+            .arg("-shared")
+            .arg(&c_path)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.dll")))
+            .arg(format!("-Wl,/IMPLIB:{}", libs.join(format!("{name}.lib")).display()))
+            .status()
+            .expect("run clang")
     } else {
+        std::fs::write(&c_path, format!("int {name}(void) {{ return 42; }}\n")).unwrap();
+        let object = dir.join(format!("{name}.o"));
+        let status = Command::new(&clang).arg("-c").arg(&c_path).arg("-o").arg(&object).status().expect("run clang");
+        assert!(status.success(), "clang -c failed");
         Command::new("ar").arg("rcs").arg(libs.join(format!("lib{name}.a"))).arg(&object).status().expect("run ar")
     };
-    assert!(status.success(), "archiving {name} failed");
+    assert!(status.success(), "building library {name} failed");
     std::fs::write(
         dir.join(format!("{name}.pep")),
         format!("{attribute}\nextern int {name}();\n\nmain(): int {{\n    return {name}() == 42 ? 0 : 1;\n}}\n"),
