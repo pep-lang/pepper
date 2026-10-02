@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-89078b78.js";
+            window.path_to_searchindex_js = "searchindex-26f9bf26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7be3830a.js"></script>
@@ -219,7 +219,9 @@ detail.</p>
 generates native code through <a href="https://llvm.org">LLVM</a>, then links an
 executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
-<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
+<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
+to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
+<a href="#webassembly">WebAssembly</a>).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors, methods and <a href="#properties">properties</a>, enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
@@ -4854,7 +4856,7 @@ the small wrappers:</p>
 <p>[Link(name = “abs”)]
 extern int c_abs(int x);
 [Link(name = “llabs”)]
-extern long c_llabs(long x);</p>
+extern i64 c_llabs(i64 x);</p>
 <p>magnitude(x: int): int { return c_abs(x); }
 magnitude(x: long): long { return c_llabs(x); }</p>
 <p>main(): int {
@@ -14705,10 +14707,10 @@ main(): int {
 <tr><th>Function</th><th>Returns</th></tr>
 </thead>
 <tbody>
-<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code> or <code>Windows</code></td></tr>
+<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code>, <code>Windows</code> or <code>Wasi</code></td></tr>
 <tr><td><code>system_name()</code></td><td>the same as text: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code></td></tr>
 <tr><td><code>system_version()</code></td><td>the kernel release on Linux, the product version on macOS (<code>14.5</code>), <code>major.minor.build</code> on Windows</td></tr>
-<tr><td><code>architecture()</code></td><td><code>"x64"</code> or <code>"aarch64"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
+<tr><td><code>architecture()</code></td><td><code>"x64"</code>, <code>"aarch64"</code> or <code>"wasm32"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
 <tr><td><code>hostname()</code></td><td>the machine’s host name</td></tr>
 <tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>’s</td></tr>
 <tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory and the virtual memory page size, in bytes</td></tr>
@@ -15147,6 +15149,17 @@ or reads the wrong bits when the program runs.</p>
 32 bits on Windows, so a C function that takes <code>long</code> needs a different
 prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[Link(name = ...)]</code></a>
 below for an example).</p>
+<h3 id="32-bit-targets"><a class="header" href="#32-bit-targets">32-bit targets</a></h3>
+<p>On a 32-bit target (<code>wasm32-wasip1</code>, see
+<a href="#webassembly">WebAssembly</a>), pointers, C’s <code>long</code> and
+<code>size_t</code> are 32 bits. There, an extern’s <code>long</code> and <code>ulong</code> stand for C’s
+pointer-sized <code>long</code>/<code>ssize_t</code> and <code>unsigned long</code>/<code>size_t</code>: the call passes
+the low 32 bits and widens the result back to 64 (sign-extending a <code>long</code>,
+zero-extending a <code>ulong</code>), so <code>extern ulong strlen(char* s);</code> works
+unchanged. <code>i64</code> and <code>u64</code> stay 64 bits on every target; use them for C’s
+<code>long long</code>, <code>int64_t</code> and <code>off_t</code>. WebAssembly checks every call’s
+signature, so a prototype with the wrong width traps instead of returning
+garbage.</p>
 <p>Some things to know about <code>extern</code> declarations:</p>
 <ul>
 <li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
@@ -15630,16 +15643,17 @@ the same attribute, as <a href="#linking-a-library-from-the-source-link"><code>[
 does on its own:</p>
 <pre><code class="language-pepper"># [Link(name = "symbol")] binds a Pepper name to a C symbol with a different name.
 
-# llabs takes a 64-bit long long on every platform.
+# llabs takes a 64-bit long long on every platform: `i64` in an extern is
+# 64 bits everywhere, where `long` follows the size of a pointer.
 [Link(name = "llabs")]
-extern long absolute(long value);
+extern i64 absolute(i64 value);
 
-# C's long is 64 bits on Linux and macOS but 32 bits on Windows, so
-# the 64-bit labs is only right away from Windows.
-[Target(OS(Windows))]
+# C's long is 64 bits on Linux and macOS but 32 bits on Windows and
+# WebAssembly, so the 64-bit labs is only right on the first two.
+[Target(OS(Windows) || OS(Wasi))]
 [Link(name = "llabs")]
-extern long abs64(long value);
-[Target(!OS(Windows))]
+extern i64 abs64(i64 value);
+[Target(OS(Linux) || OS(Mac))]
 [Link(name = "labs")]
 extern long abs64(long value);
 
@@ -15916,8 +15930,10 @@ version side by side.</p>
 <p><code>Target</code> takes one boolean condition built from these predicates:</p>
 <ul>
 <li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
-<code>MacOS</code>), or <code>Linux</code>.</li>
-<li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code> or <code>aarch64</code>.</li>
+<code>MacOS</code>), <code>Linux</code>, or <code>Wasi</code> (WebAssembly, see
+<a href="#webassembly">below</a>).</li>
+<li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
+<code>aarch64</code>, or <code>wasm32</code>.</li>
 <li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
 can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>); see
 <a href="#build-options">Build options</a>.</li>
@@ -16043,7 +16059,7 @@ platform, even one inside removed code. A misspelled value is always an error,
 never a silent “no match”:</p>
 <pre><code class="language-pepper">[Target(OS(Darwin))] f(): int { return 1; }
 </code></pre>
-<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux) in [Target(OS(Darwin))]
+<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
     1 | [Target(OS(Darwin))] f(): int { return 1; }
       | ^~~~~~~~~~~~~~~~~~~~
 </code></pre>
@@ -16076,12 +16092,14 @@ and object format. The supported targets are each OS on each architecture:</p>
 <tr><td><code>aarch64-apple-darwin</code></td><td>macOS</td><td><code>aarch64</code></td></tr>
 <tr><td><code>x86_64-pc-windows-msvc</code></td><td>Windows</td><td><code>x64</code></td></tr>
 <tr><td><code>aarch64-pc-windows-msvc</code></td><td>Windows</td><td><code>aarch64</code></td></tr>
+<tr><td><code>wasm32-wasip1</code></td><td>Wasi</td><td><code>wasm32</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>clang’s other spellings work too: <code>arm64</code> for <code>aarch64</code>, <code>amd64</code> for
 <code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>). Any
-other triple is an error that lists these.</p>
+other triple is an error that lists these. <code>wasm32-wasi</code>,
+<code>wasm32-unknown-wasi</code> and <code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>.</p>
 <pre><code class="language-sh">pep-build --target aarch64-unknown-linux-gnu main.pep -o main
 </code></pre>
 <p>Linking an executable for another platform needs that platform’s system
@@ -16110,6 +16128,38 @@ and <code>-march=x86-64-v3</code> an x86 one, and <code>native</code>, which nam
 machine you compile on, is an error for a target of another architecture.</p>
 <p>The compiler only builds for the target; copy the executable to a machine
 of that platform to run it.</p>
+<h2 id="webassembly"><a class="header" href="#webassembly">WebAssembly</a></h2>
+<p><code>--target wasm32-wasip1</code> compiles to a WebAssembly module for
+<a href="https://wasi.dev">WASI</a> preview 1, which runtimes such as
+<a href="https://wasmtime.dev">wasmtime</a> run from the command line:</p>
+<pre><code class="language-sh">pep-build --target wasm32-wasip1 --sysroot /opt/wasi-sdk main.pep -o main.wasm
+wasmtime run --dir . main.wasm
+</code></pre>
+<p>Linking needs a <a href="https://github.com/WebAssembly/wasi-sdk">wasi-sdk</a> (its
+sysroot holds wasi-libc and clang’s builtins) and LLVM’s <code>wasm-ld</code>, which the
+compiler finds as it finds <code>lld</code> (also as <code>wasm-ld-20</code>). Name the SDK
+directory, or its <code>share/wasi-sysroot</code>, with <code>--sysroot</code>, or set
+<code>PEPPER_SYSROOT_WASM32_WASIP1</code> or <code>WASI_SDK_PATH</code>. wasi-sdk 25 is the version
+tested. The program needs a runtime’s <code>--dir</code> to reach a directory and
+<code>-S inherit-env</code> (wasmtime) to see the environment.</p>
+<p>WASI preview 1 is a small system, and <code>wasm32</code> is a 32-bit target, so some
+things work differently:</p>
+<ul>
+<li><code>OS(Wasi)</code> code selects the WASI versions of the runtime’s platform layer.
+Code written for <code>!OS(Windows)</code> also compiles for WASI, so check that it
+only calls what wasi-libc has.</li>
+<li>There are no threads and no stack switching: <code>Thread.spawn</code> panics, and
+so does starting a task (<code>async.run</code>, <code>Task.spawn</code>). Mutexes, channels
+and atomics work within the one thread.</li>
+<li>Sockets, TLS, HTTP connections and starting processes return an
+<code>IoError</code> saying they are not supported on WASI.</li>
+<li>Files work through the directories the runtime grants. <code>Metadata</code> has no
+permission bits (<code>read_only</code> is false) and no creation time.</li>
+<li><code>os</code> reports <code>OperatingSystem.Wasi</code>, <code>"wasm32"</code>, an empty host name and
+version, and no total memory.</li>
+<li>Pointers and C’s <code>long</code> and <code>size_t</code> are 32 bits; see
+<a href="#32-bit-targets">32-bit targets</a>.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="build-options"><a class="header" href="#build-options">Build options</a></h1>
 <p>Some code should be optional at build time: linking a library such as
@@ -27781,6 +27831,10 @@ uses.</p>
 <pre><code class="language-pepper">Windows
 </code></pre>
 <p>Windows.</p>
+<h4 id="wasi"><a class="header" href="#wasi">Wasi</a></h4>
+<pre><code class="language-pepper">Wasi
+</code></pre>
+<p>WASI: a WebAssembly runtime such as wasmtime (<code>--target wasm32-wasip1</code>).</p>
 <h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
 <pre><code class="language-pepper">system_os(): OperatingSystem
 </code></pre>
@@ -27802,8 +27856,8 @@ uses.</p>
 <pre><code class="language-pepper">system_name(): String
 </code></pre>
 <p>Returns the name of the operating system the program was built for, in
-lowercase: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code>, for printing and for
-file and directory names.</p>
+lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code> or <code>"wasi"</code>, for printing
+and for file and directory names.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the operating system’s name</li>
@@ -27818,7 +27872,8 @@ file and directory names.</p>
 <p>Returns the operating system’s version: the kernel release on Linux
 (<code>uname -r</code>, such as <code>6.8.0-45-generic</code>), the product version on macOS
 (<code>sw_vers -productVersion</code>, such as <code>14.5</code>), and the major, minor and
-build numbers on Windows (such as <code>10.0.22631</code>).</p>
+build numbers on Windows (such as <code>10.0.22631</code>). WASI does not report
+one.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the version, or an empty String when the system does not report it</li>
@@ -27826,8 +27881,8 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <h2 id="architecture"><a class="header" href="#architecture">architecture</a></h2>
 <pre><code class="language-pepper">[Target(Arch(x64))] architecture(): String
 </code></pre>
-<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
-<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the architecture’s name</li>
@@ -27835,8 +27890,17 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <h2 id="architecture-1"><a class="header" href="#architecture-1">architecture</a></h2>
 <pre><code class="language-pepper">[Target(Arch(aarch64))] architecture(): String
 </code></pre>
-<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
-<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture’s name</li>
+</ul>
+<h2 id="architecture-2"><a class="header" href="#architecture-2">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(wasm32))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the architecture’s name</li>
@@ -27845,7 +27909,7 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <pre><code class="language-pepper">hostname(): String
 </code></pre>
 <p>Returns the machine’s host name, as <code>hostname</code> prints it (on Windows its
-DNS host name).</p>
+DNS host name). WASI does not report one.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the host name, or an empty String when the system does not report it</li>
@@ -27882,7 +27946,7 @@ share a core count once. The same as <code>async.physical_cpus()</code>.</p>
 </code></pre>
 <p>Returns the machine’s physical memory in bytes. Inside a virtual
 machine this is what the guest sees; a container’s memory limit is not
-taken into account.</p>
+taken into account. WASI does not report it.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the total physical memory in bytes, or 0 when the system does not report it</li>
@@ -27891,7 +27955,8 @@ taken into account.</p>
 <pre><code class="language-pepper">page_size(): ulong
 </code></pre>
 <p>Returns the size of a page of virtual memory in bytes: the unit the
-operating system maps memory in, usually 4096 (16384 on Apple silicon).</p>
+operating system maps memory in, usually 4096 (16384 on Apple silicon;
+65536, WebAssembly’s page, on WASI).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the page size in bytes</li>
@@ -27905,7 +27970,8 @@ operating system maps memory in, usually 4096 (16384 on Apple silicon).</p>
 </code></pre>
 <p>Returns the name of the user the program runs as: on POSIX the login
 name of the effective user id (from the user database, else <code>USER</code>),
-and on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>).</p>
+on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>), and on WASI
+<code>USER</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the user name, or none when it cannot be found</li>
@@ -27915,7 +27981,7 @@ and on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>)
 </code></pre>
 <p>Returns the user’s home directory: on POSIX <code>HOME</code>, or the user
 database’s entry when <code>HOME</code> is unset or empty; on Windows
-<code>USERPROFILE</code>.</p>
+<code>USERPROFILE</code>; on WASI <code>HOME</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the home directory, or none when it cannot be found</li>

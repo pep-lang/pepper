@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-89078b78.js";
+            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7be3830a.js"></script>
@@ -208,6 +208,10 @@ uses.</p>
 <pre><code class="language-pepper">Windows
 </code></pre>
 <p>Windows.</p>
+<h4 id="wasi"><a class="header" href="#wasi">Wasi</a></h4>
+<pre><code class="language-pepper">Wasi
+</code></pre>
+<p>WASI: a WebAssembly runtime such as wasmtime (<code>--target wasm32-wasip1</code>).</p>
 <h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
 <pre><code class="language-pepper">system_os(): OperatingSystem
 </code></pre>
@@ -229,8 +233,8 @@ uses.</p>
 <pre><code class="language-pepper">system_name(): String
 </code></pre>
 <p>Returns the name of the operating system the program was built for, in
-lowercase: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code>, for printing and for
-file and directory names.</p>
+lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code> or <code>"wasi"</code>, for printing
+and for file and directory names.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the operating system’s name</li>
@@ -245,7 +249,8 @@ file and directory names.</p>
 <p>Returns the operating system’s version: the kernel release on Linux
 (<code>uname -r</code>, such as <code>6.8.0-45-generic</code>), the product version on macOS
 (<code>sw_vers -productVersion</code>, such as <code>14.5</code>), and the major, minor and
-build numbers on Windows (such as <code>10.0.22631</code>).</p>
+build numbers on Windows (such as <code>10.0.22631</code>). WASI does not report
+one.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the version, or an empty String when the system does not report it</li>
@@ -253,8 +258,8 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <h2 id="architecture"><a class="header" href="#architecture">architecture</a></h2>
 <pre><code class="language-pepper">[Target(Arch(x64))] architecture(): String
 </code></pre>
-<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
-<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the architecture’s name</li>
@@ -262,8 +267,17 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <h2 id="architecture-1"><a class="header" href="#architecture-1">architecture</a></h2>
 <pre><code class="language-pepper">[Target(Arch(aarch64))] architecture(): String
 </code></pre>
-<p>Returns the processor architecture the program was built for: <code>"x64"</code> or
-<code>"aarch64"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture’s name</li>
+</ul>
+<h2 id="architecture-2"><a class="header" href="#architecture-2">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(wasm32))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the architecture’s name</li>
@@ -272,7 +286,7 @@ build numbers on Windows (such as <code>10.0.22631</code>).</p>
 <pre><code class="language-pepper">hostname(): String
 </code></pre>
 <p>Returns the machine’s host name, as <code>hostname</code> prints it (on Windows its
-DNS host name).</p>
+DNS host name). WASI does not report one.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the host name, or an empty String when the system does not report it</li>
@@ -309,7 +323,7 @@ share a core count once. The same as <code>async.physical_cpus()</code>.</p>
 </code></pre>
 <p>Returns the machine’s physical memory in bytes. Inside a virtual
 machine this is what the guest sees; a container’s memory limit is not
-taken into account.</p>
+taken into account. WASI does not report it.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the total physical memory in bytes, or 0 when the system does not report it</li>
@@ -318,7 +332,8 @@ taken into account.</p>
 <pre><code class="language-pepper">page_size(): ulong
 </code></pre>
 <p>Returns the size of a page of virtual memory in bytes: the unit the
-operating system maps memory in, usually 4096 (16384 on Apple silicon).</p>
+operating system maps memory in, usually 4096 (16384 on Apple silicon;
+65536, WebAssembly’s page, on WASI).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the page size in bytes</li>

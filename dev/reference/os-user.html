@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-89078b78.js";
+            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7be3830a.js"></script>
@@ -190,7 +190,8 @@
 </code></pre>
 <p>Returns the name of the user the program runs as: on POSIX the login
 name of the effective user id (from the user database, else <code>USER</code>),
-and on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>).</p>
+on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>), and on WASI
+<code>USER</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the user name, or none when it cannot be found</li>
@@ -200,7 +201,7 @@ and on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>)
 </code></pre>
 <p>Returns the user’s home directory: on POSIX <code>HOME</code>, or the user
 database’s entry when <code>HOME</code> is unset or empty; on Windows
-<code>USERPROFILE</code>.</p>
+<code>USERPROFILE</code>; on WASI <code>HOME</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the home directory, or none when it cannot be found</li>

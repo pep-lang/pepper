@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-89078b78.js";
+            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7be3830a.js"></script>
@@ -295,10 +295,10 @@ main(): int {
 <tr><th>Function</th><th>Returns</th></tr>
 </thead>
 <tbody>
-<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code> or <code>Windows</code></td></tr>
+<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code>, <code>Windows</code> or <code>Wasi</code></td></tr>
 <tr><td><code>system_name()</code></td><td>the same as text: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code></td></tr>
 <tr><td><code>system_version()</code></td><td>the kernel release on Linux, the product version on macOS (<code>14.5</code>), <code>major.minor.build</code> on Windows</td></tr>
-<tr><td><code>architecture()</code></td><td><code>"x64"</code> or <code>"aarch64"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
+<tr><td><code>architecture()</code></td><td><code>"x64"</code>, <code>"aarch64"</code> or <code>"wasm32"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
 <tr><td><code>hostname()</code></td><td>the machine’s host name</td></tr>
 <tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>’s</td></tr>
 <tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory and the virtual memory page size, in bytes</td></tr>

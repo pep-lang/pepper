@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-89078b78.js";
+            window.path_to_searchindex_js = "searchindex-26f9bf26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7be3830a.js"></script>
@@ -221,7 +221,9 @@ detail.</p>
 generates native code through <a href="https://llvm.org">LLVM</a>, then links an
 executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
-<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
+<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
+to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
+<a href="language/platform-selection.html#webassembly">WebAssembly</a>).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
