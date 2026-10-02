@@ -702,3 +702,42 @@ test(): int { return pick((1, 2)); }"#,
     );
     assert!(error.contains("call to 'pick' is ambiguous"), "{}", error);
 }
+
+#[test]
+fn calls_in_a_destructor_resolve_like_calls_in_a_method() {
+    // #482: a `destruct` body skipped type inference, so its literals and
+    // locals had no type when overload resolution ran.
+    let source = r#"
+struct Log { int total; }
+weight(text: String): int { return text.length * 10; }
+weight(n: int): int { return n; }
+struct Guard {
+    Log log;
+    construct(log: Log) { this.log = log; }
+    destruct {
+        var name = "abc";
+        log.total = log.total + weight("ab") + weight(name) + weight(4);
+    }
+}
+struct Holder<T> {
+    Log log;
+    T value;
+    construct(log: Log, value: T) {
+        this.log = log;
+        this.value = value;
+    }
+    destruct {
+        log.total = log.total + weight(value) * 1000;
+    }
+}
+test(): int {
+    var log = Log();
+    {
+        var g = Guard(log);
+        var h = Holder<int>(log, 5);
+    }
+    return log.total;
+}
+"#;
+    assert_eq!(value(source), 5054);
+}

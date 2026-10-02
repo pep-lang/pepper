@@ -845,6 +845,17 @@ fn resolve_once(module: &mut Module) -> bool {
             }
         }
 
+        // Destructor body: typed like a method's (`print("freed")` picks
+        // its overload from the literal's type).
+        if let Some(body) = &mut st.destructor.body {
+            scopes.function = st.destructor.name.clone();
+            scopes.function_loc = st.destructor.loc;
+            scopes.push(&st.destructor.name);
+            scopes.params.push(st.destructor.parameters.clone());
+            resolve_block(body, &mut scopes, &Some(current_struct.clone()));
+            scopes.pop();
+        }
+
         // Methods.
         for method in &mut st.method_members {
             let method_struct = match &method.parent {
