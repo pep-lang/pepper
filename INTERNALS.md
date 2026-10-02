@@ -2394,7 +2394,9 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     always()`, so never skipped, since a skipped job counts as passing) and
     passes only when `test-windows` and `test-linux` succeeded,
     the PR is prose only, or the PR is still a draft (asked again of the API
-    at gate time). It fails on a cancelled run. On a ready PR, `changes`
+    at gate time). It fails on a cancelled run, and when a job it needs was
+    cancelled it runs on `ubuntu-latest` rather than queueing behind the
+    self-hosted test jobs. On a ready PR, `changes`
     first posts an in-progress `test` check run that `test` completes with
     its verdict, so a pass left by a draft run cannot let the PR merge while
     the ready run is still testing it.

@@ -351,10 +351,17 @@ jobs:
   # marking it ready starts the run that tests it). It only reads the results
   # of the jobs it needs, and completes the in-progress `test` check run that
   # `changes` posted with the same verdict.
+  #
+  # When a need was cancelled (a newer push cancels the PR's older runs), the
+  # verdict is a foregone failure, so it runs on a GitHub-hosted runner
+  # instead. On pepper-linux each cancelled run queued behind the long
+  # test-linux jobs: twenty stale runs once sat queued for hours ahead of a
+  # release build. Skipping it instead would be unsafe: a skipped `test` on a
+  # cancelled run of the PR's latest commit would count as passing.
   test:
     if: always()
     needs: [changes, test-windows, test-linux]
-    runs-on: pepper-linux
+    runs-on: ${{ (needs.changes.result == 'cancelled' || needs.test-windows.result == 'cancelled' || needs.test-linux.result == 'cancelled') && 'ubuntu-latest' || 'pepper-linux' }}
     timeout-minutes: 5
     permissions:
       contents: read
