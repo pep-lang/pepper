@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0d7c585c.js";
+            window.path_to_searchindex_js = "searchindex-d9543143.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7cac40fa.js"></script>
+        <script src="toc-65b09c31.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,7 +230,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
-maps and sets, atomics, threads, channels and mutexes, tasks (green threads
+maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
 TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
@@ -5120,7 +5120,9 @@ share storage yet.</li>
 <h1 id="hashing-and-equality"><a class="header" href="#hashing-and-equality">Hashing and equality</a></h1>
 <p><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> find a key by hashing it with <code>hash&lt;K&gt;</code>
 and comparing it with <code>==</code>. What those two mean for a type decides which keys
-count as the same.</p>
+count as the same.
+<code>OrderedMap&lt;K, V&gt;</code> finds keys the same way. For maps that keep their keys
+in order, see <a href="#maps-and-sets">Maps and sets</a>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -5300,6 +5302,172 @@ main(): int {
     return 0;
 }
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="maps-and-sets"><a class="header" href="#maps-and-sets">Maps and sets</a></h1>
+<p>The standard library has three kinds of map, which differ in the order they
+keep their keys in:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Order</th><th>Lookup, insert, remove</th><th>Keys need</th></tr>
+</thead>
+<tbody>
+<tr><td><code>HashMap&lt;K, V&gt;</code>, <code>HashSet&lt;K&gt;</code></td><td>none</td><td>expected O(1)</td><td><code>hash&lt;K&gt;</code> and <code>==</code> (<a href="#hashing-and-equality">Hashing and equality</a>)</td></tr>
+<tr><td><code>Map&lt;K, V&gt;</code>, <code>Set&lt;K&gt;</code></td><td>sorted by key</td><td>O(log n)</td><td><code>compare&lt;K&gt;</code> (below)</td></tr>
+<tr><td><code>OrderedMap&lt;K, V&gt;</code></td><td>the order keys were first inserted</td><td>expected O(1)</td><td><code>hash&lt;K&gt;</code> and <code>==</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>All of them share one API: <code>m[key]</code> reads (a missing key reads as the
+default of <code>V</code>, and is not inserted) and <code>m[key] = value</code> writes; <code>insert</code>,
+<code>get</code>, <code>try_get</code> (an <a href="#optional-values">optional</a>, none when the key is absent),
+<code>contains</code>, <code>remove</code>, <code>count</code>, <code>is_empty</code> and <code>clear</code>. A <code>for</code> loop visits a
+map’s entries as <code>(key, value)</code> <a href="#tuples-and-multiple-return-values">tuples</a> and a set’s members one
+by one. Adding or removing an entry while a loop iterates the map panics
+(“Map modified during iteration”), as it does for <code>Array</code> and <code>HashMap</code>;
+changing the value of a key that is present is allowed.</p>
+<h2 id="sorted-map-and-set"><a class="header" href="#sorted-map-and-set">Sorted: <code>Map</code> and <code>Set</code></a></h2>
+<p><code>Map&lt;K, V&gt;</code> keeps its entries sorted by key, on a red-black tree. Besides
+iterating in order, it answers questions about the order:</p>
+<ul>
+<li><code>first()</code> and <code>last()</code>: the entries with the smallest and largest key.</li>
+<li><code>lower_bound(key)</code>: the first entry whose key is at least <code>key</code>;
+<code>upper_bound(key)</code>: the first whose key is greater.</li>
+<li><code>reversed()</code>: iterates from the largest key down.</li>
+<li><code>range(from, to)</code>: iterates the keys from <code>from</code> up to, not including,
+<code>to</code>.</li>
+</ul>
+<p>Each of the four queries returns an optional <code>(key, value)</code> tuple, none when
+there is no such entry. <code>Set&lt;K&gt;</code> is the same tree without values, and its
+queries return an optional member. An array converts to a <code>Set</code>, so an array
+literal can initialize one.</p>
+<pre><code class="language-pepper">main(): int {
+    var scores = Map&lt;String, int&gt;();
+    scores["carol"] = 91;
+    scores["alice"] = 84;
+    scores["bob"] = 77;
+
+    # Entries come out sorted by key.
+    var names = "";
+    for (var (name, score) in scores) {
+        names = names + name + " ";
+    }
+    assert(names == "alice bob carol ", "key order");
+
+    # Order queries return an optional (key, value) tuple.
+    assert(scores.first().value().0 == "alice", "smallest key");
+    assert(scores.lower_bound("b").value().0 == "bob", "first key &gt;= b");
+    assert(scores.upper_bound("carol").is_none(), "nothing after carol");
+
+    # A key range: from "a" up to, not including, "c".
+    var in_range = 0;
+    for (var (name, score) in scores.range("a", "c")) {
+        in_range += 1;
+    }
+    assert(in_range == 2, "alice and bob");
+
+    # A Set keeps sorted members; an array converts to one.
+    Set&lt;int&gt; primes = [7, 2, 5, 3];
+    var digits = 0;
+    for (var p in primes.reversed()) {
+        digits = digits * 10 + p;
+    }
+    assert(digits == 7532, "descending");
+    return 0;
+}
+</code></pre>
+<h3 id="how-keys-are-ordered"><a class="header" href="#how-keys-are-ordered">How keys are ordered</a></h3>
+<p><code>Map</code> and <code>Set</code> order keys with the generic function <code>compare&lt;K&gt;(a, b)</code>,
+which returns a negative number, zero or a positive number as <code>a</code> sorts
+before, equal to or after <code>b</code>. Two keys that compare equal are the same key.</p>
+<ul>
+<li>Numbers and <code>char</code> compare by value, and <code>String</code> by content (the same
+order as <code>String.compare</code>).</li>
+<li>A struct that declares a <code>&lt;</code> <a href="#operators-1">operator</a> sorts by it:
+the generic <code>compare</code> asks <code>a &lt; b</code> and <code>b &lt; a</code>.</li>
+<li>Any other struct overrides <code>compare&lt;T&gt;</code> for itself, as a hashed key
+overrides <code>hash&lt;T&gt;</code> (see
+<a href="#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a>).</li>
+</ul>
+<pre><code class="language-pepper"># A struct with a `&lt;` operator sorts by it.
+struct Version {
+    int major;
+    int minor;
+
+    construct(this.major = 0, this.minor = 0) {}
+
+    &lt;(other: Version): bool {
+        return major &lt; other.major or (major == other.major and minor &lt; other.minor);
+    }
+}
+
+# A struct without one overrides `compare&lt;T&gt;` for itself.
+struct Point {
+    int x;
+    int y;
+
+    construct(this.x = 0, this.y = 0) {}
+}
+
+compare&lt;Point&gt;(a: Point, b: Point): int {
+    return a.x != b.x ? a.x - b.x : a.y - b.y;
+}
+
+main(): int {
+    var releases = Map&lt;Version, String&gt;();
+    releases[Version(1, 10)] = "third";
+    releases[Version(0, 9)] = "first";
+    releases[Version(1, 2)] = "second";
+    assert(releases.first().value().1 == "first", "0.9 sorts first");
+    assert(releases.last().value().1 == "third", "1.10 sorts last");
+
+    var points = Set&lt;Point&gt;();
+    points.insert(Point(2, 1));
+    points.insert(Point(1, 5));
+    # An equal point (compare returns 0) is the same member.
+    assert(!points.insert(Point(1, 5)), "already a member");
+    assert(points.first().value().x == 1, "sorted by x");
+    return 0;
+}
+</code></pre>
+<p>The order must be consistent: the same two keys must always compare the
+same way, and if <code>a</code> sorts before <code>b</code> and <code>b</code> before <code>c</code>, <code>a</code> sorts before
+<code>c</code>. A struct key whose fields change while it is in a map breaks that
+promise.</p>
+<h2 id="insertion-order-orderedmap"><a class="header" href="#insertion-order-orderedmap">Insertion order: <code>OrderedMap</code></a></h2>
+<p><code>OrderedMap&lt;K, V&gt;</code> hashes its keys like <code>HashMap</code>, and iterates its entries
+in the order their keys were first inserted, like a Python <code>dict</code>. Setting
+the value of a key that is present keeps its place; removing a key and
+inserting it again moves it to the end. The other entries keep their order
+when one is removed.</p>
+<pre><code class="language-pepper">main(): int {
+    var config = OrderedMap&lt;String, String&gt;();
+    config["name"] = "pepper";
+    config["version"] = "0.2";
+    config["license"] = "MIT";
+
+    # Setting a key that is present keeps its place.
+    config["name"] = "Pepper";
+
+    # Removing a key and adding it again moves it to the end.
+    config.remove("version");
+    config["version"] = "0.3";
+
+    var keys = "";
+    for (var (key, value) in config) {
+        keys = keys + key + " ";
+    }
+    assert(keys == "name license version ", "insertion order");
+
+    if (config.try_get("license") is Some(license)) {
+        assert(license == "MIT", "found");
+    }
+    assert(config.try_get("author").is_none(), "absent");
+    return 0;
+}
+</code></pre>
+<p>Use it where the order of the input matters, such as the keys of a
+configuration file that should be written back as they were read.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
 <p>An <strong>enum</strong> is a type with a fixed set of named <strong>cases</strong>. A value of the
@@ -15813,6 +15981,24 @@ value. Expected O(1).</p>
 <ul>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
+<h4 id="try_get"><a class="header" href="#try_get">try_get</a></h4>
+<pre><code class="language-pepper">try_get(key: K): V?
+</code></pre>
+<p>Returns the value stored for <code>key</code>, or none when <code>key</code> is absent.
+Expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or none when absent</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    if (ages.try_get("ada") is Some(age)) {
+        print($"{age}");
+    }
+</code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">remove(key: K): bool
 </code></pre>
@@ -16190,6 +16376,858 @@ panic.</p>
 <li>if a member was added or removed since the iterator was created (“HashSet modified during iteration”)</li>
 <li>if <code>next()</code> was never called or already returned false (“HashSetIterator.current() without a member”)</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/map.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="map-and-set"><a class="header" href="#map-and-set">Map and Set</a></h1>
+<p>Sorted collections: <code>Map&lt;K, V&gt;</code> and <code>Set&lt;K&gt;</code>, kept in key order on a
+red-black tree, and <code>compare&lt;T&gt;</code>, the ordering they sort keys by.</p>
+<p>Source: <code>runtime/map.pep</code></p>
+<h2 id="compare-1"><a class="header" href="#compare-1">compare</a></h2>
+<pre><code class="language-pepper">compare&lt;T&gt;(a: T, b: T): int
+</code></pre>
+<p>Returns a negative number when <code>a</code> sorts before <code>b</code>, zero when they are
+equal, and a positive number when <code>a</code> sorts after <code>b</code>: the order <code>Map</code> and
+<code>Set</code> keep their keys in.</p>
+<p>The generic version compares with <code>&lt;</code>, so it works for every number type,
+<code>char</code>, and any struct that declares a <code>&lt;</code> operator. Two values neither of
+which is <code>&lt;</code> the other are equal keys. <code>String</code> compares by content through
+the concrete <code>compare&lt;String&gt;</code> override.</p>
+<p>A struct with no <code>&lt;</code> operator overrides this function for itself to be a
+<code>Map</code> key or <code>Set</code> element: <code>compare&lt;Point&gt;(a: Point, b: Point): int</code>. The
+order must be a strict weak order (consistent across calls), or the tree
+loses track of its keys.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the values to compare</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first value</li>
+<li><code>b</code> — the second value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, zero or a positive number as <code>a</code> sorts before, equal to or after <code>b</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>compare&lt;String&gt;</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(compare&lt;int&gt;(1, 2) &lt; 0, "1 sorts first");
+    assert(compare&lt;int&gt;(2, 2) == 0, "equal");
+</code></pre>
+<h2 id="compare-1-1"><a class="header" href="#compare-1-1">compare</a></h2>
+<pre><code class="language-pepper">compare&lt;String&gt;(a: String, b: String): int
+</code></pre>
+<p>Compares two Strings by content, the order <code>Map</code> and <code>Set</code> keep <code>String</code>
+keys in: the same as <code>a.compare(b)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first String</li>
+<li><code>b</code> — the second String</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, zero or a positive number as <code>a</code> sorts before, equal to or after <code>b</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(compare&lt;String&gt;("apple", "pear") &lt; 0, "apple sorts first");
+</code></pre>
+<h2 id="map"><a class="header" href="#map">Map</a></h2>
+<pre><code class="language-pepper">struct Map&lt;K, V&gt;
+</code></pre>
+<p>A map from keys of type <code>K</code> to values of type <code>V</code> that keeps its keys
+sorted.</p>
+<p>Keys are ordered by <code>compare&lt;K&gt;</code>: numbers by value, <code>String</code> by content,
+and other structs by their <code>&lt;</code> operator or a <code>compare&lt;K&gt;</code> override. Two
+keys that compare equal are the same key. Lookups, inserts and removals
+take O(log count) time on a red-black tree.</p>
+<p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples in ascending key
+order, <code>reversed()</code> in descending order, and <code>range(from, to)</code> the keys
+from <code>from</code> up to (not including) <code>to</code>. <code>first</code>, <code>last</code>, <code>lower_bound</code>
+and <code>upper_bound</code> find single entries by order.</p>
+<p>The map holds one reference to each stored key and value. It acquires
+them when they are stored and releases them when they are overwritten,
+removed, cleared, or when the map is destroyed.</p>
+<p>For keys kept in the order they were inserted, use <code>OrderedMap</code>; for
+expected O(1) lookups in no order, <code>HashMap</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type; ordered by <code>compare&lt;K&gt;</code></li>
+<li><code>V</code> — the value type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var scores = Map&lt;String, int&gt;();
+    scores["carol"] = 91;
+    scores["alice"] = 84;
+    scores["bob"] = 77;
+    for (var (name, score) in scores) {
+        print($"{name}: {score}");   # alice, bob, carol
+    }
+</code></pre>
+<h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
+<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of entries in the map. O(1).</p>
+<h4 id="is_empty-4"><a class="header" href="#is_empty-4">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the map has no entries. O(1).</p>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h4 id="map-1"><a class="header" href="#map-1">Map()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty map.</p>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="clear-3"><a class="header" href="#clear-3">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes every entry and releases the map’s references to their keys
+and values. O(count).</p>
+<h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
+<pre><code class="language-pepper">contains(key: K): bool
+</code></pre>
+<p>Returns whether the map has an entry for <code>key</code>. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> is present</li>
+</ul>
+<h4 id="insert-2"><a class="header" href="#insert-2">insert</a></h4>
+<pre><code class="language-pepper">insert(key: K, value: V): bool
+</code></pre>
+<p>Maps <code>key</code> to <code>value</code>, adding a new entry or overwriting the value of
+an existing one.</p>
+<p>When the key is already present, only the value is replaced: the map
+keeps the key object it already stores and releases the old value.
+O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to add or update</li>
+<li><code>value</code> — the value to store for <code>key</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when a new key was added, false when an existing key’s value was overwritten</li>
+</ul>
+<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<pre><code class="language-pepper">get(key: K): V
+</code></pre>
+<p>Returns the value stored for <code>key</code>, or the default of <code>V</code> (0, or a
+null reference for struct types) when <code>key</code> is absent. A missing key
+is not inserted. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>try_get</code></li>
+</ul>
+<h4 id="try_get-1"><a class="header" href="#try_get-1">try_get</a></h4>
+<pre><code class="language-pepper">try_get(key: K): V?
+</code></pre>
+<p>Returns the value stored for <code>key</code>, or none when <code>key</code> is absent.
+O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or none when absent</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    if (scores.try_get("alice") is Some(score)) {
+        print($"{score}");
+    }
+</code></pre>
+<h4 id="remove-2"><a class="header" href="#remove-2">remove</a></h4>
+<pre><code class="language-pepper">remove(key: K): bool
+</code></pre>
+<p>Removes the entry for <code>key</code>, releasing the map’s references to its
+key and value. Does nothing when <code>key</code> is absent. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> was present and removed, false when absent</li>
+</ul>
+<h4 id="operator--11"><a class="header" href="#operator--11">operator []</a></h4>
+<pre><code class="language-pepper">[](key: K): V
+</code></pre>
+<p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
+of <code>V</code> and is not inserted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
+</ul>
+<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator []</a></h4>
+<pre><code class="language-pepper">[](key: K, value: V): V
+</code></pre>
+<p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to add or update</li>
+<li><code>value</code> — the value to store for <code>key</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>value</code>, the value of the assignment expression</li>
+</ul>
+<h4 id="first-1"><a class="header" href="#first-1">first</a></h4>
+<pre><code class="language-pepper">first(): (K, V)?
+</code></pre>
+<p>Returns the entry with the smallest key. O(log count).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first <code>(key, value)</code> in key order, or none when the map is empty</li>
+</ul>
+<h4 id="last-1"><a class="header" href="#last-1">last</a></h4>
+<pre><code class="language-pepper">last(): (K, V)?
+</code></pre>
+<p>Returns the entry with the largest key. O(log count).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the last <code>(key, value)</code> in key order, or none when the map is empty</li>
+</ul>
+<h4 id="lower_bound"><a class="header" href="#lower_bound">lower_bound</a></h4>
+<pre><code class="language-pepper">lower_bound(key: K): (K, V)?
+</code></pre>
+<p>Returns the first entry whose key is not less than <code>key</code>: the entry
+for <code>key</code> itself when present, else the next one after it. O(log
+count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to search from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first <code>(key, value)</code> with a key <code>&gt;= key</code>, or none when every key is less</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var after_b = scores.lower_bound("b");   # ("bob", 77)
+</code></pre>
+<h4 id="upper_bound"><a class="header" href="#upper_bound">upper_bound</a></h4>
+<pre><code class="language-pepper">upper_bound(key: K): (K, V)?
+</code></pre>
+<p>Returns the first entry whose key is greater than <code>key</code>. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to search from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first <code>(key, value)</code> with a key <code>&gt; key</code>, or none when no key is greater</li>
+</ul>
+<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): SortedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries as <code>(key, value)</code> tuples in
+ascending key order; <code>for (var (key, value) in map)</code> drives it.</p>
+<p>The iterator holds a reference to the map. Changing a value through
+an existing key while iterating is allowed; adding or removing an
+entry makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first entry</li>
+</ul>
+<h4 id="reversed"><a class="header" href="#reversed">reversed</a></h4>
+<pre><code class="language-pepper">reversed(): SortedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries in descending key order, under
+the same rules as <code>iterate</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the last entry</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    for (var (name, score) in scores.reversed()) {
+        print(name);   # carol, bob, alice
+    }
+</code></pre>
+<h4 id="range"><a class="header" href="#range">range</a></h4>
+<pre><code class="language-pepper">range(from: K, to: K): SortedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries whose keys are at least <code>from</code>
+and less than <code>to</code>, in ascending key order, under the same rules as
+<code>iterate</code>. It is empty when <code>from</code> is not less than <code>to</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the smallest key to visit</li>
+<li><code>to</code> — the key to stop before</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first entry in the range</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    for (var (name, score) in scores.range("a", "c")) {
+        print(name);   # alice, bob
+    }
+</code></pre>
+<h4 id="copy-3"><a class="header" href="#copy-3">copy</a></h4>
+<pre><code class="language-pepper">copy(copies: Copies): Map&lt;K, V&gt;
+</code></pre>
+<p>Returns a deep copy: a new map holding a copy of each key and value,
+made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Map (the
+<code>Copyable&lt;Map&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code> rather than
+this method. O(count log count) plus the cost of copying the entries.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="sortedmapiterator"><a class="header" href="#sortedmapiterator">SortedMapIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct SortedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>An iterator over the entries of a <code>Map</code> as <code>(key, value)</code> tuples, in key
+order or reversed; returned by <code>Map.iterate()</code>, <code>reversed()</code> and
+<code>range(from, to)</code>, and driven by <code>for (var (key, value) in ...)</code>.</p>
+<p>Holds a reference to the map. It is fail-fast: adding or removing an
+entry after the iterator was created makes its next <code>next()</code> or
+<code>current()</code> panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type of the map</li>
+<li><code>V</code> — the value type of the map</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Map.iterate</code></li>
+</ul>
+<h3 id="constructor-1-2"><a class="header" href="#constructor-1-2">Constructor</a></h3>
+<h4 id="sortedmapiterator-1"><a class="header" href="#sortedmapiterator-1">SortedMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Map&lt;K, V&gt;, start: ulong, stop: ulong, reverse: bool)
+</code></pre>
+<p>Creates an iterator over <code>source</code> from node <code>start</code> up to node <code>stop</code>.
+Internal: call <code>Map.iterate</code>, <code>reversed</code> or <code>range</code> instead.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the map to iterate</li>
+<li><code>start</code> — the first node to visit</li>
+<li><code>stop</code> — the node to stop before, 0 for the end</li>
+<li><code>reverse</code> — whether to step in descending key order</li>
+</ul>
+<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
+<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“Map modified during iteration”)</li>
+</ul>
+<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<pre><code class="language-pepper">current(): (K, V)
+</code></pre>
+<p>Returns the entry the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry as a <code>(key, value)</code> tuple</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“Map modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“SortedMapIterator.current() without an entry”)</li>
+</ul>
+<h2 id="set"><a class="header" href="#set">Set</a></h2>
+<pre><code class="language-pepper">struct Set&lt;K&gt;
+</code></pre>
+<p>A set of distinct elements of type <code>K</code> kept in sorted order, on the same
+red-black tree as <code>Map</code> but without values.</p>
+<p>Elements are ordered by <code>compare&lt;K&gt;</code> (see <code>Map</code>); two elements that
+compare equal are the same member. Membership tests, inserts and removals
+take O(log count) time. <code>iterate()</code> visits the members in ascending
+order, <code>reversed()</code> in descending order, and <code>range(from, to)</code> the
+members from <code>from</code> up to (not including) <code>to</code>.</p>
+<p>The set holds one reference to each member, acquired on insert and
+released on remove, on <code>clear</code>, or when the set is destroyed.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the element type; ordered by <code>compare&lt;K&gt;</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    Set&lt;int&gt; primes = [7, 2, 5, 3];
+    for (var p in primes) {
+        print($"{p}");   # 2, 3, 5, 7
+    }
+</code></pre>
+<h3 id="properties-1-3"><a class="header" href="#properties-1-3">Properties</a></h3>
+<h4 id="count-1-2"><a class="header" href="#count-1-2">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of members. O(1).</p>
+<h4 id="is_empty-1-2"><a class="header" href="#is_empty-1-2">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the set has no members. O(1).</p>
+<h3 id="constructors-3"><a class="header" href="#constructors-3">Constructors</a></h3>
+<h4 id="set-1"><a class="header" href="#set-1">Set()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty set.</p>
+<h4 id="set-2"><a class="header" href="#set-2">Set()</a></h4>
+<pre><code class="language-pepper">[Implicit] construct(items: Array&lt;K&gt;)
+</code></pre>
+<p>Creates a set holding each element of <code>items</code> once.</p>
+<p>The constructor is <code>[Implicit]</code>: an array converts to a set wherever
+a set is expected, so an array literal can initialize one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to insert; duplicates are kept once</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    Set&lt;String&gt; keywords = ["while", "if", "else"];
+    assert(keywords.first().value() == "else", "sorted");
+</code></pre>
+<h3 id="methods-2-3"><a class="header" href="#methods-2-3">Methods</a></h3>
+<h4 id="clear-1-2"><a class="header" href="#clear-1-2">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes every member and releases the set’s references to them.
+O(count).</p>
+<h4 id="contains-1-2"><a class="header" href="#contains-1-2">contains</a></h4>
+<pre><code class="language-pepper">contains(key: K): bool
+</code></pre>
+<p>Returns whether <code>key</code> is a member. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the element to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> is a member</li>
+</ul>
+<h4 id="insert-1-2"><a class="header" href="#insert-1-2">insert</a></h4>
+<pre><code class="language-pepper">insert(key: K): bool
+</code></pre>
+<p>Adds <code>key</code> to the set if it is not already a member. When an equal
+member exists, the set keeps the member it has. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the element to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> was added, false when it was already a member</li>
+</ul>
+<h4 id="remove-1-1"><a class="header" href="#remove-1-1">remove</a></h4>
+<pre><code class="language-pepper">remove(key: K): bool
+</code></pre>
+<p>Removes <code>key</code> from the set, releasing the set’s reference to the
+member. Does nothing when <code>key</code> is not a member. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the element to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> was a member and was removed, false otherwise</li>
+</ul>
+<h4 id="first-1-1"><a class="header" href="#first-1-1">first</a></h4>
+<pre><code class="language-pepper">first(): K?
+</code></pre>
+<p>Returns the smallest member. O(log count).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the smallest member, or none when the set is empty</li>
+</ul>
+<h4 id="last-1-1"><a class="header" href="#last-1-1">last</a></h4>
+<pre><code class="language-pepper">last(): K?
+</code></pre>
+<p>Returns the largest member. O(log count).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the largest member, or none when the set is empty</li>
+</ul>
+<h4 id="lower_bound-1"><a class="header" href="#lower_bound-1">lower_bound</a></h4>
+<pre><code class="language-pepper">lower_bound(key: K): K?
+</code></pre>
+<p>Returns the smallest member that is not less than <code>key</code>. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the element to search from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first member <code>&gt;= key</code>, or none when every member is less</li>
+</ul>
+<h4 id="upper_bound-1"><a class="header" href="#upper_bound-1">upper_bound</a></h4>
+<pre><code class="language-pepper">upper_bound(key: K): K?
+</code></pre>
+<p>Returns the smallest member greater than <code>key</code>. O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the element to search from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first member <code>&gt; key</code>, or none when no member is greater</li>
+</ul>
+<h4 id="iterate-1-2"><a class="header" href="#iterate-1-2">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): SortedSetIterator&lt;K&gt;
+</code></pre>
+<p>Returns an iterator over the members in ascending order;
+<code>for (var x in set)</code> drives it.</p>
+<p>The iterator holds a reference to the set. Adding or removing a member
+while iterating makes the iterator’s next <code>next()</code> or <code>current()</code>
+panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the smallest member</li>
+</ul>
+<h4 id="reversed-1"><a class="header" href="#reversed-1">reversed</a></h4>
+<pre><code class="language-pepper">reversed(): SortedSetIterator&lt;K&gt;
+</code></pre>
+<p>Returns an iterator over the members in descending order, under the
+same rules as <code>iterate</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the largest member</li>
+</ul>
+<h4 id="range-1"><a class="header" href="#range-1">range</a></h4>
+<pre><code class="language-pepper">range(from: K, to: K): SortedSetIterator&lt;K&gt;
+</code></pre>
+<p>Returns an iterator over the members that are at least <code>from</code> and
+less than <code>to</code>, in ascending order, under the same rules as <code>iterate</code>.
+It is empty when <code>from</code> is not less than <code>to</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the smallest member to visit</li>
+<li><code>to</code> — the element to stop before</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first member in the range</li>
+</ul>
+<h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
+<pre><code class="language-pepper">copy(copies: Copies): Set&lt;K&gt;
+</code></pre>
+<p>Returns a deep copy: a new set holding a copy of each member, made
+with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Set (the
+<code>Copyable&lt;Set&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than this
+method.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="sortedsetiterator"><a class="header" href="#sortedsetiterator">SortedSetIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct SortedSetIterator&lt;K&gt;
+</code></pre>
+<p>An <code>Iterator&lt;K&gt;</code> over the members of a <code>Set</code>, in order or reversed;
+returned by <code>Set.iterate()</code>, <code>reversed()</code> and <code>range(from, to)</code>, and
+driven by <code>for (var x in ...)</code>.</p>
+<p>Holds a reference to the set. It is fail-fast: adding or removing a member
+after the iterator was created makes its next <code>next()</code> or <code>current()</code>
+panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the element type of the set</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Set.iterate</code></li>
+</ul>
+<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
+<h4 id="sortedsetiterator-1"><a class="header" href="#sortedsetiterator-1">SortedSetIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Set&lt;K&gt;, start: ulong, stop: ulong, reverse: bool)
+</code></pre>
+<p>Creates an iterator over <code>source</code> from node <code>start</code> up to node <code>stop</code>.
+Internal: call <code>Set.iterate</code>, <code>reversed</code> or <code>range</code> instead.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the set to iterate</li>
+<li><code>start</code> — the first node to visit</li>
+<li><code>stop</code> — the node to stop before, 0 for the end</li>
+<li><code>reverse</code> — whether to step in descending order</li>
+</ul>
+<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h4 id="next-1-2"><a class="header" href="#next-1-2">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“Set modified during iteration”)</li>
+</ul>
+<h4 id="current-1-2"><a class="header" href="#current-1-2">current</a></h4>
+<pre><code class="language-pepper">current(): K
+</code></pre>
+<p>Returns the member the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“Set modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“SortedSetIterator.current() without a member”)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/ordered_map.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="orderedmap"><a class="header" href="#orderedmap">OrderedMap</a></h1>
+<p><code>OrderedMap&lt;K, V&gt;</code>: a hash map that keeps its keys in the order they were
+first inserted.</p>
+<p>Source: <code>runtime/ordered_map.pep</code></p>
+<h2 id="orderedmap-1"><a class="header" href="#orderedmap-1">OrderedMap</a></h2>
+<pre><code class="language-pepper">struct OrderedMap&lt;K, V&gt;
+</code></pre>
+<p>A hash map that iterates its entries in the order their keys were first
+inserted, like Python’s <code>dict</code>.</p>
+<p>Keys are hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code>, as in <code>HashMap</code>.
+Lookups, inserts and removals take expected O(1) time. Setting the value
+of a key that is already present keeps its position; removing a key and
+inserting it again moves it to the end.</p>
+<p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples in insertion
+order. The map holds one reference to each stored key and value, acquired
+when they are stored and released when they are overwritten, removed,
+cleared, or when the map is destroyed.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
+<li><code>V</code> — the value type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var config = OrderedMap&lt;String, String&gt;();
+    config["name"] = "pepper";
+    config["version"] = "0.2";
+    config["license"] = "MIT";
+    for (var (key, value) in config) {
+        print($"{key} = {value}");   # name, version, license
+    }
+</code></pre>
+<h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
+<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of entries in the map. O(1).</p>
+<h4 id="is_empty-5"><a class="header" href="#is_empty-5">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the map has no entries. O(1).</p>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h4 id="orderedmap-2"><a class="header" href="#orderedmap-2">OrderedMap()</a></h4>
+<pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
+</code></pre>
+<p>Creates an empty map whose table has room for at least
+<code>initial_capacity</code> slots (see <code>HashMap</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>initial_capacity</code> — the minimum number of slots in the table</li>
+</ul>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h4 id="clear-4"><a class="header" href="#clear-4">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes every entry and releases the map’s references to their keys
+and values. O(capacity).</p>
+<h4 id="contains-4"><a class="header" href="#contains-4">contains</a></h4>
+<pre><code class="language-pepper">contains(key: K): bool
+</code></pre>
+<p>Returns whether the map has an entry for <code>key</code>. Expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> is present</li>
+</ul>
+<h4 id="insert-3"><a class="header" href="#insert-3">insert</a></h4>
+<pre><code class="language-pepper">insert(key: K, value: V): bool
+</code></pre>
+<p>Maps <code>key</code> to <code>value</code>. A new key is added at the end of the order; an
+existing key keeps its position (and the key object the map already
+stores), and only its value is replaced. Expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to add or update</li>
+<li><code>value</code> — the value to store for <code>key</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when a new key was added, false when an existing key’s value was overwritten</li>
+</ul>
+<h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
+<pre><code class="language-pepper">get(key: K): V
+</code></pre>
+<p>Returns the value stored for <code>key</code>, or the default of <code>V</code> (0, or a
+null reference for struct types) when <code>key</code> is absent. A missing key
+is not inserted. Expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>try_get</code></li>
+</ul>
+<h4 id="try_get-2"><a class="header" href="#try_get-2">try_get</a></h4>
+<pre><code class="language-pepper">try_get(key: K): V?
+</code></pre>
+<p>Returns the value stored for <code>key</code>, or none when <code>key</code> is absent.
+Expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or none when absent</li>
+</ul>
+<h4 id="remove-3"><a class="header" href="#remove-3">remove</a></h4>
+<pre><code class="language-pepper">remove(key: K): bool
+</code></pre>
+<p>Removes the entry for <code>key</code>, releasing the map’s references to its
+key and value. The other entries keep their order. Does nothing when
+<code>key</code> is absent. Amortized expected O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>key</code> was present and removed, false when absent</li>
+</ul>
+<h4 id="operator--12"><a class="header" href="#operator--12">operator []</a></h4>
+<pre><code class="language-pepper">[](key: K): V
+</code></pre>
+<p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
+of <code>V</code> and is not inserted.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look up</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
+</ul>
+<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator []</a></h4>
+<pre><code class="language-pepper">[](key: K, value: V): V
+</code></pre>
+<p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to add or update</li>
+<li><code>value</code> — the value to store for <code>key</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>value</code>, the value of the assignment expression</li>
+</ul>
+<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): OrderedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries as <code>(key, value)</code> tuples in
+insertion order; <code>for (var (key, value) in map)</code> drives it.</p>
+<p>The iterator holds a reference to the map. Changing a value through
+an existing key while iterating is allowed; adding or removing an
+entry makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first entry</li>
+</ul>
+<h4 id="copy-4"><a class="header" href="#copy-4">copy</a></h4>
+<pre><code class="language-pepper">copy(copies: Copies): OrderedMap&lt;K, V&gt;
+</code></pre>
+<p>Returns a deep copy: a new map holding a copy of each key and value,
+in the same order, made with <code>copies.copy</code>. This is how <code>copy(value)</code>
+copies an OrderedMap (the <code>Copyable&lt;OrderedMap&lt;K, V&gt;&gt;</code>
+implementation); call <code>copy(map)</code> rather than this method.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="orderedmapiterator"><a class="header" href="#orderedmapiterator">OrderedMapIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct OrderedMapIterator&lt;K, V&gt;
+</code></pre>
+<p>An iterator over the entries of an <code>OrderedMap</code> as <code>(key, value)</code> tuples
+in insertion order; returned by <code>OrderedMap.iterate()</code> and driven by
+<code>for (var (key, value) in map)</code>.</p>
+<p>Holds a reference to the map. It is fail-fast: adding or removing an
+entry after the iterator was created makes its next <code>next()</code> or
+<code>current()</code> panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type of the map</li>
+<li><code>V</code> — the value type of the map</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>OrderedMap.iterate</code></li>
+</ul>
+<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
+<h4 id="orderedmapiterator-1"><a class="header" href="#orderedmapiterator-1">OrderedMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: OrderedMap&lt;K, V&gt;)
+</code></pre>
+<p>Creates an iterator positioned before the first entry of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the map to iterate</li>
+</ul>
+<h3 id="methods-1-5"><a class="header" href="#methods-1-5">Methods</a></h3>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“OrderedMap modified during iteration”)</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">current(): (K, V)
+</code></pre>
+<p>Returns the entry the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry as a <code>(key, value)</code> tuple</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“OrderedMap modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“OrderedMapIterator.current() without an entry”)</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/iterator.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="iterators"><a class="header" href="#iterators">Iterators</a></h1>
 <p>Source: <code>runtime/iterator.pep</code></p>
@@ -16245,8 +17283,8 @@ which a <code>for</code> loop drives through the trait.</p>
         return total;
     }
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
-<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -16256,7 +17294,7 @@ false it must keep returning false.</p>
 <ul>
 <li>true if there is a current element, false when the elements are exhausted</li>
 </ul>
-<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -16266,7 +17304,7 @@ is an error; the runtime’s iterators panic in that case.</p>
 <ul>
 <li>the current element</li>
 </ul>
-<h4 id="map"><a class="header" href="#map">map</a></h4>
+<h4 id="map-2"><a class="header" href="#map-2">map</a></h4>
 <pre><code class="language-pepper">map&lt;U&gt;(transform: (T) =&gt; U): MapIterator&lt;T, U&gt;
 </code></pre>
 <p>Returns an iterator over <code>transform</code> applied to each element, in order.</p>
@@ -16392,7 +17430,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
@@ -16402,8 +17440,8 @@ passed through the transform function.</p>
 <li><code>source</code> — the iterator to transform</li>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
-<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
-<h4 id="next-1-2"><a class="header" href="#next-1-2">next</a></h4>
+<h3 id="methods-1-6"><a class="header" href="#methods-1-6">Methods</a></h3>
+<h4 id="next-1-3"><a class="header" href="#next-1-3">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -16411,7 +17449,7 @@ passed through the transform function.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-1-2"><a class="header" href="#current-1-2">current</a></h4>
+<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
 <pre><code class="language-pepper">current(): U
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
@@ -16432,7 +17470,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="constructor-1-2"><a class="header" href="#constructor-1-2">Constructor</a></h3>
+<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -16442,7 +17480,7 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-2-3"><a class="header" href="#methods-2-3">Methods</a></h3>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
 <h4 id="next-2-1"><a class="header" href="#next-2-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -16473,7 +17511,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>Iterator.enumerate</code></li>
 </ul>
-<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
+<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
 <h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -16482,7 +17520,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>source</code> — the iterator to number</li>
 </ul>
-<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
 <h4 id="next-3-1"><a class="header" href="#next-3-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -16525,7 +17563,7 @@ paired in step, until either runs out.</p>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
 <h3 id="methods-4-1"><a class="header" href="#methods-4-1">Methods</a></h3>
-<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<h4 id="next-4-1"><a class="header" href="#next-4-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
@@ -16534,7 +17572,7 @@ run out.</p>
 <ul>
 <li>true if both have a current element, false when either is exhausted</li>
 </ul>
-<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<h4 id="current-4-1"><a class="header" href="#current-4-1">current</a></h4>
 <pre><code class="language-pepper">current(): (T, U)
 </code></pre>
 <p>Returns the pair the last successful <code>next()</code> moved to.</p>
@@ -16569,7 +17607,7 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
     }
 </code></pre>
 <h3 id="methods-5-1"><a class="header" href="#methods-5-1">Methods</a></h3>
-<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
+<h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
 <p>Returns a new iterator positioned before the first element.</p>
@@ -16636,7 +17674,7 @@ has nothing to bind.</p>
         return open;   # 0: the session was destroyed at the end of the block
     }
 </code></pre>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -16693,7 +17731,7 @@ freely.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(target: T)
 </code></pre>
@@ -16702,7 +17740,7 @@ freely.</p>
 <ul>
 <li><code>target</code> — the object to point at; a null reference makes a weak reference that is always expired</li>
 </ul>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="expired"><a class="header" href="#expired">expired</a></h4>
 <pre><code class="language-pepper">expired(): bool
 </code></pre>
@@ -16742,7 +17780,7 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(message: String = "")
 </code></pre>
@@ -16836,7 +17874,7 @@ nothing, so it only checks that the result is Ok.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">is_ok(): bool
 </code></pre>
@@ -16991,7 +18029,7 @@ given a value is None.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var nothing = Optional&lt;String&gt;.none();
 </code></pre>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
 <pre><code class="language-pepper">is_some(): bool
 </code></pre>
@@ -17008,7 +18046,7 @@ given a value is None.</p>
 <ul>
 <li>true when the optional is None</li>
 </ul>
-<h4 id="operator--11"><a class="header" href="#operator--11">operator !!</a></h4>
+<h4 id="operator--13"><a class="header" href="#operator--13">operator !!</a></h4>
 <pre><code class="language-pepper">!!(): bool
 </code></pre>
 <p>Reports whether this optional holds a value: the truth test, so an
@@ -17345,7 +18383,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(code: ErrorCode = 0, message: String = "")
 </code></pre>
@@ -17358,7 +18396,7 @@ predicate holds for it.</p>
 <li><code>message</code> — the human-readable description</li>
 </ul>
 <h3 id="static-methods-4"><a class="header" href="#static-methods-4">Static methods</a></h3>
-<h4 id="last-1"><a class="header" href="#last-1">last</a></h4>
+<h4 id="last-2"><a class="header" href="#last-2">last</a></h4>
 <pre><code class="language-pepper">static last(): IoError
 </code></pre>
 <p>Captures the calling thread’s last platform error now: <code>errno</code> on
@@ -17370,7 +18408,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
 <h4 id="kind"><a class="header" href="#kind">kind</a></h4>
 <pre><code class="language-pepper">kind(): ErrorKind
 </code></pre>
@@ -17606,13 +18644,13 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
-<h4 id="is_empty-4"><a class="header" href="#is_empty-4">is_empty</a></h4>
+<h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
+<h4 id="is_empty-6"><a class="header" href="#is_empty-6">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the path has no text at all. File-system operations
 on the empty path fail.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
@@ -17657,7 +18695,7 @@ extension”; it now returns none.</p>
 <ul>
 <li>the index of the extension’s dot, or none when the name has no such dot (<code>noext</code>, <code>.bashrc</code>, the empty name)</li>
 </ul>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="to_string-22"><a class="header" href="#to_string-22">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -17981,7 +19019,7 @@ removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).
         print(real.value().to_string());
     }
 </code></pre>
-<h4 id="operator--12"><a class="header" href="#operator--12">operator ==</a></h4>
+<h4 id="operator--14"><a class="header" href="#operator--14">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths have exactly the same text. The comparison
@@ -17997,7 +19035,7 @@ results to ignore spelling differences.</p>
 <ul>
 <li>true when both paths’ texts are equal</li>
 </ul>
-<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator !=</a></h4>
+<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths differ in their text: the opposite of <code>==</code>,
@@ -18052,13 +19090,13 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.value();
 </code></pre>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">read(v: bool): OpenOptions
 </code></pre>
@@ -18225,7 +19263,7 @@ a reparse point.</p>
 <ul>
 <li><code>offset</code> — the new position; negative is an error</li>
 </ul>
-<h4 id="current-5"><a class="header" href="#current-5">Current</a></h4>
+<h4 id="current-6"><a class="header" href="#current-6">Current</a></h4>
 <pre><code class="language-pepper">Current(offset: Offset)
 </code></pre>
 <p><code>offset</code> bytes from the current position.</p>
@@ -18335,7 +19373,7 @@ that do not record it.</p>
 <p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
 (<code>mode &amp; 07777</code>, for example 256 for owner read); on Windows the
 <code>FILE_ATTRIBUTE_*</code> bits.</p>
-<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
+<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
 <h4 id="metadata-1-1"><a class="header" href="#metadata-1-1">Metadata()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18379,7 +19417,7 @@ kinds apart portably.</p>
 <p>The path the File was opened with; <code>&lt;stdin&gt;</code>, <code>&lt;stdout&gt;</code> or
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
-<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
+<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
 <h4 id="file-3"><a class="header" href="#file-3">File()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18613,7 +19651,7 @@ leaves it truncated or partly written.</p>
         return 1;
     }
 </code></pre>
-<h4 id="copy-3"><a class="header" href="#copy-3">copy</a></h4>
+<h4 id="copy-5"><a class="header" href="#copy-5">copy</a></h4>
 <pre><code class="language-pepper">static copy(from: Path, to: Path): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Copies the contents of the file <code>from</code> to <code>to</code>, creating <code>to</code> or
@@ -18653,7 +19691,7 @@ fails rather than copying.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
-<h4 id="remove-2"><a class="header" href="#remove-2">remove</a></h4>
+<h4 id="remove-4"><a class="header" href="#remove-4">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Deletes the file at <code>path</code>. A symlink is removed itself, not its
@@ -18673,7 +19711,7 @@ target. Directories are not removed: use <code>Directory.remove</code> or
         return 1;
     }
 </code></pre>
-<h3 id="methods-1-5"><a class="header" href="#methods-1-5">Methods</a></h3>
+<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
 <h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -19030,14 +20068,14 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
 false and <code>file_type</code> <code>Other</code>. Entries are normally obtained from
 <code>Directory.entries()</code>.</p>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
@@ -19077,7 +20115,7 @@ afresh.</p>
 <pre><code class="language-pepper">Path path
 </code></pre>
 <p>The directory’s path, as given to <code>open</code>.</p>
-<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
+<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
 <h4 id="directory-2"><a class="header" href="#directory-2">Directory()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19145,7 +20183,7 @@ directories at the same time.</p>
 
     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
 </code></pre>
-<h4 id="remove-3"><a class="header" href="#remove-3">remove</a></h4>
+<h4 id="remove-5"><a class="header" href="#remove-5">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Removes an empty directory (<code>rmdir</code> on POSIX, <code>RemoveDirectoryW</code> on
@@ -19193,7 +20231,7 @@ Windows a read-only file inside the tree is such a failure
         print(r.error().message);
     }
 </code></pre>
-<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
+<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
 <pre><code class="language-pepper">static current(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
@@ -19244,7 +20282,7 @@ a root, or <code>.</code> if that call fails.</p>
 
     var scratch = io.Directory.temp().join("my-tool");
 </code></pre>
-<h3 id="methods-1-6"><a class="header" href="#methods-1-6">Methods</a></h3>
+<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
 <h4 id="entries"><a class="header" href="#entries">entries</a></h4>
 <pre><code class="language-pepper">entries(): IoResult&lt;DirEntry[]&gt;
 </code></pre>
@@ -19265,7 +20303,7 @@ at a time instead, loop over the <code>Directory</code> itself (see <code>iterat
         var n = list.value().count;
     }
 </code></pre>
-<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
+<h4 id="iterate-6"><a class="header" href="#iterate-6">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): DirectoryIterator
 </code></pre>
 <p>Returns an iterator that reads the directory’s listing one entry at a
@@ -19314,7 +20352,7 @@ iterator is released.</p>
         var entry = it.current();
     }
 </code></pre>
-<h3 id="constructor-2-4"><a class="header" href="#constructor-2-4">Constructor</a></h3>
+<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
 <h4 id="directoryiterator-1"><a class="header" href="#directoryiterator-1">DirectoryIterator()</a></h4>
 <pre><code class="language-pepper">construct(path: Path)
 </code></pre>
@@ -19324,8 +20362,8 @@ is opened until the first <code>next()</code>.</p>
 <ul>
 <li><code>path</code> — the directory to list</li>
 </ul>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next entry, opening the listing on the first call.</p>
@@ -19334,7 +20372,7 @@ is opened until the first <code>next()</code>.</p>
 <ul>
 <li>true if there is a current element (an entry, or the error that ends the listing), false once the listing has ended</li>
 </ul>
-<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
+<h4 id="current-1-4"><a class="header" href="#current-1-4">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;DirEntry&gt;
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -19375,7 +20413,7 @@ that maps it are different values.</p>
     print(a.is_v4());         # true
     print(b.to_string());     # 2001:db8::1
 </code></pre>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19479,7 +20517,7 @@ accepted.</p>
 <pre><code class="language-pepper">    var r = IpAddress.parse("10.0.0.300");
     print(r.is_err());   # true: 300 is out of range
 </code></pre>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
 <pre><code class="language-pepper">is_v4(): bool
 </code></pre>
@@ -19537,7 +20575,7 @@ IPv4-mapped address).</p>
 <ul>
 <li>the text form, which <code>IpAddress.parse</code> reads back</li>
 </ul>
-<h4 id="operator--13"><a class="header" href="#operator--13">operator ==</a></h4>
+<h4 id="operator--15"><a class="header" href="#operator--15">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses are the same: same family and same
@@ -19551,7 +20589,7 @@ address that maps it.</p>
 <ul>
 <li>true when both are equal</li>
 </ul>
-<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator !=</a></h4>
+<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator !=</a></h4>
 <pre><code class="language-pepper">!=(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses differ.</p>
@@ -19583,7 +20621,7 @@ form is <code>address:port</code> for IPv4 and <code>[address]:port</code> for I
     var local = io.SocketAddress.parse("[::1]:443").value();
     print(local.port());   # 443
 </code></pre>
-<h3 id="constructors-3"><a class="header" href="#constructors-3">Constructors</a></h3>
+<h3 id="constructors-4"><a class="header" href="#constructors-4">Constructors</a></h3>
 <h4 id="socketaddress-1"><a class="header" href="#socketaddress-1">SocketAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19617,7 +20655,7 @@ syntax of <code>IpAddress.parse</code> and a decimal port from 0 to 65535.</p>
 <pre><code class="language-pepper">    var a = SocketAddress.parse("127.0.0.1:8080").value();
     var b = SocketAddress.parse("[::1]:8080").value();
 </code></pre>
-<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
+<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
 <h4 id="address"><a class="header" href="#address">address</a></h4>
 <pre><code class="language-pepper">address(): IpAddress
 </code></pre>
@@ -19750,7 +20788,7 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
         stream.write_all("hello " + peer.to_string());
     }
 </code></pre>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -19769,7 +20807,7 @@ fails. Use <code>TcpListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
 </ul>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -19839,7 +20877,7 @@ listener accepts, as an <code>IoResult&lt;TcpStream&gt;</code>.</p>
 item rather than ending the iteration. The iteration ends once the
 listener is closed. The iterator holds a reference to the listener, so
 the listener stays open while the iterator lives.</p>
-<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
+<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
 <h4 id="incoming-2"><a class="header" href="#incoming-2">Incoming()</a></h4>
 <pre><code class="language-pepper">construct(listener: TcpListener)
 </code></pre>
@@ -19848,8 +20886,8 @@ the listener stays open while the iterator lives.</p>
 <ul>
 <li><code>listener</code> — the listener to accept on</li>
 </ul>
-<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
-<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next connection.</p>
@@ -19857,7 +20895,7 @@ the listener stays open while the iterator lives.</p>
 <ul>
 <li>true with the connection or the accept error as the current item; false once the listener is closed</li>
 </ul>
-<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
+<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;TcpStream&gt;
 </code></pre>
 <p>Returns the item the last successful <code>next()</code> moved to.</p>
@@ -19906,7 +20944,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-2-5"><a class="header" href="#constructor-2-5">Constructor</a></h3>
+<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
 <h4 id="sharedtcplistener-1"><a class="header" href="#sharedtcplistener-1">SharedTcpListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -19929,7 +20967,7 @@ them (<code>accept</code> then fails and the loop returns).</p>
 <ul>
 <li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
+<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
 <h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
 </code></pre>
@@ -20034,7 +21072,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
+<h3 id="methods-3-4"><a class="header" href="#methods-3-4">Methods</a></h3>
 <h4 id="is_open-1-1"><a class="header" href="#is_open-1-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -20412,7 +21450,7 @@ value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
@@ -20553,7 +21591,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
         return 0;
     }
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
@@ -20567,7 +21605,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <pre><code class="language-pepper">    var a = async.Atomic&lt;int&gt;(41);
     var p = async.Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">load(): T
 </code></pre>
@@ -20792,7 +21830,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
@@ -20828,7 +21866,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
     worker.join();
 </code></pre>
-<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
+<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
@@ -20857,7 +21895,7 @@ early.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">id(): ThreadId
 </code></pre>
@@ -20951,7 +21989,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -20960,8 +21998,8 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
-<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the calling thread’s value.</p>
@@ -20971,7 +22009,7 @@ thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var va
 <ul>
 <li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
-<h4 id="set"><a class="header" href="#set">set</a></h4>
+<h4 id="set-3"><a class="header" href="#set-3">set</a></h4>
 <pre><code class="language-pepper">set([Move] value: T)
 </code></pre>
 <p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
@@ -21016,7 +22054,7 @@ or last called <code>clear()</code>.</p>
 <ul>
 <li>true if this thread has a value</li>
 </ul>
-<h4 id="clear-3"><a class="header" href="#clear-3">clear</a></h4>
+<h4 id="clear-5"><a class="header" href="#clear-5">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes the calling thread’s value, releasing it for a struct <code>T</code>.
@@ -21032,7 +22070,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-thread value</li>
 </ul>
-<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
+<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
 <h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: ThreadLocal&lt;T&gt;)
 </code></pre>
@@ -21042,7 +22080,7 @@ as <code>local.enter()</code>.</p>
 <ul>
 <li><code>local</code> — the thread-local variable</li>
 </ul>
-<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
+<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
 <h4 id="enter-1-1"><a class="header" href="#enter-1-1">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -21128,7 +22166,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -21137,7 +22175,7 @@ function called in a task can wait without being marked in any way.</p>
 <ul>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
@@ -21159,14 +22197,14 @@ finished. The task itself carries on.</p>
 <pre><code class="language-pepper">struct RuntimeOptions
 </code></pre>
 <p>Settings for <code>run_with</code>, built by chaining: <code>RuntimeOptions().stack_size(65536)</code>.</p>
-<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
+<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
 stack per task, the system’s best I/O backend, and up to 64 threads
 for <code>run_blocking</code>.</p>
-<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
 </code></pre>
@@ -21263,7 +22301,7 @@ returns.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
+<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
 <pre><code class="language-pepper">construct(core: _TaskCore)
 </code></pre>
@@ -21292,7 +22330,7 @@ task can, since it stays on this thread.</p>
 <ul>
 <li>outside <code>run</code></li>
 </ul>
-<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
 <h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
@@ -21565,7 +22603,7 @@ Timeouts nest: an inner one cannot extend an outer one.</p>
 <ul>
 <li><code>milliseconds</code> — how long from now the limit passes</li>
 </ul>
-<h3 id="methods-3-4"><a class="header" href="#methods-3-4">Methods</a></h3>
+<h3 id="methods-3-5"><a class="header" href="#methods-3-5">Methods</a></h3>
 <h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
 <pre><code class="language-pepper">enter(): Deadline
 </code></pre>
@@ -21751,7 +22789,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -21797,7 +22835,7 @@ input the null device, unless they were set.</p>
 <pre><code class="language-pepper">var program: String
 </code></pre>
 <p>The program to start, as given to the constructor.</p>
-<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
 <h4 id="command-2"><a class="header" href="#command-2">Command()</a></h4>
 <pre><code class="language-pepper">construct(program: String)
 </code></pre>
@@ -21807,7 +22845,7 @@ parent’s environment and current directory, and inherited streams.</p>
 <ul>
 <li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
 </ul>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
 <h4 id="argument"><a class="header" href="#argument">argument</a></h4>
 <pre><code class="language-pepper">argument(value: String): Command
 </code></pre>
@@ -21977,7 +23015,7 @@ signal.</p>
     assert(!status.success(), "false fails");
     assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -21987,7 +23025,7 @@ signal.</p>
 <li><code>code</code> — the exit code, when the process exited</li>
 <li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
 </ul>
-<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="success"><a class="header" href="#success">success</a></h4>
 <pre><code class="language-pepper">success(): bool
 </code></pre>
@@ -22045,14 +23083,14 @@ a Child neither waits for it nor kills it; the process runs on.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
 <h4 id="child-2"><a class="header" href="#child-2">Child()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Child that stands for no process: <code>id()</code> is 0, its streams
 are closed, and <code>wait()</code>, <code>try_wait()</code> and <code>kill()</code> fail. Use
 <code>Command.spawn()</code> to start one.</p>
-<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>
@@ -22304,7 +23342,7 @@ is copied, compared with <code>==</code>, and allocates nothing.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22370,7 +23408,7 @@ is copied, compared with <code>==</code>, and allocates nothing.</p>
 <ul>
 <li>if the duration does not fit in a <code>ulong</code> of nanoseconds (about 584 years)</li>
 </ul>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="nanoseconds"><a class="header" href="#nanoseconds">nanoseconds</a></h4>
 <pre><code class="language-pepper">nanoseconds(): ulong
 </code></pre>
@@ -22421,7 +23459,7 @@ down.</p>
 <ul>
 <li>true for a zero-length duration</li>
 </ul>
-<h4 id="operator--14"><a class="header" href="#operator--14">operator +</a></h4>
+<h4 id="operator--16"><a class="header" href="#operator--16">operator +</a></h4>
 <pre><code class="language-pepper">+(other: Duration): Duration
 </code></pre>
 <p>Returns the sum of two durations.</p>
@@ -22453,7 +23491,7 @@ down.</p>
 <ul>
 <li>if <code>other</code> is longer than this duration: a duration is never negative</li>
 </ul>
-<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator *</a></h4>
+<h4 id="operator--1-7"><a class="header" href="#operator--1-7">operator *</a></h4>
 <pre><code class="language-pepper">*(times: ulong): Duration
 </code></pre>
 <p>Returns this duration <code>times</code> times over.</p>
@@ -22569,7 +23607,7 @@ processes or reboots. Use <code>SystemTime</code> for the date and time.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
 <h4 id="instant-1"><a class="header" href="#instant-1">Instant()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22584,7 +23622,7 @@ clock.</p>
 <ul>
 <li>the current moment</li>
 </ul>
-<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
 <h4 id="elapsed"><a class="header" href="#elapsed">elapsed</a></h4>
 <pre><code class="language-pepper">elapsed(): Duration
 </code></pre>
@@ -22707,7 +23745,7 @@ zones and formatting are not part of <code>os</code>.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-2-7"><a class="header" href="#constructor-2-7">Constructor</a></h3>
+<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
 <h4 id="systemtime-1"><a class="header" href="#systemtime-1">SystemTime()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22750,7 +23788,7 @@ systems and most protocols record it.</p>
 <ul>
 <li>if the time is outside the years 1677 to 2262</li>
 </ul>
-<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
 <h4 id="unix_nanoseconds"><a class="header" href="#unix_nanoseconds">unix_nanoseconds</a></h4>
 <pre><code class="language-pepper">unix_nanoseconds(): long
 </code></pre>
@@ -22855,7 +23893,7 @@ is in the future.</p>
 <ul>
 <li>true when this one is not later</li>
 </ul>
-<h4 id="operator--15"><a class="header" href="#operator--15">operator &gt;</a></h4>
+<h4 id="operator--15-1"><a class="header" href="#operator--15-1">operator &gt;</a></h4>
 <pre><code class="language-pepper">&gt;(other: SystemTime): bool
 </code></pre>
 <p>Returns whether this time is later than <code>other</code>.</p>
@@ -22867,7 +23905,7 @@ is in the future.</p>
 <ul>
 <li>true when this one is later</li>
 </ul>
-<h4 id="operator--16"><a class="header" href="#operator--16">operator &gt;=</a></h4>
+<h4 id="operator--16-1"><a class="header" href="#operator--16-1">operator &gt;=</a></h4>
 <pre><code class="language-pepper">&gt;=(other: SystemTime): bool
 </code></pre>
 <p>Returns whether this time is later than or the same as <code>other</code>.</p>
@@ -23117,13 +24155,13 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
-<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
+<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -23140,7 +24178,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -23229,7 +24267,7 @@ end. Closing a closed channel does nothing.</p>
 <ul>
 <li>true once the channel is closed, even while values are still queued</li>
 </ul>
-<h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
+<h4 id="iterate-7"><a class="header" href="#iterate-7">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): ChannelIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator that receives until the channel is closed and
@@ -23262,7 +24300,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -23272,8 +24310,8 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
-<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -23281,7 +24319,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
+<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
@@ -23349,7 +24387,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -23368,7 +24406,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -23481,7 +24519,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
@@ -23496,7 +24534,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -23559,7 +24597,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-8"><a class="header" href="#constructor-2-8">Constructor</a></h3>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -23573,7 +24611,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
 <h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -23693,7 +24731,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23702,7 +24740,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -23764,7 +24802,7 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -23778,8 +24816,8 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
-<h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the value, building it with the initializer on the first call.</p>
@@ -23856,12 +24894,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -23969,7 +25007,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23978,8 +25016,8 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
-<h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the calling task’s value.</p>
@@ -23989,7 +25027,7 @@ thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var va
 <ul>
 <li>the value this task last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
-<h4 id="set-1"><a class="header" href="#set-1">set</a></h4>
+<h4 id="set-4"><a class="header" href="#set-4">set</a></h4>
 <pre><code class="language-pepper">set([Move] value: T)
 </code></pre>
 <p>Stores <code>value</code> as the calling task’s value, replacing (and, for a
@@ -24034,7 +25072,7 @@ or last called <code>clear()</code>.</p>
 <ul>
 <li>true if this task has a value</li>
 </ul>
-<h4 id="clear-4"><a class="header" href="#clear-4">clear</a></h4>
+<h4 id="clear-6"><a class="header" href="#clear-6">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes the calling task’s value, releasing it for a struct <code>T</code>.
@@ -24050,7 +25088,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -24060,7 +25098,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -24079,7 +25117,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 not thread-safe with the original, so it can be handed to another thread;
 <code>Copyable&lt;T&gt;</code> lets a type say how it is copied.</p>
 <p>Source: <code>runtime/copy.pep</code></p>
-<h2 id="copy-4"><a class="header" href="#copy-4">copy</a></h2>
+<h2 id="copy-6"><a class="header" href="#copy-6">copy</a></h2>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
 <p>Returns a copy of <code>value</code> that shares no non-thread-safe object with it,
@@ -24190,8 +25228,8 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
-<h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
 <p>Returns a copy of this value, for <code>copy</code>.</p>
@@ -24214,12 +25252,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -24287,7 +25325,7 @@ In a task, a request parks only the task while it waits.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructors-4"><a class="header" href="#constructors-4">Constructors</a></h3>
+<h3 id="constructors-5"><a class="header" href="#constructors-5">Constructors</a></h3>
 <h4 id="client-1-1"><a class="header" href="#client-1-1">Client()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -24303,8 +25341,8 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
-<h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
 <p>Sends a <code>GET</code> request for <code>url</code>.</p>
@@ -24364,17 +25402,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
-<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
+<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
+<h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -24404,7 +25442,7 @@ have no defined order, as HTTP allows.</p>
 <li><code>name</code> — the field name, in any case</li>
 <li><code>value</code> — the field value</li>
 </ul>
-<h4 id="set-2"><a class="header" href="#set-2">set</a></h4>
+<h4 id="set-5"><a class="header" href="#set-5">set</a></h4>
 <pre><code class="language-pepper">set(name: String, value: String)
 </code></pre>
 <p>Replaces every value of the field named <code>name</code> with <code>value</code>.</p>
@@ -24413,7 +25451,7 @@ have no defined order, as HTTP allows.</p>
 <li><code>name</code> — the field name, in any case</li>
 <li><code>value</code> — the field value</li>
 </ul>
-<h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
+<h4 id="get-7"><a class="header" href="#get-7">get</a></h4>
 <pre><code class="language-pepper">get(name: String): String?
 </code></pre>
 <p>Returns the first value of the field named <code>name</code>.</p>
@@ -24437,7 +25475,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li>true if a field has that name</li>
 </ul>
-<h4 id="remove-4"><a class="header" href="#remove-4">remove</a></h4>
+<h4 id="remove-6"><a class="header" href="#remove-6">remove</a></h4>
 <pre><code class="language-pepper">remove(name: String)
 </code></pre>
 <p>Removes the field named <code>name</code> and all its values.</p>
@@ -24459,7 +25497,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator []</a></h4>
+<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -24500,7 +25538,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -24510,7 +25548,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -24610,7 +25648,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -24619,7 +25657,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -24745,7 +25783,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -24783,7 +25821,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -24847,7 +25885,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -24934,7 +25972,7 @@ of a value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -25018,7 +26056,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -25027,8 +26065,8 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>source</code> — the open stream to read</li>
 </ul>
-<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
-<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next line.</p>
@@ -25037,7 +26075,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li>true if there is a current element (a line, or the error that ends the lines), false at the end of the stream</li>
 </ul>
-<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
+<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;String&gt;
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -25058,7 +26096,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>Reader.chunks</code></li>
 </ul>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="chunks-2"><a class="header" href="#chunks-2">Chunks()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader, size: ulong)
 </code></pre>
@@ -25068,8 +26106,8 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <li><code>source</code> — the open stream to read</li>
 <li><code>size</code> — the most bytes in one chunk</li>
 </ul>
-<h3 id="methods-3-5"><a class="header" href="#methods-3-5">Methods</a></h3>
-<h4 id="next-1-3"><a class="header" href="#next-1-3">next</a></h4>
+<h3 id="methods-3-6"><a class="header" href="#methods-3-6">Methods</a></h3>
+<h4 id="next-1-4"><a class="header" href="#next-1-4">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next chunk.</p>
@@ -25078,7 +26116,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li>true if there is a current element (a chunk, or the error that ends the chunks), false at the end of the stream</li>
 </ul>
-<h4 id="current-1-4"><a class="header" href="#current-1-4">current</a></h4>
+<h4 id="current-1-5"><a class="header" href="#current-1-5">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;u8[]&gt;
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -25130,7 +26168,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -25149,7 +26187,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -25217,7 +26255,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -25240,7 +26278,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -25279,7 +26317,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -25313,7 +26351,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
 <h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -25759,7 +26797,7 @@ steps through without allocating:</p>
 for (var i in 1..&gt;10) { ... }     # 1, 2, ..., 10
 </code></pre>
 <p>Source: <code>runtime/range.pep</code></p>
-<h2 id="range"><a class="header" href="#range">Range</a></h2>
+<h2 id="range-2"><a class="header" href="#range-2">Range</a></h2>
 <pre><code class="language-pepper">[Value] struct Range&lt;T&gt;
 </code></pre>
 <p>A run of consecutive numbers, from <code>start</code> up to <code>end</code>, as <code>a..b</code> and
@@ -25796,14 +26834,14 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
-<h4 id="is_empty-5"><a class="header" href="#is_empty-5">is_empty</a></h4>
+<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
+<h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
-<h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
 <p>Makes the range from <code>start</code> to <code>end</code>, as <code>start..end</code> (or
@@ -25814,8 +26852,8 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
-<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next number: <code>start</code> on the first call, then one
@@ -25825,7 +26863,7 @@ more each time.</p>
 <ul>
 <li>true if there is a current number, false once past the end</li>
 </ul>
-<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
+<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the number the last successful <code>next()</code> moved to.</p>
@@ -25838,7 +26876,7 @@ more each time.</p>
 <li>if <code>next()</code> was never called (“Range.current() before next()”)</li>
 <li>if <code>next()</code> already returned false (“Range.current() past the end”)</li>
 </ul>
-<h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
+<h4 id="contains-5"><a class="header" href="#contains-5">contains</a></h4>
 <pre><code class="language-pepper">contains(value: T): bool
 </code></pre>
 <p>Returns whether <code>value</code> lies in the range, whatever the iteration has
@@ -25903,7 +26941,7 @@ module scope (<code>const word = regex.Regex("\\w+");</code>) serves every threa
         return 0;
     }
 </code></pre>
-<h3 id="constructors-5"><a class="header" href="#constructors-5">Constructors</a></h3>
+<h3 id="constructors-6"><a class="header" href="#constructors-6">Constructors</a></h3>
 <h4 id="regex-1"><a class="header" href="#regex-1">Regex()</a></h4>
 <pre><code class="language-pepper">construct(pattern: String)
 </code></pre>
@@ -25962,7 +27000,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -26142,7 +27180,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -26154,7 +27192,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -26251,7 +27289,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
 <h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -26262,8 +27300,8 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
-<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next match.</p>
@@ -26271,7 +27309,7 @@ when it did not take part.</p>
 <ul>
 <li>true when there is another match, false once they are exhausted</li>
 </ul>
-<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
+<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
 <pre><code class="language-pepper">current(): Match
 </code></pre>
 <p>Returns the match the last successful <code>next()</code> moved to.</p>
@@ -26586,7 +27624,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -26604,7 +27642,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -26674,7 +27712,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -26698,7 +27736,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -26738,7 +27776,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -26749,7 +27787,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -26919,7 +27957,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26966,7 +28004,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
