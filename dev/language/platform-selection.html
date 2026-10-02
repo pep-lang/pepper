@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "../searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4c7b0bab.js"></script>
+        <script src="../toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,11 +190,14 @@ version side by side.</p>
 <p>The target is the platform you compile on, unless you name another with
 <code>--target</code> (see <a href="#cross-compiling">Cross-compiling</a> below).</p>
 <h2 id="writing-a-condition"><a class="header" href="#writing-a-condition">Writing a condition</a></h2>
-<p><code>Target</code> takes one boolean condition built from two predicates:</p>
+<p><code>Target</code> takes one boolean condition built from these predicates:</p>
 <ul>
 <li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
 <code>MacOS</code>), or <code>Linux</code>.</li>
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code> or <code>aarch64</code>.</li>
+<li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
+can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>); see
+<a href="build-options.html">Build options</a>.</li>
 </ul>
 <p>Values are matched case-insensitively, so <code>OS(windows)</code> works too. Combine
 predicates with <code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code>, and parentheses:</p>
@@ -325,7 +328,7 @@ never a silent “no match”:</p>
 <ul>
 <li><code>Target</code> takes exactly one condition: <code>[Target(OS(Windows), Arch(x64))]</code> is
 an error; write <code>[Target(OS(Windows) &amp;&amp; Arch(x64))]</code>.</li>
-<li>Only <code>OS(...)</code> and <code>Arch(...)</code> may appear inside it. A bare name
+<li>Only <code>OS(...)</code>, <code>Arch(...)</code> and <code>BuildOption(...)</code> may appear inside it. A bare name
 (<code>[Target(Windows)]</code>), another call (<code>[Target(Foo(x))]</code>), <code>not</code> in place of
 <code>!</code>, or a nested <code>Target</code> is an error.</li>
 <li><code>OS(...)</code> and <code>Arch(...)</code> are only valid inside <code>Target(...)</code>, and the
@@ -393,7 +396,7 @@ of that platform to run it.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../language/linking.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/build-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -407,7 +410,7 @@ of that platform to run it.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../language/linking.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/build-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

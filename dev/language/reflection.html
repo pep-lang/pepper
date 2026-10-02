@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "../searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4c7b0bab.js"></script>
+        <script src="../toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -406,6 +406,8 @@ the compiler writes it as a literal.</p>
 <tr><td><code>reflect.is_reference&lt;T&gt;()</code></td><td>whether <code>T</code> is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is <code>[Value]</code></td></tr>
 <tr><td><code>reflect.is_same&lt;A, B&gt;()</code></td><td>whether <code>A</code> and <code>B</code> are the same type (<code>int</code> and <code>i32</code> are)</td></tr>
 <tr><td><code>reflect.has_attribute&lt;T, A&gt;()</code>, <code>reflect.attribute&lt;T, A&gt;()</code></td><td>attribute <code>A</code> on struct or enum <code>T</code></td></tr>
+<tr><td><code>reflect.has_build_option("NAME")</code></td><td>whether the build defines <a href="build-options.html">build option</a> <code>NAME</code> (<code>-D NAME</code>)</td></tr>
+<tr><td><code>reflect.build_option("NAME")</code>, <code>reflect.build_option("NAME", default)</code></td><td>the build option’s value as a <code>String</code>; without a default, an error when the build does not define it</td></tr>
 <tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling</td></tr>
 <tr><td><code>reflect.error(message)</code></td><td>fails the compile with <code>message</code></td></tr>
 <tr><td><code>reflect.assert(condition, message)</code></td><td>fails the compile with <code>message</code> when <code>condition</code> is false</td></tr>

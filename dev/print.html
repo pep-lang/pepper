@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4c7b0bab.js"></script>
+        <script src="toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -253,6 +253,10 @@ trait members can be <a href="#overloading-1">overloaded</a>.</li>
 the attributes on them (<code>[Attribute]</code> structs of your own) and generate
 code for each, so one function can encode any struct (see
 <a href="#reflection-and-attributes">reflection and attributes</a>).</li>
+<li><code>-D NAME=VALUE</code> on the command line defines a build option, which
+<code>[BuildOption("NAME")]</code> and <code>[Target(BuildOption(NAME) &gt;= 2)]</code> select code
+by and <code>static</code> blocks read (see
+<a href="#build-options">build options</a>).</li>
 <li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
 skip defaulted parameters or pass them in any order (see
 <a href="#named-arguments">named arguments</a>).</li>
@@ -443,6 +447,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="#modules-and-imports">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
+<tr><td><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></td><td>Define a build option, which <code>[BuildOption("name")]</code> and <code>[Target(BuildOption(name))]</code> select code by. A bare name is <code>name=1</code>. See <a href="#build-options">build options</a>.</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
 <tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="#debugging">debugging</a>.</td></tr>
@@ -9042,6 +9047,8 @@ the compiler writes it as a literal.</p>
 <tr><td><code>reflect.is_reference&lt;T&gt;()</code></td><td>whether <code>T</code> is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is <code>[Value]</code></td></tr>
 <tr><td><code>reflect.is_same&lt;A, B&gt;()</code></td><td>whether <code>A</code> and <code>B</code> are the same type (<code>int</code> and <code>i32</code> are)</td></tr>
 <tr><td><code>reflect.has_attribute&lt;T, A&gt;()</code>, <code>reflect.attribute&lt;T, A&gt;()</code></td><td>attribute <code>A</code> on struct or enum <code>T</code></td></tr>
+<tr><td><code>reflect.has_build_option("NAME")</code></td><td>whether the build defines <a href="#build-options">build option</a> <code>NAME</code> (<code>-D NAME</code>)</td></tr>
+<tr><td><code>reflect.build_option("NAME")</code>, <code>reflect.build_option("NAME", default)</code></td><td>the build option’s value as a <code>String</code>; without a default, an error when the build does not define it</td></tr>
 <tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling</td></tr>
 <tr><td><code>reflect.error(message)</code></td><td>fails the compile with <code>message</code></td></tr>
 <tr><td><code>reflect.assert(condition, message)</code></td><td>fails the compile with <code>message</code> when <code>condition</code> is false</td></tr>
@@ -15906,11 +15913,14 @@ version side by side.</p>
 <p>The target is the platform you compile on, unless you name another with
 <code>--target</code> (see <a href="#cross-compiling">Cross-compiling</a> below).</p>
 <h2 id="writing-a-condition"><a class="header" href="#writing-a-condition">Writing a condition</a></h2>
-<p><code>Target</code> takes one boolean condition built from two predicates:</p>
+<p><code>Target</code> takes one boolean condition built from these predicates:</p>
 <ul>
 <li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
 <code>MacOS</code>), or <code>Linux</code>.</li>
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code> or <code>aarch64</code>.</li>
+<li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
+can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>); see
+<a href="#build-options">Build options</a>.</li>
 </ul>
 <p>Values are matched case-insensitively, so <code>OS(windows)</code> works too. Combine
 predicates with <code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code>, and parentheses:</p>
@@ -16041,7 +16051,7 @@ never a silent “no match”:</p>
 <ul>
 <li><code>Target</code> takes exactly one condition: <code>[Target(OS(Windows), Arch(x64))]</code> is
 an error; write <code>[Target(OS(Windows) &amp;&amp; Arch(x64))]</code>.</li>
-<li>Only <code>OS(...)</code> and <code>Arch(...)</code> may appear inside it. A bare name
+<li>Only <code>OS(...)</code>, <code>Arch(...)</code> and <code>BuildOption(...)</code> may appear inside it. A bare name
 (<code>[Target(Windows)]</code>), another call (<code>[Target(Foo(x))]</code>), <code>not</code> in place of
 <code>!</code>, or a nested <code>Target</code> is an error.</li>
 <li><code>OS(...)</code> and <code>Arch(...)</code> are only valid inside <code>Target(...)</code>, and the
@@ -16100,6 +16110,144 @@ and <code>-march=x86-64-v3</code> an x86 one, and <code>native</code>, which nam
 machine you compile on, is an error for a target of another architecture.</p>
 <p>The compiler only builds for the target; copy the executable to a machine
 of that platform to run it.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="build-options"><a class="header" href="#build-options">Build options</a></h1>
+<p>Some code should be optional at build time: linking a library such as
+libcrypto or zlib when it is there, tracing that only a debug build wants,
+a backend chosen when the program is built. <strong>Build options</strong> set that on
+the command line with <code>-D</code>, as in C compilers, and the code tests them with
+<code>BuildOption</code>.</p>
+<pre><code class="language-sh">pep-build main.pep -D USE_LIBCRYPTO -D LOG_LEVEL=2 -D BACKEND=zlib -o app
+</code></pre>
+<ul>
+<li><code>-D NAME</code> defines an option. It counts as <code>NAME=1</code>, as in C.</li>
+<li><code>-D NAME=VALUE</code> defines it with a value, which may be any text.</li>
+<li>Repeat <code>-D</code> for more options. When two name the same option, the later
+one wins.</li>
+</ul>
+<p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
+an error:</p>
+<pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'
+</code></pre>
+<pre><code class="language-pepper"># Build options: compile with `pep-build main.pep -D FAST_MATH -D LOG_LEVEL=2`
+# to pick the other versions.
+
+# `[BuildOption("NAME")]` keeps a declaration when `-D NAME` is given, and
+# `!BuildOption(NAME)` inside a `Target` keeps its fallback otherwise.
+[BuildOption("FAST_MATH")]
+scale(x: int): int {
+    return x &lt;&lt; 1;
+}
+
+[Target(!BuildOption(FAST_MATH))]
+scale(x: int): int {
+    return x * 2;
+}
+
+# A `static` block reads an option's value while compiling, with a default
+# for a build that does not set it.
+log_level(): int {
+    var level = 1;
+    static (level) {
+        if (reflect.build_option("LOG_LEVEL", "1") == "2") {
+            level = 2;
+        }
+    }
+    return level;
+}
+
+main(): int {
+    if (scale(21) != 42) {
+        return 1;
+    }
+    var level = log_level();
+    if (level &lt; 1 || level &gt; 2) {
+        return 2;
+    }
+    return 0;
+}
+</code></pre>
+<h2 id="selecting-code"><a class="header" href="#selecting-code">Selecting code</a></h2>
+<p><code>[BuildOption("NAME")]</code> keeps a declaration or a block only when the build
+defines <code>NAME</code>. It is shorthand for <code>[Target(BuildOption(NAME))]</code>, and it
+goes everywhere <code>[Target(...)]</code> goes: functions, <code>extern</code>s, structs,
+methods, module-scope variables, <code>import</code>s, re-exports and <code>{ }</code> blocks in
+a function (see <a href="#platform-selection">Platform selection</a>).</p>
+<p>Inside <code>Target</code>, <code>BuildOption(NAME)</code> combines with <code>OS(...)</code>, <code>Arch(...)</code>,
+<code>!</code>, <code>&amp;&amp;</code>, <code>||</code> and parentheses. Used alone, it is true when <code>NAME</code> is
+defined, whatever its value, and false when it is not, with no warning:</p>
+<pre><code class="language-pepper">[BuildOption("USE_LIBCRYPTO")]
+[Link("crypto")]
+extern int SHA256_Init(__ptr&lt;void&gt; context);
+
+[Target(!BuildOption(USE_LIBCRYPTO))]
+_sha256_compress(...) { ... }   # the portable fallback
+
+[Target(BuildOption(TRACE) &amp;&amp; OS(Linux))]
+import "linux_trace";
+</code></pre>
+<p>Several attributes on one item combine with “and”, as <code>[Target]</code> does.</p>
+<h2 id="comparing-values"><a class="header" href="#comparing-values">Comparing values</a></h2>
+<p><code>BuildOption(NAME)</code> may be compared with a literal using <code>==</code>, <code>!=</code>, <code>&lt;</code>,
+<code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>, on either side. The literal’s type says how the value
+is read:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Literal</th><th>The value is read as</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>integer</td><td>a signed 64-bit integer, decimal or <code>0x</code> hex</td><td><code>BuildOption(LOG_LEVEL) &gt;= 2</code></td></tr>
+<tr><td>float</td><td>a <code>double</code></td><td><code>BuildOption(SCALE) &gt; 1.5</code></td></tr>
+<tr><td><code>true</code> / <code>false</code></td><td><code>true</code>/<code>false</code>, <code>1</code>/<code>0</code>, <code>on</code>/<code>off</code> or <code>yes</code>/<code>no</code>, in any case (<code>==</code> and <code>!=</code> only)</td><td><code>BuildOption(TRACE) == true</code></td></tr>
+<tr><td>string</td><td>text, compared byte for byte</td><td><code>BuildOption(BACKEND) == "zlib"</code></td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper">[Target(BuildOption(LOG_LEVEL) &gt;= 2 &amp;&amp; OS(Linux))]
+_trace(message: String) { ... }
+
+[Target(BuildOption(BACKEND) == "zlib")]
+import "zlib_backend";
+</code></pre>
+<p>A value the literal’s type cannot read is an error at the comparison:</p>
+<pre><code class="language-text">main.pep:1:28: error: build option 'LEVEL' is 'high', which is not an integer
+    1 | [Target(BuildOption(LEVEL) &gt;= 2)]
+      |                            ^~~~
+</code></pre>
+<p>Comparing two build options, or a build option with anything but a
+literal, is an error too.</p>
+<p>A comparison with an option the build does not define is false, whatever
+the operator, and the compiler warns at it, since a missing option there is
+usually a mistake:</p>
+<pre><code class="language-text">main.pep:3:13: warning: build option 'LOG_LEVEL' is not defined; the comparison is false
+    3 |     [Target(BuildOption(LOG_LEVEL) &gt;= 2)] {
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+note: define it with '-D LOG_LEVEL=&lt;value&gt;'
+</code></pre>
+<h2 id="reading-values-in-static-blocks"><a class="header" href="#reading-values-in-static-blocks">Reading values in <code>static</code> blocks</a></h2>
+<p>A <a href="#reflection-and-attributes"><code>static</code> block</a> reads build options while compiling:</p>
+<ul>
+<li><code>reflect.has_build_option("NAME")</code> is whether the build defines <code>NAME</code>.</li>
+<li><code>reflect.build_option("NAME")</code> is its value, as a <code>String</code>. It is an
+error when the build does not define <code>NAME</code>.</li>
+<li><code>reflect.build_option("NAME", "default")</code> is its value, or <code>default</code>
+when the build does not define it.</li>
+</ul>
+<h2 id="the-build-cache-and-the-editor"><a class="header" href="#the-build-cache-and-the-editor">The build cache and the editor</a></h2>
+<p>The options and their values are part of the build cache’s key, so building with other options never reuses objects built with
+different ones.</p>
+<p>The language server analyzes with the options in the VS Code setting
+<code>pepper.buildOptions</code>, a list written as <code>-D</code> takes them
+(<code>["USE_ZLIB", "LOG_LEVEL=2"]</code>). It has none by default, so code that needs
+an option shows dimmed, and comparisons with options warn until the
+setting names them.</p>
+<h2 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h2>
+<ul>
+<li>A <code>pep.toml</code> table declaring the options a package takes, with their
+types and defaults.</li>
+<li>Arithmetic on options, and comparing two options.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="linking"><a class="header" href="#linking">Linking</a></h1>
 <p>The Pepper compiler turns your program into a native executable in two steps:
@@ -31379,6 +31527,16 @@ that declares the extern unless absolute; empty for none.</p>
 <pre><code class="language-pepper">const condition: String
 </code></pre>
 <p>The condition as written, such as <code>!OS(Windows)</code>.</p>
+<h2 id="buildoption"><a class="header" href="#buildoption">BuildOption</a></h2>
+<pre><code class="language-pepper">[Attribute] struct BuildOption
+</code></pre>
+<p>Keeps a declaration only when the build defines a build option with
+<code>-D</code>: <code>[BuildOption("USE_ZLIB")]</code> is <code>[Target(BuildOption(USE_ZLIB))]</code>.</p>
+<h3 id="fields-5-1"><a class="header" href="#fields-5-1">Fields</a></h3>
+<h4 id="name-1-2"><a class="header" href="#name-1-2">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>The build option’s name, such as <code>USE_ZLIB</code>.</p>
 <h2 id="likely"><a class="header" href="#likely">Likely</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Likely
 </code></pre>
@@ -31394,7 +31552,7 @@ as error handling, so the optimizer moves it out of the fast path.</p>
 </code></pre>
 <p>Forbids copying a struct with <code>copy(value)</code>, giving the reason in the
 error.</p>
-<h3 id="fields-5-1"><a class="header" href="#fields-5-1">Fields</a></h3>
+<h3 id="fields-6-1"><a class="header" href="#fields-6-1">Fields</a></h3>
 <h4 id="reason"><a class="header" href="#reason">reason</a></h4>
 <pre><code class="language-pepper">const reason: String
 </code></pre>
@@ -31415,7 +31573,7 @@ as <code>HashMap</code> and <code>HashSet</code> keys.</p>
 <code>[Equatable(exclude = true)]</code> or <code>[Equatable(include = false)]</code> leaves it
 out of both <code>==</code> and the hash. A field with neither takes part. On the
 struct itself it takes no arguments.</p>
-<h3 id="fields-6-1"><a class="header" href="#fields-6-1">Fields</a></h3>
+<h3 id="fields-7-1"><a class="header" href="#fields-7-1">Fields</a></h3>
 <h4 id="include"><a class="header" href="#include">include</a></h4>
 <pre><code class="language-pepper">bool include = true
 </code></pre>
@@ -31461,8 +31619,8 @@ it may use the locked value.</p>
 <p>Makes a free function callable from C, in a library built with
 <code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
 <code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
-<h3 id="fields-7-1"><a class="header" href="#fields-7-1">Fields</a></h3>
-<h4 id="name-1-2"><a class="header" href="#name-1-2">name</a></h4>
+<h3 id="fields-8-1"><a class="header" href="#fields-8-1">Fields</a></h3>
+<h4 id="name-2-1"><a class="header" href="#name-2-1">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The C symbol, when it differs from the function’s name; empty

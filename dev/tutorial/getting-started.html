@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "../searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4c7b0bab.js"></script>
+        <script src="../toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -321,6 +321,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="../language/modules.html">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="../language/linking.html">linking</a>.</td></tr>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="../language/linking.html#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
+<tr><td><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></td><td>Define a build option, which <code>[BuildOption("name")]</code> and <code>[Target(BuildOption(name))]</code> select code by. A bare name is <code>name=1</code>. See <a href="../language/build-options.html">build options</a>.</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
 <tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="../tools/debugging.html">debugging</a>.</td></tr>

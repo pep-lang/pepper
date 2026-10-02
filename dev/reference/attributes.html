@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "../searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4c7b0bab.js"></script>
+        <script src="../toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -266,6 +266,16 @@ that declares the extern unless absolute; empty for none.</p>
 <pre><code class="language-pepper">const condition: String
 </code></pre>
 <p>The condition as written, such as <code>!OS(Windows)</code>.</p>
+<h2 id="buildoption"><a class="header" href="#buildoption">BuildOption</a></h2>
+<pre><code class="language-pepper">[Attribute] struct BuildOption
+</code></pre>
+<p>Keeps a declaration only when the build defines a build option with
+<code>-D</code>: <code>[BuildOption("USE_ZLIB")]</code> is <code>[Target(BuildOption(USE_ZLIB))]</code>.</p>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h4 id="name-1"><a class="header" href="#name-1">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>The build option’s name, such as <code>USE_ZLIB</code>.</p>
 <h2 id="likely"><a class="header" href="#likely">Likely</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Likely
 </code></pre>
@@ -281,7 +291,7 @@ as error handling, so the optimizer moves it out of the fast path.</p>
 </code></pre>
 <p>Forbids copying a struct with <code>copy(value)</code>, giving the reason in the
 error.</p>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="reason"><a class="header" href="#reason">reason</a></h4>
 <pre><code class="language-pepper">const reason: String
 </code></pre>
@@ -302,7 +312,7 @@ as <code>HashMap</code> and <code>HashSet</code> keys.</p>
 <code>[Equatable(exclude = true)]</code> or <code>[Equatable(include = false)]</code> leaves it
 out of both <code>==</code> and the hash. A field with neither takes part. On the
 struct itself it takes no arguments.</p>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="include"><a class="header" href="#include">include</a></h4>
 <pre><code class="language-pepper">bool include = true
 </code></pre>
@@ -348,8 +358,8 @@ it may use the locked value.</p>
 <p>Makes a free function callable from C, in a library built with
 <code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
 <code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
-<h4 id="name-1"><a class="header" href="#name-1">name</a></h4>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="name-2"><a class="header" href="#name-2">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The C symbol, when it differs from the function’s name; empty

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a3774fa9.js";
+            window.path_to_searchindex_js = "searchindex-89078b78.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4c7b0bab.js"></script>
+        <script src="toc-7be3830a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -255,6 +255,10 @@ trait members can be <a href="language/overloading.html">overloaded</a>.</li>
 the attributes on them (<code>[Attribute]</code> structs of your own) and generate
 code for each, so one function can encode any struct (see
 <a href="language/reflection.html">reflection and attributes</a>).</li>
+<li><code>-D NAME=VALUE</code> on the command line defines a build option, which
+<code>[BuildOption("NAME")]</code> and <code>[Target(BuildOption(NAME) &gt;= 2)]</code> select code
+by and <code>static</code> blocks read (see
+<a href="language/build-options.html">build options</a>).</li>
 <li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
 skip defaulted parameters or pass them in any order (see
 <a href="language/functions.html#named-arguments">named arguments</a>).</li>
