@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-22193f87.js";
+            window.path_to_searchindex_js = "searchindex-2d2fc2e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3dba6a77.js"></script>
@@ -13620,8 +13620,13 @@ and a value converts to a struct whose constructor from its type is
 A raw pointer is never a struct either: a <code>__ptr&lt;char&gt;</code> is not a <code>String</code>
 (copy it with <code>String(p)</code>), and a <code>String</code> is not a <code>__ptr&lt;char&gt;</code> (pass its
 <code>c_str()</code>).
+Two specializations of one generic struct are different types: <code>Array&lt;int&gt;</code>
+is not <code>Array&lt;String&gt;</code> and <code>Array&lt;Derived&gt;</code> is not <code>Array&lt;Base&gt;</code>. Type
+arguments compare exactly, at every depth, after aliases resolve and omitted
+arguments take their defaults (<code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>).
 The check applies wherever a value flows into a typed place: a variable’s
-initializer, an assignment, an argument and a <code>return</code>:</p>
+initializer, an assignment, an argument, a <code>return</code>, and each arm of
+<code>c ? a : b</code>, whose false arm must convert to the true arm’s type:</p>
 <pre><code class="language-text">main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
     2 |     int x = "hello";
       |             ^~~~~~~
@@ -13637,6 +13642,14 @@ initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
       |            ^~~
+</code></pre>
+<pre><code class="language-text">main.pep:2:20: error: cannot initialize variable 'a' of type 'Array&lt;int&gt;' with a value of type 'Array&lt;String&gt;'
+    2 |     Array&lt;int&gt; a = Array&lt;String&gt;();
+      |                    ^~~~~~~~~~~~~
+</code></pre>
+<pre><code class="language-text">main.pep:3:35: error: incompatible operand types ('Array&lt;int&gt;' and 'Array&lt;String&gt;')
+    3 |     var a = flag ? Array&lt;int&gt;() : Array&lt;String&gt;();
+      |                                   ^~~~~~~~~~~~~
 </code></pre>
 <p><strong>A struct used as a trait it does not declare</strong> (see
 <a href="#traits-as-types">Traits as types</a>):</p>
@@ -13716,10 +13729,6 @@ out of range or a failed <code>assert</code>. These are not compiler errors: the
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
-<h2 id="current-limitations-2"><a class="header" href="#current-limitations-2">Current limitations</a></h2>
-<p>The type check does not compare the type arguments of generic structs yet, so
-<code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
-resulting program has undefined behavior.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="deprecation"><a class="header" href="#deprecation">Deprecation</a></h1>
 <p>When an API is on its way out, mark it <code>[Deprecated("message")]</code>. Code that
