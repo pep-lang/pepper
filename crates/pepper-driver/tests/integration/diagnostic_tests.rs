@@ -4247,3 +4247,30 @@ fn link_name_was_removed() {
          \x20     | [Link(name = \"llabs\")]"
     );
 }
+
+#[test]
+fn trait_method_with_other_parameter_names_warns_with_a_rename() {
+    let source = "trait Shape {\n    area(scale: int): int;\n}\n\
+                  struct Square {\n    var side: int;\n    area(factor: int): int { return side * factor; }\n}\n\
+                  extend Square with Shape;\n\
+                  test(): int {\n    var s = Square();\n    s.side = 6;\n    return s.area(7);\n}\n";
+    let mut module = compiled(source);
+    assert_eq!(
+        module.render_warnings(),
+        "main.pep:6:10: warning: parameter 'factor' of 'area' is named 'scale' in trait 'Shape'\n\
+         \x20   6 |     area(factor: int): int { return side * factor; }\n\
+         \x20     |          ^~~~~~\n\
+         main.pep:2:5: note: 'area' declared here\n\
+         \x20   2 |     area(scale: int): int;\n\
+         \x20     |     ^~~~"
+    );
+    let [warning] = module.warnings.as_slice() else { panic!("{:?}", module.warnings) };
+    assert_eq!(warning.fixes[0].message, "rename 'factor' to 'scale'");
+    // The parameter and its use in the body.
+    let edits: Vec<(&str, &str)> =
+        warning.fixes[0].edits.iter().map(|e| (&source[e.loc.span.start..e.loc.span.end], e.replacement.as_str())).collect();
+    assert_eq!(edits, [("factor", "scale"), ("factor", "scale")]);
+
+    let ctx = inkwell::context::Context::create();
+    assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 42);
+}

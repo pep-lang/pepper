@@ -300,3 +300,82 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
 pub fn reset_applied() {
     APPLIED.with(|a| a.borrow_mut().clear());
 }
+
+/// Warn where a method that implements a trait's names a parameter
+/// differently from the trait: a call names the arguments of whichever it
+/// reaches, so `s.resize(width = 1)` and the same call through the trait
+/// should take the same names. Each warning's fix renames the parameter,
+/// and its uses in the body, to the trait's name.
+pub fn check_parameter_names(module: &mut Module) {
+    use crate::passes::named_arguments::Callee;
+    let mut seen: HashSet<crate::model::Loc> = HashSet::new();
+    let mut warnings = vec![];
+    for ext in &module.extensions {
+        let Some(target) = &ext.resolved else { continue };
+        let st = module.structs.iter().find(|s| &s.name == target);
+        let methods: Vec<&FunctionDef> = ext.methods.iter().chain(st.iter().flat_map(|s| &s.method_members)).collect();
+        for trait_name in &ext.traits {
+            let Some(def) = module.traits.iter().find(|t| t.name == trait_name.name) else { continue };
+            let mut type_map: Vec<(String, TypeName)> = def
+                .generic_params
+                .iter()
+                .zip(&trait_name.sub_types)
+                .map(|(param, arg)| (param.name.clone(), arg.clone()))
+                .collect();
+            if let Some(st) = st {
+                type_map.push(("this".to_string(), st.ty.clone()));
+            }
+            for required in &def.methods {
+                let set = set_name(&required.name);
+                let candidates: Vec<&&FunctionDef> = methods
+                    .iter()
+                    .filter(|m| set_name(&m.name) == set && m.parameters.len() == required.parameters.len())
+                    .collect();
+                let have = match candidates.as_slice() {
+                    [one] => **one,
+                    _ => match candidates.iter().find(|m| same_parameters(m, required, &type_map)) {
+                        Some(m) => **m,
+                        None => continue,
+                    },
+                };
+                // A default the trait gave the struct is the trait's own.
+                if have.loc == required.loc || !seen.insert(have.loc) {
+                    continue;
+                }
+                let names = |f: &FunctionDef| Callee::of(f, "", 0, &[]).params.into_iter().map(|p| p.name).collect::<Vec<_>>();
+                for ((name, wanted), param) in names(have).iter().zip(names(required)).zip(&have.parameters) {
+                    if name == "this" || *name == wanted || param.loc == crate::model::Loc::NONE {
+                        continue;
+                    }
+                    let mut edits = vec![pepper_parser::diagnostic::Edit { loc: param.loc, replacement: wanted.clone() }];
+                    if let Some(body) = &have.body {
+                        crate::passes::visit_block(body, &mut |e| {
+                            if let crate::model::Expression::SymbolRef { id, loc, .. } = e
+                                && id == name
+                                && loc.file == param.loc.file
+                            {
+                                edits.push(pepper_parser::diagnostic::Edit { loc: *loc, replacement: wanted.clone() });
+                            }
+                        });
+                    }
+                    edits.sort_by_key(|e| e.loc.span.start);
+                    edits.dedup_by_key(|e| e.loc.span.start);
+                    let fix = pepper_parser::diagnostic::Fix { message: format!("rename '{}' to '{}'", name, wanted), edits };
+                    warnings.push(
+                        Diagnostic::warning(format!(
+                            "parameter '{}' of '{}' is named '{}' in trait '{}'",
+                            name,
+                            set,
+                            wanted,
+                            trait_name.display()
+                        ))
+                        .at(param.loc)
+                        .with_note(format!("'{}' declared here", set), Some(required.loc))
+                        .with_fix(fix),
+                    );
+                }
+            }
+        }
+    }
+    module.warnings.append(&mut warnings);
+}

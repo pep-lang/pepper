@@ -100,6 +100,21 @@ main.pep:2:5: note: 'area' declared here
       |     ^~~~
 ```
 
+A method that implements a trait should name its parameters as the trait
+does, since a call through a value of the trait type
+[names its arguments](functions.md#named-arguments) with the trait's
+names. A different name is a warning, whose fix renames the parameter and
+its uses:
+
+```text
+main.pep:8:10: warning: parameter 'factor' of 'area' is named 'scale' in trait 'Shape'
+    8 |     area(factor: int): int { return side * side * factor; }
+      |          ^~~~~~
+main.pep:2:5: note: 'area' declared here
+    2 |     area(scale: int): int;
+      |     ^~~~
+```
+
 ### Default method bodies
 
 A trait method can have a body. A type that has the trait and does not define

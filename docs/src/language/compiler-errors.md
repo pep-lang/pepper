@@ -86,8 +86,9 @@ colored.
 
 Warnings do not stop the build, and the compiler prints them whether or not
 it also finds an error. Besides the linker's own warnings, which the compiler
-passes through (see [Linking](linking.md)), the only warnings today are
-deprecations.
+passes through (see [Linking](linking.md)), the warnings today are
+deprecations and a method whose parameter names differ from its trait's
+(see [Traits](traits-and-extensions.md#traits)).
 
 ## Deprecations
 

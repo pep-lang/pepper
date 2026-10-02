@@ -27,6 +27,7 @@ use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
 use pepper_parser::namespace::{demangle, demangle_known, demangle_name};
 use analysis::{Analysis, Documents, View};
+use pepper_sema::passes::named_arguments::Parameter;
 use pepper_sema::model::{Conversion, FunctionDef, Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::lsp_types::*;
@@ -1486,6 +1487,10 @@ struct PepperLsp {
     /// client's `inlayHints.implicitConversions` initialization option,
     /// on unless it says `false`.
     conversion_hints: AtomicBool,
+    /// Show parameter names before literal arguments as inlay hints
+    /// (`width: 800`): the client's `inlayHints.parameterNames`
+    /// initialization option, on unless it says `false`.
+    parameter_hints: AtomicBool,
     /// The client can watch files for the server (`workspace/
     /// didChangeWatchedFiles` with dynamic registration).
     watches_files: AtomicBool,
@@ -1598,6 +1603,25 @@ fn conversion_hints(text: &str, sema: &SemaModule) -> Vec<InlayHint> {
             let mut open = hint(c.at.span.start, format!("{}(", c.to.display()));
             open.tooltip = Some(InlayHintTooltip::String(conversion_note(c)));
             [open, hint(c.at.span.end, ")".to_string())]
+        })
+        .collect()
+}
+
+/// The inlay hints naming the parameter before each literal argument passed
+/// by position (`width: 800`), from `SemaModule::argument_names`.
+fn parameter_hints(text: &str, sema: &SemaModule) -> Vec<InlayHint> {
+    sema.argument_names
+        .iter()
+        .filter(|(at, _)| at.file == FileId(0) && at.span.start <= text.len())
+        .map(|(at, name)| InlayHint {
+            position: byte_to_lsp_pos(text, at.span.start),
+            label: InlayHintLabel::String(format!("{}:", name)),
+            kind: Some(InlayHintKind::PARAMETER),
+            text_edits: None,
+            tooltip: None,
+            padding_left: None,
+            padding_right: Some(true),
+            data: None,
         })
         .collect()
 }
@@ -1821,6 +1845,7 @@ impl PepperLsp {
             client,
             documents: Arc::new(Documents::default()),
             conversion_hints: AtomicBool::new(true),
+            parameter_hints: AtomicBool::new(true),
             watches_files: AtomicBool::new(false),
         }
     }
@@ -2610,11 +2635,105 @@ Returns a fresh value: it shares nothing with the arguments.");
         Some(out)
     }
 
+    /// The parameter names (`width = `) a call's argument list can name at
+    /// `offset`, where an argument starts: right after its `(` or a `,`.
+    /// Each parameter not yet named, and its `[Alias]` names.
+    fn argument_names(&self, uri: &Url, text: &str, offset: usize) -> Vec<CompletionItem> {
+        let before = text.get(..offset).unwrap_or_default();
+        let head = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+        // A number is not a name being typed.
+        let typed = &before[head.len()..];
+        if !head.trim_end().ends_with(['(', ',']) || typed.starts_with(|c: char| c.is_ascii_digit()) {
+            return vec![];
+        }
+        // `f(a, |)` does not parse until the argument is written.
+        let Some(ast) = parse_source(uri.as_str(), text)
+            .ok()
+            .or_else(|| parse_source(uri.as_str(), &format!("{}_{}", before, &text[offset..])).ok())
+        else {
+            return vec![];
+        };
+        let mut call: Option<(&ast::Expression, &[ast::Expression], ast::Span)> = None;
+        infer::each(&ast, |item| {
+            if let infer::Item::Expression(ast::Expression::FunctionCall { function, arguments, span }) = item
+                && function.span().end < offset
+                && offset < span.end
+                && call.is_none_or(|(_, _, inner)| inner.start <= span.start)
+            {
+                call = Some((function, arguments, *span));
+            }
+        });
+        let Some((function, arguments, _)) = call else { return vec![] };
+        let view = self.view(uri);
+        let program = view.as_ref().and_then(|v| {
+            v.latest.program().ok().or_else(|| v.ready.as_ref().and_then(|(ready, _)| ready.program().ok()))
+        });
+        let typer = infer::Typer::new(&ast, program, None);
+        let callees: Vec<&ast::FunctionDecl> = match function {
+            ast::Expression::SymbolRef { id, .. } => typer.callees_named(id, offset),
+            ast::Expression::MemberAccess { lhs, name, .. } => match typer.member_access(lhs, name, offset) {
+                Some(infer::Found { kind: infer::Kind::Method(f), .. }) => vec![f],
+                _ => vec![],
+            },
+            _ => vec![],
+        };
+        let named: Vec<&str> = arguments
+            .iter()
+            .filter_map(|a| match a {
+                ast::Expression::NamedArgument { name, name_span, .. } if name_span.end < offset || name_span.start > offset => {
+                    Some(name.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        let mut items: Vec<CompletionItem> = vec![];
+        for f in callees {
+            let params: Vec<Parameter> = f
+                .parameters
+                .iter()
+                .filter(|p| p.name != "this")
+                .map(|p| Parameter {
+                    name: p.name.strip_prefix("this.").unwrap_or(&p.name).to_string(),
+                    has_default: p.default_value.is_some(),
+                    ty: pepper_sema::TypeName::auto(),
+                })
+                .collect();
+            let aliases = pepper_sema::passes::named_arguments::other_names(&f.attributes, &params, FileId(0));
+            let names = params
+                .iter()
+                .zip(f.parameters.iter().filter(|p| p.name != "this"))
+                .map(|(p, decl)| (p.name.clone(), decl.type_name.to_string(), None))
+                .chain(aliases.into_iter().filter_map(Result::ok).filter(|o| !o.deprecated).map(|o| {
+                    (o.name, String::new(), Some(params[o.parameter].name.clone()))
+                }));
+            for (name, ty, alias_of) in names {
+                if named.contains(&name.as_str()) || items.iter().any(|i| i.label == name) {
+                    continue;
+                }
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::FIELD),
+                    detail: Some(match alias_of {
+                        Some(of) => format!("another name for '{}'", of),
+                        None => format!("{}: {}", name, ty),
+                    }),
+                    insert_text: Some(format!("{} = ", name)),
+                    sort_text: Some(format!("0{}", name)),
+                    ..Default::default()
+                });
+            }
+        }
+        items
+    }
+
     /// Completion at `offset`: keywords plus local/struct/global symbols.
     fn completion(&self, uri: &Url, offset: usize) -> Vec<CompletionItem> {
         let mut items = vec![];
         for kw in KEYWORDS {
             items.push(CompletionItem { label: kw.to_string(), kind: Some(CompletionItemKind::KEYWORD), ..Default::default() });
+        }
+        if let Some(text) = self.doc(uri) {
+            items.extend(self.argument_names(uri, &text, offset));
         }
         if let Some(text) = self.doc(uri)
             && let Ok(ast) = parse_source(uri.as_str(), &text).or_else(|e| parse_after_dot(uri, &text, offset).ok_or(e))
@@ -2663,6 +2782,13 @@ impl LanguageServer for PepperLsp {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
         self.conversion_hints.store(hints, Ordering::Relaxed);
+        let parameters = params
+            .initialization_options
+            .as_ref()
+            .and_then(|o| o.pointer("/inlayHints/parameterNames"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        self.parameter_hints.store(parameters, Ordering::Relaxed);
         let watches = params
             .capabilities
             .workspace
@@ -2755,7 +2881,9 @@ impl LanguageServer for PepperLsp {
     // Each request computes under `guarded`: a bug that panics on one
     // document answers that request with nothing instead of ending the server.
     async fn inlay_hint(&self, params: InlayHintParams) -> LspResult<Option<Vec<InlayHint>>> {
-        if !self.conversion_hints.load(Ordering::Relaxed) {
+        let conversions = self.conversion_hints.load(Ordering::Relaxed);
+        let parameters = self.parameter_hints.load(Ordering::Relaxed);
+        if !conversions && !parameters {
             return Ok(None);
         }
         let uri = params.text_document.uri;
@@ -2768,7 +2896,18 @@ impl LanguageServer for PepperLsp {
                 let (ready, edits) = view.ready.as_ref()?;
                 // Each conversion's `To(` and `)` move as one span, so an
                 // edit inside it drops both.
-                let hints: Vec<InlayHint> = conversion_hints(&ready.text, ready.sema_model()?)
+                let sema = ready.sema_model()?;
+                let conversion = if conversions { conversion_hints(&ready.text, sema) } else { vec![] };
+                let parameter = if parameters { parameter_hints(&ready.text, sema) } else { vec![] };
+                let moved = |mut hint: InlayHint| {
+                    if let Some(edits) = edits {
+                        let span = edits.line_range_to_new(&ready.text, view.text(), Range::new(hint.position, hint.position))?;
+                        hint.position = span.start;
+                    }
+                    Some(hint)
+                };
+                let parameter: Vec<InlayHint> = parameter.into_iter().filter_map(moved).collect();
+                let hints: Vec<InlayHint> = conversion
                     .chunks(2)
                     .filter_map(|pair| {
                         let [open, close] = pair else { return None };
@@ -2780,6 +2919,7 @@ impl LanguageServer for PepperLsp {
                         Some([open, close])
                     })
                     .flatten()
+                    .chain(parameter)
                     .filter(|h| h.position >= range.start && h.position <= range.end)
                     .collect();
                 Some(hints)

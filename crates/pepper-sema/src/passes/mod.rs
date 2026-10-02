@@ -120,6 +120,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_implicit_types(module));
     step!(resolve_resolvables(module, false)); // resolve as much as possible
     step!(apply_extensions(module, false)); // apply generic/concrete extensions
+    apply_extensions::check_parameter_names(module);
     // Values interpolated outside generic code, before specializing
     // `to_string<T>` for a type it cannot convert fails inside it.
     step!(interpolation::check_interpolations(module));
@@ -206,6 +207,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
     step!(named_arguments::check_unbound(module));
+    named_arguments::record_argument_names(module);
     step!(type_arguments::check_type_arguments(module));
     step!(overloads::check_overloads(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist

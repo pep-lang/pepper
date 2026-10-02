@@ -350,8 +350,11 @@ slower than 200 ms. Code a
 `[Target(...)]` attribute leaves out on the platform you build on is shown
 dimmed.
 `pepper.inlayHints.implicitConversions` (default on) shows the constructor
-call an `[Implicit]` conversion inserts as an inlay hint; changing it
-restarts the server.
+call an `[Implicit]` conversion inserts as an inlay hint, and
+`pepper.inlayHints.parameterNames` (default on) shows the parameter name
+before a literal argument passed by position (`width:` before `800`);
+changing either restarts the server. Completion inside a call's parentheses
+offers the parameter names (`width = `) of the function it calls.
 
 Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
 `tools/vscode-pepper/src` and its dependencies into one file with esbuild

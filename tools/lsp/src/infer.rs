@@ -1169,6 +1169,22 @@ impl<'a> Typer<'a> {
     pub fn bare_member(&self, id: &str, at: usize) -> Option<Found<'a>> {
         self.member(&self.this_type(at)?, id, at)
     }
+
+    /// What a call `name(...)` at `at` may call: a method of `this`, else
+    /// every free function named `name` and every constructor of the
+    /// struct named `name`, in any program file.
+    pub fn callees_named(&self, name: &str, at: usize) -> Vec<&'a ast::FunctionDecl> {
+        if let Some(Found { kind: Kind::Method(f), .. }) = self.bare_member(name, at) {
+            return vec![f];
+        }
+        self.declarations()
+            .flat_map(|(_, d)| match d {
+                ast::Declaration::Function(f) if plain(&f.name) == name => vec![f],
+                ast::Declaration::Struct(s) if plain(&s.name) == name => s.constructors.iter().collect(),
+                _ => vec![],
+            })
+            .collect()
+    }
 }
 
 /// The type of the name destructuring binds at `span`, from a value of type

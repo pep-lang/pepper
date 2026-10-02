@@ -149,7 +149,10 @@ set one defaulted parameter without passing the ones before it:
 - **Everywhere a call is.** Free functions, methods, static methods,
   constructors (a `this.x` parameter is named `x`), extension methods, enum
   methods, generic functions, and calls through a [trait](traits-and-extensions.md)
-  value, which use the trait's parameter names.
+  value, which use the trait's parameter names. A method that implements a
+  trait should use the trait's names, so a call names the same arguments
+  either way: a different name is a warning (`parameter 'factor' of 'area'
+  is named 'scale' in trait 'Shape'`) whose fix renames the parameter.
 - **Overloads.** A member of an [overload set](overloading.md) without a
   parameter of a given name is not a candidate, so names can pick between
   overloads.

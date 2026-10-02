@@ -702,3 +702,67 @@ pub fn check_unbound(module: &Module) {
         st.constructors.iter().chain(&st.method_members).for_each(&mut check);
     }
 }
+
+/// Record the parameter each literal argument passed by position fills
+/// (`Module::argument_names`), for the language server's inlay hints. Calls
+/// to a function of one parameter are left out: its name adds nothing.
+pub fn record_argument_names(module: &mut Module) {
+    let mut literals: HashMap<Loc, Vec<(usize, Loc)>> = HashMap::new();
+    for (call, index, at) in &module.literal_args {
+        literals.entry(*call).or_default().push((*index, *at));
+    }
+    if literals.is_empty() {
+        return;
+    }
+    let table = crate::static_type::StructTable::build(module);
+    let parameters = |function: &FunctionDef| -> Vec<String> {
+        let skip = usize::from(function.parameters.first().is_some_and(|p| p.name == "this"));
+        Callee::of(function, &function.name, skip, &[]).params.into_iter().map(|p| p.name).collect()
+    };
+    let mut found = vec![];
+    let mut visit = |function: &FunctionDef, current: Option<&TypeName>| {
+        crate::passes::visit_function(function, &mut |e| {
+            let (names, loc) = match e {
+                Expression::FunctionCall { function: name, loc, .. } if literals.contains_key(loc) => {
+                    let names = if let Some(f) = module.functions.iter().find(|f| &f.name == name) {
+                        parameters(f)
+                    } else if let Some((_, constructor)) = module.constructor_of(name) {
+                        parameters(constructor)
+                    } else if let Some(ext) = module.externs.iter().find(|x| &x.name == name) {
+                        ext.parameters.iter().map(|p| p.name.clone()).collect()
+                    } else {
+                        return;
+                    };
+                    (names, *loc)
+                }
+                Expression::MethodCall { this, method, loc, .. } if literals.contains_key(loc) => {
+                    let Some(receiver) = crate::static_type::of(this, &table, current) else { return };
+                    let receiver = receiver.to_string();
+                    let Some(st) = module.structs.iter().find(|s| s.ty.to_string() == receiver) else { return };
+                    let Some(m) = st.method_members.iter().find(|m| &m.name == method) else { return };
+                    (parameters(m), *loc)
+                }
+                _ => return,
+            };
+            if names.len() < 2 {
+                return;
+            }
+            for (index, at) in &literals[&loc] {
+                if let Some(name) = names.get(*index) {
+                    found.push((*at, name.clone()));
+                }
+            }
+        });
+    };
+    for function in module.functions.iter().filter(|f| !f.is_generic_func) {
+        visit(function, None);
+    }
+    for st in module.structs.iter().filter(|s| s.generic_params.is_empty() || s.name.contains('<')) {
+        for function in st.constructors.iter().chain(&st.method_members) {
+            visit(function, Some(&st.ty));
+        }
+    }
+    found.sort_by_key(|(at, _)| (at.file.0, at.span.start));
+    found.dedup();
+    module.argument_names = found;
+}

@@ -1532,6 +1532,75 @@ walk<T>(node: Node) {
     assert!(h.starts_with("`node` — `Node`"), "{}", h);
 }
 
+const RESIZED: &str = r#"struct Window {
+    var width: int;
+    var height: int;
+
+    construct(this.width = 0, this.height = 0) {}
+
+    [Alias("w", "width")]
+    resize(width: int, height: int) {
+        this.width = width;
+        this.height = height;
+    }
+}
+
+[Alias("count", "times")]
+repeat(text: String, times: int): String { return text; }
+
+main(): int {
+    var window = Window(640, 480);
+    window.resize(800, height = 600);
+    var size = 4;
+    var s = repeat("ab", size);
+    return 0;
+}
+"#;
+
+#[test]
+fn inlay_hints_name_literal_arguments() {
+    let (_, text, program) = load("parameter_hints", RESIZED, "main.pep");
+    let sema = sema_model_of(&program).expect("sema");
+    let hints: Vec<(Position, String)> = parameter_hints(&text, &sema)
+        .into_iter()
+        .map(|h| match h.label {
+            InlayHintLabel::String(label) => (h.position, label),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    let position = |needle: &str| byte_to_lsp_pos(&text, at(&text, needle, 0, 0));
+    // A named argument and a variable need no hint.
+    assert_eq!(hints, vec![
+        (position("640"), "width:".to_string()),
+        (position("480"), "height:".to_string()),
+        (position("800"), "width:".to_string()),
+        (position("\"ab\""), "text:".to_string()),
+    ]);
+}
+
+#[test]
+fn completion_in_an_argument_list_offers_parameter_names() {
+    let uri = Url::parse("file:///t.pep").unwrap();
+    let labels = |text: &str, offset: usize| -> Vec<(String, Option<String>)> {
+        let service = analyzed_server(&uri, text);
+        service.inner().argument_names(&uri, text, offset).into_iter().map(|i| (i.label, i.insert_text)).collect()
+    };
+    let named = |names: &[&str]| -> Vec<(String, Option<String>)> {
+        names.iter().map(|n| (n.to_string(), Some(format!("{} = ", n)))).collect()
+    };
+    // A method, after a named argument: its other parameter and the alias.
+    let text = RESIZED.replace("window.resize(800, height = 600)", "window.resize(height = 600, )");
+    assert_eq!(labels(&text, at(&text, ", )", 0, 2)), named(&["width", "w"]));
+    // A free function, while its first argument is typed.
+    let text = RESIZED.replace("repeat(\"ab\", size)", "repeat(te)");
+    assert_eq!(labels(&text, at(&text, "te)", 0, 2)), named(&["text", "times", "count"]));
+    // A constructor.
+    let text = RESIZED.replace("Window(640, 480)", "Window()");
+    assert_eq!(labels(&text, at(&text, "Window()", 0, 7)), named(&["width", "height"]));
+    // Not inside an argument.
+    assert!(labels(RESIZED, at(RESIZED, "640", 0, 2)).is_empty());
+}
+
 /// Names inside a property's accessor bodies resolve like a method's: a
 /// local, a sibling member, the `set` accessor's `value`, and a property read
 /// from outside goes to its declaration.

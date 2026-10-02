@@ -1341,6 +1341,9 @@ pub struct Module {
     /// Each call or function value that named an overload set: its callee's
     /// location and the member it resolved to, for the language server.
     pub call_targets: Vec<(Loc, String)>,
+    /// Each literal argument passed by position, and the name of the
+    /// parameter it fills, for the language server's inlay hints.
+    pub argument_names: Vec<(Loc, String)>,
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     #[serde(skip)]

@@ -201,6 +201,11 @@ A few things are useful once it is installed:
   the editor shows the call it stands for as an inlay hint (`Path(` before
   `"notes.txt"` and `)` after), and hovering the value says so. The
   `pepper.inlayHints.implicitConversions` setting turns the hints off.
+- A literal passed by position shows the name of its parameter as an inlay
+  hint (`resize(width: 800, height: 600)`); the
+  `pepper.inlayHints.parameterNames` setting turns these off. Inside a
+  call's parentheses, completion offers the parameter names to
+  [name](../language/functions.md#named-arguments) (`width = `).
 - Hover and go to definition also work where the compiler has not checked
   the code yet: in a generic function or method nothing calls, on a
   `match` arm's case and the names it binds (`Circle(r) => ...`), and on
