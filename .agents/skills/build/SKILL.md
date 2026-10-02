@@ -51,7 +51,7 @@ Windows specifics worth knowing, since they are not obvious: `lldb` is **absent*
 
 ```powershell
 & "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
-  -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
+  -k "thread backtrace" -- target/debug/pep-build.exe tests/hello.pep
 ```
 
 The `20.1.8` in that path is the default major's version from `$LlvmVersions` in `scripts/setup-llvm.ps1`; with `-Llvm <major>` it is that major's version instead.
@@ -59,14 +59,14 @@ The `20.1.8` in that path is the default major's version from `$LlvmVersions` in
 On macOS and Linux, with `lldb` on PATH:
 
 ```bash
-lldb --batch -o run -k "thread backtrace" -- target/debug/pepper tests/hello.pep
+lldb --batch -o run -k "thread backtrace" -- target/debug/pep-build tests/hello.pep
 ```
 
 ## Build
 
 ```bash
-cargo build              # debug → target/debug/pepper(.exe)
-cargo build --release    # → target/release/pepper(.exe)
+cargo build              # debug → target/debug/pep-build(.exe)
+cargo build --release    # → target/release/pep-build(.exe), the compiler
 cargo check              # fast type-check; use while iterating on errors
 cargo build -p pepper-parser   # single crate
 ```

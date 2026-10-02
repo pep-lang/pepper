@@ -62,6 +62,7 @@ mod nested_hash_tests;
 mod optional_tests;
 mod param_default_tests;
 mod pep_fmt_tests;
+mod pepper_entry_tests;
 mod platform_tests;
 mod os_tests;
 mod process_tests;

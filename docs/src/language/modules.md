@@ -220,7 +220,7 @@ paths**: first each directory you pass with `-I`, in order, then the runtime
 directory. If `geometry` lives in a `deps` folder, compile with:
 
 ```sh
-pepper main.pep -I deps -o main
+pepper build main.pep -I deps -o main
 ```
 
 An identifier import never looks next to the importing file. A module that is

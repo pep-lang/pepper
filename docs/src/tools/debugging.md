@@ -9,8 +9,8 @@ WinDbg. The compiler then describes the program to the debugger, which can:
 - print parameters, locals, module-scope variables and struct fields.
 
 ```bash
-pepper -g main.pep -o main        # Linux and macOS: DWARF in the executable
-pepper -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
+pepper build -g main.pep -o main        # Linux and macOS: DWARF in the executable
+pepper build -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
 ```
 
 `-g` and `-O` work together. Optimized code still steps and shows a
@@ -28,7 +28,7 @@ This program builds an array of points and adds up the first one:
 Stop on line 18, after `first` is assigned, and look around. In gdb:
 
 ```text
-$ pepper -g debugging.pep -o debugging
+$ pepper build -g debugging.pep -o debugging
 $ gdb ./debugging
 (gdb) break debugging.pep:18
 (gdb) run

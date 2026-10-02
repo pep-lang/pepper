@@ -38,15 +38,18 @@ has the full details for each platform; this is the short version.
    debugger; you can leave it out. Run `cargo setup --check` at any time to see
    what is configured.
 
-Now build the compiler:
+Now build the compiler, then the `pepper` command with it:
 
 ```sh
 cargo build --release
+target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 ```
 
-The compiler is `target/release/pepper` (`target\release\pepper.exe` on
-Windows). To check that everything works, run the test suite with
-`cargo test --workspace`.
+On Windows, name the output `target\release\pepper.exe`. The compiler is
+`target/release/pep-build`; `pepper` is the entry point to every Pepper tool,
+so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
+[The pepper command](../tools/pepper.md)). To check that everything works,
+run the test suite with `cargo test --workspace`.
 
 ## Your first program
 
@@ -63,11 +66,11 @@ the end of the line.
 
 ## Compile and run it
 
-Pass the source file to `pepper`. It compiles and links a native executable,
+Pass the source file to `pepper build`. It compiles and links a native executable,
 but does not run it, so run the result yourself:
 
 ```sh
-pepper hello.pep -o hello
+pepper build hello.pep -o hello
 ./hello
 ```
 
@@ -82,7 +85,8 @@ file with no extension (`hello` for `hello.pep`).
 
 The examples here write `pepper`; use the path to the binary you built, or add
 `target/release` to your `PATH`. From the repository root, you can also run
-the compiler through cargo: `cargo run --release -- hello.pep -o hello`.
+the compiler through cargo: `cargo run --release -- hello.pep -o hello`
+runs `pep-build` directly.
 
 ### Where the compiler finds the standard library
 

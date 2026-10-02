@@ -10,7 +10,8 @@ Bring it in with `import cli`. The raw arguments stay where they are,
 in `main(args: String[])` and `process.arguments()`.
 
 - [Parser](cli-parser.md): `Parser`, and the handles its declarations
-  return: `Flag`, `Argument`, `ArgumentList`
+  return: `Flag`, `Argument`, `ArgumentList`; and `closest`, which
+  picks the name a misspelled one most likely meant
 
 **Example**
 ```pepper

@@ -58,6 +58,7 @@
 
 # Tools
 
+- [The pepper command](tools/pepper.md)
 - [Formatting with pep-fmt](tools/pep-fmt.md)
 - [Debugging](tools/debugging.md)
 

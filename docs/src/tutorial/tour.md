@@ -127,7 +127,7 @@ Compile it by passing the entry file; the compiler finds `counter.pep` from
 the import:
 
 ```sh
-pepper main.pep -o word-count
+pepper build main.pep -o word-count
 ./word-count
 ```
 

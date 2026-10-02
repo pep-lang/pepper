@@ -55,8 +55,10 @@ llvm20-1 = ["pepper-driver/llvm20-1"]
 llvm21-1 = ["pepper-driver/llvm21-1"]
 llvm22-1 = ["pepper-driver/llvm22-1"]
 
+# The compiler. `pepper` itself is the Pepper-written entry point in
+# tools/pepper, which runs `pep-<command>`; `pepper build` runs this.
 [[bin]]
-name = "pepper"
+name = "pep-build"
 path = "src/main.rs"
 
 # The front end parses and checks the whole runtime for every program the

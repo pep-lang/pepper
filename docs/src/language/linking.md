@@ -59,7 +59,7 @@ remember a command-line flag.
 The `-l` option links a library for one build:
 
 ```sh
-pepper main.pep -l m -o main
+pepper build main.pep -l m -o main
 ```
 
 Repeat it for more libraries (`-l m -l pthread`).
@@ -69,7 +69,7 @@ library directories, such as a Homebrew install on macOS) needs its folder
 on the search path. `-L dir` adds one, like `-L` for clang:
 
 ```sh
-pepper main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
+pepper build main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
 ```
 
 Repeat it for more folders. The folders are searched for `-l` libraries and

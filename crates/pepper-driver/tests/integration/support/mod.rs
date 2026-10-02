@@ -2,7 +2,7 @@
 //! declares `use crate::support;` or imports it by name. A helper a second
 //! test file needs moves here; it is never copied into that file.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use pepper_codegen::CodeGenerator;
@@ -105,6 +105,24 @@ pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -
     });
     results.sort_by_key(|(i, _)| *i);
     results.into_iter().map(|(_, r)| r).collect()
+}
+
+/// Compiles the program `main` (with `-I` for each of `import_paths`) to
+/// the executable `out`, keeping its build files in `build`, for a test that
+/// runs a tool written in Pepper. Panics with the rendered error when it
+/// does not compile.
+pub fn build_executable(main: &Path, import_paths: &[&Path], out: &Path, build: &Path) {
+    use clap::Parser;
+    let mut argv = vec!["pep-build".to_string(), main.to_string_lossy().into_owned()];
+    for path in import_paths {
+        argv.push("-I".to_string());
+        argv.push(path.to_string_lossy().into_owned());
+    }
+    argv.extend(["-o".to_string(), out.to_string_lossy().into_owned()]);
+    argv.extend(["--build".to_string(), build.to_string_lossy().into_owned()]);
+    let options = pepper_driver::Options::parse_from(argv);
+    let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("{} failed to compile:\n{}", main.display(), e));
+    assert_eq!(code, 0, "the compiler exited with {}", code);
 }
 
 /// The repository root, two levels above this crate.

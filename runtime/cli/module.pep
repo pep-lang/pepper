@@ -6,7 +6,8 @@
 ## in `main(args: String[])` and `process.arguments()`.
 ##
 ## - [Parser](cli-parser.md): `Parser`, and the handles its declarations
-##   return: `Flag`, `Argument`, `ArgumentList`
+##   return: `Flag`, `Argument`, `ArgumentList`; and `closest`, which
+##   picks the name a misspelled one most likely meant
 ##
 ## @example
 ##     import cli;
@@ -31,3 +32,4 @@ export Parser;
 export Flag;
 export Argument;
 export ArgumentList;
+export closest;

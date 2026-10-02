@@ -4,7 +4,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[command(name = "pepper", version, about = "Pepper compiler")]
+#[command(name = "pep-build", version, about = "Pepper compiler")]
 pub struct Options {
     /// Source files to compile (≥1).
     pub source_files: Vec<PathBuf>,

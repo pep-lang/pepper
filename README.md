@@ -156,13 +156,13 @@ installed — `20.1.8` for the default:
 
 ```powershell
 & "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
-  -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
+  -k "thread backtrace" -- target/debug/pep-build.exe tests/hello.pep
 ```
 
 On macOS and Linux, with `lldb` on PATH:
 
 ```bash
-lldb --batch -o run -k "thread backtrace" -- target/debug/pepper tests/hello.pep
+lldb --batch -o run -k "thread backtrace" -- target/debug/pep-build tests/hello.pep
 ```
 
 Two real bugs in this repository were found exactly that way. Without it you
@@ -186,8 +186,9 @@ need. Platform notes:
 ## Build and test
 
 ```bash
-cargo build                # debug binary at target/debug/pepper(.exe)
+cargo build                # debug compiler at target/debug/pep-build(.exe)
 cargo build --release
+target/release/pep-build tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
 cargo test --workspace
 ```
 
@@ -217,6 +218,14 @@ On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
 all five pass; CI's `test-macos` job runs the suite there against LLVM 20.
 
 ## Run the compiler
+
+The compiler is `pep-build`. `pepper`, built from `tools/pepper` as above, is
+the entry point to every tool: `pepper build` runs `pep-build`, `pepper fmt`
+runs `pep-fmt`, and `pepper help` lists the `pep-*` commands it finds next to
+itself or on the `PATH` (see the book's
+[pepper command](https://justinboswell.github.io/pepper/tools/pepper.html)).
+`pepper main.pep` still runs the compiler, with a deprecation warning.
+From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash
 cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout

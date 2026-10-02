@@ -5,7 +5,6 @@
 //! input and the output. Golden tests pin the style itself, and the tool's
 //! own sources must already be formatted.
 
-use clap::Parser;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -25,18 +24,8 @@ fn pep_fmt() -> &'static Path {
         let _ = std::fs::remove_dir_all(&build);
         std::fs::create_dir_all(&build).unwrap();
         let out = build.join(if cfg!(windows) { "pep-fmt.exe" } else { "pep-fmt" });
-        let options = pepper_driver::Options::parse_from([
-            "pepper".to_string(),
-            root.join("tools").join("pep-fmt").join("main.pep").to_string_lossy().into_owned(),
-            "-I".to_string(),
-            root.join("tools").to_string_lossy().into_owned(),
-            "-o".to_string(),
-            out.to_string_lossy().into_owned(),
-            "--build".to_string(),
-            build.join("obj").to_string_lossy().into_owned(),
-        ]);
-        let code = pepper_driver::run(options).unwrap_or_else(|e| panic!("pep-fmt failed to compile:\n{}", e));
-        assert_eq!(code, 0, "the compiler exited with {}", code);
+        let tools = root.join("tools");
+        support::build_executable(&tools.join("pep-fmt").join("main.pep"), &[&tools], &out, &build.join("obj"));
         out
     })
 }

@@ -456,7 +456,7 @@ their cost and accepts the risk can remove kinds of check with
 | `all` | Every check above | |
 
 ```bash
-pepper -O main.pep --no-runtime-checks=overflow,shift
+pepper build -O main.pep --no-runtime-checks=overflow,shift
 ```
 
 Removing `bounds` or `null` gives up Pepper's memory safety: an index out of

@@ -274,3 +274,27 @@ fn parse_prints_help_and_errors() {
         "pkg: error: missing required argument '<name>'\nusage: pkg add [OPTIONS] <name>\nRun 'pkg add --help' for more information.\n"
     );
 }
+
+#[test]
+fn closest_picks_the_nearest_candidate_within_two_edits() {
+    assert_eq!(
+        run(r##"
+import cli;
+
+test(): int {
+    var names = Array<String>();
+    names.append("build");
+    names.append("fmt");
+    names.append("bulk");
+    if (cli.closest("buidl", names).value() != "build") { return -1; }
+    if (cli.closest("fm", names).value() != "fmt") { return -2; }
+    # "bul" is one edit from "bulk" and two from "build": the nearer wins.
+    if (cli.closest("bul", names).value() != "bulk") { return -3; }
+    if (cli.closest("package", names).is_some()) { return -4; }
+    if (cli.closest("x", Array<String>()).is_some()) { return -5; }
+    return 0;
+}
+"##),
+        0
+    );
+}

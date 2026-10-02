@@ -628,32 +628,22 @@ export struct Parser {
     # "unknown option '--outptu'; did you mean '--output'?"
     _unknown_option(name: String): String {
         var message = "unknown option '--" + name + "'";
-        var best = "";
-        var best_distance = 3;
+        var names = Array<String>();
         for (var option in _options) {
-            var distance = _cli_edit_distance(name, option.name);
-            if (distance < best_distance) {
-                best = option.name;
-                best_distance = distance;
-            }
+            names.append(option.name);
         }
-        if (_cli_edit_distance(name, "help") < best_distance) {
-            best = "help";
-        }
-        return best.is_empty ? message : message + "; did you mean '--" + best + "'?";
+        names.append("help");
+        var best = closest(name, names);
+        return best.is_some() ? message + "; did you mean '--" + best.value() + "'?" : message;
     }
 
     _command_suggestion(name: String): String {
-        var best = "";
-        var best_distance = 3;
+        var names = Array<String>();
         for (var command in _commands) {
-            var distance = _cli_edit_distance(name, command._name);
-            if (distance < best_distance) {
-                best = command._name;
-                best_distance = distance;
-            }
+            names.append(command._name);
         }
-        return best.is_empty ? "" : "; did you mean '" + best + "'?";
+        var best = closest(name, names);
+        return best.is_some() ? "; did you mean '" + best.value() + "'?" : "";
     }
 
     # The character of `argument` whose UTF-8 sequence starts at byte `at`,
@@ -691,6 +681,32 @@ export struct Parser {
             index += 1;
         }
     }
+}
+
+## Returns the candidate closest to a misspelled `name`, for a "did you
+## mean" suggestion: the one the fewest single-byte insertions, deletions
+## and substitutions turn `name` into, when that is at most 2. Of equally
+## close candidates the first wins.
+##
+## @param name the name that matched nothing
+## @param candidates the names it could have meant
+## @returns the closest candidate, or none when none is within 2 edits
+## @example
+##     var names = Array<String>();
+##     names.append("build");
+##     names.append("fmt");
+##     var best = cli.closest("buidl", names);   # some("build")
+export closest(name: String, candidates: Array<String>): String? {
+    var best = Optional<String>.none();
+    var best_distance = 3;
+    for (var candidate in candidates) {
+        var distance = _cli_edit_distance(name, candidate);
+        if (distance < best_distance) {
+            best = Optional<String>.some(candidate);
+            best_distance = distance;
+        }
+    }
+    return best;
 }
 
 # The number of single-byte insertions, deletions and substitutions that

@@ -273,6 +273,32 @@ and returns false; exit with status 2, as the example does.
 **Returns**
 - true when the arguments were parsed, false after an error
 
+## closest
+
+```pepper
+closest(name: String, candidates: Array<String>): String?
+```
+
+Returns the candidate closest to a misspelled `name`, for a "did you
+mean" suggestion: the one the fewest single-byte insertions, deletions
+and substitutions turn `name` into, when that is at most 2. Of equally
+close candidates the first wins.
+
+**Parameters**
+- `name` — the name that matched nothing
+- `candidates` — the names it could have meant
+
+**Returns**
+- the closest candidate, or none when none is within 2 edits
+
+**Example**
+```pepper
+    var names = Array<String>();
+    names.append("build");
+    names.append("fmt");
+    var best = cli.closest("buidl", names);   # some("build")
+```
+
 ## Flag
 
 ```pepper

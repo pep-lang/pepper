@@ -25,7 +25,7 @@ names and the pass order come from that implementation.
 
 | Path | Role |
 | --- | --- |
-| `src/main.rs` | The `pepper` CLI binary: parses `Options`, calls `pepper_driver::run`, prints errors (colored on a TTY unless `NO_COLOR`). |
+| `src/main.rs` | The compiler binary, `pep-build` (run as `pepper build`): parses `Options`, calls `pepper_driver::run`, prints errors (colored on a TTY unless `NO_COLOR`). |
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
@@ -37,6 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pepper-docgen`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
+| `tools/pepper` | `pepper`, the entry point written in Pepper: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler). Tested by `pepper_entry_tests.rs`. |
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
@@ -44,7 +45,7 @@ names and the pass order come from that implementation.
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `docs.yml`, `llvm-package.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
-Dependency direction: `parser ← files ← sema ← codegen ← driver ← pepper`.
+Dependency direction: `parser ← files ← sema ← codegen ← driver ← pep-build`.
 `lsp` and `docgen` depend on the parser (and the LSP also on sema and files)
 and nothing that links LLVM.
 
@@ -53,7 +54,7 @@ and nothing that links LLVM.
 ## 2. The pipeline end to end
 
 ```text
-pepper main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]
+pep-build main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]   (pepper build ...)
   │  src/main.rs: Options::parse → pepper_driver::run            (driver/src/lib.rs)
   │
   ├─ --emit-ast ─→ run_emit_ast: parse_source(entry) → print AST   (entry file only)
@@ -143,7 +144,7 @@ with no extension, and `module_name()` is the output's stem.
   runtime directory and nothing else is searched. Otherwise the candidates
   are `<cwd>/runtime`, `<cwd>/.pep/runtime`, and `../runtime` up to five
   levels above the current directory, then `runtime` beside the running
-  executable and up to five levels above it (so `target/debug/pepper` finds
+  executable and up to five levels above it (so `target/debug/pep-build` finds
   the checkout's `runtime/` from anywhere). The **first** directory
   containing `.pep` files wins. Only that directory's top-level `.pep` files
   join the prelude (`runtime/io/` does not). Any `.a` files there are
@@ -2007,7 +2008,7 @@ release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `code --install-extension` from the current branch.
 
 **`tools/syntax` and `tools/pep-fmt`** are Pepper programs, built with
-`pepper -I tools tools/pep-fmt/main.pep`. They are the project's largest
+`pepper build -I tools tools/pep-fmt/main.pep`. They are the project's largest
 dogfooding of the language.
 
 - `tools/syntax` (a module: `module.pep` is four `export * from` lines) is a lexer
