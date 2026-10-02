@@ -436,7 +436,7 @@ export struct HashMap<K, V> {
     }
 
     ## Returns a deep copy: a new map holding a copy of each key and value,
-    ## made with `copies.copy`. This is how `copy(value)` copies a HashMap
+    ## made with `copy`. This is how `copy(value)` copies a HashMap
     ## (the `Copyable<HashMap<K, V>>` implementation); call `copy(map)`
     ## rather than this method.
     ##
@@ -444,14 +444,13 @@ export struct HashMap<K, V> {
     ## finds its entries under the copied keys. Runs in O(capacity) plus the
     ## cost of copying the entries.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): HashMap<K, V> {
+    copy(): HashMap<K, V> {
         HashMap<K, V> made = HashMap<K, V>(_table._capacity);
-        copies.register<HashMap<K, V>>(this, made);
+        register_copy<HashMap<K, V>>(this, made);
         ulong i = _table._next_occupied(0);
         while (i < _table._capacity) {
-            made.insert(copies.copy<K>(_table._keys._data[i]), copies.copy<V>(_table._values._data[i]));
+            made.insert(copy<K>(_table._keys._data[i]), copy<V>(_table._values._data[i]));
             i = _table._next_occupied(i + 1);
         }
         return made;
@@ -802,7 +801,7 @@ export struct HashSet<K> {
     }
 
     ## Returns a deep copy: a new set holding a copy of each element, made
-    ## with `copies.copy`. This is how `copy(value)` copies a HashSet (the
+    ## with `copy`. This is how `copy(value)` copies a HashSet (the
     ## `Copyable<HashSet<K>>` implementation); call `copy(set)` rather than
     ## this method.
     ##
@@ -810,14 +809,13 @@ export struct HashSet<K> {
     ## identity finds the copied elements. Runs in O(capacity) plus the cost
     ## of copying the elements.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): HashSet<K> {
+    copy(): HashSet<K> {
         HashSet<K> made = HashSet<K>(_table._capacity);
-        copies.register<HashSet<K>>(this, made);
+        register_copy<HashSet<K>>(this, made);
         ulong i = _table._next_occupied(0);
         while (i < _table._capacity) {
-            made.insert(copies.copy<K>(_table._keys._data[i]));
+            made.insert(copy<K>(_table._keys._data[i]));
             i = _table._next_occupied(i + 1);
         }
         return made;

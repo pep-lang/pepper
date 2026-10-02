@@ -699,18 +699,17 @@ export struct Map<K, V> {
     }
 
     ## Returns a deep copy: a new map holding a copy of each key and value,
-    ## made with `copies.copy`. This is how `copy(value)` copies a Map (the
+    ## made with `copy`. This is how `copy(value)` copies a Map (the
     ## `Copyable<Map<K, V>>` implementation); call `copy(map)` rather than
     ## this method. O(count log count) plus the cost of copying the entries.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): Map<K, V> {
+    copy(): Map<K, V> {
         var made = Map<K, V>();
-        copies.register<Map<K, V>>(this, made);
+        register_copy<Map<K, V>>(this, made);
         var node = _tree._first();
         while (node != 0) {
-            made.insert(copies.copy<K>(_tree._keys[node]), copies.copy<V>(_tree._values[node]));
+            made.insert(copy<K>(_tree._keys[node]), copy<V>(_tree._values[node]));
             node = _tree._successor(node);
         }
         return made;
@@ -948,18 +947,17 @@ export struct Set<K> {
     }
 
     ## Returns a deep copy: a new set holding a copy of each member, made
-    ## with `copies.copy`. This is how `copy(value)` copies a Set (the
+    ## with `copy`. This is how `copy(value)` copies a Set (the
     ## `Copyable<Set<K>>` implementation); call `copy(set)` rather than this
     ## method.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): Set<K> {
+    copy(): Set<K> {
         var made = Set<K>();
-        copies.register<Set<K>>(this, made);
+        register_copy<Set<K>>(this, made);
         var node = _tree._first();
         while (node != 0) {
-            made.insert(copies.copy<K>(_tree._keys[node]));
+            made.insert(copy<K>(_tree._keys[node]));
             node = _tree._successor(node);
         }
         return made;

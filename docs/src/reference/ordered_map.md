@@ -214,16 +214,13 @@ entry makes the iterator's next `next()` or `current()` panic.
 #### copy
 
 ```pepper
-copy(copies: Copies): OrderedMap<K, V>
+copy(): OrderedMap<K, V>
 ```
 
 Returns a deep copy: a new map holding a copy of each key and value,
-in the same order, made with `copies.copy`. This is how `copy(value)`
+in the same order, made with `copy`. This is how `copy(value)`
 copies an OrderedMap (the `Copyable<OrderedMap<K, V>>`
 implementation); call `copy(map)` rather than this method.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy

@@ -23,6 +23,8 @@ struct Tables {
     methods: Vec<(String, Vec<(String, TypeName)>)>,
     /// Struct type string → its positions in `methods`, in order.
     method_index: HashMap<String, Vec<usize>>,
+    /// Struct type string → how many arguments each of its methods takes.
+    arities: HashMap<String, Vec<crate::passes::Arity>>,
     /// Free-function and extern name → return type.
     functions: HashMap<String, TypeName>,
     /// Free functions usable as values: name → function type.
@@ -102,6 +104,7 @@ impl Tables {
             struct_bases: structs.iter().map(|(ty, _)| ty.split('<').next().unwrap_or(ty).to_string()).collect(),
             structs,
             method_index: index_of(&methods),
+            arities: first_wins(module.structs.iter().map(|st| (st.ty.to_string(), crate::passes::method_arities(st)))),
             methods,
             functions,
             function_types: first_wins(crate::passes::function_types::referenceable_functions(module)),
@@ -254,6 +257,19 @@ impl<'t> Scopes<'t> {
             // `set_name(m) == name` without splitting every member name.
             methods.iter().any(|(m, _)| m.strip_prefix(name).is_some_and(|rest| rest.is_empty() || crate::passes::overloads::set_name(m) == name))
         })
+    }
+
+    /// Whether a bare call of `name` with `count` arguments in a method of
+    /// `ty` calls one of its methods. Class scope comes first, unless no
+    /// method by that name takes `count` arguments and a free function
+    /// `name` exists: then the call is the function's, so a `copy()`
+    /// method can call `copy(x)`.
+    fn calls_method(&self, ty: &TypeName, name: &str, count: usize) -> bool {
+        if !self.has_method(ty, name) {
+            return false;
+        }
+        let free = self.tables.functions.contains_key(name) || self.tables.generic_functions.contains_key(name) || self.overloads.is_set(name);
+        !free || self.tables.arities.get(&ty.to_string()).is_none_or(|arities| crate::passes::takes(arities, name, count))
     }
 
     /// Function type of the free function `name`, when a bare `name` in
@@ -562,6 +578,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // case named `String`.
             if let Some(st) = current_struct
                 && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc)
+                && (!scopes.has_method(st, function) || scopes.calls_method(st, function, args.len()))
             {
                 let own = st.to_string();
                 if let Some(methods) = scopes.method_tables(&own).next() {
@@ -604,8 +621,9 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return TypeName::auto();
                 }
                 // `__default<T>()` (until `convert_intrinsics` makes it a
-                // `Default` node) is a `T`.
-                "__default" => {
+                // `Default` node) is a `T`, and so is `__copy_object<T>(v)`
+                // (until `copies` makes it `v.__copy()`).
+                "__default" | "__copy_object" => {
                     let parsed = crate::passes::gather_generics::parse_type_string(function);
                     return parsed.sub_types.into_iter().next().unwrap_or_else(TypeName::auto);
                 }
@@ -1013,7 +1031,7 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     }
     // Inside a method, a bare call may be one of the struct's methods,
     // which `convert_member_refs` has not turned into a method call yet.
-    if current.is_some_and(|st| scopes.has_method(st, function) || scopes.field_type(st, function).is_some()) {
+    if current.is_some_and(|st| scopes.calls_method(st, function, args.len()) || scopes.field_type(st, function).is_some()) {
         return;
     }
     let types = argument_types(args, scopes, current);

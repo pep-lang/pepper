@@ -71,6 +71,11 @@ fn conform(
         // one with the declared parameter types implements it.
         let set = set_name(&required.name);
         let candidates: Vec<&FunctionDef> = st.method_members.iter().filter(|m| set_name(&m.name) == set).collect();
+        // The deprecated `copy(copies: Copies)` still implements
+        // `Copyable<T>` for one release; `copies` passes it the context.
+        if def.name == crate::passes::copies::COPYABLE_TRAIT && candidates.iter().any(|m| crate::passes::copies::is_deprecated_copy_method(m)) {
+            continue;
+        }
         if let Some(have) = candidates.iter().find(|m| same_parameters(m, required, &type_map)) {
             check_signature(st, have, required, trait_name, &type_map, traits);
             continue;

@@ -6,13 +6,37 @@
 use crate::model::*;
 use crate::type_name::TypeName;
 
-fn convert_block(block: &mut Block, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
+/// The members a bare name in a method may bind to on `this`, and what
+/// decides between a method and a free function of one name.
+#[derive(Clone)]
+struct Methods {
+    names: Vec<String>,
+    arities: Vec<crate::passes::Arity>,
+    /// The free functions and externs a bare call may name instead.
+    free: std::sync::Arc<std::collections::HashSet<String>>,
+}
+
+impl Methods {
+    fn contains(&self, name: &String) -> bool {
+        self.names.contains(name)
+    }
+
+    /// Whether a bare call of `name` with `count` arguments is a method
+    /// call: one of the methods takes `count` arguments, or no free
+    /// function `name` exists to call instead (as
+    /// `resolve_implicit_types` decides).
+    fn calls_method(&self, name: &String, count: usize) -> bool {
+        self.contains(name) && (!self.free.contains(name) || crate::passes::takes(&self.arities, name, count))
+    }
+}
+
+fn convert_block(block: &mut Block, struct_name: &str, fields: &[VariableDef], methods: &Methods, locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
     for stmt in &mut block.items {
         convert_statement(stmt, struct_name, fields, methods, locals, globals);
     }
 }
 
-fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
+fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[VariableDef], methods: &Methods, locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
     match stmt {
         Statement::Expression(expr) => convert_expression(expr, struct_name, fields, methods, locals, globals),
         Statement::Block(inner) => {
@@ -54,7 +78,7 @@ fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[Variable
     }
 }
 
-fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &[String], globals: &std::collections::HashSet<String>) {
+fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[VariableDef], methods: &Methods, locals: &[String], globals: &std::collections::HashSet<String>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         match e {
             Expression::SymbolRef { id, ty, loc } => {
@@ -116,7 +140,7 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 // `this` there). A converted string literal constructs the
                 // `String` type even beside a method (or enum case) named
                 // `String`.
-                if methods.contains(function) && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) {
+                if methods.calls_method(function, args.len()) && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) {
                     let method = function.clone();
                     let call_args = args.clone();
                     // A sibling static is called on the struct's name; any
@@ -164,6 +188,8 @@ pub fn convert_member_refs(module: &mut Module) {
         .map(|v| v.name.clone())
         .chain(module.structs.iter().map(|s| s.name.clone()))
         .collect();
+    let free: std::sync::Arc<std::collections::HashSet<String>> =
+        std::sync::Arc::new(module.functions.iter().map(|f| f.name.clone()).chain(module.externs.iter().map(|e| e.name.clone())).collect());
     let struct_count = module.structs.len();
     for st_idx in 0..struct_count {
         // Only bodies change (a checked runtime's are stashed).
@@ -171,7 +197,7 @@ pub fn convert_member_refs(module: &mut Module) {
         if st.constructors.iter().chain(&st.method_members).all(|f| f.body.is_none()) {
             continue;
         }
-        let (fields, method_names): (Vec<VariableDef>, Vec<String>) = {
+        let (fields, method_names): (Vec<VariableDef>, Methods) = {
             let st = &module.structs[st_idx];
             let fields: Vec<VariableDef> = st
                 .field_members
@@ -197,7 +223,7 @@ pub fn convert_member_refs(module: &mut Module) {
             if !st.generic_params.is_empty() {
                 methods.push(GENERIC_BASE.to_string());
             }
-            (fields, methods)
+            (fields, Methods { names: methods, arities: crate::passes::method_arities(st), free: free.clone() })
         };
         // A bare property whose storage is not a field of its name (see
         // `passes::properties`) is `this.p` too, which the next
@@ -260,7 +286,7 @@ pub fn convert_member_refs(module: &mut Module) {
             // `this`, and no fields. What its author wrote could not name
             // members a conforming struct happens to have.
             let (fields, method_names) = match &st.method_members[method_idx].trait_default {
-                Some(trait_methods) => (vec![], trait_methods.clone()),
+                Some(trait_methods) => (vec![], Methods { names: trait_methods.clone(), arities: vec![], free: Default::default() }),
                 None => (fields.clone(), method_names.clone()),
             };
             if let Some(body) = &mut st.method_members[method_idx].body {

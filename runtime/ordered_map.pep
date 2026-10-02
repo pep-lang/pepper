@@ -222,19 +222,18 @@ export struct OrderedMap<K, V> {
     }
 
     ## Returns a deep copy: a new map holding a copy of each key and value,
-    ## in the same order, made with `copies.copy`. This is how `copy(value)`
+    ## in the same order, made with `copy`. This is how `copy(value)`
     ## copies an OrderedMap (the `Copyable<OrderedMap<K, V>>`
     ## implementation); call `copy(map)` rather than this method.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): OrderedMap<K, V> {
+    copy(): OrderedMap<K, V> {
         var made = OrderedMap<K, V>(_positions._capacity);
-        copies.register<OrderedMap<K, V>>(this, made);
+        register_copy<OrderedMap<K, V>>(this, made);
         ulong i = 0;
         while (i < _keys.count) {
             if (_live[i]) {
-                made.insert(copies.copy<K>(_keys[i]), copies.copy<V>(_values[i]));
+                made.insert(copy<K>(_keys[i]), copy<V>(_values[i]));
             }
             i = i + 1;
         }

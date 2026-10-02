@@ -1,6 +1,6 @@
 //! Deep copies for `copy(value)` (`runtime/copy.pep`).
 //!
-//! The runtime's `Copies.copy<T>(value)` is `__copy<T>(value, this)`. Once
+//! The runtime's `_Copies.copy<T>(value)` is `__copy<T>(value, this)`. Once
 //! `T` is concrete, [`synthesize_copies`] (in the specialization loop)
 //! replaces each such call by what copying a `T` means:
 //!
@@ -8,9 +8,9 @@
 //!   values) is not copied: the call becomes `value`;
 //! - a struct `T` becomes `copies._copy_object<T>(value)`, which returns
 //!   null for null, reuses a copy already made of the same object, and
-//!   otherwise calls `value._pep_copy(copies)`. This pass gives `T` that
-//!   `_pep_copy` method: `return this.copy(copies);` when `T` implements
-//!   `Copyable<T>`, else a field-by-field copy (below);
+//!   otherwise calls `value.__copy()`. This pass gives `T` that `__copy()`
+//!   method: `return this.copy();` when `T` implements `Copyable<T>`, else a
+//!   field-by-field copy (below);
 //! - a trait type `T` becomes `copies._copy_trait<T>(value)`, which returns
 //!   null for null and otherwise calls `value._pep_copy_trait(copies)`
 //!   through the vtable. This pass adds that member to the trait, and gives
@@ -23,13 +23,20 @@
 //!
 //! A struct is **trivially copyable** when it has no destructor, no raw
 //! pointer field, and no `[NotCopyable("why")]` attribute. Its synthesized
-//! `_pep_copy` allocates the copy without running a constructor
+//! `__copy()` finds the running copy's context (`copies = _pep_copies()`,
+//! one thread-local read), allocates the copy without running a constructor
 //! (`Expression::Allocate`), registers it with `copies` before copying any
 //! field (so a cycle back to it finds the copy), copies thread-safe fields
 //! as they are, and every other field with `copies.copy<F>(this.f)`. A weak
 //! field whose target is not thread-safe keeps the original's target for
 //! now; `copies._defer(made._pep_fix_weak)` then points it at the target's
 //! copy, or null, once the whole value has been copied.
+//!
+//! The context is implicit: the outermost `copy(value)` on a thread installs
+//! a `_Copies` as the thread's context and a nested `copy(x)` (in a
+//! `Copyable<T>.copy()` implementation) continues it, so `Copyable<T>` is
+//! `copy(): T`. A struct that still implements the deprecated
+//! `copy(copies: Copies)` keeps working: its `__copy()` passes the context.
 //!
 //! The copies a program asks for are checked through everything they
 //! reach: each `copy<T>(x)` call, and each `copies.copy<T>(x)` outside a
@@ -58,8 +65,13 @@ use crate::type_name::TypeName;
 use pepper_parser::diagnostic::{Edit, Fix, Sources};
 use std::collections::HashSet;
 
-/// The intrinsic `Copies.copy<T>` lowers to.
+/// The intrinsic `_Copies.copy<T>` lowers to.
 const COPY_INTRINSIC: &str = "__copy";
+
+/// The intrinsic `_Copies._copy_object<T>` calls for a struct's new copy:
+/// `__copy_object<T>(value)` lowers to `value.__copy()`, a method source
+/// code cannot call by name.
+const COPY_OBJECT_INTRINSIC: &str = "__copy_object";
 
 /// The intrinsic `MutexGuard.exit` calls before it unlocks: a
 /// `PEP_CHECK_SYNC` census of the locked value, done by copying it.
@@ -73,11 +85,17 @@ const CENSUS_FUNCTION: &str = "_pep_check_sync";
 /// instead.
 pub const NOT_COPYABLE_ATTRIBUTE: &str = "NotCopyable";
 
-/// The struct the runtime keeps copies in.
-const COPIES: &str = "Copies";
+/// The struct the runtime keeps copies in: a copy's context.
+const COPIES: &str = "_Copies";
+
+/// The runtime function that returns the running copy's context.
+const CONTEXT_FUNCTION: &str = "_pep_copies";
+
+/// The trait a struct declares to say how it is copied.
+pub const COPYABLE_TRAIT: &str = "Copyable";
 
 /// The synthesized method that copies a struct.
-const COPY_METHOD: &str = "_pep_copy";
+const COPY_METHOD: &str = "__copy";
 
 /// The synthesized method that copies a value struct (`[Value]`): a copy
 /// of the value whose fields that are not thread-safe are copied in turn.
@@ -139,9 +157,9 @@ impl Blocker {
 enum Plan {
     /// Thread-safe: the value itself.
     Same,
-    /// A struct copied by its `_pep_copy` method; `copyable` when the struct
-    /// implements `Copyable<T>` itself.
-    Object { copyable: bool },
+    /// A struct copied by its `__copy()` method; `copyable` when the struct
+    /// implements `Copyable<T>` itself, and how.
+    Object { copyable: Option<CopyMethod> },
     /// A tuple with an element that is not thread-safe: a new tuple of each
     /// element's copy.
     Tuple,
@@ -155,7 +173,7 @@ enum Plan {
 #[derive(Debug, Clone)]
 enum Hop {
     Field { owner: TypeName, field: String, loc: Loc },
-    /// A `copies.copy<X>(...)` call in the owner's `Copyable` method.
+    /// A `copy<X>(...)` call in the owner's `Copyable` method.
     Copies { owner: TypeName, copied: TypeName, loc: Loc },
 }
 
@@ -184,14 +202,48 @@ fn not_copyable(module: &Module, st: &StructDef) -> Option<String> {
     Some(attribute_string(module, attribute, st.loc.file, "reason").unwrap_or_default())
 }
 
-/// Whether `method` is a `Copyable<T>` implementation: `copy(Copies)`.
-fn is_copy_method(method: &FunctionDef) -> bool {
+/// How a struct implements `Copyable<T>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopyMethod {
+    /// `copy(): T`, which copies what it holds with `copy(x)`.
+    Current,
+    /// The deprecated `copy(copies: Copies): T`, which takes the context.
+    Deprecated,
+}
+
+/// Whether `method` is the deprecated `Copyable<T>` implementation
+/// `copy(copies: Copies)`.
+pub fn is_deprecated_copy_method(method: &FunctionDef) -> bool {
     method.name == "copy" && method.parameters.len() == 1 && method.parameters[0].ty.name == COPIES
 }
 
-/// Whether `st` implements `Copyable<T>`: it has `copy(Copies copies)`.
-fn has_copy_method(st: &StructDef) -> bool {
-    st.method_members.iter().any(is_copy_method)
+/// Whether `st` declares `Copyable<T>`.
+fn declares_copyable(st: &StructDef) -> bool {
+    st.traits.iter().any(|t| t.name == COPYABLE_TRAIT)
+}
+
+/// Whether `method` of a struct that declares `Copyable<T>` implements it:
+/// `copy()`.
+fn is_current_copy_method(method: &FunctionDef) -> bool {
+    method.name == "copy" && method.parameters.is_empty() && !method.is_static
+}
+
+/// How `st` implements `Copyable<T>`, if it does: `copy()` when it declares
+/// the trait, else the deprecated `copy(copies: Copies)`.
+fn copy_method(st: &StructDef) -> Option<CopyMethod> {
+    if declares_copyable(st) && st.method_members.iter().any(is_current_copy_method) {
+        return Some(CopyMethod::Current);
+    }
+    st.method_members.iter().any(is_deprecated_copy_method).then_some(CopyMethod::Deprecated)
+}
+
+/// Whether `method` of `st` is its `Copyable<T>` implementation.
+fn is_copy_method_of(st: &StructDef, method: &FunctionDef) -> bool {
+    match copy_method(st) {
+        Some(CopyMethod::Current) => is_current_copy_method(method),
+        Some(CopyMethod::Deprecated) => is_deprecated_copy_method(method),
+        None => false,
+    }
 }
 
 /// The `T` of each `copy<T>(...)` call (free function or method) in
@@ -241,8 +293,8 @@ fn plan(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Plan {
     if let Some(why) = not_copyable(module, st) {
         return Plan::Blocked(Blocker::NotCopyable { ty: ty.clone(), why, loc: st.loc });
     }
-    if has_copy_method(st) {
-        return Plan::Object { copyable: true };
+    if let Some(how) = copy_method(st) {
+        return Plan::Object { copyable: Some(how) };
     }
     if st.destructor.body.as_ref().is_some_and(|b| !b.items.is_empty()) {
         return Plan::Blocked(Blocker::Destructor { ty: ty.clone(), loc: st.loc });
@@ -251,20 +303,20 @@ fn plan(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Plan {
         let loc = [field.type_loc, field.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
         return Plan::Blocked(Blocker::RawPointerField { ty: ty.clone(), field: field.name.clone(), field_ty: field.ty.clone(), loc });
     }
-    Plan::Object { copyable: false }
+    Plan::Object { copyable: None }
 }
 
 /// The types a copy of `ty` copies in turn, each with the step that
 /// reaches it. A synthesized copy copies its fields (a weak field only maps
 /// its target, so it is not followed); a `Copyable` struct copies what its
-/// `copy` method passes to `copies.copy`.
+/// `copy` method passes to `copy(x)` (or the deprecated `copies.copy(x)`).
 fn contained(module: &Module, ty: &TypeName, copyable: bool) -> Vec<(TypeName, Hop)> {
     let Some(st) = struct_named(module, ty) else { return vec![] };
     if copyable {
         return st
             .method_members
             .iter()
-            .filter(|m| is_copy_method(m))
+            .filter(|m| is_copy_method_of(st, m))
             .flat_map(copy_calls)
             .map(|(copied, loc)| (copied.clone(), Hop::Copies { owner: ty.clone(), copied, loc }))
             .collect();
@@ -289,7 +341,7 @@ fn first_blocker(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Op
         let copyable = match plan(module, safe, ty) {
             Plan::Same | Plan::Trait => return None,
             Plan::Blocked(blocker) => return Some(blocker),
-            Plan::Object { copyable } => copyable,
+            Plan::Object { copyable } => copyable.is_some(),
             Plan::Tuple => false,
         };
         for (inner, hop) in contained(module, ty, copyable) {
@@ -342,12 +394,21 @@ fn copies_type() -> TypeName {
     TypeName::new(COPIES)
 }
 
+/// A synthesized method of `st` that takes the copy's context as
+/// `copies`.
 fn method(st: &StructDef, name: &str, ty: TypeName, items: Vec<Statement>) -> FunctionDef {
+    let mut method = method_without_context(st, name, ty, items);
+    method.parameters.push(variable("copies", copies_type(), None, Kind::Param));
+    method
+}
+
+/// A synthesized method of `st` with no parameters.
+fn method_without_context(st: &StructDef, name: &str, ty: TypeName, items: Vec<Statement>) -> FunctionDef {
     FunctionDef {
         name: name.to_string(),
         ty,
         generic_params: vec![],
-        parameters: vec![variable("copies", copies_type(), None, Kind::Param)],
+        parameters: vec![],
         body: Some(Block { name: name.to_string(), items, attributes: vec![] }),
         parent: Some(st.name.clone()),
         is_static: false,
@@ -360,22 +421,27 @@ fn method(st: &StructDef, name: &str, ty: TypeName, items: Vec<Statement>) -> Fu
     }
 }
 
-/// The `_pep_copy` method of `st`, and its `_pep_fix_weak` when it has weak
-/// fields to point at copies.
-fn copy_methods(st: &StructDef, safe: &ThreadSafeStructs, copyable: bool) -> Vec<FunctionDef> {
-    let ty = st.ty.clone();
+/// `_pep_copies()`: the context of the copy running on this thread.
+fn context() -> Expression {
+    Expression::FunctionCall { function: CONTEXT_FUNCTION.to_string(), args: vec![], loc: Loc::NONE }
+}
+
+/// The `__copy()` method of `st`, and its `_pep_fix_weak` when it has weak
+/// fields to point at copies. Only a running copy calls `__copy()`.
+fn copy_methods(st: &StructDef, safe: &ThreadSafeStructs, copyable: Option<CopyMethod>) -> Vec<FunctionDef> {
     let this_ty = TypeName::new(&st.name);
     let copies = || symbol("copies", copies_type());
-    if copyable {
-        let body = vec![Statement::Return(ReturnStatement {
-            expr: Some(method_call(Expression::ThisRef, "copy", vec![copies()])),
-            loc: Loc::NONE,
-        })];
-        return vec![method(st, COPY_METHOD, this_ty, body)];
+    if let Some(how) = copyable {
+        let args = match how {
+            CopyMethod::Current => vec![],
+            CopyMethod::Deprecated => vec![context()],
+        };
+        let body = vec![Statement::Return(ReturnStatement { expr: Some(method_call(Expression::ThisRef, "copy", args)), loc: Loc::NONE })];
+        return vec![method_without_context(st, COPY_METHOD, this_ty, body)];
     }
-    let _ = ty;
     let made = || symbol("__made", this_ty.clone());
     let mut items = vec![
+        Statement::Declaration(Declaration::Variable(variable("copies", copies_type(), Some(context()), Kind::Variable))),
         Statement::Declaration(Declaration::Variable(variable("__made", this_ty.clone(), Some(Expression::Allocate(this_ty.clone())), Kind::Variable))),
         Statement::Expression(method_call(copies(), &format!("register<{}>", st.name), vec![Expression::ThisRef, made()])),
     ];
@@ -405,16 +471,34 @@ fn copy_methods(st: &StructDef, safe: &ThreadSafeStructs, copyable: bool) -> Vec
         methods.push(method(st, FIX_WEAK_METHOD, TypeName::void(), fixes));
     }
     items.push(Statement::Return(ReturnStatement { expr: Some(made()), loc: Loc::NONE }));
-    methods.insert(0, method(st, COPY_METHOD, this_ty, items));
+    methods.insert(0, method_without_context(st, COPY_METHOD, this_ty, items));
     methods
 }
 
-/// The method that copies a value of value struct `ty`: its own `copy`
-/// when `copyable`, else the synthesized one. `None` when `ty` is no value
+/// The method that copies a value of a value struct, and whether it takes
+/// the context: its own `copy()` when it implements `Copyable<T>`, else the
+/// synthesized `_pep_copy_value(copies)`.
+#[derive(Debug, Clone, Copy)]
+struct ValueCopy {
+    method: &'static str,
+    takes_context: bool,
+}
+
+/// How a value of value struct `ty` is copied. `None` when `ty` is no value
 /// struct.
-fn value_copy_method(module: &Module, ty: &TypeName, copyable: bool) -> Option<&'static str> {
+fn value_copy_method(module: &Module, ty: &TypeName, copyable: Option<CopyMethod>) -> Option<ValueCopy> {
     struct_named(module, ty).filter(|st| st.is_value())?;
-    Some(if copyable { "copy" } else { COPY_VALUE_METHOD })
+    Some(match copyable {
+        Some(CopyMethod::Current) => ValueCopy { method: "copy", takes_context: false },
+        Some(CopyMethod::Deprecated) => ValueCopy { method: "copy", takes_context: true },
+        None => ValueCopy { method: COPY_VALUE_METHOD, takes_context: true },
+    })
+}
+
+/// `value.method(copies)`, or `value.method()` when it takes no context.
+fn call_value_copy(how: ValueCopy, value: Expression, copies: &Expression, loc: Loc) -> Expression {
+    let args = if how.takes_context { vec![copies.clone()] } else { vec![] };
+    Expression::MethodCall { this: Box::new(value), method: how.method.to_string(), args, loc }
 }
 
 /// The `_pep_copy_value` method of value struct `st`: a copy of `this`
@@ -462,8 +546,15 @@ fn compiled_functions(module: &mut Module) -> Vec<&mut FunctionDef> {
 /// request reaches.
 fn requests(module: &mut Module) -> Vec<(TypeName, Loc)> {
     let mut found: Vec<(TypeName, Loc)> = vec![];
+    let copyable: HashSet<String> =
+        module.structs.iter().filter(|st| copy_method(st) == Some(CopyMethod::Current)).map(|st| st.name.clone()).collect();
     for function in compiled_functions(module) {
-        if is_copy_method(function) || function.name == COPY_METHOD || function.name == COPY_VALUE_METHOD || function.name == COPY_TRAIT_METHOD {
+        let implements = is_deprecated_copy_method(function)
+            || (is_current_copy_method(function) && function.parent.as_ref().is_some_and(|p| copyable.contains(p)));
+        // The runtime's `copy<T>` copies for its caller, whose call is the
+        // request (or is inside a `Copyable` implementation).
+        let runtime_copy = function.parent.is_none() && function.name.starts_with("copy<");
+        if implements || runtime_copy || function.name == COPY_METHOD || function.name == COPY_VALUE_METHOD || function.name == COPY_TRAIT_METHOD {
             continue;
         }
         for (ty, loc) in copy_calls(function) {
@@ -475,7 +566,7 @@ fn requests(module: &mut Module) -> Vec<(TypeName, Loc)> {
     found
 }
 
-/// Lower every concrete `__copy<T>` call and synthesize the `_pep_copy`
+/// Lower every concrete `__copy<T>` call and synthesize the `__copy()`
 /// methods they need. Returns whether it added anything (the
 /// specialization loop runs again to specialize what those call).
 pub fn synthesize_copies(module: &mut Module) -> bool {
@@ -487,6 +578,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
         }
     }
     let censuses_added = lower_censuses(module, &safe);
+    lower_copy_objects(module);
     let traits_added = add_trait_copies(module, &safe);
     let mut calls: Vec<(TypeName, Loc)> = vec![];
     for function in compiled_functions(module) {
@@ -498,7 +590,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
     // What each `__copy<T>` becomes: the value, a `_copy_object<T>` call, or
     // a panic.
     let mut lowered: Vec<(TypeName, Lowering)> = vec![];
-    let mut needed: Vec<(String, bool)> = vec![];
+    let mut needed: Vec<(String, Option<CopyMethod>)> = vec![];
     for (ty, _) in &calls {
         let lowering = match plan(module, &safe, ty) {
             Plan::Same => Lowering::Same,
@@ -528,7 +620,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             continue;
         }
         let methods = if module.structs[index].is_value() {
-            if copyable {
+            if copyable.is_some() {
                 continue;
             }
             vec![copy_value_method(&module.structs[index], &safe)]
@@ -549,7 +641,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             *e = match lowering {
                 Lowering::Same => value,
                 Lowering::Object => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_object<{}>", ty), args: vec![value], loc },
-                Lowering::Value(method) => Expression::MethodCall { this: Box::new(value), method: method.to_string(), args: vec![copies], loc },
+                Lowering::Value(how) => call_value_copy(*how, value, &copies, loc),
                 Lowering::Tuple(parts) => copy_tuple(&ty, parts, value, &copies, loc),
                 Lowering::Trait => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_trait<{}>", ty), args: vec![value], loc },
                 Lowering::Fail(message) => Expression::FunctionCall {
@@ -561,6 +653,26 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
         });
     }
     added || censuses_added || lowered.iter().any(|(_, l)| matches!(l, Lowering::Fail(_)))
+}
+
+/// Lower every `__copy_object<T>(value)` whose `T` is a struct to
+/// `value.__copy()`.
+fn lower_copy_objects(module: &mut Module) {
+    let structs: HashSet<String> = module.structs.iter().map(|st| st.name.clone()).collect();
+    for function in compiled_functions(module) {
+        crate::passes::walk_function(function, &mut |e: &mut Expression| {
+            let Expression::FunctionCall { function, args, loc } = e else { return };
+            if args.len() != 1 || function.split('<').next() != Some(COPY_OBJECT_INTRINSIC) {
+                return;
+            }
+            let Some(ty) = parse_type_string(function).sub_types.into_iter().next() else { return };
+            if !structs.contains(&ty.to_string()) {
+                return;
+            }
+            let value = args.pop().unwrap();
+            *e = Expression::MethodCall { this: Box::new(value), method: COPY_METHOD.to_string(), args: vec![], loc: *loc };
+        });
+    }
 }
 
 /// The `T` of a `__census<T>(slot, waiting)` call.
@@ -621,7 +733,7 @@ enum Lowering {
     Object,
     /// A value struct, through this method of the value: its `copy` when
     /// it implements `Copyable<T>`, else the synthesized one.
-    Value(&'static str),
+    Value(ValueCopy),
     /// A new tuple of each element's copy.
     Tuple(Vec<Part>),
     /// A trait value, through `copies._copy_trait<T>`.
@@ -638,7 +750,7 @@ enum Part {
     Object(TypeName),
     /// A value struct, through this method of the element (see
     /// [`Lowering::Value`]).
-    Value(&'static str),
+    Value(ValueCopy),
     /// A nested tuple, element by element.
     Tuple(TypeName, Vec<Part>),
     /// A trait value, through `copies.copy<T>`, which lowers to
@@ -647,8 +759,8 @@ enum Part {
 }
 
 /// How to copy each element of tuple `ty`, whose elements can all be
-/// copied; records each struct element in `needed` so it gets `_pep_copy`.
-fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed: &mut Vec<(String, bool)>) -> Vec<Part> {
+/// copied; records each struct element in `needed` so it gets `__copy()`.
+fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed: &mut Vec<(String, Option<CopyMethod>)>) -> Vec<Part> {
     ty.sub_types
         .iter()
         .map(|element| match plan(module, safe, element) {
@@ -670,7 +782,7 @@ fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed:
 }
 
 /// `(copy of value.0, copy of value.1, ...)`. `value` is the parameter of
-/// `Copies.copy<T>`, so reading it once per element is safe.
+/// `_Copies.copy<T>`, so reading it once per element is safe.
 fn copy_tuple(ty: &TypeName, parts: &[Part], value: Expression, copies: &Expression, loc: Loc) -> Expression {
     let args = parts
         .iter()
@@ -685,7 +797,7 @@ fn copy_tuple(ty: &TypeName, parts: &[Part], value: Expression, copies: &Express
                     args: vec![element],
                     loc,
                 },
-                Part::Value(method) => Expression::MethodCall { this: Box::new(element), method: method.to_string(), args: vec![copies.clone()], loc },
+                Part::Value(how) => call_value_copy(*how, element, copies, loc),
                 Part::Tuple(t, inner) => copy_tuple(t, inner, element, copies, loc),
                 Part::Trait(t) => Expression::MethodCall { this: Box::new(copies.clone()), method: format!("copy<{}>", t), args: vec![element], loc },
             }
@@ -767,7 +879,7 @@ fn add_trait_copies(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
     added
 }
 
-/// The trait member `_pep_copy_trait(copies: Copies): Tr<T, ...>` of `def`,
+/// The trait member `_pep_copy_trait(copies: _Copies): Tr<T, ...>` of `def`,
 /// which returns the trait type itself at the trait's own parameters.
 fn trait_copy_member(def: &TraitDef) -> FunctionDef {
     let ty = TypeName::with_args(&def.name, def.generic_params.iter().map(|p| TypeName::new(&p.name)).collect());
@@ -868,8 +980,8 @@ fn skeleton(ty: &TypeName, indent: &str) -> String {
     let t = written(ty);
     [
         format!("extend {t} with Copyable<{t}> {{"),
-        format!("    {t} copy(Copies copies) {{"),
-        "        # Build the copy; copy each struct field with copies.copy(field).".to_string(),
+        format!("    copy(): {t} {{"),
+        "        # Build the copy; copy each struct field with copy(field).".to_string(),
         format!("        panic(\"copying '{t}' is not implemented\");"),
         "        return this;".to_string(),
         "    }".to_string(),

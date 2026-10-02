@@ -43,7 +43,7 @@ its generic and type arguments:
   `call_targets`, `bind_function_values`' rewrites, `interpolation`'s
   override test, constraint deduplication.
 - Content is added to a specialization after it exists, depending on the
-  rest of the program: `synthesize_copies` adds `_pep_copy` methods only
+  rest of the program: `synthesize_copies` adds `__copy` methods only
   when something copies the type, and `specialize_methods` adds `m<U>`
   instances as calls to them are found.
 
@@ -81,7 +81,7 @@ program-wide counter to become per-declaration:
   (`__closure@Array<int>.map#2`), not a per-file counter;
 - `Loc`-keyed maps keyed by (declaration, `Loc`);
 - `synthesize_copies` and `specialize_methods` add their members as
-  separate worklist items (`Array<Point>._pep_copy`, `Box<int>.map<long>`),
+  separate worklist items (`Array<Point>.__copy`, `Box<int>.map<long>`),
   each a function of its owner specialization and arguments, rather than
   mutating a finished specialization.
 

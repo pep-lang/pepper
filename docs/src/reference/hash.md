@@ -211,20 +211,17 @@ and values. The table keeps its capacity. Runs in O(capacity).
 #### copy
 
 ```pepper
-copy(copies: Copies): HashMap<K, V>
+copy(): HashMap<K, V>
 ```
 
 Returns a deep copy: a new map holding a copy of each key and value,
-made with `copies.copy`. This is how `copy(value)` copies a HashMap
+made with `copy`. This is how `copy(value)` copies a HashMap
 (the `Copyable<HashMap<K, V>>` implementation); call `copy(map)`
 rather than this method.
 
 The copied keys are hashed again, so a map keyed by struct identity
 finds its entries under the copied keys. Runs in O(capacity) plus the
 cost of copying the entries.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy
@@ -652,20 +649,17 @@ while iterating makes the iterator's next `next()` or `current()` panic.
 #### copy
 
 ```pepper
-copy(copies: Copies): HashSet<K>
+copy(): HashSet<K>
 ```
 
 Returns a deep copy: a new set holding a copy of each element, made
-with `copies.copy`. This is how `copy(value)` copies a HashSet (the
+with `copy`. This is how `copy(value)` copies a HashSet (the
 `Copyable<HashSet<K>>` implementation); call `copy(set)` rather than
 this method.
 
 The copied elements are hashed again, so a set of structs compared by
 identity finds the copied elements. Runs in O(capacity) plus the cost
 of copying the elements.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy

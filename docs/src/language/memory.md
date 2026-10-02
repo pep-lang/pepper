@@ -170,11 +170,29 @@ copied[0].append(" lovelace");   # names[0] is still "ada"
 A struct with a destructor or a raw pointer (`__ptr<T>`) field is not
 **trivially copyable**: copying its fields would share what it owns, such as
 a buffer it frees. Such a struct says how to copy itself by implementing
-`Copyable<T>`, with a `copy(Copies copies)` method that builds the copy and
-copies each value it holds with `copies.copy(value)`. `String`, `Array`,
-`HashMap` and `HashSet` implement it. `String.copy()` also copies a single
+`Copyable<T>`, with a `copy(): T` method that builds the copy and copies each
+value it holds with `copy(value)`. `String`, `Array`, `HashMap` and
+`HashSet` implement it. `String.copy()` also copies a single
 String; it replaces the deprecated `clone()`. `Array.clone()` is unchanged: it
 copies the Array but shares its elements.
+
+```pepper
+{{#include ../../examples/memory-copyable.pep}}
+```
+
+Inside `copy()`, the call `copy(label)` is the free function, not the
+method: a bare call in a method names the struct's own method only when one
+by that name takes those arguments. While a copy runs, `copy(value)`
+continues it rather than starting another, so an object the outer copy
+already made is reused and sharing is kept. That is why a `Copyable` value
+is copied with `copy(x)`: calling `x.copy()` directly still works, but each
+`copy(value)` inside it is then a copy of its own. A value whose contents can
+lead back to it calls `register_copy(this, made)` before copying them, so
+the cycle finds the copy being built.
+
+The `copy(copies: Copies): T` form of `Copyable<T>`, which took the copy's
+context as an argument and copied with `copies.copy(value)`, still works in
+this release, with a warning at `Copies`.
 
 Copying a value that reaches a struct that is not trivially copyable and does
 not implement `Copyable<T>` is an error at the `copy` call. It names the
@@ -193,8 +211,8 @@ main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would relea
       |        ^~~~~~
 note: implement 'Copyable<Handle>' to say how to copy it:
     extend Handle with Copyable<Handle> {
-        Handle copy(Copies copies) {
-            # Build the copy; copy each struct field with copies.copy(field).
+        copy(): Handle {
+            # Build the copy; copy each struct field with copy(field).
             panic("copying 'Handle' is not implemented");
             return this;
         }

@@ -197,7 +197,7 @@ struct Buffer {
         _pep_free(_data);
     }
 
-    Buffer copy(Copies copies) {
+    copy(): Buffer {
         copies_made.fetch_add(1);
         var made = Buffer(size);
         var i: ulong = 0;
@@ -228,6 +228,127 @@ test(): int {
     if (c.again !== c.body || copies_made.load() != 1) { return 3; }
     return 0;
 }"#,
+    );
+}
+
+#[test]
+fn copyable_implementations_continue_the_running_copy() {
+    // `copy(x)` inside `copy()` reaches the free function, and reuses the
+    // copies the outer `copy` made; `register_copy` lets a cycle find the
+    // copy being built.
+    assert_runs(
+        r#"
+struct Leaf {
+    int value;
+}
+
+struct Holder {
+    __ptr<u8> _raw;
+    Leaf first;
+    Leaf second;
+    Holder back;
+
+    construct() {
+        _raw = _pep_malloc(1);
+    }
+
+    destruct {
+        _pep_free(_raw);
+    }
+
+    copy(): Holder {
+        var made = Holder();
+        register_copy(this, made);
+        made.first = copy(first);
+        made.second = copy(second);
+        made.back = copy(back);
+        return made;
+    }
+}
+
+extend Holder with Copyable<Holder>;
+
+struct Outer {
+    Leaf leaf;
+    Holder holder;
+}
+
+test(): int {
+    var o = Outer();
+    o.leaf = Leaf();
+    o.leaf.value = 7;
+    o.holder = Holder();
+    o.holder.first = o.leaf;
+    o.holder.second = o.leaf;
+    o.holder.back = o.holder;
+    var c = copy(o);
+    if (c.leaf === o.leaf || c.leaf.value != 7) { return 1; }
+    # One copy of the leaf, shared by the outer value and the Holder's fields.
+    if (c.holder.first !== c.leaf || c.holder.second !== c.leaf) { return 2; }
+    if (c.holder.back !== c.holder) { return 3; }
+    # Called directly, `copy()` still copies; each `copy(x)` is its own copy.
+    var direct = o.holder.copy();
+    if (direct.first === o.leaf || direct.first.value != 7) { return 4; }
+    # Its `copy(back)` made a separate copy of the cycle.
+    if (direct.back === direct || direct.back.back !== direct.back) { return 5; }
+    direct.back.back = __null;
+    o.holder.back = __null;
+    c.holder.back = __null;
+    direct.back = __null;
+    return 0;
+}"#,
+    );
+}
+
+#[test]
+fn a_deprecated_copy_taking_copies_still_implements_copyable() {
+    // `copy(copies: Copies)` keeps working for one release, with a warning
+    // at `Copies`.
+    let source = r#"
+struct Buffer {
+    __ptr<u8> _data;
+    String label;
+
+    construct() {
+        _data = _pep_malloc(1);
+        label = "b";
+    }
+
+    destruct {
+        _pep_free(_data);
+    }
+
+    copy(copies: Copies): Buffer {
+        var made = Buffer();
+        copies.register(this, made);
+        made.label = copies.copy(label);
+        return made;
+    }
+}
+
+extend Buffer with Copyable<Buffer>;
+
+struct Pair {
+    Buffer a;
+    Buffer b;
+}
+
+test(): int {
+    var p = Pair();
+    p.a = Buffer();
+    p.b = p.a;
+    var q = copy(p);
+    if (q.a !== q.b || q.a === p.a) { return 1; }
+    q.a.label.append("!");
+    if (p.a.label != "b") { return 2; }
+    return 0;
+}"#;
+    assert_runs(source);
+    let module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
+    assert!(
+        module.warnings.iter().any(|w| w.message.contains("'Copies' is deprecated: implement 'Copyable<T>' as 'copy(): T'")),
+        "{:?}",
+        module.warnings
     );
 }
 
@@ -451,3 +572,4 @@ main(): int {
     let printed = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     assert!(printed.contains("cannot copy the 'Owner' behind a trait value, which is not trivially copyable"), "{printed}");
 }
+

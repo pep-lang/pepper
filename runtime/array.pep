@@ -679,7 +679,7 @@ export struct Array<T> {
     }
 
     ## Returns a deep copy: a new Array holding a copy of each element, made
-    ## with `copies.copy`. This is how `copy(value)` copies an Array (the
+    ## with `copy`. This is how `copy(value)` copies an Array (the
     ## `Copyable<Array<T>>` implementation); call `copy(array)` rather than
     ## this method.
     ##
@@ -688,18 +688,23 @@ export struct Array<T> {
     ## appears twice is copied once. Runs in O(count) plus the cost of
     ## copying the elements.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
     ## @example
     ##     var names = Array<String>();
     ##     names.append("ada");
     ##     var copied = copy(names);   # calls this method
-    copy(copies: Copies): Array<T> {
+    copy(): Array<T> {
         Array<T> made = Array<T>(_size);
-        copies.register<Array<T>>(this, made);
+        register_copy<Array<T>>(this, made);
+        # Numbers are their own copies: one block copy, and no element
+        # visits the running copy.
+        if (__is_pod<T>()) {
+            made.append_all(this);
+            return made;
+        }
         ulong i = 0;
         while (i < _size) {
-            made.append(copies.copy<T>(_data[i]));
+            made.append(copy<T>(_data[i]));
             i = i + 1;
         }
         return made;

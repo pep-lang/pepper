@@ -401,15 +401,14 @@ export struct String {
     ## later changes to either String do not affect the other. Runs in O(size).
     ##
     ## This is also how `copy(value)` copies a String (the `Copyable<String>`
-    ## implementation), which passes `copies`.
+    ## implementation).
     ##
-    ## @param copies the objects copied so far, when `copy(value)` calls it; a String holds no other objects, so it is not used
     ## @returns an independent copy of this String
     ## @example
     ##     var a = "abc";
     ##     var b = a.copy();
     ##     b.append("d");   # a is still "abc"
-    copy(copies: Copies = __null): String {
+    copy(): String {
         return String(_data, _size, _length);
     }
 

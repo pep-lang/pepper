@@ -584,11 +584,11 @@ capacity equals this Array's `count`.
 #### copy
 
 ```pepper
-copy(copies: Copies): Array<T>
+copy(): Array<T>
 ```
 
 Returns a deep copy: a new Array holding a copy of each element, made
-with `copies.copy`. This is how `copy(value)` copies an Array (the
+with `copy`. This is how `copy(value)` copies an Array (the
 `Copyable<Array<T>>` implementation); call `copy(array)` rather than
 this method.
 
@@ -596,9 +596,6 @@ Unlike `clone()`, which shares struct elements, the result shares no
 element that is not thread-safe with this Array. An element that
 appears twice is copied once. Runs in O(count) plus the cost of
 copying the elements.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy

@@ -414,7 +414,7 @@ fn cannot_copy_offers_a_copyable_skeleton() {
     assert!(edit.new_text.starts_with("
 
 extend Handle with Copyable<Handle> {
-    Handle copy(Copies copies) {"), "{}", edit.new_text);
+    copy(): Handle {"), "{}", edit.new_text);
 }
 
 const FRESH: &str = r#"make(name: String): Array<String> {

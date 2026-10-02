@@ -32,10 +32,12 @@ functions plus a generic Pepper function, and the error quality would drop.
 
 ## 3. Decision
 
-- Keep `__copy<T>`, `__census<T>` and the synthesized `_pep_copy`,
-  `_pep_copy_value`, `_pep_fix_weak` and `_pep_copy_trait`.
+- Keep `__copy<T>`, `__census<T>` and the synthesized `_pep_copy` (now
+  `__copy()`, see section 5), `_pep_copy_value`, `_pep_fix_weak` and
+  `_pep_copy_trait`.
 - Keep `Copies` as the context passed to `Copyable<T>.copy(copies)`; the
-  signature does not change, so no deprecation path is needed.
+  signature does not change, so no deprecation path is needed. (Superseded
+  by #463, section 5.)
 - What reflection did make redundant: `copies.rs` hand-parsed
   `[NotCopyable("why")]` from the syntax tree and lost the reason when it
   was written `reason = "..."` or as joined strings. It now reads the
@@ -48,3 +50,34 @@ Revisit if Pepper gets run-time type information, or if `reflect` gains
 `is_thread_safe<T>()` and a way to build an object without a constructor
 for other reasons (for example a reflection-driven `decode` that must not
 run constructors). Even then, the trait-value copy stays a vtable slot.
+
+## 5. Follow-up: an implicit copy context (#463)
+
+Every `Copyable<T>` implementation had to name `Copies`, which is why it was
+exported. The map it carries is what makes `copy` graph-preserving (sharing,
+cycles, weak fixes), so it stays; only the argument goes.
+
+- The outermost `copy<T>(value)` on a thread makes a `_Copies` and points a
+  thread-local key at it (`_copy_enter`); `_copy_leave` runs `_finish` and
+  restores the previous context. A `copy(x)` while one runs continues it.
+  The key is made on first use: every program loads `copy.pep`, and a test
+  run makes many JIT engines in one process, against a limit of 1024 keys.
+- The synthesized method is `__copy(): T` (a `__` name source cannot call;
+  `_Copies._copy_object` reaches it through the `__copy_object<T>`
+  intrinsic). A field-by-field `__copy()` reads the context once, so a copy
+  costs one thread-local read per object. `_pep_copy_value`,
+  `_pep_copy_trait` and `_pep_fix_weak` keep the context argument: the
+  copy that calls them already holds it.
+- `Copyable<T>` is `copy(): T`. Its body copies with plain `copy(x)`: a bare
+  call in a method now names the struct's method only when one by that name
+  takes those arguments, else the free function.
+- `register_copy(original, made)` replaces `copies.register`.
+- `Copies` is the internal `_Copies`, exported under its old name as a
+  `[Deprecated]` type alias for one release; `copy(copies: Copies)` still
+  implements `Copyable<T>` (its `__copy()` passes `_pep_copies()`), and
+  the alias's warning lands on the `Copies` in its signature.
+- The `PEP_CHECK_SYNC` census installs its own context the same way, and
+  restores the running copy's afterwards, since a `Copyable` method may lock
+  a Mutex in the middle of a copy.
+- `Array<T>.copy()` of a POD `T` copies the block at once instead of
+  visiting the running copy per element.

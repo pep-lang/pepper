@@ -285,6 +285,26 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+/// How many arguments the methods of one name take: the name (an overload
+/// set's members share their set's name), and the fewest and most.
+pub type Arity = (String, usize, usize);
+
+/// How many arguments each method of `st` takes.
+pub fn method_arities(st: &StructDef) -> Vec<Arity> {
+    st.method_members
+        .iter()
+        .map(|m| {
+            let fewest = m.parameters.iter().filter(|p| p.default.is_none()).count();
+            (overloads::set_name(&m.name).to_string(), fewest, m.parameters.len())
+        })
+        .collect()
+}
+
+/// Whether a method `name` among `arities` takes `count` arguments.
+pub fn takes(arities: &[Arity], name: &str, count: usize) -> bool {
+    arities.iter().any(|(m, fewest, most)| m == overloads::set_name(name) && (*fewest..=*most).contains(&count))
+}
+
 /// Report the first extern whose `[Link(...)]` attributes are wrong.
 fn check_link_attributes(module: &Module) {
     if let Some(error) = module.externs.iter().find_map(|ext| ext.link().err()) {

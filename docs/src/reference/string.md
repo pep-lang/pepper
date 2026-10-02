@@ -311,17 +311,14 @@ pass it to C. C functions stop at the first NUL byte in the content.
 #### copy
 
 ```pepper
-copy(copies: Copies = __null): String
+copy(): String
 ```
 
 Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size).
 
 This is also how `copy(value)` copies a String (the `Copyable<String>`
-implementation), which passes `copies`.
-
-**Parameters**
-- `copies` — the objects copied so far, when `copy(value)` calls it; a String holds no other objects, so it is not used
+implementation).
 
 **Returns**
 - an independent copy of this String

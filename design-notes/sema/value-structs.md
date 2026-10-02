@@ -237,7 +237,7 @@ Monomorphization means a generic sees the concrete type:
 - Generic constraints (`<T: Iterator<int>>`) call methods statically: no
   boxing. This is the path `for` uses.
 - Runtime helpers that branch on "struct or not" need a value case. The
-  audit list: `copy<T>` and `copies.rs` (`_pep_copy` copies field by
+  audit list: `copy<T>` and `copies.rs` (`__copy` copies field by
   field, deep-copying reference fields), the `_pep_check_sync` census
   (walk a value's fields inline), `release<T>`, `__default<T>` (zero
   value), `to_string<T>`.

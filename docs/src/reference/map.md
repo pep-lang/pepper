@@ -386,16 +386,13 @@ and less than `to`, in ascending key order, under the same rules as
 #### copy
 
 ```pepper
-copy(copies: Copies): Map<K, V>
+copy(): Map<K, V>
 ```
 
 Returns a deep copy: a new map holding a copy of each key and value,
-made with `copies.copy`. This is how `copy(value)` copies a Map (the
+made with `copy`. This is how `copy(value)` copies a Map (the
 `Copyable<Map<K, V>>` implementation); call `copy(map)` rather than
 this method. O(count log count) plus the cost of copying the entries.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy
@@ -699,16 +696,13 @@ It is empty when `from` is not less than `to`.
 #### copy
 
 ```pepper
-copy(copies: Copies): Set<K>
+copy(): Set<K>
 ```
 
 Returns a deep copy: a new set holding a copy of each member, made
-with `copies.copy`. This is how `copy(value)` copies a Set (the
+with `copy`. This is how `copy(value)` copies a Set (the
 `Copyable<Set<K>>` implementation); call `copy(set)` rather than this
 method.
-
-**Parameters**
-- `copies` — the objects copied so far
 
 **Returns**
 - the copy

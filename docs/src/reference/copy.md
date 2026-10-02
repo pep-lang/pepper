@@ -31,6 +31,10 @@ its fields would share what it owns; `String`, `Array`, `HashMap` and
 `HashSet` do. Copying such a struct that does not, or a plain function
 value, is a compile error.
 
+Called inside a `Copyable<T>.copy()` implementation while a copy is
+running, `copy` continues that copy: an object it already copied is not
+copied again.
+
 A trait value is copied by copying the struct behind it, which is known
 only at run time: when that struct cannot be copied, `copy` panics.
 
@@ -54,6 +58,34 @@ Runs in O(size of the value) and allocates each copied object.
     names.append("ada");
     var copied = copy(names);
     copied[0].append(" lovelace");   # names[0] is still "ada"
+```
+
+## register_copy
+
+```pepper
+register_copy<T>(original: T, made: T)
+```
+
+Records `made` as the copy of `original` in the running copy, so that
+copying `original` again returns `made`. A `Copyable<T>.copy()`
+implementation calls it before copying the values it holds when one of
+them may lead back to it; outside a copy it does nothing.
+
+**Type parameters**
+- `T` — the type of the value, a struct
+
+**Parameters**
+- `original` — the object being copied
+- `made` — its copy
+
+**Example**
+```pepper
+    copy(): Node {
+        var made = Node(value);
+        register_copy(this, made);   # a cycle back to this finds made
+        made.next = copy(next);
+        return made;
+    }
 ```
 
 ## move
@@ -99,9 +131,10 @@ copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.
 
 Declare it with `extend Buffer with Copyable<Buffer>;` and give the
-struct a `copy(Copies copies)` method. The method builds the copy and
-copies each value it holds with `copies.copy(value)`, which reuses a copy
-already made, so objects referenced twice stay shared.
+struct a `copy(): Buffer` method. The method builds the copy and copies
+each struct value it holds with `copy(value)`, which, called while a copy
+is running, reuses a copy already made, so objects referenced twice stay
+shared.
 
 **Type parameters**
 - `T` — the implementing type
@@ -121,7 +154,7 @@ already made, so objects referenced twice stay shared.
             _pep_free(data);
         }
 
-        Buffer copy(Copies copies) {
+        copy(): Buffer {
             var made = Buffer(size);
             var i: ulong = 0;
             while (i < size) {
@@ -140,18 +173,16 @@ already made, so objects referenced twice stay shared.
 #### copy
 
 ```pepper
-copy(copies: Copies): T
+copy(): T
 ```
 
 Returns a copy of this value, for `copy`.
 
-Copy each struct value this one holds with `copies.copy(value)`. A
-value that can hold a reference back to itself calls
-`copies.register(this, made)` before copying what it holds, so the
-cycle leads back to the copy.
-
-**Parameters**
-- `copies` — the objects copied so far
+Copy each struct value this one holds with `copy(value)`. A value
+that can hold a reference back to itself calls
+`register_copy(this, made)` before copying what it holds, so the
+cycle leads back to the copy. Call `copy(x)`, not `x.copy()`, to copy
+a `Copyable` value: `copy(x)` keeps objects shared inside one copy.
 
 **Returns**
 - the copy
@@ -159,66 +190,12 @@ cycle leads back to the copy.
 ## Copies
 
 ```pepper
-struct Copies
+[Deprecated("implement 'Copyable<T>' as 'copy(): T', which copies what it holds with 'copy(value)'")] type Copies = _Copies
 ```
 
-The objects one `copy` call has copied so far, so each is copied once:
-objects referenced twice stay shared inside the copy, and cycles end.
+Deprecated: implement `Copyable<T>` as `copy(): T`, which copies what it
+holds with `copy(value)` and `register_copy(original, made)`.
 
-`copy(value)` makes one and passes it to every `Copyable<T>`
-implementation it calls; programs do not create their own.
-
-### Constructor
-
-#### Copies()
-
-```pepper
-construct()
-```
-
-Creates an empty set of copies.
-
-### Methods
-
-#### copy
-
-```pepper
-copy<T>(value: T): T
-```
-
-Returns the copy of `value`: `value` itself when `T` is thread-safe,
-the copy already made when the same object was copied before, and a
-new copy otherwise.
-
-**Type parameters**
-- `T` — the type of the value
-
-**Parameters**
-- `value` — the value to copy
-
-**Returns**
-- the copy
-
-**Example**
-```pepper
-    Pair copy(Copies copies) {
-        return Pair(copies.copy(first), copies.copy(second));
-    }
-```
-
-#### register
-
-```pepper
-register<T>(original: T, made: T)
-```
-
-Records `made` as the copy of `original`, so that copying `original`
-again returns `made`. A `Copyable<T>` implementation calls it before
-copying the values it holds when one of them may lead back to it.
-
-**Type parameters**
-- `T` — the type of the value, a struct
-
-**Parameters**
-- `original` — the object being copied
-- `made` — its copy
+The context of a running copy, which a `Copyable<T>` implementation once
+took as `copy(copies: Copies): T`. Such an implementation still works
+for this release.

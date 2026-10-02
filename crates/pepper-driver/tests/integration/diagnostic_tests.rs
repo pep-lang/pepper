@@ -768,8 +768,8 @@ fn cannot_copy_a_struct_with_a_destructor() {
          \x20     |        ^~~~~~\n\
          note: implement 'Copyable<Handle>' to say how to copy it:\n\
          \x20   extend Handle with Copyable<Handle> {\n\
-         \x20       Handle copy(Copies copies) {\n\
-         \x20           # Build the copy; copy each struct field with copies.copy(field).\n\
+         \x20       copy(): Handle {\n\
+         \x20           # Build the copy; copy each struct field with copy(field).\n\
          \x20           panic(\"copying 'Handle' is not implemented\");\n\
          \x20           return this;\n\
          \x20       }\n\
@@ -787,7 +787,7 @@ fn cannot_copy_offers_a_copyable_skeleton_fix() {
     assert_eq!(edit.loc.file, pepper_driver::parser_diagnostic::FileId(0));
     let end = HANDLE_LOG.find("}\n\nstruct Log").unwrap() + 1;
     assert_eq!((edit.loc.span.start, edit.loc.span.end), (end, end));
-    assert!(edit.replacement.starts_with("\n\nextend Handle with Copyable<Handle> {\n    Handle copy(Copies copies) {\n"), "{}", edit.replacement);
+    assert!(edit.replacement.starts_with("\n\nextend Handle with Copyable<Handle> {\n    copy(): Handle {\n"), "{}", edit.replacement);
 }
 
 #[test]

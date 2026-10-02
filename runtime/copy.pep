@@ -2,16 +2,21 @@
 ## not thread-safe with the original, so it can be handed to another thread;
 ## `Copyable<T>` lets a type say how it is copied.
 
-# `Copies.copy<T>` is the `__copy<T>` intrinsic, which the compiler lowers
+# `_Copies.copy<T>` is the `__copy<T>` intrinsic, which the compiler lowers
 # once `T` is known (passes/copies.rs): to the value itself for a
 # thread-safe `T`, and for a struct to `_copy_object<T>`, which calls the
-# struct's `_pep_copy` method. The compiler synthesizes `_pep_copy`: it forwards to
-# the struct's own `copy(Copies)` when it implements `Copyable<T>`, and
+# struct's `__copy()` method. The compiler synthesizes `__copy()`: it forwards
+# to the struct's own `copy()` when it implements `Copyable<T>`, and
 # otherwise copies field by field without running a constructor. A trait
 # value goes to `_copy_trait<T>`, which calls the struct's
 # `_pep_copy_trait` through the vtable. Anything else (a struct with a
 # destructor or a raw pointer field, a plain function value) is a compile
 # error at the code that asked for the copy.
+#
+# One `_Copies` is the context of the outermost `copy` call on a thread: the
+# thread-local key `_copy_key()` points at its `_self` slot while it runs, so
+# a `copy(x)` nested inside it (in a `Copyable<T>.copy()` implementation) and
+# each synthesized `__copy()` find it with one thread-local read.
 #
 # `_made` maps each original object's address to its copy's. Every copy stays
 # alive until `copy` returns: it is referenced from the copy of the object
@@ -19,6 +24,114 @@
 
 import "array";
 import "hash";
+
+extern void* malloc(ulong size);
+[Target(!OS(Windows))]
+extern int pthread_key_create(void* key, void* destructor);
+[Target(!OS(Windows))]
+extern void* pthread_getspecific(ulong key);
+[Target(!OS(Windows))]
+extern int pthread_setspecific(ulong key, void* value);
+[Target(OS(Windows))]
+extern uint TlsAlloc();
+[Target(OS(Windows))]
+extern void* TlsGetValue(uint index);
+[Target(OS(Windows))]
+extern int TlsSetValue(uint index, void* value);
+
+# The thread-local key plus one, 0 until the first `copy` creates it. Made on
+# first use, not at start: every program (and every JIT engine in a test
+# run) loads this file, and the operating system has few keys.
+const _copy_key_cell: __ptr<ulong> = _copy_new_key_cell();
+
+# Plain `malloc`, not `_pep_malloc`: module constants may initialize before
+# the allocation counter, and the cell lives as long as the program.
+_copy_new_key_cell(): __ptr<ulong> {
+    __ptr<ulong> cell = malloc(sizeof<ulong>());
+    cell[0] = 0;
+    return cell;
+}
+
+[Target(!OS(Windows))]
+_copy_key_create(): ulong {
+    __ptr<ulong> key = _pep_malloc(8);
+    key[0] = 0;
+    if (pthread_key_create(key, __null) != 0) {
+        panic("copy: the operating system has no thread-local keys left");
+    }
+    ulong created = key[0];
+    _pep_free(key);
+    return created;
+}
+
+[Target(OS(Windows))]
+_copy_key_create(): ulong {
+    var index = TlsAlloc();
+    # TLS_OUT_OF_INDEXES
+    assert(index != 4294967295, "copy: the operating system has no thread-local keys left");
+    return index as ulong;
+}
+
+[Target(!OS(Windows))]
+_copy_key_get(key: ulong): __ptr<void> {
+    return pthread_getspecific(key);
+}
+
+[Target(OS(Windows))]
+_copy_key_get(key: ulong): __ptr<void> {
+    return TlsGetValue(key as uint);
+}
+
+[Target(!OS(Windows))]
+_copy_key_set(key: ulong, value: __ptr<void>) {
+    pthread_setspecific(key, value);
+}
+
+[Target(OS(Windows))]
+_copy_key_set(key: ulong, value: __ptr<void>) {
+    TlsSetValue(key as uint, value);
+}
+
+# The thread-local key that points at the running copy's context. Two
+# threads may race to make it; the loser's key is left unused.
+_copy_key(): ulong {
+    var key = __atomic_load<ulong>(_copy_key_cell);
+    if (key != 0) {
+        return key - 1;
+    }
+    ulong none = 0;
+    __atomic_cmpxchg<ulong>(_copy_key_cell, none, _copy_key_create() + 1);
+    return __atomic_load<ulong>(_copy_key_cell) - 1;
+}
+
+# The context of the copy running on this thread, or null when none is.
+export _pep_copies(): _Copies {
+    __ptr<void> raw = _copy_key_get(_copy_key());
+    if (raw == __null) {
+        return __default<_Copies>();
+    }
+    # The slot holds the context's address: reading it acquires a reference.
+    __ptr<_Copies> slot = raw;
+    return slot[0];
+}
+
+# Makes `copies` the context of this thread's copy and returns the one it
+# replaces (null outside any copy), for `_copy_leave`.
+_copy_enter(copies: _Copies): __ptr<void> {
+    var key = _copy_key();
+    var previous = _copy_key_get(key);
+    copies._self[0] = copies._address<_Copies>(copies);
+    _copy_key_set(key, copies._self);
+    return previous;
+}
+
+# Points every copy's weak fields at copies, then restores the context
+# `_copy_enter` replaced.
+_copy_leave(copies: _Copies, previous: __ptr<void>) {
+    copies._finish();
+    _copy_key_set(_copy_key(), previous);
+    copies._self[0] = 0;
+}
 
 ## Returns a copy of `value` that shares no non-thread-safe object with it,
 ## so the copy can be handed to another thread.
@@ -37,6 +150,10 @@ import "hash";
 ## `HashSet` do. Copying such a struct that does not, or a plain function
 ## value, is a compile error.
 ##
+## Called inside a `Copyable<T>.copy()` implementation while a copy is
+## running, `copy` continues that copy: an object it already copied is not
+## copied again.
+##
 ## A trait value is copied by copying the struct behind it, which is known
 ## only at run time: when that struct cannot be copied, `copy` panics.
 ##
@@ -52,10 +169,37 @@ import "hash";
 ##     var copied = copy(names);
 ##     copied[0].append(" lovelace");   # names[0] is still "ada"
 export copy<T>(value: T): T {
-    var copies = Copies();
+    var running = _pep_copies();
+    if (running !== __null) {
+        return running.copy<T>(value);
+    }
+    var copies = _Copies();
+    var previous = _copy_enter(copies);
     var result = copies.copy<T>(value);
-    copies._finish();
+    _copy_leave(copies, previous);
     return result;
+}
+
+## Records `made` as the copy of `original` in the running copy, so that
+## copying `original` again returns `made`. A `Copyable<T>.copy()`
+## implementation calls it before copying the values it holds when one of
+## them may lead back to it; outside a copy it does nothing.
+##
+## @typeParam T the type of the value, a struct
+## @param original the object being copied
+## @param made its copy
+## @example
+##     copy(): Node {
+##         var made = Node(value);
+##         register_copy(this, made);   # a cycle back to this finds made
+##         made.next = copy(next);
+##         return made;
+##     }
+export register_copy<T>(original: T, made: T) {
+    var running = _pep_copies();
+    if (running !== __null) {
+        running.register<T>(original, made);
+    }
 }
 
 ## Hands over the reference `value` holds and leaves it null, with no copy
@@ -84,9 +228,10 @@ export move<T>([MoveSource] value: T): T {
 ## a container that owns a buffer.
 ##
 ## Declare it with `extend Buffer with Copyable<Buffer>;` and give the
-## struct a `copy(Copies copies)` method. The method builds the copy and
-## copies each value it holds with `copies.copy(value)`, which reuses a copy
-## already made, so objects referenced twice stay shared.
+## struct a `copy(): Buffer` method. The method builds the copy and copies
+## each struct value it holds with `copy(value)`, which, called while a copy
+## is running, reuses a copy already made, so objects referenced twice stay
+## shared.
 ##
 ## @typeParam T the implementing type
 ## @example
@@ -103,7 +248,7 @@ export move<T>([MoveSource] value: T): T {
 ##             _pep_free(data);
 ##         }
 ##
-##         Buffer copy(Copies copies) {
+##         copy(): Buffer {
 ##             var made = Buffer(size);
 ##             var i: ulong = 0;
 ##             while (i < size) {
@@ -118,74 +263,75 @@ export move<T>([MoveSource] value: T): T {
 export trait Copyable<T> {
     ## Returns a copy of this value, for `copy`.
     ##
-    ## Copy each struct value this one holds with `copies.copy(value)`. A
-    ## value that can hold a reference back to itself calls
-    ## `copies.register(this, made)` before copying what it holds, so the
-    ## cycle leads back to the copy.
+    ## Copy each struct value this one holds with `copy(value)`. A value
+    ## that can hold a reference back to itself calls
+    ## `register_copy(this, made)` before copying what it holds, so the
+    ## cycle leads back to the copy. Call `copy(x)`, not `x.copy()`, to copy
+    ## a `Copyable` value: `copy(x)` keeps objects shared inside one copy.
     ##
-    ## @param copies the objects copied so far
     ## @returns the copy
-    copy(copies: Copies): T;
+    copy(): T;
 }
 
-## The objects one `copy` call has copied so far, so each is copied once:
-## objects referenced twice stay shared inside the copy, and cycles end.
+## Deprecated: implement `Copyable<T>` as `copy(): T`, which copies what it
+## holds with `copy(value)` and `register_copy(original, made)`.
 ##
-## `copy(value)` makes one and passes it to every `Copyable<T>`
-## implementation it calls; programs do not create their own.
-export struct Copies {
-    ## Maps the address of each object copied so far to its copy's address.
+## The context of a running copy, which a `Copyable<T>` implementation once
+## took as `copy(copies: Copies): T`. Such an implementation still works
+## for this release.
+[Deprecated("implement 'Copyable<T>' as 'copy(): T', which copies what it holds with 'copy(value)'")]
+export type Copies = _Copies;
+
+# The objects one `copy` call has copied so far, so each is copied once:
+# objects referenced twice stay shared inside the copy, and cycles end. The
+# outermost `copy(value)` on a thread makes one and installs it as the
+# thread's context (`_copy_enter`); `_pep_copies()` finds it.
+export struct _Copies {
+    # Maps the address of each object copied so far to its copy's address.
     HashMap<ulong, ulong> _made;
 
-    ## The copies whose weak fields to point at copies once everything is
-    ## copied.
+    # The copies whose weak fields to point at copies once everything is
+    # copied.
     Array<DeferredFix> _later;
 
-    ## Scratch space for turning an address back into a reference.
+    # Scratch space for turning an address back into a reference.
     __ptr<ulong> _cell;
 
-    ## For a `PEP_CHECK_SYNC` census (`_pep_check_sync`): how many of the
-    ## references the copy passed through lead to each original object, by
-    ## address. Null for an ordinary copy.
+    # Holds this context's address while it is the thread's context: the
+    # thread-local key points here.
+    __ptr<ulong> _self;
+
+    # For a `PEP_CHECK_SYNC` census (`_pep_check_sync`): how many of the
+    # references the copy passed through lead to each original object, by
+    # address. Null for an ordinary copy.
     HashMap<ulong, ulong> _edges;
 
-    ## Creates an empty set of copies.
     construct() {
         _made = HashMap<ulong, ulong>();
         _later = Array<DeferredFix>();
         _cell = _pep_malloc(sizeof<ulong>());
+        _self = _pep_malloc(sizeof<ulong>());
+        _self[0] = 0;
     }
 
     destruct {
         _pep_free(_cell);
+        _pep_free(_self);
     }
 
-    ## Returns the copy of `value`: `value` itself when `T` is thread-safe,
-    ## the copy already made when the same object was copied before, and a
-    ## new copy otherwise.
-    ##
-    ## @typeParam T the type of the value
-    ## @param value the value to copy
-    ## @returns the copy
-    ## @example
-    ##     Pair copy(Copies copies) {
-    ##         return Pair(copies.copy(first), copies.copy(second));
-    ##     }
+    # The copy of `value`: `value` itself when `T` is thread-safe, the copy
+    # already made when the same object was copied before, and a new copy
+    # otherwise. (A deprecated `copy(copies: Copies)` implementation calls
+    # it as `copies.copy(value)`.)
     copy<T>(value: T): T {
         return __copy<T>(value, this);
     }
 
-    ## Records `made` as the copy of `original`, so that copying `original`
-    ## again returns `made`. A `Copyable<T>` implementation calls it before
-    ## copying the values it holds when one of them may lead back to it.
-    ##
-    ## @typeParam T the type of the value, a struct
-    ## @param original the object being copied
-    ## @param made its copy
+    # Records `made` as the copy of `original`, so that copying `original`
+    # again returns `made` (`register_copy`).
     register<T>(original: T, made: T) {
         _made.insert(this._address<T>(original), this._address<T>(made));
     }
-
     # The address of struct object `value`.
     _address<T>(value: T): ulong {
         __ptr<void> raw = value;
@@ -193,7 +339,7 @@ export struct Copies {
     }
 
     # The copy of struct `value`: null for null, the copy already made of
-    # the same object, or a new one from its `_pep_copy` method.
+    # the same object, or a new one from its `__copy()` method.
     _copy_object<T>(value: T): T {
         if (value === __null) {
             return value;
@@ -207,7 +353,9 @@ export struct Copies {
         if (made !== __null) {
             return made;
         }
-        made = value._pep_copy(this);
+        # `__copy_object<T>(value)` is `value.__copy()`, the method the
+        # compiler synthesizes (passes/copies.rs).
+        made = __copy_object<T>(value);
         this.register<T>(value, made);
         return made;
     }
@@ -254,7 +402,7 @@ export struct Copies {
     }
 
     # Runs `fix` with these copies once everything is copied.
-    _defer(fix: (Copies) => void) {
+    _defer(fix: (_Copies) => void) {
         _later.append(DeferredFix(fix));
     }
 
@@ -267,13 +415,13 @@ export struct Copies {
     }
 }
 
-# A fix `Copies._finish` runs. (An `Array` of a struct rather than of the
+# A fix `_Copies._finish` runs. (An `Array` of a struct rather than of the
 # function type itself: a program that declares a struct named `T` cannot
 # specialize `Array<T>` with a function type yet.)
 struct DeferredFix {
-    (Copies) => void run;
+    (_Copies) => void run;
 
-    construct(this.run = (copies: Copies) => {}) {}
+    construct(this.run = (copies: _Copies) => {}) {}
 }
 
 # What `__census<T>(slot, waiting)` lowers to in `MutexGuard.exit` for a `T` that can
@@ -289,10 +437,13 @@ export _pep_check_sync<T>(slot: __ptr<T>, waiting: ulong, locked: __ptr<char>) {
     if (!_PEP_CHECK_SYNC_ON) {
         return;
     }
-    var copies = Copies();
+    var copies = _Copies();
     copies._edges = HashMap<ulong, ulong>();
+    # Its own context, even inside a running copy: a `Copyable` method that
+    # locks a Mutex runs this census in the middle of that copy.
+    var previous = _copy_enter(copies);
     copies.copy<T>(slot[0]);
-    copies._finish();
+    _copy_leave(copies, previous);
     # Each holder sleeping in `Condition.wait` keeps its `with` binding, one
     # more reference to the root.
     var root = copies._address<T>(slot[0]);

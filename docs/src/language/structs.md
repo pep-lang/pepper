@@ -191,6 +191,10 @@ a dot, `v.length_squared()`, and inside it `this` refers to that object.
   directly (`x`, `length_squared()`), or through `this` (`this.x`). A
   parameter or local with the same name as a field hides the field; use
   `this.` to reach the field.
+- A bare call names the struct's own method before a top-level function of
+  the same name, unless no method by that name takes those arguments: then
+  it calls the function. So a `copy(): Buffer` method can call the free
+  function `copy(label)`.
 - A method can change the fields of its object. Because struct values are
   references, the caller sees the change.
 - Calling a method does not copy the object or add a reference to it. The
