@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -360,6 +360,8 @@ main(): int {
 <p>An extension property that would need storage is an error:</p>
 <pre><code class="language-text">main.pep:5:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'
 </code></pre>
+<p>An <a href="enums.html#properties">enum</a> can declare computed properties too, under
+the same rule, and no <code>set</code>, since its values never change.</p>
 <h2 id="properties-of-shared-structs"><a class="header" href="#properties-of-shared-structs">Properties of <code>[Shared]</code> structs</a></h2>
 <p>The fields of a <a href="threads.html"><code>[Shared]</code> struct</a> are <code>const</code>, so the storage
 of its properties is too:</p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -788,12 +788,12 @@ and when the last reference goes, the object releases what it captured.</p>
 <p>A plain function value’s counts are plain increments; a <code>shared</code> one’s are
 atomic, like a <code>[Shared]</code> struct’s (see
 <a href="#sharing-function-values-between-threads">Sharing function values between threads</a>).</p>
-<h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
-<ul>
-<li><strong>Closures that capture values as C callbacks.</strong> A C function pointer
-(<code>extern (P) =&gt; R</code>) takes a named function or a closure that captures
-nothing; see <a href="c-interop.html#passing-a-pepper-function-to-c">Calling C</a>.</li>
-</ul>
+<h2 id="c-function-pointers"><a class="header" href="#c-function-pointers">C function pointers</a></h2>
+<p>A C function pointer type, <code>extern (P...) =&gt; R</code>, holds a bare address that C
+can call, not a function value: it takes a named function or a closure that
+captures nothing, and never a closure that captures values. That is by
+design; see <a href="c-interop.html#passing-a-pepper-function-to-c">Passing a Pepper function to C</a>
+for how a callback gets the state it needs.</p>
 
                     </main>
 

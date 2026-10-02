@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -467,6 +467,8 @@ binds <code>f</code> to an ordinary strong reference for the length of the block
 the object has already been destroyed, the body is skipped and the <code>else</code>
 block runs. See <a href="scopes.html">Scoped blocks with <code>with</code></a>.</li>
 <li><strong><code>expired()</code></strong> reports whether the object has been destroyed.</li>
+<li><strong><code>T</code> may be a trait</strong>: <code>Weak&lt;Shape&gt;</code> upgrades to a <code>Shape</code> (see
+<a href="traits-and-extensions.html#weak-references-and-atomics">Weak references and atomics</a>).</li>
 <li><strong>The object is destroyed on time.</strong> When its last strong reference goes,
 its destructor runs and its fields are released, even if weak references
 remain. Only the object’s small header stays allocated until the last weak

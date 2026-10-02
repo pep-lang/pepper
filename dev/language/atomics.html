@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -268,7 +268,8 @@ declared <code>Atomic&lt;T: Shared&gt;</code>: <code>T</code> is a number, <code
 <code>Atomic&lt;String&gt;</code> is a compile error at <code>String</code> (see
 <a href="generics.html#the-shared-constraint">the <code>Shared</code> constraint</a>). A tuple is
 thread-safe, but its value cannot be stored atomically, so <code>Atomic</code> of a
-tuple is an error too.</li>
+tuple is an error too, and so is <code>Atomic</code> of a trait type (see
+<a href="traits-and-extensions.html#weak-references-and-atomics">Weak references and atomics</a>).</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
 <pre><code class="language-pepper">import async;

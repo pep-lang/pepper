@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -346,7 +346,12 @@ can be shared freely. To change one, make a new value.</li>
 <li>Each case that carries nothing is a single object that every use shares.
 It is never freed and costs no allocation, however often it is used.</li>
 <li>A slot of the enum type that is not given a value holds null, as a struct
-slot does. <code>===</code> and <code>!==</code> compare identity.</li>
+slot does. <code>===</code> and <code>!==</code> compare identity, and so does <code>==</code>, unless the
+enum is <code>[Equatable]</code>.</li>
+<li>Mark the enum <a href="hashing.html#deriving-both-with-equatable"><code>[Equatable]</code></a> to
+derive <code>==</code> and <code>hash</code> from its cases: two values are equal when they hold
+the same case with equal values, so they work as <code>HashMap</code> and <code>HashSet</code>
+keys.</li>
 <li>An enum can have type parameters (<code>enum List&lt;T&gt;</code>), and its cases can hold
 the enum itself, directly or through other types, so lists and trees are
 enums.</li>
@@ -389,7 +394,8 @@ when it flows into a trait value.</li>
 <p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
 value the method was called on, and a bare call of another method of the
 enum (<code>next()</code>) calls it on <code>this</code>. A <code>static</code> method is called on the enum
-itself (<code>Light.first()</code>).</p>
+itself (<code>Light.first()</code>). A method can be generic (<code>choose&lt;T&gt;</code>), with its
+type arguments inferred or written out (<code>light.choose&lt;String&gt;(...)</code>).</p>
 <pre><code class="language-pepper"># An enum can declare methods after its cases; `this` is the value.
 enum Light: u8 {
     Red,
@@ -414,6 +420,11 @@ enum Light: u8 {
         return next().next();
     }
 
+    # A method can be generic, like any function.
+    choose&lt;T&gt;(stop: T, go: T): T {
+        return may_go() ? go : stop;
+    }
+
     static first(): Light {
         return Light.Red;
     }
@@ -424,6 +435,7 @@ main(): int {
     assert(!light.may_go(), "red means stop");
     assert(light.next().may_go(), "green follows red");
     assert(light.after_two() == Light.Amber, "then amber");
+    assert(light.choose("wait", "walk") == "wait" &amp;&amp; Light.Green.choose(0, 1) == 1, "a generic method");
 
     # Every enum has name() and from_value().
     assert(light.name() == "Red", "name() spells the case");
@@ -446,6 +458,60 @@ instead, as <code>next()</code> does. Such an enum can also declare a trait with
 <a href="traits-and-extensions.html#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
 it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
 the object, as in a struct’s method; its values still cannot change.</p>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<p>An enum can also declare computed <a href="properties.html">properties</a> after its
+cases, <code>var name: T { get { ... } }</code>, which are read like fields
+(<code>size.ounces</code>). Inside the enum, a bare property name reads it on <code>this</code>.</p>
+<pre><code class="language-pepper"># An enum can declare computed properties after its cases, read like
+# fields: `size.ounces`, not `size.ounces()`.
+enum Size {
+    Small,
+    Medium,
+    Large,
+
+    var ounces: int {
+        get {
+            return match (this) {
+                Small =&gt; 8,
+                Medium =&gt; 12,
+                Large =&gt; 16,
+            };
+        }
+    }
+
+    # Inside the enum, a bare property name reads it on `this`.
+    var cups: int {
+        get { return ounces / 8; }
+    }
+}
+
+# The same works for an enum whose cases carry values.
+enum Shape {
+    Circle(radius: int),
+    Square(side: int),
+
+    var area: int {
+        get {
+            return match (this) {
+                Circle(r) =&gt; 3 * r * r,
+                Square(s) =&gt; s * s,
+            };
+        }
+    }
+}
+
+main(): int {
+    var size = Size.Medium;
+    assert(size.ounces == 12 &amp;&amp; Size.Large.cups == 2, "value enum properties");
+    assert(Shape.Square(4).area == 16 &amp;&amp; Shape.Circle(2).area == 12, "properties that read the payload");
+    return 0;
+}
+</code></pre>
+<p>An enum value has nowhere to keep anything and never changes, so an enum’s
+property has a <code>get</code> with a body that does not use <code>field</code>, and no <code>set</code>:</p>
+<pre><code class="language-text">main.pep:6:9: error: property 'n' of enum 'E' must be computed: give 'get' a body that does not use 'field'
+main.pep:6:38: error: property 'n' of enum 'E' cannot have a 'set' accessor: enum values are immutable
+</code></pre>
 <h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
 <p>Every enum has these methods without declaring them, and cannot declare
 methods of the same names:</p>
@@ -627,6 +693,9 @@ block only: <code>if (d is Text(t)) { ... }</code> reads <code>t</code> inside t
 iteration. Anywhere else, <code>is</code> cannot bind names. <code>is</code> is a keyword only
 between a value and a pattern, so it stays usable as a name
 (<code>token.is(text)</code>).</li>
+<li><strong>A trait value</strong> is matched by type rather than by case: <code>Circle(c)</code>
+tests for the struct <code>Circle</code> and binds the value as one. See
+<a href="traits-and-extensions.html#converting-a-trait-value-back">Converting a trait value back</a>.</li>
 <li><strong>Literal patterns</strong>: a <code>match</code> on an integer, a character, a <code>bool</code> or a
 <code>String</code> compares with literals (<code>1</code>, <code>-1</code>, <code>'a'</code>, <code>true</code>, <code>"import"</code>),
 using <code>==</code>. Literals cannot list every value, so such a <code>match</code> needs an
@@ -862,10 +931,10 @@ case.</li>
 </ul>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>An enum whose cases carry nothing cannot be generic. The methods of any
-enum cannot be generic yet. An enum whose cases carry values can declare
-indexers (<code>[]</code>), as a struct does; one whose cases carry nothing cannot
-declare operators or indexers yet, and has <code>==</code> and <code>!=</code> built in.</li>
+<li>An enum whose cases carry nothing cannot be generic. An enum whose cases
+carry values can declare indexers (<code>[]</code>), as a struct does; one whose
+cases carry nothing cannot declare operators or indexers yet, and has
+<code>==</code> and <code>!=</code> built in.</li>
 <li>A constant is a pattern only when it is declared at module scope.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>The methods of an enum whose cases carry nothing have no value form:

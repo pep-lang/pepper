@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -657,14 +657,167 @@ same trait type (see <a href="memory.html#copying-trait-values">Copying trait va
 It panics when that struct cannot be copied.</p>
 </li>
 </ul>
-<p>What traits do not do yet:</p>
+<h4 id="converting-a-trait-value-back"><a class="header" href="#converting-a-trait-value-back">Converting a trait value back</a></h4>
+<p>A trait value remembers the struct it holds, so it converts back to that
+struct, or to another trait the struct declares. A <strong>type pattern</strong> names the
+type, like an enum case, and binds the value as that type:</p>
+<pre><code class="language-pepper"># A trait value converts back to the struct it holds, or to another trait
+# that struct declares, with `is`, `match` and `as?`.
+trait Shape {
+    area(): int;
+}
+
+trait Named {
+    name(): String;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+extend Square with Named {
+    name(): String { return "square"; }
+}
+
+struct Rect {
+    var width: int = 1;
+    var height: int = 1;
+    construct(this.width = 1, this.height = 1) {}
+}
+
+extend Rect with Shape {
+    area(): int { return width * height; }
+}
+
+# A type pattern tests for a struct and binds the value as that struct.
+describe(shape: Shape): String {
+    return match (shape) {
+        Square(square) =&gt; $"a square of side {square.side}",
+        Rect(rect) =&gt; $"a {rect.width} by {rect.height} rectangle",
+        else =&gt; "another shape",
+    };
+}
+
+main(): int {
+    var shape: Shape = Square(3);
+    assert(describe(shape) == "a square of side 3", "match on the struct");
+    assert(describe(Rect(2, 5)) == "a 2 by 5 rectangle", "another struct");
+
+    # `is` tests without converting; as an `if` condition it can bind.
+    assert(shape is Square, "a square");
+    assert(!(shape is Rect), "not a rectangle");
+    if (shape is Square(square)) {
+        assert(square.side == 3, "bound as a Square");
+    }
+
+    # `as?` gives an optional: Empty when the value is something else.
+    var square = shape as? Square;
+    assert(square.value().side == 3, "converted to Square");
+    var rect = shape as? Rect;
+    assert(rect.is_empty(), "not a Rect");
+
+    # Converting to another trait works when the struct declares both.
+    var named = shape as? Named;
+    assert(named.value().name() == "square", "a Square is Named");
+    var other: Shape = Rect(1, 1);
+    assert((other as? Named).is_empty(), "a Rect is not Named");
+    return 0;
+}
+</code></pre>
 <ul>
-<li><strong>A trait value cannot convert back</strong> to its struct, or to another trait.</li>
-<li><strong><code>Atomic&lt;Shape&gt;</code> is not supported.</strong> A trait value is two pointers wide
-and cannot be swapped atomically.</li>
-<li><strong><code>Weak&lt;Shape&gt;</code> is not supported.</strong> Take the weak reference to the struct
-type instead.</li>
+<li>
+<p><strong><code>value is Square</code></strong> tests whether the value holds a <code>Square</code>. As the
+whole condition of an <code>if</code> or <code>while</code>, <code>value is Square(square)</code> also binds
+it, as for <a href="enums.html#match-expressions-is-and-literal-patterns">enums</a>.</p>
+</li>
+<li>
+<p><strong><code>match (value) { Square(square) =&gt; ..., Rect(rect) =&gt; ..., else =&gt; ... }</code></strong> picks the arm of the value’s struct. Any struct may declare a trait,
+so a <code>match</code> expression on a trait value needs an <code>else</code> arm.</p>
+</li>
+<li>
+<p><strong><code>value as? Square</code></strong> converts the value, giving <code>Square?</code>: Empty when the
+value holds something else, or is null. <code>as</code> without the <code>?</code> is an error
+for a trait value, since the conversion can fail.</p>
+</li>
+<li>
+<p><strong>Another trait</strong> works the same way: <code>value as? Named</code> and <code>value is Named</code> succeed when the struct behind the value declares <code>Named</code> too.</p>
+</li>
+<li>
+<p>A generic struct is named with its type arguments: <code>Cell&lt;int&gt;(cell)</code>.</p>
+</li>
+<li>
+<p>A value struct’s trait value holds a copy of it (see
+<a href="value-structs.html#value-structs-as-trait-values">boxing</a>), and converting
+back copies it out again.</p>
+</li>
+<li>
+<p>The bound value is another reference to the same object, like any copy
+(see <a href="memory.html">Memory</a>); a test holds no reference after it.</p>
+</li>
+<li>
+<p>Naming a struct that does not declare the trait is an error, since the
+value can never hold one:</p>
+<pre><code class="language-text">main.pep:9:18: error: 'Point' does not implement 'Shape', so a 'Shape' value never holds one
+    9 |     if (shape is Point) {
+      |                  ^~~~~
+</code></pre>
+</li>
 </ul>
+<h4 id="weak-references-and-atomics"><a class="header" href="#weak-references-and-atomics">Weak references and atomics</a></h4>
+<p><strong><code>Weak&lt;Shape&gt;</code></strong> is a <a href="memory.html#weak-references">weak reference</a> to a
+trait value: it holds the struct’s weak reference and its vtable, and a
+<code>with</code> block upgrades it to a <code>Shape</code> while a strong reference is left:</p>
+<pre><code class="language-pepper"># A weak reference can point at a trait value: it keeps the struct behind
+# it without keeping it alive.
+trait Shape {
+    area(): int;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+main(): int {
+    var shape: Shape = Square(3);
+    var weak = Weak&lt;Shape&gt;(shape);
+
+    # While a strong reference is left, `with` reaches the value as a Shape.
+    with (var live = weak) {
+        assert(live.area() == 9, "upgraded to a Shape");
+    } else {
+        assert(false, "still alive");
+    }
+
+    # Once the last strong reference goes, the Square is destroyed.
+    shape = __null;
+    assert(weak.expired(), "destroyed");
+    with (var live = weak) {
+        assert(false, "expired: the body is skipped");
+    }
+    return 0;
+}
+</code></pre>
+<p><strong><code>Atomic&lt;Shape&gt;</code> is ruled out.</strong> <code>Atomic&lt;T&gt;</code> needs a thread-safe <code>T</code>, and
+a trait value may hold any struct, thread-safe or not; it is also two
+pointers wide, more than one atomic instruction swaps on every platform.
+The error is the one for any type that is not thread-safe:</p>
+<pre><code class="language-text">main.pep:8:32: error: 'Shape' does not conform to 'Shared', required by 'T' in 'Atomic'
+    8 |     var current = async.Atomic&lt;Shape&gt;();
+      |                                ^~~~~
+</code></pre>
+<p>To share a trait value between threads, keep it in a
+<a href="threads.html#mutexes-and-conditions"><code>Mutex&lt;Shape&gt;</code></a> and swap it with
+<code>replace</code>, or use <code>Atomic&lt;Square&gt;</code> for one <code>[Shared]</code> struct type.</p>
 
                     </main>
 

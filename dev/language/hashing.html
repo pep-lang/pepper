@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -197,6 +197,7 @@ in order, see <a href="maps.html">Maps and sets</a>.</p>
 <tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
 <tr><td>A tuple</td><td>element by element</td><td>the elements’ hashes, combined</td></tr>
 <tr><td>A <a href="value-structs.html">value struct</a></td><td>field by field</td><td>the fields’ hashes, combined</td></tr>
+<tr><td>An <a href="#deriving-both-with-equatable"><code>[Equatable]</code></a> struct or enum</td><td>field by field</td><td>the fields’ hashes, combined</td></tr>
 <tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object’s address</td></tr>
 </tbody>
 </table>
@@ -228,8 +229,68 @@ main(): int {
 <p>Identity is right for objects that stand for one thing: a connection, a
 node in a graph, a task. It is wrong for a struct that describes a value,
 such as a point or a record looked up by its fields.</p>
+<h2 id="deriving-both-with-equatable"><a class="header" href="#deriving-both-with-equatable">Deriving both with <code>[Equatable]</code></a></h2>
+<p>Mark the struct <code>[Equatable]</code>, and the compiler writes both halves from its
+fields, so they cannot drift apart. It compares and hashes like a tuple of
+its fields: a field of a struct type uses that struct’s <code>==</code> and <code>hash</code>, a
+<code>String</code> its content, and a null field equals only null. Mark a field
+<code>[NotCompared]</code> to leave it out of both:</p>
+<pre><code class="language-pepper"># `[Equatable]` derives `==` and the hash from the fields, so they always
+# agree.
+[Equatable]
+struct Person {
+    String name;
+    int id;
+    # Not part of the identity: two records for the same person may differ.
+    [NotCompared]
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+}
+
+# An enum whose cases carry values compares the case and then its values.
+[Equatable]
+enum Token {
+    Word(text: String),
+    Number(value: int),
+    End,
+}
+
+main(): int {
+    HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
+    assert(people.count == 1, "equal people are one member");
+    assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
+    assert(!people.contains(Person("Ada", 2)), "a different id");
+    assert(Person("Ada", 1) == Person("Ada", 1, "B"), "== is derived");
+
+    var counts = HashMap&lt;Token, int&gt;();
+    counts[Token.Word("pepper")] = 2;
+    counts[Token.End] = 1;
+    assert(counts[Token.Word("pepper")] == 2, "found by case and value");
+    assert(Token.Word("salt") != Token.Word("pepper"), "different values");
+    assert(Token.Number(0) != Token.End, "different cases");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>An <a href="enums.html#cases-that-carry-values">enum whose cases carry values</a> can
+be <code>[Equatable]</code> too: two values are equal when they hold the same case
+and its values are equal.</li>
+<li>A generic struct derives both for each specialization, from the fields
+its type arguments give it.</li>
+<li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
+either is an error. To compare some other way, drop the attribute and
+declare both by hand (below).</li>
+<li>An <code>Array</code> field compares by its elements but hashes by its address, so
+it adds nothing to the hash. Equal keys still hash equally; keys that
+differ only in such a field share a hash, which costs speed. The same goes
+for an <code>Array</code> in a tuple.</li>
+<li><code>[Equatable]</code> does not apply to a <a href="value-structs.html">value struct</a> or an
+enum whose cases carry nothing: they already compare and hash by content.</li>
+</ul>
 <h2 id="keying-a-struct-by-its-content"><a class="header" href="#keying-a-struct-by-its-content">Keying a struct by its content</a></h2>
-<p>Give the struct both halves of the pair:</p>
+<p>To decide yourself what counts as equal, give the struct both halves of the
+pair:</p>
 <ul>
 <li>an <code>==</code> <a href="structs.html#operators">operator</a> that says when two keys are the
 same, and</li>
@@ -305,7 +366,7 @@ when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</
 <pre><code class="language-text">main.pep:5:5: error: 'Point' declares '==' but no 'hash&lt;Point&gt;', so as a HashMap or HashSet key, equal values will not find each other
     5 |     ==(other: Point): bool {
       |     ^~
-note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares
+note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
 </code></pre>
 <p>The runtime’s own structs are not checked. An <code>Array</code> key’s <code>==</code> compares
 elements but its hash is its address, so find it with the same <code>Array</code>

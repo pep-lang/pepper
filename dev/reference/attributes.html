@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -276,6 +276,18 @@ error.</p>
 </code></pre>
 <p>Makes a struct a value: stored inline and copied on assignment, with no
 reference count.</p>
+<h2 id="equatable"><a class="header" href="#equatable">Equatable</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Equatable
+</code></pre>
+<p>Makes a struct, or an enum whose cases carry values, compare and hash
+by its fields, like a tuple of them, instead of by identity: the
+compiler derives its <code>==</code> and its <code>hash</code>, so equal values find each
+other as <code>HashMap</code> and <code>HashSet</code> keys.</p>
+<h2 id="notcompared"><a class="header" href="#notcompared">NotCompared</a></h2>
+<pre><code class="language-pepper">[Attribute] struct NotCompared
+</code></pre>
+<p>Leaves a field of an <code>[Equatable]</code> struct out of its derived <code>==</code> and
+<code>hash</code>.</p>
 <h2 id="shared"><a class="header" href="#shared">Shared</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Shared
 </code></pre>

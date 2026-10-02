@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -899,7 +899,10 @@ treated the same way: it is a condition only when its trait declares <code>!!</c
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
 for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
-count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. To
+compare field by field, mark the struct
+<a href="hashing.html#deriving-both-with-equatable"><code>[Equatable]</code></a>, which derives <code>==</code>
+and <code>hash</code> together. <code>===</code> and
 <code>!==</code> always compare identity, whatever methods the struct declares, so
 <code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
 <p>A struct never equals a number: unless the struct declares an <code>==</code> (or <code>!=</code>)

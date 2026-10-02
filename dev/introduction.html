@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-c45e05eb.js"></script>
@@ -224,13 +224,13 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
+structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
-traits (with default methods, and usable as types), function types and
+traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
-<code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
+<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "../searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -629,7 +629,9 @@ unsigned one: <code>(-1 as i16) as long</code> is -1, and <code>(65535 as u16) a
 <li><code>bool</code> and enums convert like integers: <code>true as int</code> is 1, and an enum
 converts to the integer it is stored as. An integer does not convert to an
 enum; name a case instead.</li>
-<li>A struct converts to a trait it conforms to: <code>dog as Named</code>.</li>
+<li>A struct converts to a trait it conforms to: <code>dog as Named</code>. The other
+way, from a trait value, may fail: <code>shape as? Square</code> gives a <code>Square?</code>
+(see <a href="traits-and-extensions.html#converting-a-trait-value-back">Converting a trait value back</a>).</li>
 <li>A pointer converts to <code>__ptr&lt;void&gt;</code> and back: <code>p as __ptr&lt;void&gt;</code>, then
 <code>v as __ptr&lt;int&gt;</code>.</li>
 <li>A value converts to its own type.</li>

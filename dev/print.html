@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2984b42.js";
+            window.path_to_searchindex_js = "searchindex-da72a21e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-c45e05eb.js"></script>
@@ -222,13 +222,13 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and <a href="#properties">properties</a>, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
+structs with constructors, destructors, methods and <a href="#properties">properties</a>, enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
-traits (with default methods, and usable as types), function types and
+traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
-<code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
+<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
@@ -1338,7 +1338,9 @@ unsigned one: <code>(-1 as i16) as long</code> is -1, and <code>(65535 as u16) a
 <li><code>bool</code> and enums convert like integers: <code>true as int</code> is 1, and an enum
 converts to the integer it is stored as. An integer does not convert to an
 enum; name a case instead.</li>
-<li>A struct converts to a trait it conforms to: <code>dog as Named</code>.</li>
+<li>A struct converts to a trait it conforms to: <code>dog as Named</code>. The other
+way, from a trait value, may fail: <code>shape as? Square</code> gives a <code>Square?</code>
+(see <a href="#converting-a-trait-value-back">Converting a trait value back</a>).</li>
 <li>A pointer converts to <code>__ptr&lt;void&gt;</code> and back: <code>p as __ptr&lt;void&gt;</code>, then
 <code>v as __ptr&lt;int&gt;</code>.</li>
 <li>A value converts to its own type.</li>
@@ -4418,12 +4420,12 @@ and when the last reference goes, the object releases what it captured.</p>
 <p>A plain function value’s counts are plain increments; a <code>shared</code> one’s are
 atomic, like a <code>[Shared]</code> struct’s (see
 <a href="#sharing-function-values-between-threads">Sharing function values between threads</a>).</p>
-<h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
-<ul>
-<li><strong>Closures that capture values as C callbacks.</strong> A C function pointer
-(<code>extern (P) =&gt; R</code>) takes a named function or a closure that captures
-nothing; see <a href="#passing-a-pepper-function-to-c">Calling C</a>.</li>
-</ul>
+<h2 id="c-function-pointers"><a class="header" href="#c-function-pointers">C function pointers</a></h2>
+<p>A C function pointer type, <code>extern (P...) =&gt; R</code>, holds a bare address that C
+can call, not a function value: it takes a named function or a closure that
+captures nothing, and never a closure that captures values. That is by
+design; see <a href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a>
+for how a callback gets the state it needs.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="overloading-1"><a class="header" href="#overloading-1">Overloading</a></h1>
 <p>Several free functions in one file can share a name when their parameter
@@ -4931,7 +4933,7 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
       |             ^
 </code></pre>
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
-<h2 id="what-is-not-supported-yet-1"><a class="header" href="#what-is-not-supported-yet-1">What is not supported yet</a></h2>
+<h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
 <li><strong>Overloads across modules</strong> do not merge: two modules’ sets of one name
 are ambiguous where both are imported, and a file’s own functions of a
@@ -5656,7 +5658,10 @@ treated the same way: it is a condition only when its trait declares <code>!!</c
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
 for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
-count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. To
+compare field by field, mark the struct
+<a href="#deriving-both-with-equatable"><code>[Equatable]</code></a>, which derives <code>==</code>
+and <code>hash</code> together. <code>===</code> and
 <code>!==</code> always compare identity, whatever methods the struct declares, so
 <code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
 <p>A struct never equals a number: unless the struct declares an <code>==</code> (or <code>!=</code>)
@@ -5860,6 +5865,8 @@ main(): int {
 <p>An extension property that would need storage is an error:</p>
 <pre><code class="language-text">main.pep:5:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'
 </code></pre>
+<p>An <a href="#properties-1">enum</a> can declare computed properties too, under
+the same rule, and no <code>set</code>, since its values never change.</p>
 <h2 id="properties-of-shared-structs"><a class="header" href="#properties-of-shared-structs">Properties of <code>[Shared]</code> structs</a></h2>
 <p>The fields of a <a href="#threads-and-shared-data"><code>[Shared]</code> struct</a> are <code>const</code>, so the storage
 of its properties is too:</p>
@@ -6065,6 +6072,7 @@ in order, see <a href="#maps-and-sets">Maps and sets</a>.</p>
 <tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
 <tr><td>A tuple</td><td>element by element</td><td>the elements’ hashes, combined</td></tr>
 <tr><td>A <a href="#value-structs">value struct</a></td><td>field by field</td><td>the fields’ hashes, combined</td></tr>
+<tr><td>An <a href="#deriving-both-with-equatable"><code>[Equatable]</code></a> struct or enum</td><td>field by field</td><td>the fields’ hashes, combined</td></tr>
 <tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object’s address</td></tr>
 </tbody>
 </table>
@@ -6096,8 +6104,68 @@ main(): int {
 <p>Identity is right for objects that stand for one thing: a connection, a
 node in a graph, a task. It is wrong for a struct that describes a value,
 such as a point or a record looked up by its fields.</p>
+<h2 id="deriving-both-with-equatable"><a class="header" href="#deriving-both-with-equatable">Deriving both with <code>[Equatable]</code></a></h2>
+<p>Mark the struct <code>[Equatable]</code>, and the compiler writes both halves from its
+fields, so they cannot drift apart. It compares and hashes like a tuple of
+its fields: a field of a struct type uses that struct’s <code>==</code> and <code>hash</code>, a
+<code>String</code> its content, and a null field equals only null. Mark a field
+<code>[NotCompared]</code> to leave it out of both:</p>
+<pre><code class="language-pepper"># `[Equatable]` derives `==` and the hash from the fields, so they always
+# agree.
+[Equatable]
+struct Person {
+    String name;
+    int id;
+    # Not part of the identity: two records for the same person may differ.
+    [NotCompared]
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+}
+
+# An enum whose cases carry values compares the case and then its values.
+[Equatable]
+enum Token {
+    Word(text: String),
+    Number(value: int),
+    End,
+}
+
+main(): int {
+    HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
+    assert(people.count == 1, "equal people are one member");
+    assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
+    assert(!people.contains(Person("Ada", 2)), "a different id");
+    assert(Person("Ada", 1) == Person("Ada", 1, "B"), "== is derived");
+
+    var counts = HashMap&lt;Token, int&gt;();
+    counts[Token.Word("pepper")] = 2;
+    counts[Token.End] = 1;
+    assert(counts[Token.Word("pepper")] == 2, "found by case and value");
+    assert(Token.Word("salt") != Token.Word("pepper"), "different values");
+    assert(Token.Number(0) != Token.End, "different cases");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>An <a href="#cases-that-carry-values">enum whose cases carry values</a> can
+be <code>[Equatable]</code> too: two values are equal when they hold the same case
+and its values are equal.</li>
+<li>A generic struct derives both for each specialization, from the fields
+its type arguments give it.</li>
+<li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
+either is an error. To compare some other way, drop the attribute and
+declare both by hand (below).</li>
+<li>An <code>Array</code> field compares by its elements but hashes by its address, so
+it adds nothing to the hash. Equal keys still hash equally; keys that
+differ only in such a field share a hash, which costs speed. The same goes
+for an <code>Array</code> in a tuple.</li>
+<li><code>[Equatable]</code> does not apply to a <a href="#value-structs">value struct</a> or an
+enum whose cases carry nothing: they already compare and hash by content.</li>
+</ul>
 <h2 id="keying-a-struct-by-its-content"><a class="header" href="#keying-a-struct-by-its-content">Keying a struct by its content</a></h2>
-<p>Give the struct both halves of the pair:</p>
+<p>To decide yourself what counts as equal, give the struct both halves of the
+pair:</p>
 <ul>
 <li>an <code>==</code> <a href="#operators-1">operator</a> that says when two keys are the
 same, and</li>
@@ -6173,7 +6241,7 @@ when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</
 <pre><code class="language-text">main.pep:5:5: error: 'Point' declares '==' but no 'hash&lt;Point&gt;', so as a HashMap or HashSet key, equal values will not find each other
     5 |     ==(other: Point): bool {
       |     ^~
-note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares
+note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
 </code></pre>
 <p>The runtime’s own structs are not checked. An <code>Array</code> key’s <code>==</code> compares
 elements but its hash is its address, so find it with the same <code>Array</code>
@@ -6566,7 +6634,12 @@ can be shared freely. To change one, make a new value.</li>
 <li>Each case that carries nothing is a single object that every use shares.
 It is never freed and costs no allocation, however often it is used.</li>
 <li>A slot of the enum type that is not given a value holds null, as a struct
-slot does. <code>===</code> and <code>!==</code> compare identity.</li>
+slot does. <code>===</code> and <code>!==</code> compare identity, and so does <code>==</code>, unless the
+enum is <code>[Equatable]</code>.</li>
+<li>Mark the enum <a href="#deriving-both-with-equatable"><code>[Equatable]</code></a> to
+derive <code>==</code> and <code>hash</code> from its cases: two values are equal when they hold
+the same case with equal values, so they work as <code>HashMap</code> and <code>HashSet</code>
+keys.</li>
 <li>An enum can have type parameters (<code>enum List&lt;T&gt;</code>), and its cases can hold
 the enum itself, directly or through other types, so lists and trees are
 enums.</li>
@@ -6609,7 +6682,8 @@ when it flows into a trait value.</li>
 <p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
 value the method was called on, and a bare call of another method of the
 enum (<code>next()</code>) calls it on <code>this</code>. A <code>static</code> method is called on the enum
-itself (<code>Light.first()</code>).</p>
+itself (<code>Light.first()</code>). A method can be generic (<code>choose&lt;T&gt;</code>), with its
+type arguments inferred or written out (<code>light.choose&lt;String&gt;(...)</code>).</p>
 <pre><code class="language-pepper"># An enum can declare methods after its cases; `this` is the value.
 enum Light: u8 {
     Red,
@@ -6634,6 +6708,11 @@ enum Light: u8 {
         return next().next();
     }
 
+    # A method can be generic, like any function.
+    choose&lt;T&gt;(stop: T, go: T): T {
+        return may_go() ? go : stop;
+    }
+
     static first(): Light {
         return Light.Red;
     }
@@ -6644,6 +6723,7 @@ main(): int {
     assert(!light.may_go(), "red means stop");
     assert(light.next().may_go(), "green follows red");
     assert(light.after_two() == Light.Amber, "then amber");
+    assert(light.choose("wait", "walk") == "wait" &amp;&amp; Light.Green.choose(0, 1) == 1, "a generic method");
 
     # Every enum has name() and from_value().
     assert(light.name() == "Red", "name() spells the case");
@@ -6666,6 +6746,60 @@ instead, as <code>next()</code> does. Such an enum can also declare a trait with
 <a href="#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
 it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
 the object, as in a struct’s method; its values still cannot change.</p>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<p>An enum can also declare computed <a href="#properties">properties</a> after its
+cases, <code>var name: T { get { ... } }</code>, which are read like fields
+(<code>size.ounces</code>). Inside the enum, a bare property name reads it on <code>this</code>.</p>
+<pre><code class="language-pepper"># An enum can declare computed properties after its cases, read like
+# fields: `size.ounces`, not `size.ounces()`.
+enum Size {
+    Small,
+    Medium,
+    Large,
+
+    var ounces: int {
+        get {
+            return match (this) {
+                Small =&gt; 8,
+                Medium =&gt; 12,
+                Large =&gt; 16,
+            };
+        }
+    }
+
+    # Inside the enum, a bare property name reads it on `this`.
+    var cups: int {
+        get { return ounces / 8; }
+    }
+}
+
+# The same works for an enum whose cases carry values.
+enum Shape {
+    Circle(radius: int),
+    Square(side: int),
+
+    var area: int {
+        get {
+            return match (this) {
+                Circle(r) =&gt; 3 * r * r,
+                Square(s) =&gt; s * s,
+            };
+        }
+    }
+}
+
+main(): int {
+    var size = Size.Medium;
+    assert(size.ounces == 12 &amp;&amp; Size.Large.cups == 2, "value enum properties");
+    assert(Shape.Square(4).area == 16 &amp;&amp; Shape.Circle(2).area == 12, "properties that read the payload");
+    return 0;
+}
+</code></pre>
+<p>An enum value has nowhere to keep anything and never changes, so an enum’s
+property has a <code>get</code> with a body that does not use <code>field</code>, and no <code>set</code>:</p>
+<pre><code class="language-text">main.pep:6:9: error: property 'n' of enum 'E' must be computed: give 'get' a body that does not use 'field'
+main.pep:6:38: error: property 'n' of enum 'E' cannot have a 'set' accessor: enum values are immutable
+</code></pre>
 <h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
 <p>Every enum has these methods without declaring them, and cannot declare
 methods of the same names:</p>
@@ -6847,6 +6981,9 @@ block only: <code>if (d is Text(t)) { ... }</code> reads <code>t</code> inside t
 iteration. Anywhere else, <code>is</code> cannot bind names. <code>is</code> is a keyword only
 between a value and a pattern, so it stays usable as a name
 (<code>token.is(text)</code>).</li>
+<li><strong>A trait value</strong> is matched by type rather than by case: <code>Circle(c)</code>
+tests for the struct <code>Circle</code> and binds the value as one. See
+<a href="#converting-a-trait-value-back">Converting a trait value back</a>.</li>
 <li><strong>Literal patterns</strong>: a <code>match</code> on an integer, a character, a <code>bool</code> or a
 <code>String</code> compares with literals (<code>1</code>, <code>-1</code>, <code>'a'</code>, <code>true</code>, <code>"import"</code>),
 using <code>==</code>. Literals cannot list every value, so such a <code>match</code> needs an
@@ -7082,10 +7219,10 @@ case.</li>
 </ul>
 <h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
 <ul>
-<li>An enum whose cases carry nothing cannot be generic. The methods of any
-enum cannot be generic yet. An enum whose cases carry values can declare
-indexers (<code>[]</code>), as a struct does; one whose cases carry nothing cannot
-declare operators or indexers yet, and has <code>==</code> and <code>!=</code> built in.</li>
+<li>An enum whose cases carry nothing cannot be generic. An enum whose cases
+carry values can declare indexers (<code>[]</code>), as a struct does; one whose
+cases carry nothing cannot declare operators or indexers yet, and has
+<code>==</code> and <code>!=</code> built in.</li>
 <li>A constant is a pattern only when it is declared at module scope.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>The methods of an enum whose cases carry nothing have no value form:
@@ -7385,6 +7522,8 @@ binds <code>f</code> to an ordinary strong reference for the length of the block
 the object has already been destroyed, the body is skipped and the <code>else</code>
 block runs. See <a href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a>.</li>
 <li><strong><code>expired()</code></strong> reports whether the object has been destroyed.</li>
+<li><strong><code>T</code> may be a trait</strong>: <code>Weak&lt;Shape&gt;</code> upgrades to a <code>Shape</code> (see
+<a href="#weak-references-and-atomics">Weak references and atomics</a>).</li>
 <li><strong>The object is destroyed on time.</strong> When its last strong reference goes,
 its destructor runs and its fields are released, even if weak references
 remain. Only the object’s small header stays allocated until the last weak
@@ -9418,14 +9557,167 @@ same trait type (see <a href="#copying-trait-values">Copying trait values</a>).
 It panics when that struct cannot be copied.</p>
 </li>
 </ul>
-<p>What traits do not do yet:</p>
+<h4 id="converting-a-trait-value-back"><a class="header" href="#converting-a-trait-value-back">Converting a trait value back</a></h4>
+<p>A trait value remembers the struct it holds, so it converts back to that
+struct, or to another trait the struct declares. A <strong>type pattern</strong> names the
+type, like an enum case, and binds the value as that type:</p>
+<pre><code class="language-pepper"># A trait value converts back to the struct it holds, or to another trait
+# that struct declares, with `is`, `match` and `as?`.
+trait Shape {
+    area(): int;
+}
+
+trait Named {
+    name(): String;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+extend Square with Named {
+    name(): String { return "square"; }
+}
+
+struct Rect {
+    var width: int = 1;
+    var height: int = 1;
+    construct(this.width = 1, this.height = 1) {}
+}
+
+extend Rect with Shape {
+    area(): int { return width * height; }
+}
+
+# A type pattern tests for a struct and binds the value as that struct.
+describe(shape: Shape): String {
+    return match (shape) {
+        Square(square) =&gt; $"a square of side {square.side}",
+        Rect(rect) =&gt; $"a {rect.width} by {rect.height} rectangle",
+        else =&gt; "another shape",
+    };
+}
+
+main(): int {
+    var shape: Shape = Square(3);
+    assert(describe(shape) == "a square of side 3", "match on the struct");
+    assert(describe(Rect(2, 5)) == "a 2 by 5 rectangle", "another struct");
+
+    # `is` tests without converting; as an `if` condition it can bind.
+    assert(shape is Square, "a square");
+    assert(!(shape is Rect), "not a rectangle");
+    if (shape is Square(square)) {
+        assert(square.side == 3, "bound as a Square");
+    }
+
+    # `as?` gives an optional: Empty when the value is something else.
+    var square = shape as? Square;
+    assert(square.value().side == 3, "converted to Square");
+    var rect = shape as? Rect;
+    assert(rect.is_empty(), "not a Rect");
+
+    # Converting to another trait works when the struct declares both.
+    var named = shape as? Named;
+    assert(named.value().name() == "square", "a Square is Named");
+    var other: Shape = Rect(1, 1);
+    assert((other as? Named).is_empty(), "a Rect is not Named");
+    return 0;
+}
+</code></pre>
 <ul>
-<li><strong>A trait value cannot convert back</strong> to its struct, or to another trait.</li>
-<li><strong><code>Atomic&lt;Shape&gt;</code> is not supported.</strong> A trait value is two pointers wide
-and cannot be swapped atomically.</li>
-<li><strong><code>Weak&lt;Shape&gt;</code> is not supported.</strong> Take the weak reference to the struct
-type instead.</li>
+<li>
+<p><strong><code>value is Square</code></strong> tests whether the value holds a <code>Square</code>. As the
+whole condition of an <code>if</code> or <code>while</code>, <code>value is Square(square)</code> also binds
+it, as for <a href="#match-expressions-is-and-literal-patterns">enums</a>.</p>
+</li>
+<li>
+<p><strong><code>match (value) { Square(square) =&gt; ..., Rect(rect) =&gt; ..., else =&gt; ... }</code></strong> picks the arm of the value’s struct. Any struct may declare a trait,
+so a <code>match</code> expression on a trait value needs an <code>else</code> arm.</p>
+</li>
+<li>
+<p><strong><code>value as? Square</code></strong> converts the value, giving <code>Square?</code>: Empty when the
+value holds something else, or is null. <code>as</code> without the <code>?</code> is an error
+for a trait value, since the conversion can fail.</p>
+</li>
+<li>
+<p><strong>Another trait</strong> works the same way: <code>value as? Named</code> and <code>value is Named</code> succeed when the struct behind the value declares <code>Named</code> too.</p>
+</li>
+<li>
+<p>A generic struct is named with its type arguments: <code>Cell&lt;int&gt;(cell)</code>.</p>
+</li>
+<li>
+<p>A value struct’s trait value holds a copy of it (see
+<a href="#value-structs-as-trait-values">boxing</a>), and converting
+back copies it out again.</p>
+</li>
+<li>
+<p>The bound value is another reference to the same object, like any copy
+(see <a href="#memory-and-reference-counting">Memory</a>); a test holds no reference after it.</p>
+</li>
+<li>
+<p>Naming a struct that does not declare the trait is an error, since the
+value can never hold one:</p>
+<pre><code class="language-text">main.pep:9:18: error: 'Point' does not implement 'Shape', so a 'Shape' value never holds one
+    9 |     if (shape is Point) {
+      |                  ^~~~~
+</code></pre>
+</li>
 </ul>
+<h4 id="weak-references-and-atomics"><a class="header" href="#weak-references-and-atomics">Weak references and atomics</a></h4>
+<p><strong><code>Weak&lt;Shape&gt;</code></strong> is a <a href="#weak-references">weak reference</a> to a
+trait value: it holds the struct’s weak reference and its vtable, and a
+<code>with</code> block upgrades it to a <code>Shape</code> while a strong reference is left:</p>
+<pre><code class="language-pepper"># A weak reference can point at a trait value: it keeps the struct behind
+# it without keeping it alive.
+trait Shape {
+    area(): int;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+
+main(): int {
+    var shape: Shape = Square(3);
+    var weak = Weak&lt;Shape&gt;(shape);
+
+    # While a strong reference is left, `with` reaches the value as a Shape.
+    with (var live = weak) {
+        assert(live.area() == 9, "upgraded to a Shape");
+    } else {
+        assert(false, "still alive");
+    }
+
+    # Once the last strong reference goes, the Square is destroyed.
+    shape = __null;
+    assert(weak.expired(), "destroyed");
+    with (var live = weak) {
+        assert(false, "expired: the body is skipped");
+    }
+    return 0;
+}
+</code></pre>
+<p><strong><code>Atomic&lt;Shape&gt;</code> is ruled out.</strong> <code>Atomic&lt;T&gt;</code> needs a thread-safe <code>T</code>, and
+a trait value may hold any struct, thread-safe or not; it is also two
+pointers wide, more than one atomic instruction swaps on every platform.
+The error is the one for any type that is not thread-safe:</p>
+<pre><code class="language-text">main.pep:8:32: error: 'Shape' does not conform to 'Shared', required by 'T' in 'Atomic'
+    8 |     var current = async.Atomic&lt;Shape&gt;();
+      |                                ^~~~~
+</code></pre>
+<p>To share a trait value between threads, keep it in a
+<a href="#mutexes-and-conditions"><code>Mutex&lt;Shape&gt;</code></a> and swap it with
+<code>replace</code>, or use <code>Atomic&lt;Square&gt;</code> for one <code>[Shared]</code> struct type.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="iteration"><a class="header" href="#iteration">Iteration</a></h1>
 <p>A <code>for</code> loop visits each element of a collection in turn. You can loop over an
@@ -11423,7 +11715,8 @@ declared <code>Atomic&lt;T: Shared&gt;</code>: <code>T</code> is a number, <code
 <code>Atomic&lt;String&gt;</code> is a compile error at <code>String</code> (see
 <a href="#the-shared-constraint">the <code>Shared</code> constraint</a>). A tuple is
 thread-safe, but its value cannot be stored atomically, so <code>Atomic</code> of a
-tuple is an error too.</li>
+tuple is an error too, and so is <code>Atomic</code> of a trait type (see
+<a href="#weak-references-and-atomics">Weak references and atomics</a>).</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
 <pre><code class="language-pepper">import async;
@@ -14723,27 +15016,71 @@ main.pep:3:9: note: pass what the callback needs through the C function's contex
     3 |     var bias = 1;
       |         ^~~~
 </code></pre>
-<p>Most C APIs that take a callback also take a <code>void*</code> context argument that
-they hand back to it; pass what the callback needs through that.
-A function value held in a variable does not convert either, since it may
-be a closure.</p>
+<p>This is a design decision, not a missing feature: a C function pointer is
+a bare address, and giving each capturing closure an address of its own
+would mean writing executable code at run time, which some platforms
+forbid. A callback that needs state gets it another way:</p>
+<ul>
+<li>
+<p><strong>The C function’s context argument.</strong> Most C APIs that take a callback
+also take a <code>void*</code> context argument that they hand back to it; pass a
+pointer to the data the callback needs through that.</p>
 </li>
 <li>
-<p><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
+<p><strong>A thread-local or module-scope value.</strong> Set an
+<a href="#per-thread-values-with-threadlocal"><code>async.ThreadLocal&lt;T&gt;</code></a> (or an <code>Atomic&lt;T&gt;</code>) before calling
+C, and read it in the callback, which is a named function:</p>
+<pre><code class="language-pepper"># A C function pointer holds no captured values, so a callback that needs
+</code></pre>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="state-reads-it-from-somewhere-c-does-not-have-to-carry-here-a"><a class="header" href="#state-reads-it-from-somewhere-c-does-not-have-to-carry-here-a">state reads it from somewhere C does not have to carry: here, a</a></h1>
+<h1 id="thread-local-the-caller-sets-before-handing-the-callback-to-c"><a class="header" href="#thread-local-the-caller-sets-before-handing-the-callback-to-c">thread-local the caller sets before handing the callback to C.</a></h1>
+<p>import async;</p>
+<p>extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);</p>
+<h1 id="the-value-to-sort-around-for-the-calling-thread"><a class="header" href="#the-value-to-sort-around-for-the-calling-thread">The value to sort around, for the calling thread.</a></h1>
+<p>const pivot = async.ThreadLocal<int>();</int></p>
+<p>distance(x: int): int {
+var d = x - pivot.get();
+return d &lt; 0 ? -d : d;
+}</p>
+<p>closest_first(a: __ptr<void>, b: __ptr<void>): int {
+__ptr<int> x = a;
+__ptr<int> y = b;
+return distance(x[0]) - distance(y[0]);
+}</int></int></void></void></p>
+<p>main(): int {
+__ptr<int> numbers = _pep_malloc(4 * sizeof<int>());
+numbers[0] = 10;
+numbers[1] = 40;
+numbers[2] = 22;
+numbers[3] = 31;</int></int></p>
+<pre><code>pivot.set(30);
+qsort(numbers, 4, sizeof&lt;int&gt;(), closest_first);
+assert(numbers[0] == 31 &amp;&amp; numbers[3] == 10, "closest to 30 first");
+
+_pep_free(numbers);
+return 0;
+</code></pre>
+<p>}
+```</p>
+<p>A function value held in a variable does not convert either, since it may
+be a closure.</p>
+<ul>
+<li><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
 and return types must be numbers, <code>bool</code>, pointers, or other C function
 pointer types. A struct is an error:
 <code>C function pointer type 'extern (String) =&gt; int' cannot use 'String'; C passes only numbers, 'bool' and pointers</code>.
 Write pointers as <code>void*</code> in an <code>extern</code> declaration and as <code>__ptr&lt;void&gt;</code>
-elsewhere, as for any pointer.</p>
-</li>
-<li>
-<p><strong>A value like a number.</strong> A C function pointer has no reference count.
+elsewhere, as for any pointer.</li>
+<li><strong>A value like a number.</strong> A C function pointer has no reference count.
 Store it in a variable, field or module-scope <code>const</code>, return it, pass it
 to other threads, or call it: <code>compare(a, b)</code> calls through it with the C
 calling convention. Calling a null one (from C) panics. It converts to
 <code>void*</code> but not to a Pepper function type; wrap it in a closure that calls
-it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
-</li>
+it, <code>(x) =&gt; f(x)</code>, to use it as one.</li>
 </ul>
 <p><code>__function_pointer(name)</code> also gives a function’s address, as an untyped
 <code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
@@ -16311,7 +16648,7 @@ the String interpolation chapter).</p>
         print(c);   # one code point per line
     }
 </code></pre>
-<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
 <h4 id="length"><a class="header" href="#length">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
@@ -17582,7 +17919,7 @@ next step of such a loop panics with “Array modified during iteration”.</p>
         return total;   # 7
     }
 </code></pre>
-<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
+<h3 id="properties-3"><a class="header" href="#properties-3">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
@@ -18169,7 +18506,8 @@ chosen to collide.</p>
 <li><code>String</code> hashes by content through the concrete <code>hash&lt;String&gt;</code>
 override, so equal strings at different addresses collide.</li>
 </ul>
-<p>A struct whose keys should match by content instead declares an <code>==</code>
+<p>A struct whose keys should match by content is marked <code>[Equatable]</code>,
+which derives its <code>==</code> and its hash from its fields, or declares an <code>==</code>
 operator and overrides this function for itself, hashing the fields <code>==</code>
 compares: <code>hash&lt;Point&gt;(value: Point): u64</code>. Keys that are <code>==</code> must hash
 equally (see the “Hashing and equality” chapter of the book).</p>
@@ -18249,7 +18587,7 @@ never shrinks.</p>
     assert(ages.remove("alan"), "removed");
     assert(ages.count == 1, "one entry left");
 </code></pre>
-<h3 id="properties-3"><a class="header" href="#properties-3">Properties</a></h3>
+<h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
@@ -18858,7 +19196,7 @@ expected O(1) lookups in no order, <code>HashMap</code>.</p>
         print($"{name}: {score}");   # alice, bob, carol
     }
 </code></pre>
-<h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
+<h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
 <h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
@@ -19418,7 +19756,7 @@ cleared, or when the map is destroyed.</p>
         print($"{key} = {value}");   # name, version, license
     }
 </code></pre>
-<h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
+<h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
 <h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
@@ -20089,7 +20427,8 @@ body is skipped and its <code>else</code> block runs instead.</p>
 <h2 id="weak-1"><a class="header" href="#weak-1">Weak</a></h2>
 <pre><code class="language-pepper">struct Weak&lt;T&gt;
 </code></pre>
-<p>A reference to a struct object that does not keep it alive, for back
+<p>A reference to a struct object, or to the struct behind a trait value
+(<code>Weak&lt;Shape&gt;</code>), that does not keep it alive, for back
 pointers (a child’s parent, an observer’s subject) that would otherwise
 form a reference cycle and leak.</p>
 <p>The object is reached only through a <code>with</code> block, which upgrades the weak
@@ -20100,7 +20439,7 @@ object has been destroyed the upgrade fails: the body is skipped and the
 freely.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the struct type pointed at</li>
+<li><code>T</code> — the struct or trait type pointed at</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
@@ -21071,7 +21410,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
+<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
 <h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
@@ -23872,7 +24211,7 @@ the array while reading changes what is read.</p>
     }
     assert(count == 2, "two lines");
 </code></pre>
-<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
 <h4 id="remaining"><a class="header" href="#remaining">remaining</a></h4>
 <pre><code class="language-pepper">var remaining: ulong { get; }
 </code></pre>
@@ -26960,7 +27299,7 @@ computed over data given in one or more pieces.</p>
     assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
     assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 </code></pre>
-<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
+<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
 <h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
@@ -27452,7 +27791,7 @@ parser, and everything after it to the command’s.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
+<h3 id="properties-10"><a class="header" href="#properties-10">Properties</a></h3>
 <h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
 <pre><code class="language-pepper">var is_selected: bool { get; }
 </code></pre>
@@ -29000,7 +29339,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-10"><a class="header" href="#properties-10">Properties</a></h3>
+<h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
 <h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
@@ -30051,6 +30390,18 @@ error.</p>
 </code></pre>
 <p>Makes a struct a value: stored inline and copied on assignment, with no
 reference count.</p>
+<h2 id="equatable"><a class="header" href="#equatable">Equatable</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Equatable
+</code></pre>
+<p>Makes a struct, or an enum whose cases carry values, compare and hash
+by its fields, like a tuple of them, instead of by identity: the
+compiler derives its <code>==</code> and its <code>hash</code>, so equal values find each
+other as <code>HashMap</code> and <code>HashSet</code> keys.</p>
+<h2 id="notcompared"><a class="header" href="#notcompared">NotCompared</a></h2>
+<pre><code class="language-pepper">[Attribute] struct NotCompared
+</code></pre>
+<p>Leaves a field of an <code>[Equatable]</code> struct out of its derived <code>==</code> and
+<code>hash</code>.</p>
 <h2 id="shared"><a class="header" href="#shared">Shared</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Shared
 </code></pre>
@@ -30305,7 +30656,7 @@ holding it in the closure keeps it alive until the release runs).</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
+<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
 <h4 id="value-6"><a class="header" href="#value-6">value</a></h4>
 <pre><code class="language-pepper">var value: T { get; }
 </code></pre>
@@ -30452,7 +30803,7 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
 <h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
@@ -33150,7 +33501,7 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
+<h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
 <h4 id="is_empty-8"><a class="header" href="#is_empty-8">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
