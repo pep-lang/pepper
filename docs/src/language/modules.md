@@ -260,6 +260,18 @@ parameter types: an `export assert(condition: bool, message: String)`
 replaces the `String` form, and a string literal message still calls the
 runtime's `__ptr<char>` form.
 
+Only functions may be redefined this way. A struct, trait, type alias or
+variable that a prelude module exports under a name the runtime (or another
+prelude module) already exports is an error in the module loaded first, with
+a note at the other:
+
+```text
+alt/module.pep:1:15: error: redefinition of 'MapIterator'
+    1 | export struct MapIterator<K, V> { var key: K; var value: V; }
+      |               ^~~~~~~~~~~
+runtime/iterator.pep:182:15: note: also exported here
+```
+
 ## How imported names behave
 
 - **Qualified names work wherever a name does**: in expressions

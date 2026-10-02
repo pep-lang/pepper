@@ -87,6 +87,13 @@ pub enum VisibilityErrorKind {
     /// An exported declaration of a non-prelude file whose name another file
     /// also declares: imports would resolve both to one of them.
     DuplicateExport,
+    /// A type or variable a file declares twice.
+    Redefinition,
+    /// A type or variable that two prelude files both export: the merged
+    /// program has one namespace, so one would silently replace the other.
+    /// Reported in the file loaded first, so a forced import's declaration,
+    /// not the runtime's, carries the error.
+    PreludeRedefinition,
 }
 
 /// A visibility violation.
@@ -143,6 +150,9 @@ impl VisibilityError {
                 "override '{}' is also declared in {}; a generic may be overridden for the same types in only one file",
                 self.name, other
             ),
+            VisibilityErrorKind::Redefinition | VisibilityErrorKind::PreludeRedefinition => {
+                format!("redefinition of '{}'", self.name)
+            }
         }
     }
 
@@ -151,6 +161,8 @@ impl VisibilityError {
     pub fn to_diagnostic(&self, files: &[SourceFile]) -> Diagnostic {
         let note = match self.kind {
             VisibilityErrorKind::DuplicateOverride => "also declared here",
+            VisibilityErrorKind::Redefinition => "previous definition is here",
+            VisibilityErrorKind::PreludeRedefinition => "also exported here",
             _ => "declared here",
         };
         let declared_at = self
@@ -210,6 +222,9 @@ struct Decl<'a> {
     generics: Vec<&'a str>,
     /// A concrete override (see [`is_function_override`]).
     is_override: bool,
+    /// A function, which may share its name with another prelude file's
+    /// (an overload, or a forced import's replacement).
+    is_function: bool,
 }
 
 /// A concrete override: one for primitives or `String` (`hash<int>`), or
@@ -247,7 +262,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         }
     }
     for (i, file) in files.iter().enumerate() {
-        let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![], is_override: false };
+        let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![], is_override: false, is_function: false };
         for d in &file.module.declarations {
             // A malformed attribute is reported by platform filtering itself.
             if !keep(d.attributes()).unwrap_or(true) {
@@ -258,6 +273,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     external: f.external,
                     generics: f.generic_params.iter().map(|g| g.name.as_str()).collect(),
                     is_override: is_function_override(f),
+                    is_function: true,
                     ..decl(f.is_exported, f.name_span)
                 }),
                 Declaration::Struct(s) => {
@@ -354,6 +370,33 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     (format!("{}<{}>", name, d.generics.join(", ")), VisibilityErrorKind::DuplicateOverride)
                 };
                 errors.push(VisibilityError { file: d.file, span: d.span, name, declared_in: other.file, declared_at: Some(other.span), kind });
+            }
+        }
+        // Only functions may repeat (as overloads, or a forced import's
+        // replacement): a type or variable declared twice in one file, or
+        // exported by two prelude files, would leave the merged program with
+        // one of them. Entries are in load order.
+        let exempt_export = |d: &Decl| d.exported && exempt[d.file];
+        for (j, d) in entries.iter().enumerate().filter(|(_, d)| !d.is_function) {
+            let earlier = entries[..j].iter().filter(|o| !o.is_function);
+            if let Some(previous) = earlier.clone().find(|o| o.file == d.file) {
+                errors.push(VisibilityError {
+                    file: d.file,
+                    span: d.span,
+                    name: name.to_string(),
+                    declared_in: previous.file,
+                    declared_at: Some(previous.span),
+                    kind: VisibilityErrorKind::Redefinition,
+                });
+            } else if let Some(first) = earlier.filter(|_| exempt_export(d)).find(|o| exempt_export(o)) {
+                errors.push(VisibilityError {
+                    file: first.file,
+                    span: first.span,
+                    name: name.to_string(),
+                    declared_in: d.file,
+                    declared_at: Some(d.span),
+                    kind: VisibilityErrorKind::PreludeRedefinition,
+                });
             }
         }
     }

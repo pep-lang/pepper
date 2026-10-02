@@ -167,7 +167,9 @@ with no extension, and `module_name()` is the output's stem.
   - `import m` goes through `imports::resolve_module`, which returns the
     first `<search path>/m/module.pep`.
   - Files reached from prelude files through local imports are marked
-    `prelude_part`, which exempts them from duplicate-export checks.
+    `prelude_part`, which exempts their functions from duplicate-export
+    checks (types and variables never are: two prelude files exporting one
+    is a `redefinition`).
 - **`modules::link`** binds every file's imports and `export x as y`
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
@@ -265,8 +267,9 @@ with no extension, and `module_name()` is the output's stem.
   and when the trait is declared by a file the checking file's imports
   bind, spelled or not (`FileScope::bound`),
   duplicate
-  exports, and concrete overrides declared in several files. Extern
-  redeclarations are exempt.
+  exports, concrete overrides declared in several files, and a type or
+  variable declared twice in one file or exported by two prelude files.
+  Extern redeclarations are exempt.
 
 ### 2.3 Parsing (`crates/pepper-parser`)
 

@@ -313,6 +313,11 @@ main.pep:2:9: note: previous definition is here
       |         ^
 ```
 
+The same holds for top-level types: two structs, traits, enums or type
+aliases of one name in a file, or exported by two
+[prelude modules](modules.md#the-runtime-prelude-and---import), report
+`redefinition of 'Point'`.
+
 **Looping over something that cannot be iterated** (see
 [Iteration](iteration.md)):
 

@@ -13,16 +13,30 @@ fn error_of(test: &str, source: &str) -> String {
 
 /// [`error_of`], with `others` (name, source) written beside `main.pep`.
 fn error_of_files(test: &str, source: &str, others: &[(&str, &str)]) -> String {
+    error_of_files_with(test, source, others, &[])
+}
+
+/// [`error_of_files`], with extra command-line arguments. The directory of
+/// `main.pep` is on the search path (`-I`), so `others` may hold modules
+/// (`alt/module.pep`) that `--import` names.
+fn error_of_files_with(test: &str, source: &str, others: &[(&str, &str)], args: &[&str]) -> String {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_diagnostic_{}_{}", test, std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for (name, other) in others {
-        std::fs::write(dir.join(name), other).unwrap();
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, other).unwrap();
     }
     let main_path = dir.join("main.pep");
     std::fs::write(&main_path, source).unwrap();
-    let options = pepper_driver::Options::parse_from(["pepper", main_path.to_str().unwrap()]);
+    let mut argv = vec!["pepper", main_path.to_str().unwrap()];
+    if !args.is_empty() {
+        argv.extend(["-I", dir.to_str().unwrap()]);
+        argv.extend_from_slice(args);
+    }
+    let options = pepper_driver::Options::parse_from(argv);
     let error = match pepper_driver::compiler::compile(&options, "main") {
         Err(e) => e,
         Ok(mut module) => {
@@ -1973,6 +1987,45 @@ fn ambiguous_overload_call() {
          \x20   2 | f(x: short): int { return 2; }\n\
          \x20     | ^"
     );
+}
+
+#[test]
+fn prelude_files_exporting_one_type() {
+    // Two forced imports (prelude files) may export overloads of one
+    // function, but not two types of one name: the merged program would keep
+    // only one of them. The error is in the file loaded first.
+    let others = [
+        ("first/module.pep", "export struct Point { var x: int; }\nexport size(p: Point): int { return 1; }\n"),
+        ("second/module.pep", "export f(): int { return 0; }\n\nexport struct Point { var y: int; }\n"),
+    ];
+    let error = error_of_files_with("prelude_type_twice", "main(): int { return 0; }\n", &others, &["--import", "first", "--import", "second"]);
+    let first = format!("first{}module.pep", std::path::MAIN_SEPARATOR);
+    let second = format!("second{}module.pep", std::path::MAIN_SEPARATOR);
+    assert_eq!(
+        error,
+        format!(
+            "{first}:1:15: error: redefinition of 'Point'\n\
+             \x20   1 | export struct Point {{ var x: int; }}\n\
+             \x20     |               ^~~~~\n\
+             {second}:3:15: note: also exported here\n\
+             \x20   3 | export struct Point {{ var y: int; }}\n\
+             \x20     |               ^~~~~"
+        )
+    );
+
+    // Against the runtime, which loads after forced imports, the error is
+    // in the forced import: `Iterator.map`'s adapter is `MapIterator`.
+    let others = [("alt/module.pep", "export struct MapIterator<K, V> { var key: K; var value: V; }\n")];
+    let error = error_of_files_with("prelude_type_runtime", "main(): int { return 0; }\n", &others, &["--import", "alt"]);
+    let alt = format!("alt{}module.pep:1:15: error: redefinition of 'MapIterator'\n", std::path::MAIN_SEPARATOR);
+    assert!(error.starts_with(&alt), "{}", error);
+    assert!(error.contains("iterator.pep:"), "{}", error);
+    assert!(error.contains(": note: also exported here\n"), "{}", error);
+
+    // One file declaring a type twice.
+    let error = error_of("type_twice", "struct A { var x: int; }\nenum A { a, b }\nmain(): int { return 0; }\n");
+    assert!(error.starts_with("main.pep:2:6: error: redefinition of 'A'\n"), "{}", error);
+    assert!(error.contains("main.pep:1:8: note: previous definition is here\n"), "{}", error);
 }
 
 #[test]
