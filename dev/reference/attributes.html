@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f8b9395b.js";
+            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -345,8 +345,15 @@ it may use the locked value.</p>
 <h2 id="export"><a class="header" href="#export">Export</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Export
 </code></pre>
-<p>Marks a function to be callable from C; the compiler does not act on it
-yet.</p>
+<p>Makes a free function callable from C, in a library built with
+<code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
+<code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h4 id="name-1"><a class="header" href="#name-1">name</a></h4>
+<pre><code class="language-pepper">const name: String = ""
+</code></pre>
+<p>The C symbol, when it differs from the function’s name; empty
+otherwise.</p>
 
                     </main>
 

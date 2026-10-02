@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f8b9395b.js";
+            window.path_to_searchindex_js = "searchindex-a3774fa9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4c7b0bab.js"></script>
@@ -228,7 +228,7 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
-<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
+<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
@@ -438,7 +438,8 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><th>Option</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable.</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable (or library, with <code>--lib</code>).</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link instead of an executable, with a C header declaring its <code>[Export]</code>ed functions. See <a href="#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="#modules-and-imports">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
@@ -11584,7 +11585,7 @@ attributes:</p>
 </code></pre>
 <p><code>export</code> controls visibility between Pepper files only. Making a function
 callable from C with C linkage is a separate matter, handled by the <code>[Export]</code>
-attribute described in <a href="#calling-c">Calling C</a>.</p>
+attribute described in <a href="#calling-pepper-from-c">Calling Pepper from C</a>.</p>
 <h2 id="the-runtimes-exports"><a class="header" href="#the-runtimes-exports">The runtime’s exports</a></h2>
 <p>The runtime’s public surface (<code>String</code>, <code>Array</code>, <code>HashMap</code>, <code>HashSet</code>,
 <code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
@@ -15731,13 +15732,170 @@ your program. The C library is always linked. For anything else, attach
 <pre><code class="language-pepper">[Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int kind);
 </code></pre>
 <h2 id="calling-pepper-from-c"><a class="header" href="#calling-pepper-from-c">Calling Pepper from C</a></h2>
-<p>Pepper builds executables, and there is no supported way yet for C code to
-call Pepper functions. The parser accepts an <code>[Export]</code> attribute on a
-function, intended to give it a C interface with object references passed as
-opaque handles, but the compiler does not act on it yet: <code>[Export]</code> currently
-has no effect.</p>
-<p>Do not confuse <code>[Export]</code> with the <code>export</code> keyword, which makes a
-declaration visible to other Pepper files (see <a href="#visibility">Visibility</a>).</p>
+<p>C code can call Pepper functions: mark each one <code>[Export]</code>, and build the
+program as a library with <code>--lib static</code> or <code>--lib shared</code>. The compiler
+writes a C header beside the library that declares every exported function.</p>
+<pre><code class="language-pepper"># A library C code calls: build it with `pepper build counter.pep --lib
+# static` (or `--lib shared`), which also writes `counter.h`.
+#
+# `main` is not needed in a library; this one calls the exported functions
+# from Pepper, so the example runs as a program too.
+
+[Export]
+add(a: int, b: int): int {
+    return a + b;
+}
+
+# A struct crosses to C as an opaque handle, `Counter*`.
+struct Counter {
+    var count: int;
+
+    construct(this.count = 0) {}
+}
+
+# The C name can differ from the Pepper name.
+[Export(name = "counter_new")]
+make_counter(start: int): Counter {
+    return Counter(start);
+}
+
+[Export]
+counter_increment(counter: Counter): int {
+    counter.count += 1;
+    return counter.count;
+}
+
+# A C function pointer, called back.
+[Export]
+apply(f: extern (int) =&gt; int, x: int): int {
+    return f(x);
+}
+
+main(): int {
+    var counter = make_counter(41);
+    assert(counter_increment(counter) == 42, "the counter counts");
+    assert(add(2, 3) == 5, "add adds");
+    return 0;
+}
+</code></pre>
+<pre><code class="language-bash">pepper build counter.pep --lib static     # libcounter.a and counter.h
+pepper build counter.pep --lib shared     # libcounter.so and counter.h
+</code></pre>
+<p>The header declares the functions with C types:</p>
+<pre><code class="language-c">typedef struct Counter Counter;
+
+void counter_retain(Counter* handle);
+void counter_release(Counter* handle);
+
+int32_t add(int32_t a, int32_t b);
+int32_t apply(int32_t (*f)(int32_t), int32_t x);
+int32_t counter_increment(Counter* counter);
+Counter* counter_new(int32_t start);
+</code></pre>
+<p>and a C program calls them like any C function:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "counter.h"
+
+static int32_t twice(int32_t x) { return 2 * x; }
+
+int main(void) {
+    Counter* counter = counter_new(41);
+    printf("%d\n", counter_increment(counter));   /* 42 */
+    counter_release(counter);
+    printf("%d\n", apply(twice, add(2, 3)));      /* 10 */
+    return 0;
+}
+</code></pre>
+<pre><code class="language-bash">cc main.c -I. -L. -lcounter -lm -o main    # Linux; macOS needs no -lm
+</code></pre>
+<h3 id="exporting-a-function"><a class="header" href="#exporting-a-function">Exporting a function</a></h3>
+<ul>
+<li><code>[Export]</code> goes on a free function that is not generic. Its C name is its
+Pepper name; <code>[Export(name = "c_name")]</code> gives it another, which must be a
+C identifier. Two exports with one C name are an error.</li>
+<li><code>[Export]</code> anywhere else (a struct, a method, an extern, a variable, a
+generic function) is a warning, and does nothing.</li>
+<li>An exported function is still a Pepper function: Pepper code calls it by
+its Pepper name.</li>
+<li>Do not confuse <code>[Export]</code> with the <code>export</code> keyword, which makes a
+declaration visible to other Pepper files (see
+<a href="#visibility">Visibility</a>). A function can be either, both or neither.</li>
+</ul>
+<h3 id="what-crosses-to-c"><a class="header" href="#what-crosses-to-c">What crosses to C</a></h3>
+<p>Each parameter and the result must be a type C can hold:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Pepper</th><th>C (in the header)</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bool</code></td><td><code>bool</code></td></tr>
+<tr><td><code>char</code>, <code>i8</code>, <code>u8</code>, <code>short</code>, <code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code> (and their <code>i16</code>… spellings)</td><td><code>char</code>, <code>int8_t</code>, <code>uint8_t</code>, <code>int16_t</code>, <code>uint16_t</code>, <code>int32_t</code>, <code>uint32_t</code>, <code>int64_t</code>, <code>uint64_t</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td><code>__ptr&lt;T&gt;</code></td><td><code>T*</code> for a number type, else <code>void*</code></td></tr>
+<tr><td><code>extern (P...) =&gt; R</code></td><td>a C function pointer, <code>R (*name)(P...)</code></td></tr>
+<tr><td>a struct</td><td>an opaque handle, <code>Name*</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Anything else is an error at the parameter or result that C cannot hold:</p>
+<pre><code class="language-text">main.pep:2:14: error: cannot export 'length': C cannot hold 'String'
+    2 | length(text: String): int {
+      |              ^~~~~~
+note: pass the bytes as a '__ptr&lt;u8&gt;' and a 'ulong' size, and make the String with 'String(p, size)'
+</code></pre>
+<p><code>String</code> is not supported yet; pass its bytes as above. A generic struct
+(<code>Array&lt;int&gt;</code>), a value struct, an enum, a trait, a tuple, <code>Optional</code> and a
+Pepper function type cannot cross either.</p>
+<h3 id="handles"><a class="header" href="#handles">Handles</a></h3>
+<p>A struct reaches C as a pointer to an incomplete C type (<code>Counter*</code>), which
+C code passes back but never looks inside. Handles follow Pepper’s
+<a href="#memory-and-reference-counting">reference counting</a>:</p>
+<ul>
+<li>A handle a function <strong>returns</strong> is one reference, which the C code owns.
+It releases it with <code>&lt;name&gt;_release</code> (<code>counter_release</code>) when it is done;
+the last release frees the object, running its destructor.</li>
+<li>A handle C <strong>passes in</strong> stays C’s: the function borrows it for the call.</li>
+<li><code>&lt;name&gt;_retain</code> adds a reference, for C code that keeps a handle in two
+places; each retain needs a release.</li>
+<li>The names are the struct’s name in snake case: <code>ByteBuffer</code> gets
+<code>byte_buffer_retain</code> and <code>byte_buffer_release</code>. The header declares them
+for every struct an export passes.</li>
+</ul>
+<p>A handle must not be null, and is freed at most once: C gets no checks on
+either.</p>
+<h3 id="building-the-library"><a class="header" href="#building-the-library">Building the library</a></h3>
+<p><code>--lib static</code> writes an archive of the program’s objects: <code>libname.a</code>
+(<code>name.lib</code> on Windows). <code>--lib shared</code> links a shared library:
+<code>libname.so</code>, <code>libname.dylib</code> on macOS, or <code>name.dll</code> on Windows, with its
+import library <code>name.lib</code>. <code>-o</code> chooses another name. Either way the header
+is written beside the library, named for it without the <code>lib</code> prefix
+(<code>counter.h</code>).</p>
+<ul>
+<li>A library needs no <code>main</code>. One that has a <code>main</code> keeps it, and C code that
+links the library cannot have its own.</li>
+<li>Only the exported functions and their handle functions are visible
+outside a shared library; everything else in it is hidden.</li>
+<li>A program that links the <strong>static</strong> library must also link the C libraries
+Pepper’s runtime uses. The header lists them in a comment at the top, such
+as <code>/* Link the static library with: -lm */</code> on Linux. A shared library
+links them itself.</li>
+<li>On Windows, <code>--lib static</code> and <code>--lib shared</code> both write <code>name.lib</code> (the
+archive, or the DLL’s import library), so build them into different
+folders.</li>
+</ul>
+<h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
+<ul>
+<li>Module-scope variables are initialized when the library is loaded, before
+C calls any exported function (a static library’s initializer runs with
+the program’s other static constructors).</li>
+<li>A panic in Pepper code called from C prints its message and aborts the
+process, as it does in a Pepper program: it never unwinds into C.</li>
+<li>Exported functions may be called from any thread, including threads C
+created. The thread-safety rules of <a href="#threads-and-shared-data">threads</a> still hold:
+a handle to a struct that is not <code>[Shared]</code> must stay on one thread at a
+time, and C does not check that.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="platform-selection"><a class="header" href="#platform-selection">Platform selection</a></h1>
 <p>Some code only makes sense on one platform: a Windows API call, a
@@ -31300,8 +31458,15 @@ it may use the locked value.</p>
 <h2 id="export"><a class="header" href="#export">Export</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Export
 </code></pre>
-<p>Marks a function to be callable from C; the compiler does not act on it
-yet.</p>
+<p>Makes a free function callable from C, in a library built with
+<code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
+<code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
+<h3 id="fields-7-1"><a class="header" href="#fields-7-1">Fields</a></h3>
+<h4 id="name-1-2"><a class="header" href="#name-1-2">name</a></h4>
+<pre><code class="language-pepper">const name: String = ""
+</code></pre>
+<p>The C symbol, when it differs from the function’s name; empty
+otherwise.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/copy.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="copypep"><a class="header" href="#copypep">copy.pep</a></h1>
 <p>Deep copies: <code>copy(value)</code> makes a copy that shares no object that is

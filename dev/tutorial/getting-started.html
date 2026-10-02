@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f8b9395b.js";
+            window.path_to_searchindex_js = "../searchindex-a3774fa9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -316,7 +316,8 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><th>Option</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable.</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable (or library, with <code>--lib</code>).</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link instead of an executable, with a C header declaring its <code>[Export]</code>ed functions. See <a href="../language/c-interop.html#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="../language/modules.html">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="../language/linking.html">linking</a>.</td></tr>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="../language/linking.html#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
