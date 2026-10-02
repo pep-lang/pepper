@@ -5,7 +5,7 @@ struct Person {
     String name;
     int id;
     # Not part of the identity: two records for the same person may differ.
-    [NotCompared]
+    [Equatable(exclude = true)]
     String nickname;
 
     construct(this.name = "", this.id = 0, this.nickname = "") {}

@@ -73,15 +73,21 @@ export struct Value {}
 
 ## Makes a struct, or an enum whose cases carry values, compare and hash
 ## by its fields, like a tuple of them, instead of by identity: the
-## compiler derives its `==` and its `hash`, so equal values find each
-## other as `HashMap` and `HashSet` keys.
+## compiler derives its `==` and its hash, so equal values find each other
+## as `HashMap` and `HashSet` keys.
+##
+## On a field of such a struct, it says whether the field takes part:
+## `[Equatable(exclude = true)]` or `[Equatable(include = false)]` leaves it
+## out of both `==` and the hash. A field with neither takes part. On the
+## struct itself it takes no arguments.
 [Attribute]
-export struct Equatable {}
-
-## Leaves a field of an `[Equatable]` struct out of its derived `==` and
-## `hash`.
-[Attribute]
-export struct NotCompared {}
+export struct Equatable {
+    ## Whether the field takes part in `==` and the hash; `false` leaves it
+    ## out.
+    bool include = true;
+    ## Whether the field is left out of `==` and the hash.
+    bool exclude = false;
+}
 
 ## Makes a struct safe to share between threads: its counts step atomically
 ## and its fields must be `const` and thread-safe.

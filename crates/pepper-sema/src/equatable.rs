@@ -14,34 +14,33 @@
 //!   tuple element's hash does, so `HashMap` and `HashSet` find keys by
 //!   content.
 //!
-//! A field marked `[NotCompared]` is left out of both. A reference enum's
-//! fields are its tag and every case's values; the values of the cases a
-//! value does not hold are zero or null, so they compare equal.
+//! A field marked `[Equatable(exclude = true)]` (or `include = false`) is
+//! left out of both. A reference enum's fields are its tag and every case's
+//! values; the values of the cases a value does not hold are zero or null,
+//! so they compare equal.
 
 use crate::model::*;
 use crate::type_name::TypeName;
 use pepper_parser::ast;
 use pepper_parser::diagnostic::Diagnostic;
 
-/// The attribute that derives `==` and `hash` from the fields.
+/// The attribute that derives `==` and `hash` from the fields, and, on a
+/// field, says whether that field takes part.
 pub const EQUATABLE_ATTRIBUTE: &str = "Equatable";
-
-/// The field attribute that leaves a field out of a derived `==` and `hash`.
-pub const NOT_COMPARED_ATTRIBUTE: &str = "NotCompared";
 
 /// The synthesized method that hashes an `[Equatable]` struct's fields.
 pub const HASH_METHOD: &str = "__hash";
 
-/// The bare `[name]` among `attributes`.
-fn find<'a>(attributes: &'a [ast::Attribute], name: &str) -> Option<&'a ast::Attribute> {
-    attributes.iter().find(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == name))
+/// The `[Equatable]` or `[Equatable(...)]` among `attributes`.
+fn find(attributes: &[ast::Attribute]) -> Option<&ast::Attribute> {
+    attributes.iter().find(|a| a.name() == Some(EQUATABLE_ATTRIBUTE))
 }
 
 /// Give every `[Equatable]` struct of `module` its `==` and `__hash`, and
-/// report a misplaced `[Equatable]` or `[NotCompared]`.
+/// report a misplaced or contradictory `[Equatable]`.
 pub fn derive(module: &mut Module) -> Result<(), Diagnostic> {
     for e in &module.enums {
-        if let Some(attribute) = find(&e.attributes, EQUATABLE_ATTRIBUTE) {
+        if let Some(attribute) = find(&e.attributes) {
             return Err(Diagnostic::error(format!(
                 "'[{EQUATABLE_ATTRIBUTE}]' does not apply to enum '{}': its cases carry no values, so it already compares and hashes by case",
                 e.name
@@ -55,13 +54,42 @@ pub fn derive(module: &mut Module) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+/// Whether a field whose attributes are `attributes` takes part in the
+/// derived `==` and hash: unless its `[Equatable(...)]` says `include =
+/// false` or `exclude = true`. Positional arguments are `include`, then
+/// `exclude`, as the attribute struct declares them.
+fn included(attributes: &[ast::Attribute], file: pepper_parser::diagnostic::FileId) -> Result<bool, Diagnostic> {
+    let Some(attribute) = find(attributes) else { return Ok(true) };
+    let (mut include, mut exclude) = (None, None);
+    for (index, argument) in attribute.arguments().iter().enumerate() {
+        let name = argument.name.map_or(if index == 0 { "include" } else { "exclude" }, |(name, _)| name);
+        let ast::Expression::Literal { value: ast::Literal::Bool(value), .. } = argument.value else {
+            return Err(Diagnostic::error(format!("'{name}' of '[{EQUATABLE_ATTRIBUTE}]' must be 'true' or 'false'"))
+                .at(Loc::new(file, argument.value.span())));
+        };
+        match name {
+            "include" => include = Some((*value, argument.value.span())),
+            _ => exclude = Some((*value, argument.value.span())),
+        }
+    }
+    if let (Some((include, _)), Some((exclude, at))) = (include, exclude)
+        && include == exclude
+    {
+        return Err(Diagnostic::error(format!(
+            "'include = {include}' and 'exclude = {exclude}' contradict each other; give one of them"
+        ))
+        .at(Loc::new(file, at)));
+    }
+    Ok(include.is_none_or(|(include, _)| include) && !exclude.is_some_and(|(exclude, _)| exclude))
+}
+
 fn derive_struct(st: &mut StructDef) -> Result<(), Diagnostic> {
     let file = st.loc.file;
     let at = |attribute: &ast::Attribute| Loc::new(file, attribute.span);
-    let Some(equatable) = find(&st.attributes, EQUATABLE_ATTRIBUTE) else {
-        if let Some(attribute) = st.field_members.iter().find_map(|f| find(&f.attributes, NOT_COMPARED_ATTRIBUTE)) {
+    let Some(equatable) = find(&st.attributes) else {
+        if let Some(attribute) = st.field_members.iter().find_map(|f| find(&f.attributes)) {
             return Err(Diagnostic::error(format!(
-                "'[{NOT_COMPARED_ATTRIBUTE}]' applies only to a field of an '[{EQUATABLE_ATTRIBUTE}]' struct"
+                "'[{EQUATABLE_ATTRIBUTE}]' on a field applies only to a field of an '[{EQUATABLE_ATTRIBUTE}]' struct"
             ))
             .at(at(attribute))
             .with_note(format!("mark '{}' '[{EQUATABLE_ATTRIBUTE}]' to derive '==' and 'hash' from its fields", st.name), Some(st.loc)));
@@ -69,6 +97,13 @@ fn derive_struct(st: &mut StructDef) -> Result<(), Diagnostic> {
         return Ok(());
     };
     let attribute_loc = at(equatable);
+    if !equatable.arguments().is_empty() {
+        return Err(Diagnostic::error(format!(
+            "'[{EQUATABLE_ATTRIBUTE}]' on '{}' takes no arguments; 'include' and 'exclude' apply to its fields",
+            st.name
+        ))
+        .at(attribute_loc));
+    }
     // Already derived (a module built once and applied again).
     if st.method_members.iter().any(|m| m.name == HASH_METHOD) {
         return Ok(());
@@ -90,11 +125,12 @@ fn derive_struct(st: &mut StructDef) -> Result<(), Diagnostic> {
         .with_note(format!("remove this '==', or remove '[{EQUATABLE_ATTRIBUTE}]' to declare both '==' and 'hash' by hand"), None)
         .with_note(format!("'[{EQUATABLE_ATTRIBUTE}]' is here"), Some(attribute_loc)));
     }
-    let compared: Vec<&VariableDef> = st
-        .field_members
-        .iter()
-        .filter(|f| find(&f.attributes, NOT_COMPARED_ATTRIBUTE).is_none())
-        .collect();
+    let mut compared: Vec<&VariableDef> = vec![];
+    for field in &st.field_members {
+        if included(&field.attributes, file)? {
+            compared.push(field);
+        }
+    }
     let member = |lhs: Expression, name: &str| Expression::MemberRef { lhs: Box::new(lhs), name: name.to_string(), loc: Loc::NONE };
     let other = || Expression::SymbolRef { id: "other".to_string(), ty: st.ty.clone(), loc: Loc::NONE };
     // A tuple has two elements or more, so one field is paired with `true`.

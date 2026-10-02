@@ -35,7 +35,8 @@ Mark the struct `[Equatable]`, and the compiler writes both halves from its
 fields, so they cannot drift apart. It compares and hashes like a tuple of
 its fields: a field of a struct type uses that struct's `==` and `hash`, a
 `String` its content, and a null field equals only null. Mark a field
-`[NotCompared]` to leave it out of both:
+`[Equatable(exclude = true)]`, or `[Equatable(include = false)]`, to leave it
+out of both; a field with neither takes part:
 
 ```pepper
 {{#include ../../examples/hashing-equatable.pep}}
@@ -46,6 +47,9 @@ its fields: a field of a struct type uses that struct's `==` and `hash`, a
   and its values are equal.
 - A generic struct derives both for each specialization, from the fields
   its type arguments give it.
+- `include` and `exclude` are `bool`s, and saying both in a way that
+  contradicts (`include = true, exclude = true`) is an error. On the struct
+  itself, `[Equatable]` takes no arguments.
 - An `[Equatable]` struct cannot also declare `==` or override `hash<T>`;
   either is an error. To compare some other way, drop the attribute and
   declare both by hand (below).

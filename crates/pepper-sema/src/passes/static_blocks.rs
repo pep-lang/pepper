@@ -42,7 +42,6 @@ pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
     "Locked",
     "Move",
     "MoveSource",
-    "NotCompared",
     "NotCopyable",
     "Rename",
     "Sending",

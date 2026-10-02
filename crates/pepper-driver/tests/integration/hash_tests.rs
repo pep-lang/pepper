@@ -671,7 +671,7 @@ test(): int {
 #[test]
 fn equatable_struct_keys_match_by_their_compared_fields() {
     // `[Equatable]` derives `==` and the hash from the fields, leaving out a
-    // `[NotCompared]` one: the same paths as a hand-written pair, with no
+    // `[Equatable(exclude = true)]` one: the same paths as a hand-written pair, with no
     // leaked references.
     let (result, leaked) = jit_census(
         r#"
@@ -679,7 +679,7 @@ fn equatable_struct_keys_match_by_their_compared_fields() {
 struct Person {
     String name;
     int id;
-    [NotCompared]
+    [Equatable(exclude = true)]
     String nickname;
 
     construct(this.name = "", this.id = 0, this.nickname = "") {}
@@ -823,6 +823,49 @@ test(): int {
     var set = HashSet<(int[], int)>();
     set.insert((a, 5));
     if (!set.contains((b, 5))) { return -2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn equatable_fields_take_part_unless_excluded_either_way() {
+    // `include = false` and `exclude = true` both leave a field out;
+    // `include = true`, `exclude = false` and neither keep it.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+[Equatable]
+struct Row {
+    [Equatable(include = false)]
+    int a;
+    [Equatable(exclude = true)]
+    int b;
+    [Equatable(include = true)]
+    int c;
+    [Equatable(exclude = false)]
+    int d;
+    int e;
+}
+
+make(a: int, b: int, c: int, d: int, e: int): Row {
+    var row = Row();
+    row.a = a;
+    row.b = b;
+    row.c = c;
+    row.d = d;
+    row.e = e;
+    return row;
+}
+
+test(): int {
+    if (make(1, 2, 3, 4, 5) != make(9, 9, 3, 4, 5)) { return -1; }
+    if (hash(make(1, 2, 3, 4, 5)) != hash(make(9, 9, 3, 4, 5))) { return -2; }
+    if (make(1, 2, 3, 4, 5) == make(1, 2, 0, 4, 5)) { return -3; }
+    if (make(1, 2, 3, 4, 5) == make(1, 2, 3, 0, 5)) { return -4; }
+    if (make(1, 2, 3, 4, 5) == make(1, 2, 3, 4, 0)) { return -5; }
     return 0;
 }"#
         ),

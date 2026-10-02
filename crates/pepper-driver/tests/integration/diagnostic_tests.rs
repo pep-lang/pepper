@@ -4379,16 +4379,38 @@ fn equatable_struct_overriding_its_hash_is_an_error_at_the_override() {
 }
 
 #[test]
-fn not_compared_outside_an_equatable_struct_is_an_error_at_the_attribute() {
-    let source = "struct Point {\n    [NotCompared]\n    int x;\n}\n";
+fn equatable_field_outside_an_equatable_struct_is_an_error_at_the_attribute() {
+    let source = "struct Point {\n    [Equatable(exclude = true)]\n    int x;\n}\n";
     assert_eq!(
-        error_of("not_compared_alone", source),
-        "main.pep:2:5: error: '[NotCompared]' applies only to a field of an '[Equatable]' struct\n\
-         \x20   2 |     [NotCompared]\n\
-         \x20     |     ^~~~~~~~~~~~~\n\
+        error_of("equatable_field_alone", source),
+        "main.pep:2:5: error: '[Equatable]' on a field applies only to a field of an '[Equatable]' struct\n\
+         \x20   2 |     [Equatable(exclude = true)]\n\
+         \x20     |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
          main.pep:1:8: note: mark 'Point' '[Equatable]' to derive '==' and 'hash' from its fields\n\
          \x20   1 | struct Point {\n\
          \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn equatable_field_with_contradicting_include_and_exclude_is_an_error() {
+    let source = "[Equatable]\nstruct Point {\n    [Equatable(include = true, exclude = true)]\n    int x;\n}\n";
+    assert_eq!(
+        error_of("equatable_contradiction", source),
+        "main.pep:3:42: error: 'include = true' and 'exclude = true' contradict each other; give one of them\n\
+         \x20   3 |     [Equatable(include = true, exclude = true)]\n\
+         \x20     |                                          ^~~~"
+    );
+}
+
+#[test]
+fn equatable_struct_with_arguments_is_an_error_at_the_attribute() {
+    let source = "[Equatable(exclude = true)]\nstruct Point {\n    int x;\n}\n";
+    assert_eq!(
+        error_of("equatable_struct_arguments", source),
+        "main.pep:1:1: error: '[Equatable]' on 'Point' takes no arguments; 'include' and 'exclude' apply to its fields\n\
+         \x20   1 | [Equatable(exclude = true)]\n\
+         \x20     | ^~~~~~~~~~~~~~~~~~~~~~~~~~~"
     );
 }
 

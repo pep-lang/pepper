@@ -760,14 +760,16 @@ cross-compilation.
 `[Equatable]` struct (or reference enum) a synthesized `==(other: T): bool`
 comparing the tuples of its fields (`(this.a, this.b) == (other.a,
 other.b)`, a lone field paired with `true`) and `__hash(): u64` returning
-`hash` of the same tuple, leaving out `[NotCompared]` fields; codegen's
+`hash` of the same tuple, leaving out a field marked `[Equatable(exclude =
+true)]` or `[Equatable(include = false)]` (`equatable::included`); codegen's
 `__address<T>` and `tuple_hash` call `T.__hash` for a non-null `T`, and
 `tuple_hash` leaves out an object element whose `==` is declared but whose
 hash would be its address (an `Array`), since equal elements would hash
 apart (codegen's `hash_overrides` tells a program's `hash<T>` override from
 the generic's specialization). It reports `[Equatable]` on a value type or
-a payload-free enum, an `[Equatable]` struct's own `==`, and a stray
-`[NotCompared]`.
+a payload-free enum, an `[Equatable]` struct's own `==`, arguments on the
+struct's `[Equatable]`, a field's `[Equatable]` outside an `[Equatable]`
+struct, and a contradicting `include`/`exclude`.
 Then it runs `passes::closures::lift_closures`, which
 turns every closure literal into a synthesized struct
 `__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
@@ -2356,8 +2358,8 @@ To give one meaning, read it where it applies:
 - `[NotCopyable("why")]` → `passes/copies.rs`
 - `[Implicit]` → `StructDef::implicit_from`, checked in `builder.rs` and
   applied by `convert_to_traits`
-- `[Equatable]` (structs, reference enums) and `[NotCompared]` (their
-  fields) → `equatable.rs` (§2.6), checked again by `check_hash_keys`
+- `[Equatable]` (structs and reference enums; with `include`/`exclude`,
+  their fields) → `equatable.rs` (§2.6), checked again by `check_hash_keys`
 
 An attribute's arguments may be named, as in a call (`[Link(name =
 "sym")]`): `ast::Attribute::name()` and `arguments()` read them. Validate the

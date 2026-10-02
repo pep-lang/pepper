@@ -183,17 +183,32 @@ reference count.
 
 Makes a struct, or an enum whose cases carry values, compare and hash
 by its fields, like a tuple of them, instead of by identity: the
-compiler derives its `==` and its `hash`, so equal values find each
-other as `HashMap` and `HashSet` keys.
+compiler derives its `==` and its hash, so equal values find each other
+as `HashMap` and `HashSet` keys.
 
-## NotCompared
+On a field of such a struct, it says whether the field takes part:
+`[Equatable(exclude = true)]` or `[Equatable(include = false)]` leaves it
+out of both `==` and the hash. A field with neither takes part. On the
+struct itself it takes no arguments.
+
+### Fields
+
+#### include
 
 ```pepper
-[Attribute] struct NotCompared
+bool include = true
 ```
 
-Leaves a field of an `[Equatable]` struct out of its derived `==` and
-`hash`.
+Whether the field takes part in `==` and the hash; `false` leaves it
+out.
+
+#### exclude
+
+```pepper
+bool exclude = false
+```
+
+Whether the field is left out of `==` and the hash.
 
 ## Shared
 
