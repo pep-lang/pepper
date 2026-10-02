@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-65f7fe71.js";
+            window.path_to_searchindex_js = "searchindex-813e9223.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-219e7a7f.js"></script>
+        <script src="toc-f3579095.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, gzip and zlib compression, tar archives, command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -2036,6 +2036,170 @@ is_identifier(text: String): bool {
 <p>Each search keeps its working state to itself, and a <code>Match</code> (which holds
 the searched <code>String</code>) stays on the thread that found it.</p>
 <p>The <a href="#regexmodulepep">reference</a> lists every method.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="compression-and-archives"><a class="header" href="#compression-and-archives">Compression and archives</a></h1>
+<p>The <code>compress</code> module compresses and decompresses DEFLATE data, plain or
+in its zlib and gzip framings, and the <code>archive</code> module reads and writes
+tar archives. Together they handle <code>.gz</code> and <code>.tar.gz</code> files. Both are
+written in Pepper, so a program that uses them links no extra library.</p>
+<pre><code class="language-pepper"># Compress and decompress bytes in one call, or as streams.
+import compress;
+import io;
+
+main(): int {
+    var text = "the cat sat on the mat; ".repeat(100).bytes();
+
+    # gzip, zlib and raw DEFLATE each have compress and decompress.
+    var packed = compress.Gzip.compress(text);
+    assert(packed.count &lt; text.count / 10, "repetitive text shrinks");
+    assert(compress.Gzip.decompress(packed).value() == text, "round trip");
+
+    # Level 0 stores, 9 squeezes hardest; 6 is the default.
+    var fast = compress.Zlib.compress(text, level = 1);
+    assert(compress.Zlib.decompress(fast).value() == text, "any level reads back");
+
+    # Corrupt data is an error, never a crash.
+    packed[packed.count - 5] = packed[packed.count - 5] ^ 1;
+    var bad = compress.Gzip.decompress(packed);
+    assert(bad.is_err() &amp;&amp; bad.error().is_invalid_input(), "the CRC-32 check fails");
+
+    # Streams: a CompressWriter wraps any io.Writer, a DecompressReader any
+    # io.Reader, such as a File. Here both are in memory.
+    var sink = io.ByteWriter();
+    var writer = compress.CompressWriter(sink, compress.Format.Gzip);
+    writer.print_line("first line");
+    writer.print_line("second line");
+    writer.finish();
+
+    var reader = compress.DecompressReader(io.ByteReader(sink.bytes), compress.Format.Gzip);
+    var lines = 0;
+    for (var line in reader.lines()) {
+        lines += 1;
+    }
+    assert(lines == 2, "two lines");
+
+    # The checksums are there on their own too.
+    assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "CRC-32");
+    return 0;
+}
+</code></pre>
+<h2 id="formats"><a class="header" href="#formats">Formats</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Format</th><th>Struct</th><th>Where it is used</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Format.Gzip</code></td><td><code>compress.Gzip</code></td><td><code>.gz</code> files, HTTP <code>Content-Encoding: gzip</code></td></tr>
+<tr><td><code>Format.Zlib</code></td><td><code>compress.Zlib</code></td><td>PNG images, HTTP <code>deflate</code></td></tr>
+<tr><td><code>Format.Raw</code></td><td><code>compress.Deflate</code></td><td>zip entries, other containers with their own framing</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><code>compress(data, level = 6)</code> returns the compressed bytes. The level runs
+from 0 (stored, no compression) to 9 (smallest, slowest). The output is
+about the size zlib makes at the same level.</li>
+<li><code>decompress(data)</code> returns an <code>io.IoResult&lt;u8[]&gt;</code>. Damaged or truncated
+data is an error whose <code>is_invalid_input()</code> holds, and gzip and zlib
+data is checked against its CRC-32 or Adler-32 checksum.</li>
+<li>Gzip input may hold several members one after another (<code>cat a.gz b.gz</code>);
+they decompress to their contents joined. Bytes after the last member are
+an error. A gzip header’s file name and comment are skipped, and a
+written header has neither.</li>
+<li>A zlib stream that needs a preset dictionary is not supported.</li>
+<li><code>decompress</code> puts everything in memory. Use a <code>DecompressReader</code> for
+input from outside the program, so a small file that expands hugely
+cannot exhaust memory.</li>
+</ul>
+<p><code>compress.Crc32</code> and <code>compress.Adler32</code> compute the two checksums over
+data given in pieces (<code>update</code>, then <code>value</code>), or in one call with <code>of</code>.</p>
+<h2 id="streams"><a class="header" href="#streams">Streams</a></h2>
+<p><code>compress.DecompressReader(source, format)</code> is an <code>io.Reader</code> that
+decompresses <code>source</code>, any <code>io.Reader</code>, as it is read, so <code>lines()</code>,
+<code>chunks(size)</code> and <code>read_all()</code> work on it. It holds at most about
+225 KiB of input and output, however large the data.</p>
+<p><code>compress.CompressWriter(sink, format, level = 6)</code> is an <code>io.Writer</code> that
+compresses what is written and writes the result to <code>sink</code>. Call
+<code>finish()</code> at the end: it writes the last block and the checksum. Dropping
+the writer does not finish it, and <code>finish()</code> does not close the sink.</p>
+<p><code>io.ByteReader(bytes)</code> and <code>io.ByteWriter()</code> stand in for a stream when
+the data is in memory.</p>
+<h2 id="tar-archives"><a class="header" href="#tar-archives">Tar archives</a></h2>
+<pre><code class="language-pepper"># Write a .tar.gz, list it, and extract it.
+import archive;
+import compress;
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-compression-tar-example");
+    io.Directory.remove_all(folder);
+    var path = io.Directory.temp().join("pepper-compression-tar-example.tar.gz");
+
+    # A TarWriter over a gzip CompressWriter over a File.
+    var file = io.File.create(path).value();
+    var gzip = compress.CompressWriter(file, compress.Format.Gzip);
+    var tar = archive.TarWriter(gzip);
+    tar.append_directory("app-1.0");
+    tar.append_file("app-1.0/main.pep", "main(): int { return 0; }\n".bytes());
+    tar.append_file("app-1.0/run.sh", "#!/bin/sh\n".bytes(), mode = 493);
+    tar.finish();
+    gzip.finish();
+    file.close();
+
+    # List the entries.
+    var reader = archive.TarReader(compress.DecompressReader(io.File.open(path).value(), compress.Format.Gzip));
+    var names = Array&lt;String&gt;();
+    while (true) {
+        var entry = reader.next_entry().value();
+        if (entry.is_none()) {
+            break;
+        }
+        names.append(entry.value().path);
+    }
+    assert(names.count == 3 &amp;&amp; names[0] == "app-1.0/", "a directory ends with '/'");
+
+    # Extract without the top directory.
+    reader = archive.TarReader(compress.DecompressReader(io.File.open(path).value(), compress.Format.Gzip));
+    reader.extract(folder, strip_components = 1).value();
+    assert(io.File.read_to_string(folder.join("main.pep")).value().starts_with("main"), "extracted");
+
+    io.Directory.remove_all(folder);
+    io.File.remove(path);
+    return 0;
+}
+</code></pre>
+<p><code>archive.TarReader(source)</code> reads an archive from any <code>io.Reader</code>;
+wrap the file in a <code>DecompressReader</code> to read a <code>.tar.gz</code>.</p>
+<ul>
+<li><code>next_entry()</code> moves to the next entry and returns its <code>TarEntry</code>:
+<code>path</code>, <code>kind</code> (<code>File</code>, <code>Directory</code>, <code>Symlink</code>, <code>HardLink</code> or <code>Other</code>),
+<code>size</code>, <code>mode</code>, <code>modified</code> (seconds since 1970) and <code>link_target</code>. It
+returns none at the end of the archive.</li>
+<li>The reader is an <code>io.Reader</code> of the current entry’s contents: <code>read</code>,
+<code>read_all()</code>, <code>lines()</code>. Contents not read are skipped.</li>
+<li>It reads ustar archives with the pax and GNU extensions for long paths,
+which covers GNU tar, bsdtar, and the <code>.tar.gz</code> snapshots that <code>git archive</code>, GitHub, GitLab and Codeberg make.</li>
+</ul>
+<p><code>extract(target, strip_components = 0)</code> writes the rest of the archive into
+the directory <code>target</code>:</p>
+<ul>
+<li>It refuses, with an <code>is_invalid_input()</code> error, an entry whose path is
+absolute or holds a <code>..</code> component, a <code>\</code> or a <code>:</code>, so an archive cannot
+write outside <code>target</code>.</li>
+<li><code>strip_components</code> drops leading path components, as tar’s
+<code>--strip-components</code> does. A GitHub snapshot puts everything under
+<code>name-version/</code>, which <code>strip_components = 1</code> removes.</li>
+<li>Files and directories are created. A hard link becomes a copy of the
+file it names. Symlinks, devices and FIFOs are skipped.</li>
+<li>Permission bits and modification times are not applied yet: extracted
+files get the default permissions, so a script loses its executable bit.</li>
+</ul>
+<p><code>archive.TarWriter(sink)</code> writes an archive: <code>append_file(path, data)</code>,
+<code>append_directory(path)</code>, <code>append_symlink(path, target)</code>, <code>append(entry, data)</code> for any header, and <code>append_stream(entry, source)</code> to copy
+<code>entry.size</code> bytes from a stream. <code>finish()</code> writes the end marker.
+Paths longer than a ustar header holds get a pax header, so none is cut
+short. <code>.zip</code> archives are not supported yet.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -11508,6 +11672,11 @@ arrays of at most <code>size</code>, both read as a <code>for</code> loop asks f
 <code>to_string</code> makes of any value, as the global <code>print</code> does on standard
 output; <code>print_line</code> adds a <code>\n</code>. Both return an <code>IoResult&lt;void&gt;</code>, like
 <code>write_all</code>.</li>
+<li><code>io.ByteReader(bytes)</code> reads an array of bytes as a stream, and
+<code>io.ByteWriter()</code> collects what is written in its <code>bytes</code> array, for
+code that takes a stream when the data is in memory.</li>
+<li><code>compress.DecompressReader</code> and <code>compress.CompressWriter</code> wrap another
+stream (see <a href="#compression-and-archives">Compression and archives</a>).</li>
 <li>Another type gets them by providing those methods and declaring
 <code>extend MyStream with io.Reader;</code> or <code>extend MyStream with io.Writer;</code>.</li>
 <li><code>io.Print</code>, which gave only <code>print</code> and <code>print_line</code>, is deprecated: use
@@ -18307,6 +18476,7 @@ is used.</p>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>Incoming</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
 <li><a href="#iounixpep">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
 <li><a href="#iostreampep">Streams</a>: the <code>Reader</code> and <code>Writer</code> traits, <code>lines()</code> and <code>chunks()</code></li>
+<li><a href="#streams-in-memory">Streams in memory</a>: <code>ByteReader</code> and <code>ByteWriter</code></li>
 <li><a href="#print-2">Print</a>: deprecated; use <code>Writer</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>ErrorKind</code>, <code>IoResult</code>, and handle types</li>
 </ul>
@@ -21616,6 +21786,105 @@ chose when it was bound to port 0.</p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/memory.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="streams-in-memory"><a class="header" href="#streams-in-memory">Streams in memory</a></h1>
+<p><code>ByteReader</code> and <code>ByteWriter</code>: a <code>Reader</code> over bytes already in memory,
+and a <code>Writer</code> that collects what is written into memory, for code that
+takes a stream when the data is in an array.</p>
+<p>Source: <code>runtime/io/memory.pep</code></p>
+<h2 id="bytereader"><a class="header" href="#bytereader">ByteReader</a></h2>
+<pre><code class="language-pepper">struct ByteReader
+</code></pre>
+<p>A <code>Reader</code> over an array of bytes: each <code>read</code> takes the next bytes of
+the array, and the stream ends after its last byte.</p>
+<p>The reader keeps a reference to the array and does not copy it; changing
+the array while reading changes what is read.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var data = "one\ntwo\n".bytes();
+    var count = 0;
+    for (var line in io.ByteReader(data).lines()) {
+        count += 1;
+    }
+    assert(count == 2, "two lines");
+</code></pre>
+<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h4 id="remaining"><a class="header" href="#remaining">remaining</a></h4>
+<pre><code class="language-pepper">var remaining: ulong { get; }
+</code></pre>
+<p>The number of bytes not read yet.</p>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h4 id="bytereader-1"><a class="header" href="#bytereader-1">ByteReader()</a></h4>
+<pre><code class="language-pepper">construct(data: u8[])
+</code></pre>
+<p>Makes a reader positioned at the first byte of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to read</li>
+</ul>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Appends up to <code>max</code> of the next bytes to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 once every byte has been read</li>
+</ul>
+<h2 id="bytewriter"><a class="header" href="#bytewriter">ByteWriter</a></h2>
+<pre><code class="language-pepper">struct ByteWriter
+</code></pre>
+<p>A <code>Writer</code> that appends everything written to an array in memory,
+<code>bytes</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var out = io.ByteWriter();
+    out.print("n = ");
+    out.print_line(3);
+    assert(out.bytes == "n = 3\n".bytes(), "collected");
+</code></pre>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h4 id="bytes-1"><a class="header" href="#bytes-1">bytes</a></h4>
+<pre><code class="language-pepper">var bytes: u8[]
+</code></pre>
+<p>The bytes written so far, in order.</p>
+<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h4 id="bytewriter-1"><a class="header" href="#bytewriter-1">ByteWriter()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a writer with nothing written yet.</p>
+<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Appends all of <code>data</code> to <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written: always <code>data.count</code></li>
+</ul>
+<h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Appends all of <code>data</code> to <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; writing to memory does not fail</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/print.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="print-2"><a class="header" href="#print-2">Print</a></h1>
 <p><code>Print</code>, deprecated: <code>Writer</code> gives <code>print</code> and <code>print_line</code> to every
@@ -21644,8 +21913,8 @@ value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
-<h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Writes all of <code>data</code>.</p>
@@ -21785,7 +22054,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
         return 0;
     }
 </code></pre>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
@@ -21799,7 +22068,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <pre><code class="language-pepper">    var a = async.Atomic&lt;int&gt;(41);
     var p = async.Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">load(): T
 </code></pre>
@@ -22024,7 +22293,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
@@ -22089,7 +22358,7 @@ early.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">id(): ThreadId
 </code></pre>
@@ -22183,7 +22452,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -22192,7 +22461,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -22264,7 +22533,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-thread value</li>
 </ul>
-<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
 <h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: ThreadLocal&lt;T&gt;)
 </code></pre>
@@ -22274,7 +22543,7 @@ as <code>local.enter()</code>.</p>
 <ul>
 <li><code>local</code> — the thread-local variable</li>
 </ul>
-<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
 <h4 id="enter-1-1"><a class="header" href="#enter-1-1">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -22355,12 +22624,12 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="message-2"><a class="header" href="#message-2">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -22369,7 +22638,7 @@ function called in a task can wait without being marked in any way.</p>
 <ul>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
-<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
 <h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
@@ -22391,14 +22660,14 @@ finished. The task itself carries on.</p>
 <pre><code class="language-pepper">struct RuntimeOptions
 </code></pre>
 <p>Settings for <code>run_with</code>, built by chaining: <code>RuntimeOptions().stack_size(65536)</code>.</p>
-<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
 stack per task, the system’s best I/O backend, and up to 64 threads
 for <code>run_blocking</code>.</p>
-<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
 </code></pre>
@@ -22967,7 +23236,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -22983,7 +23252,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -23029,7 +23298,7 @@ input the null device, unless they were set.</p>
 <pre><code class="language-pepper">var program: String
 </code></pre>
 <p>The program to start, as given to the constructor.</p>
-<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
 <h4 id="command-2"><a class="header" href="#command-2">Command()</a></h4>
 <pre><code class="language-pepper">construct(program: String)
 </code></pre>
@@ -23039,7 +23308,7 @@ parent’s environment and current directory, and inherited streams.</p>
 <ul>
 <li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
 </ul>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="argument"><a class="header" href="#argument">argument</a></h4>
 <pre><code class="language-pepper">argument(value: String): Command
 </code></pre>
@@ -23209,7 +23478,7 @@ signal.</p>
     assert(!status.success(), "false fails");
     assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -23219,7 +23488,7 @@ signal.</p>
 <li><code>code</code> — the exit code, when the process exited</li>
 <li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
 </ul>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="success"><a class="header" href="#success">success</a></h4>
 <pre><code class="language-pepper">success(): bool
 </code></pre>
@@ -23277,14 +23546,14 @@ a Child neither waits for it nor kills it; the process runs on.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
 <h4 id="child-2"><a class="header" href="#child-2">Child()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Child that stands for no process: <code>id()</code> is 0, its streams
 are closed, and <code>wait()</code>, <code>try_wait()</code> and <code>kill()</code> fail. Use
 <code>Command.spawn()</code> to start one.</p>
-<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>
@@ -23536,7 +23805,7 @@ is copied, compared with <code>==</code>, and allocates nothing.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23602,7 +23871,7 @@ is copied, compared with <code>==</code>, and allocates nothing.</p>
 <ul>
 <li>if the duration does not fit in a <code>ulong</code> of nanoseconds (about 584 years)</li>
 </ul>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="nanoseconds"><a class="header" href="#nanoseconds">nanoseconds</a></h4>
 <pre><code class="language-pepper">nanoseconds(): ulong
 </code></pre>
@@ -23801,7 +24070,7 @@ processes or reboots. Use <code>SystemTime</code> for the date and time.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
+<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
 <h4 id="instant-1"><a class="header" href="#instant-1">Instant()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -23816,7 +24085,7 @@ clock.</p>
 <ul>
 <li>the current moment</li>
 </ul>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
 <h4 id="elapsed"><a class="header" href="#elapsed">elapsed</a></h4>
 <pre><code class="language-pepper">elapsed(): Duration
 </code></pre>
@@ -24297,6 +24566,762 @@ database’s entry when <code>HOME</code> is unset or empty; on Windows
 <ul>
 <li>the temporary directory</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/compress/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-compress-module"><a class="header" href="#the-compress-module">The compress module</a></h1>
+<p>Compression: DEFLATE (RFC 1951) with its zlib and gzip framings, in one
+call or as streams, and the CRC-32 and Adler-32 checksums.</p>
+<p>Bring it in with <code>import compress</code>. It is written in Pepper, so it needs
+no zlib. Corrupt data is an <code>io.IoError</code> whose <code>is_invalid_input()</code> holds.</p>
+<ul>
+<li><a href="#formats-and-streams">Formats and streams</a>: <code>Format</code>, <code>Deflate</code>, <code>Zlib</code>,
+<code>Gzip</code>, <code>DecompressReader</code>, <code>CompressWriter</code></li>
+<li><a href="#checksums">Checksums</a>: <code>Crc32</code>, <code>Adler32</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    main(): int {
+        var data = "to be or not to be, that is the question".bytes();
+        var packed = compress.Gzip.compress(data);
+        assert(compress.Gzip.decompress(packed).value() == data, "round trip");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/compress/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/compress/format.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="formats-and-streams"><a class="header" href="#formats-and-streams">Formats and streams</a></h1>
+<p><code>Format</code>, the one-call <code>Deflate</code>, <code>Zlib</code> and <code>Gzip</code> functions, and the
+streaming <code>DecompressReader</code> and <code>CompressWriter</code>.</p>
+<p>Source: <code>runtime/compress/format.pep</code></p>
+<h2 id="format"><a class="header" href="#format">Format</a></h2>
+<pre><code class="language-pepper">enum Format
+</code></pre>
+<p>The framing around DEFLATE-compressed data.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    var packed = compress.Gzip.compress("hi".bytes());
+    var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
+</code></pre>
+<h3 id="cases-7"><a class="header" href="#cases-7">Cases</a></h3>
+<h4 id="raw"><a class="header" href="#raw">Raw</a></h4>
+<pre><code class="language-pepper">Raw
+</code></pre>
+<p>Raw DEFLATE (RFC 1951) with no header or checksum, as zip archives
+and HTTP’s <code>Content-Encoding: deflate</code> from some servers carry it.</p>
+<h4 id="zlib"><a class="header" href="#zlib">Zlib</a></h4>
+<pre><code class="language-pepper">Zlib
+</code></pre>
+<p>zlib (RFC 1950): a two-byte header, DEFLATE, then an Adler-32
+checksum. PNG images and HTTP’s <code>deflate</code> encoding use it.</p>
+<h4 id="gzip"><a class="header" href="#gzip">Gzip</a></h4>
+<pre><code class="language-pepper">Gzip
+</code></pre>
+<p>gzip (RFC 1952): a header, DEFLATE, then a CRC-32 and the length.
+<code>.gz</code> files and HTTP’s <code>gzip</code> encoding use it. Reading accepts
+several members one after another, as <code>cat a.gz b.gz</code> makes.</p>
+<h2 id="deflate"><a class="header" href="#deflate">Deflate</a></h2>
+<pre><code class="language-pepper">struct Deflate
+</code></pre>
+<p>Raw DEFLATE (RFC 1951) data, compressed or decompressed in one call.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    var data = "abcabcabcabc".bytes();
+    var packed = compress.Deflate.compress(data);
+    assert(compress.Deflate.decompress(packed).value() == data, "round trip");
+</code></pre>
+<h3 id="static-methods-13"><a class="header" href="#static-methods-13">Static methods</a></h3>
+<h4 id="compress"><a class="header" href="#compress">compress</a></h4>
+<pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
+</code></pre>
+<p>Compresses <code>data</code> into raw DEFLATE data.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to compress</li>
+<li><code>level</code> — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two, as zlib’s default does</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the compressed bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
+</ul>
+<h4 id="decompress"><a class="header" href="#decompress">decompress</a></h4>
+<pre><code class="language-pepper">static decompress(data: u8[]): io.IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Decompresses raw DEFLATE data. Bytes after the end of the compressed
+data are ignored.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the compressed bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the decompressed bytes; an <code>is_invalid_input()</code> error when <code>data</code> is not valid DEFLATE data or ends too soon</li>
+</ul>
+<h2 id="zlib-1"><a class="header" href="#zlib-1">Zlib</a></h2>
+<pre><code class="language-pepper">struct Zlib
+</code></pre>
+<p>zlib (RFC 1950) data, compressed or decompressed in one call.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    var packed = compress.Zlib.compress("hello".bytes());
+    assert(packed[0] == 0x78, "the zlib header");
+    assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
+</code></pre>
+<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
+<h4 id="compress-1"><a class="header" href="#compress-1">compress</a></h4>
+<pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
+</code></pre>
+<p>Compresses <code>data</code> into a zlib stream.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to compress</li>
+<li><code>level</code> — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the compressed bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
+</ul>
+<h4 id="decompress-1"><a class="header" href="#decompress-1">decompress</a></h4>
+<pre><code class="language-pepper">static decompress(data: u8[]): io.IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Decompresses a zlib stream and checks its Adler-32 checksum. Bytes
+after the stream are ignored. A stream that needs a preset
+dictionary is not supported.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the compressed bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the decompressed bytes; an <code>is_invalid_input()</code> error when <code>data</code> is not a valid zlib stream, ends too soon, or fails its checksum</li>
+</ul>
+<h2 id="gzip-1"><a class="header" href="#gzip-1">Gzip</a></h2>
+<pre><code class="language-pepper">struct Gzip
+</code></pre>
+<p>gzip (RFC 1952) data, as in <code>.gz</code> files, compressed or decompressed in
+one call.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+    import io;
+
+    var packed = compress.Gzip.compress("hello".bytes());
+    io.File.write_bytes(io.Path("hello.txt.gz"), packed);
+    assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
+</code></pre>
+<h3 id="static-methods-2-3"><a class="header" href="#static-methods-2-3">Static methods</a></h3>
+<h4 id="compress-2"><a class="header" href="#compress-2">compress</a></h4>
+<pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
+</code></pre>
+<p>Compresses <code>data</code> into one gzip member with no file name and no
+modification time.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to compress</li>
+<li><code>level</code> — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the compressed bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
+</ul>
+<h4 id="decompress-2"><a class="header" href="#decompress-2">decompress</a></h4>
+<pre><code class="language-pepper">static decompress(data: u8[]): io.IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Decompresses gzip data, checking each member’s CRC-32 and length.
+Several members one after another decompress to their contents
+joined. The header’s file name, comment and extra field are skipped.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the compressed bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the decompressed bytes; an <code>is_invalid_input()</code> error when <code>data</code> is not valid gzip data, ends too soon, fails a check, or has bytes after the last member</li>
+</ul>
+<h2 id="decompressreader"><a class="header" href="#decompressreader">DecompressReader</a></h2>
+<pre><code class="language-pepper">struct DecompressReader
+</code></pre>
+<p>A <code>Reader</code> that decompresses another stream as it is read, such as a
+<code>.gz</code> file or an HTTP response body, without holding all of it in memory.</p>
+<p>It reads its source in chunks of up to 64 KiB and keeps at most about
+160 KiB of output, however large the data. Corrupt or truncated data is an
+<code>is_invalid_input()</code> error from <code>read</code>, after the bytes decoded before
+the problem; an error from the source is passed on.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+    import io;
+
+    var file = io.File.open(io.Path("notes.txt.gz")).value();
+    var reader = compress.DecompressReader(file, compress.Format.Gzip);
+    for (var line in reader.lines()) {
+        print(line.value());
+    }
+</code></pre>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h4 id="decompressreader-1"><a class="header" href="#decompressreader-1">DecompressReader()</a></h4>
+<pre><code class="language-pepper">construct(source: io.Reader, format: Format)
+</code></pre>
+<p>Makes a reader of the decompressed contents of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream of compressed bytes</li>
+<li><code>format</code> — the framing of the compressed data</li>
+</ul>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h4 id="read-4"><a class="header" href="#read-4">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Decompresses up to <code>max</code> more bytes and appends them to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the compressed data; an error when the data is invalid or the source fails</li>
+</ul>
+<h4 id="read_all-1"><a class="header" href="#read_all-1">read_all</a></h4>
+<pre><code class="language-pepper">read_all(): io.IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Decompresses the rest of the stream.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the decompressed bytes not read yet; an error as for <code>read</code></li>
+</ul>
+<h2 id="compresswriter"><a class="header" href="#compresswriter">CompressWriter</a></h2>
+<pre><code class="language-pepper">struct CompressWriter
+</code></pre>
+<p>A <code>Writer</code> that compresses what is written to it and writes the result
+to another stream, such as a <code>.gz</code> file.</p>
+<p>Compressed bytes reach the sink in pieces as blocks fill; <code>finish()</code>
+writes the rest and the format’s trailer, and must be called once at the
+end, since dropping the writer does not. It does not close the sink.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+    import io;
+
+    var file = io.File.create(io.Path("log.txt.gz")).value();
+    var writer = compress.CompressWriter(file, compress.Format.Gzip);
+    writer.print_line("first line");
+    writer.print_line("second line");
+    writer.finish();
+    file.close();
+</code></pre>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h4 id="compresswriter-1"><a class="header" href="#compresswriter-1">CompressWriter()</a></h4>
+<pre><code class="language-pepper">construct(sink: io.Writer, format: Format, level: int = 6)
+</code></pre>
+<p>Makes a writer that compresses into <code>sink</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>sink</code> — the stream the compressed bytes are written to</li>
+<li><code>format</code> — the framing to write</li>
+<li><code>level</code> — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
+</ul>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h4 id="write-4"><a class="header" href="#write-4">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Compresses all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to compress</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>data.count</code>; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“CompressWriter used after finish()”)</li>
+</ul>
+<h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Compresses all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to compress</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“CompressWriter used after finish()”)</li>
+</ul>
+<h4 id="finish"><a class="header" href="#finish">finish</a></h4>
+<pre><code class="language-pepper">finish(): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Compresses what is still buffered, writes the format’s trailer, and
+ends the stream. Later calls do nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/compress/checksum.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="checksums"><a class="header" href="#checksums">Checksums</a></h1>
+<p><code>Crc32</code> and <code>Adler32</code>: the checksums gzip and zlib streams carry, for
+checking data as it is read or written.</p>
+<p>Source: <code>runtime/compress/checksum.pep</code></p>
+<h2 id="crc32"><a class="header" href="#crc32">Crc32</a></h2>
+<pre><code class="language-pepper">struct Crc32
+</code></pre>
+<p>The CRC-32 checksum (IEEE 802.3, the polynomial gzip, zip and PNG use),
+computed over data given in one or more pieces.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    var crc = compress.Crc32();
+    crc.update("hello ".bytes());
+    crc.update("world".bytes());
+    assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
+    assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
+</code></pre>
+<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
+<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
+<pre><code class="language-pepper">var value: uint { get; }
+</code></pre>
+<p>The checksum of everything given to <code>update</code> so far.</p>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a checksum of no data yet (<code>value</code> is 0).</p>
+<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
+<h4 id="of"><a class="header" href="#of">of</a></h4>
+<pre><code class="language-pepper">static of(data: u8[]): uint
+</code></pre>
+<p>Returns the CRC-32 of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the checksum</li>
+</ul>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h4 id="update"><a class="header" href="#update">update</a></h4>
+<pre><code class="language-pepper">update(data: u8[])
+</code></pre>
+<p>Adds <code>data</code> to the checksum.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the next bytes of the data</li>
+</ul>
+<h4 id="reset"><a class="header" href="#reset">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Starts over, as if no data had been given.</p>
+<h2 id="adler32"><a class="header" href="#adler32">Adler32</a></h2>
+<pre><code class="language-pepper">struct Adler32
+</code></pre>
+<p>The Adler-32 checksum (RFC 1950, the one zlib streams carry), computed
+over data given in one or more pieces.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import compress;
+
+    assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
+</code></pre>
+<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h4 id="value-1-1"><a class="header" href="#value-1-1">value</a></h4>
+<pre><code class="language-pepper">var value: uint { get; }
+</code></pre>
+<p>The checksum of everything given to <code>update</code> so far.</p>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h4 id="adler32-1"><a class="header" href="#adler32-1">Adler32()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a checksum of no data yet (<code>value</code> is 1).</p>
+<h3 id="static-methods-1-5"><a class="header" href="#static-methods-1-5">Static methods</a></h3>
+<h4 id="of-1"><a class="header" href="#of-1">of</a></h4>
+<pre><code class="language-pepper">static of(data: u8[]): uint
+</code></pre>
+<p>Returns the Adler-32 of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the checksum</li>
+</ul>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
+<pre><code class="language-pepper">update(data: u8[])
+</code></pre>
+<p>Adds <code>data</code> to the checksum.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the next bytes of the data</li>
+</ul>
+<h4 id="reset-1"><a class="header" href="#reset-1">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Starts over, as if no data had been given.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/archive/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-archive-module"><a class="header" href="#the-archive-module">The archive module</a></h1>
+<p>Archives: tar files, read entry by entry, extracted safely into a
+directory, or written.</p>
+<p>Bring it in with <code>import archive</code>. Combine it with <code>compress</code> for
+<code>.tar.gz</code>: wrap the file in a <code>compress.DecompressReader</code> to read one, or
+in a <code>compress.CompressWriter</code> to write one. A damaged archive is an
+<code>io.IoError</code> whose <code>is_invalid_input()</code> holds.</p>
+<ul>
+<li><a href="#tar-archives-1">Tar archives</a>: <code>TarReader</code>, <code>TarWriter</code>, <code>TarEntry</code>,
+<code>EntryKind</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import archive;
+    import io;
+
+    main(): int {
+        var out = io.ByteWriter();
+        var writer = archive.TarWriter(out);
+        writer.append_file("hello.txt", "hi\n".bytes());
+        writer.finish();
+
+        var reader = archive.TarReader(io.ByteReader(out.bytes));
+        var entry = reader.next_entry().value().value();
+        assert(entry.path == "hello.txt" &amp;&amp; entry.size == 3, "the header");
+        assert(reader.read_all().value() == "hi\n".bytes(), "the contents");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/archive/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/archive/tar.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="tar-archives-1"><a class="header" href="#tar-archives-1">Tar archives</a></h1>
+<p><code>TarReader</code> and <code>TarWriter</code>: tar archives (POSIX ustar, with the pax and
+GNU extensions for long names), read entry by entry from a stream,
+extracted safely into a directory, or written.</p>
+<p>Source: <code>runtime/archive/tar.pep</code></p>
+<h2 id="entrykind"><a class="header" href="#entrykind">EntryKind</a></h2>
+<pre><code class="language-pepper">enum EntryKind
+</code></pre>
+<p>What a tar entry is.</p>
+<h3 id="cases-8"><a class="header" href="#cases-8">Cases</a></h3>
+<h4 id="file-4"><a class="header" href="#file-4">File</a></h4>
+<pre><code class="language-pepper">File
+</code></pre>
+<p>A regular file, whose contents follow the entry’s header.</p>
+<h4 id="directory-3"><a class="header" href="#directory-3">Directory</a></h4>
+<pre><code class="language-pepper">Directory
+</code></pre>
+<p>A directory.</p>
+<h4 id="symlink-1"><a class="header" href="#symlink-1">Symlink</a></h4>
+<pre><code class="language-pepper">Symlink
+</code></pre>
+<p>A symbolic link to <code>TarEntry.link_target</code>.</p>
+<h4 id="hardlink"><a class="header" href="#hardlink">HardLink</a></h4>
+<pre><code class="language-pepper">HardLink
+</code></pre>
+<p>A hard link to the earlier entry named <code>TarEntry.link_target</code>.</p>
+<h4 id="other-2"><a class="header" href="#other-2">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Anything else: a device, a FIFO, or a type this reader does not know.</p>
+<h2 id="tarentry"><a class="header" href="#tarentry">TarEntry</a></h2>
+<pre><code class="language-pepper">struct TarEntry
+</code></pre>
+<p>One entry of a tar archive: its header, without its contents.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import archive;
+
+    var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
+    entry.mode = 493;   # octal 755: rwxr-xr-x
+</code></pre>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h4 id="path-5"><a class="header" href="#path-5">path</a></h4>
+<pre><code class="language-pepper">var path: String
+</code></pre>
+<p>The path in the archive, with <code>/</code> between components, as stored (a
+directory’s may end with <code>/</code>).</p>
+<h4 id="kind-1"><a class="header" href="#kind-1">kind</a></h4>
+<pre><code class="language-pepper">var kind: EntryKind
+</code></pre>
+<p>What the entry is.</p>
+<h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
+<pre><code class="language-pepper">var size: ulong
+</code></pre>
+<p>The length of the contents in bytes; 0 for anything but a file.</p>
+<h4 id="mode-2"><a class="header" href="#mode-2">mode</a></h4>
+<pre><code class="language-pepper">var mode: uint
+</code></pre>
+<p>The permission bits, such as 420 (octal 644, <code>rw-r--r--</code>).</p>
+<h4 id="modified-1"><a class="header" href="#modified-1">modified</a></h4>
+<pre><code class="language-pepper">var modified: long
+</code></pre>
+<p>The modification time, in seconds since 1970-01-01 UTC.</p>
+<h4 id="link_target"><a class="header" href="#link_target">link_target</a></h4>
+<pre><code class="language-pepper">var link_target: String
+</code></pre>
+<p>The target of a symlink or hard link; empty otherwise.</p>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
+<pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
+</code></pre>
+<p>Makes an entry with the given path and kind, mode 420 (octal 644) for
+a file and 493 (octal 755) otherwise, size 0 and modification time 0.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the path in the archive</li>
+<li><code>kind</code> — what the entry is</li>
+</ul>
+<h2 id="tarreader"><a class="header" href="#tarreader">TarReader</a></h2>
+<pre><code class="language-pepper">struct TarReader
+</code></pre>
+<p>Reads a tar archive from a stream, one entry at a time: <code>next_entry()</code>
+moves to the next entry and returns its header, then <code>read</code> (it is an
+<code>io.Reader</code>) reads that entry’s contents. Contents not read are skipped.</p>
+<p>It reads POSIX ustar archives and the pax (<code>x</code>) and GNU (<code>L</code>, <code>K</code>)
+extensions for long paths, link targets and sizes, which is what GNU tar,
+bsdtar and Git (<code>git archive</code>, and the <code>.tar.gz</code> snapshots GitHub, GitLab
+and Codeberg serve) write. Global pax headers (<code>g</code>) are skipped.
+Wrap the source in a <code>compress.DecompressReader</code> to read a <code>.tar.gz</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import archive;
+    import compress;
+    import io;
+
+    var file = io.File.open(io.Path("release.tar.gz")).value();
+    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+    while (true) {
+        var entry = tar.next_entry().value();
+        if (entry.is_none()) {
+            break;
+        }
+        print(entry.value().path);
+    }
+</code></pre>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h4 id="tarreader-1"><a class="header" href="#tarreader-1">TarReader()</a></h4>
+<pre><code class="language-pepper">construct(source: io.Reader)
+</code></pre>
+<p>Makes a reader of the archive in <code>source</code>, before its first entry.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream of the archive</li>
+</ul>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
+<pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
+</code></pre>
+<p>Moves to the next entry, skipping what is left of the current one’s
+contents, and returns its header.</p>
+<p>The archive ends at two zero blocks, as tar writes, or at the end of
+the stream between entries.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next entry, or none at the end of the archive; an <code>is_invalid_input()</code> error for a damaged or truncated archive, or the source’s error</li>
+</ul>
+<h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Reads up to <code>max</code> more bytes of the current entry’s contents and
+appends them to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the entry’s contents (or before the first <code>next_entry()</code>); an error when the archive is truncated or the source fails</li>
+</ul>
+<h4 id="read_all-2"><a class="header" href="#read_all-2">read_all</a></h4>
+<pre><code class="language-pepper">read_all(): io.IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Reads the rest of the current entry’s contents.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the bytes not read yet; an error as for <code>read</code></li>
+</ul>
+<h4 id="extract"><a class="header" href="#extract">extract</a></h4>
+<pre><code class="language-pepper">extract(target: io.Path, strip_components: ulong = 0): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Extracts the rest of the archive into the directory <code>target</code>,
+creating it and any directories the entries need.</p>
+<p>Each entry’s path is checked first, so that no archive can write
+outside <code>target</code>: an absolute path, a <code>..</code> component, a <code>\</code> or a <code>:</code>
+(which Windows would read as a separator or a drive) is an
+<code>is_invalid_input()</code> error. Files are written (replacing a file
+already there) and directories created; a hard link becomes a copy of
+the file it names, which must be an earlier entry. Symlinks, devices
+and FIFOs are skipped, as are permission bits and modification times.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the directory to extract into</li>
+<li><code>strip_components</code> — how many leading path components to drop from each entry, as tar’s <code>--strip-components</code> does: 1 drops the <code>name-version/</code> directory that GitHub’s snapshots put everything in. An entry with no components left is skipped.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every entry is extracted; an <code>is_invalid_input()</code> error for an unsafe path or a damaged archive, or the error of a file that could not be written</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import archive;
+    import compress;
+    import io;
+
+    var file = io.File.open(io.Path("pepper-main.tar.gz")).value();
+    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+    tar.extract(io.Path(".pep/deps/pepper"), strip_components = 1).value();
+</code></pre>
+<h2 id="tarwriter"><a class="header" href="#tarwriter">TarWriter</a></h2>
+<pre><code class="language-pepper">struct TarWriter
+</code></pre>
+<p>Writes a tar archive to a stream: each <code>append</code> writes one entry’s
+header and contents, and <code>finish()</code> writes the end-of-archive marker.</p>
+<p>It writes POSIX ustar headers, and a pax header before an entry whose
+path or link target does not fit one (a path over 100 bytes that cannot
+be split at a <code>/</code> into 155 and 100), so every path is kept whole. Owner
+ids are 0 and owner names empty. Wrap the sink in a
+<code>compress.CompressWriter</code> to write a <code>.tar.gz</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import archive;
+    import io;
+
+    var out = io.ByteWriter();
+    var tar = archive.TarWriter(out);
+    tar.append_directory("docs");
+    tar.append_file("docs/readme.txt", "hello\n".bytes());
+    tar.finish();
+    assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
+</code></pre>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h4 id="tarwriter-1"><a class="header" href="#tarwriter-1">TarWriter()</a></h4>
+<pre><code class="language-pepper">construct(sink: io.Writer)
+</code></pre>
+<p>Makes a writer of a new archive into <code>sink</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>sink</code> — the stream the archive is written to</li>
+</ul>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
+<pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Appends a regular file holding <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file’s path in the archive, with <code>/</code> between components</li>
+<li><code>data</code> — the file’s contents</li>
+<li><code>mode</code> — the permission bits; 420 is octal 644 (<code>rw-r--r--</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“TarWriter used after finish()”)</li>
+</ul>
+<h4 id="append_directory"><a class="header" href="#append_directory">append_directory</a></h4>
+<pre><code class="language-pepper">append_directory(path: String, mode: uint = 493): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Appends a directory.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the directory’s path in the archive; a final <code>/</code> is added when missing</li>
+<li><code>mode</code> — the permission bits; 493 is octal 755 (<code>rwxr-xr-x</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“TarWriter used after finish()”)</li>
+</ul>
+<h4 id="append_symlink"><a class="header" href="#append_symlink">append_symlink</a></h4>
+<pre><code class="language-pepper">append_symlink(path: String, target: String): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Appends a symbolic link.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the link’s path in the archive</li>
+<li><code>target</code> — the path the link points to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“TarWriter used after finish()”)</li>
+</ul>
+<h4 id="append-4"><a class="header" href="#append-4">append</a></h4>
+<pre><code class="language-pepper">append(entry: TarEntry, data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Appends an entry with the given header and contents. The size
+written is <code>data.count</code> for a file and 0 for anything else, whatever
+<code>entry.size</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>entry</code> — the entry’s header</li>
+<li><code>data</code> — the contents of a file entry; ignored for other kinds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“TarWriter used after finish()”)</li>
+</ul>
+<h4 id="append_stream"><a class="header" href="#append_stream">append_stream</a></h4>
+<pre><code class="language-pepper">append_stream(entry: TarEntry, source: io.Reader): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Appends a file entry whose contents are read from <code>source</code>: exactly
+<code>entry.size</code> bytes, so a large file need not be in memory.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>entry</code> — the entry’s header; its <code>kind</code> must be <code>File</code></li>
+<li><code>source</code> — the stream holding the contents</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when reading or writing fails, or an <code>is_invalid_input()</code> error when <code>source</code> ends before <code>entry.size</code> bytes (the archive is then incomplete)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>finish()</code> was called (“TarWriter used after finish()”)</li>
+<li>if <code>entry.kind</code> is not <code>File</code> (“append_stream needs a file entry”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var file = io.File.open(io.Path("big.bin")).value();
+    var entry = archive.TarEntry("big.bin");
+    entry.size = file.metadata().value().size;
+    tar.append_stream(entry, file);
+</code></pre>
+<h4 id="finish-1"><a class="header" href="#finish-1">finish</a></h4>
+<pre><code class="language-pepper">finish(): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Writes the end-of-archive marker (two zero blocks). Later calls do
+nothing. It does not close the sink.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when writing to the sink fails</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-cli-module"><a class="header" href="#the-cli-module">The cli module</a></h1>
 <p>Command-line parsing: declare a program’s options and arguments, then
@@ -24363,14 +25388,14 @@ parser, and everything after it to the command’s.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
 <h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
 <pre><code class="language-pepper">var is_selected: bool { get; }
 </code></pre>
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -24381,7 +25406,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
 </code></pre>
@@ -24560,7 +25585,7 @@ Run 'pepper --help' for more information.
 <pre><code class="language-pepper">struct Flag
 </code></pre>
 <p>An option that takes no value, from <code>Parser.flag</code>.</p>
-<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h3 id="properties-1-5"><a class="header" href="#properties-1-5">Properties</a></h3>
 <h4 id="is_set-1"><a class="header" href="#is_set-1">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
@@ -24569,7 +25594,7 @@ Run 'pepper --help' for more information.
 <pre><code class="language-pepper">var occurrences: int { get; }
 </code></pre>
 <p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
-<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -24590,7 +25615,7 @@ for the runtime.</p>
 </code></pre>
 <p>Whether a value was given on the command line; false when the
 argument was left out, even when it has a default.</p>
-<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
 <h4 id="argument-1-1"><a class="header" href="#argument-1-1">Argument()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -24600,8 +25625,8 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
-<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h4 id="value-3"><a class="header" href="#value-3">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
 <p>Returns the value given, or the default when it was left out.</p>
@@ -24707,13 +25732,13 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
+<h3 id="properties-10"><a class="header" href="#properties-10">Properties</a></h3>
 <h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -24730,7 +25755,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -24852,7 +25877,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -24862,7 +25887,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24939,7 +25964,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -24958,7 +25983,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -25065,13 +26090,13 @@ with the confinement rule (see <code>Mutex</code>).</p>
         totals.requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
@@ -25086,7 +26111,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -25149,7 +26174,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -25283,7 +26308,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -25292,7 +26317,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -25354,7 +26379,7 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -25368,7 +26393,7 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -25446,12 +26471,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -25559,7 +26584,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -25568,7 +26593,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -25640,7 +26665,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -25650,7 +26675,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -25780,7 +26805,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -25804,12 +26829,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -25893,7 +26918,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -25954,17 +26979,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
+<h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
 <h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -26075,7 +27100,7 @@ full.</p>
 <pre><code class="language-pepper">    var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
     request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -26090,7 +27115,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
+<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -26100,7 +27125,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -26135,7 +27160,7 @@ received.</p>
 <ul>
 <li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
 </ul>
-<h4 id="path-5"><a class="header" href="#path-5">path</a></h4>
+<h4 id="path-6"><a class="header" href="#path-6">path</a></h4>
 <pre><code class="language-pepper">path(): String
 </code></pre>
 <p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
@@ -26200,7 +27225,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -26335,7 +27360,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -26346,7 +27371,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-13"><a class="header" href="#static-methods-13">Static methods</a></h3>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
 <h4 id="bind-3"><a class="header" href="#bind-3">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -26373,7 +27398,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -26437,8 +27462,8 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
-<h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until some bytes are available, then appends up to <code>max</code> of
@@ -26524,8 +27549,8 @@ of a value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
-<h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Writes what the stream takes in one call, which may be less than all
@@ -26538,7 +27563,7 @@ of <code>data</code>.</p>
 <ul>
 <li>the number of bytes written; an error when the stream fails</li>
 </ul>
-<h4 id="write_all-4"><a class="header" href="#write_all-4">write_all</a></h4>
+<h4 id="write_all-6"><a class="header" href="#write_all-6">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Writes all of <code>data</code>.</p>
@@ -26608,7 +27633,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -26648,7 +27673,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>Reader.chunks</code></li>
 </ul>
-<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
+<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
 <h4 id="chunks-2"><a class="header" href="#chunks-2">Chunks()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader, size: ulong)
 </code></pre>
@@ -26720,13 +27745,13 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed listener: <code>is_open()</code> is false and every operation
 fails. Use <code>UnixListener.bind</code> to get an open one.</p>
-<h3 id="static-methods-14"><a class="header" href="#static-methods-14">Static methods</a></h3>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(path: Path): IoResult&lt;UnixListener&gt;
 </code></pre>
@@ -26739,7 +27764,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -26748,7 +27773,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>false after <code>close()</code> and for a <code>UnixListener()</code> never bound</li>
 </ul>
-<h4 id="path-6"><a class="header" href="#path-6">path</a></h4>
+<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">path(): Path
 </code></pre>
 <p>Returns the path the listener was bound to.</p>
@@ -26807,7 +27832,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -26816,7 +27841,7 @@ goes. The socket file stays.</p>
 <ul>
 <li><code>handle</code> — the listening socket, or an invalid handle for none</li>
 </ul>
-<h3 id="static-methods-1-4"><a class="header" href="#static-methods-1-4">Static methods</a></h3>
+<h3 id="static-methods-1-6"><a class="header" href="#static-methods-1-6">Static methods</a></h3>
 <h4 id="bind-1-1"><a class="header" href="#bind-1-1">bind</a></h4>
 <pre><code class="language-pepper">static bind(path: Path): IoResult&lt;SharedUnixListener&gt;
 </code></pre>
@@ -26830,7 +27855,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -26869,14 +27894,14 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
+<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed stream: <code>is_open()</code> is false and every operation
 fails. Use <code>UnixStream.connect</code> or <code>UnixListener.accept</code> to get an
 open one.</p>
-<h3 id="static-methods-2-3"><a class="header" href="#static-methods-2-3">Static methods</a></h3>
+<h3 id="static-methods-2-4"><a class="header" href="#static-methods-2-4">Static methods</a></h3>
 <h4 id="connect-2"><a class="header" href="#connect-2">connect</a></h4>
 <pre><code class="language-pepper">static connect(path: Path): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -26912,7 +27937,7 @@ gets the connection.</p>
 <ul>
 <li>false after <code>close()</code> and for a <code>UnixStream()</code> never connected</li>
 </ul>
-<h4 id="read-4"><a class="header" href="#read-4">read</a></h4>
+<h4 id="read-7"><a class="header" href="#read-7">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> bytes of it to
@@ -26939,7 +27964,7 @@ gets the connection.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the peer closes the connection first (“connection closed after n of count bytes”), or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-4"><a class="header" href="#write-4">write</a></h4>
+<h4 id="write-6"><a class="header" href="#write-6">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Sends bytes from <code>data</code> with a single system call, waiting until the
@@ -26953,7 +27978,7 @@ system can take at least some of them. The send may be partial; use
 <ul>
 <li>the number of bytes sent, which may be less than <code>data.count</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
 </ul>
-<h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
+<h4 id="write_all-7"><a class="header" href="#write_all-7">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.
@@ -27075,7 +28100,7 @@ type, so <code>i32.parse</code> is <code>int.parse</code>.</p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
 <pre><code class="language-pepper">extend char
 </code></pre>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
 <h4 id="parse-3"><a class="header" href="#parse-3">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): char?
 </code></pre>
@@ -27102,7 +28127,7 @@ are accepted.</p>
 <h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
 <pre><code class="language-pepper">extend byte
 </code></pre>
-<h3 id="static-methods-1-5"><a class="header" href="#static-methods-1-5">Static methods</a></h3>
+<h3 id="static-methods-1-7"><a class="header" href="#static-methods-1-7">Static methods</a></h3>
 <h4 id="parse-1-1"><a class="header" href="#parse-1-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): byte?
 </code></pre>
@@ -27129,7 +28154,7 @@ accepted.</p>
 <h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
 <pre><code class="language-pepper">extend short
 </code></pre>
-<h3 id="static-methods-2-4"><a class="header" href="#static-methods-2-4">Static methods</a></h3>
+<h3 id="static-methods-2-5"><a class="header" href="#static-methods-2-5">Static methods</a></h3>
 <h4 id="parse-2-1"><a class="header" href="#parse-2-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): short?
 </code></pre>
@@ -27373,7 +28398,7 @@ advances that variable.</p>
     var r = 0..10;
     assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="start-1"><a class="header" href="#start-1">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -27386,13 +28411,13 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="properties-10"><a class="header" href="#properties-10">Properties</a></h3>
+<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
 <h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -27404,7 +28429,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -27515,7 +28540,7 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
 <h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
@@ -27552,7 +28577,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -27732,7 +28757,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -27744,7 +28769,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -27841,7 +28866,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
 <h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -27888,7 +28913,7 @@ points below 128 have an ASCII byte.</p>
     assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
+<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -27994,7 +29019,7 @@ is written, and one read is kept as part of the text.</p>
     assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
+<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -28051,7 +29076,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
     var bytes = text.Utf8.encode("hi");
     assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
+<h3 id="static-methods-21"><a class="header" href="#static-methods-21">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -28176,7 +29201,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -28185,7 +29210,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
+<h3 id="static-methods-22"><a class="header" href="#static-methods-22">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -28194,7 +29219,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -28264,7 +29289,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
+<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -28273,7 +29298,7 @@ one.</p>
 <ul>
 <li><code>context</code> — the platform’s server context, or null for none</li>
 </ul>
-<h3 id="static-methods-1-6"><a class="header" href="#static-methods-1-6">Static methods</a></h3>
+<h3 id="static-methods-1-8"><a class="header" href="#static-methods-1-8">Static methods</a></h3>
 <h4 id="create-1-1"><a class="header" href="#create-1-1">create</a></h4>
 <pre><code class="language-pepper">static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;TlsAcceptor&gt;
 </code></pre>
@@ -28288,7 +29313,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -28328,7 +29353,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
+<h3 id="constructor-2-14"><a class="header" href="#constructor-2-14">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -28348,7 +29373,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <ul>
 <li>false after <code>close()</code></li>
 </ul>
-<h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
+<h4 id="read-8"><a class="header" href="#read-8">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> decrypted bytes of
@@ -28375,7 +29400,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the connection ends first, or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
+<h4 id="write-7"><a class="header" href="#write-7">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Encrypts and sends bytes from <code>data</code>. The send may be partial; use
@@ -28388,7 +29413,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes sent; an error when the stream is closed, a TLS error, or an io error from the socket</li>
 </ul>
-<h4 id="write_all-6"><a class="header" href="#write_all-6">write_all</a></h4>
+<h4 id="write_all-8"><a class="header" href="#write_all-8">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
@@ -28479,7 +29504,7 @@ has an empty query) differs from a missing one (<code>http://h/</code> has none)
     assert(Uri.decode(uri.path).value() == "/a b", "decoded");
     assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -28497,7 +29522,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var port: u16?
 </code></pre>
 <p>The port after the host, if the authority gives one.</p>
-<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
+<h4 id="path-8"><a class="header" href="#path-8">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
 <p>The path, possibly empty, with its percent-escapes.</p>
@@ -28509,13 +29534,13 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-21"><a class="header" href="#static-methods-21">Static methods</a></h3>
+<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
 <h4 id="parse-11"><a class="header" href="#parse-11">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
@@ -28556,7 +29581,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>

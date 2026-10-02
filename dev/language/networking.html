@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-65f7fe71.js";
+            window.path_to_searchindex_js = "../searchindex-813e9223.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-219e7a7f.js"></script>
+        <script src="../toc-f3579095.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -337,6 +337,11 @@ arrays of at most <code>size</code>, both read as a <code>for</code> loop asks f
 <code>to_string</code> makes of any value, as the global <code>print</code> does on standard
 output; <code>print_line</code> adds a <code>\n</code>. Both return an <code>IoResult&lt;void&gt;</code>, like
 <code>write_all</code>.</li>
+<li><code>io.ByteReader(bytes)</code> reads an array of bytes as a stream, and
+<code>io.ByteWriter()</code> collects what is written in its <code>bytes</code> array, for
+code that takes a stream when the data is in memory.</li>
+<li><code>compress.DecompressReader</code> and <code>compress.CompressWriter</code> wrap another
+stream (see <a href="compression.html">Compression and archives</a>).</li>
 <li>Another type gets them by providing those methods and declaring
 <code>extend MyStream with io.Reader;</code> or <code>extend MyStream with io.Writer;</code>.</li>
 <li><code>io.Print</code>, which gave only <code>print</code> and <code>print_line</code>, is deprecated: use
