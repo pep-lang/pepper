@@ -469,6 +469,12 @@ export struct HashMap<K, V> {
         return this;
     }
 
+    # Joins the short chains of a long map literal, as
+    # `Array._literal_then` does for arrays.
+    _literal_then(next: HashMap<K, V>): HashMap<K, V> {
+        return next;
+    }
+
     ## Maps `key` to `value`, adding a new entry or overwriting the value of
     ## an existing one.
     ##

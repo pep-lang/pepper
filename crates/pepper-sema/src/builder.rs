@@ -476,7 +476,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
     }
 }
 /// `[a, b, c]` is `_array_literal(a)._literal_append(b)._literal_append(c)`
-/// (runtime/array.pep). The element type is `element` when the literal
+/// (runtime/array.pep; a long literal is a tree of such chains, see
+/// `literals.rs`). The element type is `element` when the literal
 /// initializes a variable declared as an `Array` or `HashSet`
 /// (`long[] a = [1, 2]`), else the first element's type, inferred like any
 /// generic call's; each later element converts to it. A literal flowing into
@@ -495,16 +496,9 @@ fn array_literal(elements: &[ast::Expression], span: ast::Span, element: Option<
         Some(ty) => format!("_array_literal<{}>", ty),
         None => "_array_literal".to_string(),
     };
-    let mut result = Expression::FunctionCall { function, args: vec![typed_expression(first, element)?], loc: loc(span) };
-    for item in rest {
-        result = Expression::MethodCall {
-            this: Box::new(result),
-            method: "_literal_append".to_string(),
-            args: vec![typed_expression(item, element)?],
-            loc: loc(span),
-        };
-    }
-    Ok(result)
+    let start = Expression::FunctionCall { function, args: vec![typed_expression(first, element)?], loc: loc(span) };
+    let steps = rest.iter().map(|item| Ok(vec![typed_expression(item, element)?])).collect::<Result<Vec<_>, Diagnostic>>()?;
+    Ok(crate::literals::build(start, steps, "_literal_append", TypeName::auto(), loc(span)))
 }
 
 /// `[k1: v1, k2: v2]` is `_map_literal(k1, v1)._literal_insert(k2, v2)`
@@ -536,16 +530,9 @@ fn map_literal(
     let entry = |key: &ast::Expression, value: &ast::Expression| -> Result<Vec<Expression>, Diagnostic> {
         Ok(vec![typed_expression(key, key_type)?, typed_expression(value, value_type)?])
     };
-    let mut result = Expression::FunctionCall { function, args: entry(first_key, first_value)?, loc: loc(span) };
-    for (key, value) in rest {
-        result = Expression::MethodCall {
-            this: Box::new(result),
-            method: "_literal_insert".to_string(),
-            args: entry(key, value)?,
-            loc: loc(span),
-        };
-    }
-    Ok(result)
+    let start = Expression::FunctionCall { function, args: entry(first_key, first_value)?, loc: loc(span) };
+    let steps = rest.iter().map(|(key, value)| entry(key, value)).collect::<Result<Vec<_>, _>>()?;
+    Ok(crate::literals::build(start, steps, "_literal_insert", TypeName::auto(), loc(span)))
 }
 
 /// `expr` initializing a slot of type `ty`: a collection literal takes its

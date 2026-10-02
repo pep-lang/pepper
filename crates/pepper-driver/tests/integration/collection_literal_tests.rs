@@ -3,7 +3,7 @@
 //! prelude and JIT-executed through the entry function `test`; each checks
 //! that every reference it made was released.
 
-use crate::support::compile_jit_with_runtime;
+use crate::support::{compile_jit_with_runtime, jit_census};
 
 #[test]
 fn array_literals() {
@@ -171,4 +171,64 @@ test(): int {
         ),
         0
     );
+}
+
+/// Literals long enough that one call chain per element would overflow the
+/// stack: built as a tree of short chains (`pepper_sema::literals`), they
+/// compile on a test thread's default 2 MB stack, keep their order, convert
+/// to the slot's type, and release everything.
+#[test]
+fn long_literals_compile_on_a_small_stack() {
+    let numbers = |n: usize| (0..n).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+    let entries = |n: usize| (0..n).map(|i| format!("{}: {}", i, i * 2)).collect::<Vec<_>>().join(", ");
+    let words = (0..300).map(|i| format!("\"w{}\"", i)).collect::<Vec<_>>().join(", ");
+    let squares = (0..300).map(|i| format!("Square({})", i)).collect::<Vec<_>>().join(", ");
+    let source = format!(
+        r#"
+trait Shape {{
+    area(): int;
+}}
+struct Square {{
+    int side;
+    construct(side: int) {{ this.side = side; }}
+    area(): int {{ return side * side; }}
+}}
+extend Square with Shape;
+check(): int {{
+    var big = [{big}];
+    if (big.count != 30000) {{ return -1; }}
+    for (var i in 0..big.count) {{
+        if (big[i] != i as int) {{ return -2; }}
+    }}
+    long[] longs = [{numbers}];
+    if (!(longs.count == 300 && longs[299] == 299)) {{ return -3; }}
+    var words = [{words}];
+    if (!(words.count == 300 && words[0] == "w0" && words[299] == "w299")) {{ return -4; }}
+    Shape[] shapes = [{squares}];
+    if (!(shapes.count == 300 && shapes[17].area() == 289)) {{ return -5; }}
+    var map = [{entries}];
+    if (!(map.count == 300 && map[299] == 598)) {{ return -6; }}
+    HashMap<long, long> longs_map = [{entries}];
+    if (!(longs_map.count == 300 && longs_map[5] == 10)) {{ return -7; }}
+    var nested = [[{numbers}], [{numbers}]];
+    if (!(nested[1][299] == 299)) {{ return -8; }}
+    return 0;
+}}
+
+test(): int {{
+    return check();
+}}"#,
+        big = numbers(30000),
+        numbers = numbers(300),
+        entries = entries(300),
+    );
+    // The test thread's default size, set explicitly so RUST_MIN_STACK
+    // cannot hide a regression.
+    let (result, leaked) = std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || jit_census(&source))
+        .expect("spawn a test thread")
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+    assert_eq!((result, leaked), (0, 0));
 }

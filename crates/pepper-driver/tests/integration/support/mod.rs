@@ -129,45 +129,26 @@ pub fn scratch_name(test: &str) -> String {
 /// Compiles `source` with the runtime and JIT-runs its `test` function,
 /// returning what it returns.
 pub fn compile_jit_with_runtime(source: &str) -> i32 {
-    on_compiler_stack(|| {
-        let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
+    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
 {}", e));
-        let ctx = inkwell::context::Context::create();
-        let mut generator = CodeGenerator::new(&ctx, "test");
-        generator.jit_execute(&mut module, "test").expect("jit")
-    })
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.jit_execute(&mut module, "test").expect("jit")
 }
 
 /// Like [`compile_jit_with_runtime`], also returning the net change in live
 /// runtime allocations across the call: 0 when nothing leaked.
 pub fn jit_census(source: &str) -> (i32, i64) {
-    on_compiler_stack(|| {
-        let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
+    let mut module = sema(source).unwrap_or_else(|e| panic!("compile:
 {}", e));
-        let ctx = inkwell::context::Context::create();
-        let mut generator = CodeGenerator::new(&ctx, "test");
-        let ee = generator.jit_engine(&mut module).expect("jit");
-        let live_allocs = unsafe {
-            ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs").expect("_pep_live_allocs")
-        };
-        let before = unsafe { live_allocs.call() };
-        let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
-        let after = unsafe { live_allocs.call() };
-        (result, after - before)
-    })
-}
-
-/// Runs `f` on a thread with the driver's `STACK_SIZE` stack, the one the
-/// compiler runs on outside tests. A test thread gets 2 MB, and the compiler
-/// recurses over nested expressions (an array literal is a call chain one
-/// link per element), which a debug build overflows on a long literal.
-fn on_compiler_stack<R: Send>(f: impl FnOnce() -> R + Send) -> R {
-    std::thread::scope(|scope| {
-        std::thread::Builder::new()
-            .stack_size(pepper_driver::STACK_SIZE)
-            .spawn_scoped(scope, f)
-            .expect("spawn a compiler thread")
-            .join()
-            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-    })
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    let ee = generator.jit_engine(&mut module).expect("jit");
+    let live_allocs = unsafe {
+        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs").expect("_pep_live_allocs")
+    };
+    let before = unsafe { live_allocs.call() };
+    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
+    let after = unsafe { live_allocs.call() };
+    (result, after - before)
 }

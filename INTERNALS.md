@@ -496,12 +496,18 @@ with no extension, and `module_name()` is the output's stem.
     v2)` (`array_literal`, `map_literal`; the helpers are in
     `runtime/array.pep` and `runtime/hash.pep`). With no other type, the
     generic start function infers the element types from the first entry.
+    Every pass and codegen recurse down a chain, so a literal of more than
+    `literals::CHUNK` (16) steps is a balanced tree of short chains over
+    one collection instead: a `WithSubject` whose subject is the start
+    call and whose body joins chains on the `Subject` with
+    `_literal_then` (`crates/pepper-sema/src/literals.rs`), keeping the
+    depth logarithmic whatever the length.
     A variable declared as `Array<T>`, `HashSet<T>` or `HashMap<K, V>`
     types its literal in the builder (`typed_expression`), which also lets
     `[]` and `[:]` build an empty collection. Any other typed slot
     (argument, return, assignment) is handled by
     `convert_to_traits::convert_array_literal` / `convert_map_literal`,
-    which rebuild the chain from `Array<T>()` / `HashMap<K, V>()` and
+    which rebuild the literal from `Array<T>()` / `HashMap<K, V>()` and
     convert each element to the slot's element type. A `HashSet` slot takes
     an array through its `[Implicit]` constructor.
   - A range `a..b` or `a..>b` (parsed by `range`, between the shift and

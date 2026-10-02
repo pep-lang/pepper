@@ -565,6 +565,14 @@ export struct Array<T> {
         return this;
     }
 
+    # A literal too long for one chain is built as a balanced tree of short
+    # chains, all appending to the same Array, joined left to right by this
+    # (see `crates/pepper-sema/src/literals.rs`): `this` is built first, then
+    # `next`, and both are that Array.
+    _literal_then(next: Array<T>): Array<T> {
+        return next;
+    }
+
     static _min(a: ulong, b: ulong): ulong {
         if (a < b) {
             return a;

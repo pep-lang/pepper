@@ -6,6 +6,7 @@ pub mod enums;
 pub mod value_structs;
 pub mod value_types;
 pub mod interface;
+pub mod literals;
 pub mod member_lookup;
 pub(crate) mod errors;
 pub mod model;
