@@ -423,7 +423,8 @@ fn pep_fmt_rejects_bad_usage() {
     assert!(error.starts_with("pep-fmt: error: -w and --check need files\n"), "{error}");
     let (code, usage, _) = run_in(&directory, &["-h"]);
     assert_eq!(code, 0);
-    assert!(usage.starts_with("usage: pep-fmt [-w] [--check] [FILE | DIRECTORY]..."), "{usage}");
+    assert!(usage.contains("\nusage: pep-fmt [OPTIONS] [paths]...\n"), "{usage}");
+    assert!(usage.contains("  -w, --write  "), "{usage}");
 }
 
 #[test]

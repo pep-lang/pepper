@@ -1,0 +1,134 @@
+# Command-line options
+
+The `cli` module parses a program's command line. Declare each option and
+positional argument on a `cli.Parser`, call `parse`, then read the values
+through the handles the declarations returned. The help, `--version` and
+the error messages all come from the declarations. Bring it in with
+`import cli`; the full API is in the [reference](../reference/cli-module.md).
+
+```pepper
+{{#include ../../examples/cli-basics.pep}}
+```
+
+`greet --help` prints:
+
+```text
+Greets someone
+
+usage: greet [OPTIONS] [names]...
+
+Arguments:
+  <names>...  who to greet
+
+Options:
+  -g, --greeting <GREETING>  what to say [default: hello]
+  -l, --loud                 shout it
+  -n, --times <COUNT>        how many times to say it
+  -h, --help                 show this help
+  -V, --version              show the version
+```
+
+The raw arguments stay where they were: `main(args: String[])` receives
+them, and `process.arguments()` returns them. `parse` takes them as `main`
+receives them, program name first.
+
+## Declaring
+
+| Declaration | Handle | Reads |
+|-------------|--------|-------|
+| `flag(name, short_name, help)` | `Flag` | `is_set` and `occurrences` (properties) |
+| `option(name, short_name, help, value_name, default_value, required)` | `Argument` | `value()`, `value_or(fallback)`, `is_set` |
+| `multiple(name, short_name, help, value_name, required)` | `ArgumentList` | `values()`, `is_set` |
+| `positional(name, help, required, default_value)` | `Argument` | `value()`, `value_or(fallback)`, `is_set` |
+| `positionals(name, help, required)` | `ArgumentList` | `values()`, `is_set` |
+
+- An option's `name` is its long name without `--`; `short_name` is one
+  character without `-`, or empty for none. Pass the rest by
+  [name](functions.md#named-arguments): `option("output", "o",
+  "the executable to write", default_value = "a.out")`.
+- `value()` returns the value given, else the default; it panics when the
+  argument was left out and has no default, so use `value_or` or check
+  `is_set` for an optional one. `is_set` (a
+  [property](properties.md), like `occurrences` and `is_selected`) is false
+  for a value that came from the default.
+- Positional arguments fill in declaration order. A required one cannot
+  follow an optional one, and `positionals` takes every value that is left,
+  so it comes last.
+- `-h`/`--help` is always there, and `-V`/`--version` when the parser has a
+  `version`. Declaring `-h` or `-V` yourself takes the short name; the long
+  forms keep working.
+- A mistake in the declarations, such as a name declared twice or a short
+  name longer than one character, panics: it is a bug in the program, not
+  in its input.
+
+## On the command line
+
+- A value follows its option as `--output a.out`, `--output=a.out`,
+  `-o a.out`, `-oa.out` or `-o=a.out`. It is taken as it is, even when it
+  starts with `-`.
+- Short flags combine: `-vq` is `-v -q`, and `-vo a.out` gives `-v` and
+  then `-o a.out`. `-vvv` counts three `occurrences`.
+- Options and positional arguments mix in any order. `--` ends the
+  options, so `rm -- -file` removes a file named `-file`, and `-` alone is
+  a positional argument (by custom, standard input).
+- An option that takes one value keeps the last one given.
+- Values are Strings; parse numbers yourself (`int.parse`) and report a bad
+  one, as the example does.
+
+## Errors
+
+`parse` writes a clang-style error, the usage and a hint to standard error
+and returns false, so the program can exit with 2:
+
+```text
+greet: error: unknown option '--lound'; did you mean '--loud'?
+usage: greet [OPTIONS] [names]...
+Run 'greet --help' for more information.
+```
+
+The messages:
+
+- `unknown option '--x'` (with `did you mean '--y'?` for a near miss) and
+  `unknown option '-x'`
+- `missing value for '-o'`
+- `option '--loud' takes no value` (for `--loud=yes`)
+- `missing required option '--target'`, `missing required argument '<source>'`
+- `unexpected argument 'x'` when there is no positional argument left for it
+- `unknown command 'x'` and `missing command: expected 'add' or 'update'`
+
+`try_parse` does the same parse and writes nothing. It returns a
+`Result<String?>`: an error holding the message, some text when `--help` or
+`--version` asked for it (print it and exit with 0), or none when the
+arguments were parsed. Tests use it, and so can a program that reports
+errors its own way.
+
+## Subcommands
+
+`command(name, about)` declares a subcommand, as in `git add` or
+`pep-package update`, and returns its own `Parser` to declare its options
+and arguments on. The first argument that is not an option names the
+command; after `parse`, `is_selected` tells which command was given.
+
+```pepper
+{{#include ../../examples/cli-commands.pep}}
+```
+
+- A parser with commands needs one, and cannot have positional arguments
+  of its own.
+- Options before the command's name belong to the parent, and everything
+  after it to the command, so `pkg -v add x` works and `pkg add -v x` does
+  not.
+- `--help` after a command shows that command's help, and errors show its
+  usage.
+- Commands nest: a command's parser can declare commands too.
+
+## Not yet
+
+- **Declaring options as a struct**, with an attribute on each field
+  (`[Option("o")] var output: String;`), needs compile-time reflection
+  (#232). The builder above is the only style until then; the struct style
+  is tracked in [#362](https://github.com/justinboswell/pepper/issues/362).
+- Typed values (integers, `io.Path`): values are Strings.
+- Options that apply after a subcommand's name (clap's global options).
+- Windows-style `/option` forms: every platform uses `-` and `--`.
+- Generating shell completions.

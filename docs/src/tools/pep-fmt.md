@@ -27,7 +27,7 @@ pep-fmt < main.pep          # no files: standard input to standard output
 
 A directory stands for every `.pep` file under it, in name order, skipping
 directories whose names start with `.` (such as `.git` and the `.pep` build
-cache). `-w` rewrites only the files whose formatting changes. `--check`
+cache). `-w` (or `--write`) rewrites only the files whose formatting changes. `--check`
 changes nothing, prints the path of each file that `-w` would rewrite, and
 exits with status 1 if there is one, which suits a CI step. The two can be
 combined.
@@ -42,7 +42,8 @@ main.pep:2:14: error: expected ')'
 
 A file that cannot be read or written also exits with status 1, and an
 unknown option exits with status 2 after printing the usage (`pep-fmt -h`
-prints it too).
+prints the full help). pep-fmt parses its options with the
+[`cli` module](../language/cli.md).
 
 ## The style
 

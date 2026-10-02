@@ -2,7 +2,7 @@
 #
 #     pep-fmt < file.pep > formatted.pep    # standard input to standard output
 #     pep-fmt file.pep                      # a file's formatted text to standard output
-#     pep-fmt -w file.pep src/              # rewrite files that are not formatted
+#     pep-fmt -w file.pep src/              # rewrite files that are not formatted (--write)
 #     pep-fmt --check src/                  # list files that are not formatted
 #
 # A directory stands for every `.pep` file under it, skipping directories whose
@@ -16,44 +16,26 @@
 #
 #     pepper -I tools tools/pep-fmt/main.pep -o pep-fmt
 
+import cli;
 import [Directory, File, Path] from io;
 import syntax;
 import "format";
 
-# The help text. (A function: a module-scope `const` cannot hold a String.)
-usage(): String {
-    return "usage: pep-fmt [-w] [--check] [FILE | DIRECTORY]...\n\n"
-        + "With no files, formats standard input to standard output.\n\n"
-        + "  -w       rewrite each file that is not formatted\n"
-        + "  --check  list each file that is not formatted, and exit with 1 if any is\n"
-        + "  -h       show this help\n";
-}
-
 main(args: String[]): int {
-    var write = false;
-    var check = false;
+    var parser = cli.Parser("pep-fmt", "Formats Pepper source; with no files, standard input to standard output.");
+    var write = parser.flag("write", "w", "rewrite each file that is not formatted");
+    var check = parser.flag("check", help = "list each file that is not formatted, and exit with 1 if any is");
+    var sources = parser.positionals("paths", "files, and directories to search for .pep files");
+    if (!parser.parse(args)) {
+        return 2;
+    }
     var paths = Array<Path>();
-    ulong index = 1;
-    while (index < args.count) {
-        var part = args[index];
-        if (part == "-w") {
-            write = true;
-        } else if (part == "--check") {
-            check = true;
-        } else if (part == "-h" or part == "--help") {
-            File.stdout().write_all(usage());
-            return 0;
-        } else if (part.starts_with("-") and part.size > 1) {
-            File.stderr().write_all("pep-fmt: error: unknown option '" + part + "'\n" + usage());
-            return 2;
-        } else {
-            paths.append(Path(part));
-        }
-        index += 1;
+    for (var source in sources.values()) {
+        paths.append(Path(source));
     }
     if (paths.is_empty) {
-        if (write or check) {
-            File.stderr().write_all("pep-fmt: error: -w and --check need files\n" + usage());
+        if (write.is_set or check.is_set) {
+            File.stderr().write_all("pep-fmt: error: -w and --check need files\n" + parser.usage() + "\n");
             return 2;
         }
         return format_standard_input();
@@ -71,10 +53,10 @@ main(args: String[]): int {
     }
     var unformatted = false;
     for (var file in files) {
-        var result = format_file(file, write, check);
+        var result = format_file(file, write.is_set, check.is_set);
         if (result == FILE_FAILED) {
             failed = true;
-        } else if (result == FILE_CHANGED and check) {
+        } else if (result == FILE_CHANGED and check.is_set) {
             unformatted = true;
         }
     }
