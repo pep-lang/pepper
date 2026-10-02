@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-813e9223.js";
+            window.path_to_searchindex_js = "searchindex-6a9704c9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f3579095.js"></script>
+        <script src="toc-b23e31f5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, gzip and zlib compression, tar archives, command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -12492,6 +12492,90 @@ is tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362<
 <li>Generating shell completions.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cryptographic-hashes"><a class="header" href="#cryptographic-hashes">Cryptographic hashes</a></h1>
+<p>The <code>digest</code> module computes SHA-256, SHA-1 and BLAKE3 digests: fixed-size
+fingerprints of data, used to check that a download arrived intact, to name
+content by its hash, or to key a cache. Bring it in with <code>import digest</code>;
+the full API is in the <a href="#the-digest-module">reference</a>.</p>
+<pre><code class="language-pepper"># Cryptographic hashes: one-shot, incremental, and as hexadecimal text.
+import digest;
+
+main(): int {
+    # One call hashes a whole input, bytes or a String's UTF-8 bytes.
+    var id = digest.to_hex(digest.sha256("hello"));
+    assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
+
+    # A hasher takes the input in pieces, such as the blocks of a file as
+    # they are read; the digest does not depend on how it was split.
+    var hasher = digest.Blake3();
+    hasher.update("hel");
+    hasher.update("lo");
+    var whole = digest.blake3("hello");
+    assert(hasher.finish() == whole, "same digest");
+    assert(whole.count == 32, "32 bytes");
+
+    # git names a file's content by the SHA-1 of a header and the bytes.
+    u8[] nul = [0];
+    var git = digest.Sha1();
+    git.update("blob 6");
+    git.update(nul);
+    git.update("hello\n");
+    assert(git.finish_hex() == "ce013625030ba8dba906f756967f9e9ca394464a", "git blob id");
+    return 0;
+}
+</code></pre>
+<h2 id="one-shot-and-incremental"><a class="header" href="#one-shot-and-incremental">One-shot and incremental</a></h2>
+<p>Each hash has a one-shot function and a hasher type:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Hash</th><th>Function</th><th>Hasher</th><th>Digest size</th></tr>
+</thead>
+<tbody>
+<tr><td>SHA-256</td><td><code>digest.sha256(input)</code></td><td><code>digest.Sha256</code></td><td>32 bytes</td></tr>
+<tr><td>SHA-1</td><td><code>digest.sha1(input)</code></td><td><code>digest.Sha1</code></td><td>20 bytes</td></tr>
+<tr><td>BLAKE3</td><td><code>digest.blake3(input)</code></td><td><code>digest.Blake3</code></td><td>32 bytes</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>The input is a <code>u8[]</code>, or a <code>String</code>, which hashes its UTF-8 bytes
+(without a terminating NUL).</li>
+<li>A hasher takes the input in pieces: call <code>update</code> any number of times,
+then <code>finish</code> for the digest. Splitting the input differently gives the
+same digest. <code>finish</code> also resets the hasher, so it can hash another
+input; <code>reset</code> discards the input so far.</li>
+<li>A digest is a <code>u8[]</code>. <code>digest.to_hex(bytes)</code> writes it as lowercase
+hexadecimal, the way checksums are usually shown, and each hasher’s
+<code>finish_hex()</code> does both steps.</li>
+<li>An array literal passed straight to <code>update</code> is ambiguous between its
+<code>u8[]</code> and <code>String</code> overloads; give it a type first
+(<code>u8[] nul = [0]; hasher.update(nul);</code>).</li>
+</ul>
+<h2 id="which-hash"><a class="header" href="#which-hash">Which hash</a></h2>
+<ul>
+<li><strong>SHA-256</strong> is the common choice for published checksums and anything
+that must interoperate.</li>
+<li><strong>BLAKE3</strong> is faster and as strong; the compiler’s build cache keys its
+objects with it.</li>
+<li><strong>SHA-1</strong> is broken for collision resistance: someone can make two inputs
+with the same digest. Use it only where a format requires it, such as git
+object ids.</li>
+</ul>
+<p>None of these is the hash for a hash table: <code>HashMap</code> and <code>HashSet</code> use
+<a href="#hashing-and-equality"><code>hash&lt;T&gt;</code></a>, which is much faster but neither cryptographic nor
+stable between versions.</p>
+<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<ul>
+<li>The hashes are written in Pepper, with no link dependency. They run at a
+few hundred megabytes per second, below OpenSSL’s SHA-256 with CPU SHA
+instructions and the official BLAKE3, which uses SIMD and threads.</li>
+<li>BLAKE3’s keyed hashing, key derivation and extended output are not
+supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
+<li>The code is not hardened against timing side channels, which matters only
+when hashing secrets. There is no HMAC yet.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -13604,7 +13688,7 @@ passes the name on without using it</li>
 </code></pre>
 <p>The other errors are <code>'Deprecated' expects the replacement as a string</code>, <code>the replacement 'a b' is not a name</code>, <code>too many arguments to 'Deprecated': expected at most 2, have 3</code>, <code>duplicate 'Deprecated' attribute</code>, and
 <code>'Deprecated' cannot be applied to</code> an extension or a destructor.</p>
-<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<h2 id="limitations-2"><a class="header" href="#limitations-2">Limitations</a></h2>
 <ul>
 <li>The compiler does not report uses it writes for you: the <code>next()</code> and
 <code>current()</code> calls of a <code>for</code> loop, the <code>enter()</code> call of a <code>with</code> block,
@@ -25680,6 +25764,360 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li>a new array of the values, empty when none was given</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-digest-module"><a class="header" href="#the-digest-module">The digest module</a></h1>
+<p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.</p>
+<p>Bring it in with <code>import digest</code>. Each hash has an incremental hasher
+(<code>update</code> any number of times, then <code>finish</code>) and a one-shot function,
+and both take bytes (<code>u8[]</code>) or a <code>String</code> (its UTF-8 bytes). A digest
+is a <code>u8[]</code>; <code>to_hex</code> writes it as text.</p>
+<ul>
+<li><a href="#sha-256">SHA-256</a>: <code>Sha256</code>, <code>sha256</code></li>
+<li><a href="#sha-1">SHA-1</a>: <code>Sha1</code>, <code>sha1</code>, for formats that need it,
+such as git object ids</li>
+<li><a href="#blake3">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code></li>
+<li><a href="#hexadecimal">Hexadecimal</a>: <code>to_hex</code></li>
+</ul>
+<p>The implementations are portable Pepper with no link dependency; they
+are not hardened against timing side channels, which matters only when
+hashing secrets.</p>
+<p>For the hash tables of <code>HashMap</code> and <code>HashSet</code>, use <code>hash&lt;T&gt;</code> instead:
+it is much faster, but neither cryptographic nor stable between
+versions.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    main(): int {
+        var id = digest.to_hex(digest.sha256("hello"));
+        assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/digest/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/sha256.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="sha-256"><a class="header" href="#sha-256">SHA-256</a></h1>
+<p>SHA-256 (FIPS 180-4): 32-byte digests, as used to check downloads and
+sign data.</p>
+<p>Source: <code>runtime/digest/sha256.pep</code></p>
+<h2 id="sha256"><a class="header" href="#sha256">Sha256</a></h2>
+<pre><code class="language-pepper">struct Sha256
+</code></pre>
+<p>An incremental SHA-256 hasher: feed it bytes with <code>update</code>, any number of
+times and in pieces of any size, then read the 32-byte digest with
+<code>finish</code>.</p>
+<p>The digest of the input is the same however it was split between
+<code>update</code> calls. <code>finish</code> resets the hasher, so it can hash a new input.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    var hasher = digest.Sha256();
+    hasher.update("hello ");
+    hasher.update("world");
+    assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
+</code></pre>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Discards the input given so far, returning the hasher to its initial
+state.</p>
+<h4 id="update-2"><a class="header" href="#update-2">update</a></h4>
+<pre><code class="language-pepper">update(bytes: u8[])
+</code></pre>
+<p>Hashes <code>bytes</code> as the next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to add</li>
+</ul>
+<h4 id="update-1-1"><a class="header" href="#update-1-1">update</a></h4>
+<pre><code class="language-pepper">update(text: String)
+</code></pre>
+<p>Hashes the UTF-8 bytes of <code>text</code> (without a terminating NUL) as the
+next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to add</li>
+</ul>
+<h4 id="finish-2"><a class="header" href="#finish-2">finish</a></h4>
+<pre><code class="language-pepper">finish(): u8[]
+</code></pre>
+<p>Returns the 32-byte digest of the input given since the hasher was
+created or last reset, then resets it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest, most significant byte first</li>
+</ul>
+<h4 id="finish_hex"><a class="header" href="#finish_hex">finish_hex</a></h4>
+<pre><code class="language-pepper">finish_hex(): String
+</code></pre>
+<p>Returns the digest as <code>finish</code> does, written as 64 lowercase
+hexadecimal digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest in hexadecimal</li>
+</ul>
+<h2 id="sha256-2"><a class="header" href="#sha256-2">sha256</a></h2>
+<pre><code class="language-pepper">sha256(bytes: u8[]): u8[]
+</code></pre>
+<p>Returns the SHA-256 digest of <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    var empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    assert(digest.to_hex(digest.sha256(Array&lt;u8&gt;())) == empty, "SHA-256 of nothing");
+</code></pre>
+<h2 id="sha256-3"><a class="header" href="#sha256-3">sha256</a></h2>
+<pre><code class="language-pepper">sha256(text: String): u8[]
+</code></pre>
+<p>Returns the SHA-256 digest of the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    var abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    assert(digest.to_hex(digest.sha256("abc")) == abc, "FIPS 180-4 example");
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/sha1.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="sha-1"><a class="header" href="#sha-1">SHA-1</a></h1>
+<p>SHA-1 (FIPS 180-4): 20-byte digests, as git uses for object ids. SHA-1
+is broken for collision resistance; use it to read existing formats,
+and SHA-256 or BLAKE3 for anything new.</p>
+<p>Source: <code>runtime/digest/sha1.pep</code></p>
+<h2 id="sha1"><a class="header" href="#sha1">Sha1</a></h2>
+<pre><code class="language-pepper">struct Sha1
+</code></pre>
+<p>An incremental SHA-1 hasher: feed it bytes with <code>update</code>, any number of
+times and in pieces of any size, then read the 20-byte digest with
+<code>finish</code>.</p>
+<p>SHA-1 is not collision resistant: someone can make two inputs with the
+same digest. Use it only where a format requires it, such as git object
+ids. <code>finish</code> resets the hasher, so it can hash a new input.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    # The id git gives an empty file ("blob 0" and a NUL byte).
+    u8[] nul = [0];
+    var hasher = digest.Sha1();
+    hasher.update("blob 0");
+    hasher.update(nul);
+    assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
+</code></pre>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Discards the input given so far, returning the hasher to its initial
+state.</p>
+<h4 id="update-3"><a class="header" href="#update-3">update</a></h4>
+<pre><code class="language-pepper">update(bytes: u8[])
+</code></pre>
+<p>Hashes <code>bytes</code> as the next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to add</li>
+</ul>
+<h4 id="update-1-2"><a class="header" href="#update-1-2">update</a></h4>
+<pre><code class="language-pepper">update(text: String)
+</code></pre>
+<p>Hashes the UTF-8 bytes of <code>text</code> (without a terminating NUL) as the
+next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to add</li>
+</ul>
+<h4 id="finish-3"><a class="header" href="#finish-3">finish</a></h4>
+<pre><code class="language-pepper">finish(): u8[]
+</code></pre>
+<p>Returns the 20-byte digest of the input given since the hasher was
+created or last reset, then resets it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest, most significant byte first</li>
+</ul>
+<h4 id="finish_hex-1"><a class="header" href="#finish_hex-1">finish_hex</a></h4>
+<pre><code class="language-pepper">finish_hex(): String
+</code></pre>
+<p>Returns the digest as <code>finish</code> does, written as 40 lowercase
+hexadecimal digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest in hexadecimal</li>
+</ul>
+<h2 id="sha1-2"><a class="header" href="#sha1-2">sha1</a></h2>
+<pre><code class="language-pepper">sha1(bytes: u8[]): u8[]
+</code></pre>
+<p>Returns the SHA-1 digest of <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 20-byte digest</li>
+</ul>
+<h2 id="sha1-3"><a class="header" href="#sha1-3">sha1</a></h2>
+<pre><code class="language-pepper">sha1(text: String): u8[]
+</code></pre>
+<p>Returns the SHA-1 digest of the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 20-byte digest</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d", "FIPS 180-4 example");
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/blake3.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="blake3"><a class="header" href="#blake3">BLAKE3</a></h1>
+<p>BLAKE3: 32-byte digests, faster than SHA-256 in hardware without SHA
+instructions, and the hash the compiler’s build cache keys objects with.</p>
+<p>Source: <code>runtime/digest/blake3.pep</code></p>
+<h2 id="blake3-1"><a class="header" href="#blake3-1">Blake3</a></h2>
+<pre><code class="language-pepper">struct Blake3
+</code></pre>
+<p>An incremental BLAKE3 hasher: feed it bytes with <code>update</code>, any number of
+times and in pieces of any size, then read the 32-byte digest with
+<code>finish</code>.</p>
+<p>This is a portable implementation of the default hash mode, one block
+at a time; it does not use SIMD or threads, so it runs well below the
+speed of the official C and Rust implementations. The digests are the
+same. <code>finish</code> resets the hasher, so it can hash a new input.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    var hasher = digest.Blake3();
+    hasher.update("hello ");
+    hasher.update("world");
+    assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
+</code></pre>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Discards the input given so far, returning the hasher to its initial
+state.</p>
+<h4 id="update-4"><a class="header" href="#update-4">update</a></h4>
+<pre><code class="language-pepper">update(bytes: u8[])
+</code></pre>
+<p>Hashes <code>bytes</code> as the next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to add</li>
+</ul>
+<h4 id="update-1-3"><a class="header" href="#update-1-3">update</a></h4>
+<pre><code class="language-pepper">update(text: String)
+</code></pre>
+<p>Hashes the UTF-8 bytes of <code>text</code> (without a terminating NUL) as the
+next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to add</li>
+</ul>
+<h4 id="finish-4"><a class="header" href="#finish-4">finish</a></h4>
+<pre><code class="language-pepper">finish(): u8[]
+</code></pre>
+<p>Returns the 32-byte digest of the input given since the hasher was
+created or last reset, then resets it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest</li>
+</ul>
+<h4 id="finish_hex-2"><a class="header" href="#finish_hex-2">finish_hex</a></h4>
+<pre><code class="language-pepper">finish_hex(): String
+</code></pre>
+<p>Returns the digest as <code>finish</code> does, written as 64 lowercase
+hexadecimal digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest in hexadecimal</li>
+</ul>
+<h2 id="blake3-3"><a class="header" href="#blake3-3">blake3</a></h2>
+<pre><code class="language-pepper">blake3(bytes: u8[]): u8[]
+</code></pre>
+<p>Returns the BLAKE3 digest of <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+    assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of nothing");
+</code></pre>
+<h2 id="blake3-4"><a class="header" href="#blake3-4">blake3</a></h2>
+<pre><code class="language-pepper">blake3(text: String): u8[]
+</code></pre>
+<p>Returns the BLAKE3 digest of the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/hex.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="hexadecimal"><a class="header" href="#hexadecimal">Hexadecimal</a></h1>
+<p>Hexadecimal text for digests.</p>
+<p>Source: <code>runtime/digest/hex.pep</code></p>
+<h2 id="to_hex"><a class="header" href="#to_hex">to_hex</a></h2>
+<pre><code class="language-pepper">to_hex(bytes: u8[]): String
+</code></pre>
+<p>Returns <code>bytes</code> as lowercase hexadecimal text, two digits per byte, the
+way checksums and git object ids are usually written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to write, such as a digest from <code>finish</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a String of <code>2 * bytes.count</code> characters from <code>0-9a-f</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import digest;
+
+    assert(digest.to_hex([0, 15, 255]) == "000fff", "two digits per byte");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -25738,7 +26176,7 @@ threads.</p>
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -25755,7 +26193,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -25964,7 +26402,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -25983,7 +26421,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -26308,7 +26746,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26317,7 +26755,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -26471,12 +26909,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -26584,7 +27022,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26593,7 +27031,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -26805,7 +27243,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -26829,7 +27267,7 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26918,7 +27356,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -26984,12 +27422,12 @@ have no defined order, as HTTP allows.</p>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -27360,7 +27798,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -27398,7 +27836,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -27462,7 +27900,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -27633,7 +28071,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -27745,7 +28183,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -27764,7 +28202,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -28417,7 +28855,7 @@ advances that variable.</p>
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -28429,7 +28867,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -28577,7 +29015,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -28757,7 +29195,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -29201,7 +29639,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -29219,7 +29657,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -29534,7 +29972,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -29581,7 +30019,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
