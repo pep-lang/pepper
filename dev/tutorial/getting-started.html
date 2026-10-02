@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
+            window.path_to_searchindex_js = "../searchindex-0d7c585c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7cac40fa.js"></script>
@@ -354,6 +354,11 @@ install.</p>
 the editor shows the call it stands for as an inlay hint (<code>Path(</code> before
 <code>"notes.txt"</code> and <code>)</code> after), and hovering the value says so. The
 <code>pepper.inlayHints.implicitConversions</code> setting turns the hints off.</li>
+<li>A literal passed by position shows the name of its parameter as an inlay
+hint (<code>resize(width: 800, height: 600)</code>); the
+<code>pepper.inlayHints.parameterNames</code> setting turns these off. Inside a
+call’s parentheses, completion offers the parameter names to
+<a href="../language/functions.html#named-arguments">name</a> (<code>width = </code>).</li>
 <li>Hover and go to definition also work where the compiler has not checked
 the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on

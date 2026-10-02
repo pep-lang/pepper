@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
+            window.path_to_searchindex_js = "../searchindex-0d7c585c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7cac40fa.js"></script>
@@ -411,7 +411,9 @@ passed to their parameters.</li>
 <li><strong>Everywhere a call is.</strong> Free functions, methods, static methods,
 constructors (a <code>this.x</code> parameter is named <code>x</code>), extension methods, enum
 methods, generic functions, and calls through a <a href="traits-and-extensions.html">trait</a>
-value, which use the trait’s parameter names.</li>
+value, which use the trait’s parameter names. A method that implements a
+trait should use the trait’s names, so a call names the same arguments
+either way: a different name is a warning (<code>parameter 'factor' of 'area' is named 'scale' in trait 'Shape'</code>) whose fix renames the parameter.</li>
 <li><strong>Overloads.</strong> A member of an <a href="overloading.html">overload set</a> without a
 parameter of a given name is not a candidate, so names can pick between
 overloads.</li>

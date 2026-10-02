@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
+            window.path_to_searchindex_js = "../searchindex-0d7c585c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7cac40fa.js"></script>
@@ -393,6 +393,18 @@ extension, with a note at the trait’s method:</p>
       |        ^~~~~~
 main.pep:2:5: note: 'area' declared here
     2 |     area(): int;
+      |     ^~~~
+</code></pre>
+<p>A method that implements a trait should name its parameters as the trait
+does, since a call through a value of the trait type
+<a href="functions.html#named-arguments">names its arguments</a> with the trait’s
+names. A different name is a warning, whose fix renames the parameter and
+its uses:</p>
+<pre><code class="language-text">main.pep:8:10: warning: parameter 'factor' of 'area' is named 'scale' in trait 'Shape'
+    8 |     area(factor: int): int { return side * side * factor; }
+      |          ^~~~~~
+main.pep:2:5: note: 'area' declared here
+    2 |     area(scale: int): int;
       |     ^~~~
 </code></pre>
 <h3 id="default-method-bodies"><a class="header" href="#default-method-bodies">Default method bodies</a></h3>

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-25f22dfc.js";
+            window.path_to_searchindex_js = "searchindex-0d7c585c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7cac40fa.js"></script>
@@ -464,6 +464,11 @@ install.</p>
 the editor shows the call it stands for as an inlay hint (<code>Path(</code> before
 <code>"notes.txt"</code> and <code>)</code> after), and hovering the value says so. The
 <code>pepper.inlayHints.implicitConversions</code> setting turns the hints off.</li>
+<li>A literal passed by position shows the name of its parameter as an inlay
+hint (<code>resize(width: 800, height: 600)</code>); the
+<code>pepper.inlayHints.parameterNames</code> setting turns these off. Inside a
+call’s parentheses, completion offers the parameter names to
+<a href="#named-arguments">name</a> (<code>width = </code>).</li>
 <li>Hover and go to definition also work where the compiler has not checked
 the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
@@ -2512,7 +2517,9 @@ passed to their parameters.</li>
 <li><strong>Everywhere a call is.</strong> Free functions, methods, static methods,
 constructors (a <code>this.x</code> parameter is named <code>x</code>), extension methods, enum
 methods, generic functions, and calls through a <a href="#traits-and-extensions">trait</a>
-value, which use the trait’s parameter names.</li>
+value, which use the trait’s parameter names. A method that implements a
+trait should use the trait’s names, so a call names the same arguments
+either way: a different name is a warning (<code>parameter 'factor' of 'area' is named 'scale' in trait 'Shape'</code>) whose fix renames the parameter.</li>
 <li><strong>Overloads.</strong> A member of an <a href="#overloading-1">overload set</a> without a
 parameter of a given name is not a candidate, so names can pick between
 overloads.</li>
@@ -7258,6 +7265,18 @@ extension, with a note at the trait’s method:</p>
       |        ^~~~~~
 main.pep:2:5: note: 'area' declared here
     2 |     area(): int;
+      |     ^~~~
+</code></pre>
+<p>A method that implements a trait should name its parameters as the trait
+does, since a call through a value of the trait type
+<a href="#named-arguments">names its arguments</a> with the trait’s
+names. A different name is a warning, whose fix renames the parameter and
+its uses:</p>
+<pre><code class="language-text">main.pep:8:10: warning: parameter 'factor' of 'area' is named 'scale' in trait 'Shape'
+    8 |     area(factor: int): int { return side * side * factor; }
+      |          ^~~~~~
+main.pep:2:5: note: 'area' declared here
+    2 |     area(scale: int): int;
       |     ^~~~
 </code></pre>
 <h3 id="default-method-bodies"><a class="header" href="#default-method-bodies">Default method bodies</a></h3>
@@ -12734,8 +12753,9 @@ variable to turn colors off. Output that goes to a file or a pipe is never
 colored.</p>
 <p>Warnings do not stop the build, and the compiler prints them whether or not
 it also finds an error. Besides the linker’s own warnings, which the compiler
-passes through (see <a href="#linking">Linking</a>), the only warnings today are
-deprecations.</p>
+passes through (see <a href="#linking">Linking</a>), the warnings today are
+deprecations and a method whose parameter names differ from its trait’s
+(see <a href="#traits">Traits</a>).</p>
 <h2 id="deprecations"><a class="header" href="#deprecations">Deprecations</a></h2>
 <p>A use of a declaration marked <code>[Deprecated("message")]</code> warns at the name,
 with the message and a note at the declaration. When the attribute names a

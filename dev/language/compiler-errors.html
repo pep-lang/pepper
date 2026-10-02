@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-25f22dfc.js";
+            window.path_to_searchindex_js = "../searchindex-0d7c585c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-7cac40fa.js"></script>
@@ -261,8 +261,9 @@ variable to turn colors off. Output that goes to a file or a pipe is never
 colored.</p>
 <p>Warnings do not stop the build, and the compiler prints them whether or not
 it also finds an error. Besides the linker’s own warnings, which the compiler
-passes through (see <a href="linking.html">Linking</a>), the only warnings today are
-deprecations.</p>
+passes through (see <a href="linking.html">Linking</a>), the warnings today are
+deprecations and a method whose parameter names differ from its trait’s
+(see <a href="traits-and-extensions.html#traits">Traits</a>).</p>
 <h2 id="deprecations"><a class="header" href="#deprecations">Deprecations</a></h2>
 <p>A use of a declaration marked <code>[Deprecated("message")]</code> warns at the name,
 with the message and a note at the declaration. When the attribute names a
