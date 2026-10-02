@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
+            window.path_to_searchindex_js = "../searchindex-b64bb7eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -439,6 +439,45 @@ wait park the task rather than blocking its worker.</p>
 <pre><code class="language-pepper">    var output = process.Command("echo").argument("hello").run().value();
     assert(output.status.success(), "echo succeeds");
     assert(output.stdout == "hello\n", "and prints its argument");
+</code></pre>
+<h4 id="exec"><a class="header" href="#exec">exec</a></h4>
+<pre><code class="language-pepper">exec(): io.IoError
+</code></pre>
+<p>Replaces the running program with this one, as a shell’s <code>exec</code>
+does: the program receives this process’s signals, and its exit
+status becomes this process’s own. A launcher that only hands its
+command line on to another program, such as <code>pepper</code>, ends this way.</p>
+<p>On POSIX the program takes over this process (<code>execvp</code>): it keeps
+the process id, the standard streams and every other descriptor not
+marked close-on-exec, and nothing after the call runs. Windows cannot
+replace a process, so there the program is started with the standard
+streams inherited and waited for, and this process then ends with its
+exit status, as <code>process.exit</code> does. While it waits, this process
+ignores Ctrl-C and Ctrl-Break, which the program, sharing the
+console, receives and handles itself.</p>
+<p>Output <code>print</code> has buffered is flushed first. The standard streams
+must be left inherited: no process remains to hold a pipe’s other
+end. When the call fails, the process carries on unchanged, in its
+own working directory.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>only when the program cannot be started: why, as for <code>spawn()</code>, or an error with <code>is_invalid_input()</code> when a standard stream was set to something other than <code>Stream.Inherit</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import process;
+
+    main(args: String[]): int {
+        # Run git with this program's arguments, as if it were git.
+        var git = process.Command("git");
+        ulong index = 1;
+        while (index &lt; args.count) {
+            git.argument(args[index]);
+            index += 1;
+        }
+        var error = git.exec();
+        print($"cannot run git: {error.message}");
+        return 1;
+    }
 </code></pre>
 
                     </main>

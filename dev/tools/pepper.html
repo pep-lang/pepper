@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
+            window.path_to_searchindex_js = "../searchindex-b64bb7eb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -226,9 +226,11 @@ installed next to <code>pepper</code> win over others with the same name, and an
 program named <code>pep-&lt;name&gt;</code> on the <code>PATH</code> adds the command <code>&lt;name&gt;</code>: a tool of
 your own becomes <code>pepper &lt;name&gt;</code> once it is installed. On Linux and macOS
 only files with an execute permission count.</p>
-<p>The command runs with <code>pepper</code>’s own standard input, output and error, and
-<code>pepper</code> exits with its exit status (<code>128 + n</code> when signal <code>n</code> ended it, as a
-shell reports it). A command name is lowercase letters, digits, <code>-</code> and <code>_</code>;
+<p>The command takes <code>pepper</code>’s place, with its standard input, output and
+error: on Linux and macOS <code>pepper</code> execs it, so signals such as Ctrl-C reach
+the command directly and its exit status is <code>pepper</code>’s. Windows cannot
+replace a process, so there <code>pepper</code> waits for the command, leaves Ctrl-C
+to it, and exits with its exit status. A command name is lowercase letters, digits, <code>-</code> and <code>_</code>;
 anything else, such as a path, is not a command.</p>
 <p>An unknown command is an error that suggests the closest command and lists
 the ones <code>pepper</code> found:</p>
