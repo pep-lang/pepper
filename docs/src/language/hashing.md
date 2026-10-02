@@ -3,6 +3,8 @@
 `HashMap<K, V>` and `HashSet<K>` find a key by hashing it with `hash<K>`
 and comparing it with `==`. What those two mean for a type decides which keys
 count as the same.
+`OrderedMap<K, V>` finds keys the same way. For maps that keep their keys
+in order, see [Maps and sets](maps.md).
 
 | Key type | `==` | `hash<K>` |
 | --- | --- | --- |

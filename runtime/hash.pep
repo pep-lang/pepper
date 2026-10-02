@@ -508,6 +508,23 @@ export struct HashMap<K, V> {
         return __default<V>();
     }
 
+    ## Returns the value stored for `key`, or none when `key` is absent.
+    ## Expected O(1).
+    ##
+    ## @param key the key to look up
+    ## @returns the value for `key`, or none when absent
+    ## @example
+    ##     if (ages.try_get("ada") is Some(age)) {
+    ##         print($"{age}");
+    ##     }
+    try_get(key: K): V? {
+        long slot = _table._find_slot(key);
+        if (slot >= 0) {
+            return Optional<V>.some(_table._values._data[slot]);
+        }
+        return Optional<V>.none();
+    }
+
     ## Removes the entry for `key`, releasing the map's references to its key
     ## and value. Does nothing when `key` is absent.
     ##

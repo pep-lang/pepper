@@ -136,10 +136,12 @@ export _pep_free(p: __ptr<void>) {
 export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
     # C realloc preserves contents up to min(prev,new); net-zero on the
     # counter. The extension region is uninitialized — zero it so fresh
-    var np = realloc(p, new_size);
+    # Never ask for 0 bytes (an Array of a zero-size type): realloc(p, 0)
+    # may free `p` and return null, which the counter would not see.
+    var np = realloc(p, new_size > 0 ? new_size : 1);
     if (np != __null) {
         # realloc(null, n) is a fresh allocation; the counter must see it.
-        if (p == __null && new_size > 0) {
+        if (p == __null) {
             __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
         }
         if (new_size > prev_size) {

@@ -291,6 +291,28 @@ value. Expected O(1).
 **Returns**
 - the value for `key`, or the default of `V` when absent
 
+#### try_get
+
+```pepper
+try_get(key: K): V?
+```
+
+Returns the value stored for `key`, or none when `key` is absent.
+Expected O(1).
+
+**Parameters**
+- `key` — the key to look up
+
+**Returns**
+- the value for `key`, or none when absent
+
+**Example**
+```pepper
+    if (ages.try_get("ada") is Some(age)) {
+        print($"{age}");
+    }
+```
+
 #### remove
 
 ```pepper
