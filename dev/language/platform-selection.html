@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
+            window.path_to_searchindex_js = "../searchindex-6d2a303d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -187,8 +187,8 @@ Linux-specific constant, a type whose size differs between operating systems.
 The <code>[Target(...)]</code> attribute keeps a declaration or a block only when you
 compile for a matching platform, so one source file can hold every platform’s
 version side by side.</p>
-<p>The target is always the platform you compile on: Pepper does not
-cross-compile yet.</p>
+<p>The target is the platform you compile on, unless you name another with
+<code>--target</code> (see <a href="#cross-compiling">Cross-compiling</a> below).</p>
 <h2 id="writing-a-condition"><a class="header" href="#writing-a-condition">Writing a condition</a></h2>
 <p><code>Target</code> takes one boolean condition built from two predicates:</p>
 <ul>
@@ -334,6 +334,56 @@ brackets hold one attribute: <code>[OS(Windows)]</code> and
 <li>Struct fields cannot carry <code>[Target(...)]</code>. Select the whole struct instead,
 as <code>Cpu</code> does in the first example.</li>
 </ul>
+<h2 id="cross-compiling"><a class="header" href="#cross-compiling">Cross-compiling</a></h2>
+<p><code>--target &lt;triple&gt;</code> compiles for another platform: <code>[Target(...)]</code> selects
+that platform’s code, and the compiler emits that platform’s machine code
+and object format. The supported targets are each OS on each architecture:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Triple</th><th>OS</th><th>Arch</th></tr>
+</thead>
+<tbody>
+<tr><td><code>x86_64-unknown-linux-gnu</code></td><td>Linux</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-unknown-linux-gnu</code></td><td>Linux</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-apple-darwin</code></td><td>macOS</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-apple-darwin</code></td><td>macOS</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-pc-windows-msvc</code></td><td>Windows</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-pc-windows-msvc</code></td><td>Windows</td><td><code>aarch64</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>clang’s other spellings work too: <code>arm64</code> for <code>aarch64</code>, <code>amd64</code> for
+<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>). Any
+other triple is an error that lists these.</p>
+<pre><code class="language-sh">pep-build --target aarch64-unknown-linux-gnu main.pep -o main
+</code></pre>
+<p>Linking an executable for another platform needs that platform’s system
+libraries and LLVM’s linker, <code>lld</code>: the compiler looks for it beside clang,
+in its LLVM install and on the <code>PATH</code>, also under the versioned name
+Ubuntu’s <code>lld-20</code> package uses (<code>ld.lld-20</code>). Name
+the directory that holds the libraries (the sysroot) with <code>--sysroot &lt;dir&gt;</code>,
+or set <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code>, the triple in capitals with <code>_</code> for each
+<code>-</code> (<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code>):</p>
+<ul>
+<li><strong>Linux:</strong> a directory with the target’s glibc and GCC runtime
+(<code>/usr/aarch64-linux-gnu</code> from Debian’s or Ubuntu’s
+<code>libc6-dev-arm64-cross</code> and <code>libgcc-13-dev-arm64-cross</code>, which clang
+also finds without <code>--sysroot</code>).</li>
+<li><strong>macOS:</strong> a macOS SDK (<code>MacOSX.sdk</code>).</li>
+<li><strong>Windows:</strong> a directory laid out like a Visual Studio install, with the
+MSVC libraries and the Windows SDK, as
+<a href="https://github.com/Jake-Shadle/xwin">xwin</a> <code>splat --use-winsysroot-style</code>
+writes it.</li>
+</ul>
+<p>When the link fails, the error ends with a note naming what is missing:</p>
+<pre><code class="language-text">note: linking for 'x86_64-pc-windows-msvc' needs that platform's system libraries and LLVM's linker (lld): pass '--sysroot &lt;dir&gt;' or set PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC
+</code></pre>
+<p>The <code>-m</code> options are read for the target: <code>-mcpu</code> is an AArch64 option
+and <code>-march=x86-64-v3</code> an x86 one, and <code>native</code>, which names the CPU of the
+machine you compile on, is an error for a target of another architecture.</p>
+<p>The compiler only builds for the target; copy the executable to a machine
+of that platform to run it.</p>
 
                     </main>
 

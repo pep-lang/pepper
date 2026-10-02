@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
+            window.path_to_searchindex_js = "../searchindex-6d2a303d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -325,6 +325,8 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>. Without it, <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when set. At <code>-O2</code> and <code>-O3</code> the whole program is also optimized together once every file is compiled.</td></tr>
 <tr><td><code>--lto=off</code></td><td>At <code>-O2</code> and <code>-O3</code>, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. <code>--lto=full</code> turns it on at <code>-O1</code>.</td></tr>
 <tr><td><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>Generate code for a CPU, as clang’s options of the same names do. On x86-64, <code>-march</code> names the CPU (<code>x86-64-v3</code>, <code>znver4</code>, <code>native</code> for the machine compiling). On AArch64, <code>-mcpu</code> names the CPU (<code>apple-m2</code>, <code>native</code>) and <code>-march</code> the architecture (<code>armv8.2-a+crypto</code>). <code>-mtune</code> only changes scheduling. <code>-m&lt;feature&gt;</code> adds a feature (<code>-mavx2</code>) and <code>-mno-&lt;feature&gt;</code> removes one. Without them, the program runs on any machine of its kind: clang’s default CPU (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64).</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform (<code>aarch64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>, <code>aarch64-unknown-linux-gnu</code>); see <a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a>.</td></tr>
+<tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The other platform’s system libraries, for linking with <code>--target</code>. Without it, <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when set.</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>, optimized at the <code>-O</code> level.</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
 <tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
