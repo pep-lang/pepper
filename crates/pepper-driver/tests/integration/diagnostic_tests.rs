@@ -5050,3 +5050,44 @@ fn export_names_must_differ() {
          note: give one a different C name with [Export(name = \"...\")]"
     );
 }
+
+#[test]
+fn build_option_value_that_is_not_an_integer() {
+    assert_eq!(
+        error_of_files_with(
+            "build_option_not_an_integer",
+            "[Target(BuildOption(LEVEL) >= 2)]\nextern int trace();\nmain(): int {\n    return 0;\n}\n",
+            &[],
+            &["-D", "LEVEL=high"]
+        ),
+        "main.pep:1:28: error: build option 'LEVEL' is 'high', which is not an integer\n\
+         \x20   1 | [Target(BuildOption(LEVEL) >= 2)]\n\
+         \x20     |                            ^~~~"
+    );
+}
+
+#[test]
+fn build_option_compared_with_something_that_is_not_a_literal() {
+    assert_eq!(
+        error_of("build_option_not_a_literal", "[Target(BuildOption(LEVEL) == HIGH)]\nextern int trace();\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:31: error: build option 'LEVEL' can only be compared with a literal: a number, 'true' or 'false', or a string\n\
+         \x20   1 | [Target(BuildOption(LEVEL) == HIGH)]\n\
+         \x20     |                               ^~~~"
+    );
+    assert_eq!(
+        error_of("build_options_compared", "[Target(BuildOption(A) == BuildOption(B))]\nextern int trace();\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:24: error: '==' cannot compare two build options; compare a 'BuildOption(...)' with a literal\n\
+         \x20   1 | [Target(BuildOption(A) == BuildOption(B))]\n\
+         \x20     |                        ^~~~~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn build_option_with_an_invalid_name() {
+    assert_eq!(
+        error_of("build_option_invalid_name", "[BuildOption(\"2FAST\")]\nextern int trace();\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:14: error: invalid build option name '2FAST'; a name is a letter or '_' followed by letters, digits and '_'\n\
+         \x20   1 | [BuildOption(\"2FAST\")]\n\
+         \x20     |              ^~~~~~~"
+    );
+}

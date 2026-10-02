@@ -61,6 +61,14 @@ export struct Target {
     const condition: String;
 }
 
+## Keeps a declaration only when the build defines a build option with
+## `-D`: `[BuildOption("USE_ZLIB")]` is `[Target(BuildOption(USE_ZLIB))]`.
+[Attribute]
+export struct BuildOption {
+    ## The build option's name, such as `USE_ZLIB`.
+    const name: String;
+}
+
 ## Marks the `if` or `match` arm below it as the branch usually taken,
 ## so the optimizer lays it out as the straight-line path.
 [Attribute]

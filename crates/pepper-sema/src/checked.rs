@@ -134,12 +134,12 @@ pub struct CheckedRuntime {
     pub aliases: Vec<TypeAliasDef>,
 }
 
-/// What identifies a checked runtime: the target platform, whose
-/// `[Target(...)]` filters it went through, and each runtime file's place in
+/// What identifies a checked runtime: the target platform and build
+/// options, whose `[Target(...)]` filters it went through, and each runtime file's place in
 /// the program, name, namespace (which its mangled names carry, and which
 /// depends on where the compiler runs) and text. Programs that load the
 /// same runtime files in the same places for one platform share one.
-type RuntimeKey = ((String, String), Vec<(usize, String, String, String)>);
+type RuntimeKey = ((String, String, crate::passes::platform::BuildOptions), Vec<(usize, String, String, String)>);
 
 /// The runtimes checked so far in this process: the test harnesses and the
 /// language server check many programs against one runtime.
@@ -204,7 +204,8 @@ fn empty(program: &Program) -> Module {
 /// process, else from `store`.
 pub fn checked_runtime(program: &Program, in_runtime: &[bool], store: Option<&dyn RuntimeStore>) -> Result<Arc<CheckedRuntime>, Diagnostic> {
     let files = program.files.iter().enumerate().filter(|(i, _)| in_runtime[*i]).map(|(i, f)| (i, f.name.clone(), f.namespace.clone(), f.source.clone()));
-    let key: RuntimeKey = ((crate::passes::platform::target_os(), crate::passes::platform::target_arch()), files.collect());
+    use crate::passes::platform::{target_arch, target_build_options, target_os};
+    let key: RuntimeKey = ((target_os(), target_arch(), target_build_options()), files.collect());
     // With a store (the CLI), the store is the cache: a process checks one
     // program.
     if store.is_none()
@@ -221,6 +222,12 @@ pub fn checked_runtime(program: &Program, in_runtime: &[bool], store: Option<&dy
         for part in [&key.0 .0, &key.0 .1] {
             hasher.update(part.as_bytes());
             hasher.update(&[0]);
+        }
+        for (name, value) in &key.0 .2 {
+            for part in [name, value] {
+                hasher.update(&(part.len() as u64).to_le_bytes());
+                hasher.update(part.as_bytes());
+            }
         }
         for (_, name, namespace, source) in &key.1 {
             for part in [name, namespace] {

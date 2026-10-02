@@ -156,6 +156,25 @@ const condition: String
 
 The condition as written, such as `!OS(Windows)`.
 
+## BuildOption
+
+```pepper
+[Attribute] struct BuildOption
+```
+
+Keeps a declaration only when the build defines a build option with
+`-D`: `[BuildOption("USE_ZLIB")]` is `[Target(BuildOption(USE_ZLIB))]`.
+
+### Fields
+
+#### name
+
+```pepper
+const name: String
+```
+
+The build option's name, such as `USE_ZLIB`.
+
 ## Likely
 
 ```pepper

@@ -50,6 +50,9 @@ thread_local! {
     /// Warnings found so far in the current parse; `parse_module` moves them
     /// into the module.
     static WARNINGS: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(vec![]) };
+    /// The attributes parsed so far that test a build option;
+    /// `parse_module` moves them into the module.
+    static BUILD_OPTION_TESTS: std::cell::RefCell<Vec<Attribute>> = const { std::cell::RefCell::new(vec![]) };
     /// A hard error that is not an unmet expectation (an out-of-range
     /// literal); it wins over the furthest expectation when the parse fails.
     static ERROR: std::cell::RefCell<Option<Diagnostic>> = const { std::cell::RefCell::new(None) };
@@ -132,6 +135,7 @@ impl SourceGuard {
         EXPECTATION.with(|e| *e.borrow_mut() = None);
         QUALIFIERS.with(|q| q.borrow_mut().clear());
         WARNINGS.with(|w| w.borrow_mut().clear());
+        BUILD_OPTION_TESTS.with(|t| t.borrow_mut().clear());
         ERROR.with(|e| *e.borrow_mut() = None);
         NESTING.with(|n| n.set(0));
         STATIC_DEPTH.with(|d| d.set(0));
@@ -2478,7 +2482,17 @@ fn attribute(input: &mut &str) -> Result<Attribute> {
     ws(input)?;
     if !input.starts_with(']') { return Err(cut_expecting(input, "']'")); }
     *input = &input[1..];
-    Ok(Attribute { body, span: Span { start, end: pos(input) } })
+    let attribute = Attribute { body, span: Span { start, end: pos(input) } };
+    if contains_platform_predicate(&attribute.body) && mentions_build_option(&attribute.body) {
+        // Backtracking can parse the same attribute twice.
+        BUILD_OPTION_TESTS.with(|t| {
+            let mut t = t.borrow_mut();
+            if !t.iter().any(|a| a.span == attribute.span) {
+                t.push(attribute.clone());
+            }
+        });
+    }
+    Ok(attribute)
 }
 
 /// Attribute bodies are exactly one attribute: a bare symbol (`[Export]`) or
@@ -2512,7 +2526,7 @@ pub fn contains_platform_predicate(e: &Expression) -> bool {
     matches!(
         e,
         Expression::FunctionCall { function, .. }
-            if matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id))
+            if matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id) || is_build_option_predicate_name(&id))
     )
 }
 
@@ -2520,6 +2534,25 @@ pub fn contains_platform_predicate(e: &Expression) -> bool {
 /// parser's field rejection and the evaluator agree on the set.
 pub fn is_platform_predicate_name(id: &str) -> bool {
     id.to_ascii_lowercase() == "target"
+}
+
+/// `BuildOption`: the predicate that tests a `-D` build option, inside
+/// `Target(...)` or as an attribute of its own (`[BuildOption("X")]`).
+pub fn is_build_option_predicate_name(id: &str) -> bool {
+    id.to_ascii_lowercase() == "buildoption"
+}
+
+/// Whether `e` calls `BuildOption(...)` anywhere.
+pub fn mentions_build_option(e: &Expression) -> bool {
+    match e {
+        Expression::FunctionCall { function, arguments, .. } => {
+            matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_build_option_predicate_name(id))
+                || arguments.iter().any(mentions_build_option)
+        }
+        Expression::Unary { operand, .. } => mentions_build_option(operand),
+        Expression::Binary { lhs, rhs, .. } => mentions_build_option(lhs) || mentions_build_option(rhs),
+        _ => false,
+    }
 }
 
 /// The predicate names valid inside a `Target(...)` argument. Shared with
@@ -5125,7 +5158,8 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
     }
 
     let warnings = WARNINGS.with(|w| std::mem::take(&mut *w.borrow_mut()));
-    Ok(Module { imports, exports, declarations, warnings })
+    let build_option_tests = BUILD_OPTION_TESTS.with(|t| std::mem::take(&mut *t.borrow_mut()));
+    Ok(Module { imports, exports, declarations, warnings, build_option_tests })
 }
 
 // ── C pointer syntax check ───────────────────────────────────────────────────

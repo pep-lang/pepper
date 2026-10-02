@@ -11,11 +11,14 @@ The target is the platform you compile on, unless you name another with
 
 ## Writing a condition
 
-`Target` takes one boolean condition built from two predicates:
+`Target` takes one boolean condition built from these predicates:
 
 - `OS(...)` is true on the named operating system: `Windows`, `Mac` (or
   `MacOS`), or `Linux`.
 - `Arch(...)` is true on the named processor architecture: `x64` or `aarch64`.
+- `BuildOption(NAME)` is true when the build defines `NAME` with `-D`, and
+  can be compared with a literal (`BuildOption(LOG_LEVEL) >= 2`); see
+  [Build options](build-options.md).
 
 Values are matched case-insensitively, so `OS(windows)` works too. Combine
 predicates with `&&` (or `and`), `||` (or `or`), `!`, and parentheses:
@@ -95,7 +98,7 @@ Other mistakes the compiler reports:
 
 - `Target` takes exactly one condition: `[Target(OS(Windows), Arch(x64))]` is
   an error; write `[Target(OS(Windows) && Arch(x64))]`.
-- Only `OS(...)` and `Arch(...)` may appear inside it. A bare name
+- Only `OS(...)`, `Arch(...)` and `BuildOption(...)` may appear inside it. A bare name
   (`[Target(Windows)]`), another call (`[Target(Foo(x))]`), `not` in place of
   `!`, or a nested `Target` is an error.
 - `OS(...)` and `Arch(...)` are only valid inside `Target(...)`, and the

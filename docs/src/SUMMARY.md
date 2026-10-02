@@ -51,6 +51,7 @@
 - [Optimizer hints](language/hints.md)
 - [Calling C](language/c-interop.md)
 - [Platform selection](language/platform-selection.md)
+- [Build options](language/build-options.md)
 - [Linking](language/linking.md)
 - [Compiler errors](language/compiler-errors.md)
 - [Deprecation](language/deprecation.md)

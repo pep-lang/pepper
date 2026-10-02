@@ -1,43 +1,66 @@
 //! Platform selection: evaluates `Target(...)` attribute predicates against the
-//! compile target (the host, or the one `--target` names; see [`Target`]) and
-//! drops top-level declarations and attributed blocks that do not match. Runs
-//! before `struct_body::apply` so filtered-out code never reaches synthesis or
-//! codegen.
+//! compile target (the host, or the one `--target` names, with the build
+//! options `-D` defines; see [`Target`]) and drops top-level declarations and
+//! attributed blocks that do not match. Runs before `struct_body::apply` so
+//! filtered-out code never reaches synthesis or codegen.
 //!
-//! The only platform-selection attribute is `Target(...)`, which takes exactly
-//! one argument: a boolean expression built from `OS(v)` / `Arch(v)` calls,
-//! combined with `&&`/`||` (and `and`/`or`) and negated with `!`. Example:
-//! `[Target(OS(Windows) && Arch(x64))]`.
+//! `Target(...)` takes exactly one argument: a boolean expression built from
+//! `OS(v)` / `Arch(v)` / `BuildOption(NAME)` calls, comparisons of a
+//! `BuildOption(NAME)` with a literal, combined with `&&`/`||` (and
+//! `and`/`or`) and negated with `!`. Example:
+//! `[Target(OS(Windows) && BuildOption(LOG_LEVEL) >= 2)]`.
+//! `[BuildOption("NAME")]` is shorthand for `[Target(BuildOption(NAME))]`.
 
 use crate::model::*;
-use pepper_parser::ast::{self, Expression};
+use pepper_parser::ast::{self, Expression, Literal, Span};
 use pepper_parser::diagnostic::FileId;
 use pepper_parser::parser::parsers::{
-    contains_platform_predicate, is_os_or_arch_name, is_platform_predicate_name,
+    contains_platform_predicate, is_build_option_predicate_name, is_os_or_arch_name, is_platform_predicate_name,
 };
+use std::collections::BTreeMap;
 use std::env::consts;
+
+/// Why a `Target(...)` or `BuildOption(...)` attribute cannot be evaluated,
+/// and the token to point at.
+struct Invalid {
+    message: String,
+    span: Span,
+}
+
+/// `message`, located at the whole attribute `attr`.
+fn invalid(attr: &ast::Attribute, message: String) -> Invalid {
+    Invalid { message, span: attr.span }
+}
 
 /// Evaluate one attribute body against the target platform.
 ///
 /// - Bare symbols that are not predicates (`[Export]`, `[Inline]`) are ignored (true).
-/// - A bare `Target` without a call is an error.
+/// - A bare `Target` or `BuildOption` without a call is an error.
 /// - `Target(expr)`: `expr` must be a single boolean predicate over `OS(v)` /
-///   `Arch(v)`; the declaration is kept iff it evaluates true on the target.
+///   `Arch(v)` / `BuildOption(NAME)`; the declaration is kept iff it
+///   evaluates true on the target.
+/// - `BuildOption(NAME)`: true iff `-D` defined `NAME`.
 /// - Calls with other names (`[Align(8)]`) are ignored (true).
-fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
+fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, Invalid> {
     match body {
-        Expression::SymbolRef { id, .. } => {
-            if is_platform_predicate_name(&id) {
-                Err(format!("platform predicate `{id}` used without a value in {attr}"))
+        Expression::SymbolRef { id, span } => {
+            if is_build_option_predicate_name(id) {
+                Err(Invalid { message: format!("'{id}' needs the name of a build option, such as '[{id}(\"USE_ZLIB\")]'"), span: *span })
+            } else if is_platform_predicate_name(id) {
+                Err(invalid(attr, format!("platform predicate `{id}` used without a value in {attr}")))
             } else {
                 Ok(true)
             }
         }
-        Expression::FunctionCall { function, arguments, .. } => match function.as_ref() {
-            Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id) => {
+        Expression::FunctionCall { function, arguments, span } => match function.as_ref() {
+            Expression::SymbolRef { id, .. } if is_build_option_predicate_name(id) => {
+                Ok(target_build_options().contains_key(build_option_name(id, arguments, *span)?))
+            }
+            Expression::SymbolRef { id, .. } if is_platform_predicate_name(id) => {
                 let [arg] = arguments.as_slice() else {
-                    return Err(format!(
-                        "Target takes exactly one value (a boolean over OS(...) and Arch(...)) in {attr}"
+                    return Err(invalid(
+                        attr,
+                        format!("Target takes exactly one value (a boolean over OS(...), Arch(...) and BuildOption(...)) in {attr}"),
                     ));
                 };
                 evaluate_predicate(arg, attr)
@@ -48,38 +71,44 @@ fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
         // A qualified attribute (`[serialize.Ignore]`) is never a predicate.
         Expression::MemberAccess { .. } | Expression::TypeLiteral(_) => Ok(true),
         // Top-level `!` / `&&` / `||` is rejected by the parser; defensive.
-        _ => Err(bad_body(attr)),
+        _ => Err(invalid(attr, bad_body(attr))),
     }
 }
 
 /// Evaluate the single boolean argument of `Target(...)`: `OS(v)` / `Arch(v)`
-/// calls, `!`, and `&&`/`||` (with `and`/`or`).
-fn evaluate_predicate(e: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
+/// / `BuildOption(NAME)` calls, comparisons of a build option with a
+/// literal, `!`, and `&&`/`||` (with `and`/`or`).
+fn evaluate_predicate(e: &Expression, attr: &ast::Attribute) -> Result<bool, Invalid> {
     match e {
-        Expression::FunctionCall { function, arguments, .. } => match function.as_ref() {
-            Expression::SymbolRef { id, .. } if is_os_or_arch_name(&id) => {
+        Expression::FunctionCall { function, arguments, span } => match function.as_ref() {
+            Expression::SymbolRef { id, .. } if is_os_or_arch_name(id) => {
                 if id.to_ascii_lowercase() == "os" {
-                    os_matches(arguments, attr)
+                    os_matches(arguments, attr).map_err(|m| invalid(attr, m))
                 } else {
-                    arch_matches(arguments, attr)
+                    arch_matches(arguments, attr).map_err(|m| invalid(attr, m))
                 }
             }
-            Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id) => Err(format!(
-                "`{id}` cannot be nested inside Target(...) in {attr}"
+            Expression::SymbolRef { id, .. } if is_build_option_predicate_name(id) => {
+                Ok(target_build_options().contains_key(build_option_name(id, arguments, *span)?))
+            }
+            Expression::SymbolRef { id, .. } if is_platform_predicate_name(id) => Err(invalid(
+                attr,
+                format!("`{id}` cannot be nested inside Target(...) in {attr}"),
             )),
-            Expression::SymbolRef { id, .. } => Err(format!(
-                "unknown predicate `{id}` (expected OS or Arch) in {attr}"
+            Expression::SymbolRef { id, .. } => Err(invalid(
+                attr,
+                format!("unknown predicate `{id}` (expected OS, Arch or BuildOption) in {attr}"),
             )),
-            _ => Err(bad_body(attr)),
+            _ => Err(invalid(attr, bad_body(attr))),
         },
         Expression::Unary { op, prefix, operand, .. } => {
             if *prefix && op == "!" {
                 Ok(!evaluate_predicate(operand, attr)?)
             } else {
-                Err(bad_body(attr))
+                Err(invalid(attr, bad_body(attr)))
             }
         }
-        Expression::Binary { lhs, op, rhs, .. } => match op.as_str() {
+        Expression::Binary { lhs, op, rhs, span } => match op.as_str() {
             // Both operands are evaluated (no short-circuit) so a malformed
             // predicate in either half is reported on every host.
             "&&" | "and" => {
@@ -90,12 +119,14 @@ fn evaluate_predicate(e: &Expression, attr: &ast::Attribute) -> Result<bool, Str
                 let (l, r) = (evaluate_predicate(lhs, attr)?, evaluate_predicate(rhs, attr)?);
                 Ok(l || r)
             }
-            _ => Err(bad_body(attr)),
+            "==" | "!=" | "<" | "<=" | ">" | ">=" => compare(lhs, op, rhs, *span),
+            _ => Err(invalid(attr, bad_body(attr))),
         },
-        Expression::SymbolRef { id, .. } => Err(format!(
-            "bare symbol `{id}` is not a predicate; expected OS(...) or Arch(...) in {attr}"
+        Expression::SymbolRef { id, .. } => Err(invalid(
+            attr,
+            format!("bare symbol `{id}` is not a predicate; expected OS(...), Arch(...) or BuildOption(...) in {attr}"),
         )),
-        _ => Err(bad_body(attr)),
+        _ => Err(invalid(attr, bad_body(attr))),
     }
 }
 
@@ -103,9 +134,217 @@ fn bad_body(attr: &ast::Attribute) -> String {
     format!("invalid platform predicate in {attr}")
 }
 
-/// The platform a program is compiled for: what `Target(...)` predicates
-/// evaluate against and what codegen emits for. The host unless the
-/// compiler was given `--target <triple>`.
+/// The build options `-D` defines, by name: each one's value as written,
+/// `"1"` for a bare `-D NAME` (as in C).
+pub type BuildOptions = BTreeMap<String, String>;
+
+/// Whether `name` can name a build option: a letter or `_`, then letters,
+/// digits and `_`, as a C macro.
+pub fn is_build_option_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// One `-D` argument, `NAME` or `NAME=value`, as a name and its value
+/// (`"1"` for a bare `NAME`, as in C).
+pub fn parse_build_option(text: &str) -> Result<(String, String), String> {
+    let (name, value) = text.split_once('=').unwrap_or((text, "1"));
+    if !is_build_option_name(name) {
+        return Err(format!(
+            "invalid build option name '{name}' in '-D {text}'; a name is a letter or '_' followed by letters, digits and '_'"
+        ));
+    }
+    Ok((name.to_string(), value.to_string()))
+}
+
+/// The name a `BuildOption(...)` call (spelled `id`, at `span`) tests:
+/// one argument, a name or a string holding one.
+fn build_option_name<'a>(id: &str, arguments: &'a [Expression], span: Span) -> Result<&'a str, Invalid> {
+    let [argument] = arguments else {
+        return Err(Invalid { message: format!("'{id}' takes the name of one build option, such as '{id}(USE_ZLIB)'"), span });
+    };
+    let name = match argument {
+        Expression::SymbolRef { id, .. } => id.as_str(),
+        Expression::Literal { value: Literal::String(name), .. } => name.as_str(),
+        other => {
+            return Err(Invalid {
+                message: format!("'{id}' takes the name of a build option, such as '{id}(USE_ZLIB)'"),
+                span: other.span(),
+            })
+        }
+    };
+    if !is_build_option_name(name) {
+        return Err(Invalid {
+            message: format!("invalid build option name '{name}'; a name is a letter or '_' followed by letters, digits and '_'"),
+            span: argument.span(),
+        });
+    }
+    Ok(name)
+}
+
+/// `e` as a `BuildOption(...)` call: its spelling, arguments and span.
+fn build_option_call(e: &Expression) -> Option<(&str, &[Expression], Span)> {
+    match e {
+        Expression::FunctionCall { function, arguments, span } => match function.as_ref() {
+            Expression::SymbolRef { id, .. } if is_build_option_predicate_name(id) => Some((id, arguments, *span)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// `e` as a literal a build option can be compared with, a negative number
+/// included (`-1`).
+fn comparison_literal(e: &Expression) -> Option<Literal> {
+    match e {
+        Expression::Literal { value, .. } => Some(value.clone()),
+        Expression::Unary { op, prefix: true, operand, .. } if op == "-" => match operand.as_ref() {
+            Expression::Literal { value: Literal::Integer(n), .. } => Some(Literal::Integer(n.checked_neg()?)),
+            Expression::Literal { value: Literal::Float(f), .. } => Some(Literal::Float(-f)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The comparison `lhs op rhs` in a `Target(...)`, at `span` (from the
+/// operator to the end of `rhs`): a
+/// `BuildOption(NAME)` and a literal, either way round. The literal's type
+/// says how the option's value is read. False when the option is not
+/// defined (`undefined_build_option_comparisons` warns about it).
+fn compare(lhs: &Expression, op: &str, rhs: &Expression, span: Span) -> Result<bool, Invalid> {
+    let (option, literal, op) = match (build_option_call(lhs), build_option_call(rhs)) {
+        (Some(_), Some(_)) => {
+            return Err(Invalid {
+                message: format!("'{op}' cannot compare two build options; compare a 'BuildOption(...)' with a literal"),
+                span,
+            })
+        }
+        (Some(option), None) => (option, rhs, op),
+        // `2 <= BuildOption(X)` is `BuildOption(X) >= 2`.
+        (None, Some(option)) => {
+            let mirrored = match op {
+                "<" => ">",
+                "<=" => ">=",
+                ">" => "<",
+                ">=" => "<=",
+                same => same,
+            };
+            (option, lhs, mirrored)
+        }
+        (None, None) => {
+            return Err(Invalid {
+                message: format!("'{op}' in a 'Target' must compare a 'BuildOption(...)' with a literal"),
+                span,
+            })
+        }
+    };
+    let (id, arguments, option_span) = option;
+    let name = build_option_name(id, arguments, option_span)?;
+    let Some(value) = comparison_literal(literal).filter(|l| !matches!(l, Literal::Char(_) | Literal::Null)) else {
+        return Err(Invalid {
+            message: format!("build option '{name}' can only be compared with a literal: a number, 'true' or 'false', or a string"),
+            span: literal.span(),
+        });
+    };
+    if matches!(value, Literal::Bool(_)) && !matches!(op, "==" | "!=") {
+        return Err(Invalid {
+            message: format!("'{op}' cannot compare build option '{name}' with a bool; use '==' or '!='"),
+            span,
+        });
+    }
+    let options = target_build_options();
+    let Some(defined) = options.get(name) else {
+        return Ok(false);
+    };
+    let unreadable = |what: &str| Invalid {
+        message: format!("build option '{name}' is '{defined}', which is not {what}"),
+        span,
+    };
+    let ordering = match &value {
+        Literal::Integer(n) => parse_integer(defined).ok_or_else(|| unreadable("an integer"))?.cmp(n),
+        Literal::Float(f) => match defined.trim().parse::<f64>().map_err(|_| unreadable("a number"))?.partial_cmp(f) {
+            Some(ordering) => ordering,
+            // NaN: unequal to everything, ordered with nothing.
+            None => return Ok(op == "!="),
+        },
+        Literal::Bool(b) => parse_bool(defined).ok_or_else(|| unreadable("'true' or 'false'"))?.cmp(b),
+        Literal::String(s) => defined.as_bytes().cmp(s.as_bytes()),
+        Literal::Char(_) | Literal::Null => unreachable!("rejected above"),
+    };
+    Ok(match op {
+        "==" => ordering.is_eq(),
+        "!=" => ordering.is_ne(),
+        "<" => ordering.is_lt(),
+        "<=" => ordering.is_le(),
+        ">" => ordering.is_gt(),
+        _ => ordering.is_ge(),
+    })
+}
+
+/// A build option's value as a signed 64-bit integer: decimal, or
+/// hexadecimal after `0x`, with an optional sign.
+fn parse_integer(text: &str) -> Option<i64> {
+    let text = text.trim();
+    let (negative, digits) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    let magnitude = match digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X")) {
+        Some(hex) => i128::from_str_radix(hex, 16).ok()?,
+        None if digits.bytes().all(|b| b.is_ascii_digit()) => digits.parse::<i128>().ok()?,
+        None => return None,
+    };
+    i64::try_from(if negative { -magnitude } else { magnitude }).ok()
+}
+
+/// A build option's value as a bool: `true`/`false`, `1`/`0`, `on`/`off`
+/// or `yes`/`no`, in any case.
+fn parse_bool(text: &str) -> Option<bool> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "on" | "yes" => Some(true),
+        "false" | "0" | "off" | "no" => Some(false),
+        _ => None,
+    }
+}
+
+/// The build options `attribute` compares with a literal that this build
+/// does not define, each with the span of its `BuildOption(...)` call, in
+/// source order. Each such comparison is false; the program warns about it.
+pub fn undefined_build_option_comparisons(attribute: &ast::Attribute) -> Vec<(String, Span)> {
+    fn walk(e: &Expression, options: &BuildOptions, out: &mut Vec<(String, Span)>) {
+        match e {
+            Expression::Binary { lhs, op, rhs, .. } if matches!(op.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                // Only a well-formed comparison: a malformed one is an error.
+                let option = match (build_option_call(lhs), build_option_call(rhs)) {
+                    (Some(option), None) if comparison_literal(rhs).is_some() => option,
+                    (None, Some(option)) if comparison_literal(lhs).is_some() => option,
+                    _ => return,
+                };
+                let (id, arguments, span) = option;
+                if let Ok(name) = build_option_name(id, arguments, span)
+                    && !options.contains_key(name)
+                {
+                    out.push((name.to_string(), span));
+                }
+            }
+            Expression::Binary { lhs, rhs, .. } => {
+                walk(lhs, options, out);
+                walk(rhs, options, out);
+            }
+            Expression::Unary { operand, .. } => walk(operand, options, out),
+            Expression::FunctionCall { arguments, .. } => arguments.iter().for_each(|a| walk(a, options, out)),
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    walk(&attribute.body, &target_build_options(), &mut out);
+    out
+}
+
+/// What a program is compiled for: the platform `Target(...)` predicates
+/// evaluate against and codegen emits for (the host unless the compiler was
+/// given `--target <triple>`), and the build options `-D` defines.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Target {
     /// The OS, as `std::env::consts::OS` spells it (`"windows"`, `"macos"`,
@@ -117,6 +356,9 @@ pub struct Target {
     /// The LLVM target triple, or `None` for the host's own (LLVM's default
     /// triple, which also carries the host OS version on macOS).
     pub triple: Option<String>,
+    /// The build options `-D` defines, which `BuildOption(...)` predicates
+    /// and `static` blocks read.
+    pub build_options: BuildOptions,
 }
 
 /// The triples `--target` accepts: each supported OS on each supported
@@ -131,9 +373,10 @@ pub const SUPPORTED_TRIPLES: &[&str] = &[
 ];
 
 impl Target {
-    /// The machine the compiler runs on.
+    /// The machine the compiler runs on, with the default build options
+    /// (none, unless [`set_default_build_options`] set some).
     pub fn host() -> Target {
-        Target { os: consts::OS.to_string(), arch: consts::ARCH.to_string(), triple: None }
+        Target { os: consts::OS.to_string(), arch: consts::ARCH.to_string(), triple: None, build_options: default_build_options() }
     }
 
     /// The target `triple` names (`aarch64-apple-darwin`,
@@ -171,7 +414,7 @@ impl Target {
         } else {
             return Err(unsupported());
         };
-        Ok(Target { os: os.to_string(), arch: arch.to_string(), triple: Some(triple.to_string()) })
+        Ok(Target { os: os.to_string(), arch: arch.to_string(), triple: Some(triple.to_string()), build_options: default_build_options() })
     }
 
     /// Whether this is the machine the compiler runs on: the code it
@@ -179,6 +422,21 @@ impl Target {
     pub fn is_host(&self) -> bool {
         self.os == consts::OS && self.arch == consts::ARCH
     }
+}
+
+/// The build options a target has when none are given: what the language
+/// server was told to assume.
+static DEFAULT_BUILD_OPTIONS: std::sync::RwLock<BuildOptions> = std::sync::RwLock::new(BTreeMap::new());
+
+/// Make `options` the build options of every target made from now on
+/// ([`Target::host`], [`Target::parse`]), in every thread: for the language
+/// server, whose analyses run on threads that never set a target.
+pub fn set_default_build_options(options: BuildOptions) {
+    *DEFAULT_BUILD_OPTIONS.write().unwrap_or_else(|e| e.into_inner()) = options;
+}
+
+fn default_build_options() -> BuildOptions {
+    DEFAULT_BUILD_OPTIONS.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 thread_local! {
@@ -218,7 +476,8 @@ pub fn current_target() -> Target {
 /// to JIT-run its portable parts here (`path_functions_on_every_platform`);
 /// `with_target` compiles for the other platform's triple instead.
 pub fn with_simulated_host<R>(os: &str, arch: &str, f: impl FnOnce() -> R) -> R {
-    with_target(Target { os: os.to_string(), arch: arch.to_string(), triple: None }, f)
+    let build_options = current_target().build_options;
+    with_target(Target { os: os.to_string(), arch: arch.to_string(), triple: None, build_options }, f)
 }
 
 /// The OS `Target(...)` predicates evaluate against: the target's (see
@@ -227,6 +486,12 @@ pub fn target_os() -> String {
     TARGET
         .with(|t| t.borrow().as_ref().map(|t| t.os.clone()))
         .unwrap_or_else(|| consts::OS.to_string())
+}
+
+/// The build options `BuildOption(...)` predicates and `static` blocks
+/// read: the target's (see `current_target`).
+pub fn target_build_options() -> BuildOptions {
+    TARGET.with(|t| t.borrow().as_ref().map(|t| t.build_options.clone())).unwrap_or_else(default_build_options)
 }
 
 /// The architecture `Target(...)` predicates evaluate against (see
@@ -314,7 +579,7 @@ pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
         if !contains_platform_predicate(&attr.body) {
             continue;
         }
-        if !evaluate(&attr.body, attr)? {
+        if !evaluate(&attr.body, attr).map_err(|e| e.message)? {
             return Ok(false);
         }
     }
@@ -325,7 +590,7 @@ pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
 /// on a false predicate — so a bad attribute later in the list is still reported.
 fn validate(attributes: &[ast::Attribute], file: FileId) -> Result<(), Diagnostic> {
     for attr in attributes {
-        evaluate(&attr.body, attr).map_err(|e| Diagnostic::error(e).at(Loc::new(file, attr.span)))?;
+        evaluate(&attr.body, attr).map_err(|e| Diagnostic::error(e.message).at(Loc::new(file, e.span)))?;
     }
     Ok(())
 }

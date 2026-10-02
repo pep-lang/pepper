@@ -144,6 +144,8 @@ the compiler writes it as a literal.
 | `reflect.is_reference<T>()` | whether `T` is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is `[Value]` |
 | `reflect.is_same<A, B>()` | whether `A` and `B` are the same type (`int` and `i32` are) |
 | `reflect.has_attribute<T, A>()`, `reflect.attribute<T, A>()` | attribute `A` on struct or enum `T` |
+| `reflect.has_build_option("NAME")` | whether the build defines [build option](build-options.md) `NAME` (`-D NAME`) |
+| `reflect.build_option("NAME")`, `reflect.build_option("NAME", default)` | the build option's value as a `String`; without a default, an error when the build does not define it |
 | `reflect.print(value)` | writes `value` as a note while compiling |
 | `reflect.error(message)` | fails the compile with `message` |
 | `reflect.assert(condition, message)` | fails the compile with `message` when `condition` is false |

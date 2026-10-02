@@ -746,8 +746,21 @@ with no extension (with `--lib`, the library's file name for the stem,
 ### 2.5 Platform filters (`passes/platform.rs`)
 
 `apply_platform_filters` evaluates every `[Target(<bool expr>)]` against the
-**target**: the host, or the platform `--target <triple>` names. The grammar is `OS(Windows|Mac|MacOS|Linux)`, `Arch(x64|aarch64)`,
-`!`, `&&`/`and`, and `||`/`or`. The pass drops top-level declarations,
+**target**: the host, or the platform `--target <triple>` names, with the
+build options `-D` defines (`Target::build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux)`, `Arch(x64|aarch64)`,
+`BuildOption(NAME)`, a `BuildOption(NAME)` compared with a literal (`compare`:
+the literal's type says how the value is read), `!`, `&&`/`and`, and
+`||`/`or`. `[BuildOption("NAME")]` is `[Target(BuildOption(NAME))]`. Errors
+are `Invalid { message, span }`, located at the token (older ones at the
+attribute). A comparison with an undefined option is false; the parser
+lists every attribute that tests an option in `ast::Module::build_option_tests`,
+and `Program::build_option_warnings` warns at each such comparison
+(`undefined_build_option_comparisons`), once per site. The options are in
+the cache key (`cache::Build::name`'s `-D<hash>`, and the checked
+runtime's key), `static` blocks read them (`reflect.build_option`,
+`has_build_option`), and the language server takes them from its
+`buildOptions` initialization option (`set_default_build_options`, which
+every `Target::host()` then carries). The pass drops top-level declarations,
 struct/trait/extension members, and attributed blocks whose predicate is
 false. Every predicate is validated before anything is dropped, so a typo in
 code that another platform would compile is still reported. Attributes other
@@ -970,7 +983,7 @@ language side.
   (`is_built_in`: a struct named like one); `check_attributes` leaves their
   arguments to the compiler's own checks, and `built_in_value` reads a
   value through the same binding, except `Target`, which holds its
-  condition as written.
+  condition as written, and `BuildOption`, which holds its option's name.
 
 ## 3. Sema transform passes (`crates/pepper-sema/src/passes/`)
 

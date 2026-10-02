@@ -1157,6 +1157,11 @@ pub struct Module {
     /// Not serialized: the build cache stores only trees without warnings.
     #[serde(skip)]
     pub warnings: Vec<crate::diagnostic::Diagnostic>,
+    /// Every attribute that tests a build option (`[BuildOption(...)]`, or a
+    /// `Target(...)` that calls `BuildOption`), in source order, so a
+    /// program can check them against its `-D` options without walking the
+    /// tree.
+    pub build_option_tests: Vec<Attribute>,
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────

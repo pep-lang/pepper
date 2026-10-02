@@ -83,6 +83,8 @@ pub struct Build {
     pub debug: bool,
     /// The runtime checks the code performs (`--no-runtime-checks`).
     pub runtime_checks: pepper_codegen::checks::RuntimeChecks,
+    /// The build options (`-D`), which choose what code exists.
+    pub build_options: pepper_sema::BuildOptions,
 }
 
 impl Build {
@@ -92,9 +94,10 @@ impl Build {
     }
 
     /// How the options appear in the cache: `O2-x86-64@generic`,
-    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`, `O2-nrc-overflow-x86-64@generic`. A CPU name that is not a plain file name (from
+    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`, `O2-nrc-overflow-x86-64@generic`,
+    /// `O0-D1a2b3c4d5e6f-x86-64@generic`. A CPU name that is not a plain file name (from
     /// `-march=native`'s features, say) is hashed.
-    fn name(&self) -> String {
+    pub(crate) fn name(&self) -> String {
         let cpu = self.cpu.key();
         let cpu = if cpu.len() <= 48 && cpu.chars().all(|c| c.is_ascii_alphanumeric() || "-_.+@".contains(c)) {
             cpu
@@ -104,7 +107,21 @@ impl Build {
         // `-nrc-overflow-shift`: the checks `--no-runtime-checks` removed.
         let removed: String = self.runtime_checks.removed().iter().map(|name| format!("-{}", name)).collect();
         let removed = if removed.is_empty() { String::new() } else { format!("-nrc{}", removed) };
-        format!("O{}{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, removed, cpu)
+        // `-D<hash>`: the build options, hashed, since their values may be
+        // anything.
+        let options = if self.build_options.is_empty() {
+            String::new()
+        } else {
+            let mut hasher = blake3::Hasher::new();
+            for (name, value) in &self.build_options {
+                for part in [name, value] {
+                    hasher.update(&(part.len() as u64).to_le_bytes());
+                    hasher.update(part.as_bytes());
+                }
+            }
+            format!("-D{}", &hasher.finalize().to_hex()[..12])
+        };
+        format!("O{}{}{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, removed, options, cpu)
     }
 }
 

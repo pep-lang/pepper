@@ -32,6 +32,7 @@ use std::rc::Rc;
 pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
     "Alias",
     "Attribute",
+    "BuildOption",
     "Deprecated",
     "Equatable",
     "Export",
@@ -1030,6 +1031,19 @@ impl Expander<'_> {
         }
     }
 
+    /// The build option `argument` names: a compile-time string holding a
+    /// valid name.
+    fn build_option_name(&mut self, argument: &ast::Expression) -> Result<String> {
+        match self.evaluate(argument)? {
+            Value::String(name) if crate::passes::platform::is_build_option_name(&name) => Ok(name),
+            Value::String(name) => Err(self.error(
+                format!("invalid build option name '{}'; a name is a letter or '_' followed by letters, digits and '_'", name),
+                argument.span(),
+            )),
+            other => Err(self.error(format!("a build option's name must be a 'String', not a {}", other.kind()), argument.span())),
+        }
+    }
+
     fn expect_arguments(&self, name: &str, arguments: &[ast::Expression], want: usize, span: ast::Span) -> Result<()> {
         if arguments.len() != want {
             return Err(self.error(format!("'{}' takes {} argument{}, have {}", name, want, if want == 1 { "" } else { "s" }, arguments.len()), span));
@@ -1115,6 +1129,31 @@ impl Expander<'_> {
                 };
                 let attributes = attributes.clone();
                 self.attribute_of(&attributes, file, attribute, name == "attribute", &format!("'{}'", demangle(&ty.display())), span)
+            }
+            "has_build_option" => {
+                self.expect_types(name, type_args, 0, span)?;
+                self.expect_arguments(name, arguments, 1, span)?;
+                let option = self.build_option_name(&arguments[0])?;
+                Ok(Value::Bool(crate::passes::platform::target_build_options().contains_key(&option)))
+            }
+            "build_option" => {
+                self.expect_types(name, type_args, 0, span)?;
+                if !(1..=2).contains(&arguments.len()) {
+                    return Err(self.error(format!("'build_option' takes 1 or 2 arguments, have {}", arguments.len()), span));
+                }
+                let option = self.build_option_name(&arguments[0])?;
+                if let Some(value) = crate::passes::platform::target_build_options().get(&option) {
+                    return Ok(Value::String(value.clone()));
+                }
+                match arguments.get(1) {
+                    Some(default) => match self.evaluate(default)? {
+                        Value::String(value) => Ok(Value::String(value)),
+                        other => Err(self.error(format!("the default of a build option must be a 'String', not a {}", other.kind()), default.span())),
+                    },
+                    None => Err(self
+                        .error(format!("build option '{}' is not defined", option), span)
+                        .with_note(format!("define it with '-D {}=<value>', test it with 'reflect.has_build_option', or give a default: 'reflect.build_option(\"{}\", \"\")'", option, option), None)),
+                }
             }
             "print" => {
                 self.expect_arguments(name, arguments, 1, span)?;
@@ -1369,15 +1408,27 @@ fn is_built_in(st: &StructDef) -> bool {
 
 /// The value of built-in attribute `name` as written (`attribute`, in
 /// `file`), as the struct the runtime declares for it. `[Target(...)]`
-/// holds its condition as written; the others take their arguments as an
+/// holds its condition as written and `[BuildOption(...)]` its option's
+/// name; the others take their arguments as an
 /// `[Attribute]` struct of the user's does.
 fn built_in_value(module: &Module, name: &str, attribute: &ast::Attribute, file: FileId) -> Result<Value> {
-    if name != "Target" {
-        return attribute_value(module, attribute, file);
-    }
-    let st = find_attribute_struct(module, name, file).expect("the runtime declares 'Target'");
-    let condition = attribute.arguments().iter().map(|argument| argument.value.to_string()).collect::<Vec<_>>().join(", ");
-    Ok(Value::Attribute(Rc::new(Attribute { ty: st.name.clone(), fields: vec![("condition".to_string(), Value::String(condition))] })))
+    let field = match name {
+        "Target" => "condition",
+        "BuildOption" => "name",
+        _ => return attribute_value(module, attribute, file),
+    };
+    let st = find_attribute_struct(module, name, file).unwrap_or_else(|| panic!("the runtime declares '{}'", name));
+    let written = attribute
+        .arguments()
+        .iter()
+        .map(|argument| match argument.value {
+            // `[BuildOption("X")]` names `X`, as `BuildOption(X)` does.
+            ast::Expression::Literal { value: ast::Literal::String(text), .. } if name == "BuildOption" => text.clone(),
+            value => value.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(Value::Attribute(Rc::new(Attribute { ty: st.name.clone(), fields: vec![(field.to_string(), Value::String(written))] })))
 }
 
 fn as_float(value: &Value) -> f64 {

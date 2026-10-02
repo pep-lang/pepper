@@ -102,9 +102,15 @@ pub fn compile(
 }
 
 /// [`compile`], also returning the loaded program, whose files and units
-/// ([`Program::units`]) the object pipeline splits the module by.
+/// ([`Program::units`]) the object pipeline splits the module by. Compiles
+/// for this thread's target, with the options' build options (`-D`) when
+/// they give any.
 pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String> {
-    compile_program_with(options, None, false).map(|(module, program, _)| (module, program))
+    let mut target = pepper_sema::current_target();
+    if !options.build_options.is_empty() {
+        target.build_options = options.effective_build_options();
+    }
+    pepper_sema::with_target(target, || compile_program_with(options, None, false)).map(|(module, program, _)| (module, program))
 }
 
 /// What [`compile_for_objects`] hands [`crate::objects`].

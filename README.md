@@ -250,6 +250,7 @@ cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 cargo run -- tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries
+cargo run -- tests/hello.pep -D USE_ZLIB -D LOG_LEVEL=2  # define build options for [BuildOption] and [Target(BuildOption(...))]
 cargo run -- tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T passes     # print each sema pass's time
@@ -393,7 +394,9 @@ dimmed.
 call an `[Implicit]` conversion inserts as an inlay hint, and
 `pepper.inlayHints.parameterNames` (default on) shows the parameter name
 before a literal argument passed by position (`width:` before `800`);
-changing either restarts the server. Completion inside a call's parentheses
+`pepper.buildOptions` lists the build options the server analyzes with, as
+`-D` takes them (`["USE_ZLIB", "LOG_LEVEL=2"]`); changing any of these
+restarts the server. Completion inside a call's parentheses
 offers the parameter names (`width = `) of the function it calls.
 
 Packaging (`vsce package`, run by the script and the VSIX workflow) bundles

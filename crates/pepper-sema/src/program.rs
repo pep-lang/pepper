@@ -88,7 +88,26 @@ impl Program {
     /// [`Program::deprecation_warnings`].
     pub fn warnings(&self) -> Vec<Diagnostic> {
         let mut out = self.parser_warnings();
+        out.extend(self.build_option_warnings());
         out.extend(self.deprecation_warnings());
+        out
+    }
+
+    /// Comparisons with a build option this build does not define, which
+    /// are false: one warning at each `BuildOption(...)` call.
+    pub fn build_option_warnings(&self) -> Vec<Diagnostic> {
+        let mut out = vec![];
+        for (i, f) in self.files.iter().enumerate() {
+            for attribute in &f.module.build_option_tests {
+                for (name, span) in crate::passes::platform::undefined_build_option_comparisons(attribute) {
+                    out.push(
+                        Diagnostic::warning(format!("build option '{name}' is not defined; the comparison is false"))
+                            .at(Loc::new(FileId(i as u32), span))
+                            .with_note(format!("define it with '-D {name}=<value>'"), None),
+                    );
+                }
+            }
+        }
         out
     }
 

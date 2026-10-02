@@ -27,6 +27,14 @@ pub struct Options {
     #[arg(short = 'L', value_name = "DIR")]
     pub library_dirs: Vec<PathBuf>,
 
+    /// Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value
+    /// (a bare `NAME` is `NAME=1`, as in C). `[BuildOption("NAME")]` and
+    /// `BuildOption(NAME)` in `[Target(...)]` select code by it, and
+    /// `static` blocks read it with `reflect.build_option`. Repeat for more
+    /// options; of two that name one option, the later wins.
+    #[arg(short = 'D', value_name = "NAME[=VALUE]", value_parser = parse_build_option)]
+    pub build_options: Vec<(String, String)>,
+
     /// Output path: the executable, or with `--lib` the library.
     #[arg(short = 'o', value_name = "OUT")]
     pub output: Option<PathBuf>,
@@ -151,6 +159,11 @@ pub fn sysroot_variable(triple: &str) -> String {
     format!("PEPPER_SYSROOT_{}", name)
 }
 
+/// One `-D` option: its name and value.
+fn parse_build_option(text: &str) -> Result<(String, String), String> {
+    pepper_sema::passes::platform::parse_build_option(text)
+}
+
 /// The checks `--no-runtime-checks=<list>` leaves on.
 fn parse_runtime_checks(list: &str) -> Result<pepper_codegen::checks::RuntimeChecks, String> {
     pepper_codegen::checks::RuntimeChecks::without(list)
@@ -183,7 +196,14 @@ impl Options {
             None => matches!(opt_level, OptLevel::O2 | OptLevel::O3),
         };
         let runtime_checks = self.effective_runtime_checks()?;
-        Ok(crate::cache::Build { opt_level, lto, debug: self.emit_debug, cpu: self.effective_cpu()?, runtime_checks })
+        Ok(crate::cache::Build {
+            opt_level,
+            lto,
+            debug: self.emit_debug,
+            cpu: self.effective_cpu()?,
+            runtime_checks,
+            build_options: self.effective_build_options(),
+        })
     }
 
     /// The runtime checks the code performs: every one at `-O0`, else all
@@ -204,12 +224,21 @@ impl Options {
         ignored.then(|| "warning: '--no-runtime-checks' has no effect at -O0".to_string())
     }
 
-    /// The platform to compile for: `--target`'s, else the host.
+    /// The platform to compile for (`--target`'s, else the host), with the
+    /// build options `-D` defines.
     pub fn effective_target(&self) -> Result<pepper_sema::Target, String> {
-        match &self.target {
-            Some(triple) => pepper_sema::Target::parse(triple),
-            None => Ok(pepper_sema::Target::host()),
-        }
+        let mut target = match &self.target {
+            Some(triple) => pepper_sema::Target::parse(triple)?,
+            None => pepper_sema::Target::host(),
+        };
+        target.build_options = self.effective_build_options();
+        Ok(target)
+    }
+
+    /// The build options `-D` defines; of two that name one option, the
+    /// later wins.
+    pub fn effective_build_options(&self) -> pepper_sema::BuildOptions {
+        self.build_options.iter().cloned().collect()
     }
 
     /// The CPU `-march`, `-mcpu`, `-mtune` and `-m<feature>` choose for the
@@ -319,6 +348,18 @@ mod tests {
         assert_eq!(parse(&["pepper", "main.pep", "-O3"]).effective_opt_level(), Ok(OptLevel::O3));
         assert_eq!(parse(&["pepper", "main.pep", "-O0"]).effective_opt_level(), Ok(OptLevel::O0));
         assert!(Options::try_parse_from(["pepper", "main.pep", "-O4"]).is_err());
+    }
+
+    #[test]
+    fn build_options() {
+        let options = parse(&["pepper", "-D", "FAST", "-DLEVEL=2", "-D", "PATH=a=b", "-D", "LEVEL=3", "main.pep"]);
+        let expected: pepper_sema::BuildOptions =
+            [("FAST", "1"), ("LEVEL", "3"), ("PATH", "a=b")].iter().map(|(n, v)| (n.to_string(), v.to_string())).collect();
+        assert_eq!(options.effective_build_options(), expected);
+        assert_eq!(options.effective_target().unwrap().build_options, expected);
+        assert_ne!(options.effective_build().unwrap().name(), parse(&["pepper", "main.pep"]).effective_build().unwrap().name());
+        let error = Options::try_parse_from(["pepper", "-D", "2FAST", "main.pep"]).unwrap_err().to_string();
+        assert!(error.contains("invalid build option name '2FAST' in '-D 2FAST'"), "{error}");
     }
 
     #[test]

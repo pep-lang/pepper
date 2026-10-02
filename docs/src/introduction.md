@@ -79,6 +79,10 @@ Some that you will meet quickly:
   the attributes on them (`[Attribute]` structs of your own) and generate
   code for each, so one function can encode any struct (see
   [reflection and attributes](language/reflection.md)).
+- `-D NAME=VALUE` on the command line defines a build option, which
+  `[BuildOption("NAME")]` and `[Target(BuildOption(NAME) >= 2)]` select code
+  by and `static` blocks read (see
+  [build options](language/build-options.md)).
 - A call can name its arguments, `window("Editor", resizable = false)`, to
   skip defaulted parameters or pass them in any order (see
   [named arguments](language/functions.md#named-arguments)).

@@ -20,6 +20,7 @@ mod async_tests;
 mod atomic_tests;
 mod audit_fixes_tests;
 mod build_cache_tests;
+mod build_option_tests;
 mod c_callback_tests;
 mod c_export_tests;
 mod cli_tests;

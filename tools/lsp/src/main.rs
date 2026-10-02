@@ -2816,6 +2816,22 @@ impl LanguageServer for PepperLsp {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
         self.parameter_hints.store(parameters, Ordering::Relaxed);
+        // `-D` options to analyze with, as the compiler takes them; one that
+        // does not parse is left out.
+        let build_options = params
+            .initialization_options
+            .as_ref()
+            .and_then(|o| o.pointer("/buildOptions"))
+            .and_then(|v| v.as_array())
+            .map(|options| {
+                options
+                    .iter()
+                    .filter_map(|o| o.as_str())
+                    .filter_map(|o| pepper_sema::passes::platform::parse_build_option(o).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        pepper_sema::passes::platform::set_default_build_options(build_options);
         let watches = params
             .capabilities
             .workspace

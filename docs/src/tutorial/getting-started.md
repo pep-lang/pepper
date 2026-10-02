@@ -166,6 +166,7 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `-I <dir>` | Add a directory to search for imported modules. See [modules and imports](../language/modules.md). |
 | `-l <lib>` | Link a C library. See [linking](../language/linking.md). |
 | `-L <dir>` | Add a folder the linker searches for libraries. Folders in `PEPPER_LIBRARY_PATH` are searched after it. See [linking](../language/linking.md#library-search-directories-in-the-source-and-the-environment). |
+| `-D <name>`, `-D <name>=<value>` | Define a build option, which `[BuildOption("name")]` and `[Target(BuildOption(name))]` select code by. A bare name is `name=1`. See [build options](../language/build-options.md). |
 | `--import <name>` | Load a module into every file of the program, like the standard library. |
 | `--build <dir>` | Write intermediate files to `<dir>` instead of `.pep/build/`. |
 | `-g` | Emit debug info for gdb, lldb, Visual Studio and WinDbg (a `.pdb` on Windows). See [debugging](../tools/debugging.md). |
