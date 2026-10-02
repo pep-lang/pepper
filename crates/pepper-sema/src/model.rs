@@ -1566,6 +1566,10 @@ pub struct Module {
     /// Declarations already checked (a reused, checked runtime): the passes
     /// read them but do not walk or change them again.
     pub checked: Checked,
+    /// What the passes derive from the checked declarations, built on first
+    /// use (see `checked::CheckedFacts`).
+    #[serde(skip)]
+    pub checked_facts: std::sync::OnceLock<std::sync::Arc<crate::checked::CheckedFacts>>,
     /// The checked declarations' bodies while the passes run, so they leave
     /// them alone (see `checked::stash_bodies`).
     #[serde(skip)]
@@ -1580,6 +1584,11 @@ pub struct Module {
     pub record_summaries: bool,
     /// The summaries worth recording (see `record_summaries`), by location.
     pub summaries_to_record: Vec<(Loc, String)>,
+    /// Every summary `record_summaries` found that does not depend on the
+    /// rest of the program, by summary key, with a location in the file
+    /// its locations point into: what a checked runtime keeps (`Checked::summaries`).
+    #[serde(skip)]
+    pub settled_summaries: std::collections::HashMap<String, (Loc, String)>,
     /// Warnings found while compiling: those the driver carried over from
     /// the loaded program (`Program::warnings`), then the uses of
     /// deprecated members `check_deprecated_members` found. `merge` leaves
@@ -1599,6 +1608,12 @@ pub struct Checked {
     pub functions: std::collections::HashSet<String>,
     pub globals: std::collections::HashSet<String>,
     pub extensions: usize,
+    /// The link summaries (`check_confinement`) of the checked functions
+    /// that do not depend on the rest of the program, by summary key: a
+    /// location in the file the summary's locations point into, and the
+    /// summary. The pass
+    /// neither summarizes nor checks those functions again.
+    pub summaries: std::collections::HashMap<String, (Loc, String)>,
 }
 
 impl Checked {
@@ -1609,6 +1624,7 @@ impl Checked {
             functions: module.functions.iter().map(|f| f.name.clone()).collect(),
             globals: module.globals.iter().map(|g| g.name.clone()).collect(),
             extensions: module.extensions.len(),
+            summaries: Default::default(),
         }
     }
 

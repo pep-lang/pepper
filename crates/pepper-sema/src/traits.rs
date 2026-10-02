@@ -89,13 +89,89 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
     if traits.is_empty() {
         return found;
     }
+    // What checked declarations use comes from their facts, built once.
+    let facts = crate::checked::CheckedFacts::of(module);
+    if let Some(facts) = facts {
+        found.extend(facts.signature_traits.iter().cloned());
+        // The checked bodies, unless the passes stashed them.
+        if module.stashed_bodies.is_empty() {
+            for ty in &facts.body_traits {
+                if !found.iter().any(|f| f.to_string() == ty.to_string()) {
+                    found.push(ty.clone());
+                }
+            }
+        }
+    }
     let names = TraitNames::of(traits);
     let mut add = |ty: &TypeName| {
         if names.mentioned_in(ty) {
             collect(traits, ty, &mut found);
         }
     };
-    for st in &module.structs {
+    let structs = module.structs.iter().filter(|st| !facts.is_some_and(|f| f.covers_struct(st)));
+    let functions = module.functions.iter().filter(|f| !facts.is_some_and(|_| module.checked.has_function(&f.name)));
+    let globals = module.globals.iter().filter(|g| !facts.is_some_and(|_| module.checked.globals.contains(&g.name)));
+    declaration_types(structs, functions, globals, &mut |_| true, &mut add);
+    found
+}
+
+/// The trait types `module`'s checked declarations use: outside their
+/// bodies, and only in their bodies (stashed or not). See
+/// `checked::CheckedFacts`.
+pub(crate) fn checked_trait_types(module: &Module) -> (Vec<TypeName>, Vec<TypeName>) {
+    let traits = &module.traits;
+    let mut signatures: Vec<TypeName> = vec![];
+    let mut all: Vec<TypeName> = vec![];
+    if traits.is_empty() {
+        return (signatures, all);
+    }
+    let names = TraitNames::of(traits);
+    let structs = || module.structs.iter().filter(|st| module.checked.has_struct(&st.name));
+    let functions = || module.functions.iter().filter(|f| module.checked.has_function(&f.name));
+    let globals = || module.globals.iter().filter(|g| module.checked.globals.contains(&g.name));
+    let add = |found: &mut Vec<TypeName>, ty: &TypeName| {
+        if names.mentioned_in(ty) {
+            collect(traits, ty, found);
+        }
+    };
+    declaration_types(structs(), functions(), globals(), &mut |_| false, &mut |ty| add(&mut signatures, ty));
+    // A body the passes stashed counts as the body.
+    fn stashed<'m>(module: &'m Module, function: &'m FunctionDef, of: crate::checked::BodyOf) -> Option<&'m crate::model::Block> {
+        function.body.as_ref().or_else(|| module.stashed_bodies.get(&of))
+    }
+    for st in structs().filter(|st| !(st.ty.is_generic() && st.name == st.ty.name)) {
+        for (kind, method) in st
+            .method_members
+            .iter()
+            .map(|m| ("method", m))
+            .chain(st.constructors.iter().map(|c| ("constructor", c)))
+            .chain([("destructor", &st.destructor)])
+        {
+            if let Some(body) = stashed(module, method, crate::checked::BodyOf::Member(st.name.clone(), kind, method.name.clone())) {
+                block_types(body, &mut |ty| add(&mut all, ty));
+            }
+        }
+    }
+    for function in functions().filter(|f| !f.is_generic_func) {
+        if let Some(body) = stashed(module, function, crate::checked::BodyOf::Function(function.name.clone())) {
+            block_types(body, &mut |ty| add(&mut all, ty));
+        }
+    }
+    let body_only = all.into_iter().filter(|ty| !signatures.iter().any(|s| s.to_string() == ty.to_string())).collect();
+    (signatures, body_only)
+}
+
+/// Pass each type the declarations use to `add`: their fields, signatures,
+/// globals, and (when `bodies` says so for a function) their bodies'
+/// locals. Generic bases are skipped.
+fn declaration_types<'m>(
+    structs: impl Iterator<Item = &'m crate::model::StructDef>,
+    functions: impl Iterator<Item = &'m FunctionDef>,
+    globals: impl Iterator<Item = &'m crate::model::VariableDef>,
+    bodies: &mut impl FnMut(&FunctionDef) -> bool,
+    add: &mut impl FnMut(&TypeName),
+) {
+    for st in structs {
         if st.ty.is_generic() && st.name == st.ty.name {
             continue;
         }
@@ -107,16 +183,15 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
             .iter()
             .chain(st.constructors.iter()).chain([&st.destructor])
         {
-            function_types(method, &mut add);
+            function_types(method, bodies(method), add);
         }
     }
-    for function in module.functions.iter().filter(|f| !f.is_generic_func) {
-        function_types(function, &mut add);
+    for function in functions.filter(|f| !f.is_generic_func) {
+        function_types(function, bodies(function), add);
     }
-    for var in &module.globals {
+    for var in globals {
         add(&var.ty);
     }
-    found
 }
 
 /// The traits' names, for [`TraitNames::mentioned_in`].
@@ -198,12 +273,12 @@ fn collect(traits: &[TraitDef], ty: &TypeName, found: &mut Vec<TypeName>) {
     }
 }
 
-fn function_types(function: &FunctionDef, add: &mut impl FnMut(&TypeName)) {
+fn function_types(function: &FunctionDef, body: bool, add: &mut impl FnMut(&TypeName)) {
     add(&function.ty);
     for param in &function.parameters {
         add(&param.ty);
     }
-    if let Some(body) = &function.body {
+    if body && let Some(body) = &function.body {
         block_types(body, add);
     }
 }

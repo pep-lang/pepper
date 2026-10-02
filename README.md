@@ -238,6 +238,7 @@ cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-t
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 cargo run -- tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
+cargo run -- tests/hello.pep -T passes     # print each sema pass's time
 cargo run -- tests/hello.pep -T cache      # print which objects came from the build cache
 cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check they match
 cargo run -- tests/hello.pep --no-cache    # compile everything, skip the build cache

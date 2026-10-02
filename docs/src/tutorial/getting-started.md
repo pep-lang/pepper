@@ -174,6 +174,7 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |
 | `-T time` | Print how long each stage of the compile took. |
+| `-T passes` | Print how long each pass of the checker took, summed over its runs, slowest first. |
 | `-T cache` | Print how the build cache supplied each object: `hit` (its sources, and its imports' declarations, unchanged), `hit (same code)` (recompiled, same code), or `miss`. |
 | `--no-cache` | Compile everything without reading or writing the build cache. |
 | `--cache <dir>` | Keep the build cache in `<dir>` instead of `.pep/cache/` (also `PEPPER_CACHE_DIR`). |

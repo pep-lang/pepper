@@ -101,7 +101,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // later passes would only trip over it.
     macro_rules! step {
         ($pass:expr) => {{
+            let started = std::time::Instant::now();
             $pass;
+            crate::pass_timer::record(stringify!($pass), started);
             if let Some(error) = crate::errors::take() {
                 return Err(error);
             }

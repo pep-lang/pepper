@@ -166,6 +166,9 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
         .ok_or_else(|| "no source files".to_string())?;
 
     let mut timer = crate::StageTimer::new(options.tracing("time"));
+    if options.tracing("passes") {
+        pepper_sema::pass_timer::enable();
+    }
     let program = load(options, entry_source)?;
     timer.stage("load and parse");
     let mut reused_units = Reused::default();
@@ -189,6 +192,12 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     crate::report_warnings(&module.render_warnings());
     result?;
     timer.stage("sema passes");
+    if options.tracing("passes") {
+        // The runtime's own passes too, when this compile checked it.
+        for (pass, time, runs) in pepper_sema::pass_timer::take() {
+            eprintln!("pass: {:>9.3} ms {:>4}x {}", time.as_secs_f64() * 1000.0, runs, pass);
+        }
+    }
     Ok((module, program, reused_units))
 }
 

@@ -369,6 +369,20 @@ fn exported_globals_are_shared() {
     assert_runs("exported_globals", EXPORTED_GLOBALS_PROGRAM);
 }
 
+/// Checked alone, the runtime keeps the link summaries of its functions
+/// that reach no trait call, so a program checked against it neither
+/// summarizes nor checks them again (#405).
+#[test]
+fn a_checked_runtime_keeps_its_link_summaries() {
+    let program = pepper_driver::compiler::load_with_runtime("test.pep", "import async;\ntest(): int { return 0; }\n").unwrap();
+    let in_runtime = pepper_sema::checked::runtime_files(&program).unwrap();
+    let runtime = pepper_sema::checked::checked_runtime(&program, &in_runtime, None).unwrap();
+    let summaries = &runtime.module.checked.summaries;
+    for key in ["Channel@async/channel<ulong>.send", "Channel@async/channel<ulong>.receive"] {
+        assert!(summaries.contains_key(key), "no summary of '{}' among {} kept", key, summaries.len());
+    }
+}
+
 /// Compile, link and run `source`, which must panic: a nonzero exit whose
 /// last line of stdout (the panic message) contains `message`.
 fn assert_panics(name: &str, source: &str, message: &str) {

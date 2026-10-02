@@ -111,7 +111,18 @@ and leave them alone (`checked::stash_bodies` keeps their bodies out of
 the passes that walk bodies, and `enums::resolve_enum_cases` skips their
 parameter and field defaults, whose cases it resolved already), specializations the runtime already made are
 reused, and `check_confinement` starts from the runtime's recorded link
-summaries. The process-wide cache (`CHECKED_RUNTIMES`, a few entries) is
+summaries. A checked runtime keeps the link summaries of all its
+functions that reach no trait call, by summary key (`Checked::summaries`),
+and `check_confinement` neither summarizes nor checks those functions
+again. What the passes derive from the checked declarations (the
+`StructTable` and named-argument `Callees` of the checked structs and
+functions, and the trait types they use) is built once per module, on
+first use, as `checked::CheckedFacts` (`Module::checked_facts`; computed
+with the runtime, so the in-process copies share it): a pass's table over
+the program holds only what the program adds and reads the rest from the
+facts, and `CheckedFacts::covers_struct` leaves out a checked struct a
+program's extension adds members to. Passes that walk bodies skip
+declarations with none, so the stashed runtime costs them nothing. The process-wide cache (`CHECKED_RUNTIMES`, a few entries) is
 keyed by the target platform and each runtime file's place, name,
 namespace (its mangled names carry it) and text. With a store (the CLI),
 the store is the cache and memory is skipped. A program that overrides a runtime generic (`hash<int>`) changes
@@ -129,7 +140,9 @@ a `checks::RuntimeChecks`, every check on at `-O0` with a warning,
 `runtime_checks_warning`; part of `cache::Build` and so of the cache key),
 `--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
-and build, sema passes, codegen and emission, link), and `-T cache`, which
+and build, sema passes, codegen and emission, link), `-T passes`, which
+prints each sema pass's time summed over its runs (`sema/src/pass_timer.rs`,
+fed by `transform_pass`'s `step!`), and `-T cache`, which
 prints how the cache supplied each unit's object (`hit`, `hit (same code)`
 or `miss`). `-g` emits debug info (see
 [4.4](#44-debug-info-codegensrcdebugrs-debug_typesrs)). `-v` and the

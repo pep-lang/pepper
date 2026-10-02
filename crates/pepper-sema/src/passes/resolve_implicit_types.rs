@@ -691,8 +691,10 @@ fn resolve_once(module: &mut Module) -> bool {
     let overloads = std::rc::Rc::new(crate::passes::overloads::Overloads::build(module));
     let resolved: std::rc::Rc<std::cell::RefCell<Vec<(Loc, String)>>> = Default::default();
 
-    // Structs first (methods see field types).
-    for st in &mut module.structs {
+    // Structs first (methods see field types). A checked runtime's are
+    // resolved already, their bodies stashed.
+    let facts = crate::checked::CheckedFacts::of(module).cloned();
+    for st in module.structs.iter_mut().filter(|st| !facts.as_ref().is_some_and(|f| f.covers_struct(st))) {
         let current_struct = st.ty.clone();
         let mut scopes = Scopes::new(&tables);
         scopes.overloads = overloads.clone();

@@ -146,6 +146,11 @@ pub fn convert_member_refs(module: &mut Module) {
         .collect();
     let struct_count = module.structs.len();
     for st_idx in 0..struct_count {
+        // Only bodies change (a checked runtime's are stashed).
+        let st = &module.structs[st_idx];
+        if st.constructors.iter().chain(&st.method_members).all(|f| f.body.is_none()) {
+            continue;
+        }
         let (fields, method_names): (Vec<VariableDef>, Vec<String>) = {
             let st = &module.structs[st_idx];
             let fields: Vec<VariableDef> = st
@@ -222,6 +227,9 @@ pub fn convert_member_refs(module: &mut Module) {
         // Methods.
         for method_idx in 0..module.structs[st_idx].method_members.len() {
             let st = &mut module.structs[st_idx];
+            if st.method_members[method_idx].body.is_none() {
+                continue;
+            }
             let mut locals: Vec<String> = st.method_members[method_idx]
                 .parameters
                 .iter()

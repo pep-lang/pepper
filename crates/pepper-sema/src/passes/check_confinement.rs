@@ -296,6 +296,11 @@ struct Program<'a> {
     table: StructTable,
     safe: ThreadSafeStructs,
     summaries: HashMap<String, Summary>,
+    /// The functions whose summaries were recorded before (`recorded`):
+    /// neither summarized nor checked again.
+    settled: std::collections::HashSet<String>,
+    /// Every compiled function body ([`bodies`]).
+    all: std::rc::Rc<Vec<Body<'a>>>,
     /// The functions with bodies: a callee not summarized yet starts at
     /// the bottom (it will be, and its callers again after it).
     bodies: std::collections::HashSet<String>,
@@ -309,27 +314,36 @@ struct Program<'a> {
     regions: std::cell::RefCell<HashMap<String, bool>>,
     /// What [`record_summaries`] found.
     recorded_out: Vec<(Loc, String)>,
+    /// What [`record_summaries`] found, by summary key, with every other
+    /// summary that does not depend on the program (`Module::settled_summaries`).
+    settled_out: HashMap<String, (Loc, String)>,
     /// The runtime's directory, found on first use.
     runtime_directory: super::RuntimeDirectory,
 }
 
 impl<'a> Program<'a> {
     fn new(module: &'a Module) -> Program<'a> {
-        let bodies = bodies(module).into_iter().map(|(_, key, _)| key).collect();
+        let all = std::rc::Rc::new(bodies(module));
+        let bodies = all.iter().map(|(_, key, _)| key.clone()).collect();
         let structs = module.structs.iter().map(|st| (st.name.clone(), st)).collect();
         let constructors = module.structs.iter().flat_map(|st| st.constructors.iter()).map(|c| (c.name.clone(), c)).collect();
         let isolated = module.structs.iter().filter(|st| has_attribute(&st.attributes, ISOLATED_ATTRIBUTE)).map(|st| st.name.clone()).collect();
+        let summaries = recorded(module);
+        let settled = summaries.keys().cloned().collect();
         Program {
             module,
             table: StructTable::build(module),
             safe: ThreadSafeStructs::of(module),
-            summaries: recorded(module),
+            summaries,
+            settled,
+            all,
             bodies,
             structs,
             constructors,
             isolated,
             regions: std::cell::RefCell::new(HashMap::new()),
             recorded_out: vec![],
+            settled_out: HashMap::new(),
             runtime_directory: super::RuntimeDirectory::default(),
         }
     }
@@ -1313,9 +1327,12 @@ fn describe(expr: &Expression) -> String {
 
 // ── The pass ─────────────────────────────────────────────────────────────────
 
-/// Every compiled function body, with the struct it belongs to and its
-/// summary key.
-fn bodies(module: &Module) -> Vec<(Option<TypeName>, String, &FunctionDef)> {
+/// A compiled function body, with the struct it belongs to and its summary
+/// key.
+type Body<'a> = (Option<TypeName>, String, &'a FunctionDef);
+
+/// Every compiled function body.
+fn bodies(module: &Module) -> Vec<Body<'_>> {
     let mut out = vec![];
     for f in module.functions.iter().filter(|f| !f.is_generic_func && f.body.is_some()) {
         out.push((None, f.name.clone(), f));
@@ -1333,9 +1350,16 @@ fn bodies(module: &Module) -> Vec<(Option<TypeName>, String, &FunctionDef)> {
 }
 
 /// The recorded summaries (`Module::recorded_summaries`) of the functions
-/// whose bodies were skipped, by summary key.
+/// whose bodies were skipped, and of a checked runtime's functions (checked
+/// alone, their bodies walked then), by summary key. A summary is recorded
+/// only when it does not depend on the rest of the program.
 fn recorded(module: &Module) -> HashMap<String, Summary> {
     let mut out = HashMap::new();
+    for (key, (loc, text)) in &module.checked.summaries {
+        if let Some(summary) = Summary::decode(text, loc.file) {
+            out.insert(key.clone(), summary);
+        }
+    }
     if module.recorded_summaries.is_empty() {
         return out;
     }
@@ -1362,16 +1386,27 @@ fn recorded(module: &Module) -> HashMap<String, Summary> {
 /// method at its own location, whose summary does not depend on the rest of
 /// the program. Locations more than one function share are left out.
 fn record_summaries(program: &mut Program) {
-    let module = program.module;
-    let keys: Vec<String> = bodies(module).into_iter().map(|(_, key, _)| key).collect();
-    summaries(program, keys);
+    let all = program.all.clone();
+    summaries(program, all.iter().map(|(_, key, _)| key.clone()).collect());
     let mut at: HashMap<Loc, Option<String>> = HashMap::new();
-    for (_, key, function) in bodies(module) {
+    for (_, key, function) in all.iter() {
         if function.loc.is_none() || !function.owner.is_none() || key.contains('<') || key.ends_with(".__ctor") {
             continue;
         }
-        let text = program.summaries.get(&key).filter(|s| !s.dependent).map(Summary::encode);
+        let text = program.summaries.get(key).filter(|s| !s.dependent).map(Summary::encode);
         at.entry(function.loc).and_modify(|shared| *shared = None).or_insert(text);
+    }
+    // Every function's, by key, for a module checked whole: what a checked
+    // runtime keeps (one checked on top of it keeps nothing).
+    let module = program.module;
+    if module.checked.functions.is_empty() && module.checked.structs.is_empty() {
+        program.settled_out = all
+            .iter()
+            .filter_map(|(_, key, function)| {
+                let summary = program.summaries.get(key).filter(|s| !s.dependent)?;
+                Some((key.clone(), (summary.blame.unwrap_or(function.loc), summary.encode())))
+            })
+            .collect();
     }
     let mut out: Vec<(Loc, String)> = at.into_iter().filter_map(|(loc, text)| Some((loc, text?))).collect();
     out.sort_by_key(|(loc, _)| (loc.file.0, loc.span.start));
@@ -1444,13 +1479,14 @@ fn summarize(program: &Program, owner: &Option<TypeName>, key: &str, function: &
 /// point: a worklist that summarizes each function once its callees'
 /// summaries are known, and again when one of them changes.
 fn summaries(program: &mut Program, roots: Vec<String>) {
-    let all: HashMap<String, (Option<TypeName>, &FunctionDef)> =
-        bodies(program.module).into_iter().map(|(owner, key, function)| (key, (owner, function))).collect();
+    let bodies = program.all.clone();
+    let all: HashMap<&str, (&Option<TypeName>, &FunctionDef)> = bodies.iter().map(|(owner, key, function)| (key.as_str(), (owner, *function))).collect();
     let mut callers: HashMap<String, Vec<String>> = HashMap::new();
     let mut queue: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     let mut queued: std::collections::HashSet<String> = std::collections::HashSet::new();
     for key in roots {
-        if let Some((owner, function)) = all.get(&key)
+        if let Some((owner, function)) = all.get(key.as_str())
+            && !program.settled.contains(&key)
             && queued.insert(key.clone())
         {
             program.summaries.insert(key.clone(), Summary::bottom(slots(owner, &key, function), result_slots(&function.ty)));
@@ -1464,10 +1500,10 @@ fn summaries(program: &mut Program, roots: Vec<String>) {
             break;
         }
         budget -= 1;
-        let (owner, function) = &all[&key];
+        let (owner, function) = all[key.as_str()];
         let (summary, called) = summarize(program, owner, &key, function);
         for callee in called {
-            let Some((callee_owner, callee_function)) = all.get(&callee) else { continue };
+            let Some((callee_owner, callee_function)) = all.get(callee.as_str()) else { continue };
             let list = callers.entry(callee.clone()).or_default();
             if !list.contains(&key) {
                 list.push(key.clone());
@@ -1494,7 +1530,8 @@ fn summaries(program: &mut Program, roots: Vec<String>) {
 /// The functions whose checks need summaries: those with a `with` block
 /// (over an `[Isolated]` guard or not; the walk tells) or a call to a
 /// function with a `[Move]` parameter (by name, generously).
-fn roots(module: &Module) -> Vec<String> {
+fn roots(program: &Program) -> Vec<String> {
+    let module = program.module;
     let mut sending: std::collections::HashSet<String> = std::collections::HashSet::new();
     for st in &module.structs {
         for constructor in &st.constructors {
@@ -1530,7 +1567,8 @@ fn roots(module: &Module) -> Vec<String> {
         }
     }
     let mut out = vec![];
-    for (_, key, function) in bodies(module) {
+    // A settled function's summary is known, and its checks were made.
+    for (_, key, function) in program.all.iter().filter(|(_, key, _)| !program.settled.contains(key)) {
         let Some(body) = &function.body else { continue };
         let mut found = false;
         let mut closures: Vec<String> = vec![];
@@ -1551,7 +1589,7 @@ fn roots(module: &Module) -> Vec<String> {
             _ => {}
         });
         if found {
-            out.push(key);
+            out.push(key.clone());
         }
         out.extend(closures);
     }
@@ -1560,17 +1598,22 @@ fn roots(module: &Module) -> Vec<String> {
 
 pub fn check_confinement(module: &mut Module) {
     lower_moved_arguments(module);
-    let recorded = check(module);
+    let (recorded, settled) = check(module);
     module.summaries_to_record = recorded;
+    module.settled_summaries = settled;
 }
 
+/// What [`check`] records: the summaries by location
+/// (`Module::summaries_to_record`) and by key (`Module::settled_summaries`).
+type Recorded = (Vec<(Loc, String)>, HashMap<String, (Loc, String)>);
+
 /// [`check_confinement`], returning the summaries to record.
-fn check(module: &Module) -> Vec<(Loc, String)> {
+fn check(module: &Module) -> Recorded {
     let mut program = Program::new(module);
     if check_parameter_attributes(&program) || check_mutex_arguments(&program) || check_guard_fields(&program) {
-        return vec![];
+        return Default::default();
     }
-    let roots = roots(module);
+    let roots = roots(&program);
     // Only a function with a `with` block needs the region walk.
     let with_blocks: std::collections::HashSet<String> = roots.iter().cloned().collect();
     if module.record_summaries {
@@ -1580,17 +1623,19 @@ fn check(module: &Module) -> Vec<(Loc, String)> {
         summaries(&mut program, roots);
     }
     let triggers = triggers(&program);
-    for (owner, key, function) in bodies(module) {
-        let regions = with_blocks.contains(&key);
-        if !regions && !mentions(function, &triggers) {
+    for (owner, key, function) in program.all.iter() {
+        let regions = with_blocks.contains(key);
+        // Checked with its runtime, and nothing it reaches depends on this
+        // program.
+        if program.settled.contains(key) || (!regions && !mentions(function, &triggers)) {
             continue;
         }
         if let Some(error) = check_function(&program, &owner, function, regions) {
             crate::errors::report(error);
-            return vec![];
+            return Default::default();
         }
     }
-    program.recorded_out
+    (program.recorded_out, program.settled_out)
 }
 
 /// The names a function must mention for the expression checks to find

@@ -17,7 +17,7 @@
 //! Every other struct is not thread-safe, and neither is a plain function
 //! type (`(P...) => R`): its counts are plain and a closure of that type may
 //! hold anything. `shared_functions` checks what a closure converted to a
-//! `shared` function type captures, with [`unsafe_part`] too.
+//! `shared` function type captures, with [`unsafe_part_in`] too.
 //!
 //! Every module-scope variable, exported or not, is implicitly shared: any
 //! function can hand it to any thread, so it follows the same two rules as a
@@ -30,11 +30,6 @@
 use crate::model::*;
 use crate::passes::gather_generics::parse_type_string;
 use crate::type_name::TypeName;
-
-/// The first type inside `ty` that is not thread-safe, if any.
-fn unsafe_part(ty: &TypeName, module: &Module) -> Option<TypeName> {
-    unsafe_part_in(ty, &ThreadSafeStructs::of(module))
-}
 
 /// The names of the structs whose references are thread-safe: `[Shared]`
 /// structs and `shared` function types, and the value structs (`[Value]`)
@@ -67,7 +62,8 @@ impl ThreadSafeStructs {
     }
 }
 
-/// [`unsafe_part`], given the thread-safe structs.
+/// The first type inside `ty` that is not thread-safe, if any, given the
+/// thread-safe structs.
 pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<TypeName> {
     let name = ty.to_string();
     // A C function pointer is a code address, the same on every thread.
@@ -217,16 +213,19 @@ pub(crate) fn not_shared_note(diagnostic: Diagnostic, ty: &TypeName, module: &Mo
 
 pub fn check_shared_types(module: &mut Module) {
     let module: &Module = module;
-    if !check_shared_structs(module) {
+    // Built once: it walks every value struct to a fixed point.
+    let safe = ThreadSafeStructs::of(module);
+    if !check_shared_structs(module, &safe) {
         return;
     }
-    check_globals(module);
+    check_globals(module, &safe);
 }
 
 /// Module-scope variables must be `const` and thread-safe, like the fields
 /// of a `[Shared]` struct.
-fn check_globals(module: &Module) {
-    for global in &module.globals {
+fn check_globals(module: &Module, safe: &ThreadSafeStructs) {
+    // A checked runtime's were checked with it.
+    for global in module.globals.iter().filter(|g| !module.checked.globals.contains(&g.name)) {
         if !global.is_const {
             crate::errors::report(
                 Diagnostic::error(format!("module-scope variable '{}' must be 'const'", global.name))
@@ -238,7 +237,7 @@ fn check_globals(module: &Module) {
             );
             return;
         }
-        let Some(offender) = unsafe_part(&global.ty, module) else { continue };
+        let Some(offender) = unsafe_part_in(&global.ty, safe) else { continue };
         let loc = [global.type_loc, global.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
         let diagnostic = Diagnostic::error(format!(
             "module-scope variable '{}' has type '{}', which is not thread-safe",
@@ -253,8 +252,10 @@ fn check_globals(module: &Module) {
 
 /// Every `[Shared]` struct's fields must be `const` and thread-safe. Returns
 /// whether they all are.
-fn check_shared_structs(module: &Module) -> bool {
-    for st in module.structs.iter().filter(|st| st.is_shared()) {
+fn check_shared_structs(module: &Module, safe: &ThreadSafeStructs) -> bool {
+    // A checked runtime's were checked with it; the specializations the
+    // program adds are not checked yet.
+    for st in module.structs.iter().filter(|st| st.is_shared() && !module.checked.has_struct(&st.name)) {
         let fields = st.field_members.iter().filter(|f| f.kind == Kind::Field && !f.name.starts_with("__"));
         let is_generic_base = st.name == st.ty.name && st.ty.is_generic();
         let is_specialization = st.name.contains('<');
@@ -275,7 +276,7 @@ fn check_shared_structs(module: &Module) -> bool {
             if is_generic_base {
                 continue;
             }
-            let Some(offender) = unsafe_part(&field.ty, module) else { continue };
+            let Some(offender) = unsafe_part_in(&field.ty, safe) else { continue };
             let field_loc = [field.type_loc, field.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
             // A reference enum's field holds a value of one of its cases.
             let (what, owner) = match field.name.split_once('.') {

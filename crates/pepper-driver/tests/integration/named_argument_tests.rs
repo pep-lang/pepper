@@ -231,3 +231,24 @@ fn alias_and_rename_errors() {
         assert!(error.contains(expected), "{attributes}: expected '{expected}', got:\n{error}");
     }
 }
+
+/// A program's extension of a runtime struct adds members its checked
+/// declarations lack: calls bind to them by name, and their results type
+/// the variables they initialize.
+#[test]
+fn named_arguments_reach_a_runtime_struct_the_program_extends() {
+    let source = r#"
+extend String {
+    measured(extra: int = 0, scale: int = 1): int {
+        return (length as int + extra) * scale;
+    }
+}
+test(): int {
+    var n = "ab".measured(scale = 3);
+    if (n != 6) { return 1; }
+    if ("abc".measured(extra = 1) != 4) { return 2; }
+    return 0;
+}
+"#;
+    assert_eq!(compile_jit_with_runtime(source), 0);
+}

@@ -453,8 +453,10 @@ pub fn bind(call: &mut Expression, callees: &[Callee], literals: &[(Loc, usize, 
     }
 }
 
-/// The callees of a module, by how calls name them.
-#[derive(Default)]
+/// The callees of a module, by how calls name them. Over a checked runtime
+/// it holds only what the program adds, and reads the rest from the
+/// runtime's (`base`), built once (`checked::CheckedFacts`).
+#[derive(Debug, Default)]
 pub struct Callees {
     /// Free functions (and enum and value-type methods, `E::m`) by name.
     functions: HashMap<String, Vec<Callee>>,
@@ -466,18 +468,55 @@ pub struct Callees {
     methods: HashMap<String, HashMap<String, Vec<Callee>>>,
     /// `Module::literal_args`.
     literals: Vec<(Loc, usize, Loc)>,
+    base: Option<std::sync::Arc<Callees>>,
+}
+
+/// `base`'s list, then `top`'s, as the declarations come in the module.
+fn merged<'s>(base: Option<&'s [Callee]>, top: Option<&'s [Callee]>) -> Option<std::borrow::Cow<'s, [Callee]>> {
+    match (base, top) {
+        (Some(base), Some(top)) => Some(std::borrow::Cow::Owned([base, top].concat())),
+        (Some(list), None) | (None, Some(list)) => Some(std::borrow::Cow::Borrowed(list)),
+        (None, None) => None,
+    }
 }
 
 impl Callees {
     pub fn of(module: &Module) -> Self {
-        let mut callees = Callees { literals: module.literal_args.clone(), ..Callees::default() };
-        for function in &module.functions {
+        let facts = crate::checked::CheckedFacts::of(module);
+        let mut callees = Callees { literals: module.literal_args.clone(), base: facts.map(|f| f.callees.clone()), ..Callees::default() };
+        let functions = module.functions.iter().filter(|f| !facts.is_some_and(|_| module.checked.has_function(&f.name)));
+        callees.add(functions, module.structs.iter().filter(|st| !facts.is_some_and(|f| f.covers_struct(st))));
+        callees.externs = module.externs.iter().map(|e| e.name.clone()).collect();
+        for ty in crate::traits::used_trait_types(module) {
+            if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
+                let instance = crate::traits::instance(def, &ty);
+                let methods = callees.methods.entry(ty.to_string()).or_default();
+                for method in &instance.methods {
+                    let display = format!("{}.{}", ty.display(), method.name);
+                    methods.entry(method.name.clone()).or_default().push(Callee::of(method, &display, 0, &[]));
+                }
+            }
+        }
+        callees
+    }
+
+    /// The callees `module`'s checked functions and structs declare, alone
+    /// (see `checked::CheckedFacts`).
+    pub(crate) fn of_checked(module: &Module) -> Self {
+        let mut callees = Callees::default();
+        let functions = module.functions.iter().filter(|f| module.checked.has_function(&f.name));
+        callees.add(functions, module.structs.iter().filter(|st| module.checked.has_struct(&st.name)));
+        callees
+    }
+
+    fn add<'m>(&mut self, functions: impl Iterator<Item = &'m FunctionDef>, structs: impl Iterator<Item = &'m StructDef>) {
+        let callees = self;
+        for function in functions {
             let display = function.name.split('<').next().unwrap_or(&function.name);
             let set = crate::passes::overloads::set_name(display).to_string();
             callees.functions.entry(set).or_default().push(Callee::of(function, display, 0, &[]));
         }
-        callees.externs = module.externs.iter().map(|e| e.name.clone()).collect();
-        for st in &module.structs {
+        for st in structs {
             let generic: Vec<String> =
                 if st.name.contains('<') { vec![] } else { st.generic_params.iter().map(|p| p.name.clone()).collect() };
             let display = st.name.clone();
@@ -498,29 +537,40 @@ impl Callees {
                 }
             }
         }
-        for ty in crate::traits::used_trait_types(module) {
-            if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
-                let instance = crate::traits::instance(def, &ty);
-                let methods = callees.methods.entry(ty.to_string()).or_default();
-                for method in &instance.methods {
-                    let display = format!("{}.{}", ty.display(), method.name);
-                    methods.entry(method.name.clone()).or_default().push(Callee::of(method, &display, 0, &[]));
-                }
-            }
-        }
-        callees
+    }
+
+    /// The methods of a receiver of type `receiver`, by set name. A struct
+    /// the program adds to (an extension) has all of them here, not in the
+    /// base.
+    fn receiver(&self, receiver: &str) -> Option<&HashMap<String, Vec<Callee>>> {
+        self.methods.get(receiver).or_else(|| self.base.as_ref()?.methods.get(receiver))
     }
 
     /// The methods of set `method` on a receiver of type `receiver`.
     pub fn methods(&self, receiver: &str, method: &str) -> Option<&[Callee]> {
         let base = method.split('<').next().unwrap_or(method);
-        self.methods.get(receiver)?.get(crate::passes::overloads::set_name(base)).map(Vec::as_slice)
+        self.receiver(receiver)?.get(crate::passes::overloads::set_name(base)).map(Vec::as_slice)
+    }
+
+    /// The free functions of overload set `set`.
+    fn set(&self, set: &str) -> Option<std::borrow::Cow<'_, [Callee]>> {
+        merged(self.base.as_ref().and_then(|b| b.functions.get(set)).map(Vec::as_slice), self.functions.get(set).map(Vec::as_slice))
     }
 
     /// The free functions named `name` (type arguments ignored).
-    pub fn functions(&self, name: &str) -> Option<&[Callee]> {
+    pub fn functions(&self, name: &str) -> Option<std::borrow::Cow<'_, [Callee]>> {
         let base = name.split('<').next().unwrap_or(name);
-        self.functions.get(crate::passes::overloads::set_name(base)).map(Vec::as_slice)
+        self.set(crate::passes::overloads::set_name(base))
+    }
+
+    /// Whether `name` is an extern.
+    fn is_extern(&self, name: &str) -> bool {
+        self.externs.contains(name)
+    }
+
+    /// The constructors a call by `name` names.
+    fn constructors(&self, name: &str) -> Option<std::borrow::Cow<'_, [Callee]>> {
+        merged(self.base.as_ref().and_then(|b| b.constructors.get(name)).map(Vec::as_slice), self.constructors.get(name).map(Vec::as_slice))
     }
 }
 
@@ -588,15 +638,16 @@ pub fn bind_calls(module: &mut Module) {
             let set = crate::passes::overloads::set_name(&base).to_string();
             let found = own
                 .and_then(|methods| methods.get(&set))
-                .or_else(|| callees.functions.get(&set))
-                .or_else(|| callees.constructors.get(name.as_str()))
-                .or_else(|| callees.constructors.get(&base));
+                .map(|list| std::borrow::Cow::Borrowed(list.as_slice()))
+                .or_else(|| callees.set(&set))
+                .or_else(|| callees.constructors(name.as_str()))
+                .or_else(|| callees.constructors(&base));
             match found {
                 Some(list) => {
-                    let list = list.clone();
+                    let list = list.into_owned();
                     bind(e, &list, &callees.literals);
                 }
-                None if callees.externs.contains(&base) => report_extern(&base, args),
+                None if callees.is_extern(&base) => report_extern(&base, args),
                 None => {}
             }
         };
@@ -611,7 +662,12 @@ pub fn bind_calls(module: &mut Module) {
         bind_in(function, None);
     }
     for st in &mut module.structs {
-        let own = callees.methods.get(&st.ty.to_string()).cloned();
+        // Only bodies are bound (a checked runtime's are stashed).
+        let members = st.constructors.iter().chain(&st.method_members).chain(&st.generic_methods).chain(std::iter::once(&st.destructor));
+        if members.clone().all(|f| f.body.is_none() && f.parameters.iter().all(|p| p.default.is_none())) {
+            continue;
+        }
+        let own = callees.receiver(&st.ty.to_string()).cloned();
         for function in st.constructors.iter_mut().chain(&mut st.method_members).chain(&mut st.generic_methods).chain(std::iter::once(&mut st.destructor)) {
             bind_in(function, own.as_ref());
         }
@@ -633,11 +689,11 @@ pub fn bind_calls(module: &mut Module) {
                 return;
             }
             let base = name.split('<').next().unwrap_or(name).to_string();
-            let found = callees.functions(&base).or_else(|| callees.constructors.get(&base).map(Vec::as_slice));
+            let found = callees.functions(&base).or_else(|| callees.constructors(&base));
             if let Some(list) = found {
-                let list = list.to_vec();
+                let list = list.into_owned();
                 bind(e, &list, &callees.literals);
-            } else if callees.externs.contains(&base) {
+            } else if callees.is_extern(&base) {
                 report_extern(&base, args);
             }
         });
@@ -658,7 +714,7 @@ pub fn bind_method_call(e: &mut Expression, receiver: &TypeName, callees: &Calle
     let key = crate::value_types::key(&receiver_name).unwrap_or_else(|| receiver_name.clone());
     if let Some(is_static) = crate::enums::method_is_static(&key, method) {
         let name = crate::enums::method_name(&key, method);
-        if let Some(list) = callees.functions.get(&name) {
+        if let Some(list) = callees.set(&name) {
             let skip = usize::from(!is_static);
             let list: Vec<Callee> = list
                 .iter()

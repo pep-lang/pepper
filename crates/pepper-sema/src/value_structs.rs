@@ -118,14 +118,18 @@ pub fn check(module: &mut Module) {
     let table = StructTable::build(module);
     let mutating = mutating_methods(module, &table);
     let globals: Vec<Binding> = module.globals.iter().map(|v| (v.name.clone(), v.is_const.then_some(v.loc))).collect();
+    // Only bodies are walked (a checked runtime's are stashed).
     for st in module.structs.iter().filter(|st| !is_generic_base(st)) {
+        if st.constructors.iter().chain(&st.method_members).all(|f| f.body.is_none()) {
+            continue;
+        }
         let fields: HashSet<String> = st.field_members.iter().map(|f| f.name.clone()).collect();
-        for function in st.constructors.iter().chain(&st.method_members) {
+        for function in st.constructors.iter().chain(&st.method_members).filter(|f| f.body.is_some()) {
             let mut uses = Uses::new(&table, Some(&st.ty), fields.clone(), &globals, function);
             uses.function(function, &mut |found| found.report(&mutating));
         }
     }
-    for function in &module.functions {
+    for function in module.functions.iter().filter(|f| f.body.is_some()) {
         let mut uses = Uses::new(&table, None, HashSet::new(), &globals, function);
         uses.function(function, &mut |found| found.report(&mutating));
     }

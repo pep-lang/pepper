@@ -4,7 +4,9 @@
 //! checks that read callee bodies (`check_confinement`) run, then put back.
 
 use crate::builder::build_file;
-use crate::model::{Checked, Module, TypeAliasDef};
+use crate::model::{Checked, Module, StructDef, TypeAliasDef};
+use crate::static_type::StructTable;
+use crate::type_name::TypeName;
 use crate::program::Program;
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 use std::collections::HashMap;
@@ -68,6 +70,57 @@ pub fn restore_bodies(module: &mut Module) {
     }
 }
 
+
+/// What the passes derive from a module's checked declarations, which they
+/// read but leave alone: built once per module, on first use, so that a
+/// pass over a program on a checked runtime costs what the program adds.
+#[derive(Debug)]
+pub struct CheckedFacts {
+    /// The checked structs and functions (`StructTable::of_checked`).
+    pub(crate) table: Arc<StructTable>,
+    /// What calls with named arguments bind to among them
+    /// (`named_arguments::Callees::of_checked`).
+    pub(crate) callees: Arc<crate::passes::named_arguments::Callees>,
+    /// The trait types the checked declarations use outside bodies
+    /// (`traits::used_trait_types`).
+    pub(crate) signature_traits: Vec<TypeName>,
+    /// Those only their bodies use: the passes see them only while the
+    /// bodies are not stashed.
+    pub(crate) body_traits: Vec<TypeName>,
+    /// Each checked struct's methods and constructors, counted: a program's
+    /// extension can add to a checked struct, which the facts then no longer
+    /// cover.
+    members: HashMap<String, usize>,
+}
+
+impl CheckedFacts {
+    /// `module`'s facts; none when nothing in it is checked.
+    pub(crate) fn of(module: &Module) -> Option<&Arc<CheckedFacts>> {
+        if module.checked.structs.is_empty() && module.checked.functions.is_empty() {
+            return None;
+        }
+        Some(module.checked_facts.get_or_init(|| {
+            let (signature_traits, body_traits) = crate::traits::checked_trait_types(module);
+            Arc::new(CheckedFacts {
+                table: Arc::new(StructTable::of_checked(module)),
+                callees: Arc::new(crate::passes::named_arguments::Callees::of_checked(module)),
+                signature_traits,
+                body_traits,
+                members: module.structs.iter().filter(|st| module.checked.has_struct(&st.name)).map(|st| (st.name.clone(), members(st))).collect(),
+            })
+        }))
+    }
+
+    /// Whether the facts cover `st`: it is checked and unchanged.
+    pub(crate) fn covers_struct(&self, st: &StructDef) -> bool {
+        self.members.get(&st.name) == Some(&members(st))
+    }
+}
+
+/// How many methods and constructors `st` has.
+fn members(st: &StructDef) -> usize {
+    st.method_members.len() + st.constructors.len()
+}
 
 /// A runtime checked alone (see [`checked_runtime`]): the module the passes
 /// left, its declarations marked checked.
@@ -201,6 +254,10 @@ pub fn checked_runtime(program: &Program, in_runtime: &[bool], store: Option<&dy
         }
     }
     runtime.checked = Checked::all(&runtime);
+    runtime.checked.summaries = std::mem::take(&mut runtime.settled_summaries);
+    // Built now, so every program checked against this runtime in this
+    // process shares them (a copy of the module shares them too).
+    CheckedFacts::of(&runtime);
     runtime.record_summaries = false;
     let summaries = std::mem::take(&mut runtime.summaries_to_record).into_iter().collect();
     let checked = CheckedRuntime { module: runtime, summaries, aliases };
@@ -239,14 +296,20 @@ pub enum Build {
 /// and check only the other files.
 pub fn on_checked_runtime(program: &Program, in_runtime: &[bool], build: Build, store: Option<&dyn RuntimeStore>) -> Result<Module, Diagnostic> {
     let runtime = checked_runtime(program, in_runtime, store)?;
-    let mut module = runtime.module.clone();
+    // One loaded from the store is this program's alone: take it rather than
+    // copy it.
+    let CheckedRuntime { mut module, summaries, aliases } = Arc::try_unwrap(runtime).unwrap_or_else(|shared| CheckedRuntime {
+        module: shared.module.clone(),
+        summaries: shared.summaries.clone(),
+        aliases: shared.aliases.clone(),
+    });
     let fresh = empty(program);
     module.sources = fresh.sources;
     module.namespaces = fresh.namespaces;
     module.extension_scopes = fresh.extension_scopes;
     module.overload_unions = fresh.overload_unions;
-    module.type_aliases = runtime.aliases.clone();
-    module.recorded_summaries = runtime.summaries.clone();
+    module.type_aliases = aliases;
+    module.recorded_summaries = summaries;
     let mut order: Vec<usize> = (0..program.files.len()).filter(|&i| !in_runtime[i]).collect();
     if build == Build::Document {
         let document = order.iter().position(|&i| i == 0).map_or(0, |p| p + 1);

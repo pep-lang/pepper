@@ -4,10 +4,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::model::{BinaryOp, Expression, Module};
+use crate::model::{BinaryOp, Expression, Module, StructDef};
 use crate::type_name::TypeName;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct StructInfo {
     /// (field name, field type)
     pub(crate) fields: Vec<(String, TypeName)>,
@@ -20,85 +20,111 @@ pub(crate) struct StructInfo {
     pub(crate) unary_operators: HashSet<String>,
 }
 
-pub(crate) struct StructTable {
-    pub(crate) structs: HashMap<String, StructInfo>,
-    /// Free-function and extern name -> return type.
-    pub(crate) functions: HashMap<String, TypeName>,
-}
-
-impl StructTable {
-    pub(crate) fn build(module: &Module) -> Self {
-        let mut structs = HashMap::new();
-        for st in &module.structs {
-            let name = st.ty.to_string();
-            let info = StructInfo {
-                fields: st
-                    .field_members
-                    .iter()
-                    .map(|f| (f.name.clone(), f.ty.clone()))
-                    .collect(),
-                // An overloaded method also answers to its set's name (`+`).
-                methods: st
-                    .method_members
-                    .iter()
-                    .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
-                    .collect(),
-                returns: st
-                    .method_members
-                    .iter()
-                    .map(|m| (m.name.clone(), m.ty.clone()))
-                    .collect(),
-                unary_operators: crate::passes::unary_operators::declared(&st.method_members),
-            };
-            // Also key the generic base (`Array<T>` -> `Array`) so pre-
-            // specialization lookups resolve; never clobber a concrete entry.
-            if name != st.ty.name && !structs.contains_key(&st.ty.name) {
-                structs.insert(st.ty.name.clone(), info.clone());
-            }
-            structs.insert(name, info);
+impl StructInfo {
+    fn of(st: &StructDef) -> StructInfo {
+        StructInfo {
+            fields: st.field_members.iter().map(|f| (f.name.clone(), f.ty.clone())).collect(),
+            // An overloaded method also answers to its set's name (`+`).
+            methods: st
+                .method_members
+                .iter()
+                .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
+                .collect(),
+            returns: st.method_members.iter().map(|m| (m.name.clone(), m.ty.clone())).collect(),
+            unary_operators: crate::passes::unary_operators::declared(&st.method_members),
         }
-        // Traits used as types: what a value of the type can call. The
-        // specialized instances first (`Iterator<int>`), then each base for
-        // lookups of an instance nothing declares.
-        let trait_info = |t: &crate::model::TraitType| StructInfo {
+    }
+
+    /// What a value of trait type can call.
+    fn of_trait(t: &crate::model::TraitType) -> StructInfo {
+        StructInfo {
             fields: vec![],
             methods: t
                 .methods
                 .iter()
                 .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
                 .collect(),
-            returns: t
-                .methods
-                .iter()
-                .map(|m| (m.name.clone(), m.ty.clone()))
-                .collect(),
+            returns: t.methods.iter().map(|m| (m.name.clone(), m.ty.clone())).collect(),
             unary_operators: crate::passes::unary_operators::declared(&t.methods),
-        };
+        }
+    }
+}
+
+/// The structs (and trait types) and functions of a module, for static
+/// types. Over a checked runtime it holds only what the program adds, and
+/// reads the rest from the runtime's table (`base`), built once
+/// (`checked::CheckedFacts`).
+#[derive(Debug, Default)]
+pub(crate) struct StructTable {
+    structs: HashMap<String, StructInfo>,
+    /// Free-function and extern name -> return type.
+    functions: HashMap<String, TypeName>,
+    base: Option<std::sync::Arc<StructTable>>,
+}
+
+impl StructTable {
+    pub(crate) fn build(module: &Module) -> Self {
+        let facts = crate::checked::CheckedFacts::of(module);
+        let mut table = StructTable { base: facts.map(|f| f.table.clone()), ..StructTable::default() };
+        table.add_structs(module.structs.iter().filter(|st| !facts.is_some_and(|f| f.covers_struct(st))));
+        // Traits used as types: what a value of the type can call. The
+        // specialized instances first (`Iterator<int>`), then each base for
+        // lookups of an instance nothing declares.
         for ty in crate::traits::used_trait_types(module) {
-            if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
-                structs
-                    .entry(ty.to_string())
-                    .or_insert_with(|| trait_info(&crate::traits::instance(def, &ty)));
+            if let Some(def) = crate::traits::trait_def(&module.traits, &ty)
+                && table.get(&ty.to_string()).is_none()
+            {
+                table.structs.insert(ty.to_string(), StructInfo::of_trait(&crate::traits::instance(def, &ty)));
             }
         }
         for def in &module.traits {
-            let ty = TypeName::new(&def.name);
-            structs
-                .entry(def.name.clone())
-                .or_insert_with(|| trait_info(&crate::traits::instance(def, &ty)));
+            if table.get(&def.name).is_none() {
+                let ty = TypeName::new(&def.name);
+                table.structs.insert(def.name.clone(), StructInfo::of_trait(&crate::traits::instance(def, &ty)));
+            }
         }
-        let mut functions = HashMap::new();
-        for f in &module.functions {
-            functions.insert(f.name.clone(), f.ty.clone());
-        }
+        table.add_functions(module.functions.iter().filter(|f| !facts.is_some_and(|_| module.checked.has_function(&f.name))));
         for e in &module.externs {
-            functions.insert(e.name.clone(), e.ty.clone());
+            table.functions.insert(e.name.clone(), e.ty.clone());
         }
-        Self { structs, functions }
+        table
+    }
+
+    /// The table of `module`'s checked structs and functions alone, without
+    /// trait types or externs (see `checked::CheckedFacts`).
+    pub(crate) fn of_checked(module: &Module) -> Self {
+        let mut table = StructTable::default();
+        table.add_structs(module.structs.iter().filter(|st| module.checked.has_struct(&st.name)));
+        table.add_functions(module.functions.iter().filter(|f| module.checked.has_function(&f.name)));
+        table
+    }
+
+    fn add_structs<'m>(&mut self, structs: impl Iterator<Item = &'m StructDef>) {
+        for st in structs {
+            let name = st.ty.to_string();
+            let info = StructInfo::of(st);
+            // Also key the generic base (`Array<T>` -> `Array`) so pre-
+            // specialization lookups resolve; never clobber a concrete entry.
+            if name != st.ty.name && self.get(&st.ty.name).is_none() {
+                self.structs.insert(st.ty.name.clone(), info.clone());
+            }
+            self.structs.insert(name, info);
+        }
+    }
+
+    fn add_functions<'m>(&mut self, functions: impl Iterator<Item = &'m crate::model::FunctionDef>) {
+        for f in functions {
+            self.functions.insert(f.name.clone(), f.ty.clone());
+        }
+    }
+
+    /// The return type of free function or extern `name`.
+    pub(crate) fn function(&self, name: &str) -> Option<&TypeName> {
+        self.functions.get(name).or_else(|| self.base.as_ref()?.function(name))
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&StructInfo> {
-        self.structs.get(name)
+        self.structs.get(name).or_else(|| self.base.as_ref()?.get(name))
     }
 
     /// Base struct name of a type string (`String<...>` -> `String`).
@@ -109,9 +135,7 @@ impl StructTable {
     /// Struct info for a type: the exact specialization first (`Array<int>`),
     /// then the generic base (`Array`) for pre-specialization lookups.
     pub(crate) fn lookup(&self, ty: &TypeName) -> Option<&StructInfo> {
-        self.structs
-            .get(&ty.to_string())
-            .or_else(|| self.structs.get(&Self::base_name(ty)))
+        self.get(&ty.to_string()).or_else(|| self.get(&Self::base_name(ty)))
     }
 }
 
@@ -242,7 +266,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         }
         Expression::FunctionCall { function, .. } => {
             // Plain free-function call: its declared return type.
-            if let Some(ty) = table.functions.get(function) {
+            if let Some(ty) = table.function(function) {
                 return Some(ty.clone());
             }
             // Constructor-style call `Name<...>(...)` resolves to Name<...>;

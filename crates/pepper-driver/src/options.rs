@@ -85,7 +85,8 @@ pub struct Options {
     pub emit_ast: bool,
 
     /// Enable a trace channel. `time` prints how long each compile stage
-    /// took; `cache` prints whether each unit's object came from the build
+    /// took; `passes` prints how long each sema pass took, summed over its
+    /// runs; `cache` prints whether each unit's object came from the build
     /// cache; the others (codegen|ast|parser|ir|debuginfo|link) are accepted
     /// and ignored.
     #[arg(short = 'T', value_name = "CHAN")]

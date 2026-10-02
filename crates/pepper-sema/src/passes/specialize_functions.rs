@@ -6,17 +6,17 @@ use crate::type_name::TypeName;
 
 pub fn specialize_functions(module: &mut Module) {
     let specs: Vec<TypeName> = module.func_specs.clone();
+    // Looked up once per spec, and a checked runtime brings many.
+    let structs: std::collections::HashSet<String> =
+        module.structs.iter().flat_map(|st| [st.name.clone(), st.ty.to_string()]).collect();
+    let mut functions: std::collections::HashSet<String> = module.functions.iter().map(|f| f.name.clone()).collect();
     for spec in specs {
         // Skip constructor-shaped specs (they are struct specs).
-        if module
-            .structs
-            .iter()
-            .any(|st| st.name == spec.name || st.ty.to_string() == spec.to_string())
-        {
+        if structs.contains(&spec.name) || structs.contains(&spec.to_string()) {
             continue;
         }
         // Existing specialization?
-        if module.functions.iter().any(|f| f.name == spec.to_string()) {
+        if functions.contains(&spec.to_string()) {
             continue;
         }
         if crate::passes::gather_generics::specialization_too_deep(module, &spec) {
@@ -57,6 +57,7 @@ pub fn specialize_functions(module: &mut Module) {
             replace_body_types(body, &type_map);
         }
         rewrite_static_calls(&mut specialized, &type_map, &[]);
+        functions.insert(specialized.name.clone());
         module.functions.push(specialized);
     }
 }

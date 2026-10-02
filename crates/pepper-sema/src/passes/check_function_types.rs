@@ -627,7 +627,7 @@ impl<'a> Checker<'a> {
         let is_struct = |t: &TypeName| {
             !t.is_pointer()
                 && !crate::enums::is_enum(&t.name)
-                && self.table.structs.get(&t.to_string()).is_some_and(|info| !info.methods.contains(&op.op_name()))
+                && self.table.get(&t.to_string()).is_some_and(|info| !info.methods.contains(&op.op_name()))
         };
         let structure = if is_struct(&l) && is_integer(&r) {
             l
