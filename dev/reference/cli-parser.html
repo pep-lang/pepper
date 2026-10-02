@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cac7866f.js";
+            window.path_to_searchindex_js = "../searchindex-539d85b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c45e05eb.js"></script>
+        <script src="../toc-bea1f4dd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -361,6 +361,57 @@ it was the one given.</p>
 <ul>
 <li>if <code>name</code> is empty, starts with <code>-</code> or is already declared, or if this parser has positional arguments</li>
 </ul>
+<h4 id="add_options"><a class="header" href="#add_options">add_options</a></h4>
+<pre><code class="language-pepper">add_options&lt;T&gt;(options: T)
+</code></pre>
+<p>Declares an option or positional argument for each public field of
+<code>options</code>, and has every successful parse store the values in those
+fields.</p>
+<p>A field’s type picks what it declares: <code>bool</code> is a flag, <code>String</code> an
+option with one value, <code>String?</code> one that may be left out, and
+<code>String[]</code> one that may be given many times. An option is named after
+its field, with each <code>_</code> written <code>-</code> (<code>import_path</code> is
+<code>--import-path</code>); <code>[cli.Option]</code> on a field gives it a short name,
+help, another name, or makes it required. <code>[cli.Positional]</code> makes a
+field the next positional argument instead.</p>
+<p>A <code>String</code> field that holds a value when this is called keeps it as
+the default; an empty one has no default, so leaving the option out
+leaves it empty, or is an error for a positional argument. Every
+parse sets every field: a flag to whether it was given, a list to the
+values given.</p>
+<p>The declarations are the same as the builder methods make, so the
+help and errors read the same, and the two styles mix on one parser.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the options struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>options</code> — the struct whose fields to declare and fill in</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import cli;
+
+    struct Options {
+        [cli.Option("o", "the executable to write")]
+        var output: String = "a.out";
+        [cli.Option("v", "say what is happening")]
+        var verbose: bool;
+        [cli.Positional("the program's entry file")]
+        var source: String;
+    }
+
+    main(args: String[]): int {
+        var options = Options();
+        var parser = cli.Parser("pepper", "Compiles a Pepper program");
+        parser.add_options(options);
+        if (!parser.parse(args)) {
+            return 2;
+        }
+        print($"{options.source} -&gt; {options.output}");
+        return 0;
+    }
+</code></pre>
 <h4 id="usage"><a class="header" href="#usage">usage</a></h4>
 <pre><code class="language-pepper">usage(): String
 </code></pre>
@@ -543,7 +594,7 @@ argument lists; this constructor is for the runtime.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/digest-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/cli-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -557,7 +608,7 @@ argument lists; this constructor is for the runtime.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/digest-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/cli-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

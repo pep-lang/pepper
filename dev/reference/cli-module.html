@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cac7866f.js";
+            window.path_to_searchindex_js = "../searchindex-539d85b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c45e05eb.js"></script>
+        <script src="../toc-bea1f4dd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,6 +192,8 @@ in <code>main(args: String[])</code> and <code>process.arguments()</code>.</p>
 <li><a href="cli-parser.html">Parser</a>: <code>Parser</code>, and the handles its declarations
 return: <code>Flag</code>, <code>Argument</code>, <code>ArgumentList</code>; and <code>closest</code>, which
 picks the name a misspelled one most likely meant</li>
+<li><a href="cli-options.html">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
+that shape what <code>Parser.add_options</code> declares from a struct’s fields</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import cli;

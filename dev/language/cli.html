@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cac7866f.js";
+            window.path_to_searchindex_js = "../searchindex-539d85b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c45e05eb.js"></script>
+        <script src="../toc-bea1f4dd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,8 @@
                         <h1 id="command-line-options"><a class="header" href="#command-line-options">Command-line options</a></h1>
 <p>The <code>cli</code> module parses a program’s command line. Declare each option and
 positional argument on a <code>cli.Parser</code>, call <code>parse</code>, then read the values
-through the handles the declarations returned. The help, <code>--version</code> and
+through the handles the declarations returned, or declare them all at once
+as the fields of a struct. The help, <code>--version</code> and
 the error messages all come from the declarations. Bring it in with
 <code>import cli</code>; the full API is in the <a href="../reference/cli-module.html">reference</a>.</p>
 <pre><code class="language-pepper"># Command-line parsing: declare options and arguments, then parse.
@@ -306,6 +307,82 @@ Run 'greet --help' for more information.
 <code>--version</code> asked for it (print it and exit with 0), or none when the
 arguments were parsed. Tests use it, and so can a program that reports
 errors its own way.</p>
+<h2 id="declaring-options-as-a-struct"><a class="header" href="#declaring-options-as-a-struct">Declaring options as a struct</a></h2>
+<p><code>add_options</code> declares an option or positional argument for each public
+field of a struct, and every successful parse stores the values in that
+struct’s fields. The attributes <code>[cli.Option]</code> and <code>[cli.Positional]</code> on
+the fields carry what the builder calls take as arguments:</p>
+<pre><code class="language-pepper"># Command-line parsing: declare the options as a struct's fields.
+import cli;
+
+struct Options {
+    [cli.Option("g", "what to say")]
+    var greeting: String = "hello";
+    [cli.Option("l", "shout it")]
+    var loud: bool;
+    [cli.Option("n", "how many times to say it", value_name = "COUNT")]
+    var times: String?;
+    [cli.Positional("who to greet")]
+    var names: String[];
+}
+
+main(args: String[]): int {
+    var options = Options();
+    var parser = cli.Parser("greet", "Greets someone", version = "1.0");
+    parser.add_options(options);
+    if (!parser.parse(args)) {
+        return 2;
+    }
+
+    var people = options.names.is_empty ? ["world"] : options.names;
+    var count = int.parse(options.times.value_or("1"));
+    if (!count) {
+        print("greet: error: '--times' needs a number");
+        return 2;
+    }
+    for (var person in people) {
+        var line = $"{options.greeting}, {person}";
+        for (var _ in 0..count.value()) {
+            print(options.loud ? line.upper() : line);
+        }
+    }
+    return 0;
+}
+</code></pre>
+<p>Its help and errors are the same as the builder example’s above: the
+declarations are the same ones.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field type</th><th>Declares</th><th>After a parse</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bool</code></td><td><code>flag</code></td><td>whether it was given</td></tr>
+<tr><td><code>String</code></td><td><code>option</code></td><td>the value given, else the field’s starting value</td></tr>
+<tr><td><code>String?</code></td><td><code>option</code></td><td>the value given, or Empty</td></tr>
+<tr><td><code>String[]</code></td><td><code>multiple</code></td><td>the values given, in order</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>An option is named after its field, with each <code>_</code> written <code>-</code>:
+<code>import_path</code> is <code>--import-path</code>. Any other field type is a compile
+error at the call: <code>'add_options' cannot declare field 'count' of type 'int'; use bool, String, String? or String[]</code>.</li>
+<li><code>[cli.Option(short_name, help, name, value_name, required)]</code> sets the
+rest, every argument optional: <code>[cli.Option("o", "the executable to write")]</code>, <code>[cli.Option(required = true)]</code>.</li>
+<li><code>[cli.Positional(help, name, required)]</code> makes the field the next
+positional argument. A <code>String</code> one is required unless the field starts
+with a value; a <code>String?</code> one may be left out; a <code>String[]</code> one takes
+every value left (<code>positionals</code>), and <code>required</code> asks for at least one.</li>
+<li>A <code>String</code> field’s starting value is the default the help shows; an
+empty one means none. Each parse sets every field again, so a flag left
+out is false even if the field started true.</li>
+<li>A parse that fails, or that asks for <code>--help</code> or <code>--version</code>, leaves the
+fields as they were.</li>
+<li>The two styles mix: call <code>flag</code> and <code>option</code> on the same parser, and
+<code>add_options</code> on a command’s parser for that command’s options. A
+command’s struct is filled only when that command is given.</li>
+</ul>
 <h2 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h2>
 <p><code>command(name, about)</code> declares a subcommand, as in <code>git add</code> or
 <code>pep-package update</code>, and returns its own <code>Parser</code> to declare its options
@@ -351,11 +428,8 @@ usage.</li>
 </ul>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
-<li><strong>Declaring options as a struct</strong>, with an attribute on each field
-(<code>[Option("o")] var output: String;</code>). The
-<a href="reflection.html">reflection</a> it needs is in place; the struct style is
-tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362</a>.</li>
-<li>Typed values (integers, <code>io.Path</code>): values are Strings.</li>
+<li>Typed values (integers, <code>io.Path</code>): values are Strings, and a struct’s
+fields are <code>bool</code>, <code>String</code>, <code>String?</code> or <code>String[]</code>.</li>
 <li>Options that apply after a subcommand’s name (clap’s global options).</li>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
 <li>Generating shell completions.</li>
