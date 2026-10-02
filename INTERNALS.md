@@ -469,7 +469,7 @@ with no extension, and `module_name()` is the output's stem.
   of its name, of each constraint (`Bound`), and of its default.
 - `type_name_from` lowers `T[]` to `Array<T>`.
 - `variable_def` gives a variable or field of type `Optional<T>` with no
-  initializer the default `Optional<T>()`, so it starts as None, not null.
+  initializer the default `Optional<T>()`, so it starts as Empty, not null.
 - Lowering highlights:
   - A `for (var x in e)` loop becomes a block holding a hidden
     `__for_iterator_N` local (initialized with `Expression::ForIterator(e)`)

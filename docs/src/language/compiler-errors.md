@@ -137,7 +137,8 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `io.Print` trait | `io.Writer` (which also needs `write(data)`) |
 | `Atomic<T>` without an import (now an error: it moved to the `async` module) | `async.Atomic<T>` after `import async`, or `import [Atomic] from async` |
 | `math.parse_int(text, base)` | `long.parse(text, base)`, with no import |
-| `Optional<T>()` (now an error: `Optional` is an enum) | `Optional<T>.none()` or `Optional<T>.None` |
+| `Optional<T>()` (now an error: `Optional` is an enum) | `Optional<T>.none()` or `Optional<T>.Empty` |
+| `Optional` cases `None` and `Some(v)` (now an error: renamed) | `Empty` and `Value(v)` |
 | `[LinkName("symbol")]` on an extern (now an error) | `[Link(name = "symbol")]` |
 | A parameter's former name, kept by `[Rename("old", "new")]` | the new name (see [named arguments](functions.md#other-names-for-a-parameter)) |
 

@@ -30,7 +30,7 @@ export struct Uri {
     var scheme: String;
     ## The user information before `@` in the authority, if any.
     var user_info: String?;
-    ## The host, without the brackets of an IPv6 address; None when the URI
+    ## The host, without the brackets of an IPv6 address; Empty when the URI
     ## has no authority (no `//`), and empty for one such as `file:///tmp`.
     var host: String?;
     ## The port after the host, if the authority gives one.
@@ -186,8 +186,8 @@ export struct Uri {
     ## Returns the authority as it appears after `//`: user information,
     ## host (in brackets when it is an IPv6 address) and port.
     ##
-    ## @returns the authority, such as `user@example.com:8443`, or None when
-    ##   `host` is None
+    ## @returns the authority, such as `user@example.com:8443`, or Empty when
+    ##   `host` is Empty
     authority(): String? {
         if (host.is_none()) {
             return Optional<String>.none();

@@ -110,7 +110,7 @@ export struct _HttpReader {
         return this._connection._read(this._buffer, 16384);
     }
 
-    # The next line without its CRLF (or LF). None when the stream ends
+    # The next line without its CRLF (or LF). Empty when the stream ends
     # before any byte of it; an error when it ends mid-line or the line is
     # longer than `limit`.
     _line(limit: ulong): io.IoResult<String?> {

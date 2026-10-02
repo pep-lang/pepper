@@ -523,7 +523,7 @@ export struct HashMap<K, V> {
     ## @param key the key to look up
     ## @returns the value for `key`, or none when absent
     ## @example
-    ##     if (ages.try_get("ada") is Some(age)) {
+    ##     if (ages.try_get("ada") is Value(age)) {
     ##         print($"{age}");
     ##     }
     try_get(key: K): V? {

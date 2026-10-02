@@ -568,7 +568,7 @@ _json_new<T>(witness: T, is_null: bool): T {
     return T();
 }
 
-# None when `value` is an integer in [low, high], else the error.
+# Empty when `value` is an integer in [low, high], else the error.
 _json_integer(value: JsonValue, path: String, low: long, high: long, type_name: String): JsonError? {
     var number = value.as_int();
     if (number.is_none()) {

@@ -461,7 +461,7 @@ test(): int {
     if (!spelled.is_ok()) { return -2; }
     var found = Array<int?>();
     found.append(Optional<int>.some(1));
-    found.append(Optional<int>.None);
+    found.append(Optional<int>.Empty);
     if (found[0].value() != 1 || found[1]) { return -3; }
     return 0;
 }

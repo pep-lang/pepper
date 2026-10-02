@@ -533,7 +533,7 @@ _tar_checksum_ok(header: u8[]): bool {
 
 # The number in the `size`-byte field at `start`: octal digits, padded with
 # spaces or NULs, or GNU's base-256 form (first byte 0x80, then big-endian).
-# None when the field holds anything else.
+# Empty when the field holds anything else.
 _tar_number(header: u8[], start: ulong, size: ulong): ulong? {
     if ((header[start] & 128) != 0) {
         ulong value = (header[start] & 127) as ulong;

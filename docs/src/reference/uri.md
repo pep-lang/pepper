@@ -62,7 +62,7 @@ The user information before `@` in the authority, if any.
 var host: String?
 ```
 
-The host, without the brackets of an IPv6 address; None when the URI
+The host, without the brackets of an IPv6 address; Empty when the URI
 has no authority (no `//`), and empty for one such as `file:///tmp`.
 
 #### port
@@ -183,7 +183,7 @@ Returns the authority as it appears after `//`: user information,
 host (in brackets when it is an IPv6 address) and port.
 
 **Returns**
-- the authority, such as `user@example.com:8443`, or None when `host` is None
+- the authority, such as `user@example.com:8443`, or Empty when `host` is Empty
 
 #### path_and_query
 

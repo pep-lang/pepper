@@ -572,7 +572,7 @@ export struct Map<K, V> {
     ## @param key the key to look up
     ## @returns the value for `key`, or none when absent
     ## @example
-    ##     if (scores.try_get("alice") is Some(score)) {
+    ##     if (scores.try_get("alice") is Value(score)) {
     ##         print($"{score}");
     ##     }
     try_get(key: K): V? {

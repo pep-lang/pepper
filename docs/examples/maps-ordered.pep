@@ -17,7 +17,7 @@ main(): int {
     }
     assert(keys == "name license version ", "insertion order");
 
-    if (config.try_get("license") is Some(license)) {
+    if (config.try_get("license") is Value(license)) {
         assert(license == "MIT", "found");
     }
     assert(config.try_get("author").is_none(), "absent");

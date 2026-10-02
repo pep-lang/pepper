@@ -10,8 +10,8 @@ Source: `runtime/optional.pep`
 [Value] enum Optional<T>
 ```
 
-A value of type `T` that may be absent: either Some, holding a `T`, or
-None, holding nothing, like Rust's `Option<T>` and Swift's `Optional`.
+A value of type `T` that may be absent: either Value, holding a `T`, or
+Empty, holding nothing, like Rust's `Option<T>` and Swift's `Optional`.
 
 Use it instead of a null reference or a sentinel (`-1`, `""`) wherever a
 value may be missing: the type says so, and reading the value goes through
@@ -19,12 +19,12 @@ value may be missing: the type says so, and reading the value goes through
 every type, including those that have no null, such as `int`.
 
 `T?` is shorthand for `Optional<T>`, and a variable or field of an
-optional type that is not given a value starts as None.
+optional type that is not given a value starts as Empty.
 
 Build one with the static `some` or `none` functions, or with its cases
-(`Optional<int>.Some(1)`, `Optional<int>.None`). Test it with `is_some()`
+(`Optional<int>.Value(1)`, `Optional<int>.Empty`). Test it with `is_some()`
 or `is_none()`, as a condition by itself (`if (found)`), or with `match`
-and `is` on its cases (`if (found is Some(v))`).
+and `is` on its cases (`if (found is Value(v))`).
 
 An optional is a [value enum](../language/value-structs.md): it is stored
 inline in whatever holds it, with no allocation, and copying one gives an
@@ -32,7 +32,7 @@ independent optional. It is never null, and has no identity, so compare
 optionals with `==`, not `===`.
 
 **Type parameters**
-- `T` — the type of the value a Some optional holds
+- `T` — the type of the value a Value optional holds
 
 **Example**
 ```pepper
@@ -55,19 +55,19 @@ optionals with `==`, not `===`.
 
 ### Cases
 
-#### None
+#### Empty
 
 ```pepper
-None
+Empty
 ```
 
 Holds no value. It is the first case, so an optional that is never
-given a value is None.
+given a value is Empty.
 
-#### Some
+#### Value
 
 ```pepper
-Some(value: T)
+Value(value: T)
 ```
 
 Holds a value.
@@ -83,7 +83,7 @@ Holds a value.
 static some(value: T): Optional<T>
 ```
 
-Returns a Some optional holding `value`.
+Returns a Value optional holding `value`.
 
 For a struct `T` the optional acquires a reference to `value`.
 
@@ -91,7 +91,7 @@ For a struct `T` the optional acquires a reference to `value`.
 - `value` — the value to hold
 
 **Returns**
-- a Some optional whose value is `value`
+- a Value optional whose value is `value`
 
 **Example**
 ```pepper
@@ -104,10 +104,10 @@ For a struct `T` the optional acquires a reference to `value`.
 static none(): Optional<T>
 ```
 
-Returns a None optional, one holding no value.
+Returns an Empty optional, one holding no value.
 
 **Returns**
-- a None optional
+- an Empty optional
 
 **Example**
 ```pepper
@@ -125,7 +125,7 @@ is_some(): bool
 Reports whether this optional holds a value.
 
 **Returns**
-- true when the optional is Some
+- true when the optional is Value
 
 #### is_none
 
@@ -136,7 +136,7 @@ is_none(): bool
 Reports whether this optional holds no value.
 
 **Returns**
-- true when the optional is None
+- true when the optional is Empty
 
 #### operator !!
 
@@ -152,7 +152,7 @@ optional can stand as a condition by itself.
 `?:`.
 
 **Returns**
-- true when the optional is Some
+- true when the optional is Value
 
 **Example**
 ```pepper
@@ -166,7 +166,7 @@ optional can stand as a condition by itself.
 value(location: __ptr<char> = __caller_location()): T
 ```
 
-Returns the value, panicking if this optional is None.
+Returns the value, panicking if this optional is Empty.
 
 For a struct `T` the caller gets its own reference; the optional keeps
 its reference too.
@@ -175,10 +175,10 @@ its reference too.
 - `location` — where a failure is reported; left out, this call's location
 
 **Returns**
-- the value of a Some optional
+- the value of a Value optional
 
 **Panics**
-- if the optional is None ("Optional.value on a None value")
+- if the optional is Empty ("Optional.value on an Empty optional")
 
 **Example**
 ```pepper
@@ -191,16 +191,16 @@ its reference too.
 value_or(fallback: T): T
 ```
 
-Returns the value, or `fallback` if this optional is None.
+Returns the value, or `fallback` if this optional is Empty.
 
 Never panics. `fallback` is evaluated by the caller whether or not it
 is used.
 
 **Parameters**
-- `fallback` — the value to return when the optional is None
+- `fallback` — the value to return when the optional is Empty
 
 **Returns**
-- the value when the optional is Some, otherwise `fallback`
+- the value when the optional is Value, otherwise `fallback`
 
 **Example**
 ```pepper

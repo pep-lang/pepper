@@ -236,7 +236,7 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   indexers (`[]`), as a struct does; one whose cases carry nothing cannot
   declare operators or indexers yet, and has `==` and `!=` built in.
 - A case's values bind names only: a pattern cannot nest inside a case
-  (`Some(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
+  (`Value(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
   inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).
   Patterns cannot match ranges (`1..9`) or have guards yet. A literal
   pattern is a literal, not a named constant.

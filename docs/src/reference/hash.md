@@ -308,7 +308,7 @@ Expected O(1).
 
 **Example**
 ```pepper
-    if (ages.try_get("ada") is Some(age)) {
+    if (ages.try_get("ada") is Value(age)) {
         print($"{age}");
     }
 ```

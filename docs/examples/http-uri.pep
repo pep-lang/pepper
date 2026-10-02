@@ -7,7 +7,7 @@ main(): int {
     assert(Uri.decode(uri.path).value() == "/café", "decoded path");
     assert(uri.path_and_query() == "/caf%C3%A9?page=2", "what an HTTP request line names");
 
-    # Missing parts are None: a mailto URI has no authority.
+    # Missing parts are Empty: a mailto URI has no authority.
     var mail = Uri.parse("mailto:someone@example.com").value();
     assert(mail.host.is_none() && mail.path == "someone@example.com", "no authority");
 

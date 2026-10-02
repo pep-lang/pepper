@@ -1,5 +1,5 @@
 //! Optional<T> semantics: every method against a POD `T` and a struct `T`,
-//! the None panic, and reference counts of a struct value held by an
+//! the Empty panic, and reference counts of a struct value held by an
 //! optional. Each test returns 0 on success or a distinct negative code per
 //! check.
 
@@ -35,7 +35,7 @@ test(): int {
     var b = Optional<int>.none();
     if (b.is_some() || !b.is_none()) { return -4; }
     if (b.value_or(7) != 7) { return -5; }
-    var c = Optional<int>.None;
+    var c = Optional<int>.Empty;
     if (!c.is_none()) { return -6; }
     return 0;
 }"#),
@@ -142,7 +142,7 @@ fn value_of_none_panics() {
     let output = Command::new(&exe).output().expect("spawn");
     let stdout = crate::support::output_text(&output);
     assert!(!output.status.success(), "expected a panic; stdout: {stdout:?}");
-    assert!(stdout.contains("Optional.value on a None value"), "stdout: {stdout:?}");
+    assert!(stdout.contains("Optional.value on an Empty optional"), "stdout: {stdout:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -213,21 +213,21 @@ test(): int {
 }
 
 #[test]
-fn optional_is_an_enum_with_none_and_some_cases() {
+fn optional_is_an_enum_with_empty_and_value_cases() {
     assert_eq!(
         run(r#"
 describe(o: String?): int {
     return match (o) {
-        None => 0,
-        Some(text) => text.length as int,
+        Empty => 0,
+        Value(text) => text.length as int,
     };
 }
 
 test(): int {
-    var some = Optional<String>.Some("four");
+    var some = Optional<String>.Value("four");
     if (describe(some) != 4) { return -1; }
-    if (describe(Optional<String>.None) != 0) { return -2; }
-    if (some is Some(text)) {
+    if (describe(Optional<String>.Empty) != 0) { return -2; }
+    if (some is Value(text)) {
         if (text != "four") { return -3; }
     } else {
         return -3;
@@ -235,7 +235,7 @@ test(): int {
     if (some != Optional<String>.some("four")) { return -4; }
     if (some == Optional<String>.none()) { return -5; }
     String? unset;
-    if (unset != Optional<String>.None) { return -6; }
+    if (unset != Optional<String>.Empty) { return -6; }
     return 0;
 }"#),
         0

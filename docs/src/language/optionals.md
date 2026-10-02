@@ -1,8 +1,8 @@
 # Optional values
 
 A value that may be missing has the type `Optional<T>`, written `T?` for
-short: either **Some**,
-holding a `T`, or **None**, holding nothing. It plays the role of Rust's
+short: either **Value**,
+holding a `T`, or **Empty**, holding nothing. It plays the role of Rust's
 `Option<T>` and Swift's `Optional`. Use it instead of a null reference or a
 sentinel such as `-1` or `""`: the type tells the caller that the value can be
 absent, and reading it goes through a method that checks.
@@ -25,57 +25,57 @@ A C-style declaration inside a function body, such as `Node? n = m;`, is read
 as a declaration only when a name follows the `?` and then `=`, `;` or the end
 of the line; `a ? b : c` stays a conditional expression.
 
-## Optional slots start as None
+## Optional slots start as Empty
 
 A variable or field of an optional type that is not given a value starts as
-None, not null:
+Empty, not null:
 
 ```pepper
 struct Node {
-    Token? leaf;   # None until assigned
+    Token? leaf;   # Empty until assigned
 }
-var count: int?;   # None
+var count: int?;   # Empty
 ```
 
 ## Creating and checking optionals
 
 | Member | What it does |
 |---|---|
-| `Optional<T>.some(value)` | Creates a Some optional holding `value`. |
-| `Optional<T>.none()`, `Optional<T>.None` | Create a None optional. |
-| `Optional<T>.Some(value)` | The case itself: the same as `some(value)`. |
+| `Optional<T>.some(value)` | Creates a Value optional holding `value`. |
+| `Optional<T>.none()`, `Optional<T>.Empty` | Create an Empty optional. |
+| `Optional<T>.Value(value)` | The case itself: the same as `some(value)`. |
 | `is_some()`, `is_none()` | Report which kind the optional is. |
 | `!!` (truth test) | An optional is a condition by itself: `if (found)` is `if (found.is_some())`, and `!found` is `found.is_none()`. |
-| `value()` | Returns the value; panics with `Optional.value on a None value` if the optional is None. |
-| `value_or(fallback)` | Returns the value, or `fallback` if the optional is None. Never panics. |
+| `value()` | Returns the value; panics with `Optional.value on an Empty optional` if the optional is Empty. |
+| `value_or(fallback)` | Returns the value, or `fallback` if the optional is Empty. Never panics. |
 
-Use `value()` when a None would be a bug in your program, since it stops the
+Use `value()` when an Empty optional would be a bug in your program, since it stops the
 program. When a missing value is an expected outcome, test it first (`if
 (found)`, `is_some()` or `is_none()`), or supply a fallback with `value_or`.
 Testing the optional itself works because `Optional` declares the truth-test
 operator `!!` (see [Truth tests](structs.md#truth-tests-and-conditions)).
 
 `Optional<T>` works for every `T`, including types that have no null at all,
-such as `int` or `ulong`. For a struct type, a Some optional holds a
+such as `int` or `ulong`. For a struct type, a Value optional holds a
 reference to the object, like any other struct slot (see
 [Memory and reference counting](memory.md)).
 
-`Optional<T>` is an [enum](enums.md) with the cases `None` and
-`Some(value)`, so `match` and `is` work on it too:
+`Optional<T>` is an [enum](enums.md) with the cases `Empty` and
+`Value(value)`, so `match` and `is` work on it too:
 
 ```pepper
 var shown = match (name) {
-    None => "nobody",
-    Some(text) => text,
+    Empty => "nobody",
+    Value(text) => text,
 };
-if (name is Some(text)) { print(text); }
+if (name is Value(text)) { print(text); }
 ```
 
 An optional is a [value enum](enums.md#value-enums): it lives inline in the
 variable, field or array element that holds it, so creating one allocates
 nothing, and copying one gives an independent optional. It is never null,
 and has no identity: compare two optionals with `==`, which compares
-whether each is Some and, if both are, their values; `===` on an optional
+whether each holds a value and, if both do, their values; `===` on an optional
 is an error.
 
 ## Optionals in the standard library
@@ -83,7 +83,7 @@ is an error.
 Standard library lookups that can come up empty return an optional rather
 than a sentinel value:
 
-| API | Returns | None when |
+| API | Returns | Empty when |
 |---|---|---|
 | `Array<T>.find(item)` | `ulong?` | no element equals `item` |
 | `io.Path.parent()` | `Path?` | the path is a root (`/`, `C:\`), a bare name with no root (`a`, `.`, `..`), or empty |

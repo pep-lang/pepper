@@ -217,7 +217,7 @@ O(log count).
 
 **Example**
 ```pepper
-    if (scores.try_get("alice") is Some(score)) {
+    if (scores.try_get("alice") is Value(score)) {
         print($"{score}");
     }
 ```

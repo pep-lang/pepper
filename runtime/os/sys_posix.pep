@@ -197,7 +197,7 @@ const PASSWD_DIRECTORY_FIELD: ulong = 4;
 const PASSWD_DIRECTORY_FIELD: ulong = 6;
 
 # The effective user's entry in the user database: field 0 is pw_name, and
-# `field` picks another pointer-sized field. None when there is no entry.
+# `field` picks another pointer-sized field. Empty when there is no entry.
 [Target(!OS(Windows))]
 _os_passwd_field(field: ulong): String? {
     __ptr<__ptr<char>> entry = _pep_malloc(128);  # struct passwd: 48 or 72 bytes
