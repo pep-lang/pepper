@@ -701,7 +701,8 @@ pub fn resolve_implicit_types(module: &mut Module) {
     for _ in 0..8 {
         let synced = crate::passes::closures::sync_closures(module);
         let bound = crate::passes::overloads::bind_function_values(module);
-        if !resolve_once(module) && !synced && !bound {
+        let specialized = crate::passes::type_arguments::bind_generic_function_values(module);
+        if !resolve_once(module) && !synced && !bound && !specialized {
             break;
         }
     }

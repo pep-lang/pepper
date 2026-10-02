@@ -55,6 +55,10 @@ main.pep:1:1: note: declared here
       | ^~~~
 ```
 
+A generic function used as a value, not called, takes its type arguments
+from the function type it is given: `var f: (int, int) => int = larger;` is
+`larger<int>` (see [Function types](function-types.md#methods-constructors-and-generic-functions)).
+
 A parameter whose type is a trait takes its type arguments from the trait the
 argument's type declares: given `total<T>(items: Iterator<T>)`, the call
 `total(Countdown(4))` infers `T = int` from `extend Countdown with

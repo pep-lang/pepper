@@ -45,6 +45,9 @@ main(): int {
     # A generic function with its type arguments names one specialization.
     assert(combine(larger<int>, 2, 9) == 9, "generic function");
 
+    # Where a function type is expected, it picks the specialization.
+    assert(combine(larger, 4, 1) == 4, "inferred specialization");
+
     var steps = Array<(int) => Point>();
     steps.append(p.shifted);
     steps.append(Point(10, 0).shifted);

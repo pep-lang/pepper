@@ -83,8 +83,17 @@ too:
 - **Traits and extensions.** A method declared in an
   [extension](traits-and-extensions.md) works the same way, and so does a
   method of a trait-typed value (`shape.area`), which calls through the trait.
-- **Generic functions** need their type arguments: `larger<int>`, not
-  `larger`.
+- **Generic functions.** Where a function type is expected, the generic
+  function's name alone is enough: the expected type picks the
+  specialization, as a call's arguments do. `var f: (int, int) => int =
+  larger;` and `combine(larger, 2, 9)` both mean `larger<int>`, and a type
+  parameter that appears only in the return type is bound from the
+  expected return type. With no function type to go by, as in `var f =
+  larger;`, write the type arguments:
+
+  ```text
+  main.pep:3:13: error: cannot infer the type arguments of 'larger' used as a value; write them (larger<T>) or give the value a function type
+  ```
 - **A type with a constructor that takes no arguments.** `Box<int>` on its
   own names the constructor only when the constructor needs at least one
   argument; otherwise it is a call, `Box<int>()`. The same goes for a generic
@@ -298,7 +307,8 @@ hides the function inside its scope. Inside a function with a parameter named
 A function value is a reference, like a struct value, and follows the same
 reference-counting rules (see [Memory and reference counting](memory.md)).
 Referring to a named function allocates nothing: every reference to `square`
-shares one static function object. A method, constructor or generic function
+shares one static function object, and so does a generic function named
+without its type arguments (`larger` as an `(int, int) => int`). A method, constructor or generic function
 value allocates one small object, like a closure; a bound method's object
 holds a reference to its receiver.
 
@@ -312,9 +322,6 @@ atomic, like a `[Shared]` struct's (see
 
 ## What is not supported yet
 
-- **Generic functions without type arguments** cannot be referenced as
-  values. `larger` alone is not a value even where the expected type would
-  pick `larger<int>`.
 - **Generic methods** cannot be referenced as values: `b.map<long>` is not
   a value. Wrap the call in a closure: `(f: (int) => long) => b.map(f)`.
 - **Closures in trait default methods** cannot use `this` or the members of

@@ -20,6 +20,16 @@ fn written(var: &crate::model::VariableDef) -> Loc {
     if var.type_loc.is_none() { var.loc } else { var.type_loc }
 }
 
+/// The function a call names, or a generic function value names
+/// (`larger<int>`, which `type_arguments::bind_generic_function_values`
+/// makes a `FunctionRef`).
+fn generic_use(expr: &Expression) -> Option<(&String, &Loc)> {
+    match expr {
+        Expression::FunctionCall { function, loc, .. } | Expression::FunctionRef { function, loc, .. } => Some((function, loc)),
+        _ => None,
+    }
+}
+
 fn request(requests: &mut Requests, name: &str, by: &str, loc: Loc) {
     requests.entry(name.to_string()).or_insert_with(|| (by.to_string(), loc));
 }
@@ -35,7 +45,7 @@ pub fn gather_generics(module: &mut Module) {
         let params = param_names(&st.generic_params);
         let owner = st.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, loc, .. } = expr {
+            if let Some((function, loc)) = generic_use(expr) {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
@@ -88,7 +98,7 @@ pub fn gather_generics(module: &mut Module) {
         let params = param_names(&function.generic_params);
         let owner = function.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, loc, .. } = expr {
+            if let Some((function, loc)) = generic_use(expr) {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
@@ -119,7 +129,7 @@ pub fn gather_generics(module: &mut Module) {
     for var in &mut module.globals {
         let owner = var.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, loc, .. } = expr {
+            if let Some((function, loc)) = generic_use(expr) {
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
@@ -140,7 +150,7 @@ pub fn gather_generics(module: &mut Module) {
         let params = extension_params(&module.structs, ext);
         let owner = ext.target.name.clone();
         let mut gather = |expr: &mut Expression| {
-            if let Expression::FunctionCall { function, loc, .. } = expr {
+            if let Some((function, loc)) = generic_use(expr) {
                 // Do not record specializations for intrinsics.
                 if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;

@@ -13,7 +13,7 @@
 //! each run of its fixpoint loop, so closure bodies typed on one run can
 //! complete a call on the next.
 
-use crate::model::{Diagnostic, Expression, FunctionDef, GenericParam, Module};
+use crate::model::{Diagnostic, Expression, FunctionDef, GenericParam, Loc, Module};
 use crate::type_name::TypeName;
 use std::collections::HashMap;
 
@@ -160,6 +160,27 @@ impl GenericSignature {
         self.params.iter().map(|p| bindings.get(&p.name).cloned()).collect()
     }
 
+    /// The type arguments that make the function, whose declared return
+    /// type is `ret`, a value of function type `expected`: each parameter
+    /// type matched against the expected one, and the return type against
+    /// the expected return type. `None` when the counts differ or a generic
+    /// parameter stays unbound (with no default).
+    pub fn infer_from_function_type(&self, ret: &TypeName, expected: &TypeName) -> Option<Vec<TypeName>> {
+        let params = expected.function_params();
+        if params.len() != self.parameter_types.len() {
+            return None;
+        }
+        let mut bindings = HashMap::new();
+        for (pattern, actual) in self.parameter_types.iter().zip(params) {
+            self.unify(pattern, actual, &mut bindings);
+        }
+        if let Some(expected_ret) = expected.function_return() {
+            self.unify(ret, expected_ret, &mut bindings);
+        }
+        self.bind_through_bounds(&mut bindings);
+        self.params.iter().map(|p| bindings.get(&p.name).cloned().or_else(|| p.default.clone())).collect()
+    }
+
     /// Parameter `index`'s type with the known bindings substituted and every
     /// unbound generic parameter left unknown (`auto`), for a closure
     /// argument to take its types from.
@@ -204,6 +225,123 @@ impl GenericSignature {
     }
 }
 
+/// Name each generic function written without type arguments where a
+/// function type is expected (`var f: (int, int) => int = larger;`) by
+/// the specialization that type picks: a `FunctionRef` to `larger<int>`,
+/// which `gather_generics` then specializes. Runs in
+/// `resolve_implicit_types`' loop; returns whether it named any. Generic
+/// code is left to its specializations, where the expected type is
+/// concrete.
+pub fn bind_generic_function_values(module: &mut Module) -> bool {
+    let generics: HashMap<String, (GenericSignature, TypeName)> = module
+        .functions
+        .iter()
+        .filter(|f| f.is_generic_func && !f.name.contains('<'))
+        .map(|f| (f.name.clone(), (GenericSignature::of(f), f.ty.clone())))
+        .collect();
+    if generics.is_empty() {
+        return false;
+    }
+    let unbound = |e: &Expression| matches!(e, Expression::SymbolRef { id, ty, .. } if (ty.is_empty() || ty.is_auto()) && generics.contains_key(id));
+    let mut candidate = false;
+    crate::passes::closures::for_each_expression_mut(module, &mut |e| candidate |= unbound(e));
+    if !candidate {
+        return false;
+    }
+    let generic_bases: std::collections::HashSet<&str> = module
+        .functions
+        .iter()
+        .filter(|f| f.is_generic_func)
+        .map(|f| f.name.as_str())
+        .chain(module.structs.iter().filter(|s| !s.generic_params.is_empty() && s.name == s.ty.name).map(|s| s.name.as_str()))
+        .collect();
+    let shadowed = shadowed_names(module, &generics);
+    let mut bound: HashMap<(String, Loc), (String, TypeName)> = HashMap::new();
+    crate::passes::closures::for_each_applied_site_in(module, &mut |owner, expr, expected, _| {
+        if owner.is_some_and(|o| generic_bases.contains(o)) || !unbound(expr) {
+            return;
+        }
+        let Expression::SymbolRef { id, loc, .. } = expr else { return };
+        if shadowed.contains(&(id.clone(), *loc)) {
+            return;
+        }
+        let Some(expected) = expected.filter(|t| t.is_callable() && !t.contains_auto()) else { return };
+        let (signature, ret) = &generics[id];
+        let Some(args) = signature.infer_from_function_type(ret, expected) else { return };
+        let mut ty = TypeName::function_type(ret.clone(), signature.parameter_types.clone());
+        for (param, arg) in signature.params.iter().zip(&args) {
+            ty.replace(&param.name, arg);
+        }
+        if ty.contains_auto() {
+            return;
+        }
+        bound.insert((id.clone(), *loc), (specialization(id, args), ty));
+    });
+    if bound.is_empty() {
+        return false;
+    }
+    crate::passes::closures::for_each_expression_mut(module, &mut |e| {
+        if let Expression::SymbolRef { id, loc, .. } = e {
+            if let Some((function, ty)) = bound.get(&(id.clone(), *loc)) {
+                let loc = *loc;
+                *e = Expression::FunctionRef { function: function.clone(), ty: ty.clone(), loc };
+            }
+        }
+    });
+    true
+}
+
+/// The uses of `generics`' names that a parameter, a local or a field of
+/// the enclosing struct (a closure's capture) of the same name hides, by
+/// name and location. Their types may still be unknown when
+/// [`bind_generic_function_values`] runs.
+fn shadowed_names<T>(module: &Module, generics: &HashMap<String, T>) -> std::collections::HashSet<(String, Loc)> {
+    fn declared(block: &crate::model::Block, names: &mut Vec<String>) {
+        use crate::model::{Declaration, Statement};
+        for stmt in &block.items {
+            match stmt {
+                Statement::Declaration(Declaration::Variable(var)) => names.push(var.name.clone()),
+                Statement::Block(b) => declared(b, names),
+                Statement::Branch(b) => {
+                    declared(&b.if_block, names);
+                    if let Some(e) = &b.else_block {
+                        declared(e, names);
+                    }
+                }
+                Statement::While(w) => declared(&w.block, names),
+                _ => {}
+            }
+        }
+    }
+    let mut shadowed = std::collections::HashSet::new();
+    let mut visit = |function: &FunctionDef, fields: &[String]| {
+        let Some(body) = &function.body else { return };
+        let mut names: Vec<String> = function.parameters.iter().map(|p| p.name.clone()).chain(fields.iter().cloned()).collect();
+        declared(body, &mut names);
+        names.retain(|n| generics.contains_key(n));
+        if names.is_empty() {
+            return;
+        }
+        crate::passes::visit_block(body, &mut |e| {
+            if let Expression::SymbolRef { id, loc, .. } = e {
+                if names.contains(id) {
+                    shadowed.insert((id.clone(), *loc));
+                }
+            }
+        });
+    };
+    for function in &module.functions {
+        visit(function, &[]);
+    }
+    for st in &module.structs {
+        let fields: Vec<String> = st.field_members.iter().map(|f| f.name.clone()).collect();
+        for method in st.method_members.iter().chain(&st.constructors).chain([&st.destructor]) {
+            visit(method, &fields);
+        }
+    }
+    shadowed
+}
+
 /// `name<args>`, the name call sites and specializations use.
 pub fn specialization(name: &str, args: Vec<TypeName>) -> String {
     TypeName::with_args(name, args).to_string()
@@ -225,6 +363,21 @@ pub fn check_type_arguments(module: &Module) {
     let named = |callee: &str| callee.starts_with(|c: char| c.is_alphabetic() || c == '_');
     let report = |expr: &Expression, current: Option<&TypeName>| {
         let (callee, args, loc, base) = match expr {
+            // A generic function named as a value where no function type
+            // picked its specialization (`bind_generic_function_values`).
+            Expression::SymbolRef { id, ty, loc } if ty.is_empty() || ty.is_auto() => {
+                let Some(base) = generics.get(id.as_str()) else { return };
+                let all = base.generic_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "cannot infer the type arguments of '{}' used as a value; write them ({}<{}>) or give the value a function type",
+                        id, id, all
+                    ))
+                    .at(*loc)
+                    .with_note("declared here", Some(base.loc)),
+                );
+                return;
+            }
             Expression::FunctionCall { function, args, loc } if named(function) => {
                 let name = crate::passes::gather_generics::parse_type_string(function).name;
                 let Some(base) = generics.get(name.as_str()) else { return };

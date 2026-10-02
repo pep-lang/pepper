@@ -140,6 +140,74 @@ test(): int {
 }
 
 #[test]
+fn generic_function_inferred_from_the_expected_type() {
+    let src = r#"
+larger<T>(a: T, b: T): T { return a > b ? a : b; }
+zero<T>(): T { return __default<T>(); }
+first<A, B>(a: A, b: B): A { return a; }
+
+combine(f: (int, int) => int, a: int, b: int): int { return f(a, b); }
+
+struct Picker {
+    int unused;
+    construct(this.unused = 0) {}
+    pick(): (long, long) => long { return larger; }
+}
+
+twice<T>(x: T): T {
+    var f: (T, T) => T = larger;
+    return f(x, x);
+}
+
+test(): int {
+    var f: (int, int) => int = larger;
+    var z: () => int = zero;
+    var p: (String, int) => String = first;
+    var s: shared (int, int) => int = larger;
+    var c: extern (int, int) => int = larger;
+    var total = f(2, 9) + combine(larger, 4, 1) + z() + p("abc", 1).length + Picker().pick()(5, 3);
+    return total * 100 + twice<int>(3) * 10 + s(1, 2) + c(0, -1) + 1;
+}
+"#;
+    // 9 + 4 + 0 + 3 + 5 = 21; 3; 2 + 0 + 1.
+    assert_eq!(run(src), (2100 + 30 + 3, 0));
+}
+
+#[test]
+fn a_local_hides_a_generic_function_of_its_name() {
+    let src = r#"
+keep<T>(value: T): T { return value; }
+
+apply(f: (int) => int, x: int): int { return f(x); }
+
+later(keep: (int) => int): () => int {
+    return () => apply(keep, 2);
+}
+
+test(): int {
+    var keep2: (int) => int = keep;
+    return later((x: int) => x * 10)() + keep2(1);
+}
+"#;
+    assert_eq!(run(src), (21, 0));
+}
+
+#[test]
+fn generic_function_value_without_a_type_is_an_error() {
+    let err = compile_error(
+        r#"
+larger<T>(a: T, b: T): T { return a > b ? a : b; }
+
+test(): int {
+    var f = larger;
+    return 0;
+}
+"#,
+    );
+    assert!(err.contains("5:13: error: cannot infer the type arguments of 'larger' used as a value; write them (larger<T>) or give the value a function type"), "{}", err);
+}
+
+#[test]
 fn methods_in_arrays_and_through_traits() {
     let src = r#"
 trait Shape {

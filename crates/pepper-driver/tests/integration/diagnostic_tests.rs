@@ -384,6 +384,22 @@ fn with_else_on_int() {
 }
 
 #[test]
+fn generic_function_value_without_type_arguments() {
+    assert_eq!(
+        error_of(
+            "generic_function_value",
+            "larger<T>(a: T, b: T): T { return a > b ? a : b; }\nmain(): int {\n    var f = larger;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:13: error: cannot infer the type arguments of 'larger' used as a value; write them (larger<T>) or give the value a function type\n\
+         \x20   3 |     var f = larger;\n\
+         \x20     |             ^~~~~~\n\
+         main.pep:1:1: note: declared here\n\
+         \x20   1 | larger<T>(a: T, b: T): T { return a > b ? a : b; }\n\
+         \x20     | ^~~~~~"
+    );
+}
+
+#[test]
 fn bare_return_in_a_non_void_function() {
     assert_eq!(
         error_of("bare_return_non_void", "f(x: int): int {\n    if (x > 0) {\n        return;\n    }\n    return 1;\n}\nmain(): int {\n    return f(1);\n}\n"),
