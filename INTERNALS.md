@@ -2112,7 +2112,7 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
 - **`ci.yml`** (push to `main`, PRs):
   - `test` is the required check: a gate job that always runs (`if:
     always()`, so never skipped, since a skipped job counts as passing) and
-    passes only when `test-windows`, `test-macos` and `test-linux` succeeded,
+    passes only when `test-windows` and `test-linux` succeeded,
     the PR is prose only, or the PR is still a draft (asked again of the API
     at gate time). It fails on a cancelled run. On a ready PR, `changes`
     first posts an in-progress `test` check run that `test` completes with
@@ -2123,8 +2123,9 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     --workspace --locked`, `cargo test --workspace --locked`, and
     `pepper-docgen -- check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
-    run the suite against the default LLVM. Both are required, through
-    `test`.
+    run the suite against the default LLVM. `test-linux` is required,
+    through `test`; `test-macos` is not for now (it takes about twice as
+    long and held up the merge queue), so `test` does not wait for it.
   - `changes` runs first. It asks the API whether the PR is a draft now (the
     event payload can be stale when a push races "ready for review"), and
     diffs the PR against its base. A draft, or a PR that changed only prose

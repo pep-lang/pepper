@@ -1,8 +1,10 @@
 # Required check for merging into main: `test`, a gate that passes only when
 # `test-windows` -- the workspace build and test suite on Windows, the platform
-# the compiler is developed against, against the default LLVM version --
-# `test-macos` and `test-linux`, the same suite on macOS and Linux, all ran and
-# passed on this commit (or the PR changes only prose; see `changes`). The
+# the compiler is developed against, against the default LLVM version -- and
+# `test-linux`, the same suite on Linux, both ran and passed on this commit (or
+# the PR changes only prose; see `changes`). `test-macos` runs the suite on
+# macOS too but does not gate merging for now: it takes twice as long as the
+# others and held up the merge queue. The
 # suite against every other LLVM major runs before a release, not on PRs: see
 # llvm-versions.yml.
 #
@@ -26,7 +28,7 @@
 #
 # A skipped job reports success to branch protection, so the required check
 # is never a job that can be skipped: `test` always runs and fails unless
-# `test-windows`, `test-macos` and `test-linux` succeeded, the PR is prose
+# `test-windows` and `test-linux` succeeded, the PR is prose
 # only, or the PR is still a draft. Before it existed, #279
 # merged untested: marking it ready and pushing raced, and a run whose event
 # payload still said "draft" cancelled the ready run and skipped every job,
@@ -244,8 +246,8 @@ jobs:
       - name: Standard library reference is current
         run: cargo run -p pepper-docgen --locked -- check
 
-  # The suite on macOS against the default LLVM, from Homebrew. Required:
-  # `test` gates on it and on the Windows job above.
+  # The suite on macOS against the default LLVM, from Homebrew. Not required
+  # for now: `test` does not wait for it (see the top of this file).
   test-macos:
     runs-on: pepper-macos
     needs: changes
@@ -348,14 +350,14 @@ jobs:
 
   # The required check. It always runs, even when the run is cancelled, so it
   # can never report the success a skipped job does: it passes only when
-  # test-windows, test-macos and test-linux passed on this commit, the PR
+  # test-windows and test-linux passed on this commit, the PR
   # changes only prose, or the PR is still a draft (a draft cannot merge;
   # marking it ready starts the run that tests it). It only reads the results
   # of the jobs it needs, and completes the in-progress `test` check run that
   # `changes` posted with the same verdict.
   test:
     if: always()
-    needs: [changes, test-windows, test-macos, test-linux]
+    needs: [changes, test-windows, test-linux]
     runs-on: pepper-linux
     timeout-minutes: 5
     permissions:
@@ -373,12 +375,11 @@ jobs:
           CODE: ${{ needs.changes.outputs.code }}
           HOLD: ${{ needs.changes.outputs.hold }}
           WINDOWS: ${{ needs.test-windows.result }}
-          MACOS: ${{ needs.test-macos.result }}
           LINUX: ${{ needs.test-linux.result }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "changes=$CHANGES draft=$DRAFT code=$CODE hold=$HOLD test-windows=$WINDOWS test-macos=$MACOS test-linux=$LINUX"
+          echo "changes=$CHANGES draft=$DRAFT code=$CODE hold=$HOLD test-windows=$WINDOWS test-linux=$LINUX"
 
           verdict() {
             if [ "$CHANGES" != "success" ]; then
@@ -404,15 +405,11 @@ jobs:
               echo "test-windows did not pass ($WINDOWS)"
               return 1
             fi
-            if [ "$MACOS" != "success" ]; then
-              echo "test-macos did not pass ($MACOS)"
-              return 1
-            fi
             if [ "$LINUX" != "success" ]; then
               echo "test-linux did not pass ($LINUX)"
               return 1
             fi
-            echo "test-windows, test-macos and test-linux passed"
+            echo "test-windows and test-linux passed"
             return 0
           }
 
