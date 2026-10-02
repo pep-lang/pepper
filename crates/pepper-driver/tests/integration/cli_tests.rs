@@ -298,3 +298,131 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn declares_options_from_a_struct() {
+    assert_eq!(
+        run(r##"
+import cli;
+
+struct BuildOptions {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say more")]
+    var verbose: bool;
+    [cli.Option("I", "a directory to search")]
+    var import_path: String[];
+    [cli.Option(name = "opt-level", value_name = "LEVEL")]
+    var level: String?;
+    [cli.Option(required = true)]
+    var target: String;
+    [cli.Positional("the entry file")]
+    var source: String;
+    [cli.Positional("everything else")]
+    var rest: String[];
+}
+
+test(): int {
+    var options = BuildOptions();
+    var parser = cli.Parser("pepper", "Compiles a Pepper program");
+    parser.add_options(options);
+    var expected = "Compiles a Pepper program\n\n"
+        + "usage: pepper [OPTIONS] --target <TARGET> <source> [rest]...\n\n"
+        + "Arguments:\n"
+        + "  <source>   the entry file\n"
+        + "  <rest>...  everything else\n\n"
+        + "Options:\n"
+        + "  -o, --output <OUTPUT>            the executable to write [default: a.out]\n"
+        + "  -v, --verbose                    say more\n"
+        + "  -I, --import-path <IMPORT_PATH>  a directory to search [repeatable]\n"
+        + "      --opt-level <LEVEL>\n"
+        + "      --target <TARGET>            [required]\n"
+        + "  -h, --help                       show this help\n";
+    if (parser.help() != expected) {
+        print(parser.help());
+        return -1;
+    }
+
+    var parsed = parser.try_parse(["pepper", "--target", "x86", "-v", "-I", "a", "-Ib", "--opt-level=2", "main.pep", "p", "q"]);
+    if (parsed.is_err() or parsed.value()) { return -2; }
+    if (options.output != "a.out" or !options.verbose or options.target != "x86") { return -3; }
+    if (options.import_path.count != 2 or options.import_path[1] != "b") { return -4; }
+    if (options.level.value_or("") != "2" or options.source != "main.pep" or options.rest.count != 2) { return -5; }
+
+    # Every parse sets every field: what was left out goes back to its default.
+    parsed = parser.try_parse(["pepper", "--target", "arm", "-o", "x", "s.pep"]);
+    if (parsed.is_err() or parsed.value()) { return -10; }
+    if (options.output != "x" or options.verbose or options.target != "arm") { return -11; }
+    if (!options.import_path.is_empty or options.level.is_value() or !options.rest.is_empty) { return -12; }
+    parser.try_parse(["pepper", "--target", "arm", "s.pep"]);
+    if (options.output != "a.out") { return -13; }
+
+    # Errors, help and a failed parse leave the fields as they were.
+    if (parser.try_parse(["pepper", "s.pep"]).error().message != "missing required option '--target'") { return -20; }
+    if (parser.try_parse(["pepper", "--verbos"]).error().message != "unknown option '--verbos'; did you mean '--verbose'?") { return -21; }
+    if (!parser.try_parse(["pepper", "--help"]).value()) { return -22; }
+    if (options.target != "arm" or options.source != "s.pep") { return -23; }
+    return 0;
+}
+"##),
+        0
+    );
+}
+
+#[test]
+fn struct_options_mix_with_builder_calls_and_commands() {
+    assert_eq!(
+        run(r##"
+import cli;
+
+struct Global {
+    [cli.Option("v")]
+    var verbose: bool;
+}
+
+struct AddOptions {
+    [cli.Option("D", "a development dependency")]
+    var dev: bool;
+    [cli.Positional("the package", name = "package")]
+    var name: String;
+    [cli.Positional("the version")]
+    var version: String = "latest";
+}
+
+test(): int {
+    var global = Global();
+    var add = AddOptions();
+    var parser = cli.Parser("pkg");
+    parser.add_options(global);
+    var quiet = parser.flag("quiet", "q");
+    var add_parser = parser.command("add", "Adds a dependency");
+    add_parser.add_options(add);
+    parser.command("update", "Updates the lock file");
+
+    if (add_parser.usage() != "usage: pkg add [OPTIONS] <package> [version]") { return -1; }
+    var parsed = parser.try_parse(["pkg", "-vq", "add", "-D", "yaml"]);
+    if (parsed.is_err() or parsed.value()) { return -2; }
+    if (!global.verbose or !quiet.is_set or !add.dev or add.name != "yaml" or add.version != "latest") { return -3; }
+
+    # A command that was not given leaves its struct alone.
+    parsed = parser.try_parse(["pkg", "update"]);
+    if (parsed.is_err() or global.verbose or add.name != "yaml") { return -4; }
+    if (parser.try_parse(["pkg", "add"]).error().message != "missing required argument '<package>'") { return -5; }
+    return 0;
+}
+"##),
+        0
+    );
+}
+
+#[test]
+fn struct_options_name_an_unsupported_field() {
+    let error = support::compile_error(
+        "import cli;\n\nstruct Options {\n    var count: int;\n}\n\ntest(): int {\n    cli.Parser(\"x\").add_options(Options());\n    return 0;\n}\n",
+    );
+    assert!(
+        error.contains("error: 'add_options' cannot declare field 'count' of type 'int'; use bool, String, String? or String[]"),
+        "{}",
+        error
+    );
+}

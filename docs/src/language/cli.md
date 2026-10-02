@@ -2,7 +2,8 @@
 
 The `cli` module parses a program's command line. Declare each option and
 positional argument on a `cli.Parser`, call `parse`, then read the values
-through the handles the declarations returned. The help, `--version` and
+through the handles the declarations returned, or declare them all at once
+as the fields of a struct. The help, `--version` and
 the error messages all come from the declarations. Bring it in with
 `import cli`; the full API is in the [reference](../reference/cli-module.md).
 
@@ -102,6 +103,47 @@ The messages:
 arguments were parsed. Tests use it, and so can a program that reports
 errors its own way.
 
+## Declaring options as a struct
+
+`add_options` declares an option or positional argument for each public
+field of a struct, and every successful parse stores the values in that
+struct's fields. The attributes `[cli.Option]` and `[cli.Positional]` on
+the fields carry what the builder calls take as arguments:
+
+```pepper
+{{#include ../../examples/cli-struct.pep}}
+```
+
+Its help and errors are the same as the builder example's above: the
+declarations are the same ones.
+
+| Field type | Declares | After a parse |
+|------------|----------|---------------|
+| `bool` | `flag` | whether it was given |
+| `String` | `option` | the value given, else the field's starting value |
+| `String?` | `option` | the value given, or Empty |
+| `String[]` | `multiple` | the values given, in order |
+
+- An option is named after its field, with each `_` written `-`:
+  `import_path` is `--import-path`. Any other field type is a compile
+  error at the call: `'add_options' cannot declare field 'count' of type
+  'int'; use bool, String, String? or String[]`.
+- `[cli.Option(short_name, help, name, value_name, required)]` sets the
+  rest, every argument optional: `[cli.Option("o", "the executable to
+  write")]`, `[cli.Option(required = true)]`.
+- `[cli.Positional(help, name, required)]` makes the field the next
+  positional argument. A `String` one is required unless the field starts
+  with a value; a `String?` one may be left out; a `String[]` one takes
+  every value left (`positionals`), and `required` asks for at least one.
+- A `String` field's starting value is the default the help shows; an
+  empty one means none. Each parse sets every field again, so a flag left
+  out is false even if the field started true.
+- A parse that fails, or that asks for `--help` or `--version`, leaves the
+  fields as they were.
+- The two styles mix: call `flag` and `option` on the same parser, and
+  `add_options` on a command's parser for that command's options. A
+  command's struct is filled only when that command is given.
+
 ## Subcommands
 
 `command(name, about)` declares a subcommand, as in `git add` or
@@ -124,11 +166,8 @@ command; after `parse`, `is_selected` tells which command was given.
 
 ## Not yet
 
-- **Declaring options as a struct**, with an attribute on each field
-  (`[Option("o")] var output: String;`). The
-  [reflection](reflection.md) it needs is in place; the struct style is
-  tracked in [#362](https://github.com/justinboswell/pepper/issues/362).
-- Typed values (integers, `io.Path`): values are Strings.
+- Typed values (integers, `io.Path`): values are Strings, and a struct's
+  fields are `bool`, `String`, `String?` or `String[]`.
 - Options that apply after a subcommand's name (clap's global options).
 - Windows-style `/option` forms: every platform uses `-` and `--`.
 - Generating shell completions.

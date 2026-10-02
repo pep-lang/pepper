@@ -250,6 +250,48 @@ test(): int {
     assert_eq!(jit_census(source), (43, 0));
 }
 
+/// `and` and `or` are `&&` and `||` at compile time too, and a generic
+/// method's block can emit calls on `this` with string literals in them.
+#[test]
+fn word_operators_and_blocks_in_generic_methods() {
+    let source = r#"
+struct P {
+    var x: int;
+    var flag: bool;
+    var name: String;
+}
+
+struct Counter {
+    var total: int = 0;
+
+    _add(label: String, n: int) {
+        total += label.length + n;
+    }
+
+    count<T>(value: T) {
+        static (this) {
+            for (var field in reflect.properties<T>()) {
+                var number = reflect.is_same<field.Type, int>();
+                var text = reflect.is_same<field.Type, String>();
+                if (number or text) {
+                    this._add("ab", 1);
+                } else if (!number and !text) {
+                    this._add("abcd", 100);
+                }
+            }
+        }
+    }
+}
+
+test(): int {
+    var counter = Counter();
+    counter.count(P());
+    return counter.total;
+}
+"#;
+    assert_eq!(jit_census(source), (110, 0));
+}
+
 #[test]
 fn print_writes_a_note() {
     let module = sema("test(): int {\n    static {\n        reflect.print(reflect.name<String[]>());\n    }\n    return 0;\n}\n").unwrap();

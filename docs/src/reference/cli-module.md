@@ -12,6 +12,8 @@ in `main(args: String[])` and `process.arguments()`.
 - [Parser](cli-parser.md): `Parser`, and the handles its declarations
   return: `Flag`, `Argument`, `ArgumentList`; and `closest`, which
   picks the name a misspelled one most likely meant
+- [Options](cli-options.md): `Option` and `Positional`, the attributes
+  that shape what `Parser.add_options` declares from a struct's fields
 
 **Example**
 ```pepper

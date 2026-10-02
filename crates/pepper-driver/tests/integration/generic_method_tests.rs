@@ -394,3 +394,31 @@ test(): int {
         err
     );
 }
+
+/// A string literal in a generic method of a plain struct is a `String`,
+/// as in any other method (it once reached codegen as a bare `char*`).
+#[test]
+fn string_literals_in_generic_methods() {
+    let src = r#"
+struct Log {
+    var size: ulong = 0;
+
+    _note(text: String) {
+        size += text.size;
+    }
+
+    add<T>(value: T) {
+        _note("value");
+        this._note("seen");
+    }
+}
+
+test(): int {
+    var log = Log();
+    log.add(1);
+    log.add("x");
+    return log.size as int;
+}
+"#;
+    assert_eq!(run(src), (18, 0));
+}

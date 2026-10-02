@@ -3,6 +3,7 @@
 
 import [File] from io;
 import process;
+import "options";
 
 # What a declared option or positional argument holds.
 const FLAG_KIND = 0;
@@ -131,6 +132,7 @@ export struct Parser {
     var _selected: bool = false;
     var _failed_usage: String = "";
     var _failed_path: String = "";
+    var _binders: Array<() => void> = __null;
 
     ## Makes a parser for the program `name`.
     ##
@@ -146,6 +148,7 @@ export struct Parser {
         _options = Array<_CliArgument>();
         _positionals = Array<_CliArgument>();
         _commands = Array<Parser>();
+        _binders = Array<() => void>();
     }
 
     ## Declares an option that takes no value, such as `--verbose`.
@@ -261,6 +264,128 @@ export struct Parser {
         return command;
     }
 
+    ## Declares an option or positional argument for each public field of
+    ## `options`, and has every successful parse store the values in those
+    ## fields.
+    ##
+    ## A field's type picks what it declares: `bool` is a flag, `String` an
+    ## option with one value, `String?` one that may be left out, and
+    ## `String[]` one that may be given many times. An option is named after
+    ## its field, with each `_` written `-` (`import_path` is
+    ## `--import-path`); `[cli.Option]` on a field gives it a short name,
+    ## help, another name, or makes it required. `[cli.Positional]` makes a
+    ## field the next positional argument instead.
+    ##
+    ## A `String` field that holds a value when this is called keeps it as
+    ## the default; an empty one has no default, so leaving the option out
+    ## leaves it empty, or is an error for a positional argument. Every
+    ## parse sets every field: a flag to whether it was given, a list to the
+    ## values given.
+    ##
+    ## The declarations are the same as the builder methods make, so the
+    ## help and errors read the same, and the two styles mix on one parser.
+    ##
+    ## @typeParam T the options struct
+    ## @param options the struct whose fields to declare and fill in
+    ## @example
+    ##     import cli;
+    ##
+    ##     struct Options {
+    ##         [cli.Option("o", "the executable to write")]
+    ##         var output: String = "a.out";
+    ##         [cli.Option("v", "say what is happening")]
+    ##         var verbose: bool;
+    ##         [cli.Positional("the program's entry file")]
+    ##         var source: String;
+    ##     }
+    ##
+    ##     main(args: String[]): int {
+    ##         var options = Options();
+    ##         var parser = cli.Parser("pepper", "Compiles a Pepper program");
+    ##         parser.add_options(options);
+    ##         if (!parser.parse(args)) {
+    ##             return 2;
+    ##         }
+    ##         print($"{options.source} -> {options.output}");
+    ##         return 0;
+    ##     }
+    add_options<T>(options: T) {
+        var declared = Array<_CliArgument>();
+        static (this, options, declared) {
+            reflect.assert(reflect.is_struct<T>(), $"'add_options' needs a struct, not '{reflect.name<T>()}'");
+            for (var field in reflect.properties<T>()) {
+                var flag = reflect.is_same<field.Type, bool>();
+                var single = reflect.is_same<field.Type, String>();
+                var maybe = reflect.is_same<field.Type, Optional<String>>();
+                var list = reflect.is_same<field.Type, Array<String>>();
+                if (!flag and !single and !maybe and !list) {
+                    reflect.error(
+                        $"'add_options' cannot declare field '{field.name}' of type '{field.type_name}'; use bool, String, String? or String[]"
+                    );
+                }
+                if (field.has_attribute<Positional>()) {
+                    var positional = field.attribute<Positional>();
+                    reflect.assert(!flag, $"positional argument '{field.name}' cannot be a bool");
+                    var name = positional.name.is_empty ? field.name : positional.name;
+                    if (list) {
+                        declared.append(
+                            this._declare_positional(name, positional.help, LIST_KIND, positional.required)
+                        );
+                    } else if (maybe) {
+                        declared.append(this._declare_positional(name, positional.help, SINGLE_KIND, false));
+                    } else {
+                        declared.append(this._declare_field_positional(name, positional.help, field.get(options)));
+                    }
+                } else {
+                    var short_name = "";
+                    var help = "";
+                    var name = "";
+                    var value_name = "";
+                    var required = false;
+                    if (field.has_attribute<Option>()) {
+                        var option = field.attribute<Option>();
+                        short_name = option.short_name;
+                        help = option.help;
+                        name = option.name;
+                        value_name = option.value_name;
+                        required = option.required;
+                    }
+                    if (flag) {
+                        declared.append(
+                            this._declare_field_option(field.name, name, short_name, help, FLAG_KIND, "", false, "")
+                        );
+                    } else if (single) {
+                        declared.append(
+                            this._declare_field_option(
+                                field.name,
+                                name,
+                                short_name,
+                                help,
+                                SINGLE_KIND,
+                                value_name,
+                                required,
+                                field.get(options)
+                            )
+                        );
+                    } else if (maybe) {
+                        declared.append(
+                            this._declare_field_option(
+                                field.name, name, short_name, help, SINGLE_KIND, value_name, required, ""
+                            )
+                        );
+                    } else {
+                        declared.append(
+                            this._declare_field_option(
+                                field.name, name, short_name, help, LIST_KIND, value_name, required, ""
+                            )
+                        );
+                    }
+                }
+            }
+        }
+        _binders.append(() => _cli_store<T>(options, declared));
+    }
+
     ## Whether the last `parse` reached this parser: whether this command
     ## was given. The top-level parser is selected whenever its arguments
     ## were parsed.
@@ -344,7 +469,11 @@ export struct Parser {
     try_parse(args: String[]): Result<String?> {
         _failed_usage = "";
         _failed_path = _path;
-        return _parse(args, 1, this);
+        var result = _parse(args, 1, this);
+        if (result.is_ok() and !result.value()) {
+            _bind();
+        }
+        return result;
     }
 
     ## Parses `args` and fills in every handle.
@@ -384,6 +513,51 @@ export struct Parser {
             process.exit(0);
         }
         return true;
+    }
+
+    # Declares an option for a field of an options struct: named `name`, or
+    # after the field when that is empty.
+    _declare_field_option(
+        field_name: String,
+        name: String,
+        short_name: String,
+        help: String,
+        kind: int,
+        value_name: String,
+        required: bool,
+        default_value: String
+    ): _CliArgument {
+        var long_name = name.is_empty ? field_name.replace("_", "-") : name;
+        var declared = _declare_option(long_name, short_name, help, kind);
+        if (kind != FLAG_KIND) {
+            declared.value_name = value_name.is_empty ? long_name.upper().replace("-", "_") : value_name;
+            declared.required = required;
+            # A `String` field declared without a value holds none.
+            declared.default_value = default_value === __null ? "" : default_value;
+        }
+        return declared;
+    }
+
+    # Declares a positional `String` field, which is optional when it holds
+    # a default.
+    _declare_field_positional(name: String, help: String, default_value: String): _CliArgument {
+        var fallback = default_value === __null ? "" : default_value;
+        var declared = _declare_positional(name, help, SINGLE_KIND, fallback.is_empty);
+        declared.default_value = fallback;
+        return declared;
+    }
+
+    # Stores what the last parse found in the options structs given to
+    # `add_options`, here and in the command that was selected.
+    _bind() {
+        for (var binder in _binders) {
+            binder();
+        }
+        for (var command in _commands) {
+            if (command._selected) {
+                command._bind();
+            }
+        }
     }
 
     # Declares an option after checking its names.
@@ -742,6 +916,30 @@ _cli_edit_distance(a: String, b: String): int {
         i += 1;
     }
     return previous[b.size];
+}
+
+# Stores each declaration's parsed value in its field of `options`, in the
+# order `add_options` declared them.
+_cli_store<T>(options: T, declared: Array<_CliArgument>) {
+    static (options, declared) {
+        var index = 0;
+        for (var field in reflect.properties<T>()) {
+            if (reflect.is_same<field.Type, bool>()) {
+                field.set(options, declared[index].occurrences > 0);
+            } else if (reflect.is_same<field.Type, String>()) {
+                field.set(options, Argument(declared[index]).value_or(""));
+            } else if (reflect.is_same<field.Type, Optional<String>>()) {
+                if (declared[index].values.is_empty) {
+                    field.set(options, Optional<String>.Empty);
+                } else {
+                    field.set(options, Optional<String>.Value(declared[index].values.last()));
+                }
+            } else {
+                field.set(options, declared[index].values.clone());
+            }
+            index += 1;
+        }
+    }
 }
 
 ## An option that takes no value, from `Parser.flag`.

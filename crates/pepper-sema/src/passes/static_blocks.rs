@@ -196,8 +196,14 @@ pub fn remove_from_generic_code(module: &mut Module) {
             }
         }
     }
+    // A non-generic struct's generic methods keep theirs: they are the bases
+    // `generic_methods::specialize_methods` clones from, and a program that
+    // reuses the checked runtime specializes the runtime's after this ran
+    // (`parser.add_options<Options>` in `cli`).
     let functions = module.functions.iter_mut().chain(module.structs.iter_mut().flat_map(|st| {
-        st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain(st.generic_methods.iter_mut()).chain(std::iter::once(&mut st.destructor))
+        let keep = st.generic_params.is_empty();
+        let generic_methods = st.generic_methods.iter_mut().filter(move |_| !keep);
+        st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain(generic_methods).chain(std::iter::once(&mut st.destructor))
     }));
     let functions = functions.chain(module.traits.iter_mut().flat_map(|t| t.methods.iter_mut()));
     let functions = functions.chain(module.extensions.iter_mut().flat_map(|e| e.methods.iter_mut()));
@@ -844,9 +850,9 @@ impl Expander<'_> {
             let _ = name_span;
             return Ok(value);
         }
-        if op == "&&" || op == "||" {
+        if ["&&", "||", "and", "or"].contains(&op) {
             let left = self.condition(lhs)?;
-            if left == (op == "||") {
+            if left == (op == "||" || op == "or") {
                 return Ok(Value::Bool(left));
             }
             return Ok(Value::Bool(self.condition(rhs)?));

@@ -208,6 +208,64 @@ it was the one given.
 **Panics**
 - if `name` is empty, starts with `-` or is already declared, or if this parser has positional arguments
 
+#### add_options
+
+```pepper
+add_options<T>(options: T)
+```
+
+Declares an option or positional argument for each public field of
+`options`, and has every successful parse store the values in those
+fields.
+
+A field's type picks what it declares: `bool` is a flag, `String` an
+option with one value, `String?` one that may be left out, and
+`String[]` one that may be given many times. An option is named after
+its field, with each `_` written `-` (`import_path` is
+`--import-path`); `[cli.Option]` on a field gives it a short name,
+help, another name, or makes it required. `[cli.Positional]` makes a
+field the next positional argument instead.
+
+A `String` field that holds a value when this is called keeps it as
+the default; an empty one has no default, so leaving the option out
+leaves it empty, or is an error for a positional argument. Every
+parse sets every field: a flag to whether it was given, a list to the
+values given.
+
+The declarations are the same as the builder methods make, so the
+help and errors read the same, and the two styles mix on one parser.
+
+**Type parameters**
+- `T` — the options struct
+
+**Parameters**
+- `options` — the struct whose fields to declare and fill in
+
+**Example**
+```pepper
+    import cli;
+
+    struct Options {
+        [cli.Option("o", "the executable to write")]
+        var output: String = "a.out";
+        [cli.Option("v", "say what is happening")]
+        var verbose: bool;
+        [cli.Positional("the program's entry file")]
+        var source: String;
+    }
+
+    main(args: String[]): int {
+        var options = Options();
+        var parser = cli.Parser("pepper", "Compiles a Pepper program");
+        parser.add_options(options);
+        if (!parser.parse(args)) {
+            return 2;
+        }
+        print($"{options.source} -> {options.output}");
+        return 0;
+    }
+```
+
 #### usage
 
 ```pepper

@@ -110,6 +110,7 @@
     - [Tar archives](reference/archive-tar.md)
   - [The cli module](reference/cli-module.md)
     - [Parser](reference/cli-parser.md)
+    - [Options](reference/cli-options.md)
   - [The digest module](reference/digest-module.md)
     - [SHA-256](reference/digest-sha256.md)
     - [SHA-1](reference/digest-sha1.md)

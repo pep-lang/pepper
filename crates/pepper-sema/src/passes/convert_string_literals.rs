@@ -77,7 +77,11 @@ pub fn convert_string_literals(module: &mut Module) {
         for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             walk_body(body);
         }
-        for method in &mut st.method_members {
+        // Generic methods too (`add<T>`): `generic_methods::specialize_methods`
+        // clones them into `method_members` after this pass, so a literal
+        // left raw here reached codegen as a bare `char*` where a String was
+        // due.
+        for method in st.method_members.iter_mut().chain(st.generic_methods.iter_mut()) {
             convert_defaults(&mut method.parameters);
             if let Some(body) = &mut method.body {
                 walk_body(body);
