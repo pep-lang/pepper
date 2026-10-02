@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6a9704c9.js";
+            window.path_to_searchindex_js = "../searchindex-fd49ca35.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b23e31f5.js"></script>
+        <script src="../toc-3dba6a77.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -254,9 +254,14 @@ remember a command-line flag.</p>
 <p>The <code>-l</code> option links a library for one build:</p>
 <pre><code class="language-sh">pepper main.pep -l m -o main
 </code></pre>
-<p>Repeat it for more libraries (<code>-l m -l pthread</code>). There is no option to add a
-library search directory yet, so a library must be one the linker finds on its
-own: a system library, or one in a directory the linker searches by default.</p>
+<p>Repeat it for more libraries (<code>-l m -l pthread</code>).</p>
+<p>A library the linker does not find on its own (one outside the system’s
+library directories, such as a Homebrew install on macOS) needs its folder
+on the search path. <code>-L dir</code> adds one, like <code>-L</code> for clang:</p>
+<pre><code class="language-sh">pepper main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
+</code></pre>
+<p>Repeat it for more folders. The folders are searched for <code>-l</code> libraries and
+<code>[Link]</code> libraries alike, in the order given, before the default ones.</p>
 <h2 id="when-linking-fails"><a class="header" href="#when-linking-fails">When linking fails</a></h2>
 <p>If a function you declared with <code>extern</code> is not defined by any linked library,
 compilation succeeds and the link fails. The compiler prints what the linker

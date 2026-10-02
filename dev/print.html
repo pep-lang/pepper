@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6a9704c9.js";
+            window.path_to_searchindex_js = "searchindex-fd49ca35.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b23e31f5.js"></script>
+        <script src="toc-3dba6a77.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -12853,6 +12853,67 @@ end of an allocation, using memory after <code>free</code>, or forgetting to <co
 behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
+<h2 id="owning-a-c-resource-handlet"><a class="header" href="#owning-a-c-resource-handlet">Owning a C resource: <code>Handle&lt;T&gt;</code></a></h2>
+<p>A C library hands out objects that it frees with a function of its own
+(<code>fclose</code>, <code>free</code>, <code>LLVMDisposeModule</code>). Pepper’s reference counting does
+not know about them, so the runtime’s <code>Handle&lt;T&gt;</code> ties one to Pepper’s
+lifetimes, like C#’s <code>SafeHandle</code>: it holds the raw value and a release
+function, and calls the function once, when the last reference to the
+handle goes away.</p>
+<pre><code class="language-pepper"># A C resource owned by a Handle: `free` runs when the last reference to
+# the handle goes away.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+extern void* memset(void* p, int value, ulong size);
+
+# A buffer from C, freed with the struct that holds it.
+struct Buffer {
+    var _memory: Handle&lt;__ptr&lt;void&gt;&gt;;
+    var size: ulong { get; }
+
+    construct(size: ulong) {
+        _memory = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(size), (p) =&gt; free(p));
+        this.size = size;
+    }
+
+    fill(value: u8) {
+        memset(_memory.value, value as int, size);
+    }
+
+    at(index: ulong): u8 {
+        return (_memory.value as __ptr&lt;u8&gt;)[index];
+    }
+}
+
+main(): int {
+    var buffer = Buffer(16);
+    buffer.fill(7);
+    if (buffer.at(15) != 7) {
+        return 1;
+    }
+
+    # release() frees early; the handle then no longer owns the memory.
+    var scratch = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(8), (p) =&gt; free(p));
+    scratch.release();
+    return scratch.is_owned() ? 2 : 0;
+}
+</code></pre>
+<ul>
+<li><code>Handle&lt;T&gt;(value, release)</code> takes ownership of <code>value</code>. <code>T</code> is usually
+<code>__ptr&lt;void&gt;</code> or an integer descriptor.</li>
+<li><code>value</code> reads the raw value, to pass to C.</li>
+<li>A handle is a reference, so copies share the resource; it is released
+when the last copy goes away. Keep it in a field of the struct that
+wraps the resource, as <code>Buffer</code> does.</li>
+<li><code>release()</code> frees the resource early, and <code>detach()</code> gives it back
+without freeing it. Either way the release function never runs again,
+and <code>is_owned()</code> becomes false.</li>
+<li><code>release</code> is a function value, so a closure may capture what the release
+needs. A captured reference stays alive until the release runs, which is
+how a C object that must not outlive its parent (an LLVM module and its
+context) keeps the parent alive.</li>
+</ul>
 <h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
 <p>A Pepper <a href="#function-types-and-closures">function value</a> is a reference-counted object,
 not a C function pointer. For C, Pepper has a separate type,
@@ -13244,9 +13305,14 @@ remember a command-line flag.</p>
 <p>The <code>-l</code> option links a library for one build:</p>
 <pre><code class="language-sh">pepper main.pep -l m -o main
 </code></pre>
-<p>Repeat it for more libraries (<code>-l m -l pthread</code>). There is no option to add a
-library search directory yet, so a library must be one the linker finds on its
-own: a system library, or one in a directory the linker searches by default.</p>
+<p>Repeat it for more libraries (<code>-l m -l pthread</code>).</p>
+<p>A library the linker does not find on its own (one outside the system’s
+library directories, such as a Homebrew install on macOS) needs its folder
+on the search path. <code>-L dir</code> adds one, like <code>-L</code> for clang:</p>
+<pre><code class="language-sh">pepper main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
+</code></pre>
+<p>Repeat it for more folders. The folders are searched for <code>-l</code> libraries and
+<code>[Link]</code> libraries alike, in the order given, before the default ones.</p>
 <h2 id="when-linking-fails"><a class="header" href="#when-linking-fails">When linking fails</a></h2>
 <p>If a function you declared with <code>extern</code> is not defined by any linked library,
 compilation succeeds and the link fails. The compiler prints what the linker
@@ -27311,6 +27377,81 @@ copying the values it holds when one of them may lead back to it.</p>
 <li><code>original</code> — the object being copied</li>
 <li><code>made</code> — its copy</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/handle.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="handlepep"><a class="header" href="#handlepep">handle.pep</a></h1>
+<p><code>Handle&lt;T&gt;</code>: owns a resource that Pepper’s reference counting does not
+know about, such as a C library’s object, and releases it when the last
+reference to the handle goes away, like C#’s <code>SafeHandle</code>.</p>
+<p>Source: <code>runtime/handle.pep</code></p>
+<h2 id="handle"><a class="header" href="#handle">Handle</a></h2>
+<pre><code class="language-pepper">struct Handle&lt;T&gt;
+</code></pre>
+<p>Owns a raw resource and calls a release function on it once, when the
+handle is destroyed or <code>release()</code> is called, whichever comes first.</p>
+<p>Use it to tie a C library’s object (a <code>__ptr&lt;void&gt;</code> from an <code>extern</code>, a
+file descriptor) to Pepper’s lifetimes: hold a <code>Handle</code> in a struct
+field, and the resource is freed when the struct is. A handle is a
+reference like any struct, so copies share one resource, and it is
+released when the last copy goes away. <code>detach()</code> takes the resource
+back without releasing it.</p>
+<p><code>release</code> is an ordinary function value, so a closure may capture what
+the release needs (such as an owner that must outlive the resource:
+holding it in the closure keeps it alive until the release runs).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the raw resource, usually <code>__ptr&lt;void&gt;</code> or an integer</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    extern void* malloc(ulong size);
+    extern void free(void* p);
+
+    main(): int {
+        var buffer = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(16), (p) =&gt; free(p));
+        # use buffer.value; free runs when `buffer` goes out of scope
+        return 0;
+    }
+</code></pre>
+<h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
+<h4 id="value-4"><a class="header" href="#value-4">value</a></h4>
+<pre><code class="language-pepper">var value: T { get; }
+</code></pre>
+<p>The resource. It stays readable after the handle is released or
+detached, but it no longer refers to anything the handle owns.</p>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h4 id="handle-1"><a class="header" href="#handle-1">Handle()</a></h4>
+<pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
+</code></pre>
+<p>Creates a handle that owns <code>value</code> and calls <code>release(value)</code> when
+it is destroyed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the resource to own</li>
+<li><code>release</code> — the function that frees <code>value</code>; it is called at most once</li>
+</ul>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h4 id="is_owned"><a class="header" href="#is_owned">is_owned</a></h4>
+<pre><code class="language-pepper">is_owned(): bool
+</code></pre>
+<p>Reports whether the handle still owns its resource: false after
+<code>release()</code> or <code>detach()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true while the resource has not been released or detached</li>
+</ul>
+<h4 id="release"><a class="header" href="#release">release</a></h4>
+<pre><code class="language-pepper">release()
+</code></pre>
+<p>Releases the resource now instead of when the handle is destroyed.
+Calling it again, or after <code>detach()</code>, does nothing.</p>
+<h4 id="detach"><a class="header" href="#detach">detach</a></h4>
+<pre><code class="language-pepper">detach(): T
+</code></pre>
+<p>Gives up ownership without releasing the resource, which the caller
+then frees itself.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the resource</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/client.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="httpclientpep"><a class="header" href="#httpclientpep">http/client.pep</a></h1>
 <p>The HTTP client: <code>Client</code> sends a <code>Request</code> over HTTP or HTTPS and
@@ -27356,7 +27497,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -27417,17 +27558,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
+<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
 <h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -27798,7 +27939,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -27836,7 +27977,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -27900,7 +28041,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -28071,7 +28212,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -28183,7 +28324,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -28202,7 +28343,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -28849,13 +28990,13 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
 <h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -28867,7 +29008,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -29015,7 +29156,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -29195,7 +29336,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -29639,7 +29780,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -29657,7 +29798,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -29972,7 +30113,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -30019,7 +30160,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>

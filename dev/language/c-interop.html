@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6a9704c9.js";
+            window.path_to_searchindex_js = "../searchindex-fd49ca35.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b23e31f5.js"></script>
+        <script src="../toc-3dba6a77.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -458,6 +458,67 @@ end of an allocation, using memory after <code>free</code>, or forgetting to <co
 behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
+<h2 id="owning-a-c-resource-handlet"><a class="header" href="#owning-a-c-resource-handlet">Owning a C resource: <code>Handle&lt;T&gt;</code></a></h2>
+<p>A C library hands out objects that it frees with a function of its own
+(<code>fclose</code>, <code>free</code>, <code>LLVMDisposeModule</code>). Pepper’s reference counting does
+not know about them, so the runtime’s <code>Handle&lt;T&gt;</code> ties one to Pepper’s
+lifetimes, like C#’s <code>SafeHandle</code>: it holds the raw value and a release
+function, and calls the function once, when the last reference to the
+handle goes away.</p>
+<pre><code class="language-pepper"># A C resource owned by a Handle: `free` runs when the last reference to
+# the handle goes away.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+extern void* memset(void* p, int value, ulong size);
+
+# A buffer from C, freed with the struct that holds it.
+struct Buffer {
+    var _memory: Handle&lt;__ptr&lt;void&gt;&gt;;
+    var size: ulong { get; }
+
+    construct(size: ulong) {
+        _memory = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(size), (p) =&gt; free(p));
+        this.size = size;
+    }
+
+    fill(value: u8) {
+        memset(_memory.value, value as int, size);
+    }
+
+    at(index: ulong): u8 {
+        return (_memory.value as __ptr&lt;u8&gt;)[index];
+    }
+}
+
+main(): int {
+    var buffer = Buffer(16);
+    buffer.fill(7);
+    if (buffer.at(15) != 7) {
+        return 1;
+    }
+
+    # release() frees early; the handle then no longer owns the memory.
+    var scratch = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(8), (p) =&gt; free(p));
+    scratch.release();
+    return scratch.is_owned() ? 2 : 0;
+}
+</code></pre>
+<ul>
+<li><code>Handle&lt;T&gt;(value, release)</code> takes ownership of <code>value</code>. <code>T</code> is usually
+<code>__ptr&lt;void&gt;</code> or an integer descriptor.</li>
+<li><code>value</code> reads the raw value, to pass to C.</li>
+<li>A handle is a reference, so copies share the resource; it is released
+when the last copy goes away. Keep it in a field of the struct that
+wraps the resource, as <code>Buffer</code> does.</li>
+<li><code>release()</code> frees the resource early, and <code>detach()</code> gives it back
+without freeing it. Either way the release function never runs again,
+and <code>is_owned()</code> becomes false.</li>
+<li><code>release</code> is a function value, so a closure may capture what the release
+needs. A captured reference stays alive until the release runs, which is
+how a C object that must not outlive its parent (an LLVM module and its
+context) keeps the parent alive.</li>
+</ul>
 <h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
 <p>A Pepper <a href="function-types.html">function value</a> is a reference-counted object,
 not a C function pointer. For C, Pepper has a separate type,
