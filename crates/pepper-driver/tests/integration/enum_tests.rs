@@ -526,7 +526,6 @@ fn method_errors() {
     assert!(declared("name(): String { return \"\"; }").contains("'name' is built into every enum and cannot be redeclared"));
     assert!(error_of(&format!("{}extend Light {{ extra(): int {{ return 1; }} }}\ntest(): int {{ return 0; }}", LIGHT))
         .contains("cannot extend enum 'Light' without a trait: declare its methods inside the enum"));
-    assert!(declared("pick<T>(x: T): T { return x; }").contains("methods of an enum cannot be generic yet ('pick')"));
 }
 
 #[test]
@@ -577,6 +576,63 @@ test(): int {
 }
 "#;
     assert_eq!(crate::support::jit_census(src), (1 + 90 + 100, 0));
+}
+
+#[test]
+fn methods_can_be_generic() {
+    let src = r#"
+enum Light {
+    Red,
+    Green,
+
+    pick<T>(on_red: T, on_green: T): T {
+        return match (this) {
+            Red => on_red,
+            Green => on_green,
+        };
+    }
+    static either<T>(go: bool, a: T, b: T): T {
+        return go ? a : b;
+    }
+    # A bare call of a generic method acts on `this`.
+    both<T>(x: T): Array<T> {
+        var a = Array<T>();
+        a.append(pick(x, x));
+        a.append(x);
+        return a;
+    }
+}
+
+enum Maybe<T> {
+    Some(value: T),
+    Nothing,
+
+    map<U>(f: (T) => U): Maybe<U> {
+        return match (this) {
+            Some(v) => Maybe<U>.Some(f(v)),
+            Nothing => Maybe<U>.Nothing,
+        };
+    }
+    has_value(): bool {
+        return match (this) {
+            Some(_) => true,
+            Nothing => false,
+        };
+    }
+}
+
+test(): int {
+    var total = 0;
+    var green = Light.Green;
+    if (green.pick(1, 2) == 2 && Light.Red.pick("a", "b") == "a") { total += 1; }
+    if (Light.either(true, 3, 4) == 3 && Light.either<String>(false, "a", "b") == "b") { total += 10; }
+    if (green.pick<long>(5, 6) == 6 && green.both("x").count == 2) { total += 100; }
+    var shown = Maybe<int>.Some(4).map((x: int) => $"n{x}");
+    if (shown.has_value() && !Maybe<int>.Nothing.map<String>((x: int) => "").has_value()) { total += 1000; }
+    return total;
+}
+"#;
+    assert_eq!(crate::support::jit_census(src), (1111, 0));
 }
 
 #[test]

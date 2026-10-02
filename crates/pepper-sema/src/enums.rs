@@ -390,7 +390,18 @@ pub const BUILT_IN_METHODS: [&str; 2] = ["name", "from_value"];
 /// `Color::name`. An instance method takes the value as its first
 /// parameter, `this` ([`this_parameter`]).
 pub fn method_name(enum_name: &str, method: &str) -> String {
-    format!("{}::{}", enum_name, spelled_in_name(method))
+    let (method, type_arguments) = type_arguments_of(method);
+    format!("{}::{}{}", enum_name, spelled_in_name(method), type_arguments)
+}
+
+/// `method` split from the type arguments of a generic method's call,
+/// `("pick", "<long>")` for `pick<long>`; the operators `<`, `<=` and `<<`
+/// have none.
+fn type_arguments_of(method: &str) -> (&str, &str) {
+    match method.find('<') {
+        Some(at) if at > 0 && method.ends_with('>') => method.split_at(at),
+        _ => (method, ""),
+    }
 }
 
 /// `method` as the part of a function name after `::`: an operator's `<` and
@@ -430,6 +441,9 @@ pub fn this_parameter(enum_name: &str) -> VariableDef {
 /// Whether enum `enum_name` has a method `method`, and if so whether it is
 /// static.
 pub fn method_is_static(enum_name: &str, method: &str) -> Option<bool> {
+    // A generic method called with type arguments: `pick<long>` (not the
+    // operators `<`, `<=`, `<<`).
+    let (method, _) = type_arguments_of(method);
     METHODS.with(|m| m.borrow().get(&(enum_name.to_string(), spelled_in_name(method).into_owned())).copied())
 }
 

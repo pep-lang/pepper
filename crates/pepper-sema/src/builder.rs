@@ -2546,10 +2546,6 @@ fn reference_enum_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
 /// parameter, `this`, by value.
 fn enum_method(decl: &ast::StructDecl, m: &ast::FunctionDecl) -> Result<FunctionDef, Diagnostic> {
     let at = loc(m.name_span);
-    if let Some(p) = m.generic_params.first() {
-        return Err(Diagnostic::error(format!("methods of an enum cannot be generic yet ('{}')", m.name))
-            .at(loc(p.name_span)));
-    }
     if m.is_indexer || !m.name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
         return Err(Diagnostic::error(format!("enum '{}' cannot declare operators or indexers yet", decl.name)).at(at));
     }

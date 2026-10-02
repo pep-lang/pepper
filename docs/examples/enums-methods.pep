@@ -22,6 +22,11 @@ enum Light: u8 {
         return next().next();
     }
 
+    # A method can be generic, like any function.
+    choose<T>(stop: T, go: T): T {
+        return may_go() ? go : stop;
+    }
+
     static first(): Light {
         return Light.Red;
     }
@@ -32,6 +37,7 @@ main(): int {
     assert(!light.may_go(), "red means stop");
     assert(light.next().may_go(), "green follows red");
     assert(light.after_two() == Light.Amber, "then amber");
+    assert(light.choose("wait", "walk") == "wait" && Light.Green.choose(0, 1) == 1, "a generic method");
 
     # Every enum has name() and from_value().
     assert(light.name() == "Red", "name() spells the case");

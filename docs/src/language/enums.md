@@ -139,7 +139,8 @@ enum Shape {
 An enum can declare methods after its cases. Inside a method, `this` is the
 value the method was called on, and a bare call of another method of the
 enum (`next()`) calls it on `this`. A `static` method is called on the enum
-itself (`Light.first()`).
+itself (`Light.first()`). A method can be generic (`choose<T>`), with its
+type arguments inferred or written out (`light.choose<String>(...)`).
 
 ```pepper
 {{#include ../../examples/enums-methods.pep}}
@@ -336,10 +337,10 @@ the next arm is tried, as if this one had not matched.
 
 ## Current limits
 
-- An enum whose cases carry nothing cannot be generic. The methods of any
-  enum cannot be generic yet. An enum whose cases carry values can declare
-  indexers (`[]`), as a struct does; one whose cases carry nothing cannot
-  declare operators or indexers yet, and has `==` and `!=` built in.
+- An enum whose cases carry nothing cannot be generic. An enum whose cases
+  carry values can declare indexers (`[]`), as a struct does; one whose
+  cases carry nothing cannot declare operators or indexers yet, and has
+  `==` and `!=` built in.
 - A constant is a pattern only when it is declared at module scope.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:
