@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2a157130.js";
+            window.path_to_searchindex_js = "../searchindex-22193f87.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -582,10 +582,15 @@ main(): int {
     return f(1, 2);                    # error
 }
 </code></pre>
-<pre><code>error: variable 'f' expects a function of type (String) =&gt; int, but was given a function of type (int) =&gt; int
-a function of type (String) =&gt; int takes 1 argument(s), but 2 were given
+<pre><code class="language-text">main.pep:4:30: error: cannot initialize variable 'f' of type '(String) =&gt; int' with a value of type '(int) =&gt; int'
+    4 |     var f: (String) =&gt; int = square;   # error
+      |                              ^~~~~~
+main.pep:5:12: error: too many arguments to function of type '(String) =&gt; int': expected 1, have 2
+    5 |     return f(1, 2);                    # error
+      |            ^
 </code></pre>
-<p>These two errors do not show a source location yet.</p>
+<p>The compiler reports <a href="compiler-errors.html#one-error-at-a-time">one error at a time</a>,
+so the second appears once the first is fixed.</p>
 <h2 id="sharing-function-values-between-threads"><a class="header" href="#sharing-function-values-between-threads">Sharing function values between threads</a></h2>
 <p>A plain function type such as <code>() =&gt; void</code> can hold any function value,
 including a closure that captures a <code>String</code> or an <code>Array</code>. Such values stay
