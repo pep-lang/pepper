@@ -556,6 +556,11 @@ with no extension, and `module_name()` is the output's stem.
     `passes::properties` reads a bare `p` in those functions as `this.p`.
     Any enum's properties must be computed and have no `set`
     (`enum_property_error`).
+    An operator or indexer method is the function `E::<` (with `<` and `>`
+    spelled `{` and `}` in the name, as for value types), and
+    `resolve_operators` and `unary_operators::dispatch` turn `a < b`, `-a`
+    and `a[i]` on such an enum into calls of it
+    (`enums::declares_operator`, `operator_call`).
   - An enum with a case that carries values (a reference enum) *is* a
     struct in the model (`reference_enum_def`): `StructDef::enum_cases`
     lists its cases (`EnumCaseDef::payload` names each case's values, and

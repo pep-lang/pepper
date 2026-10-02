@@ -57,8 +57,9 @@ This section is about enums whose cases carry nothing.
 it is copied, not reference counted, and it can be stored in locals, fields,
 arrays and module-scope constants, and passed to and returned from functions.
 
-- `==` and `!=` compare two values of the same enum. No other operator
-  applies to an enum.
+- `==` and `!=` compare two values of the same enum. Other operators apply
+  only when the enum declares them (see
+  [Operators and indexers](#operators-and-indexers)).
 - An enum does not mix with integers or with other enums: `int x = Color.Red`
   and `Color c = 0` are errors, and so is comparing a `Color` with a `Size`.
 - `value as int` (or any integer type) gives a case's integer value. The
@@ -159,6 +160,22 @@ instead, as `next()` does. Such an enum can also declare a trait with
 [numbers, `bool` and enums](traits-and-extensions.md#numbers-bool-and-enums));
 it is still never a trait value. For an enum whose cases carry values, `this` is
 the object, as in a struct's method; its values still cannot change.
+
+### Operators and indexers
+
+An enum can declare [operators](structs.md#operators) and an
+[indexer](structs.md#indexers) the way a struct does: a method named after
+the operator (`<(other: Level): bool`) or `[]`. For an enum whose cases
+carry nothing, `a < b` calls `Level.<` with `a` as `this`.
+
+```pepper
+{{#include ../../examples/enums-operators.pep}}
+```
+
+Its values never change and it already compares with `==` and `!=`, so
+such an enum cannot declare `==`, `!=`, a compound assignment (`+=`), an
+indexer that assigns (`[](index, value)`) or the truth test `!!`, and its
+operators are not `static`.
 
 ### Properties
 
@@ -342,10 +359,14 @@ the next arm is tried, as if this one had not matched.
 
 ## Current limits
 
-- An enum whose cases carry nothing cannot be generic. An enum whose cases
-  carry values can declare indexers (`[]`), as a struct does; one whose
-  cases carry nothing cannot declare operators or indexers yet, and has
-  `==` and `!=` built in.
+- An enum whose cases carry nothing cannot be generic, by design: its value
+  is a plain integer, so a type parameter would have nothing to describe.
+  An enum whose cases carry values can be (`enum List<T>`).
+- An enum whose cases carry values has no derived `==` that compares the
+  values: `==` compares identity, as for a struct, unless the enum declares
+  `==` (with a matching `hash<T>` to be a key), or is a
+  [`[Value]` enum](#value-enums). Deriving `==` and `hash` from the values
+  is planned together with the same for structs.
 - A constant is a pattern only when it is declared at module scope.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:
@@ -353,7 +374,7 @@ the next arm is tried, as if this one had not matched.
   call it as 'name()'"), where a struct's `p.norm` is a
   [bound method](function-types.md). Wrap the call in a closure instead,
   `() => c.name()`.
-- An enum whose cases carry nothing cannot be extended
-  (`extend Color { ... }`); declare its methods inside it. So it cannot
-  conform to a trait either, and a trait value is a reference to an object,
-  which such an enum's value is not.
+- An enum whose cases carry nothing is extended only with a trait
+  (`extend Color with Describe { ... }`); declare its other methods inside
+  it. It is never a trait value, since a trait value is a reference to an
+  object, which such an enum's value is not.

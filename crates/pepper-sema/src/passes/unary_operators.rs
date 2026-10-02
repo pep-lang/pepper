@@ -54,6 +54,20 @@ pub(crate) fn dispatch(body: &mut Block, table: &StructTable, current: Option<&T
     crate::passes::walk_block(body, &mut |expr: &mut Expression| match expr {
         Expression::Unary { op, operand, loc } => {
             let loc = *loc;
+            // An enum declaring the operator: `-a` is `E::-(a)`.
+            let name = match op {
+                UnaryOp::Neg => "-",
+                UnaryOp::BitNot => "~",
+                UnaryOp::LogicalNot => "!",
+                _ => "",
+            };
+            if !name.is_empty()
+                && let Some(ty) = static_type::of(operand, table, current)
+                && crate::enums::declares_operator(&ty, name)
+            {
+                *expr = crate::enums::operator_call(&ty, name, vec![take(operand)], loc);
+                return;
+            }
             match op {
                 UnaryOp::Neg | UnaryOp::BitNot => {
                     let name = if *op == UnaryOp::Neg { "-" } else { "~" };

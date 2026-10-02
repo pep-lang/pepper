@@ -447,6 +447,20 @@ pub fn method_is_static(enum_name: &str, method: &str) -> Option<bool> {
     METHODS.with(|m| m.borrow().get(&(enum_name.to_string(), spelled_in_name(method).into_owned())).copied())
 }
 
+/// Whether `ty` is an enum whose cases carry nothing and whose own instance
+/// method `operator` (`<`, `+`, `-`, `__index_get`) an operator on its
+/// value calls: `a < b` is then `E::<(a, b)`. (A number type's extension
+/// operators are for other types on the right, `value_types`.)
+pub fn declares_operator(ty: &TypeName, operator: &str) -> bool {
+    ty.sub_types.is_empty() && !ty.is_pointer() && is_enum(&ty.name) && method_is_static(&ty.name, operator) == Some(false)
+}
+
+/// The call of operator method `operator` of enum `ty` on `operands`
+/// (the value first), as [`declares_operator`] finds it.
+pub fn operator_call(ty: &TypeName, operator: &str, operands: Vec<Expression>, loc: Loc) -> Expression {
+    Expression::FunctionCall { function: method_name(&ty.name, operator), args: operands, loc }
+}
+
 /// A call of method `method` on a value of enum `enum_name`, as a call of
 /// its function: `c.name()` is `Color::name(c)`. Reports a method the enum
 /// lacks, or a static one called on a value, at `loc`, and returns `None`

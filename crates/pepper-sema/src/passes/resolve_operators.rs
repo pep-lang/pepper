@@ -122,6 +122,13 @@ fn lower_index(expr: &mut Expression, table: &StructTable, current: Option<&Type
     let Expression::Index { lhs, rhs, loc } = expr else {
         return false;
     };
+    // An enum's indexer: `light[i]` is `Light::__index_get(light, i)`.
+    if let Some(ty) = static_type::of(lhs, table, current)
+        && crate::enums::declares_operator(&ty, "__index_get")
+    {
+        *expr = crate::enums::operator_call(&ty, "__index_get", vec![(**lhs).clone(), (**rhs).clone()], *loc);
+        return true;
+    }
     let info = lhs_struct(lhs, table, current);
     if info.is_some_and(|i| i.methods.contains("__index_get")) && !is_raw_buffer_field(lhs, table, current) {
         // Replace the index op with a call to the index method.
@@ -207,6 +214,14 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
             // the lhs's struct declares the method — plain field compares
             // (`Size == 0`) and POD elements must stay binary ops.
             let op_name = op.op_name();
+            // An enum declaring the operator: `a < b` is `E::<(a, b)`.
+            if !op_name.is_empty()
+                && let Some(ty) = static_type::of(lhs, table, current)
+                && crate::enums::declares_operator(&ty, &op_name)
+            {
+                *expr = crate::enums::operator_call(&ty, &op_name, vec![(**lhs).clone(), (**rhs).clone()], *loc);
+                return;
+            }
             if !op_name.is_empty() {
                 // `Data[idx] == key` on a raw buffer field: dispatch on the
                 // pointee (string content equality), which the receiver's

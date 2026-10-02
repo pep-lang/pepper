@@ -2546,11 +2546,31 @@ fn reference_enum_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
 /// parameter, `this`, by value.
 fn enum_method(decl: &ast::StructDecl, m: &ast::FunctionDecl) -> Result<FunctionDef, Diagnostic> {
     let at = loc(m.name_span);
-    if m.is_indexer || !m.name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-        return Err(Diagnostic::error(format!("enum '{}' cannot declare operators or indexers yet", decl.name)).at(at));
-    }
     if crate::enums::BUILT_IN_METHODS.contains(&m.name.as_str()) {
         return Err(Diagnostic::error(format!("'{}' is built into every enum and cannot be redeclared", m.name)).at(at));
+    }
+    let operator = !m.name.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') || m.is_indexer;
+    if operator && m.is_static {
+        return Err(Diagnostic::error(format!("an operator of enum '{}' cannot be static", decl.name)).at(at));
+    }
+    if m.name == "==" || m.name == "!=" {
+        return Err(Diagnostic::error(format!(
+            "enum '{}' cannot declare '{}': it compares its cases with '==' and '!=' already",
+            decl.name, m.name
+        ))
+        .at(at));
+    }
+    // A value is passed by value and never changes, so nothing can assign
+    // through one.
+    let compound = m.name.ends_with('=') && !["<=", ">="].contains(&m.name.as_str());
+    if compound || m.name == "__index_set" || m.name == "!!" {
+        let shown = if m.name == "__index_set" { "[]".to_string() } else { m.name.clone() };
+        let why = if m.name == "!!" {
+            "an enum value is not a condition".to_string()
+        } else {
+            "its values never change".to_string()
+        };
+        return Err(Diagnostic::error(format!("enum '{}' cannot declare '{}': {}", decl.name, shown, why)).at(at));
     }
     let mut f = function_def(m, None)?;
     f.name = crate::enums::method_name(&decl.name, &m.name);

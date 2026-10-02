@@ -636,6 +636,80 @@ test(): int {
 }
 
 #[test]
+fn operators_and_indexers_call_the_enums_methods() {
+    let src = r#"
+enum Level {
+    Low,
+    Mid,
+    High,
+
+    <(other: Level): bool {
+        return (this as int) < (other as int);
+    }
+    <=(other: Level): bool {
+        return !(other < this);
+    }
+    +(steps: int): Level {
+        var next = Level.from_value(this as int + steps);
+        return next.is_ok() ? next.value() : Level.High;
+    }
+    -(): Level {
+        return Level.High;
+    }
+    -(other: Level): int {
+        return (this as int) - (other as int);
+    }
+    ~(): bool {
+        return this != Level.Low;
+    }
+    [](bit: int): bool {
+        return ((this as int) >> bit) & 1 == 1;
+    }
+}
+
+enum Label {
+    Text(text: String),
+    Blank,
+
+    <(other: Label): bool {
+        return this.name() < other.name();
+    }
+    [](index: int): String {
+        return match (this) {
+            Text(t) => t,
+            Blank => "",
+        };
+    }
+}
+
+test(): int {
+    var low = Level.Low;
+    var total = 0;
+    if (low < Level.Mid && !(Level.High < low) && low <= low) { total += 1; }
+    if (low + 1 == Level.Mid && low + 9 == Level.High) { total += 10; }
+    if (-low == Level.High && Level.High - low == 2 && ~Level.Mid && !~low) { total += 100; }
+    if (Level.Mid[0] && !Level.Mid[1] && Level.High[1]) { total += 1000; }
+    if (Label.Blank < Label.Text("x") && Label.Text("a")[0] == "a") { total += 10000; }
+    return total;
+}
+"#;
+    assert_eq!(crate::support::jit_census(src), (11111, 0));
+}
+
+#[test]
+fn operator_errors() {
+    let declared = |member: &str| error_of(&format!("enum E {{\n    A,\n\n    {}\n}}\ntest(): int {{ return 0; }}\n", member));
+    assert!(declared("==(other: E): bool { return true; }")
+        .contains("enum 'E' cannot declare '==': it compares its cases with '==' and '!=' already"));
+    assert!(declared("+=(n: int): E { return this; }").contains("enum 'E' cannot declare '+=': its values never change"));
+    assert!(declared("[](i: int, v: int): int { return v; }").contains("enum 'E' cannot declare '[]': its values never change"));
+    assert!(declared("!!(): bool { return true; }").contains("enum 'E' cannot declare '!!': an enum value is not a condition"));
+    assert!(declared("static <(other: E): bool { return true; }").contains("an operator of enum 'E' cannot be static"));
+    let used = error_of("enum E {\n    A,\n    B,\n}\ntest(): int {\n    var b = E.A < E.B;\n    return 0;\n}\n");
+    assert!(used.contains("an enum only compares with '==' and '!='"), "{}", used);
+}
+
+#[test]
 fn property_errors() {
     let declared = |cases: &str, member: &str| {
         error_of(&format!("enum E {{\n    {},\n\n    {}\n}}\ntest(): int {{ return 0; }}\n", cases, member))
