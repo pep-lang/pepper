@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c4646bbf.js";
+            window.path_to_searchindex_js = "../searchindex-447ae866.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -241,12 +241,17 @@ there is none.</p>
 <pre><code class="language-pepper">[Attribute] struct Link
 </code></pre>
 <p>Names the C library an extern links against, its C symbol, or both:
-<code>[Link("m")]</code>, <code>[Link(name = "sym")]</code>.</p>
+<code>[Link("m")]</code>, <code>[Link(name = "sym")]</code>, <code>[Link("ssl", path = "vendor")]</code>.</p>
 <h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
 <h4 id="lib"><a class="header" href="#lib">lib</a></h4>
 <pre><code class="language-pepper">const lib: String = ""
 </code></pre>
 <p>The library; empty when only the symbol is given.</p>
+<h4 id="path"><a class="header" href="#path">path</a></h4>
+<pre><code class="language-pepper">const path: String = ""
+</code></pre>
+<p>A folder the linker searches for libraries, relative to the file
+that declares the extern unless absolute; empty for none.</p>
 <h4 id="name"><a class="header" href="#name">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>

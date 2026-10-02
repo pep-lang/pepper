@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c4646bbf.js";
+            window.path_to_searchindex_js = "../searchindex-447ae866.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -262,7 +262,25 @@ on the search path. <code>-L dir</code> adds one, like <code>-L</code> for clang
 <pre><code class="language-sh">pepper build main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
 </code></pre>
 <p>Repeat it for more folders. The folders are searched for <code>-l</code> libraries and
-<code>[Link]</code> libraries alike, in the order given, before the default ones.</p>
+<code>[Link]</code> libraries alike, in the order given, before the default ones. On
+Windows, clang passes each one to the linker as <code>/LIBPATH:</code>.</p>
+<h2 id="library-search-directories-in-the-source-and-the-environment"><a class="header" href="#library-search-directories-in-the-source-and-the-environment">Library search directories in the source and the environment</a></h2>
+<p>A library that ships with your program, such as a vendored build in a
+<code>vendor/</code> folder, can name its folder in the <code>[Link]</code> attribute with <code>path</code>:</p>
+<pre><code class="language-pepper">[Link(lib = "probe", path = "vendor/lib")]
+extern int probe_version();
+</code></pre>
+<p>A relative <code>path</code> is relative to the folder of the file that declares the
+extern, not to where you run the compiler, so the program builds the same
+from anywhere. Like the library, the folder is searched only when the extern
+survives <a href="platform-selection.html">platform selection</a>, so a <code>[Target]</code> can
+give each platform its own folder.</p>
+<p>The <code>PEPPER_LIBRARY_PATH</code> environment variable adds folders for every build,
+separated like <code>PATH</code> (<code>:</code>, or <code>;</code> on Windows):</p>
+<pre><code class="language-sh">PEPPER_LIBRARY_PATH=/opt/homebrew/lib pepper build main.pep -o main
+</code></pre>
+<p>The linker searches <code>-L</code> folders first, then <code>[Link]</code> paths, then
+<code>PEPPER_LIBRARY_PATH</code>, then the runtime’s folder and the system’s.</p>
 <h2 id="when-linking-fails"><a class="header" href="#when-linking-fails">When linking fails</a></h2>
 <p>If a function you declared with <code>extern</code> is not defined by any linked library,
 compilation succeeds and the link fails. The compiler prints what the linker

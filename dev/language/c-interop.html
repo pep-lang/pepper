@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c4646bbf.js";
+            window.path_to_searchindex_js = "../searchindex-447ae866.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -742,7 +742,7 @@ extern int stat(char* path, void* buf);
 <p><code>[Link]</code> takes the library as its one positional argument or as <code>lib</code>, and
 the symbol as <code>name</code>; each is a non-empty string, and an extern names at
 most one symbol. Anything else is an error, such as:</p>
-<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib', 'path' or 'name'
     1 | [Link(symbol = "labs")] extern long pep_abs(long v);
       |       ^~~~~~
 </code></pre>

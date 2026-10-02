@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c4646bbf.js";
+            window.path_to_searchindex_js = "searchindex-447ae866.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4c7b0bab.js"></script>
@@ -441,6 +441,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="#modules-and-imports">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
+<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
 <tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="#debugging">debugging</a>.</td></tr>
@@ -15617,7 +15618,7 @@ extern int stat(char* path, void* buf);
 <p><code>[Link]</code> takes the library as its one positional argument or as <code>lib</code>, and
 the symbol as <code>name</code>; each is a non-empty string, and an extern names at
 most one symbol. Anything else is an error, such as:</p>
-<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib', 'path' or 'name'
     1 | [Link(symbol = "labs")] extern long pep_abs(long v);
       |       ^~~~~~
 </code></pre>
@@ -15979,7 +15980,25 @@ on the search path. <code>-L dir</code> adds one, like <code>-L</code> for clang
 <pre><code class="language-sh">pepper build main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
 </code></pre>
 <p>Repeat it for more folders. The folders are searched for <code>-l</code> libraries and
-<code>[Link]</code> libraries alike, in the order given, before the default ones.</p>
+<code>[Link]</code> libraries alike, in the order given, before the default ones. On
+Windows, clang passes each one to the linker as <code>/LIBPATH:</code>.</p>
+<h2 id="library-search-directories-in-the-source-and-the-environment"><a class="header" href="#library-search-directories-in-the-source-and-the-environment">Library search directories in the source and the environment</a></h2>
+<p>A library that ships with your program, such as a vendored build in a
+<code>vendor/</code> folder, can name its folder in the <code>[Link]</code> attribute with <code>path</code>:</p>
+<pre><code class="language-pepper">[Link(lib = "probe", path = "vendor/lib")]
+extern int probe_version();
+</code></pre>
+<p>A relative <code>path</code> is relative to the folder of the file that declares the
+extern, not to where you run the compiler, so the program builds the same
+from anywhere. Like the library, the folder is searched only when the extern
+survives <a href="#platform-selection">platform selection</a>, so a <code>[Target]</code> can
+give each platform its own folder.</p>
+<p>The <code>PEPPER_LIBRARY_PATH</code> environment variable adds folders for every build,
+separated like <code>PATH</code> (<code>:</code>, or <code>;</code> on Windows):</p>
+<pre><code class="language-sh">PEPPER_LIBRARY_PATH=/opt/homebrew/lib pepper build main.pep -o main
+</code></pre>
+<p>The linker searches <code>-L</code> folders first, then <code>[Link]</code> paths, then
+<code>PEPPER_LIBRARY_PATH</code>, then the runtime’s folder and the system’s.</p>
 <h2 id="when-linking-fails"><a class="header" href="#when-linking-fails">When linking fails</a></h2>
 <p>If a function you declared with <code>extern</code> is not defined by any linked library,
 compilation succeeds and the link fails. The compiler prints what the linker
@@ -31133,12 +31152,17 @@ there is none.</p>
 <pre><code class="language-pepper">[Attribute] struct Link
 </code></pre>
 <p>Names the C library an extern links against, its C symbol, or both:
-<code>[Link("m")]</code>, <code>[Link(name = "sym")]</code>.</p>
+<code>[Link("m")]</code>, <code>[Link(name = "sym")]</code>, <code>[Link("ssl", path = "vendor")]</code>.</p>
 <h3 id="fields-3-1"><a class="header" href="#fields-3-1">Fields</a></h3>
 <h4 id="lib"><a class="header" href="#lib">lib</a></h4>
 <pre><code class="language-pepper">const lib: String = ""
 </code></pre>
 <p>The library; empty when only the symbol is given.</p>
+<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
+<pre><code class="language-pepper">const path: String = ""
+</code></pre>
+<p>A folder the linker searches for libraries, relative to the file
+that declares the extern unless absolute; empty for none.</p>
 <h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -31836,7 +31860,7 @@ received.</p>
 <ul>
 <li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
 </ul>
-<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
+<h4 id="path-8"><a class="header" href="#path-8">path</a></h4>
 <pre><code class="language-pepper">path(): String
 </code></pre>
 <p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
@@ -32449,7 +32473,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>false after <code>close()</code> and for a <code>UnixListener()</code> never bound</li>
 </ul>
-<h4 id="path-8"><a class="header" href="#path-8">path</a></h4>
+<h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
 <pre><code class="language-pepper">path(): Path
 </code></pre>
 <p>Returns the path the listener was bound to.</p>
@@ -36987,7 +37011,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var port: u16?
 </code></pre>
 <p>The port after the host, if the authority gives one.</p>
-<h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
+<h4 id="path-10"><a class="header" href="#path-10">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
 <p>The path, possibly empty, with its percent-escapes.</p>
