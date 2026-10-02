@@ -67,11 +67,12 @@ pub fn link_driver() -> PathBuf {
     PathBuf::from(exe)
 }
 
-/// System libraries every Pepper executable needs on the target's OS.
+/// System libraries every Pepper executable (or shared library) needs on the
+/// target's OS; a C program that links a static library links them too.
 ///
 /// clang supplies the C runtime and, on macOS, libSystem plus the SDK/platform
 /// flags itself; these are the ones it does not add.
-fn default_system_libraries(os: &str) -> &'static [&'static str] {
+pub fn default_system_libraries(os: &str) -> &'static [&'static str] {
     match os {
         // Pepper's documented Windows defaults (docs/src/language/linking.md).
         "windows" => &["kernel32", "user32", "shell32"],
@@ -131,9 +132,11 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
 }
 
 /// Link obj files into an executable for the target
-/// (`pepper_sema::current_target`), with its system root `sysroot` when it
-/// is given; with `debug`, keep their debug info (for Windows, clang then has
-/// the linker write `<output>.pdb`, with the visualizers in `natvis`).
+/// (`pepper_sema::current_target`), or with `shared` a shared library
+/// (`--lib shared`), with its system root `sysroot` when it is given; with
+/// `debug`, keep their debug info (for Windows, clang then has the linker
+/// write `<output>.pdb`, with the visualizers in `natvis`).
+#[allow(clippy::too_many_arguments)]
 pub fn link(
     objects: &[PathBuf],
     output: &Path,
@@ -142,11 +145,22 @@ pub fn link(
     debug: bool,
     natvis: Option<&Path>,
     sysroot: Option<&Path>,
+    shared: bool,
 ) -> Result<(), String> {
     let driver = link_driver();
     let target = pepper_sema::current_target();
 
     let mut args: Vec<String> = vec!["-o".to_string(), output.to_string_lossy().into_owned()];
+    if shared {
+        args.push("-shared".to_string());
+        let name = output.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if target.os == "macos" {
+            // Programs that link it find it on their run path.
+            args.push(format!("-Wl,-install_name,@rpath/{}", name));
+        } else if target.os != "windows" {
+            args.push(format!("-Wl,-soname,{}", name));
+        }
+    }
     let lld = if target.is_host() { None } else { find_lld(&target.os, &driver) };
     args.extend(target_arguments(&target, sysroot, lld.as_deref()));
     if debug {

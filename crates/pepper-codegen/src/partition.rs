@@ -52,8 +52,9 @@ impl UnitFilter {
 /// `main`), shared definitions `linkonce_odr`, unused private helpers are
 /// removed, and every symbol a Pepper declaration defines anywhere in the
 /// program (`owners`, or a definition in this module) gets its linker
-/// spelling.
-pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), String> {
+/// spelling. The C entry points in `exported` stay external and get their
+/// C symbols (see [`crate::exports`]).
+pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>, exported: &HashSet<String>) -> Result<(), String> {
     let machine = crate::target::target_machine()?;
     let comdats = !machine.get_triple().as_str().to_string_lossy().contains("apple");
     let mut defined: HashSet<String> = owners.keys().cloned().collect();
@@ -61,7 +62,7 @@ pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), 
     values.extend(module.get_globals());
     for &value in &values {
         let symbol = name_of(value);
-        if symbol.starts_with("llvm.") {
+        if symbol.starts_with("llvm.") || exported.contains(&symbol) {
             continue;
         }
         let definition = !value.is_declaration();
@@ -84,6 +85,15 @@ pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), 
     }
     for g in module.get_globals() {
         respell(module, g, &defined);
+    }
+    for f in module.get_functions() {
+        let name = name_of(f.as_global_value());
+        if let Some(symbol) = name.strip_prefix(crate::exports::EXPORT_PREFIX).filter(|_| exported.contains(&name)) {
+            if module.get_function(symbol).is_some() {
+                return Err(format!("cannot export '{}': the program already has a C symbol of that name", symbol));
+            }
+            f.as_global_value().set_name(symbol);
+        }
     }
     module.verify().map_err(|e| format!("unit does not verify: {}", e.to_string()))
 }

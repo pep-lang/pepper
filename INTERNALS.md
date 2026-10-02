@@ -29,8 +29,8 @@ names and the pass order come from that implementation.
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
-| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
-| `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
+| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), `exports.rs` (the C entry points of `[Export]`ed functions, see 4.1), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
+| `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
@@ -135,7 +135,8 @@ the runtime's own instances, so it is checked whole (`compiler::merge`).
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-L`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
 [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
-`--emit-llvm`, `--emit-ast`, and
+`--emit-llvm`, `--emit-ast`, `--lib static|shared` (`library_kind`, see
+[4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), and
 `--no-runtime`, `--no-runtime-checks=<list>` (`effective_runtime_checks`:
 a `checks::RuntimeChecks`, every check on at `-O0` with a warning,
 `runtime_checks_warning`; part of `cache::Build` and so of the cache key),
@@ -149,7 +150,8 @@ or `miss`). `-g` emits debug info (see
 [4.4](#44-debug-info-codegensrcdebugrs-debug_typesrs)). `-v` and the
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `output_path()` defaults to `<cwd>/<entry stem>`
-with no extension, and `module_name()` is the output's stem.
+with no extension (with `--lib`, the library's file name for the stem,
+`LibraryKind::file_name`), and `module_name()` is the output's stem.
 
 ### 2.2 Program loading (`crates/pepper-sema/src/program.rs`, `crates/pepper-files`)
 
@@ -1026,6 +1028,7 @@ several passes run more than once on purpose.
 | final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (a guarded arm's patterns handle nothing, but one after an unguarded arm for its case is still handled twice) (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `module.warnings`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`check_arm_types`). `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). Over a trait value (`trait_arm`, §4.2) each pattern's `ty` must name a struct that declares the trait or another trait (`trait_target`), each type is handled once, a binding becomes `FromTrait`, and a `match` expression needs an `else`. A case pattern's values (`enum_test`) are tested on their payload fields after the tag (`element_test` over `case_field`, typed by `case_payload_types`), and the `CaseValue`s the builder left in nested tests are lowered to fields (`lower_case_values`, `typed_path`). A pattern nested in a case's values handles part of the case: it is a row of the match's `spaces`, and `check_exhaustive` counts a case no pattern handles whole as handled when those rows cover it, else names the value they miss. A `match` over a tuple (`lower_tuple_arm`) tests each element on its path (`element_test`, `&&` over the elements), resolves each bare element name to a case or a binding and drops the local of one that is a case (reporting one that binds where it may not), and checks coverage with the usefulness algorithm (`useful` over `Space`s, a case with the spaces of its values, with each enum's and `bool`'s cases and their value types as `Domains`): a pattern the earlier ones cover is an error, a value no arm covers is reported with an example (`does not handle '(Line, _)'`), and an `else` after full coverage is a warning. |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
 | final | `check_hash_keys` | Errors: for each key type of a `_HashTable<K, V>` specialization (every `HashMap` and `HashSet` key), a struct that declares `==(other: K)` but no `hash<K>` override (a function of that name with no type parameters; the generic's own specialization keeps them), and a reference struct with the override but no `==`. Each is reported (`errors::report`) at the declaration to complete. Structs declared in the runtime (`passes::RuntimeDirectory`, shared with `check_confinement`) are skipped, and so are `[Equatable]` structs, whose hash is derived; overriding `hash<T>` for one is an error at the override. |
+| final | `exports::collect_exports` | Fills `Module::exports` with each `[Export]`ed free function C can call and the struct handles they pass (see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs), "Libraries for C"). `[Export]` on anything else is a warning; a parameter or result C cannot hold, a duplicate C symbol, or a bad `name` is an error. |
 | last | `static_strings` | String literals as shared immortal objects (#410), after `checked::restore_bodies`, over every body. An operand slot of type `String` (a parameter, or `this` of a `String` method) is **free** when the body only reads its fields that hold no reference, passes it to free parameters of resolved calls (not an `extern`, a function value or a trait method; not `[Move]`), calls methods on it whose `this` is free, or compares it with null: the greatest fixed point over the call graph. Constructors, `__` methods, functions used as values (`FunctionRef`, `FunctionPointer`) and methods that implement a trait's are never free, since only a direct call can make the caller's copy (below). A literal (`String(raw, size, length)` matched by its loc) that is an argument to a free parameter, or the receiver of a method whose `this` is free, becomes `Expression::StaticString`, one immortal object that codegen's `static_string` emits; every other literal (a variable's, field's or element's value, a result, a capture) is still a new `String`, so `var s = "a"; s.append("b");` behaves as before. Free parameters are listed in `Module::caller_copies`, by codegen name: their caller makes the copy (§5). A caller depends on its callees' bodies here, so each recorded link summary carries its function's facts after `|s=` (`f` free, `k` kept, `-` not a `String`, per slot): they reach the file's interface hash (`summary_without_position` keeps them), and a body the cache skipped reads them back (a slot with none is kept). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -1459,10 +1462,38 @@ them into one module (`link_in_module`), makes every definition but
 `main` internal and drops its comdat (`internalize`: nothing outside the
 program calls Pepper code by name), runs `Pipeline::Link`
 (`lto<On>`) over the whole program, and writes `<build>/<module>.lto.o`,
-the only object the system linker sees. No linker plugin or `lld` is
+the only object the system linker sees. The C entry points of `[Export]`ed
+functions stay external too (`internalize` keeps every external definition
+with default visibility, which only `main` and they have). No linker plugin or `lld` is
 involved, so it works wherever the compiler does. The LTO mode is part of
 the cache's directory name and compiler identity (`O2-lto`, or `O2-lto-g` with `-g`). The JIT does
 not use LTO: it compiles the whole program as one module already.
+
+**Libraries for C** (`driver/src/library.rs`, `codegen/src/exports.rs`,
+`sema/src/passes/exports.rs`). `--lib static|shared` builds the same
+objects. Sema's last pass, `exports::collect_exports`, fills
+`Module::exports` with each `[Export]`ed free function (its C symbol, from
+`[Export(name = ...)]` or the declared name) and the struct handles they
+pass, rejecting a type C cannot hold (`c_type`). Codegen's `emit_exports`
+defines, in the program module only (`unit: None`), one C entry point per
+export that calls the Pepper function with the same LLVM signature (adding
+`signext`/`zeroext` on small integers, default visibility, and `dllexport`
+on Windows), and `<struct>_retain`/`_release` per handle, which step the
+count with `acquire_ref`/`release_ref`. Until `partition::finish` they are
+named `__export.<symbol>` (`EXPORT_PREFIX`), since a Pepper function of the
+same name keeps it until `finish` spells it `_P...`; `finish` then names
+them by their C symbols (`CodeGenerator::exported`). Being in the program
+module is what makes a static library work: a C program pulls the program
+object out of the archive through them, and with it the static constructor
+that runs `__pep_global_init`. `run` then writes the header
+(`exports::header`, beside the library, `library::header_path`; its
+declarations are kept in the cache's `ProgramRecord::header`, since a full
+cache hit runs no sema), and either writes the archive itself
+(`library::write_archive`, with `ar_archive_writer` in the host's format,
+so no archiver is needed) or links with `linker::link(..., shared)`
+(`-shared`, plus `-soname` or `-install_name`). A static library's header
+names the libraries its users link (`[Link]`, `-l`, and
+`linker::default_system_libraries`).
 
 **Target CPU** (`codegen/src/target.rs`). `Cpu` is the CPU, the features
 added to or removed from it, and the CPU to tune for. `Cpu::default` is

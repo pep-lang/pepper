@@ -5014,3 +5014,39 @@ fn branch_hint_after_else_needs_an_if() {
          \x20     |                     ^"
     );
 }
+
+#[test]
+fn export_on_a_method_warns() {
+    let source = "struct S {\n    construct() {}\n\n    [Export]\n    get(): int { return 1; }\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:4:5: warning: 'Export' has no effect on a method; only a free function can be called from C\n\
+         \x20   4 |     [Export]\n\
+         \x20     |     ^~~~~~~~"
+    );
+}
+
+#[test]
+fn export_of_a_type_c_cannot_hold() {
+    assert_eq!(
+        error_of("export_string", "[Export]\nlength(text: String): int {\n    return 0;\n}\n"),
+        "main.pep:2:14: error: cannot export 'length': C cannot hold 'String'\n\
+         \x20   2 | length(text: String): int {\n\
+         \x20     |              ^~~~~~\n\
+         note: pass the bytes as a '__ptr<u8>' and a 'ulong' size, and make the String with 'String(p, size)'"
+    );
+}
+
+#[test]
+fn export_names_must_differ() {
+    assert_eq!(
+        error_of("export_twice", "[Export(name = \"f\")]\na(): int { return 0; }\n\n[Export(name = \"f\")]\nb(): int { return 0; }\n"),
+        "main.pep:5:1: error: two functions are exported as 'f'\n\
+         \x20   5 | b(): int { return 0; }\n\
+         \x20     | ^\n\
+         main.pep:2:1: note: first exported here\n\
+         \x20   2 | a(): int { return 0; }\n\
+         \x20     | ^\n\
+         note: give one a different C name with [Export(name = \"...\")]"
+    );
+}

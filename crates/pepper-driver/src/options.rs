@@ -27,9 +27,16 @@ pub struct Options {
     #[arg(short = 'L', value_name = "DIR")]
     pub library_dirs: Vec<PathBuf>,
 
-    /// Output executable path.
+    /// Output path: the executable, or with `--lib` the library.
     #[arg(short = 'o', value_name = "OUT")]
     pub output: Option<PathBuf>,
+
+    /// Build a library for C code to link instead of an executable:
+    /// `static` (`libname.a`, `name.lib` on Windows) or `shared`
+    /// (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside
+    /// it declaring the `[Export]`ed functions. No `main` is needed.
+    #[arg(long = "lib", value_name = "KIND", value_parser = ["static", "shared"])]
+    pub library: Option<String>,
 
     /// Build directory.
     #[arg(long = "build", value_name = "DIR")]
@@ -257,7 +264,13 @@ impl Options {
         self.trace_all || self.trace.iter().any(|c| c == channel)
     }
 
-    /// Output path: `-o` or $CWD/<primary source stem>.
+    /// The library `--lib` builds, if any.
+    pub fn library_kind(&self) -> Option<crate::library::LibraryKind> {
+        self.library.as_deref().and_then(crate::library::LibraryKind::parse)
+    }
+
+    /// Output path: `-o`, else $CWD/<primary source stem>, or with `--lib`
+    /// the library's file name for that stem (`libmain.a`).
     pub fn output_path(&self) -> Result<PathBuf, String> {
         if let Some(out) = &self.output {
             return Ok(out.clone());
@@ -269,9 +282,13 @@ impl Options {
         let stem = primary
             .file_stem()
             .ok_or_else(|| format!("invalid source path {:?}", primary))?;
+        let name = match self.library_kind() {
+            Some(kind) => std::ffi::OsString::from(kind.file_name(&stem.to_string_lossy())),
+            None => stem.to_os_string(),
+        };
         Ok(std::env::current_dir()
             .unwrap_or_default()
-            .join(stem))
+            .join(name))
     }
 
     /// Main module name: output filename stem.

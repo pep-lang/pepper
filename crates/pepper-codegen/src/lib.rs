@@ -7,6 +7,7 @@ pub mod checks;
 pub mod context;
 pub mod debug;
 mod debug_types;
+pub mod exports;
 pub mod facts;
 mod intrinsics;
 #[cfg(windows)]
@@ -189,6 +190,10 @@ pub struct CodeGenerator<'ctx> {
     /// [`partition`]). Instantiations, synthesized helpers and anything else
     /// without an owner may be defined by every unit that uses them.
     pub owners: HashMap<String, u32>,
+    /// The C entry points of `[Export]`ed functions and their handle
+    /// functions (see [`exports`]), by their names before
+    /// `partition::finish` gives them their C symbols.
+    pub exported: HashSet<String>,
     /// Each file's namespace (see `pepper_parser::namespace`), indexed like
     /// the module's sources: names the file's global initializer
     /// (`__pep_init@<namespace>`), so it is the same in every program. Files
@@ -275,6 +280,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             extern_params: std::collections::HashMap::new(),
             error_loc: None,
             owners: HashMap::new(),
+            exported: HashSet::new(),
             file_namespaces: Vec::new(),
             unit: None,
             opt_level: target::OptLevel::from_env().ok().flatten().unwrap_or_default(),
@@ -518,6 +524,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         // ctor-registered init function. Emitted between the instantiation and
         // codegen passes so initializers can call instantiated functions.
         self.emit_globals(module)?;
+        // C entry points, before the codegen pass, which emits the shared
+        // bodies they call.
+        self.emit_exports(module)?;
 
         // Codegen pass: structs → functions.
         if self.unit.is_some() {

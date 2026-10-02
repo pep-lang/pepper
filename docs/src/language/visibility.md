@@ -158,7 +158,7 @@ main.pep:2:8: error: unexpected '['
 
 `export` controls visibility between Pepper files only. Making a function
 callable from C with C linkage is a separate matter, handled by the `[Export]`
-attribute described in [Calling C](c-interop.md).
+attribute described in [Calling Pepper from C](c-interop.md#calling-pepper-from-c).
 
 ## The runtime's exports
 

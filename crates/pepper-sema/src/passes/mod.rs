@@ -80,6 +80,7 @@ pub mod interpolation;
 pub mod properties;
 pub mod named_arguments;
 pub mod static_blocks;
+pub mod exports;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -282,6 +283,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_deprecated_members::check_deprecated_members(module));
     // Struct keys whose `==` and `hash<T>` disagree.
     step!(check_hash_keys::check_hash_keys(module));
+    // `[Export]`ed functions C can call, once every type is final.
+    step!(exports::collect_exports(module));
     crate::checked::restore_bodies(module);
     // Last, over every body (a checked runtime's are back): which literals
     // can be shared reads the callees' bodies.

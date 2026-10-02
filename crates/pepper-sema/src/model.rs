@@ -1668,6 +1668,10 @@ pub struct Module {
     /// it alone.
     #[serde(skip)]
     pub warnings: Vec<Diagnostic>,
+    /// The functions C code can call (`[Export]`) and the struct handles
+    /// they pass, found by `passes::exports`.
+    #[serde(skip)]
+    pub exports: crate::passes::exports::Exports,
     /// Built from files module linking processed, which decided which
     /// generic functions are concrete overrides and marked them
     /// (`GenericParam::is_argument`): sema follows those marks alone.

@@ -379,11 +379,142 @@ your program. The C library is always linked. For anything else, attach
 
 ## Calling Pepper from C
 
-Pepper builds executables, and there is no supported way yet for C code to
-call Pepper functions. The parser accepts an `[Export]` attribute on a
-function, intended to give it a C interface with object references passed as
-opaque handles, but the compiler does not act on it yet: `[Export]` currently
-has no effect.
+C code can call Pepper functions: mark each one `[Export]`, and build the
+program as a library with `--lib static` or `--lib shared`. The compiler
+writes a C header beside the library that declares every exported function.
 
-Do not confuse `[Export]` with the `export` keyword, which makes a
-declaration visible to other Pepper files (see [Visibility](visibility.md)).
+```pepper
+{{#include ../../examples/c-export.pep}}
+```
+
+```bash
+pepper build counter.pep --lib static     # libcounter.a and counter.h
+pepper build counter.pep --lib shared     # libcounter.so and counter.h
+```
+
+The header declares the functions with C types:
+
+```c
+typedef struct Counter Counter;
+
+void counter_retain(Counter* handle);
+void counter_release(Counter* handle);
+
+int32_t add(int32_t a, int32_t b);
+int32_t apply(int32_t (*f)(int32_t), int32_t x);
+int32_t counter_increment(Counter* counter);
+Counter* counter_new(int32_t start);
+```
+
+and a C program calls them like any C function:
+
+```c
+#include <stdio.h>
+#include "counter.h"
+
+static int32_t twice(int32_t x) { return 2 * x; }
+
+int main(void) {
+    Counter* counter = counter_new(41);
+    printf("%d\n", counter_increment(counter));   /* 42 */
+    counter_release(counter);
+    printf("%d\n", apply(twice, add(2, 3)));      /* 10 */
+    return 0;
+}
+```
+
+```bash
+cc main.c -I. -L. -lcounter -lm -o main    # Linux; macOS needs no -lm
+```
+
+### Exporting a function
+
+- `[Export]` goes on a free function that is not generic. Its C name is its
+  Pepper name; `[Export(name = "c_name")]` gives it another, which must be a
+  C identifier. Two exports with one C name are an error.
+- `[Export]` anywhere else (a struct, a method, an extern, a variable, a
+  generic function) is a warning, and does nothing.
+- An exported function is still a Pepper function: Pepper code calls it by
+  its Pepper name.
+- Do not confuse `[Export]` with the `export` keyword, which makes a
+  declaration visible to other Pepper files (see
+  [Visibility](visibility.md)). A function can be either, both or neither.
+
+### What crosses to C
+
+Each parameter and the result must be a type C can hold:
+
+| Pepper | C (in the header) |
+|---|---|
+| `bool` | `bool` |
+| `char`, `i8`, `u8`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` (and their `i16`... spellings) | `char`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t` |
+| `float`, `double` | `float`, `double` |
+| `__ptr<T>` | `T*` for a number type, else `void*` |
+| `extern (P...) => R` | a C function pointer, `R (*name)(P...)` |
+| a struct | an opaque handle, `Name*` |
+
+Anything else is an error at the parameter or result that C cannot hold:
+
+```text
+main.pep:2:14: error: cannot export 'length': C cannot hold 'String'
+    2 | length(text: String): int {
+      |              ^~~~~~
+note: pass the bytes as a '__ptr<u8>' and a 'ulong' size, and make the String with 'String(p, size)'
+```
+
+`String` is not supported yet; pass its bytes as above. A generic struct
+(`Array<int>`), a value struct, an enum, a trait, a tuple, `Optional` and a
+Pepper function type cannot cross either.
+
+### Handles
+
+A struct reaches C as a pointer to an incomplete C type (`Counter*`), which
+C code passes back but never looks inside. Handles follow Pepper's
+[reference counting](memory.md):
+
+- A handle a function **returns** is one reference, which the C code owns.
+  It releases it with `<name>_release` (`counter_release`) when it is done;
+  the last release frees the object, running its destructor.
+- A handle C **passes in** stays C's: the function borrows it for the call.
+- `<name>_retain` adds a reference, for C code that keeps a handle in two
+  places; each retain needs a release.
+- The names are the struct's name in snake case: `ByteBuffer` gets
+  `byte_buffer_retain` and `byte_buffer_release`. The header declares them
+  for every struct an export passes.
+
+A handle must not be null, and is freed at most once: C gets no checks on
+either.
+
+### Building the library
+
+`--lib static` writes an archive of the program's objects: `libname.a`
+(`name.lib` on Windows). `--lib shared` links a shared library:
+`libname.so`, `libname.dylib` on macOS, or `name.dll` on Windows, with its
+import library `name.lib`. `-o` chooses another name. Either way the header
+is written beside the library, named for it without the `lib` prefix
+(`counter.h`).
+
+- A library needs no `main`. One that has a `main` keeps it, and C code that
+  links the library cannot have its own.
+- Only the exported functions and their handle functions are visible
+  outside a shared library; everything else in it is hidden.
+- A program that links the **static** library must also link the C libraries
+  Pepper's runtime uses. The header lists them in a comment at the top, such
+  as `/* Link the static library with: -lm */` on Linux. A shared library
+  links them itself.
+- On Windows, `--lib static` and `--lib shared` both write `name.lib` (the
+  archive, or the DLL's import library), so build them into different
+  folders.
+
+### Initialization, panics and threads
+
+- Module-scope variables are initialized when the library is loaded, before
+  C calls any exported function (a static library's initializer runs with
+  the program's other static constructors).
+- A panic in Pepper code called from C prints its message and aborts the
+  process, as it does in a Pepper program: it never unwinds into C.
+- Exported functions may be called from any thread, including threads C
+  created. The thread-safety rules of [threads](threads.md) still hold:
+  a handle to a struct that is not `[Shared]` must stay on one thread at a
+  time, and C does not check that.
+

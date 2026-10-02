@@ -258,9 +258,14 @@ cargo run -- tests/hello.pep --verify-cache  # regenerate cache hits and check t
 cargo run -- tests/hello.pep --no-cache    # compile everything, skip the build cache
 cargo run -- main.pep -L libs -l foo        # link libfoo from the folder libs
 PEPPER_LIBRARY_PATH=libs cargo run -- main.pep -l foo  # the same, from the environment
+cargo run -- lib.pep --lib static           # a C library: liblib.a and lib.h ([Export]ed functions)
+cargo run -- lib.pep --lib shared           # liblib.so / liblib.dylib / lib.dll, and lib.h
 ```
 
-The compiler produces an executable; it does not run it for you. With no `-o`
+The compiler produces an executable (or with `--lib`, a library and its C
+header; see the book's
+[Calling Pepper from C](docs/src/language/c-interop.md#calling-pepper-from-c));
+it does not run it for you. With no `-o`
 the output goes to `<cwd>/<source stem>` — so the third command leaves a
 `hello` in whatever directory you invoked it from. At the repository root that
 path is gitignored; anywhere else it is not.

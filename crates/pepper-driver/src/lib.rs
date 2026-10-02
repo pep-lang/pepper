@@ -4,6 +4,7 @@
 pub mod cache;
 pub mod compiler;
 pub mod keys;
+pub mod library;
 pub mod lto;
 pub mod linker;
 pub mod options;
@@ -168,6 +169,7 @@ fn run_for_target(options: Options) -> Result<i32, String> {
                         key,
                         libraries: libraries.clone(),
                         library_dirs: library_dirs.iter().map(|dir| dir.to_string_lossy().into_owned()).collect(),
+                        header: pepper_sema::passes::exports::header_declarations(&sema_module.exports),
                         ..Default::default()
                     };
                     cache.store_program(&program_name, &record, &build_dir.join(format!("{}.{}", module_name, build.extension())))?;
@@ -207,17 +209,47 @@ fn run_for_target(options: Options) -> Result<i32, String> {
     }
     libraries.extend(link_libraries);
 
+    // A library gets its C header; a static one is an archive, not linked.
+    if let Some(kind) = options.library_kind() {
+        let declarations = match &program_key {
+            Some(record) => record.header.clone(),
+            None => pepper_sema::passes::exports::header_declarations(&sema_module.exports),
+        };
+        if declarations.is_empty() {
+            report_warnings("warning: the library exports no functions; mark the functions C calls with '[Export]'");
+        }
+        // What a program linking the static library links too.
+        let mut needs = vec![];
+        if kind == library::LibraryKind::Static {
+            for library in libraries.iter().map(String::as_str).chain(linker::default_system_libraries(&pepper_sema::current_target().os).iter().copied()) {
+                if !needs.iter().any(|l| l == library) {
+                    needs.push(library.to_string());
+                }
+            }
+        }
+        let header = library::header_path(&out_path);
+        let file_name = header.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        std::fs::write(&header, pepper_sema::passes::exports::header(&file_name, &declarations, &needs))
+            .map_err(|e| format!("cannot write {}: {}", header.display(), e))?;
+        if kind == library::LibraryKind::Static {
+            library::write_archive(&objects, &out_path)?;
+            timer.stage("archive");
+            return Ok(0);
+        }
+    }
+
     // With `-g` on Windows, the runtime's visualizers go into the `.pdb`.
     let windows = pepper_sema::current_target().os == "windows";
     let natvis = runtime_dirs.first().map(|dir| dir.join("debuggers").join("pepper.natvis")).filter(|path| options.emit_debug && windows && path.is_file());
     // An unchanged program linked into an unchanged file needs no link.
-    let link = link_key(&objects, &out_path, &libraries, &library_dirs);
+    let shared = options.library_kind() == Some(library::LibraryKind::Shared);
+    let link = link_key(&objects, &out_path, &libraries, &library_dirs, shared);
     let unchanged = program_key.as_ref().is_some_and(|record| {
         !record.output.is_empty() && record.link == link && output_hash(&out_path).is_some_and(|h| h == record.output)
     });
     if !unchanged {
         let sysroot = options.effective_sysroot();
-        linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref(), sysroot.as_deref())?;
+        linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref(), sysroot.as_deref(), shared)?;
         if let (Some(cache), Some(record), Some(output)) = (&cache, &program_key, output_hash(&out_path)) {
             cache.record_link(&program_name, &record.key, &link, &output)?;
         }
@@ -230,10 +262,11 @@ fn run_for_target(options: Options) -> Result<i32, String> {
 }
 
 /// The hash of a link's inputs: the objects (by path and contents), the
-/// libraries, and where it writes.
-fn link_key(objects: &[PathBuf], output: &std::path::Path, libraries: &[String], library_dirs: &[PathBuf]) -> String {
+/// libraries, where it writes, and whether it makes a shared library.
+fn link_key(objects: &[PathBuf], output: &std::path::Path, libraries: &[String], library_dirs: &[PathBuf], shared: bool) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"pepper link 1\0");
+    hasher.update(if shared { b"shared\0" } else { b"executable\0" });
     for object in objects {
         hasher.update(object.to_string_lossy().as_bytes());
         hasher.update(&[0]);
@@ -460,7 +493,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
             inputs: job.inputs.clone(),
         });
         generator.generate(module).map_err(|d| module.sources.render(&d))?;
-        pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
+        pepper_codegen::partition::finish(&generator.module, &generator.owners, &generator.exported)?;
         Ok(generator.module)
     };
     if job.stripped {

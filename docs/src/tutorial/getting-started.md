@@ -161,7 +161,8 @@ program abnormally. For example, `value()` on a failed `Result` prints
 
 | Option | What it does |
 |---|---|
-| `-o <file>` | Name the output executable. |
+| `-o <file>` | Name the output executable (or library, with `--lib`). |
+| `--lib static`, `--lib shared` | Build a library for C code to link instead of an executable, with a C header declaring its `[Export]`ed functions. See [calling Pepper from C](../language/c-interop.md#calling-pepper-from-c). |
 | `-I <dir>` | Add a directory to search for imported modules. See [modules and imports](../language/modules.md). |
 | `-l <lib>` | Link a C library. See [linking](../language/linking.md). |
 | `-L <dir>` | Add a folder the linker searches for libraries. Folders in `PEPPER_LIBRARY_PATH` are searched after it. See [linking](../language/linking.md#library-search-directories-in-the-source-and-the-environment). |

@@ -41,16 +41,18 @@ pub fn optimize(bitcode: &[PathBuf], object: &Path, build: &Build) -> Result<(),
     pepper_codegen::target::write_object(&machine, &program, object)
 }
 
-/// Make every definition but `main` internal: nothing outside the program
-/// calls Pepper code by name, so the optimizer may inline, specialize or
-/// drop any of it. A definition leaves its comdat, which only told the
+/// Make every definition but `main` and the C entry points of `[Export]`ed
+/// functions internal (the only definitions with default visibility):
+/// nothing else outside the program calls Pepper code by name, so the
+/// optimizer may inline, specialize or drop any of it. A definition leaves its comdat, which only told the
 /// linker to keep one copy of it.
 fn internalize(program: &Module<'_>) {
     let mut values: Vec<GlobalValue<'_>> = program.get_functions().map(|f| f.as_global_value()).collect();
     values.extend(program.get_globals());
     for value in values {
         let name = value.get_name().to_string_lossy();
-        if value.is_declaration() || name == "main" || name.starts_with("llvm.") {
+        let visible = value.get_visibility() == inkwell::GlobalVisibility::Default && value.get_linkage() == Linkage::External;
+        if value.is_declaration() || name == "main" || name.starts_with("llvm.") || visible {
             continue;
         }
         if matches!(value.get_linkage(), Linkage::Appending) {

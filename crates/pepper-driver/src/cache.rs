@@ -522,7 +522,7 @@ impl Record {
 }
 
 /// A program's record, `programs/<program>.json`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProgramRecord {
     /// The program's key ([`crate::keys::Keys::program_key`]).
     pub key: String,
@@ -534,17 +534,21 @@ pub struct ProgramRecord {
     /// path), and of the file that link wrote; empty before a link.
     pub link: String,
     pub output: String,
+    /// The declarations of its C header (`passes::exports::header_declarations`),
+    /// empty when it exports nothing.
+    pub header: String,
 }
 
 impl ProgramRecord {
     fn to_json(&self) -> String {
         format!(
-            "{{\"key\": \"{}\", \"libraries\": \"{}\", \"library_dirs\": \"{}\", \"link\": \"{}\", \"output\": \"{}\"}}\n",
+            "{{\"key\": \"{}\", \"libraries\": \"{}\", \"library_dirs\": \"{}\", \"link\": \"{}\", \"output\": \"{}\", \"header\": \"{}\"}}\n",
             self.key,
             self.libraries.join(";"),
             std::env::join_paths(&self.library_dirs).map(|joined| joined.to_string_lossy().into_owned()).unwrap_or_default(),
             self.link,
-            self.output
+            self.output,
+            crate::library::to_hex(&self.header)
         )
     }
 
@@ -559,6 +563,7 @@ impl ProgramRecord {
                 .collect(),
             link: json_string(text, "link").unwrap_or_default().to_string(),
             output: json_string(text, "output").unwrap_or_default().to_string(),
+            header: crate::library::from_hex(json_string(text, "header").unwrap_or_default())?,
         })
     }
 }
@@ -659,14 +664,12 @@ mod tests {
             library_dirs: vec!["/opt/vendor/lib".to_string(), "/usr/local/lib".to_string()],
             link: "cd34".to_string(),
             output: "ef56".to_string(),
+            header: "int32_t add(int32_t a, int32_t b);\n".to_string(),
         };
         let read = super::ProgramRecord::parse(&record.to_json()).unwrap();
-        assert_eq!(
-            (read.key, read.libraries, read.library_dirs, read.link, read.output),
-            (record.key, record.libraries, record.library_dirs, record.link, record.output)
-        );
+        assert_eq!(read, record);
         let older = super::ProgramRecord::parse("{\"key\": \"ab12\", \"libraries\": \"\"}").unwrap();
-        assert!(older.libraries.is_empty() && older.library_dirs.is_empty());
+        assert!(older.libraries.is_empty() && older.library_dirs.is_empty() && older.header.is_empty());
     }
 
     #[test]

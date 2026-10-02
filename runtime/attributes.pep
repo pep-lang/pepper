@@ -132,7 +132,12 @@ export struct MoveSource {}
 [Attribute]
 export struct Locked {}
 
-## Marks a function to be callable from C; the compiler does not act on it
-## yet.
+## Makes a free function callable from C, in a library built with
+## `--lib static` or `--lib shared`: `[Export]`, or
+## `[Export(name = "c_name")]` for a C symbol other than its name.
 [Attribute]
-export struct Export {}
+export struct Export {
+    ## The C symbol, when it differs from the function's name; empty
+    ## otherwise.
+    const name: String = "";
+}

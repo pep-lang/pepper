@@ -297,5 +297,17 @@ it may use the locked value.
 [Attribute] struct Export
 ```
 
-Marks a function to be callable from C; the compiler does not act on it
-yet.
+Makes a free function callable from C, in a library built with
+`--lib static` or `--lib shared`: `[Export]`, or
+`[Export(name = "c_name")]` for a C symbol other than its name.
+
+### Fields
+
+#### name
+
+```pepper
+const name: String = ""
+```
+
+The C symbol, when it differs from the function's name; empty
+otherwise.

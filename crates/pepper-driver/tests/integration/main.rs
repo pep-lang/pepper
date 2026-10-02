@@ -21,6 +21,7 @@ mod atomic_tests;
 mod audit_fixes_tests;
 mod build_cache_tests;
 mod c_callback_tests;
+mod c_export_tests;
 mod cli_tests;
 mod character_literal_tests;
 mod closure_tests;
