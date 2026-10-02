@@ -527,7 +527,7 @@ impl Converter {
             Expression::RefCount(_, arg)
             | Expression::Address(_, arg)
             | Expression::AtomicLoad(_, arg) => self.expression(arg, current),
-            Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => {
+            Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) | Expression::ConstructAt(a, b) => {
                 self.expression(a, current);
                 self.expression(b, current);
             }

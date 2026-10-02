@@ -3149,7 +3149,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::FunctionPointer { .. } => Some("void*".to_string()),
             Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) => Some(ty.to_string()),
             Expression::Move { value, .. } => self.value_sema_type(value),
-            Expression::AtomicStore(..) => Some("void".to_string()),
+            Expression::AtomicStore(..) | Expression::ConstructAt(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
             Expression::AtomicFetch(_, ty, _, _) => Some(ty.to_string()),
             _ => None,
@@ -3735,6 +3735,28 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         self.store_refcount_ops(elem_name, gep, value_ty, new_val, source)
     }
+    /// The reference counting of `__construct_at` into an element slot of
+    /// `elem_name`: the slot is empty, so the new value is acquired and
+    /// nothing is released, as `std::construct_at` copy-constructs a
+    /// `shared_ptr`. The caller stores the value.
+    fn construct_refcount_ops(
+        &mut self,
+        elem_name: &str,
+        value_ty: BasicTypeEnum<'ctx>,
+        new_val: BasicValueEnum<'ctx>,
+        source: &Expression,
+    ) -> Result<(), String> {
+        let elem = self.buffer_element_type(elem_name);
+        if !matches!(elem, BasicTypeEnum::StructType(_)) && !self.is_trait_name(elem_name) {
+            return Ok(());
+        }
+        address::check_store_type(value_ty, new_val, "reference slot", elem_name)?;
+        if self.is_aggregate(elem_name) {
+            self.call_function(&format!("{}.{}", elem_name, "__acquire"), vec![new_val])?;
+            return Ok(());
+        }
+        self.acquire_copy(elem_name, new_val, source)
+    }
     /// Store a struct-reference value into a struct-typed field, applying the
     /// unified shared_ptr `operator=` rule (`store_refcount_ops`). A field is
     /// one reference slot; struct values are references, so the slot holds a
@@ -4297,6 +4319,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.acquire_ref(&ty_name, loaded)?;
                 }
                 Ok(loaded)
+            }
+            Expression::ConstructAt(slot, value) => {
+                // __construct_at(p[i], v): `p[i] = v` into a slot known to
+                // be empty, so the store acquires `v` and skips the old
+                // occupant's load, comparison and release.
+                if !matches!(slot.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                    return Err("'__construct_at' stores into a raw buffer element, such as 'p[i]'".to_string());
+                }
+                self.codegen_assignment(&BinaryOp::Assign, slot, value, Loc::NONE, true)?;
+                Ok(self.context.i32_type().const_zero().into())
             }
             Expression::AtomicStore(ty, arg_ptr, arg_val) => {
                 // __atomic_store<T>(p, v): release-ordered store ≡ shared_ptr
@@ -5817,6 +5849,133 @@ impl<'ctx> CodeGenerator<'ctx> {
         result
     }
 
+    /// `lhs = rhs` (or a compound `lhs op= rhs`): store into the lhs
+    /// address with the shared_ptr `operator=` rule. `construct` is
+    /// `__construct_at`: the slot is known to be empty, so the store only
+    /// acquires the new value, like `std::construct_at`.
+    fn codegen_assignment(
+        &mut self,
+        op: &BinaryOp,
+        lhs: &Expression,
+        rhs: &Expression,
+        loc: Loc,
+        construct: bool,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        // An owned-rvalue rhs (e.g. `a[i] = f()`) is a temporary: the
+        // slot store acquires its own ref for the new occupant, so the
+        // temp's creation ref is released after the store.
+        let rhs_temp = self.owned_temp_type(rhs);
+        let rhs_val = self.codegen_expr(rhs)?;
+        let lhs_addr = self.codegen_lvalue(lhs)?;
+        let lhs_ty = lhs_addr.ty.clone();
+        // The sema names carry signedness (`u8` vs `i8`) — LLVM value
+        // names flatten both to i8, which would sext a u8 200 to -56.
+        let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
+        let coerced = llvm_ops::coerce(
+            self.context,
+            &self.builder,
+            rhs_val,
+            &rhs_name,
+            &lhs_ty,
+        );
+        // The sema type name can be a pointer (`__ptr<char>` → i32 in
+        // coerce) while the address's LLVM pointee is narrower (i8);
+        // narrow to it so `_data[_size] = 0` stores one byte, not four.
+        let slot_ty = lhs_addr.llvm_ty;
+        let fit = |builder: &inkwell::builder::Builder<'ctx>, v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
+            if let (Some(BasicTypeEnum::IntType(target)), BasicValueEnum::IntValue(iv)) =
+                (&slot_ty, &v)
+            {
+                if iv.get_type().get_bit_width() > target.get_bit_width() {
+                    return match builder.build_int_truncate(*iv, *target, "narrow") {
+                        Ok(t) => BasicValueEnum::IntValue(t),
+                        Err(_) => v,
+                    };
+                }
+            }
+            v
+        };
+        let coerced = fit(&self.builder, coerced);
+        // Compound assign: load lhs, apply the base op, store.
+        if let Some(base_op) = op.base_assign_op() {
+            let lhs_val = lhs_addr
+                .load(&self.builder)
+                .ok_or_else(|| "compound lhs load".to_string())?;
+            let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
+            // C: `x op= e` is `x = x op e` — the op runs on the usual
+            // conversion of (lhs type, rhs type), so feed the unconverted
+            // rhs (`int += 2.5` adds at f64; `u8 += 200` wraps at int).
+            let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
+            let result_ty = binary_result_type(&base_op, &lhs_name, &rhs_name);
+            let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
+            let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
+            let result = match self.checked_operands(base_op, lhs_c, rhs_c, &result_ty, loc)? {
+                Some(result) => result,
+                None => apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None, None)?,
+            };
+            // C: `x op= e` converts the converted operands to the usual
+            // conversion type (e.g. `int += 2.5` adds at f64), then the
+            // result is converted back to the lhs's type for the store.
+            let lhs_sema = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
+            let result = if result_ty != lhs_sema {
+                llvm_ops::coerce(self.context, &self.builder, result, &result_ty, &lhs_sema)
+            } else {
+                result
+            };
+            let fitted = fit(&self.builder, result);
+            if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                // Compound store into a struct-reference slot transfers
+                // ownership like any other index store.
+                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, fitted, rhs)?;
+            }
+            if let Expression::MemberRef { .. } = lhs {
+                // Compound store into a struct-typed field transfers
+                // ownership like any other reference-slot store.
+                self.field_refcount_ops(lhs, lhs_addr.ptr, fitted, rhs)?;
+            }
+            if let Some(ty) = rhs_temp {
+                self.release_temp(&ty, rhs_val)?;
+            }
+            lhs_addr.store(&self.builder, fitted)?;
+            return Ok(fitted);
+        }
+        if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+            // The element type is resolved from the buffer's pointee
+            // (`_data`), not the index expression itself.
+            if construct {
+                self.construct_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), coerced, rhs)?;
+            } else {
+                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced, rhs)?;
+            }
+        }
+        if let Expression::MemberRef { .. } = lhs {
+            // A struct-typed field is one reference slot: storing over it
+            // releases the old occupant and acquires the new value.
+            self.field_refcount_ops(lhs, lhs_addr.ptr, coerced, rhs)?;
+        }
+        if let Expression::SymbolRef { .. } = lhs {
+            // A plain struct-reference local/global is one reference slot:
+            // the same shared_ptr `operator=` rule as index and field
+            // stores — same pointer (self-assignment in any form) is a
+            // no-op, otherwise acquire new then release old.
+            let ty_name = lhs_addr.ty.to_string();
+            if self.is_reference_name(&ty_name) {
+                self.store_refcount_ops(
+                    &ty_name,
+                    lhs_addr.ptr,
+                    lhs_addr.llvm_ty.unwrap(),
+                    coerced,
+                    rhs,
+                )?;
+            }
+        }
+        if let Some(ty) = rhs_temp {
+            self.release_temp(&ty, rhs_val)?;
+        }
+        lhs_addr.store(&self.builder, coerced)?;
+        Ok(coerced)
+    }
+
     fn codegen_binary(
         &mut self,
         op: &BinaryOp,
@@ -5833,115 +5992,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         // Assignment: store into the lhs address (OperatorGen.cpp:155-180).
         if op.is_assignment() {
-            // An owned-rvalue rhs (e.g. `a[i] = f()`) is a temporary: the
-            // slot store acquires its own ref for the new occupant, so the
-            // temp's creation ref is released after the store.
-            let rhs_temp = self.owned_temp_type(rhs);
-            let rhs_val = self.codegen_expr(rhs)?;
-            let lhs_addr = self.codegen_lvalue(lhs)?;
-            let lhs_ty = lhs_addr.ty.clone();
-            // The sema names carry signedness (`u8` vs `i8`) — LLVM value
-            // names flatten both to i8, which would sext a u8 200 to -56.
-            let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
-            let coerced = llvm_ops::coerce(
-                self.context,
-                &self.builder,
-                rhs_val,
-                &rhs_name,
-                &lhs_ty,
-            );
-            // The sema type name can be a pointer (`__ptr<char>` → i32 in
-            // coerce) while the address's LLVM pointee is narrower (i8);
-            // narrow to it so `_data[_size] = 0` stores one byte, not four.
-            let slot_ty = lhs_addr.llvm_ty;
-            let fit = |builder: &inkwell::builder::Builder<'ctx>, v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
-                if let (Some(BasicTypeEnum::IntType(target)), BasicValueEnum::IntValue(iv)) =
-                    (&slot_ty, &v)
-                {
-                    if iv.get_type().get_bit_width() > target.get_bit_width() {
-                        return match builder.build_int_truncate(*iv, *target, "narrow") {
-                            Ok(t) => BasicValueEnum::IntValue(t),
-                            Err(_) => v,
-                        };
-                    }
-                }
-                v
-            };
-            let coerced = fit(&self.builder, coerced);
-            // Compound assign: load lhs, apply the base op, store.
-            if let Some(base_op) = op.base_assign_op() {
-                let lhs_val = lhs_addr
-                    .load(&self.builder)
-                    .ok_or_else(|| "compound lhs load".to_string())?;
-                let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
-                // C: `x op= e` is `x = x op e` — the op runs on the usual
-                // conversion of (lhs type, rhs type), so feed the unconverted
-                // rhs (`int += 2.5` adds at f64; `u8 += 200` wraps at int).
-                let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
-                let result_ty = binary_result_type(&base_op, &lhs_name, &rhs_name);
-                let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
-                let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
-                let result = match self.checked_operands(base_op, lhs_c, rhs_c, &result_ty, loc)? {
-                    Some(result) => result,
-                    None => apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None, None)?,
-                };
-                // C: `x op= e` converts the converted operands to the usual
-                // conversion type (e.g. `int += 2.5` adds at f64), then the
-                // result is converted back to the lhs's type for the store.
-                let lhs_sema = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
-                let result = if result_ty != lhs_sema {
-                    llvm_ops::coerce(self.context, &self.builder, result, &result_ty, &lhs_sema)
-                } else {
-                    result
-                };
-                let fitted = fit(&self.builder, result);
-                if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
-                    // Compound store into a struct-reference slot transfers
-                    // ownership like any other index store.
-                    self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, fitted, rhs)?;
-                }
-                if let Expression::MemberRef { .. } = lhs {
-                    // Compound store into a struct-typed field transfers
-                    // ownership like any other reference-slot store.
-                    self.field_refcount_ops(lhs, lhs_addr.ptr, fitted, rhs)?;
-                }
-                if let Some(ty) = rhs_temp {
-                    self.release_temp(&ty, rhs_val)?;
-                }
-                lhs_addr.store(&self.builder, fitted)?;
-                return Ok(fitted);
-            }
-            if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
-                // The element type is resolved from the buffer's pointee
-                // (`_data`), not the index expression itself.
-                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced, rhs)?;
-            }
-            if let Expression::MemberRef { .. } = lhs {
-                // A struct-typed field is one reference slot: storing over it
-                // releases the old occupant and acquires the new value.
-                self.field_refcount_ops(lhs, lhs_addr.ptr, coerced, rhs)?;
-            }
-            if let Expression::SymbolRef { .. } = lhs {
-                // A plain struct-reference local/global is one reference slot:
-                // the same shared_ptr `operator=` rule as index and field
-                // stores — same pointer (self-assignment in any form) is a
-                // no-op, otherwise acquire new then release old.
-                let ty_name = lhs_addr.ty.to_string();
-                if self.is_reference_name(&ty_name) {
-                    self.store_refcount_ops(
-                        &ty_name,
-                        lhs_addr.ptr,
-                        lhs_addr.llvm_ty.unwrap(),
-                        coerced,
-                        rhs,
-                    )?;
-                }
-            }
-            if let Some(ty) = rhs_temp {
-                self.release_temp(&ty, rhs_val)?;
-            }
-            lhs_addr.store(&self.builder, coerced)?;
-            return Ok(coerced);
+            return self.codegen_assignment(op, lhs, rhs, loc, false);
         }
         if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
             return self.codegen_logical(*op, lhs, rhs);

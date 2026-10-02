@@ -315,6 +315,12 @@ pub enum Expression {
     /// `__atomic_store<T>(p, v)`: release-ordered atomic store of `v` into
     /// the T-sized value at pointer `p`.
     AtomicStore(TypeName, Box<Expression>, Box<Expression>),
+    /// `__construct_at(p[i], v)`: store `v` into the raw buffer element
+    /// `p[i]`, which must be empty (null or zero), acquiring `v` without
+    /// reading or releasing the old occupant, like C++'s
+    /// `std::construct_at`. The slot is the first operand, the value the
+    /// second.
+    ConstructAt(Box<Expression>, Box<Expression>),
     /// `__atomic_cmpxchg<T>(p, expected, desired)`: acquire/release compare
     /// and exchange; true iff `*p == expected` (in which case `*p = desired`).
     AtomicCmpXchg(TypeName, Box<Expression>, Box<Expression>, Box<Expression>),

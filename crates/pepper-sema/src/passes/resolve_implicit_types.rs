@@ -539,7 +539,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return parsed.sub_types.into_iter().next().unwrap_or_else(TypeName::auto);
                 }
                 "__is_pod" => return TypeName::bool_(),
-                "__atomic_store" => return TypeName::new("void"),
+                "__atomic_store" | "__construct_at" => return TypeName::new("void"),
                 "__atomic_cmpxchg" => return TypeName::new("bool"),
                 _ => {}
             }
@@ -577,7 +577,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) | Expression::Default(ty) => ty.clone(),
         Expression::IsPod(_) => TypeName::bool_(),
         Expression::SizeOf(_) => TypeName::new("u64"),
-        Expression::AtomicStore(..) => TypeName::new("void"),
+        Expression::AtomicStore(..) | Expression::ConstructAt(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),
         // `p[i]` through a raw pointer reads the pointee (codegen GEPs

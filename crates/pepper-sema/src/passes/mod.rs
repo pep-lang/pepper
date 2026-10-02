@@ -372,7 +372,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         Expression::CountStep { .. } | Expression::FunctionPointer { .. } => {}
         Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => walk_expression(arg, f),
         Expression::AtomicLoad(_, arg) => walk_expression(arg, f),
-        Expression::AtomicStore(_, ptr, val) => {
+        Expression::AtomicStore(_, ptr, val) | Expression::ConstructAt(ptr, val) => {
             walk_expression(ptr, f);
             walk_expression(val, f);
         }
@@ -526,7 +526,7 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
         Expression::CountStep { .. } | Expression::FunctionPointer { .. } => {}
         Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => visit_expression(arg, f),
         Expression::AtomicLoad(_, arg) => visit_expression(arg, f),
-        Expression::AtomicStore(_, ptr, val) => {
+        Expression::AtomicStore(_, ptr, val) | Expression::ConstructAt(ptr, val) => {
             visit_expression(ptr, f);
             visit_expression(val, f);
         }
@@ -683,7 +683,9 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         )),
         Expression::CaseValue(value) => Children::one(&mut value.subject),
         Expression::WithSubject(with) => Children::two(&mut with.subject, &mut with.body),
-        Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => Children::two(ptr.as_mut(), val.as_mut()),
+        Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) | Expression::ConstructAt(ptr, val) => {
+            Children::two(ptr.as_mut(), val.as_mut())
+        }
         Expression::AtomicCmpXchg(_, ptr, expected, desired) => Children::three(ptr.as_mut(), expected.as_mut(), desired.as_mut()),
         Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter_mut()),
         Expression::MethodCall { this, args, .. } => Children::Chain(Some(this.as_mut()), args.iter_mut()),
@@ -739,7 +741,7 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
             Children::Boxed(Box::new(std::iter::once(&test.subject).chain(test.patterns.iter().flat_map(|p| p.all()).filter_map(|p| p.literal.as_ref()))))
         }
         Expression::Destructure { value, .. } | Expression::Move { value, .. } | Expression::NamedArgument { value, .. } => Children::one(value),
-        Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => Children::two(a, b),
+        Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) | Expression::ConstructAt(a, b) => Children::two(a, b),
         Expression::AtomicCmpXchg(_, a, b, c) => Children::three(a, b, c),
         Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter()),
         Expression::MethodCall { this, args, .. } => Children::Chain(Some(this), args.iter()),

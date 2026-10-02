@@ -354,6 +354,10 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
+        Expression::ConstructAt(lhs, rhs) => {
+            subst_expr(lhs, aliases, values);
+            subst_expr(rhs, aliases, values);
+        }
         Expression::AtomicCmpXchg(ty, lhs, mid, rhs) => {
             subst(ty, aliases);
             subst_expr(lhs, aliases, values);

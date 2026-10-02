@@ -1147,3 +1147,69 @@ test(): int {
     );
     assert_eq!((result, leaked), (0, 0));
 }
+
+// ── __construct_at: stores into slots known to be empty (#339) ─────────────
+
+#[test]
+fn construct_at_stores_count_and_free() {
+    // `append`, `insert` and HashMap's insert and rehash construct into
+    // empty slots: each element holds exactly one reference, and nothing
+    // leaks once the containers go.
+    let (result, leaked) = jit_census(
+        r#"
+struct Point {
+    int x;
+    construct(this.x = 0) {}
+}
+trait Shape {
+    area(): int;
+}
+extend Point with Shape {
+    area(): int { return x; }
+}
+make(x: int): Point {
+    return Point(x);
+}
+test(): int {
+    var p = Point(1);
+    {
+        var a = Array<Point>();
+        a.append(p);
+        a.append(make(2));
+        a.insert(0, p);
+        a.insert(1, make(3));
+        if (__refcount<Point>(p) != 3) { return -1; }
+        # `a[i]` is a copy of the element, so it holds a second reference.
+        if (__refcount<Point>(a[1]) != 2 || __refcount<Point>(a[3]) != 2) { return -2; }
+        if (a[0].x + a[1].x + a[2].x + a[3].x != 7) { return -3; }
+
+        var tuples = Array<(int, Point)>();
+        tuples.append((1, p));
+        tuples.insert(0, (2, make(4)));
+        if (__refcount<Point>(p) != 4) { return -4; }
+        if (__refcount<Point>(tuples[0].1) != 2) { return -5; }
+
+        var shapes = Array<Shape>();
+        shapes.append(p);
+        shapes.insert(0, make(5));
+        if (__refcount<Point>(p) != 5) { return -6; }
+        if (shapes[0].area() + shapes[1].area() != 6) { return -7; }
+
+        var m = HashMap<int, Point>();
+        var i = 0;
+        while (i < 40) {
+            m.insert(i, p);
+            i = i + 1;
+        }
+        if (__refcount<Point>(p) != 45) { return -8; }
+        m.remove(3);
+        m.insert(3, make(6));
+        if (__refcount<Point>(p) != 44) { return -9; }
+    }
+    if (__refcount<Point>(p) != 1) { return -10; }
+    return 0;
+}"#,
+    );
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}

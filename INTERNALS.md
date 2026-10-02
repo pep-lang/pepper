@@ -1053,8 +1053,11 @@ How the language lowers:
   acq_rel down, or a plain load/add/store), `FunctionPointer` (the LLVM
   function's address; a static method is `Owner.name`), `Address` (FNV-folds POD values),
   `AtomicLoad` (acquire), `AtomicStore` (release, via `xchg`),
-  `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), and `AtomicFetch`
-  (`atomicrmw` acq_rel).
+  `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), `AtomicFetch`
+  (`atomicrmw` acq_rel), and `ConstructAt` (`__construct_at(p[i], v)`, an
+  element store into a slot the runtime knows is empty:
+  `codegen_assignment` with `construct`, which acquires through
+  `construct_refcount_ops` and never loads or releases the old occupant).
 - **`match` expressions and `is` tests**: `WithSubject` (`with_subject`)
   evaluates the subject once, panics on a null reference enum, keeps the
   value in `subjects` by id for `Subject` to read, then evaluates the body
@@ -1635,6 +1638,7 @@ entry, whose caller may pass its only reference) keep both steps.
 | `var x = expr` | `codegen_var_def_unlocated`: acquire when `expr` is an lvalue read. An owned rvalue (a call result, see `is_owned_rvalue`) moves in. The slot is registered with `track_scope_local`. |
 | `x = y`, field and element stores | `store_refcount_ops`: if the new pointer equals the old one (self-assignment), do nothing; otherwise acquire the new value, store it, then release the old, so a destructor the release runs that reads the slot finds the new value (as `shared_ptr::operator=`). Fields use `field_refcount_ops` and indexed slots use `index_refcount_ops`. |
 | By-value parameter | `codegen_function_unlocated`: acquire each struct parameter on entry (`this` excepted) and track it in the function scope. A `[Move]` parameter is not acquired: the caller hands its reference over (`pass_argument`: an owned temporary is not released after the call, an lvalue is acquired for it). |
+| `std::construct_at` | `__construct_at(p[i], v)` (`Expression::ConstructAt`): acquire `v` and store it into a raw buffer element that holds no reference, with no load, compare or release of the old occupant (`construct_refcount_ops`). The runtime uses it where a slot is known empty: `Array.append` and `insert`, and `HashMap`'s insert and rehash. A non-empty slot leaks its occupant. |
 | `move(x)` | `codegen_move`: load the reference from the place and store null there, with no count step; the result is an owned rvalue (`is_owned_rvalue`). |
 | Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves. |
 | `return` | An lvalue read is acquired before `release_all_scopes`. A call result moves. |

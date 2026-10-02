@@ -118,6 +118,10 @@ fn convert_expression(expr: &mut Expression) {
                 let ptr = std::mem::replace(&mut args[0], Expression::PointerLiteral);
                 let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
                 *e = Expression::AtomicStore(ty, Box::new(ptr), Box::new(val));
+            } else if base == "__construct_at" && args.len() == 2 {
+                let slot = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
+                *e = Expression::ConstructAt(Box::new(slot), Box::new(val));
             } else if base == "__atomic_cmpxchg" && args.len() == 3 {
                 let parsed = crate::passes::gather_generics::parse_type_string(function);
                 let base_name = parsed.name.clone();

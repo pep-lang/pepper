@@ -942,6 +942,13 @@ impl<'p, 'a> Walk<'p, 'a> {
                 self.eval(b);
                 None
             }
+            // Stores like an assignment, so it links the same way.
+            Expression::ConstructAt(slot, value) => {
+                let value_region = self.eval(value);
+                let target = self.place(slot);
+                self.link(target, value_region, value);
+                None
+            }
             Expression::AtomicCmpXchg(_, a, b, c) => {
                 self.eval(a);
                 self.eval(b);

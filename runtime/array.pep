@@ -284,7 +284,8 @@ export struct Array<T> {
     append(item: T) {
         _version = _version + 1;
         grow();
-        _data[_size] = item;
+        # Slots past `count` are kept empty, so the store only acquires.
+        __construct_at(_data[_size], item);
         _size = _size + 1;
     }
 
@@ -325,13 +326,13 @@ export struct Array<T> {
         # Shift the tail up one slot as raw bytes: each reference moves to
         # its new slot without changing its count, exactly as moving
         # `shared_ptr`s between slots would. The vacated slot still holds a
-        # copy of the bits it moved, so it is zeroed before the store, which
-        # would otherwise release it.
+        # copy of the bits it moved, so it is zeroed, leaving an empty slot
+        # for the store to construct into.
         if (idx < _size) {
             _array_move(_slot(idx + 1), _slot(idx), (_size - idx) * sizeof<T>());
             _array_zero(_slot(idx), sizeof<T>());
         }
-        _data[idx] = item;
+        __construct_at(_data[idx], item);
         _size = _size + 1;
     }
     ## Removes and returns the element at `idx`, shifting every later element

@@ -182,9 +182,10 @@ export struct _HashTable<K, V> {
                     step = step + 1;
                     index = (index + step) & mask;
                 }
-                keys._data[index] = _keys._data[i];
+                # The new arrays' slots start empty.
+                __construct_at(keys._data[index], _keys._data[i]);
                 if (sizeof<V>() != 0) {
-                    values._data[index] = _values._data[i];
+                    __construct_at(values._data[index], _values._data[i]);
                 }
                 control._data[index] = _tag(h);
             }
@@ -262,9 +263,11 @@ export struct _HashTable<K, V> {
                 index = (index + step) & mask;
             }
         }
-        _keys._data[index] = key;
+        # An empty slot or a tombstone, whose key and value `_remove` reset,
+        # so the stores only acquire.
+        __construct_at(_keys._data[index], key);
         if (sizeof<V>() != 0) {
-            _values._data[index] = value;
+            __construct_at(_values._data[index], value);
         }
         _control._data[index] = tag;
         _size = _size + 1;
