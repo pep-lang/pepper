@@ -87,6 +87,32 @@ note: a 'static' block can call the 'reflect' functions and the methods of what 
 main.pep:10:1: note: in the static block of 'dump<Point>'
 ```
 
+### At module scope
+
+A `static` block outside any function runs once, while compiling. It has
+nothing to capture and emits no code; instead, each `const` declared at the
+top of the block becomes a module-scope constant holding what the block
+computed. Its other `var`s, and anything declared in its loops and
+branches, stay in the compiler. `export static` exports its constants, and
+attributes written above the block (`[Target(...)]`) apply to them too.
+
+```pepper
+{{#include ../../examples/reflection-module/sizes.pep}}
+```
+
+```pepper
+{{#include ../../examples/reflection-module/main.pep}}
+```
+
+A constant takes a number, `bool`, character or enum case; a
+[module-scope variable](types-and-variables.md#module-level-variables) cannot be a `String`, since it must
+be thread-safe. At module scope, a case's `get()` is the case itself, and a
+statement that would emit code is an error:
+
+```text
+main.pep:7:9: error: a module-scope 'static' block cannot emit code; declare a 'const' with what it computes
+```
+
 ### What the compiler can evaluate
 
 Compile-time values are integers, floating-point numbers, `bool`, strings,
@@ -185,7 +211,6 @@ methods, constructors, parameters and module-scope variables.
 ## Not supported yet
 
 - Calling functions other than the `reflect` functions at compile time.
-- `static` blocks at module scope, to compute constants.
 - Reflecting methods and constructors (`reflect.methods<T>()`).
 - The values of built-in attributes: `attribute<Deprecated>()` is an error;
   `has_attribute<Deprecated>()` works.

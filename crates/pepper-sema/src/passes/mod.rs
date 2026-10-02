@@ -106,6 +106,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // First pass
     // Attributes name a built-in attribute or an `[Attribute]` struct.
     step!(static_blocks::check_attributes(module));
+    // Module-scope `static` blocks set their constants' initializers.
+    step!(static_blocks::expand_module_blocks(module));
     // `static` blocks in concrete code, before the passes lower what they
     // emit; those in generic code wait for their specializations.
     step!(static_blocks::expand(module, false));

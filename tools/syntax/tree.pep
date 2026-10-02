@@ -87,8 +87,9 @@ export enum NodeKind {
     For,
     ## `with [(] (VARIABLE | expression) [)] BLOCK [else BLOCK]`
     With,
-    ## `static [ARGUMENTS] BLOCK`: a compile-time block and the names it
-    ## captures, `static (out, value) { ... }`.
+    ## `[attribute]... [export] static [ARGUMENTS] BLOCK`: a compile-time
+    ## block and the names it captures, `static (out, value) { ... }`; at
+    ## module scope, with its attributes and `export`.
     Static,
     ## `return [expression] [;]`
     Return,

@@ -1624,6 +1624,7 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
         ast::Declaration::TypeAlias(t) => {
             Err(Diagnostic::error("type aliases are top-level declarations").at(loc(t.name_span)))
         }
+        ast::Declaration::Static(s) => Err(Diagnostic::error("a module-scope 'static' block cannot be declared here").at(loc(s.keyword_span))),
     }
 }
 fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
@@ -2430,6 +2431,7 @@ fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> 
                 // global's constant initializer or an init function.
                 out.globals.push(variable_def(v, Kind::Variable)?);
             }
+            ast::Declaration::Static(s) => out.static_blocks.push(static_items::module_static_block(s)?),
             ast::Declaration::Function(f) => {
                 if f.external {
                     check_deprecation(&f.attributes)?;

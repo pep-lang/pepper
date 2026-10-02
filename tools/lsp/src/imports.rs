@@ -219,6 +219,7 @@ fn in_declaration(decl: &ast::Declaration, offset: usize) -> Option<&ast::TypeNa
             .or_else(|| e.traits.iter().find_map(|t| in_type_name(t, offset)))
             .or_else(|| e.methods.iter().find_map(|m| in_function(m, offset))),
         ast::Declaration::TypeAlias(t) => in_generics(&t.generic_params, offset).or_else(|| in_type_name(&t.target, offset)),
+        ast::Declaration::Static(s) => in_block(&s.block, offset),
     }
 }
 

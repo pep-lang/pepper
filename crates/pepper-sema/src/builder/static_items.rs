@@ -42,6 +42,8 @@ struct Names {
     /// The statement is in a branch of a runtime `if`, which a compile-time
     /// `break` cannot depend on.
     in_runtime_if: bool,
+    /// The block is at module scope, where nothing is emitted.
+    module_scope: bool,
 }
 
 impl Names {
@@ -89,7 +91,8 @@ impl Names {
     /// `expr` uses a runtime name of the block, or emits code itself
     /// (`check.call()`), so a statement with it is emitted.
     fn mentions_runtime(&self, expr: &ast::Expression) -> bool {
-        let mut found = emits(expr);
+        // At module scope nothing is emitted: `case.get()` is evaluated.
+        let mut found = !self.module_scope && emits(expr);
         symbols(expr, &mut |name| found |= self.is_runtime(name));
         found
     }
@@ -257,10 +260,14 @@ pub(super) fn placeholder(expr: &ast::Expression) -> Result<Option<Expression>, 
 
 /// Builds `static (captures) { ... }`.
 pub(super) fn static_block(block: &ast::StaticBlock) -> Result<Statement, Diagnostic> {
+    build_block(block, false)
+}
+
+fn build_block(block: &ast::StaticBlock, module_scope: bool) -> Result<Statement, Diagnostic> {
     if COMPILE_TIME.with(|c| c.borrow().is_some()) {
         return Err(Diagnostic::error("a 'static' block cannot be nested in another").at(loc(block.keyword_span)));
     }
-    let mut names = Names { compile_time: vec![HashSet::new()], runtime: vec![HashSet::new()], loops: 0, in_runtime_if: false };
+    let mut names = Names { compile_time: vec![HashSet::new()], runtime: vec![HashSet::new()], loops: 0, in_runtime_if: false, module_scope };
     for (i, (name, span)) in block.captures.iter().enumerate() {
         if let Some((_, first)) = block.captures[..i].iter().find(|(other, _)| other == name) {
             return Err(Diagnostic::error(format!("'{}' is captured twice", name))
@@ -276,6 +283,27 @@ pub(super) fn static_block(block: &ast::StaticBlock) -> Result<Statement, Diagno
         type_map: vec![],
         loc: loc(block.keyword_span),
     })))
+}
+
+/// Builds a module-scope `static { ... }`, whose top-level `const`
+/// declarations the parser also declared as module-scope variables.
+pub(super) fn module_static_block(block: &ast::StaticBlock) -> Result<ModuleStaticBlock, Diagnostic> {
+    if let Some((_, span)) = block.captures.first() {
+        return Err(Diagnostic::error("a module-scope 'static' block has no runtime values to capture").at(loc(*span)));
+    }
+    let Statement::Static(built) = build_block(block, true)? else { unreachable!("build_block builds a static block") };
+    let constants = block
+        .block
+        .statements
+        .iter()
+        .filter_map(|stmt| match stmt {
+            ast::Statement::Declaration(ast::Declaration::Variable(v)) if v.is_const && v.default_value.is_some() => {
+                Some((v.name.clone(), loc(v.name_span)))
+            }
+            _ => None,
+        })
+        .collect();
+    Ok(ModuleStaticBlock { block: *built, constants })
 }
 
 fn scoped(block: &ast::Block, names: &mut Names) -> Result<Vec<StaticItem>, Diagnostic> {
@@ -383,9 +411,15 @@ fn with_compile_time<T>(names: &Names, build: impl FnOnce() -> T) -> T {
 }
 
 fn emit(stmt: &ast::Statement, names: &Names) -> Result<Statement, Diagnostic> {
+    if names.module_scope {
+        return Err(Diagnostic::error("a module-scope 'static' block cannot emit code; declare a 'const' with what it computes").at(loc(stmt.span())));
+    }
     with_compile_time(names, || statement(stmt))
 }
 
 fn emit_expression(expr: &ast::Expression, names: &Names) -> Result<Expression, Diagnostic> {
+    if names.module_scope {
+        return Err(Diagnostic::error("a module-scope 'static' block cannot emit code; declare a 'const' with what it computes").at(loc(expr.span())));
+    }
     with_compile_time(names, || expression(expr))
 }

@@ -324,6 +324,8 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                         members.in_extensions.entry(&p.name).or_default().push((i, e.is_exported));
                     }
                 }
+                // Its constants are declared beside it, as variables.
+                Declaration::Static(_) => {}
             }
         }
     }

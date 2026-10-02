@@ -801,6 +801,17 @@ language side.
   hold items. `break`/`continue` in a compile-time loop is a `Jump`; one
   under a runtime `if`, or outside any compile-time loop, is an error
   (`Names::loops`, `Names::in_runtime_if`).
+- **Module scope.** A module-scope `static { ... }` is
+  `ast::Declaration::Static`. The parser also declares each `const` at the
+  top of the block as a module-scope variable (`static_constants`, with
+  the block's attributes and `export`) whose initializer is its own name,
+  so linking, visibility and mangling see an ordinary constant.
+  `static_items::module_static_block` builds the block with
+  `Names::module_scope` (nothing may be emitted; `case.get()` is
+  evaluated) into `Module::static_blocks`, and
+  `static_blocks::expand_module_blocks`, first in `transform_pass` after
+  `check_attributes`, runs each and gives each constant the value it
+  computed, matched by the location of its name.
 - **Generic code.** The walks in `passes/mod.rs` reach the emitted
   statements, so the early passes lower them with the rest of a generic
   base; passes with their own statement walks skip `Statement::Static`.
@@ -846,7 +857,7 @@ several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
-| 0′ | `static_blocks::check_attributes`, `static_blocks::expand` (`static_blocks.rs`) | Reports unknown attributes and bad attribute arguments, then expands the `static` blocks of concrete code (§2.8). |
+| 0′ | `static_blocks::check_attributes`, `static_blocks::expand_module_blocks`, `static_blocks::expand` (`static_blocks.rs`) | Reports unknown attributes and bad attribute arguments, runs the module-scope `static` blocks to set their constants, then expands the `static` blocks of concrete code (§2.8). |
 | 0 | `enums::resolve_enum_cases` (`enums.rs`) | First, `value_types::lower_extensions` (`value_types.rs`) turns each extension of a value type (a number type, `char`, `bool`, or an enum whose cases carry no values; `value_types::key` files them under the enum's name or the number's canonical spelling, `i32` for `int`) into free functions `X::m` like an enum's own methods, copies the trait defaults its conformances need, reports a missing member and an enum extension without a trait, and leaves the extension in `module.extensions` with no methods (and `resolved` set) as the declaration of its conformances, which `Conformance` reads for `T: Tr`; `value_types::resolve_static_calls` turns `int.zero()` into `i32::zero()`, and `rewrite_static_calls` does the same for `T.zero()` in a specialization. `convert_to_traits` reports a value type flowing into a trait slot (`'int' cannot be converted to trait 'Tr'`). Installs the reference enums (structs with `enum_cases`) in their own registry (`enums::reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E::from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums::method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums::call_on_value`); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
 | 0a | `entry_point::lower_main_arguments` (`entry_point.rs`) | The C `main` the compiler emits takes no `argc`/`argv`, so a root file's `main(args: String[])` is renamed `main@#args` (`MAIN_WITH_ARGUMENTS`; `#` cannot start a namespace, and messages demangle it to `main`) and a `main()` is synthesized at its location that returns `main@#args(_pep_arguments())` (a `void` one is called, then 0 returned). `_pep_arguments` is `arguments()` under a name a program's own `arguments` cannot shadow. Reports any other parameter list on `main` and `main` declared twice. `is_entry_point` gives both forms the inferred `int` return. |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |

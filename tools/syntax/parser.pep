@@ -1132,16 +1132,7 @@ struct Parser {
             return _with_statement();
         }
         if (_at_word("static") and (_peek_at(1).is("(") or _peek_at(1).is("{"))) {
-            var node = Node(NodeKind.Static);
-            _take(node);
-            if (_at("(")) {
-                node.add(_arguments());
-                if (_failed) {
-                    return node;
-                }
-            }
-            node.add(_block(Array<Node>()));
-            return node;
+            return _static_block(Array<Node>());
         }
         if (_at_word("match")) {
             return _match_statement();
@@ -1232,6 +1223,22 @@ struct Parser {
         }
         if (parenthesized) {
             _expect(node, ")");
+            if (_failed) {
+                return node;
+            }
+        }
+        node.add(_block(Array<Node>()));
+        return node;
+    }
+
+    _static_block(prefix: Node[]): Node {
+        var node = Node(NodeKind.Static);
+        for (var item in prefix) {
+            node.add(item);
+        }
+        _take(node);
+        if (_at("(")) {
+            node.add(_arguments());
             if (_failed) {
                 return node;
             }
@@ -2317,6 +2324,9 @@ struct Parser {
         }
         if (_at_word("type")) {
             return _type_alias(prefix);
+        }
+        if (_at_word("static") and (_peek_at(1).is("(") or _peek_at(1).is("{"))) {
+            return _static_block(prefix);
         }
         if (_at_word("extern") and !_peek_at(1).is("(")) {
             return _extern_function(prefix);

@@ -1031,7 +1031,7 @@ fn rename(decl: &mut Declaration, name: String) {
         Declaration::TypeAlias(t) => t.name = name,
         Declaration::Trait(t) => t.name = name,
         Declaration::Variable(v) => v.name = name,
-        Declaration::Extend(_) => {}
+        Declaration::Extend(_) | Declaration::Static(_) => {}
     }
 }
 

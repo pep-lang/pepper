@@ -880,6 +880,17 @@ pub struct StaticBlock {
     pub loc: Loc,
 }
 
+/// A module-scope `static { ... }` block.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ModuleStaticBlock {
+    /// The block's compile-time work; it emits nothing.
+    pub block: StaticBlock,
+    /// The `const` declarations at the top of the block, which are also
+    /// module-scope variables: each name and the location of its declared
+    /// name, which the variable's `loc` shares.
+    pub constants: Vec<(String, Loc)>,
+}
+
 impl StaticBlock {
     /// Applies `statement` to every statement the block emits and
     /// `condition` to every runtime `if` condition, in order.
@@ -1458,6 +1469,10 @@ pub struct Module {
     /// Module-scope variables (`var x = ...` at file scope): LLVM globals,
     /// initialized by a constant initializer or an init function.
     pub globals: Vec<VariableDef>,
+    /// Module-scope `static { ... }` blocks, run by
+    /// `passes::static_blocks::expand_module_blocks` before any other pass:
+    /// each sets the initializers of the constants it declares.
+    pub static_blocks: Vec<ModuleStaticBlock>,
     /// Enums whose cases carry no values (`enum Color { Red, Green }`):
     /// integer types, which keep their own name through sema so types are
     /// checked and `match` is checked for exhaustiveness (see `enums.rs`).
@@ -1688,6 +1703,7 @@ impl Module {
         self.private_functions.extend(other.private_functions);
         self.externs.extend(other.externs);
         self.globals.extend(other.globals);
+        self.static_blocks.extend(other.static_blocks);
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);

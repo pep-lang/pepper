@@ -281,6 +281,7 @@ pub fn each<'a>(module: &'a ast::Module, visit: impl FnMut(Item<'a>)) {
                 roots.extend(e.methods.iter().chain(e.properties.iter().flat_map(|p| p.accessors())).map(Node::Function))
             }
             ast::Declaration::TypeAlias(_) => {}
+            ast::Declaration::Static(s) => roots.push(Node::Block(&s.block)),
         }
     }
     walk(roots, visit);

@@ -643,6 +643,9 @@ pub enum Declaration {
     Trait(TraitDecl),
     Extend(ExtendDecl),
     TypeAlias(TypeAliasDecl),
+    /// A module-scope `static { ... }` block: compile-time work whose
+    /// top-level `const` declarations become module-scope constants.
+    Static(StaticBlock),
 }
 
 impl Declaration {
@@ -655,6 +658,7 @@ impl Declaration {
             Declaration::Trait(t) => &t.attributes,
             Declaration::Extend(e) => &e.attributes,
             Declaration::TypeAlias(t) => &t.attributes,
+            Declaration::Static(s) => &s.attributes,
         }
     }
 
@@ -667,6 +671,7 @@ impl Declaration {
             Declaration::Trait(t) => t.is_exported,
             Declaration::Extend(e) => e.is_exported,
             Declaration::TypeAlias(t) => t.is_exported,
+            Declaration::Static(s) => s.is_exported,
         }
     }
 
@@ -678,6 +683,7 @@ impl Declaration {
             Declaration::Trait(t) => &t.name,
             Declaration::Extend(e) => e.target.name.as_str(),
             Declaration::TypeAlias(t) => &t.name,
+            Declaration::Static(_) => "",
         }
     }
 
@@ -690,6 +696,7 @@ impl Declaration {
             Declaration::Trait(t) => t.name_span,
             Declaration::Extend(e) => e.target.span,
             Declaration::TypeAlias(t) => t.name_span,
+            Declaration::Static(s) => s.keyword_span,
         }
     }
 
@@ -701,6 +708,7 @@ impl Declaration {
             Declaration::Trait(t) => t.span,
             Declaration::Extend(e) => e.span,
             Declaration::TypeAlias(t) => t.span,
+            Declaration::Static(s) => s.span,
         }
     }
 }
@@ -852,6 +860,11 @@ pub struct StaticBlock {
     /// Span of the `static` keyword.
     pub keyword_span: Span,
     pub span: Span,
+    /// At module scope: the attributes written before the block.
+    pub attributes: Vec<Attribute>,
+    /// At module scope: written `export static`, so the constants it
+    /// declares are exported.
+    pub is_exported: bool,
 }
 
 impl Display for StaticBlock {
@@ -1541,6 +1554,7 @@ impl Display for Statement {
             Statement::Declaration(Declaration::Trait(t)) => write!(f, "{}", t),
             Statement::Declaration(Declaration::Extend(e)) => write!(f, "{}", e),
             Statement::Declaration(Declaration::TypeAlias(t)) => write!(f, "{};", t),
+            Statement::Declaration(Declaration::Static(s)) => write!(f, "{}", s),
             Statement::Branch(b) => write!(f, "{}", b),
             Statement::While(w) => write!(f, "{}", w),
             Statement::For(fr) => write!(f, "{}", fr),
@@ -1653,6 +1667,7 @@ impl Display for Module {
                 Declaration::Trait(t) => writeln!(f, "{}", t)?,
                 Declaration::Extend(e) => writeln!(f, "{}", e)?,
                 Declaration::TypeAlias(t) => writeln!(f, "{};", t)?,
+                Declaration::Static(s) => writeln!(f, "{}", s)?,
             }
         }
         Ok(())

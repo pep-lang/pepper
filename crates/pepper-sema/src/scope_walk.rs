@@ -306,6 +306,11 @@ macro_rules! scope_walker {
                         self.visit_type_name(&$($m)? t.target);
                         self.scopes_mut().pop();
                     }
+                    Declaration::Static(s) => {
+                        self.scopes_mut().push(Scope::Static(HashSet::from(["reflect".to_string()])));
+                        self.walk_block(&$($m)? s.block);
+                        self.scopes_mut().pop();
+                    }
                 }
                 self.exit_declaration();
             }

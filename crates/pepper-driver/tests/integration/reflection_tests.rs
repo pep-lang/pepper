@@ -356,3 +356,47 @@ fn compile_time_while_errors() {
     let error = compile_error("test(): int {\n    static {\n        continue;\n    }\n    return 0;\n}\n");
     assert!(error.starts_with("test.pep:3:9: error: 'continue' in a 'static' block must be in a compile-time 'for' or 'while'"), "{}", error);
 }
+
+#[test]
+fn module_scope_blocks_declare_constants() {
+    let source = r#"
+struct Point {
+    var x: int;
+    var y: int;
+    var z: int;
+}
+
+enum Axis { X, Y, Z }
+
+static {
+    var count = 0;
+    for (var field in reflect.properties<Point>()) {
+        count += 1;
+    }
+    const POINT_FIELDS = count;
+    const LAST_AXIS = reflect.cases<Axis>()[reflect.cases<Axis>().count - 1].get();
+    const NAMED: bool = reflect.name<Point>() == "Point";
+    reflect.assert(count == 3, "Point has three fields");
+}
+
+test(): int {
+    if (LAST_AXIS != Axis.Z or !NAMED) {
+        return 1;
+    }
+    return POINT_FIELDS == 3 ? 0 : 2;
+}
+"#;
+    assert_eq!(jit_census(source), (0, 0));
+}
+
+#[test]
+fn module_scope_block_errors() {
+    let error = compile_error("static {\n    reflect.assert(false, \"stop\");\n}\n\ntest(): int {\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:2:20: error: stop"), "{}", error);
+    let error = compile_error("var n = 0;\n\nstatic (n) {\n}\n\ntest(): int {\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:3:9: error: a module-scope 'static' block has no runtime values to capture"), "{}", error);
+    let error = compile_error("struct P {\n    var x: int;\n}\n\nstatic {\n    for (var f in reflect.properties<P>()) {\n        f.get(P());\n    }\n}\n\ntest(): int {\n    return 0;\n}\n");
+    assert!(error.contains("'get' emits code"), "{}", error);
+    let error = compile_error("static {\n    const FIELDS = reflect.properties<String>();\n}\n\ntest(): int {\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:2:11: error: 'FIELDS' is a compile-time list, which emitted code cannot use"), "{}", error);
+}

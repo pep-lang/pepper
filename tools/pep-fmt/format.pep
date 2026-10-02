@@ -61,7 +61,7 @@ blank_before(node: syntax.Node): bool {
 # extension, or a function with a body), so it gets blank lines around it.
 is_big(node: syntax.Node): bool {
     match (node.kind) {
-        Struct, Trait, Enum => {
+        Struct, Trait, Enum, Static => {
             return true;
         }
         Extend => {
@@ -1225,10 +1225,12 @@ export struct Formatter {
     # space, `(`/`)` and the `for` binding kept tight.
     _control(item: syntax.Node): Doc {
         var result = concat();
-        ulong i = 0;
+        # A module-scope `static` block's attributes and `export`.
+        ulong first = _prefix(item, result);
+        ulong i = first;
         while (i < item.count) {
             var child = item.child(i);
-            if (i > 0 and !child.is_token(")") and !item.child(i - 1).is_token("(")) {
+            if (i > first and !child.is_token(")") and !item.child(i - 1).is_token("(")) {
                 result.add(text(" "));
             }
             if (child.kind == syntax.NodeKind.Variable) {

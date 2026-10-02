@@ -2632,7 +2632,7 @@ fn static_block(input: &mut &str) -> Result<StaticBlock> {
     STATIC_DEPTH.with(|d| d.set(d.get() - 1));
     QUALIFIERS.with(|q| *q.borrow_mut() = qualifiers);
     let block = block?;
-    Ok(StaticBlock { captures, span: Span { start, end: block.span.end }, block, keyword_span })
+    Ok(StaticBlock { captures, span: Span { start, end: block.span.end }, block, keyword_span, attributes: vec![], is_exported: false })
 }
 
 fn branch(input: &mut &str) -> Result<Branch> {
@@ -4573,12 +4573,21 @@ fn declaration(input: &mut &str) -> Result<Declaration> {
             Declaration::Trait(t) => { t.is_exported = true; t.span.start = t.span.start.min(start); }
             Declaration::Extend(e) => { e.is_exported = true; e.span.start = e.span.start.min(start); }
             Declaration::Variable(v) => { v.is_exported = true; v.span.start = v.span.start.min(start); }
+            Declaration::Static(s) => { s.is_exported = true; s.span.start = s.span.start.min(start); }
         }
     }
     Ok(decl)
 }
 
 fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declaration> {
+    if keyword(&mut { *input }, "static") {
+        let mut block = static_block(input)?;
+        if !leading.is_empty() {
+            block.span.start = leading[0].span.start;
+        }
+        block.attributes = leading;
+        return Ok(Declaration::Static(block));
+    }
 
     if input.starts_with("struct") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Struct(struct_declaration(input, leading)?));
@@ -4793,6 +4802,30 @@ fn export_alias(input: &mut &str) -> Result<ExportAlias> {
 // ── Module ────────────────────────────────────────────────────────────────────
 
 /// Parse a complete Pepper source file into a `Module` AST.
+/// The module-scope constants a module-scope `static` block declares: one
+/// variable per `const` at the top of the block, with the block's
+/// attributes and `export`. Its initializer names the constant itself until
+/// `static_blocks::expand_module_blocks` replaces it with the value the
+/// block computes.
+fn static_constants(block: &StaticBlock) -> Vec<Declaration> {
+    block
+        .block
+        .statements
+        .iter()
+        .filter_map(|stmt| match stmt {
+            Statement::Declaration(Declaration::Variable(v)) if v.is_const && v.default_value.is_some() => {
+                Some(Declaration::Variable(VariableDecl {
+                    attributes: block.attributes.clone(),
+                    default_value: Some(Expression::SymbolRef { id: v.name.clone(), span: v.name_span }),
+                    is_exported: block.is_exported,
+                    ..v.clone()
+                }))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 pub fn parse_module(input: &mut &str) -> Result<Module> {
     ws(input)?;
 
@@ -4865,7 +4898,12 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
             ws(input)?;
             if input.starts_with(';') { *input = &input[1..]; }
         }
+        let constants = match &decl {
+            Declaration::Static(block) => static_constants(block),
+            _ => vec![],
+        };
         declarations.push(decl);
+        declarations.extend(constants);
     }
 
     // The entire input must have been consumed; a partial parse is an error.
@@ -4989,6 +5027,10 @@ fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PostParseError> {
             ptr_check_attrs(&a.attributes)?;
             ptr_check_generic_params(&a.generic_params)?;
             ptr_check_type(&a.target)
+        }
+        Declaration::Static(s) => {
+            ptr_check_attrs(&s.attributes)?;
+            ptr_check_block(&s.block)
         }
     }
 }
@@ -7121,6 +7163,7 @@ export const z = 3;",
                 Declaration::Trait(t) => (t.name.clone(), t.is_exported),
                 Declaration::Extend(e) => (format!("extend {}", e.target.name), e.is_exported),
                 Declaration::Variable(v) => (v.name.clone(), v.is_exported),
+                Declaration::Static(s) => ("static".to_string(), s.is_exported),
             })
             .collect();
         let expected: Vec<(String, bool)> = [

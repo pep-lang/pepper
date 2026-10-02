@@ -140,6 +140,40 @@ pub fn expand(module: &mut Module, lowered: bool) -> bool {
     true
 }
 
+/// Runs the module-scope `static` blocks and gives each constant one
+/// declares the value the block computed, in place of the initializer the
+/// parser gave it (the constant's own name). Runs before any other pass.
+pub fn expand_module_blocks(module: &mut Module) {
+    let blocks = std::mem::take(&mut module.static_blocks);
+    let mut values = vec![];
+    let mut notes = vec![];
+    for block in &blocks {
+        let context = Context { name: String::new(), loc: block.block.loc, runtime: HashSet::new() };
+        let mut expander =
+            Expander { module, lowered: false, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None };
+        if let Err(error) = expander.expand(&block.block) {
+            crate::errors::report(error);
+            continue;
+        }
+        notes.append(&mut expander.notes);
+        for (name, loc) in &block.constants {
+            let written = ast::Expression::SymbolRef { id: name.clone(), span: loc.span };
+            let value = expander.scopes[0].get(name).cloned().map(|value| expander.emitted(value, &written, *loc));
+            match value {
+                Some(Ok(value)) => values.push((*loc, value)),
+                Some(Err(error)) => crate::errors::report(error),
+                None => {}
+            }
+        }
+    }
+    for (loc, value) in values {
+        if let Some(global) = module.globals.iter_mut().find(|g| g.loc == loc) {
+            global.default = Some(value);
+        }
+    }
+    module.warnings.append(&mut notes);
+}
+
 /// Removes the `static` blocks left in generic bases once every
 /// specialization has been made: each specialization expanded its own copy,
 /// and what a base's blocks emit was never typed, so the passes that check
@@ -1074,6 +1108,9 @@ impl Expander<'_> {
                     _ => text.contains(&part),
                 }))
             }
+            // At module scope, where nothing is emitted, a case's `get()`
+            // is the case itself.
+            "get" if matches!(value, Value::Case(case) if case.is_value) && arguments.is_empty() => Ok(value.clone()),
             "get" | "set" | "call" if value.attributes().is_some() => Err(self.error(
                 format!("'{}' emits code, so it can be used only in a statement that uses a captured value", name),
                 span,

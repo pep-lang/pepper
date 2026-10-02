@@ -61,6 +61,7 @@ pub fn inactive_regions(text: &str, module: &ast::Module) -> Vec<Span> {
             ast::Declaration::Trait(t) => t.methods.iter().for_each(|f| function(f, &mut out)),
             ast::Declaration::Extend(e) => e.methods.iter().for_each(|f| function(f, &mut out)),
             ast::Declaration::Variable(_) | ast::Declaration::TypeAlias(_) => {}
+            ast::Declaration::Static(s) => statements(&s.block, &mut out),
         }
     }
     out.sort_by_key(|s| s.start);

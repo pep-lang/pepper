@@ -242,7 +242,8 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
                 name_span: t.name_span,
                 ty: format!("trait {}{}", t.name, generics_string(&t.generic_params)),
             }),
-            ast::Declaration::Extend(_) => {}
+            // Its constants are declared beside it, as variables.
+            ast::Declaration::Extend(_) | ast::Declaration::Static(_) => {}
             ast::Declaration::TypeAlias(t) => {
                 let ty = format!("type {}{} = {}", t.name, generics_string(&t.generic_params), t.target);
                 out.push(Symbol {
@@ -2642,6 +2643,8 @@ Returns a fresh value: it shares nothing with the arguments.");
                     span_to_range(&text, t.name_span),
                     None,
                 )),
+                // Its constants are listed beside it, as variables.
+                ast::Declaration::Static(_) => {}
             }
         }
         Some(out)
