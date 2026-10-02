@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2d2fc2e4.js";
+            window.path_to_searchindex_js = "../searchindex-758c8f0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -210,8 +210,9 @@ struct Stack&lt;T&gt; {
     }
 
     peek(): T {
-        # Inside the struct, T can be used like any other type name.
-        var top: T = items.last();
+        # `top` is inferred as `T`: an `int` in `Stack&lt;int&gt;`, a `String`
+        # in `Stack&lt;String&gt;`.
+        var top = items.last();
         return top;
     }
 
@@ -263,11 +264,6 @@ compiler stops 64 levels deep with an error at the type that asks for the
 next level (<code>'Foo' is specialized 65 levels deep, past the limit of 64</code>),
 with a note where the chain started.</li>
 </ul>
-<blockquote>
-<p><strong>Note:</strong> Inside a generic struct, <code>var top = items.last();</code> cannot infer a
-type that involves a type parameter yet, and fails with
-<code>unknown type name 'T'</code>. Write the type out: <code>var top: T = items.last();</code>.</p>
-</blockquote>
 <h2 id="generic-functions"><a class="header" href="#generic-functions">Generic functions</a></h2>
 <p>A free function takes type parameters the same way:</p>
 <pre><code class="language-pepper">larger&lt;T&gt;(a: T, b: T): T {

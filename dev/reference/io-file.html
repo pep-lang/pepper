@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2d2fc2e4.js";
+            window.path_to_searchindex_js = "../searchindex-758c8f0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -864,7 +864,7 @@ opened.</p>
 <li>an Ok result when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
 </ul>
 <h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
-<pre><code class="language-pepper">read(buf: u8[], max: ulong): IoResult&lt;ulong&gt;
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
 <p>Reads up to <code>max</code> bytes from the current position and appends them
 to <code>buf</code>, growing it; the bytes already in <code>buf</code> are kept. Advances
@@ -874,10 +874,10 @@ bytes before the end of the file (always so for pipes and terminals),
 and a single call moves at most about 2 GiB on POSIX or 1 GiB on
 Windows. Loop until it returns 0 to read everything, or use
 <code>read_all</code>. On POSIX an interrupted read (<code>EINTR</code>) is retried. On
-failure <code>buf</code> keeps its previous contents.</p>
+failure <code>buffer</code> keeps its previous contents.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>buf</code> — the array the bytes are appended to</li>
+<li><code>buffer</code> — the array the bytes are appended to</li>
 <li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
 </ul>
 <p><strong>Returns</strong></p>
