@@ -76,6 +76,26 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     };
                     return;
                 }
+                // A bare method name is the method as a value, as `this.m`
+                // (or `S.m` for a static method) would write it.
+                if methods.contains(id) {
+                    let receiver = if methods.contains(&format!("{}{}", STATIC_MARK, id)) {
+                        if methods.contains(&GENERIC_BASE.to_string()) {
+                            return;
+                        }
+                        // A specialization is named as `Box<int>.m` writes
+                        // it: a constructor-style receiver.
+                        if struct_name.contains('<') {
+                            Expression::FunctionCall { function: struct_name.to_string(), args: vec![], loc: *loc }
+                        } else {
+                            Expression::SymbolRef { id: struct_name.to_string(), ty: TypeName::auto(), loc: *loc }
+                        }
+                    } else {
+                        Expression::ThisRef
+                    };
+                    *e = Expression::MemberRef { lhs: Box::new(receiver), name: id.clone(), loc: *loc };
+                    return;
+                }
                 // File-scope globals are visible from struct methods too, and
                 // so are struct names: a bare struct name is the receiver of
                 // a static call (`File.open(p)` inside another struct).

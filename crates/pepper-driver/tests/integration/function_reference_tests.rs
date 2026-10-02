@@ -209,3 +209,71 @@ test(): int { return 0; }
     );
     assert!(err.contains("storing a method of 'this' in field 'measure' of 'this' creates a reference cycle"), "{}", err);
 }
+
+#[test]
+fn bare_method_names_inside_methods() {
+    let src = r#"
+struct Box<T> {
+    T value;
+    construct(v: T) { value = v; }
+    get(): T { return value; }
+    static make(v: T): Box<T> { return Box<T>(v); }
+    getter(): () => T { var f = get; return f; }
+    maker(): (T) => Box<T> { return make; }
+    in_closure(): () => () => T { return () => get; }
+    static_in_closure(): () => (T) => Box<T> { return () => make; }
+}
+
+struct Point {
+    int x;
+    construct(this.x = 0) {}
+    static origin(): Point { return Point(7); }
+    origin_maker(): () => Point { return origin; }
+    shadowed(): int { var origin = 5; return origin; }
+}
+
+trait Shape {
+    area(): int;
+    doubled(): int { var f = area; return f() * 2; }
+}
+
+struct Square {
+    int side;
+    construct(this.side = 0) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+    area_value(): () => int { return area; }
+}
+
+test(): int {
+    var b = Box<int>(3);
+    var total = b.getter()() + b.maker()(4).value + b.in_closure()()() + b.static_in_closure()()(5).value;
+    var p = Point();
+    var q = Square(3);
+    return total * 1000 + p.origin_maker()().x * 100 + p.shadowed() * 10 + q.doubled() + q.area_value()();
+}
+"#;
+    // 3 + 4 + 3 + 5 = 15; 7; 5; 18 + 9.
+    assert_eq!(run(src), (15 * 1000 + 700 + 50 + 27, 0));
+}
+
+#[test]
+fn storing_a_bare_method_of_this_in_a_field_is_an_error() {
+    let err = compile_error(
+        r#"
+struct Widget {
+    int size;
+    () => int measure;
+    area(): int { return size * size; }
+    setup() {
+        measure = area;
+    }
+}
+
+test(): int { return 0; }
+"#,
+    );
+    assert!(err.contains("storing a method of 'this' in field 'measure' of 'this' creates a reference cycle"), "{}", err);
+}

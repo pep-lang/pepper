@@ -66,13 +66,17 @@ too:
 - **Bound methods.** `p.norm` keeps a reference to the object, like a closure
   `() => p.norm()` that captured `p`, so the object lives as long as the
   value does. The expression before the `.` is evaluated once, when the value
-  is made. Inside a method, write `this.norm`; a bare `norm` is not a value.
-  Storing `this.norm` in a field of `this` would be a reference cycle, and is
-  an error, as for [closures](#this-in-methods).
+  is made.
   A bound method is a function value, not the value the method returns:
   passing `p.name` where a `String` is expected is an error. Call it,
   `p.name()`. The methods of an enum whose cases carry nothing are not
   values at all (see [enums](enums.md#current-limits)).
+- **Inside a method.** A bare method name is a value too, as a bare call
+  is a call: `norm` means `this.norm`, and a static method's bare name
+  means `Point.origin`. This works in closures, extensions and trait default
+  methods as well. A local or parameter of the same name hides the method.
+  Storing `norm` (or `this.norm`) in a field of `this` would be a reference
+  cycle, and is an error, as for [closures](#this-in-methods).
 - **Traits and extensions.** A method declared in an
   [extension](traits-and-extensions.md) works the same way, and so does a
   method of a trait-typed value (`shape.area`), which calls through the trait.
@@ -311,8 +315,6 @@ atomic, like a `[Shared]` struct's (see
   value, wrap it in a closure: `(x: int) => abs(x)`.
 - **Generic methods** cannot be referenced as values: `b.map<long>` is not
   a value. Wrap the call in a closure: `(f: (int) => long) => b.map(f)`.
-- **A bare method name inside a method** (`var f = norm;`) is not a value;
-  write `this.norm`.
 - **Closures in trait default methods** cannot use `this` or the members of
   the struct yet.
 - **Closures that capture values as C callbacks.** A C function pointer

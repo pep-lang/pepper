@@ -11,6 +11,11 @@ struct Point {
     shifted(dx: int): Point {
         return Point(x + dx, y);
     }
+
+    # Inside a method, a bare method name is `this.norm`.
+    norm_of_this(): () => int {
+        return norm;
+    }
 }
 
 larger<T>(a: T, b: T): T {
@@ -27,6 +32,7 @@ main(): int {
     # A bound method: the method of one object, which it keeps alive.
     var norm = p.norm;
     assert(norm() == 7, "bound method");
+    assert(p.norm_of_this()() == 7, "bare method name");
 
     # An unbound method takes the object as its first argument.
     var norm_of: (Point) => int = Point.norm;

@@ -211,6 +211,18 @@ impl<'a> Lifter<'a> {
         }
     }
 
+    /// The enclosing struct as the receiver of a static method. A generic
+    /// type is named as `C<T>.m()` writes it: a constructor-style receiver;
+    /// a plain one by its name.
+    fn static_receiver(&self, loc: Loc) -> Expression {
+        let ty = self.ctx.this_ty.clone().unwrap_or_else(TypeName::auto);
+        if ty.sub_types.is_empty() {
+            Expression::SymbolRef { id: ty.to_string(), ty: TypeName::auto(), loc }
+        } else {
+            Expression::FunctionCall { function: ty.to_string(), args: vec![], loc }
+        }
+    }
+
     fn this_ref(loc: Loc) -> Expression {
         Expression::SymbolRef { id: THIS_FIELD.to_string(), ty: TypeName::auto(), loc }
     }
@@ -277,6 +289,17 @@ impl<'a> Lifter<'a> {
                     let loc = *loc;
                     self.use_this(loc);
                     *expr = Expression::MemberRef { lhs: Box::new(Self::this_ref(loc)), name: id.clone(), loc };
+                } else if inside && self.ctx.this_ty.is_some() && self.ctx.methods.contains(id.as_str()) {
+                    // A bare method of the enclosing struct as a value:
+                    // `S.m` for a static one, else `__this.m`.
+                    let loc = *loc;
+                    let receiver = if self.ctx.statics.contains(id.as_str()) {
+                        self.static_receiver(loc)
+                    } else {
+                        self.use_this(loc);
+                        Self::this_ref(loc)
+                    };
+                    *expr = Expression::MemberRef { lhs: Box::new(receiver), name: id.clone(), loc };
                 }
                 return;
             }
@@ -303,17 +326,10 @@ impl<'a> Lifter<'a> {
                     // A bare static method of the enclosing struct:
                     // `S.m(...)` (`C<T>.m(...)` in a generic one), which
                     // needs no `this`.
-                    let ty = self.ctx.this_ty.clone().unwrap_or_else(TypeName::auto);
                     let Expression::FunctionCall { function, args, loc } = std::mem::replace(expr, Expression::PointerLiteral) else {
                         unreachable!()
                     };
-                    // A generic type is named as `C<T>.m()` writes it: a
-                    // constructor-style receiver; a plain one by its name.
-                    let receiver = if ty.sub_types.is_empty() {
-                        Expression::SymbolRef { id: ty.to_string(), ty: TypeName::auto(), loc }
-                    } else {
-                        Expression::FunctionCall { function: ty.to_string(), args: vec![], loc }
-                    };
+                    let receiver = self.static_receiver(loc);
                     *expr = Expression::MethodCall {
                         this: Box::new(receiver),
                         method: function,
