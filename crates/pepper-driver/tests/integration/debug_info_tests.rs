@@ -173,7 +173,13 @@ struct Node {
     (int, Node) pair;
 }
 
+struct Leaf {
+    var up: Leaf?;
+}
+
 main(): int {
+    var leaf = Optional<Leaf>.none();
+    var found = Optional<int>.some(7);
     var suit = Suit.Hearts;
     var pair = (3, Square());
     Shape shape = Square();
@@ -204,7 +210,12 @@ fn g_describes_enums_tuples_traits_and_generics() {
     assert!(has("!DICompositeType(tag: DW_TAG_structure_type, name: \"Array<long>\""), "no structure for 'Array<long>'");
     // A struct that leads back to itself, through a field and a tuple.
     assert!(has("!DICompositeType(tag: DW_TAG_structure_type, name: \"Node\""), "no structure for 'Node'");
-    for name in ["suit", "pair", "shape", "node", "counts"] {
+    // A value enum is held inline: its structure, not a pointer to it,
+    // with its payload as a member a debugger expression can name.
+    assert!(has("!DICompositeType(tag: DW_TAG_structure_type, name: \"Optional<int>\""), "no structure for 'Optional<int>'");
+    assert!(!has("!DIDerivedType(tag: DW_TAG_pointer_type, name: \"Optional<"), "an optional is described as a pointer");
+    assert!(has("!DIDerivedType(tag: DW_TAG_member, name: \"Value__value\""), "no member 'Value__value'");
+    for name in ["leaf", "found", "suit", "pair", "shape", "node", "counts"] {
         assert!(has(&format!("!DILocalVariable(name: \"{name}\"")), "no variable '{name}'");
     }
 }

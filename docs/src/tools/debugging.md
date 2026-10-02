@@ -65,16 +65,20 @@ The `.pdb` beside the executable is found automatically.
   helps when chasing an ownership bug.
 - **Numbers** under their Pepper names (`int`, `ulong`, `u8`).
 - **Enums.** A plain enum shows its case by name. An enum with payloads
-  shows as a struct holding its tag and its payload fields.
+  shows as a struct holding its tag, `__tag` (the case's position), and its
+  payload fields, each named `Case__value` (`Value__value`), which a
+  debugger expression can name: `print found.Value__value`. A value enum
+  (`[Value]`, such as `Optional` and `Result`) is that struct itself,
+  held inline, with no reference counts.
 - **Tuples** as a struct with members `0`, `1`, and so on.
 - **Trait values** as the object they refer to and its vtable.
 - **Generics.** Each instantiation is its own type, such as `Array<long>`.
 - **Module-scope variables** under their names.
 - **`String`, `Array` and `Optional`** read naturally once the
   debugger loads Pepper's formatters (see below): a `String` as its text,
-  an `Array` as its count and elements, an `Optional` as `none` or `some`
-  and its value. Each also shows its reference counts as `[ref count]`
-  (strong references) and `[weak count]`.
+  an `Array` as its count and elements, an `Optional` as its case, `Empty`
+  or `Value`, and its value. A `String` and an `Array` also show their
+  reference counts as `[ref count]` (strong references) and `[weak count]`.
 
 Not yet supported: an enum with payloads shows its tag and every payload
 field, rather than the active case and its payload alone.
@@ -100,7 +104,7 @@ The sessions below stop in a program holding `var name = "pepper";`, an
   (gdb) print values
   $2 = Array<int> of count 2 = {[ref count] = 1, [weak count] = 1, [0] = 3, [1] = 4}
   (gdb) print found
-  $3 = some = {[ref count] = 1, [weak count] = 1, value = 7}
+  $3 = Value = {value = 7}
   ```
 
 - **lldb.** Import `lldb_formatters.py`, once per session or in
@@ -108,13 +112,16 @@ The sessions below stop in a program holding `var name = "pepper";`, an
 
   ```text
   (lldb) command script import runtime/debuggers/lldb_formatters.py
-  (lldb) frame variable name *values
+  (lldb) frame variable name *values found
   (String *) name = 0x00005555555592c0 "pepper"
   (Array<int>) *values = count=2 {
     [ref count] = 1
     [weak count] = 1
     [0] = 3
     [1] = 4
+  }
+  (Optional<int>) found = Value {
+    value = 7
   }
   ```
 

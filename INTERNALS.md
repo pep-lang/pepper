@@ -1597,11 +1597,15 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
 - **Types** (`debug_types.rs`, `CodeGenerator::debug_type`): numbers under
   their written names (`written`), raw pointers, a plain enum as an
   enumeration, a tuple as a structure of `0`, `1`, ..., a trait value as
-  `object` and `vtable`, and a struct reference as a pointer to a
-  structure with every field, the count head included. Struct types are
+  `object` and `vtable`, a struct reference as a pointer to a
+  structure with every field, the count head included, and a value struct
+  (`CodeGenerator::values`, such as `Optional<T>`) as the structure itself.
+  An enum's payload field `Case.value` is the member `Case__value`, which
+  debugger expressions and natvis can name. Struct types are
   built from a work stack after the structs their fields name; a reference
   back to a struct or tuple still being built (`DebugInfo::building`) is a
-  forward declaration, which debuggers resolve by name.
+  forward declaration (behind a pointer, except for a value, whose
+  declaration carries its size), which debuggers resolve by name.
 - **`DebugInfo::finish`**, before the module is verified, gives every other
   defined function (thunks, initializers) an artificial subprogram, moves
   to line 0 every instruction without a location in its own function's
@@ -1627,7 +1631,9 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
   kept by `llvm.used`; `run` links `pepper.natvis` into the `.pdb` with
   `/NATVIS` on Windows; `lldb_formatters.py` is imported by hand. Each
   matches the struct and a reference to it, by name, and shows the head
-  counts first as `[ref count]` and `[weak count]`.
+  counts first as `[ref count]` and `[weak count]`; `Optional`, a value
+  enum, has no head and shows its case from `__tag` and its value from
+  `Value__value`.
 
 - **JIT.** A `CodeGenerator` with `debug_info` set JITs a module with
   debug info; MCJIT hands every object it loads to LLVM's GDB JIT

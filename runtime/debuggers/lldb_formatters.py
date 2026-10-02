@@ -5,7 +5,8 @@
 # or put that line in ~/.lldbinit. A variable of a struct type holds a
 # reference, a pointer to the object, so each formatter accepts the
 # reference as well as the object. Each shows the object's reference counts
-# first, as `[ref count]` (strong references) and `[weak count]`.
+# first, as `[ref count]` (strong references) and `[weak count]`. An
+# Optional is a value, held inline, with no counts.
 
 import lldb
 
@@ -129,32 +130,42 @@ def array_summary(value, internal_dict):
     return "count=%d" % array.GetChildMemberWithName("_size").GetValueAsUnsigned()
 
 
-class OptionalChildren(_Children):
-    """An Optional's reference counts, then its value when it holds one."""
+class OptionalChildren:
+    """A Value optional's value. An Optional is a value enum, held inline:
+    its `__tag` is the case's position, and `Value__value` holds a Value's
+    value."""
+
+    def __init__(self, value, internal_dict):
+        self.value = value
+        self.update()
 
     def update(self):
-        super().update()
-        self.has = self.object is not None and self.object.GetChildMemberWithName("_has_value").GetValueAsUnsigned() != 0
+        self.has = _has_value(self.value)
         return False
 
-    def extra_count(self):
+    def num_children(self):
         return 1 if self.has else 0
 
-    def extra_index(self, name):
+    def get_child_index(self, name):
         return 0 if name == "value" else -1
 
-    def extra_child(self, index):
+    def get_child_at_index(self, index):
         if index != 0 or not self.has:
             return None
-        return _renamed(self.object.GetChildMemberWithName("_value"), "value")
+        return _renamed(self.value.GetNonSyntheticValue().GetChildMemberWithName("Value__value"), "value")
+
+    def has_children(self):
+        return self.has
+
+
+def _has_value(optional):
+    """Whether `optional` is a Value optional, not Empty."""
+    return optional.GetNonSyntheticValue().GetChildMemberWithName("__tag").GetValueAsUnsigned() == 1
 
 
 def optional_summary(value, internal_dict):
-    """An Optional as `none` or `some`."""
-    optional = _object(value)
-    if optional is None:
-        return "null"
-    return "some" if optional.GetChildMemberWithName("_has_value").GetValueAsUnsigned() != 0 else "none"
+    """An Optional as its case, `Empty` or `Value`."""
+    return "Value" if _has_value(value) else "Empty"
 
 
 def __lldb_init_module(debugger, internal_dict):

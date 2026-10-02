@@ -9,7 +9,7 @@
 # A variable of a struct type holds a reference, a pointer to the object,
 # so each printer accepts the reference as well as the object. Each shows
 # the object's reference counts first, as `[ref count]` (strong references)
-# and `[weak count]`.
+# and `[weak count]`. An Optional is a value, held inline, with no counts.
 
 import re
 
@@ -73,20 +73,22 @@ class ArrayPrinter:
 
 
 class OptionalPrinter:
-    """An Optional as `none`, or `some` and its value."""
+    """An Optional as its case, `Empty` or `Value`, and a Value's value.
+    An Optional is a value enum, held inline: its `__tag` is the case's
+    position, and `Value__value` holds a Value's value."""
 
     def __init__(self, value, name):
-        self.object = _object(value)
+        self.value = value
+
+    def _has_value(self):
+        return int(self.value["__tag"]) == 1
 
     def to_string(self):
-        if self.object is None:
-            return "null"
-        return "some" if bool(self.object["_has_value"]) else "none"
+        return "Value" if self._has_value() else "Empty"
 
     def children(self):
-        yield from _counts(self.object)
-        if self.object is not None and bool(self.object["_has_value"]):
-            yield "value", self.object["_value"]
+        if self._has_value():
+            yield "value", self.value["Value__value"]
 
 
 _PRINTERS = [

@@ -29,13 +29,12 @@
       </ArrayItems>
     </Expand>
   </Type>
+  <!-- A value enum, held inline: __tag is the case's position. -->
   <Type Name="Optional&lt;*&gt;">
-    <DisplayString Condition="!_has_value">none</DisplayString>
-    <DisplayString>some({_value})</DisplayString>
+    <DisplayString Condition="__tag == 0">Empty</DisplayString>
+    <DisplayString>Value({Value__value})</DisplayString>
     <Expand>
-      <Item Name="[ref count]">__refcount</Item>
-      <Item Name="[weak count]">__weakcount</Item>
-      <Item Name="value" Condition="_has_value">_value</Item>
+      <Item Name="value" Condition="__tag == 1">Value__value</Item>
     </Expand>
   </Type>
 </AutoVisualizer>

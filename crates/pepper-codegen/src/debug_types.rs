@@ -1,11 +1,13 @@
 //! Debug types for `-g` (see [`crate::debug`]): Pepper's numeric types as
 //! base types under their Pepper names, raw pointers, a plain enum as an
 //! enumeration, a tuple as a structure with members `0`, `1`, and so on, a
-//! trait value as its object and vtable pointers, and a struct reference
+//! trait value as its object and vtable pointers, a struct reference
 //! (which covers a generic's instantiation such as `Array<int>`, an enum
-//! with payloads, `Optional<T>` and a function type's object) as a pointer
-//! to a structure type with every field, the `__refcount`/`__weakcount`
-//! head included, so ownership bugs can be diagnosed in the debugger.
+//! with payloads and a function type's object) as a pointer to a structure
+//! type with every field, the `__refcount`/`__weakcount` head included, so
+//! ownership bugs can be diagnosed in the debugger, and a value struct
+//! (`[Value]`, such as `Optional<T>` and `Result<T>`) as the structure
+//! itself, which has no head.
 //!
 //! Types refer to each other through fields and elements, in cycles too
 //! (`struct Node { Node next; }`). A struct's type is built after its
@@ -170,6 +172,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             let ty = self.debug_structure(&current);
             building.remove(&current);
             self.debug.as_mut()?.building.remove(&current);
+            if self.values.contains_key(&current) {
+                // A value struct is held inline: the structure itself.
+                self.debug.as_mut()?.types.insert(current, ty);
+                continue;
+            }
             // Named as the user writes the type: a reference is the struct.
             let display = pepper_parser::namespace::demangle_name(&current).to_string();
             let debug = self.debug.as_mut()?;
@@ -212,7 +219,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             let line = debug.line_column(*field_loc).map_or(0, |(line, _)| line);
             let scope = debug.unit_scope();
             let bits = member_type.get_size_in_bits();
-            let member = debug.builder().create_member_type(scope, field, file, line, bits, 0, offset, DIFlags::ZERO, member_type);
+            // An enum's payload field `Case.value` is `Case__value`: a
+            // debugger's expressions and natvis cannot name a member with a
+            // dot in it.
+            let field = field.replace('.', "__");
+            let member = debug.builder().create_member_type(scope, &field, file, line, bits, 0, offset, DIFlags::ZERO, member_type);
             members.push(member.as_type());
         }
         let debug = self.debug.as_mut().expect("debug info");
@@ -225,17 +236,29 @@ impl<'ctx> CodeGenerator<'ctx> {
             .as_type()
     }
 
-    /// A reference to a struct whose type is still being built: a pointer
-    /// to a declaration of it.
+    /// A struct or tuple whose type is still being built: a declaration of
+    /// it, behind a pointer for a struct reference. A value (a tuple or a
+    /// value struct) is held inline, so its declaration carries its size.
     fn debug_declaration(&mut self, name: &str) -> DIType<'ctx> {
         let display = pepper_parser::namespace::demangle_name(name).to_string();
+        let size = if self.values.contains_key(name) {
+            Some(self.structs[name].size * 8)
+        } else if self.tuples.contains_key(name) {
+            let target = crate::target::host_machine().expect("host target machine").get_target_data();
+            self.types.get(name).map(|ty| target.get_abi_size(&ty) * 8)
+        } else {
+            None
+        };
         let debug = self.debug.as_mut().expect("debug info");
         let scope = debug.unit_scope();
         let file = debug.file_of(pepper_sema::model::Loc::NONE);
         let declared = debug
             .builder()
-            .create_struct_type(scope, &display, file, 0, 0, 0, DIFlags::FWD_DECL, None, &[], 0, None, name)
+            .create_struct_type(scope, &display, file, 0, size.unwrap_or(0), 0, DIFlags::FWD_DECL, None, &[], 0, None, name)
             .as_type();
+        if size.is_some() {
+            return declared;
+        }
         debug.builder().create_pointer_type(&display, declared, POINTER_BITS, 0, AddressSpace::default()).as_type()
     }
 
