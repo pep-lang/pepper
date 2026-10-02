@@ -41,11 +41,14 @@ export struct Rename {
 }
 
 ## Names the C library an extern links against, its C symbol, or both:
-## `[Link("m")]`, `[Link(name = "sym")]`.
+## `[Link("m")]`, `[Link(name = "sym")]`, `[Link("ssl", path = "vendor")]`.
 [Attribute]
 export struct Link {
     ## The library; empty when only the symbol is given.
     const lib: String = "";
+    ## A folder the linker searches for libraries, relative to the file
+    ## that declares the extern unless absolute; empty for none.
+    const path: String = "";
     ## The C symbol, when it differs from the declared name; empty otherwise.
     const name: String = "";
 }

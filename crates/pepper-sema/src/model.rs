@@ -1397,6 +1397,9 @@ pub struct Link {
     /// The libraries to link (`[Link("m")]`, `[Link(lib = "m")]`), in
     /// declaration order.
     pub libraries: Vec<String>,
+    /// Library search directories (`[Link(lib = "m", path = "vendor")]`),
+    /// as written: relative ones are relative to the extern's file.
+    pub paths: Vec<String>,
     /// The C symbol (`[Link(name = "sym")]`), when it differs from the
     /// declared name.
     pub name: Option<String>,
@@ -1405,7 +1408,8 @@ pub struct Link {
 impl ExternDef {
     /// The extern's `[Link(...)]` attributes: `[Link("lib")]`,
     /// `[Link(lib = "lib")]`, `[Link(name = "sym")]`, or both
-    /// (`[Link(lib = "lib", name = "sym")]`). Errors are located at the
+    /// (`[Link(lib = "lib", name = "sym")]`), each optionally with a search
+    /// directory (`path = "dir"`). Errors are located at the
     /// argument (or attribute) that is wrong, including the removed
     /// `[LinkName("sym")]`.
     pub fn link(&self) -> Result<Link, Diagnostic> {
@@ -1433,6 +1437,7 @@ impl ExternDef {
                     .at(at(attr.span)));
             }
             let mut library_given = false;
+            let mut path_given = false;
             for (index, argument) in arguments.iter().enumerate() {
                 let (key, key_at) = match argument.name {
                     Some((key, span)) => (key, at(span)),
@@ -1456,6 +1461,13 @@ impl ExternDef {
                         library_given = true;
                         link.libraries.push(value.clone());
                     }
+                    "path" if path_given => {
+                        return Err(Diagnostic::error("path given twice in one 'Link'").at(key_at));
+                    }
+                    "path" => {
+                        path_given = true;
+                        link.paths.push(value.clone());
+                    }
                     "name" => {
                         if let Some(first) = name_at {
                             return Err(Diagnostic::error(format!("extern '{}' has more than one symbol name", self.name))
@@ -1466,7 +1478,7 @@ impl ExternDef {
                         link.name = Some(value.clone());
                     }
                     other => {
-                        return Err(Diagnostic::error(format!("'Link' has no argument named '{}'; use 'lib' or 'name'", other)).at(key_at));
+                        return Err(Diagnostic::error(format!("'Link' has no argument named '{}'; use 'lib', 'path' or 'name'", other)).at(key_at));
                     }
                 }
             }

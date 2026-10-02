@@ -528,6 +528,8 @@ pub struct ProgramRecord {
     pub key: String,
     /// Its `[Link]` libraries, in order.
     pub libraries: Vec<String>,
+    /// Its `[Link(path = ...)]` folders, in order.
+    pub library_dirs: Vec<String>,
     /// The hash of its last link's inputs (objects, libraries, output
     /// path), and of the file that link wrote; empty before a link.
     pub link: String,
@@ -537,9 +539,10 @@ pub struct ProgramRecord {
 impl ProgramRecord {
     fn to_json(&self) -> String {
         format!(
-            "{{\"key\": \"{}\", \"libraries\": \"{}\", \"link\": \"{}\", \"output\": \"{}\"}}\n",
+            "{{\"key\": \"{}\", \"libraries\": \"{}\", \"library_dirs\": \"{}\", \"link\": \"{}\", \"output\": \"{}\"}}\n",
             self.key,
             self.libraries.join(";"),
+            std::env::join_paths(&self.library_dirs).map(|joined| joined.to_string_lossy().into_owned()).unwrap_or_default(),
             self.link,
             self.output
         )
@@ -550,6 +553,10 @@ impl ProgramRecord {
         Some(ProgramRecord {
             key: json_string(text, "key")?.to_string(),
             libraries: libraries.split(';').filter(|l| !l.is_empty()).map(str::to_string).collect(),
+            library_dirs: std::env::split_paths(json_string(text, "library_dirs").unwrap_or_default())
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .map(|dir| dir.to_string_lossy().into_owned())
+                .collect(),
             link: json_string(text, "link").unwrap_or_default().to_string(),
             output: json_string(text, "output").unwrap_or_default().to_string(),
         })
@@ -649,12 +656,17 @@ mod tests {
         let record = super::ProgramRecord {
             key: "ab12".to_string(),
             libraries: vec!["ssl".to_string(), "crypto".to_string()],
+            library_dirs: vec!["/opt/vendor/lib".to_string(), "/usr/local/lib".to_string()],
             link: "cd34".to_string(),
             output: "ef56".to_string(),
         };
         let read = super::ProgramRecord::parse(&record.to_json()).unwrap();
-        assert_eq!((read.key, read.libraries, read.link, read.output), (record.key, record.libraries, record.link, record.output));
-        assert!(super::ProgramRecord::parse("{\"key\": \"ab12\", \"libraries\": \"\"}").unwrap().libraries.is_empty());
+        assert_eq!(
+            (read.key, read.libraries, read.library_dirs, read.link, read.output),
+            (record.key, record.libraries, record.library_dirs, record.link, record.output)
+        );
+        let older = super::ProgramRecord::parse("{\"key\": \"ab12\", \"libraries\": \"\"}").unwrap();
+        assert!(older.libraries.is_empty() && older.library_dirs.is_empty());
     }
 
     #[test]

@@ -108,7 +108,7 @@ The parameter's name now.
 ```
 
 Names the C library an extern links against, its C symbol, or both:
-`[Link("m")]`, `[Link(name = "sym")]`.
+`[Link("m")]`, `[Link(name = "sym")]`, `[Link("ssl", path = "vendor")]`.
 
 ### Fields
 
@@ -119,6 +119,15 @@ const lib: String = ""
 ```
 
 The library; empty when only the symbol is given.
+
+#### path
+
+```pepper
+const path: String = ""
+```
+
+A folder the linker searches for libraries, relative to the file
+that declares the extern unless absolute; empty for none.
 
 #### name
 

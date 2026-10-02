@@ -314,7 +314,7 @@ the symbol as `name`; each is a non-empty string, and an extern names at
 most one symbol. Anything else is an error, such as:
 
 ```text
-main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
+main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib', 'path' or 'name'
     1 | [Link(symbol = "labs")] extern long pep_abs(long v);
       |       ^~~~~~
 ```

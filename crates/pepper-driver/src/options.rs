@@ -21,7 +21,9 @@ pub struct Options {
     #[arg(short = 'l', value_name = "LIB")]
     pub libraries: Vec<String>,
 
-    /// Add a directory to the linker's library search path.
+    /// Add a directory to the linker's library search path. The folders in
+    /// `$PEPPER_LIBRARY_PATH` (separated like `PATH`) are searched after
+    /// these and `[Link(path = ...)]` folders.
     #[arg(short = 'L', value_name = "DIR")]
     pub library_dirs: Vec<PathBuf>,
 
@@ -324,4 +326,12 @@ mod tests {
         let options = parse(&["pepper", "--sysroot", "/sdk", "main.pep"]);
         assert_eq!(options.effective_sysroot(), Some(PathBuf::from("/sdk")));
     }
+}
+
+/// The library search directories in `$PEPPER_LIBRARY_PATH`, separated the
+/// way `PATH` is (`:`, or `;` on Windows); empty entries are skipped.
+pub fn environment_library_dirs() -> Vec<PathBuf> {
+    std::env::var_os("PEPPER_LIBRARY_PATH")
+        .map(|value| std::env::split_paths(&value).filter(|dir| !dir.as_os_str().is_empty()).collect())
+        .unwrap_or_default()
 }

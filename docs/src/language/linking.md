@@ -74,7 +74,34 @@ pepper build main.pep -L /opt/homebrew/opt/llvm@20/lib -o main
 ```
 
 Repeat it for more folders. The folders are searched for `-l` libraries and
-`[Link]` libraries alike, in the order given, before the default ones.
+`[Link]` libraries alike, in the order given, before the default ones. On
+Windows, clang passes each one to the linker as `/LIBPATH:`.
+
+## Library search directories in the source and the environment
+
+A library that ships with your program, such as a vendored build in a
+`vendor/` folder, can name its folder in the `[Link]` attribute with `path`:
+
+```pepper
+[Link(lib = "probe", path = "vendor/lib")]
+extern int probe_version();
+```
+
+A relative `path` is relative to the folder of the file that declares the
+extern, not to where you run the compiler, so the program builds the same
+from anywhere. Like the library, the folder is searched only when the extern
+survives [platform selection](platform-selection.md), so a `[Target]` can
+give each platform its own folder.
+
+The `PEPPER_LIBRARY_PATH` environment variable adds folders for every build,
+separated like `PATH` (`:`, or `;` on Windows):
+
+```sh
+PEPPER_LIBRARY_PATH=/opt/homebrew/lib pepper build main.pep -o main
+```
+
+The linker searches `-L` folders first, then `[Link]` paths, then
+`PEPPER_LIBRARY_PATH`, then the runtime's folder and the system's.
 
 ## When linking fails
 

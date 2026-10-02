@@ -127,6 +127,8 @@ fn link_attribute_errors() {
         ("link_unknown_key", "[Link(symbol = \"a\")]", "'Link' has no argument named 'symbol'"),
         ("link_not_string", "[Link(name = 3)]", "'Link' argument 'name' must be a string"),
         ("link_lib_twice", "[Link(\"m\", lib = \"c\")]", "library given twice in one 'Link'"),
+        ("link_path_twice", "[Link(\"m\", path = \"a\", path = \"b\")]", "path given twice in one 'Link'"),
+        ("link_path_empty", "[Link(\"m\", path = \"\")]", "'Link' argument 'path' must not be empty"),
         ("link_name_twice", "[Link(name = \"labs\")] [Link(name = \"llabs\")]", "has more than one symbol name"),
         ("link_name_removed", "[LinkName(\"llabs\")]", "'LinkName' was removed; use '[Link(name = \"llabs\")]'"),
     ] {
@@ -182,47 +184,87 @@ test(): int {
     assert_eq!(pepper_codegen::CodeGenerator::jit_call_i32(&ee, "test"), Ok(7));
 }
 
-/// `-L dir` adds a library search directory: a `[Link]` library that only
-/// exists in that folder links, and the call into it runs.
-#[cfg(not(windows))]
-#[test]
-fn library_search_directory_reaches_linker() {
-    let root = repo_root();
-    std::env::set_current_dir(&root).unwrap();
-
-    let dir = std::env::temp_dir().join(format!("pepper_link_search_dir_{}", std::process::id()));
+/// A fresh folder `<dir>/libs` holding a static library `name` (`lib<name>.a`,
+/// or `<name>.lib` on Windows) whose `<name>()` returns 42, and a program
+/// in `<dir>` declaring that function under `attribute`, which exits 0 when
+/// the call returns 42. Returns `(dir, libs)`.
+fn search_probe(name: &str, attribute: &str) -> (PathBuf, PathBuf) {
+    let dir = std::env::temp_dir().join(format!("pepper_{}_{}", name, std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
     let libs = dir.join("libs");
     std::fs::create_dir_all(&libs).unwrap();
-    let c_path = dir.join("probe.c");
-    let object = dir.join("probe.o");
-    std::fs::write(&c_path, "int pepper_search_probe(void) { return 42; }\n").unwrap();
-    let status = Command::new(pepper_driver::linker::link_driver()).arg("-c").arg(&c_path).arg("-o").arg(&object).status().expect("run clang");
+    let c_path = dir.join(format!("{name}.c"));
+    let object = dir.join(format!("{name}.o"));
+    std::fs::write(&c_path, format!("int {name}(void) {{ return 42; }}\n")).unwrap();
+    let clang = pepper_driver::linker::link_driver();
+    let status = Command::new(&clang).arg("-c").arg(&c_path).arg("-o").arg(&object).status().expect("run clang");
     assert!(status.success(), "clang -c failed");
-    let status = Command::new("ar").arg("rcs").arg(libs.join("libpepper_search_probe.a")).arg(&object).status().expect("run ar");
-    assert!(status.success(), "ar failed");
-
-    let src_path = dir.join("search_probe.pep");
-    let out_path = dir.join("search_probe");
+    let status = if cfg!(windows) {
+        // llvm-lib ships beside clang in the LLVM the compiler uses.
+        let beside = clang.with_file_name("llvm-lib.exe");
+        let archiver = if beside.is_file() { beside } else { PathBuf::from("llvm-lib") };
+        Command::new(archiver).arg(format!("/out:{}", libs.join(format!("{name}.lib")).display())).arg(&object).status().expect("run llvm-lib")
+    } else {
+        Command::new("ar").arg("rcs").arg(libs.join(format!("lib{name}.a"))).arg(&object).status().expect("run ar")
+    };
+    assert!(status.success(), "archiving {name} failed");
     std::fs::write(
-        &src_path,
-        r#"
-[Link("pepper_search_probe")]
-extern int pepper_search_probe();
-
-main(): int {
-    return pepper_search_probe() == 42 ? 0 : 1;
-}"#,
+        dir.join(format!("{name}.pep")),
+        format!("{attribute}\nextern int {name}();\n\nmain(): int {{\n    return {name}() == 42 ? 0 : 1;\n}}\n"),
     )
     .unwrap();
-    let options = pepper_driver::Options::parse_from(vec![
-        "pepper".to_string(),
-        src_path.to_string_lossy().into_owned(),
-        "-L".to_string(),
-        libs.to_string_lossy().into_owned(),
-        "-o".to_string(),
-        out_path.to_string_lossy().into_owned(),
-    ]);
+    (dir, libs)
+}
+
+/// Build `<dir>/<name>.pep` with the extra command-line `arguments`, run it,
+/// and require that it exits 0.
+fn build_and_run_search_probe(name: &str, dir: &std::path::Path, arguments: &[String]) {
+    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+    let mut command = vec!["pepper".to_string(), dir.join(format!("{name}.pep")).to_string_lossy().into_owned()];
+    command.extend(arguments.iter().cloned());
+    command.extend(["-o".to_string(), out_path.to_string_lossy().into_owned()]);
+    let options = pepper_driver::Options::parse_from(command);
     assert_eq!(pepper_driver::run(options).expect("compile + link"), 0);
     let status = Command::new(&out_path).status().expect("spawn linked binary");
     assert!(status.success(), "linked binary exited with {}", status);
+}
+
+/// `-L dir` adds a library search directory: a `[Link]` library that only
+/// exists in that folder links, and the call into it runs.
+#[test]
+fn library_search_directory_reaches_linker() {
+    std::env::set_current_dir(repo_root()).unwrap();
+    let name = "pepper_search_flag_probe";
+    let (dir, libs) = search_probe(name, &format!("[Link(\"{name}\")]"));
+    build_and_run_search_probe(name, &dir, &["-L".to_string(), libs.to_string_lossy().into_owned()]);
+}
+
+/// `[Link(lib = ..., path = "libs")]` searches `libs` beside the source
+/// file, wherever the compiler runs.
+#[test]
+fn link_attribute_path_is_relative_to_the_source() {
+    std::env::set_current_dir(repo_root()).unwrap();
+    let name = "pepper_search_attribute_probe";
+    let (dir, _) = search_probe(name, &format!("[Link(lib = \"{name}\", path = \"libs\")]"));
+    build_and_run_search_probe(name, &dir, &[]);
+    // The second build skips sema; the folder comes from the cache record.
+    std::fs::remove_file(dir.join(name).with_extension(if cfg!(windows) { "exe" } else { "" })).unwrap();
+    build_and_run_search_probe(name, &dir, &[]);
+}
+
+/// `$PEPPER_LIBRARY_PATH` adds library search directories too.
+#[test]
+fn library_path_variable_reaches_linker() {
+    std::env::set_current_dir(repo_root()).unwrap();
+    let name = "pepper_search_variable_probe";
+    let (dir, libs) = search_probe(name, &format!("[Link(\"{name}\")]"));
+    let value = std::env::join_paths([dir.join("missing"), libs]).unwrap();
+    // SAFETY: no other test reads or writes this variable; links running
+    // alongside only see one more folder to search.
+    unsafe { std::env::set_var("PEPPER_LIBRARY_PATH", &value) };
+    let result = std::panic::catch_unwind(|| build_and_run_search_probe(name, &dir, &[]));
+    unsafe { std::env::remove_var("PEPPER_LIBRARY_PATH") };
+    if let Err(panic) = result {
+        std::panic::resume_unwind(panic);
+    }
 }

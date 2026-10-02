@@ -90,7 +90,7 @@ driver::objects: Program::units, cache::unit_key, then per unit, on parallel thr
   partition::finish               linkage, globaldce, symbol_name spelling
   cache::Cache::object            same bitcode → reuse the object, else emit + store
   → <build>/<name>.units/<unit>.o, plus the program module → <build>/<name>.o
-link_libraries (from [Link]) + -l + runtime/*.a
+link_libraries / link_library_dirs (from [Link]) + -l/-L + $PEPPER_LIBRARY_PATH + runtime/*.a
 linker::link → clang -o <out> <objs> -L… -l… (+ kernel32 user32 shell32 on Windows, m on Linux)
 ```
 
@@ -1497,7 +1497,12 @@ It collects
 libraries in this order: `-l` flags, then `runtime/*.a` (as
 `-L<dir> -l<name>`, after the `-L` directories), then `link_libraries(&module)`, which gathers the
 `[Link("name")]` attributes of externs that survived platform filtering,
-deduplicated. `linker::link` invokes **clang as the link driver**,
+deduplicated. Search directories go in this order: `-L`, then
+`link_library_dirs(&module)` (`[Link(path = "dir")]`, resolved against the
+declaring file's folder), then `$PEPPER_LIBRARY_PATH`
+(`options::environment_library_dirs`), then the runtime's folders. The
+program's cache record keeps both `[Link]` lists, so a build that skips sema
+links the same way. `linker::link` invokes **clang as the link driver**,
 preferring `$LLVM_SYS_<NN>1_PREFIX/bin/clang` so the linker matches the
 LLVM the compiler was built against, and falling back to `clang` on PATH.
 `default_system_libraries` adds `kernel32 user32 shell32` on Windows and `m` on Linux (float `**` calls `pow`). Link

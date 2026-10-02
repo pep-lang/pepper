@@ -129,7 +129,7 @@ fn run_for_target(options: Options) -> Result<i32, String> {
     let build = options.effective_build()?;
     let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root, build.clone())).transpose()?;
     let program_name = program.files[0].namespace.clone();
-    let (mut objects, link_libraries, program_key) = match cached {
+    let (mut objects, (link_libraries, link_library_dirs), program_key) = match cached {
         // Every unit and the program came from the cache: sema did not run.
         Some(record) => {
             let mut objects: Vec<PathBuf> =
@@ -141,7 +141,8 @@ fn run_for_target(options: Options) -> Result<i32, String> {
                 }
                 eprintln!("cache: program hit");
             }
-            (objects, record.libraries.clone(), Some(record))
+            let link = (record.libraries.clone(), record.library_dirs.iter().map(PathBuf::from).collect());
+            (objects, link, Some(record))
         }
         None => {
             let built = objects(&options, &sema_module, trial.as_ref(), &interfaces, &program, &build_dir, &module_name)?;
@@ -157,18 +158,24 @@ fn run_for_target(options: Options) -> Result<i32, String> {
                 }
             }
             let libraries = link_libraries(&sema_module);
+            let library_dirs = link_library_dirs(&sema_module);
             // The next build can skip sema when nothing changes.
             let keys: Option<Vec<String>> = built.iter().filter(|o| o.unit != "__program").map(|o| o.key.clone()).collect();
             let record = match (&cache, keys) {
                 (Some(cache), Some(keys)) => {
                     let key = keys::Keys::new(&program).program_key(cache.compiler(), &keys);
-                    let record = cache::ProgramRecord { key, libraries: libraries.clone(), ..Default::default() };
+                    let record = cache::ProgramRecord {
+                        key,
+                        libraries: libraries.clone(),
+                        library_dirs: library_dirs.iter().map(|dir| dir.to_string_lossy().into_owned()).collect(),
+                        ..Default::default()
+                    };
                     cache.store_program(&program_name, &record, &build_dir.join(format!("{}.{}", module_name, build.extension())))?;
                     Some(record)
                 }
                 _ => None,
             };
-            (built.into_iter().map(|o| o.path).collect(), libraries, record)
+            (built.into_iter().map(|o| o.path).collect(), (libraries, library_dirs), record)
         }
     };
     timer.stage("codegen and emission");
@@ -182,7 +189,11 @@ fn run_for_target(options: Options) -> Result<i32, String> {
     // Discover runtime libs for linking.
     let (_sources, runtime_libs, runtime_dirs) = runtime::discover();
     let mut libraries: Vec<String> = options.libraries.clone();
+    // Search order: `-L`, then `[Link(path = ...)]`, then
+    // `$PEPPER_LIBRARY_PATH`, then the runtime's folders.
     let mut library_dirs: Vec<PathBuf> = options.library_dirs.clone();
+    library_dirs.extend(link_library_dirs);
+    library_dirs.extend(options::environment_library_dirs());
     for lib in &runtime_libs {
         if let Some(parent) = lib.parent() {
             library_dirs.push(parent.to_path_buf());
@@ -529,6 +540,26 @@ pub fn link_libraries(module: &pepper_sema::model::Module) -> Vec<String> {
         for library in ext.link().map(|link| link.libraries).unwrap_or_default() {
             if !out.contains(&library) {
                 out.push(library);
+            }
+        }
+    }
+    out
+}
+
+/// Library search directories named by `[Link(path = "dir")]` on surviving
+/// externs, deduplicated in declaration order. A relative path is relative
+/// to the folder of the file that declares the extern.
+pub fn link_library_dirs(module: &pepper_sema::model::Module) -> Vec<PathBuf> {
+    use pepper_parser::diagnostic::Sources;
+    let mut out: Vec<PathBuf> = Vec::new();
+    for ext in &module.externs {
+        for path in ext.link().map(|link| link.paths).unwrap_or_default() {
+            let file = module.sources.get(ext.loc.file).map(|(name, _)| std::path::Path::new(name).to_path_buf()).unwrap_or_default();
+            let folder = file.parent().unwrap_or(std::path::Path::new(""));
+            let dir = folder.join(&path);
+            let dir = std::path::absolute(&dir).unwrap_or(dir);
+            if !out.contains(&dir) {
+                out.push(dir);
             }
         }
     }
