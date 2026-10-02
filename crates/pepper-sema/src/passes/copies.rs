@@ -44,10 +44,16 @@
 //! `_pep_check_sync<T>(slot, waiting, "Mutex<T>")`, which copies the locked value to
 //! count the references inside it when `PEP_CHECK_SYNC` is set, for a `T`
 //! that can be copied; to nothing for any other `T`.
+//!
+//! This stays compiler work rather than a `static` block over
+//! `reflect.fields<T>()`: reflection cannot see another file's private
+//! fields, allocate without a constructor, or see the struct behind a trait
+//! value (`design-notes/sema/copy-and-reflection.md`, #324).
 
 use crate::model::*;
 use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in};
 use crate::passes::gather_generics::parse_type_string;
+use crate::passes::static_blocks::{attribute_name, attribute_string};
 use crate::type_name::TypeName;
 use pepper_parser::diagnostic::{Edit, Fix, Sources};
 use std::collections::HashSet;
@@ -170,24 +176,12 @@ fn pointer_display(ty: &TypeName) -> String {
     }
 }
 
-/// The string argument of `[NotCopyable("why")]`, when the struct has one.
-fn not_copyable(st: &StructDef) -> Option<String> {
-    for attribute in &st.attributes {
-        match &attribute.body {
-            pepper_parser::ast::Expression::SymbolRef { id, .. } if id == NOT_COPYABLE_ATTRIBUTE => return Some(String::new()),
-            pepper_parser::ast::Expression::FunctionCall { function, arguments, .. }
-                if matches!(function.as_ref(), pepper_parser::ast::Expression::SymbolRef { id, .. } if id == NOT_COPYABLE_ATTRIBUTE) =>
-            {
-                let why = match arguments.as_slice() {
-                    [pepper_parser::ast::Expression::Literal { value: pepper_parser::ast::Literal::String(why), .. }] => why.clone(),
-                    _ => String::new(),
-                };
-                return Some(why);
-            }
-            _ => {}
-        }
-    }
-    None
+/// The reason of `[NotCopyable("why")]`, when the struct has one: empty for
+/// a bare `[NotCopyable]`. Read like `reflect.attribute<NotCopyable>()`, so
+/// `reason = "..."` and joined strings work.
+fn not_copyable(module: &Module, st: &StructDef) -> Option<String> {
+    let attribute = st.attributes.iter().find(|a| attribute_name(a).as_deref() == Some(NOT_COPYABLE_ATTRIBUTE))?;
+    Some(attribute_string(module, attribute, st.loc.file, "reason").unwrap_or_default())
 }
 
 /// Whether `method` is a `Copyable<T>` implementation: `copy(Copies)`.
@@ -244,7 +238,7 @@ fn plan(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Plan {
     let Some(st) = struct_named(module, ty) else {
         return Plan::Same;
     };
-    if let Some(why) = not_copyable(st) {
+    if let Some(why) = not_copyable(module, st) {
         return Plan::Blocked(Blocker::NotCopyable { ty: ty.clone(), why, loc: st.loc });
     }
     if has_copy_method(st) {

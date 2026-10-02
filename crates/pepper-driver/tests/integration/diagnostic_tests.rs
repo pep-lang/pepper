@@ -855,6 +855,24 @@ fn cannot_copy_through_a_value_enum() {
 }
 
 #[test]
+fn not_copyable_reason_is_read_like_reflection() {
+    // `reason = ...` and joined strings give the reason too, as they do
+    // for `reflect.attribute<NotCopyable>()`.
+    assert_eq!(
+        error_of(
+            "not_copyable_named_reason",
+            "[NotCopyable(reason = \"owns \" + \"a handle\")]\nstruct Handle {\n    int id;\n}\n\nmain(): int {\n    var c = copy(Handle());\n    return 0;\n}\n"
+        ),
+        "main.pep:7:13: error: cannot copy 'Handle', which cannot be copied\n\
+         \x20   7 |     var c = copy(Handle());\n\
+         \x20     |             ^~~~\n\
+         main.pep:2:8: note: 'Handle' owns a handle\n\
+         \x20   2 | struct Handle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+#[test]
 fn cannot_copy_a_plain_function_value() {
     assert_eq!(
         error_of(

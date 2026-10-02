@@ -1723,6 +1723,17 @@ fn attribute_value(module: &Module, attribute: &ast::Attribute, file: FileId) ->
     Ok(Value::Attribute(Rc::new(Attribute { ty: st.name.clone(), fields })))
 }
 
+/// The string field `field` of `attribute` (written in `file`), read the way
+/// `attribute<A>()` reads it: named arguments, joined strings and defaults
+/// included. `None` when the attribute is malformed or has no such string.
+pub fn attribute_string(module: &Module, attribute: &ast::Attribute, file: FileId, field: &str) -> Option<String> {
+    let Ok(Value::Attribute(value)) = attribute_value(module, attribute, file) else { return None };
+    value.fields.iter().find_map(|(name, value)| match value {
+        Value::String(text) if name == field => Some(text.clone()),
+        _ => None,
+    })
+}
+
 // ── Checking attributes ─────────────────────────────────────────────────────
 
 /// Reports an attribute that names neither a built-in attribute nor an
