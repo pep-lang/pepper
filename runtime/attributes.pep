@@ -58,6 +58,16 @@ export struct Target {
     const condition: String;
 }
 
+## Marks the `if` or `match` arm below it as the branch usually taken,
+## so the optimizer lays it out as the straight-line path.
+[Attribute]
+export struct Likely {}
+
+## Marks the `if` or `match` arm below it as a branch rarely taken, such
+## as error handling, so the optimizer moves it out of the fast path.
+[Attribute]
+export struct Unlikely {}
+
 ## Forbids copying a struct with `copy(value)`, giving the reason in the
 ## error.
 [Attribute]

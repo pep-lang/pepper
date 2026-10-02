@@ -2,29 +2,24 @@
 
 # hint/module.pep
 
-Hints to the optimizer: which way a branch usually goes, and memory a
-loop will soon read or write.
+Hints to the optimizer about memory a loop will soon read or write.
 
 Bring it in with `import hint`. A hint never changes what a program
-computes, only how fast: the optimizer lays out the likely path as the
-straight-line one, and a prefetch starts loading a cache line early. At
-`-O0`, and where the CPU has no prefetch instruction, they cost little
-and do nothing.
+computes, only how fast: a prefetch starts loading a cache line early.
+Where the CPU has no prefetch instruction it does nothing.
+
+To say which way a branch usually goes, write `[Likely]` or
+`[Unlikely]` above the `if` or `match` arm; `likely` and `unlikely`
+here are deprecated.
 
 **Example**
 ```pepper
     import hint;
 
     main(): int {
-        var values = [3, 1, 2];
-        var total = 0;
-        for (var value in values) {
-            if (hint.unlikely(value < 0)) {
-                return 1;
-            }
-            total += value;
-        }
-        assert(total == 6, "summed");
+        var text = "a long text that a loop will read";
+        hint.prefetch_read(text.c_str());
+        assert(text.length > 0, "a prefetch changes nothing");
         return 0;
     }
 ```
@@ -34,47 +29,36 @@ Source: `runtime/hint/module.pep`
 ## likely
 
 ```pepper
-likely(condition: bool): bool
+[Deprecated("write '[Likely]' above the 'if' instead")] likely(condition: bool): bool
 ```
 
-Returns `condition`, telling the optimizer it is usually true, so the
-code for the true case is laid out as the fast path (`llvm.expect`).
+Deprecated: write `[Likely]` above the `if` instead.
+
+Returns `condition`, telling the optimizer it is usually true
+(`llvm.expect`).
 
 **Parameters**
 - `condition` — the condition to test
 
 **Returns**
 - `condition`
-
-**Example**
-```pepper
-    if (hint.likely(index < count)) {
-        # the common case
-    }
-```
 
 ## unlikely
 
 ```pepper
-unlikely(condition: bool): bool
+[Deprecated("write '[Unlikely]' above the 'if' instead")] unlikely(condition: bool): bool
 ```
 
-Returns `condition`, telling the optimizer it is usually false, so the
-code for the true case, such as error handling, is moved out of the
-fast path (`llvm.expect`).
+Deprecated: write `[Unlikely]` above the `if` instead.
+
+Returns `condition`, telling the optimizer it is usually false
+(`llvm.expect`).
 
 **Parameters**
 - `condition` — the condition to test
 
 **Returns**
 - `condition`
-
-**Example**
-```pepper
-    if (hint.unlikely(length > LIMIT)) {
-        return error;
-    }
-```
 
 ## prefetch_read
 

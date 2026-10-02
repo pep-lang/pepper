@@ -79,7 +79,8 @@ export enum NodeKind {
     TypeArguments,
     ## `[attribute]... { statement... }`
     Block,
-    ## `if expression BLOCK [else (IF | BLOCK)]`
+    ## `[attribute]... if expression BLOCK [else (IF | BLOCK)]`, the
+    ## attributes `[Likely]` or `[Unlikely]`.
     If,
     ## `while expression BLOCK`
     While,
@@ -155,7 +156,8 @@ export enum NodeKind {
     Match,
     ## `{ MATCH_ARM... }`
     MatchArms,
-    ## `PATTERN, ... => BLOCK`, or `else => BLOCK`.
+    ## `[attribute]... PATTERN, ... => BLOCK`, or `[attribute]... else =>
+    ## BLOCK`, the attributes `[Likely]` or `[Unlikely]`.
     MatchArm,
     ## `name[.name]... [( name, ... )]`: a case, and the names it binds; a
     ## literal; or `( PATTERN, PATTERN, ... )`, a tuple pattern.

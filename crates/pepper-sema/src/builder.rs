@@ -714,7 +714,10 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         ast::Statement::Branch(branch) => match is_branch(branch)? {
             Some(lowered) => Ok(lowered),
             None => Ok(Statement::Branch(Branch {
-                condition: expression(&branch.condition)?,
+                condition: {
+                    check_branch_hints(&branch.if_block.attributes, "an 'if'")?;
+                    expression(&branch.condition)?
+                },
                 if_block: block(&branch.if_block)?,
                 else_block: branch.else_block.as_ref().map(block).transpose()?,
             })),
@@ -1014,6 +1017,9 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
 /// the subject's type is known. A `match` with no arms still gets one test,
 /// with no patterns, so its exhaustiveness is checked.
 fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
+    for body in m.arms.iter().map(|a| &a.body).chain(m.else_arm.iter().map(|(_, b)| b)) {
+        check_branch_hints(&body.attributes, "a 'match' arm")?;
+    }
     let arms: Vec<(&[ast::Pattern], Option<&ast::Expression>, &ast::Block)> =
         m.arms.iter().map(|a| (a.patterns.as_slice(), a.guard.as_ref(), &a.body)).collect();
     let else_arm = m.else_arm.as_ref().map(|(span, b)| (loc(*span), block(b))).map(|(l, b)| b.map(|b| (l, b))).transpose()?;
@@ -1091,12 +1097,44 @@ fn lower_match_statement(
     Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
 }
 
+/// The error for attributes above `what` (an `if` or a `match` arm) other
+/// than one `[Likely]` or `[Unlikely]`, the branch hints codegen turns into
+/// branch weights (`ast::branch_hint`).
+fn check_branch_hints(attributes: &[ast::Attribute], what: &str) -> Result<(), Diagnostic> {
+    let mut seen: Option<&ast::Attribute> = None;
+    for attribute in attributes {
+        let at = loc(attribute.span);
+        match (attribute.name(), &attribute.body) {
+            (Some("Likely" | "Unlikely"), ast::Expression::SymbolRef { .. }) => {}
+            (Some(name @ ("Likely" | "Unlikely")), _) => {
+                return Err(Diagnostic::error(format!("'{}' takes no arguments", name)).at(at));
+            }
+            (name, _) => {
+                return Err(Diagnostic::error(format!(
+                    "'{}' cannot mark {}; only '[Likely]' or '[Unlikely]' can",
+                    name.unwrap_or("attribute"),
+                    what
+                ))
+                .at(at));
+            }
+        }
+        if let Some(first) = seen {
+            return Err(Diagnostic::error(format!("only one of '[Likely]' or '[Unlikely]' can mark {}", what))
+                .at(at)
+                .with_note(format!("'{}' is here", first.name().unwrap_or_default()), Some(loc(first.span))));
+        }
+        seen = Some(attribute);
+    }
+    Ok(())
+}
+
 /// `if (x is P(a)) { ... } else { ... }`: the `match` statement `match (x) {
 /// P(a) => { ... } else => { ... } }`, so `a` is a local of the block.
 fn is_branch(branch: &ast::Branch) -> Result<Option<Statement>, Diagnostic> {
     let ast::Expression::Is { value, pattern, keyword_span, .. } = &branch.condition else {
         return Ok(None);
     };
+    check_branch_hints(&branch.if_block.attributes, "an 'if'")?;
     let else_arm = branch.else_block.as_ref().map(block).transpose()?.map(|b| (Loc::NONE, b));
     let arms = [(std::slice::from_ref(pattern.as_ref()), None, &branch.if_block)];
     lower_match_statement(value, *keyword_span, &arms, else_arm, true).map(Some)

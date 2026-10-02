@@ -144,6 +144,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `[LinkName("symbol")]` on an extern (now an error) | `[Link(name = "symbol")]` |
 | A parameter's former name, kept by `[Rename("old", "new")]` | the new name (see [named arguments](functions.md#other-names-for-a-parameter)) |
 | `Copyable<T>` implemented as `copy(copies: Copies): T`, with `copies.copy(x)` and `copies.register(original, made)` | `copy(): T`, with `copy(x)` and `register_copy(original, made)` (see [copying](memory.md)) |
+| `hint.likely(condition)`, `hint.unlikely(condition)` | `[Likely]` or `[Unlikely]` above the `if` or `match` arm (see [branch hints](control-flow.md#branch-hints-likely-and-unlikely)) |
 
 ## Errors in the editor
 

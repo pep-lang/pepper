@@ -261,6 +261,14 @@ fn pep_fmt_keeps_parameter_attributes_inline() {
 }
 
 #[test]
+fn pep_fmt_puts_branch_hints_above_their_branch() {
+    assert_formats(
+        "f(n: int): int {\n    [Unlikely] if (n < 0) { return -1; } else\n    [Likely]\n    if (n > 0) { return 1; }\n    match (n) {\n        [Likely] 0 => { return 0; }\n        [Unlikely] else => { return 2; }\n    }\n}\n",
+        "f(n: int): int {\n    [Unlikely]\n    if (n < 0) { return -1; } else [Likely] if (n > 0) { return 1; }\n    match (n) {\n        [Likely]\n        0 => { return 0; }\n        [Unlikely]\n        else => { return 2; }\n    }\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_spaces_export_from_and_keeps_its_order() {
     assert_formats(
         "import \"b\";\nimport \"a\";\nexport   *   from \"zeta\";\n[Target(OS(Linux))] export  [ x as y,z ]  from   \"alpha\";\nexport * from io;\n",

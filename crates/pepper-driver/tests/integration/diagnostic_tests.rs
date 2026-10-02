@@ -4959,3 +4959,58 @@ fn llvm_intrinsic_argument_must_be_constant() {
          \x20     |                             ^~~~~~~~~~~"
     );
 }
+
+#[test]
+fn two_branch_hints_on_one_if() {
+    assert_eq!(
+        error_of(
+            "two_branch_hints_on_one_if",
+            "main(): int {\n    var n = 1;\n    [Likely]\n    [Unlikely]\n    if (n > 0) {\n        return 1;\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:4:5: error: only one of '[Likely]' or '[Unlikely]' can mark an 'if'\n\
+         \x20   4 |     [Unlikely]\n\
+         \x20     |     ^~~~~~~~~~\n\
+         main.pep:3:5: note: 'Likely' is here\n\
+         \x20   3 |     [Likely]\n\
+         \x20     |     ^~~~~~~~"
+    );
+}
+
+#[test]
+fn other_attribute_on_an_if() {
+    assert_eq!(
+        error_of(
+            "other_attribute_on_an_if",
+            "main(): int {\n    var n = 1;\n    [Target(OS(Linux))]\n    if (n > 0) {\n        return 1;\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:3:5: error: 'Target' cannot mark an 'if'; only '[Likely]' or '[Unlikely]' can\n\
+         \x20   3 |     [Target(OS(Linux))]\n\
+         \x20     |     ^~~~~~~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn branch_hint_with_arguments_on_a_match_arm() {
+    assert_eq!(
+        error_of(
+            "branch_hint_with_arguments_on_a_match_arm",
+            "main(): int {\n    var n = 1;\n    match (n) {\n        [Likely(2)]\n        1 => { return 1; }\n        else => { return 0; }\n    }\n}\n"
+        ),
+        "main.pep:4:9: error: 'Likely' takes no arguments\n\
+         \x20   4 |         [Likely(2)]\n\
+         \x20     |         ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn branch_hint_after_else_needs_an_if() {
+    assert_eq!(
+        error_of(
+            "branch_hint_after_else_needs_an_if",
+            "main(): int {\n    var n = 1;\n    if (n > 0) {\n        return 1;\n    } else [Likely] {\n        return 0;\n    }\n}\n"
+        ),
+        "main.pep:5:21: error: expected 'if'\n\
+         \x20   5 |     } else [Likely] {\n\
+         \x20     |                     ^"
+    );
+}

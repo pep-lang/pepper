@@ -693,7 +693,10 @@ export struct Formatter {
         ulong i = 0;
         while (i < item.count) {
             var child = item.child(i);
-            if (child.is_token("=>") or child.is_token("if")) {
+            if (child.kind == syntax.NodeKind.Attribute) {
+                # `[Likely]` or `[Unlikely]`, on its own line above the arm.
+                result.add(_attribute(child)).add(hardline());
+            } else if (child.is_token("=>") or child.is_token("if")) {
                 result.add(text(" ")).add(_leaf(child)).add(text(" "));
             } else {
                 if (i > 0 and item.child(i - 1).is_token(",")) {
@@ -1235,12 +1238,34 @@ export struct Formatter {
             }
             if (child.kind == syntax.NodeKind.Variable) {
                 result.add(_variable(child, 0, false));
+            } else if (child.kind == syntax.NodeKind.If) {
+                result.add(_else_if(child));
             } else {
                 result.add(_node(child));
             }
             i += 1;
         }
         return result;
+    }
+
+    # The `if` of an `else if`, whose attributes stay on the `else` line:
+    # `} else [Unlikely] if (x) {`.
+    _else_if(item: syntax.Node): Doc {
+        var result = concat();
+        ulong i = 0;
+        while (i < item.count and item.child(i).kind == syntax.NodeKind.Attribute) {
+            result.add(_attribute(item.child(i))).add(text(" "));
+            i += 1;
+        }
+        if (i == 0) {
+            return _control(item);
+        }
+        var rest = syntax.Node(syntax.NodeKind.If);
+        while (i < item.count) {
+            rest.add(item.child(i));
+            i += 1;
+        }
+        return result.add(_control(rest));
     }
 
     _simple_statement(item: syntax.Node): Doc {

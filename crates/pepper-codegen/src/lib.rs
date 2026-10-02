@@ -3035,6 +3035,27 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     // ── Branch + ternary + while (BranchGen.cpp, LoopGen.cpp) ───────────────
 
+    /// `[Likely]` or `[Unlikely]` above an `if` (its block) or on its else
+    /// block (a `match` arm lowers to a branch whose block is the arm's): the
+    /// branch weights clang gives `__builtin_expect`, 2000 to 1.
+    fn weigh_branch(&self, instruction: inkwell::values::InstructionValue<'ctx>, branch: &Branch) -> Result<(), String> {
+        let then_likely = match pepper_parser::ast::branch_hint(&branch.if_block.attributes) {
+            Some(likely) => likely,
+            None => match branch.else_block.as_ref().and_then(|b| pepper_parser::ast::branch_hint(&b.attributes)) {
+                Some(likely) => !likely,
+                None => return Ok(()),
+            },
+        };
+        let i32_type = self.context.i32_type();
+        let (taken, not_taken) = if then_likely { (2000, 1) } else { (1, 2000) };
+        let weights = self.context.metadata_node(&[
+            self.context.metadata_string("branch_weights").into(),
+            i32_type.const_int(taken, false).into(),
+            i32_type.const_int(not_taken, false).into(),
+        ]);
+        instruction.set_metadata(weights, self.context.get_kind_id("prof")).map_err(|e| e.to_string())
+    }
+
     fn codegen_branch(&mut self, branch: &Branch) -> Result<(), String> {
         let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
         let then_block = self.context.append_basic_block(fn_value, "then");
@@ -3051,9 +3072,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.flush_deferred_temps()?;
-        self.builder
+        let branch_instruction = self
+            .builder
             .build_conditional_branch(cond_bool, then_block, else_block.unwrap_or(merge_block))
             .map_err(|e| e.to_string())?;
+        self.weigh_branch(branch_instruction, branch)?;
 
         // The then-arm is its own scope: its locals are released at the arm's
         // fall-through tail, where they dominate (function-end release would

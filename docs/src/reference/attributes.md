@@ -147,6 +147,24 @@ const condition: String
 
 The condition as written, such as `!OS(Windows)`.
 
+## Likely
+
+```pepper
+[Attribute] struct Likely
+```
+
+Marks the `if` or `match` arm below it as the branch usually taken,
+so the optimizer lays it out as the straight-line path.
+
+## Unlikely
+
+```pepper
+[Attribute] struct Unlikely
+```
+
+Marks the `if` or `match` arm below it as a branch rarely taken, such
+as error handling, so the optimizer moves it out of the fast path.
+
 ## NotCopyable
 
 ```pepper

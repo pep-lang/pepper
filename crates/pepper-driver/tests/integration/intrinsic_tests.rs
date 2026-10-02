@@ -1,6 +1,6 @@
 //! LLVM intrinsics (#344): externs bound to `llvm.*` symbols, the integer
 //! types' bit methods, the float functions and the `hint` module written
-//! with them.
+//! with them. Branch hints are in `branch_hint_tests.rs`.
 
 use crate::support::{compile_jit_with_runtime, jit_cases, run_linked_with};
 
@@ -131,29 +131,19 @@ test(): int {
 }
 
 #[test]
-fn hint_functions_return_their_condition() {
+fn prefetches_change_nothing() {
     jit_cases(
         r#"
 import hint;
 
-hints(): int {
-    var values = [3, -1, 2];
-    var negatives = 0;
-    for (var value in values) {
-        if (hint.unlikely(value < 0)) {
-            negatives += 1;
-        }
-        if (!hint.likely(value != 0)) {
-            return 1;
-        }
-    }
+prefetches(): int {
     var text = "hello";
     hint.prefetch_read(text.c_str());
     hint.prefetch_write(text.c_str());
-    return negatives == 1 ? 0 : 2;
+    return text.length == 5 ? 0 : 1;
 }
 "#,
-        &["hints"],
+        &["prefetches"],
     );
 }
 

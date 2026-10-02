@@ -508,8 +508,9 @@ rounded once) and `min(x)` and `max(x)` (which ignore a NaN argument):
 {{#include ../../examples/types-float-functions.pep}}
 ```
 
-Hints for the optimizer (`likely`, `unlikely`, `prefetch_read`) are in the
-[`hint` module](hints.md). Any other LLVM intrinsic can be declared as an
+Hints for the optimizer are [`[Likely]` and
+`[Unlikely]`](control-flow.md#branch-hints-likely-and-unlikely) on a
+branch and the prefetches of the [`hint` module](hints.md). Any other LLVM intrinsic can be declared as an
 extern; see [LLVM intrinsics](c-interop.md#llvm-intrinsics).
 
 ## Operators

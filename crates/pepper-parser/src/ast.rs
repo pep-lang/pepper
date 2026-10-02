@@ -223,6 +223,17 @@ impl Attribute {
     }
 }
 
+/// How likely the block that `attributes` mark is to run: `Some(true)` for
+/// `[Likely]`, `Some(false)` for `[Unlikely]`, `None` for neither. The
+/// builder checks that a branch carries at most one of them.
+pub fn branch_hint(attributes: &[Attribute]) -> Option<bool> {
+    attributes.iter().find_map(|a| match (a.name(), &a.body) {
+        (Some("Likely"), Expression::SymbolRef { .. }) => Some(true),
+        (Some("Unlikely"), Expression::SymbolRef { .. }) => Some(false),
+        _ => None,
+    })
+}
+
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

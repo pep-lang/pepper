@@ -1167,6 +1167,13 @@ How the language lowers:
   `partition::finish` leaves `llvm.*` symbols alone. The runtime's integer
   bit methods, float functions (`runtime/number.pep`) and the `hint` module
   are written with these.
+- **Branch hints**: `[Likely]` or `[Unlikely]` above an `if` or a `match`
+  arm is parsed into that block's attributes (`marked_branch`, and the arm
+  loop of `match_statement`); the builder checks them
+  (`check_branch_hints`), and a `match` lowers to branches whose blocks
+  are the arms' blocks, so they arrive on `Branch::if_block` or
+  `else_block`. `weigh_branch` turns them into `!prof` branch weights
+  (`ast::branch_hint`).
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `__caller_location()` is handled in
   `codegen_expr` (#354): a constant C string `file:line:col`

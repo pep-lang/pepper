@@ -2717,9 +2717,14 @@ fn branch(input: &mut &str) -> Result<Branch> {
     if input.starts_with("else") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[4..];
         ws(input)?;
+        // `else [Unlikely] if`: the attributes mark the nested branch.
+        let attrs = attributes(input)?;
+        if !attrs.is_empty() && !keyword(&mut { *input }, "if") {
+            return Err(cut_expecting(input, "'if'"));
+        }
         // `else if` is an else block holding just the nested branch.
         if input.starts_with("if") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-            let inner = nested(input, branch)?;
+            let inner = nested(input, |input| marked_branch(input, attrs))?;
             let span = inner.span;
             else_block = Some(Block { statements: vec![Statement::Branch(inner)], span, attributes: vec![] });
         } else {
@@ -2730,6 +2735,17 @@ fn branch(input: &mut &str) -> Result<Branch> {
 
     let end = else_block.as_ref().map(|b| b.span.end).unwrap_or(if_block.span.end);
     Ok(Branch { condition, if_block, else_block, span: Span { start, end } })
+}
+
+/// A branch with the attributes written above it (`[Unlikely]`), which
+/// mark its `if` block (see `docs/src/language/control-flow.md`).
+fn marked_branch(input: &mut &str, attributes: Vec<Attribute>) -> Result<Branch> {
+    let mut branch = branch(input)?;
+    if let Some(first) = attributes.first() {
+        branch.span.start = first.span.start;
+        branch.if_block.attributes = attributes;
+    }
+    Ok(branch)
 }
 
 fn while_loop(input: &mut &str) -> Result<While> {
@@ -2898,12 +2914,16 @@ fn match_statement(input: &mut &str) -> Result<Match> {
             return Err(cut(input));
         }
         let arm_start = pos(input);
+        // `[Likely]` or `[Unlikely]` above an arm marks its block.
+        let attrs = attributes(input)?;
         if keyword(&mut { *input }, "else") {
+            let else_start = pos(input);
             keyword(input, "else");
-            let else_span = Span { start: arm_start, end: pos(input) };
+            let else_span = Span { start: else_start, end: pos(input) };
             ws(input)?;
             match_arrow(input)?;
-            let body = block(input, vec![])?;
+            let mut body = block(input, vec![])?;
+            body.attributes = attrs;
             else_arm = Some((else_span, body));
             continue;
         }
@@ -2917,7 +2937,8 @@ fn match_statement(input: &mut &str) -> Result<Match> {
         }
         let guard = match_guard(input)?;
         match_arrow(input)?;
-        let body = block(input, vec![])?;
+        let mut body = block(input, vec![])?;
+        body.attributes = attrs;
         let span = Span { start: arm_start, end: body.span.end };
         arms.push(MatchArm { patterns, guard, body, span });
     }
@@ -3282,6 +3303,10 @@ fn statement(input: &mut &str) -> Result<Statement> {
     // grammar starts with `[`, so this cannot shadow a valid expression.
     if input.starts_with('[') {
         let attrs = attributes(input)?;
+        // `[Likely]` or `[Unlikely]` above an `if` marks its block.
+        if keyword(&mut { *input }, "if") {
+            return Ok(Statement::Branch(marked_branch(input, attrs)?));
+        }
         let b = block(input, attrs)?;
         return Ok(Statement::Block(b));
     }

@@ -1161,13 +1161,17 @@ struct Parser {
             if (_failed) {
                 return Node(NodeKind.Block);
             }
+            # `[Likely]` or `[Unlikely]` above an `if`.
+            if (_at_word("if")) {
+                return _if_statement(list);
+            }
             return _block(list);
         }
         if (_at("{")) {
             return _block(Array<Node>());
         }
         if (_at_word("if")) {
-            return _if_statement();
+            return _if_statement(Array<Node>());
         }
         if (_at_word("while")) {
             var node = Node(NodeKind.While);
@@ -1225,8 +1229,11 @@ struct Parser {
         return node;
     }
 
-    _if_statement(): Node {
+    _if_statement(prefix: Node[]): Node {
         var node = Node(NodeKind.If);
+        for (var item in prefix) {
+            node.add(item);
+        }
         _take(node);
         node.add(_expression());
         if (_failed) {
@@ -1238,8 +1245,13 @@ struct Parser {
         }
         if (_at_word("else")) {
             _take(node);
-            if (_at_word("if")) {
-                node.add(_if_statement());
+            # `else [Unlikely] if`.
+            var list = _attributes();
+            if (_failed) {
+                return node;
+            }
+            if (_at_word("if") or list.count > 0) {
+                node.add(_if_statement(list));
             } else {
                 node.add(_block(Array<Node>()));
             }
@@ -1358,6 +1370,13 @@ struct Parser {
             }
             var arm = Node(NodeKind.MatchArm);
             arms.add(arm);
+            # `[Likely]` or `[Unlikely]` above the arm.
+            for (var attribute in _attributes()) {
+                arm.add(attribute);
+            }
+            if (_failed) {
+                return node;
+            }
             if (_at_word("else")) {
                 _take(arm);
             } else {

@@ -118,6 +118,36 @@ match (light) {
 
 [Enums and `match`](enums.md#match) covers patterns and the `else` arm.
 
+## Branch hints: `[Likely]` and `[Unlikely]`
+
+`[Likely]` or `[Unlikely]` on the line above an `if`, an `else if`'s `if`
+or a `match` arm (the `else` arm too) says how often that branch runs. The
+optimizer keeps the likely path as straight-line code and moves the
+unlikely one, such as error handling, out of its way. A hint never changes
+what the program computes; a wrong one costs only speed.
+
+```pepper
+{{#include ../../examples/control-branch-hints.pep}}
+```
+
+- `[Likely]` above an `if` marks its block, so its `else` is the unlikely
+  side; `[Unlikely]` marks the block as the rare one. To mark an `else`,
+  mark the `if` the other way.
+- In an `else if`, the attribute goes between `else` and `if`: `} else
+  [Unlikely] if (x) {`.
+- A hint is an LLVM branch weight (2000 to 1, as clang gives
+  `__builtin_expect`), so it matters with optimization (`-O1` and up).
+- Only one of them, with no arguments, can mark a branch, and no other
+  attribute can:
+
+  ```text
+  main.pep:3:5: error: 'Target' cannot mark an 'if'; only '[Likely]' or '[Unlikely]' can
+      3 |     [Target(OS(Linux))]
+        |     ^~~~~~~~~~~~~~~~~~~
+  ```
+
+`while` loops and the arms of a `match` expression take no hint yet.
+
 ## `break` and `continue`
 
 `break` leaves the innermost loop immediately. `continue` skips the rest of the
