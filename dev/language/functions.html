@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-56fd62a3.js";
+            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -484,9 +484,10 @@ written: its braces are not a format.</li>
     5 |     print(f);
       |           ^
 </code></pre>
-<p><code>print</code> buffers its output. Writing to standard output through
-<code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
-in the order the program wrote it, even when standard output is a pipe.</p>
+<p><code>print</code> writes each line out as it prints it, like Rust’s <code>println!</code>, so the
+output appears as the program runs even when standard output is a pipe or a
+file. Text from <code>print</code> and from <code>io.File.stdout()</code> comes out in the order
+the program wrote it.</p>
 <p>A <code>float</code> or <code>double</code> prints its shortest exact text (<code>print(0.5)</code> prints
 <code>0.5</code>), and a tuple its elements in parentheses (<code>(1, two)</code>).</p>
 <h2 id="assertions-and-panics"><a class="header" href="#assertions-and-panics">Assertions and panics</a></h2>

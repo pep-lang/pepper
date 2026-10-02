@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-56fd62a3.js";
+            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -1232,6 +1232,9 @@ without quotes. Tuples of up to eight elements convert this way.</p>
 prints what <code>String.format</code> makes of them (<code>print("{0} of {1}", a, b)</code>).
 A string with no arguments after it is printed as written, braces
 included.</p>
+<p>Each line is flushed as it is printed, as Rust’s <code>println!</code> does, so the
+output appears as the program runs even when standard output is a pipe
+or a file (where C would buffer it until the program exits).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>text</code> — the text to print</li>
