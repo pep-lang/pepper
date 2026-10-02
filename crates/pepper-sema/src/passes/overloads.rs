@@ -117,7 +117,7 @@ pub fn name_overloads(module: &mut Module) {
                 (externs[0].loc, function.loc)
             };
             crate::errors::report(
-                Diagnostic::error(format!("extern '{}' cannot be overloaded", demangle_name(name)))
+                Diagnostic::error(format!("extern '{}' cannot be overloaded; rename it and overload Pepper functions named '{}' that call it", demangle_name(name), demangle_name(name)))
                     .at(later)
                     .with_note("previous declaration is here", Some(earlier)),
             );
@@ -157,7 +157,7 @@ pub fn name_overloads(module: &mut Module) {
         };
         if let Some(&other) = externs[1..].iter().find(|&&i| prototype(&module.externs[i]) != prototype(first)) {
             crate::errors::report(
-                Diagnostic::error(format!("extern '{}' cannot be overloaded", first.name))
+                Diagnostic::error(format!("extern '{}' cannot be overloaded; rename it and overload Pepper functions named '{}' that call it", first.name, first.name))
                     .at(module.externs[other].loc)
                     .with_note("previous declaration is here", Some(first.loc)),
             );

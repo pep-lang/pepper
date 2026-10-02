@@ -98,8 +98,21 @@ set too, and so are its static methods, its operators, its
   unqualified `parse(…)` is an error (`'parse' is ambiguous: more than one
   import provides it`), even when their parameters differ. A qualifier
   (`a.parse`) or an import list (`import [parse] from "b"`) picks one.
-- **`extern` functions do not overload**: a C function has one symbol. Wrap
-  it in a Pepper function to give it company.
+- **`extern` functions do not overload**, by design: an extern is a C
+  function, which has one symbol, and keeping one extern per name keeps
+  the binding to C one-to-one. To put a family of C functions such as
+  `abs` and `llabs` behind one name, give each extern a name of its own
+  (`[Link(name = ...)]` binds it to the C symbol) and overload Pepper
+  functions that call them. With optimization on (`-O2`), LLVM inlines
+  the small wrappers:
+
+  ```pepper
+  {{#include ../../examples/overloading-externs.pep}}
+  ```
+
+  Overloading the extern itself is an error that says so (`extern 'abs'
+  cannot be overloaded; rename it and overload Pepper functions named
+  'abs' that call it`).
 
 ## How a call picks a member
 
@@ -308,7 +321,6 @@ An expected type that matches no member is `address of overloaded function
 
 ## What is not supported yet
 
-- **`extern` functions** do not overload.
 - **Overloads across modules** do not merge: two modules' sets of one name
   are ambiguous where both are imported, and a file's own functions of a
   name hide an imported set of that name.

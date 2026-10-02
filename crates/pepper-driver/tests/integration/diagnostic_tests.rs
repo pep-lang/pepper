@@ -2087,7 +2087,7 @@ fn overloads_that_cannot_coexist() {
     let external = error_of("overload_extern", "extern int abs(int x);\nabs(x: double): double { return x; }\nmain(): int { return 0; }\n");
     assert_eq!(
         external,
-        "main.pep:2:1: error: extern 'abs' cannot be overloaded\n\
+        "main.pep:2:1: error: extern 'abs' cannot be overloaded; rename it and overload Pepper functions named 'abs' that call it\n\
          \x20   2 | abs(x: double): double { return x; }\n\
          \x20     | ^~~\n\
          main.pep:1:12: note: previous declaration is here\n\
@@ -4749,5 +4749,18 @@ fn number_on_the_left_without_an_extension_operator() {
         "main.pep:5:15: error: invalid operands to binary expression ('int' and 'V')\n\
          \x20   5 |     var w = 2 * V();\n\
          \x20     |               ^"
+    );
+}
+
+#[test]
+fn extern_overloaded_by_another_extern() {
+    assert_eq!(
+        error_of("overload_two_externs", "extern int abs(int x);\n[Link(name = \"llabs\")]\nextern long abs(long x);\nmain(): int { return 0; }\n"),
+        "main.pep:3:13: error: extern 'abs' cannot be overloaded; rename it and overload Pepper functions named 'abs' that call it\n\
+         \x20   3 | extern long abs(long x);\n\
+         \x20     |             ^~~\n\
+         main.pep:1:12: note: previous declaration is here\n\
+         \x20   1 | extern int abs(int x);\n\
+         \x20     |            ^~~"
     );
 }
