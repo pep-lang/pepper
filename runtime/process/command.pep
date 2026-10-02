@@ -9,6 +9,8 @@ import "child";
 import "sys_posix";
 import "sys_windows";
 
+extern int fflush(void* stream);
+
 ## Where a child's standard input, output or error goes (see
 ## `Command.stdin`, `Command.stdout` and `Command.stderr`).
 export enum Stream {
@@ -261,6 +263,53 @@ export struct Command {
         return io.IoResult<Output>.ok(output);
     }
 
+    ## Replaces the running program with this one, as a shell's `exec`
+    ## does: the program receives this process's signals, and its exit
+    ## status becomes this process's own. A launcher that only hands its
+    ## command line on to another program, such as `pepper`, ends this way.
+    ##
+    ## On POSIX the program takes over this process (`execvp`): it keeps
+    ## the process id, the standard streams and every other descriptor not
+    ## marked close-on-exec, and nothing after the call runs. Windows cannot
+    ## replace a process, so there the program is started with the standard
+    ## streams inherited and waited for, and this process then ends with its
+    ## exit status, as `process.exit` does. While it waits, this process
+    ## ignores Ctrl-C and Ctrl-Break, which the program, sharing the
+    ## console, receives and handles itself.
+    ##
+    ## Output `print` has buffered is flushed first. The standard streams
+    ## must be left inherited: no process remains to hold a pipe's other
+    ## end. When the call fails, the process carries on unchanged, in its
+    ## own working directory.
+    ##
+    ## @returns only when the program cannot be started: why, as for
+    ##   `spawn()`, or an error with `is_invalid_input()` when a standard
+    ##   stream was set to something other than `Stream.Inherit`
+    ## @example
+    ##     import process;
+    ##
+    ##     main(args: String[]): int {
+    ##         # Run git with this program's arguments, as if it were git.
+    ##         var git = process.Command("git");
+    ##         ulong index = 1;
+    ##         while (index < args.count) {
+    ##             git.argument(args[index]);
+    ##             index += 1;
+    ##         }
+    ##         var error = git.exec();
+    ##         print($"cannot run git: {error.message}");
+    ##         return 1;
+    ##     }
+    exec(): io.IoError {
+        if (!_inherits(_stdin) || !_inherits(_stdout) || !_inherits(_stderr)) {
+            return io.IoError(
+                io._io_sys_code_invalid_input(), "exec keeps this process's standard streams: leave them inherited"
+            );
+        }
+        fflush(__null);
+        return _process_sys_exec(this);
+    }
+
     # The child's environment as `NAME=VALUE` entries: the parent's, or none
     # after `clear_environment`, with the changes applied.
     _environment_entries(): Array<String> {
@@ -299,6 +348,11 @@ _stream_or(stream: Stream?): Stream {
         return stream.value();
     }
     return Stream.Inherit;
+}
+
+# Whether `stream` leaves a standard stream inherited.
+_inherits(stream: Stream?): bool {
+    return stream.is_empty() || stream.value() == Stream.Inherit;
 }
 
 # Whether the environment entry `entry` (`NAME=VALUE`) is for `name`. On

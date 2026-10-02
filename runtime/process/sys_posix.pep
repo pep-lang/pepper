@@ -34,6 +34,8 @@ extern int posix_spawnattr_destroy(void* attributes);
 [Target(!OS(Windows))]
 extern int posix_spawnattr_setflags(void* attributes, short flags);
 [Target(OS(Linux))]
+extern int execvpe(char* file, void* argv, void* envp);
+[Target(OS(Linux))]
 extern int pipe2(int* descriptors, int flags);
 [Target(OS(Mac))]
 extern int pipe(int* descriptors);
@@ -297,6 +299,70 @@ export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stder
     child._stderr = _process_pipe_file(ends[4], "<child stderr>");
     _pep_free(ends);
     return io.IoResult<Child>.ok(child);
+}
+
+# Runs `program` in place of this process with `argv` and `envp`: execvpe
+# on Linux. Returns the errno value it failed with.
+[Target(OS(Linux))]
+_process_exec_program(program: String, argv: __ptr<__ptr<char>>, envp: __ptr<__ptr<char>>): int {
+    execvpe(program.c_str(), argv, envp);
+    return io.IoError.last().code;
+}
+
+# macOS has no execvpe; posix_spawnp with POSIX_SPAWN_SETEXEC searches the
+# PATH the same way and replaces this process instead of starting another.
+[Target(OS(Mac))]
+_process_exec_program(program: String, argv: __ptr<__ptr<char>>, envp: __ptr<__ptr<char>>): int {
+    __ptr<void> attributes = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
+    posix_spawnattr_init(attributes);
+    posix_spawnattr_setflags(attributes, 64);  # POSIX_SPAWN_SETEXEC
+    __ptr<int> pid = _pep_malloc(4);
+    var code = posix_spawnp(pid, program.c_str(), __null, attributes, argv, envp);
+    _pep_free(pid);
+    posix_spawnattr_destroy(attributes);
+    _pep_free(attributes);
+    return code;
+}
+
+[Target(!OS(Windows))]
+export _process_sys_exec(command: Command): io.IoError {
+    # The program starts in the working directory this process has when it
+    # execs, so enter the Command's and come back if the exec fails.
+    var previous = Optional<io.Path>.Empty;
+    if (command._working_directory.is_value()) {
+        var current = io.Directory.current();
+        if (current.is_err()) {
+            return current.error();
+        }
+        var entered = io.Directory.set_current(command._working_directory.value());
+        if (entered.is_err()) {
+            return entered.error();
+        }
+        previous = Optional<io.Path>.Value(current.value());
+    }
+    var argument_values = Array<String>();
+    argument_values.append(command.program);
+    for (var argument in command._arguments) {
+        argument_values.append(argument);
+    }
+    var argv = _process_c_strings(argument_values);
+    var environment_values = Array<String>();
+    __ptr<__ptr<char>> envp = os._os_environ();
+    var built_environment = command._changes_environment();
+    if (built_environment) {
+        environment_values = command._environment_entries();
+        envp = _process_c_strings(environment_values);
+    }
+    var code = _process_exec_program(command.program, argv, envp);
+    _pep_free(argv);
+    if (built_environment) {
+        _pep_free(envp);
+    }
+    if (previous.is_value()) {
+        io.Directory.set_current(previous.value());
+    }
+    var message = _process_sys_error_message(code);
+    return io.IoError(code, $"cannot start '{command.program}': {message}");
 }
 
 # A File owning the pipe end `descriptor`, or a closed File for -1.

@@ -9,7 +9,8 @@
 # `pepper <command> arguments...` runs the program `pep-<command>`
 # (`pep-<command>.exe` on Windows), looked for next to `pepper` first and
 # then on the PATH, with the remaining arguments and pepper's own standard
-# streams, and exits with its exit status. Installing a `pep-<name>` program
+# streams, in place of pepper (on Windows, pepper waits for it and exits
+# with its exit status). Installing a `pep-<name>` program
 # adds the command `<name>`.
 #
 # A first argument that is a `.pep` file or an option is the old way of
@@ -68,8 +69,8 @@ main(args: String[]): int {
     return run_command(first, rest);
 }
 
-# Runs `pep-<command>` with `arguments` and returns its exit status, or
-# reports why it cannot.
+# Runs `pep-<command>` with `arguments` in place of pepper, or reports why
+# it cannot.
 run_command(command: String, arguments: Array<String>): int {
     var tool = is_command_name(command) ? find_tool(command) : Optional<Path>.Empty;
     if (tool.is_empty()) {
@@ -82,24 +83,11 @@ run_command(command: String, arguments: Array<String>): int {
         File.stderr().write_all(message + "\n\n" + command_list(commands));
         return 1;
     }
-    var started = process.Command(tool.value().to_string()).arguments(arguments).spawn();
-    if (started.is_err()) {
-        File.stderr().write_all($"pepper: error: cannot run '{tool.value()}': {started.error().message}\n");
-        return 1;
-    }
-    var child = started.value();
-    var ended = child.wait();
-    if (ended.is_err()) {
-        File.stderr().write_all($"pepper: error: cannot wait for '{tool.value()}': {ended.error().message}\n");
-        return 1;
-    }
-    var status = ended.value();
-    var code = status.code();
-    if (code.is_value()) {
-        return code.value();
-    }
-    # Killed by a signal: report it the way a POSIX shell does.
-    return 128 + status.signal().value();
+    # The tool takes over this process, so signals reach it directly and
+    # its exit status is pepper's; exec returns only when it cannot start.
+    var error = process.Command(tool.value().to_string()).arguments(arguments).exec();
+    File.stderr().write_all($"pepper: error: {error.message}\n");
+    return 1;
 }
 
 # Whether `name` can name a command: lowercase letters, digits, `-` and

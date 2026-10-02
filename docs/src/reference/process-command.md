@@ -348,3 +348,49 @@ wait park the task rather than blocking its worker.
     assert(output.status.success(), "echo succeeds");
     assert(output.stdout == "hello\n", "and prints its argument");
 ```
+
+#### exec
+
+```pepper
+exec(): io.IoError
+```
+
+Replaces the running program with this one, as a shell's `exec`
+does: the program receives this process's signals, and its exit
+status becomes this process's own. A launcher that only hands its
+command line on to another program, such as `pepper`, ends this way.
+
+On POSIX the program takes over this process (`execvp`): it keeps
+the process id, the standard streams and every other descriptor not
+marked close-on-exec, and nothing after the call runs. Windows cannot
+replace a process, so there the program is started with the standard
+streams inherited and waited for, and this process then ends with its
+exit status, as `process.exit` does. While it waits, this process
+ignores Ctrl-C and Ctrl-Break, which the program, sharing the
+console, receives and handles itself.
+
+Output `print` has buffered is flushed first. The standard streams
+must be left inherited: no process remains to hold a pipe's other
+end. When the call fails, the process carries on unchanged, in its
+own working directory.
+
+**Returns**
+- only when the program cannot be started: why, as for `spawn()`, or an error with `is_invalid_input()` when a standard stream was set to something other than `Stream.Inherit`
+
+**Example**
+```pepper
+    import process;
+
+    main(args: String[]): int {
+        # Run git with this program's arguments, as if it were git.
+        var git = process.Command("git");
+        ulong index = 1;
+        while (index < args.count) {
+            git.argument(args[index]);
+            index += 1;
+        }
+        var error = git.exec();
+        print($"cannot run git: {error.message}");
+        return 1;
+    }
+```

@@ -56,6 +56,8 @@ extern uint GetModuleFileNameW(void* module, ushort* buffer, uint size);
 [Target(OS(Windows))]
 extern uint GetLastError();
 [Target(OS(Windows))]
+extern int SetConsoleCtrlHandler(extern (uint) => int handler, int add);
+[Target(OS(Windows))]
 extern void memcpy(void* destination, void* source, ulong size);
 
 # A child process: its `HANDLE`.
@@ -354,6 +356,37 @@ _process_pipe_file(handle: __ptr<void>, name: String): io.File {
         file.path = io.Path(name);
     }
     return file;
+}
+
+# A console control handler that reports every event (Ctrl-C, Ctrl-Break)
+# handled, so it does not end this process.
+[Target(OS(Windows))]
+_process_ignore_control(event: uint): int {
+    return 1;
+}
+
+# Windows cannot replace a process: start the program, wait for it, and end
+# with its exit status. `_process_ignore_control` keeps Ctrl-C from ending
+# this process before the program does. SetConsoleCtrlHandler(NULL, TRUE)
+# would also ignore it, but the program would inherit that and ignore it
+# too.
+[Target(OS(Windows))]
+export _process_sys_exec(command: Command): io.IoError {
+    var handler: extern (uint) => int = _process_ignore_control;
+    SetConsoleCtrlHandler(handler, 1);
+    var spawned = command.spawn();
+    if (spawned.is_err()) {
+        SetConsoleCtrlHandler(handler, 0);
+        return spawned.error();
+    }
+    var ended = spawned.value().wait();
+    if (ended.is_err()) {
+        SetConsoleCtrlHandler(handler, 0);
+        return ended.error();
+    }
+    var code = ended.value().code();
+    _pep_exit(code.is_value() ? code.value() : 1);
+    return io.IoError();
 }
 
 [Target(OS(Windows))]

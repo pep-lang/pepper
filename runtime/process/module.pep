@@ -8,7 +8,7 @@
 ##
 ## - [Command](process-command.md): `Command` describes a program to start;
 ##   `run()` waits for it and collects its output, `spawn()` starts it and
-##   returns a `Child`
+##   returns a `Child`, and `exec()` runs it in place of the running program
 ## - [Child](process-child.md): a running child process, its piped streams,
 ##   and its `ExitStatus`
 ## - [The running process](process-current.md): `id()` and

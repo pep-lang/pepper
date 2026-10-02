@@ -51,9 +51,11 @@ program named `pep-<name>` on the `PATH` adds the command `<name>`: a tool of
 your own becomes `pepper <name>` once it is installed. On Linux and macOS
 only files with an execute permission count.
 
-The command runs with `pepper`'s own standard input, output and error, and
-`pepper` exits with its exit status (`128 + n` when signal `n` ended it, as a
-shell reports it). A command name is lowercase letters, digits, `-` and `_`;
+The command takes `pepper`'s place, with its standard input, output and
+error: on Linux and macOS `pepper` execs it, so signals such as Ctrl-C reach
+the command directly and its exit status is `pepper`'s. Windows cannot
+replace a process, so there `pepper` waits for the command, leaves Ctrl-C
+to it, and exits with its exit status. A command name is lowercase letters, digits, `-` and `_`;
 anything else, such as a path, is not a command.
 
 An unknown command is an error that suggests the closest command and lists

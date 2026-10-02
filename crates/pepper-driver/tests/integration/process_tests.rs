@@ -237,3 +237,59 @@ fn command_starts_children_and_collects_their_output() {
     assert_eq!(output.status.code(), Some(0));
 }
 
+#[test]
+#[cfg(unix)]
+fn exec_replaces_the_program_and_keeps_its_id() {
+    // stdout is a pipe, so the printed id sits in print's buffer: exec
+    // flushes it.
+    // The shell prints its own id, which must be the one printed before.
+    let output = run_with(
+        "exec_replaces",
+        r#"import io;
+import process;
+main(): int {
+    print($"{process.id()}");
+    var temporary = io.Path("/tmp");
+    var error = process.Command("sh")
+        .arguments(["-c", "echo $$; echo $PEP_EXEC; pwd; exit 9"])
+        .environment("PEP_EXEC", "set")
+        .working_directory(temporary)
+        .exec();
+    print($"exec returned: {error.message}");
+    return 1;
+}
+"#,
+        &[],
+    );
+    let stdout = stdout_of(&output);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 4, "{stdout}");
+    assert_eq!(lines[0], lines[1], "the shell runs as the same process");
+    assert_eq!(&lines[2..], ["set", "/tmp"]);
+    assert_eq!(output.status.code(), Some(9));
+}
+
+#[test]
+fn exec_returns_why_the_program_cannot_start() {
+    let output = run_with(
+        "exec_fails",
+        r#"import io;
+import process;
+main(): int {
+    var before = process.working_directory().value();
+    var missing = process.Command("pep-no-such-program").working_directory(io.Path("..")).exec();
+    print(missing.is_not_found() ? "not found" : $"other: {missing.message}");
+    print(process.working_directory().value() == before ? "same directory" : "moved");
+    var piped = process.Command("pep-no-such-program").stdout(process.Stream.Pipe).exec();
+    print(piped.is_invalid_input() ? "invalid input" : $"other: {piped.message}");
+    return 0;
+}
+"#,
+        &[],
+    );
+    assert_eq!(
+        stdout_of(&output),
+        "not found\nsame directory\ninvalid input\n"
+    );
+    assert_eq!(output.status.code(), Some(0));
+}
