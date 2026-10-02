@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-402a8d7a.js";
+            window.path_to_searchindex_js = "../searchindex-cac7866f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-c45e05eb.js"></script>
@@ -234,7 +234,8 @@ such as a point or a record looked up by its fields.</p>
 fields, so they cannot drift apart. It compares and hashes like a tuple of
 its fields: a field of a struct type uses that struct’s <code>==</code> and <code>hash</code>, a
 <code>String</code> its content, and a null field equals only null. Mark a field
-<code>[NotCompared]</code> to leave it out of both:</p>
+<code>[Equatable(exclude = true)]</code>, or <code>[Equatable(include = false)]</code>, to leave it
+out of both; a field with neither takes part:</p>
 <pre><code class="language-pepper"># `[Equatable]` derives `==` and the hash from the fields, so they always
 # agree.
 [Equatable]
@@ -242,7 +243,7 @@ struct Person {
     String name;
     int id;
     # Not part of the identity: two records for the same person may differ.
-    [NotCompared]
+    [Equatable(exclude = true)]
     String nickname;
 
     construct(this.name = "", this.id = 0, this.nickname = "") {}
@@ -278,6 +279,9 @@ be <code>[Equatable]</code> too: two values are equal when they hold the same ca
 and its values are equal.</li>
 <li>A generic struct derives both for each specialization, from the fields
 its type arguments give it.</li>
+<li><code>include</code> and <code>exclude</code> are <code>bool</code>s, and saying both in a way that
+contradicts (<code>include = true, exclude = true</code>) is an error. On the struct
+itself, <code>[Equatable]</code> takes no arguments.</li>
 <li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
 either is an error. To compare some other way, drop the attribute and
 declare both by hand (below).</li>

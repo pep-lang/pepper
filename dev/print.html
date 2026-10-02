@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-402a8d7a.js";
+            window.path_to_searchindex_js = "searchindex-cac7866f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-c45e05eb.js"></script>
@@ -6109,7 +6109,8 @@ such as a point or a record looked up by its fields.</p>
 fields, so they cannot drift apart. It compares and hashes like a tuple of
 its fields: a field of a struct type uses that struct’s <code>==</code> and <code>hash</code>, a
 <code>String</code> its content, and a null field equals only null. Mark a field
-<code>[NotCompared]</code> to leave it out of both:</p>
+<code>[Equatable(exclude = true)]</code>, or <code>[Equatable(include = false)]</code>, to leave it
+out of both; a field with neither takes part:</p>
 <pre><code class="language-pepper"># `[Equatable]` derives `==` and the hash from the fields, so they always
 # agree.
 [Equatable]
@@ -6117,7 +6118,7 @@ struct Person {
     String name;
     int id;
     # Not part of the identity: two records for the same person may differ.
-    [NotCompared]
+    [Equatable(exclude = true)]
     String nickname;
 
     construct(this.name = "", this.id = 0, this.nickname = "") {}
@@ -6153,6 +6154,9 @@ be <code>[Equatable]</code> too: two values are equal when they hold the same ca
 and its values are equal.</li>
 <li>A generic struct derives both for each specialization, from the fields
 its type arguments give it.</li>
+<li><code>include</code> and <code>exclude</code> are <code>bool</code>s, and saying both in a way that
+contradicts (<code>include = true, exclude = true</code>) is an error. On the struct
+itself, <code>[Equatable]</code> takes no arguments.</li>
 <li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
 either is an error. To compare some other way, drop the attribute and
 declare both by hand (below).</li>
@@ -30450,13 +30454,22 @@ reference count.</p>
 </code></pre>
 <p>Makes a struct, or an enum whose cases carry values, compare and hash
 by its fields, like a tuple of them, instead of by identity: the
-compiler derives its <code>==</code> and its <code>hash</code>, so equal values find each
-other as <code>HashMap</code> and <code>HashSet</code> keys.</p>
-<h2 id="notcompared"><a class="header" href="#notcompared">NotCompared</a></h2>
-<pre><code class="language-pepper">[Attribute] struct NotCompared
+compiler derives its <code>==</code> and its hash, so equal values find each other
+as <code>HashMap</code> and <code>HashSet</code> keys.</p>
+<p>On a field of such a struct, it says whether the field takes part:
+<code>[Equatable(exclude = true)]</code> or <code>[Equatable(include = false)]</code> leaves it
+out of both <code>==</code> and the hash. A field with neither takes part. On the
+struct itself it takes no arguments.</p>
+<h3 id="fields-6-1"><a class="header" href="#fields-6-1">Fields</a></h3>
+<h4 id="include"><a class="header" href="#include">include</a></h4>
+<pre><code class="language-pepper">bool include = true
 </code></pre>
-<p>Leaves a field of an <code>[Equatable]</code> struct out of its derived <code>==</code> and
-<code>hash</code>.</p>
+<p>Whether the field takes part in <code>==</code> and the hash; <code>false</code> leaves it
+out.</p>
+<h4 id="exclude"><a class="header" href="#exclude">exclude</a></h4>
+<pre><code class="language-pepper">bool exclude = false
+</code></pre>
+<p>Whether the field is left out of <code>==</code> and the hash.</p>
 <h2 id="shared"><a class="header" href="#shared">Shared</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Shared
 </code></pre>
