@@ -1060,6 +1060,9 @@ others use an exponent (`"1e+16"`, `"1.5e-05"`). The special values are
 `"nan"`, `"inf"` and `"-inf"`. For a fixed number of fraction digits,
 interpolate with a precision instead: `$"{value:.2}"`.
 
+The digits come from the Ryu algorithm, which takes a fixed, small
+number of steps per value.
+
 **Parameters**
 - `value` — the number to convert
 

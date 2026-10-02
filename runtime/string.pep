@@ -4,7 +4,6 @@ extern void memcpy(void* dest, void* src, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
 extern int puts(char* text);
 extern int fflush(void* stream);
-extern double strtod(char* text, char** end);
 
 # `snprintf` for one floating-point argument. The UCRT defines `snprintf`
 # inline in its headers, so on Windows the call goes to the function those
@@ -1062,104 +1061,6 @@ _print_double(buffer: __ptr<char>, size: ulong, format: String, value: double) {
     snprintf(buffer, size, format.c_str(), value);
 }
 
-# The shortest decimal text that reads back as `value` (as a `float` when
-# `single`), laid out as Swift prints a number: `3.0`, `0.1`, `-2.5`, and
-# an exponent outside 1e-4 to 1e16 (`1e+16`, `1.5e-05`); `nan`, `inf` and
-# `-inf` for the special values.
-_float_text(value: double, single: bool): String {
-    if (value != value) {
-        return "nan";
-    }
-    if (value > 1.7976931348623157e308) {
-        return "inf";
-    }
-    if (value < -1.7976931348623157e308) {
-        return "-inf";
-    }
-    var most = 17;
-    if (single) {
-        most = 9;
-    }
-    # "-d.ddddddddddddddddde+ddd" and a terminator fit in 32 bytes.
-    var buffer = _pep_malloc(32) as __ptr<char>;
-    var precision = 1;
-    while (true) {
-        _print_double(buffer, 32, $"%.{precision - 1}e", value);
-        if (precision == most) {
-            break;
-        }
-        var back = strtod(buffer, __null);
-        if (single) {
-            if ((back as float) == (value as float)) {
-                break;
-            }
-        } else if (back == value) {
-            break;
-        }
-        precision = precision + 1;
-    }
-    # Split "-d.ddde+xx" into its sign, digits and exponent.
-    var negative = buffer[0] == '-';
-    ulong i = 0;
-    if (negative) {
-        i = 1;
-    }
-    var digits = StringBuilder();
-    while (buffer[i] != 'e') {
-        if (buffer[i] != '.') {
-            digits.append(String(buffer + i, 1, 1));
-        }
-        i = i + 1;
-    }
-    i = i + 1;
-    var exponent_negative = buffer[i] == '-';
-    i = i + 1;
-    long exponent = 0;
-    while (buffer[i] != 0) {
-        exponent = exponent * 10 + (buffer[i] - '0');
-        i = i + 1;
-    }
-    _pep_free(buffer);
-    if (exponent_negative) {
-        exponent = 0 - exponent;
-    }
-    var text = digits.to_string();
-    var count = text.size;
-    while (count > 1 && text.byte_at(count - 1) == '0') {
-        count = count - 1;
-    }
-    text = text.substr_bytes(0, count);
-    var sign = "";
-    if (negative) {
-        sign = "-";
-    }
-    if (exponent < -4 || exponent >= 16) {
-        var mantissa = text.substr_bytes(0, 1);
-        if (count > 1) {
-            mantissa = mantissa + "." + text.substr_bytes(1, count - 1);
-        }
-        var exponent_sign = "+";
-        var magnitude = exponent;
-        if (exponent < 0) {
-            exponent_sign = "-";
-            magnitude = 0 - exponent;
-        }
-        var exponent_text = to_string(magnitude);
-        if (magnitude < 10) {
-            exponent_text = "0" + exponent_text;
-        }
-        return sign + mantissa + "e" + exponent_sign + exponent_text;
-    }
-    if (exponent < 0) {
-        return sign + "0." + "0".repeat((0 - exponent - 1) as ulong) + text;
-    }
-    var whole = (exponent + 1) as ulong;
-    if (count <= whole) {
-        return sign + text + "0".repeat(whole - count) + ".0";
-    }
-    return sign + text.substr_bytes(0, whole) + "." + text.substr_bytes(whole, count - whole);
-}
-
 ## Returns the shortest decimal text that reads back as exactly `value`,
 ## as Swift prints a `Double`.
 ##
@@ -1168,6 +1069,9 @@ _float_text(value: double, single: bool): String {
 ## others use an exponent (`"1e+16"`, `"1.5e-05"`). The special values are
 ## `"nan"`, `"inf"` and `"-inf"`. For a fixed number of fraction digits,
 ## interpolate with a precision instead: `$"{value:.2}"`.
+##
+## The digits come from the Ryu algorithm, which takes a fixed, small
+## number of steps per value.
 ##
 ## @param value the number to convert
 ## @returns a new String such as `"0.1"` or `"-2.5"`

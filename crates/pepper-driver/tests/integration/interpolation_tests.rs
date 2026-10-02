@@ -392,6 +392,114 @@ test(): int {
 }
 
 #[test]
+fn floats_read_back_exactly() {
+    // Random bit patterns and the edge cases of the shortest-digits search
+    // (#411): every text parses back to the same bits, and at a power of 2,
+    // where the interval below the value is half as wide, the digits are
+    // still the shortest (the old search printed 17 digits there).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+double_reads_back(bits: ulong): bool {
+    var value = unsafe_cast<double>(bits);
+    if (value != value || value - value != 0) {
+        return true;
+    }
+    var text = to_string(value);
+    var back = double.parse(text);
+    if (back.is_value() && unsafe_cast<ulong>(back.value()) == bits) {
+        return true;
+    }
+    print($"double {bits:x} printed as {text} did not read back");
+    return false;
+}
+
+float_reads_back(bits: uint): bool {
+    float value = unsafe_cast<float>(bits);
+    if (value != value || value - value != 0) {
+        return true;
+    }
+    var text = to_string(value);
+    var back = float.parse(text);
+    if (back.is_value() && unsafe_cast<uint>(back.value()) == bits) {
+        return true;
+    }
+    print($"float {bits:x} printed as {text} did not read back");
+    return false;
+}
+
+test(): int {
+    ulong state = 88172645463325252;
+    var failures = 0;
+    var i = 0;
+    while (i < 100000) {
+        state = state ^ (state << 13);
+        state = state ^ (state >> 7);
+        state = state ^ (state << 17);
+        # Count the failures, so the printed ones show a pattern.
+        if (!double_reads_back(state)) { failures = failures | 1; }
+        if (!double_reads_back(state & 0xfff0000000000000)) { failures = failures | 2; }
+        if (!float_reads_back((state >> 32) as uint)) { failures = failures | 4; }
+        i = i + 1;
+    }
+    if (failures != 0) { return 0 - failures; }
+    # Every power of 2 and its neighbors, subnormals included.
+    ulong exponent = 0;
+    while (exponent < 2047) {
+        var base = exponent << 52;
+        if (!double_reads_back(base) || !double_reads_back(base + 1)) { return -4; }
+        if (!double_reads_back(base | 0xfffffffffffff)) { return -5; }
+        exponent = exponent + 1;
+    }
+    uint narrow_exponent = 0;
+    while (narrow_exponent < 255) {
+        var base = narrow_exponent << 23;
+        if (!float_reads_back(base) || !float_reads_back(base + 1)) { return -6; }
+        if (!float_reads_back(base | 0x7fffff)) { return -7; }
+        narrow_exponent = narrow_exponent + 1;
+    }
+    # Powers of 10 print as themselves.
+    var power = 1.0;
+    var digits = 0;
+    while (digits < 16) {
+        if (!(to_string(power) == "1" + "0".repeat(digits as ulong) + ".0")) { return -8; }
+        power = power * 10.0;
+        digits = digits + 1;
+    }
+    if (!(to_string(1.0e-4) == "0.0001")) { return -9; }
+    if (!(to_string(1.0e22) == "1e+22")) { return -10; }
+    if (!(to_string(1.0e23) == "1e+23")) { return -11; }
+    if (!(to_string(1.0e-300) == "1e-300")) { return -12; }
+    # The shortest digits at a power of 2.
+    if (!(to_string(unsafe_cast<double>(0x4ab0000000000000)) == "5.986310706507379e+51")) { return -13; }
+    if (!(to_string(unsafe_cast<double>(0x61f0000000000000)) == "5.758609657015292e+163")) { return -14; }
+    if (!(to_string(unsafe_cast<float>(0x6b000000 as uint)) == "1.5474251e+26")) { return -15; }
+    # The extremes: the largest double and float, the smallest normal and
+    # subnormal values, and the largest subnormal.
+    if (!(to_string(1.7976931348623157e308) == "1.7976931348623157e+308")) { return -16; }
+    if (!(to_string(-1.7976931348623157e308) == "-1.7976931348623157e+308")) { return -17; }
+    if (!(to_string(2.2250738585072014e-308) == "2.2250738585072014e-308")) { return -18; }
+    if (!(to_string(unsafe_cast<double>(0x000fffffffffffff)) == "2.225073858507201e-308")) { return -19; }
+    if (!(to_string(unsafe_cast<double>(1 as ulong)) == "5e-324")) { return -20; }
+    float largest = 3.4028235e38;
+    if (!(to_string(largest) == "3.4028235e+38")) { return -21; }
+    if (!(to_string(unsafe_cast<float>(1 as uint)) == "1e-45")) { return -22; }
+    if (!(to_string(unsafe_cast<double>(0x8000000000000000)) == "-0.0")) { return -23; }
+    float negative_zero = unsafe_cast<float>(0x80000000 as uint);
+    if (!(to_string(negative_zero) == "-0.0")) { return -24; }
+    var zero = 0.0;
+    if (!(to_string(0.0 - zero / zero) == "nan")) { return -25; }
+    float narrow_infinity = (1.0 / zero) as float;
+    if (!(to_string(narrow_infinity) == "inf")) { return -26; }
+    if (!(to_string(-narrow_infinity) == "-inf")) { return -27; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
 fn a_precision_rounds_a_float() {
     assert_eq!(
         compile_jit_with_runtime(

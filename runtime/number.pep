@@ -242,6 +242,19 @@ _parse_unsigned(text: String, base: int, highest: ulong): (bool, ulong) {
     return _parse_digits(text, index, base, highest);
 }
 
+# C's `strtod` for text `_is_decimal` accepted. The Windows C runtime's
+# result can be one unit in the last place off, so `_float_correct`
+# (float_parse.pep) rounds it to the nearest double there.
+[Target(OS(Windows))]
+_number_strtod(text: String): double {
+    return _float_correct(text, strtod(text.c_str(), __null));
+}
+
+[Target(!OS(Windows))]
+_number_strtod(text: String): double {
+    return strtod(text.c_str(), __null);
+}
+
 # Whether `text` is decimal notation: an optional sign, digits with at most
 # one `.` among or around them (at least one digit), then optionally `e` or
 # `E`, an optional sign and digits. strtod would also skip leading spaces and
@@ -2539,7 +2552,7 @@ export extend double {
         if (!_is_decimal(text)) {
             return Optional<double>.Empty;
         }
-        var value = strtod(text.c_str(), __null);
+        var value = _number_strtod(text);
         # An infinity minus itself is NaN, not zero: the value overflowed.
         if (value - value != 0) {
             return Optional<double>.Empty;
