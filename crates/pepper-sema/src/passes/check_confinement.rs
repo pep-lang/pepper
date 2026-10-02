@@ -1038,7 +1038,7 @@ impl<'p, 'a> Walk<'p, 'a> {
                 self.eval(value);
                 None
             }
-            Expression::ToTrait { value, .. } => self.eval(value),
+            Expression::ToTrait { value, .. } | Expression::FromTrait { value, .. } => self.eval(value),
             Expression::StaticValue(_) | Expression::StaticMember(_) => None,
         }
     }

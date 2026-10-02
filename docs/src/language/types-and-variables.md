@@ -304,7 +304,9 @@ var wide = whole as long;
 - `bool` and enums convert like integers: `true as int` is 1, and an enum
   converts to the integer it is stored as. An integer does not convert to an
   enum; name a case instead.
-- A struct converts to a trait it conforms to: `dog as Named`.
+- A struct converts to a trait it conforms to: `dog as Named`. The other
+  way, from a trait value, may fail: `shape as? Square` gives a `Square?`
+  (see [Converting a trait value back](traits-and-extensions.md#converting-a-trait-value-back)).
 - A pointer converts to `__ptr<void>` and back: `p as __ptr<void>`, then
   `v as __ptr<int>`.
 - A value converts to its own type.

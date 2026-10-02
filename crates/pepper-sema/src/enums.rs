@@ -35,6 +35,93 @@ thread_local! {
     /// Reference enum name (without type arguments) → its declaration, for
     /// this run. Filled by [`resolve_enum_cases`].
     static REFERENCE_ENUMS: RefCell<HashMap<String, ReferenceEnum>> = RefCell::new(HashMap::new());
+    /// What a `match` on a trait value needs to know, for this run. Filled
+    /// by [`install_traits`].
+    static TRAITS: RefCell<TraitFacts> = RefCell::new(TraitFacts::default());
+}
+
+/// The program's traits and which struct declares which, for a `match` on a
+/// trait value (`shape is Circle`, `match (shape) { Circle(c) => ... }`).
+#[derive(Default)]
+struct TraitFacts {
+    /// Every trait's name.
+    names: std::collections::HashSet<String>,
+    /// Each concrete struct: its type, its canonical spelling, and the
+    /// canonical spellings of the traits it declares.
+    structs: Vec<(TypeName, String, Vec<String>)>,
+}
+
+/// Make `module`'s traits and structs the ones a `match` on a trait value
+/// sees, replacing any earlier run's.
+pub fn install_traits(module: &Module) {
+    let canonical = |t: &TypeName| crate::passes::check_function_types::canonical(t).to_string();
+    let facts = TraitFacts {
+        names: module.traits.iter().map(|t| t.name.clone()).collect(),
+        structs: module
+            .structs
+            .iter()
+            .filter(|st| !(st.ty.is_generic() && st.name == st.ty.name) && !st.ty.is_tuple())
+            .map(|st| (TypeName::new(&st.name), canonical(&TypeName::new(&st.name)), st.traits.iter().map(canonical).collect()))
+            .collect(),
+    };
+    TRAITS.with(|t| *t.borrow_mut() = facts);
+}
+
+/// Whether `ty` is a trait used as a type.
+fn is_trait(ty: &TypeName) -> bool {
+    ty.is_scalar() && !ty.is_pointer() && TRAITS.with(|t| t.borrow().names.contains(&ty.name))
+}
+
+/// What a type pattern over a value of trait `from` tests for: `target`
+/// itself, a struct that declares `from`, or another trait, and the structs
+/// a value may hold to match it (`target`, or each struct that declares
+/// both traits). The error when `target` is neither, or is a struct that a
+/// `from` value can never hold.
+fn trait_target(from: &TypeName, target: &TypeName, at: Loc) -> Result<(TypeName, Vec<TypeName>), Diagnostic> {
+    let canonical = |t: &TypeName| crate::passes::check_function_types::canonical(t).to_string();
+    let (from_c, target_c) = (canonical(from), canonical(target));
+    TRAITS.with(|t| {
+        let facts = t.borrow();
+        if is_trait(target) {
+            let candidates = facts
+                .structs
+                .iter()
+                .filter(|(_, _, traits)| traits.contains(&from_c) && traits.contains(&target_c))
+                .map(|(ty, _, _)| ty.clone())
+                .collect();
+            return Ok((target.clone(), candidates));
+        }
+        let Some((ty, _, traits)) = facts.structs.iter().find(|(_, c, _)| *c == target_c) else {
+            return Err(Diagnostic::error(format!(
+                "no struct or trait named '{}': a value of trait type '{}' is matched by type",
+                shown(target),
+                shown(from)
+            ))
+            .at(at));
+        };
+        if !traits.contains(&from_c) {
+            return Err(Diagnostic::error(format!(
+                "'{}' does not implement '{}', so a '{}' value never holds one",
+                shown(target),
+                shown(from),
+                shown(from)
+            ))
+            .at(at));
+        }
+        Ok((ty.clone(), vec![ty.clone()]))
+    })
+}
+
+/// A binding's value in an arm over a trait value: the subject as the
+/// pattern's type.
+fn trait_case_value(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option<Expression> {
+    let (subject, from) = typed_path(&value.subject, subjects)?;
+    if !is_trait(&from) {
+        return None;
+    }
+    let target = value.choices.first()?.ty.clone()?;
+    let (to, candidates) = trait_target(&from, &target, value.loc).ok()?;
+    Some(Expression::FromTrait { value: Box::new(subject), from, to, candidates, test: false, loc: value.loc })
 }
 
 /// What [`reference_cases`] knows of a reference enum.
@@ -201,6 +288,50 @@ pub fn case_value_type(
 ) -> Result<Option<TypeName>, Diagnostic> {
     if subject.is_auto() || subject.is_empty() {
         return Ok(None);
+    }
+    if value.name == crate::builder::CAST_VALUE && !is_trait(subject) {
+        return Err(Diagnostic::error(format!(
+            "'as?' converts a value of trait type, not one of '{}': use 'as' to convert it",
+            shown(subject)
+        ))
+        .at(value.choices[0].case_loc));
+    }
+    if is_trait(subject) {
+        // A type pattern binds the value itself, as that type.
+        let mut found: Option<(&TypeName, &CaseChoice)> = None;
+        for choice in &value.choices {
+            let Some(ty) = &choice.ty else {
+                return Err(Diagnostic::error(format!(
+                    "a value of trait type '{}' is matched by type: name a struct or trait, as in 'Circle(c)'",
+                    shown(subject)
+                ))
+                .at(choice.case_loc));
+            };
+            if choice.bindings.len() != 1 {
+                return Err(Diagnostic::error(format!(
+                    "type pattern '{}' binds one name, the value as a '{}', not {}",
+                    shown(ty),
+                    shown(ty),
+                    choice.bindings.len()
+                ))
+                .at(choice.case_loc));
+            }
+            match &found {
+                Some((first, first_choice)) if *first != ty => {
+                    return Err(Diagnostic::error(format!(
+                        "'{}' has type '{}' here but '{}' in '{}'",
+                        value.name,
+                        shown(ty),
+                        shown(first),
+                        shown(first_choice.ty.as_ref().unwrap_or(first))
+                    ))
+                    .at(choice.loc));
+                }
+                Some(_) => {}
+                None => found = Some((ty, choice)),
+            }
+        }
+        return Ok(found.map(|(ty, _)| ty.clone()));
     }
     let Some((cases, declared)) = reference_cases(subject) else {
         let first = &value.choices[0];
@@ -446,6 +577,7 @@ fn for_each_body_in(module: &mut Module, mut f: impl FnMut(&mut Block, bool, Opt
 pub fn resolve_enum_cases(module: &mut Module) {
     install(&module.enums);
     install_reference_enums(&module.structs);
+    install_traits(module);
     // Extensions of numbers, `bool` and enums become functions `X::m`.
     crate::value_types::lower_extensions(module);
     if module.enums.is_empty() && !module.structs.iter().any(|st| st.enum_cases.is_some()) {
@@ -912,6 +1044,7 @@ fn case_field(subject: &Expression, case: &EnumCaseDef, index: usize, at: Loc) -
 pub fn lower_matches(module: &mut Module) {
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
     let table = crate::static_type::StructTable::build(module);
+    install_traits(module);
     let mut warnings: Vec<Diagnostic> = vec![];
     for_each_body_in(module, |block, generic, current, parameters| {
         if generic {
@@ -983,6 +1116,10 @@ fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>
     let Some(Expression::CaseValue(value)) = var.default.clone() else {
         return vec![];
     };
+    if let Some(converted) = trait_case_value(&value, subjects) {
+        var.default = Some(converted);
+        return vec![];
+    }
     let Some((subject, picks)) = case_picks(&value, subjects) else {
         return vec![];
     };
@@ -1081,6 +1218,9 @@ pub fn arm_test(condition: &Expression) -> Option<&MatchArmTest> {
 /// A binding inside a `match` expression's arm value or an arm's guard: the
 /// payload field, or `?:` on the tag when alternatives bind it.
 fn lower_case_value(value: &CaseValue, subjects: &HashMap<String, TypeName>) -> Option<Expression> {
+    if let Some(converted) = trait_case_value(value, subjects) {
+        return Some(converted);
+    }
     let (subject, picks) = case_picks(value, subjects)?;
     let at = value.loc;
     let (last, rest) = picks.split_last()?;
@@ -1185,6 +1325,17 @@ fn lower_expressions(
             {
                 with.null_message = Some(format!("match on a null '{}'", shown(ty)));
             }
+            if let Some(ty) = &ty
+                && is_trait(ty)
+                && let Some(keyword) = missing_else(&with.body)
+            {
+                report(
+                    Diagnostic::error(format!("'match' on trait type '{}' needs an 'else' arm", shown(ty)))
+                        .at(keyword)
+                        .with_note(format!("any struct may implement '{}', so no list of arms handles every value", shown(ty)), None),
+                );
+                return;
+            }
             lower_expressions(&mut with.subject, enums, subjects, coverage);
             lower_expressions(&mut with.body, enums, subjects, coverage);
             drop_no_match(&mut with.body);
@@ -1195,6 +1346,18 @@ fn lower_expressions(
     for child in crate::passes::children_mut(expr) {
         lower_expressions(child, enums, subjects, coverage);
     }
+}
+
+/// The `match` keyword of a `match` expression chain that ends without an
+/// `else` arm.
+fn missing_else(chain: &Expression) -> Option<Loc> {
+    let mut keyword = None;
+    let mut at = chain;
+    while let Expression::Ternary { condition, false_expr, .. } = at {
+        keyword = keyword.or_else(|| arm_test(condition).map(|t| t.site.keyword));
+        at = false_expr;
+    }
+    if matches!(at, Expression::NoMatch) { keyword } else { None }
 }
 
 /// A `match` expression without `else`, once its tests are lowered: the
@@ -1276,6 +1439,9 @@ fn arm_condition(
     let subject = typed(&test.subject, &ty);
     let entry = coverage.entry(test.site.id).or_default();
     entry.site = Some(test.site.clone());
+    if is_trait(&ty) {
+        return trait_arm(test, &subject, &ty, entry);
+    }
     if ty.is_tuple() {
         return lower_tuple_arm(test, &subject, &ty, subject_loc, enums, entry, cases);
     }
@@ -1397,6 +1563,53 @@ fn arm_condition(
         });
     }
     resolve_element_names(test, &names, cases)?;
+    Some(condition.unwrap_or(Expression::BoolLiteral(false)))
+}
+
+/// The test of an arm over a trait value: whether the value is one of the
+/// types its patterns name. A `match` on a trait value is never exhaustive,
+/// so its coverage records only what each pattern handles.
+fn trait_arm(test: &MatchArmTest, subject: &Expression, ty: &TypeName, entry: &mut Coverage) -> Option<Expression> {
+    let mut condition: Option<Expression> = None;
+    for p in &test.patterns {
+        let target = match &p.ty {
+            Some(target) if p.literal.is_none() && p.elements.is_none() => target,
+            _ => {
+                report(
+                    Diagnostic::error(format!(
+                        "a value of trait type '{}' is matched by type: name a struct or trait, as in 'Circle(c)'",
+                        shown(ty)
+                    ))
+                    .at(p.loc),
+                );
+                return None;
+            }
+        };
+        let (to, candidates) = match trait_target(ty, target, p.loc) {
+            Ok(found) => found,
+            Err(d) => {
+                report(d);
+                return None;
+            }
+        };
+        let key = to.to_string();
+        if let Some(first) = entry.handled.get(&key) {
+            report(
+                Diagnostic::error(format!("type '{}' is already handled", shown(&to)))
+                    .at(p.loc)
+                    .with_note("first handled here", Some(*first)),
+            );
+            return None;
+        }
+        if !test.guarded {
+            entry.handled.insert(key, p.loc);
+        }
+        let is = Expression::FromTrait { value: Box::new(subject.clone()), from: ty.clone(), to, candidates, test: true, loc: p.loc };
+        condition = Some(match condition {
+            None => is,
+            Some(c) => Expression::Binary { op: BinaryOp::LogicalOr, lhs: Box::new(c), rhs: Box::new(is), loc: p.loc },
+        });
+    }
     Some(condition.unwrap_or(Expression::BoolLiteral(false)))
 }
 

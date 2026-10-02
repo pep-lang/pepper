@@ -78,6 +78,14 @@ const VTABLE_RELEASE: u64 = 0;
 const VTABLE_ACQUIRE: u64 = 1;
 const VTABLE_METHODS: u64 = 2;
 
+/// The type identity a vtable ends with, after the trait's methods: a hash
+/// of the struct's name, the same in every unit (a vtable is private to
+/// its unit, so its address is no identity). `FromTrait` compares it.
+fn type_id(struct_name: &str) -> u64 {
+    // FNV-1a, 64-bit.
+    struct_name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3))
+}
+
 /// Result of generation.
 pub struct Generated {
     pub module: Module<'static>,
@@ -1824,6 +1832,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .traits
             .get(to)
             .ok_or_else(|| format!("unknown trait type '{}'", to))?;
+        // The type id follows the members (see `type_id`).
         let mut members: Vec<(String, Option<String>)> = vec![
             ("__release".to_string(), None),
             ("__acquire".to_string(), None),
@@ -1852,7 +1861,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // convert to this same trait (`_pep_copy_trait` returns the struct),
         // and must find this vtable rather than make a second one.
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
-        let global = self.module.add_global(ptr_type.array_type(members.len() as u32), None, &global_name);
+        let global = self.module.add_global(ptr_type.array_type(members.len() as u32 + 1), None, &global_name);
         global.set_linkage(inkwell::module::Linkage::Private);
         global.set_constant(true);
         let mut entries: Vec<PointerValue<'ctx>> = vec![];
@@ -1885,6 +1894,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             entries.push(function.as_global_value().as_pointer_value());
         }
+        entries.push(self.context.i64_type().const_int(type_id(from), false).const_to_pointer(ptr_type));
         let init = ptr_type.const_array(&entries);
         global.set_initializer(&init);
         Ok(global.as_pointer_value())
@@ -2109,6 +2119,83 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_insert_value(pair, vtable, 1, "trait_value")
             .map_err(|e| e.to_string())?;
         Ok(pair.into_array_value().into())
+    }
+
+    /// `FromTrait`: whether trait value `value` (of trait `from`) holds one
+    /// of `candidates`, or, with `test` false, the value as a `to`: its
+    /// object for a struct (a value struct's value, read from its box), or
+    /// for a trait the object with the vtable of its struct's conformance
+    /// to `to`. The conversion runs only where the test succeeded.
+    fn codegen_from_trait(
+        &mut self,
+        value: &Expression,
+        from: &TypeName,
+        to: &TypeName,
+        candidates: &[TypeName],
+        test: bool,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let from_name = from.to_string();
+        let to_name = to.to_string();
+        let methods = self.traits.get(&from_name).ok_or_else(|| format!("unknown trait type '{}'", from_name))?.methods.len();
+        let pair = self.codegen_expr(value)?.into_array_value();
+        let object = self.object_pointer(pair.into())?;
+        let i64_type = self.context.i64_type();
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        if test {
+            let function = self.builder.get_insert_block().and_then(|b| b.get_parent()).ok_or("no function")?;
+            let entry = self.builder.get_insert_block().ok_or("no block")?;
+            let check = self.context.append_basic_block(function, "type_check");
+            let done = self.context.append_basic_block(function, "type_checked");
+            let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
+            self.builder.build_conditional_branch(is_null, done, check).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(check);
+            let id = self.vtable_entry(pair, VTABLE_METHODS + methods as u64)?;
+            let id = self.builder.build_ptr_to_int(id, i64_type, "type_id").map_err(|e| e.to_string())?;
+            let mut matched = self.context.bool_type().const_zero();
+            for candidate in candidates {
+                let expected = i64_type.const_int(type_id(&candidate.to_string()), false);
+                let same = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, id, expected, "same_type")
+                    .map_err(|e| e.to_string())?;
+                matched = self.builder.build_or(matched, same, "matched").map_err(|e| e.to_string())?;
+            }
+            let check_end = self.builder.get_insert_block().ok_or("no block")?;
+            self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(done);
+            let phi = self.builder.build_phi(self.context.bool_type(), "is_type").map_err(|e| e.to_string())?;
+            phi.add_incoming(&[(&self.context.bool_type().const_zero(), entry), (&matched, check_end)]);
+            return Ok(phi.as_basic_value());
+        }
+        if self.is_trait_name(&to_name) {
+            let fat = match self.types.get(&to_name) {
+                Some(BasicTypeEnum::ArrayType(at)) => at,
+                _ => return Err(format!("unknown trait type '{}'", to_name)),
+            };
+            let id = self.vtable_entry(pair, VTABLE_METHODS + methods as u64)?;
+            let id = self.builder.build_ptr_to_int(id, i64_type, "type_id").map_err(|e| e.to_string())?;
+            let mut vtable: PointerValue<'ctx> = ptr_type.const_null();
+            for candidate in candidates.iter().rev() {
+                let candidate = candidate.to_string();
+                let expected = i64_type.const_int(type_id(&candidate), false);
+                let same = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, id, expected, "same_type")
+                    .map_err(|e| e.to_string())?;
+                let table = self.vtable(&candidate, &to_name)?;
+                vtable = self.builder.build_select(same, table, vtable, "vtable").map_err(|e| e.to_string())?.into_pointer_value();
+            }
+            let converted = self.builder.build_insert_value(fat.get_undef(), object, 0, "trait_object").map_err(|e| e.to_string())?;
+            let converted = self.builder.build_insert_value(converted, vtable, 1, "trait_value").map_err(|e| e.to_string())?;
+            return Ok(converted.into_array_value().into());
+        }
+        if self.values.contains_key(&to_name) {
+            let box_type = self.box_type(&to_name)?;
+            let slot = self.builder.build_struct_gep(box_type, object, 2, "boxed").map_err(|e| e.to_string())?;
+            let field = box_type.get_field_type_at_index(2).ok_or("boxed value")?;
+            return self.builder.build_load(field, slot, "unboxed").map_err(|e| e.to_string());
+        }
+        Ok(object.into())
     }
 
     // ── Struct codegen (ctor + methods) ─────────────────────────────────────
@@ -3089,6 +3176,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .cloned()
             }
             Expression::ToTrait { to, .. } => Some(to.to_string()),
+            Expression::FromTrait { test: true, .. } => Some("bool".to_string()),
+            Expression::FromTrait { to, .. } => Some(to.to_string()),
             Expression::Unary { op, operand, .. } => match *op {
                 // `!x` produces an i1; the arithmetic unaries keep the
                 // operand's type (codegen_unary).
@@ -3211,6 +3300,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             // Boxing a value struct makes a new object.
             Expression::ToTrait { from, .. } if self.values.contains_key(&from.to_string()) => false,
             Expression::ToTrait { value, .. } => self.is_lvalue_read(value),
+            // The object of the `match`'s subject, a place: a read.
+            Expression::FromTrait { test: false, to, .. } => self.is_struct_ref_name(&Some(to.to_string())),
             // A ternary that owns nothing yields a read of one arm (or null),
             // as `c ? a : b` on two lvalues is an lvalue in C++: the consumer
             // copies it. A `match` expression is its body.
@@ -4539,6 +4630,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::ToTrait {
                 value, from, to, ..
             } => self.codegen_to_trait(value, from, to),
+            Expression::FromTrait { value, from, to, candidates, test, .. } => {
+                self.codegen_from_trait(value, from, to, candidates, *test)
+            }
             // lower_with_blocks replaces every one before codegen.
             Expression::WithEntered(_) => {
                 Err("internal error: unlowered 'with' condition".to_string())

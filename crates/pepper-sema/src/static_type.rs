@@ -162,6 +162,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::StaticCase { ty, .. } => Some(ty.clone()),
         Expression::Subject { ty, .. } if !ty.is_auto() => Some(ty.clone()),
         Expression::WithSubject(with) => of(&with.body, table, current),
+        // An `is` test, or one arm's test of a `match`.
+        Expression::MatchArm(_) => Some(TypeName::bool_()),
         // A value a `match` pattern binds: its payload field's type.
         Expression::CaseValue(value) => {
             let subject = of(&value.subject, table, current)?;
@@ -327,6 +329,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::FunctionRef { ty, .. } => Some(ty.clone()),
         Expression::MakeClosure { ty, .. } if !ty.contains_auto() => Some(ty.clone()),
         Expression::ToTrait { to, .. } => Some(to.clone()),
+        Expression::FromTrait { test: true, .. } => Some(TypeName::bool_()),
+        Expression::FromTrait { to, .. } => Some(to.clone()),
         Expression::Invoke { callee, .. } => of(callee, table, current)?.function_return().cloned(),
         _ => None,
     }

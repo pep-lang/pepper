@@ -787,3 +787,179 @@ test(): int {
 "#;
     assert_eq!(run(source), (0, 0));
 }
+
+/// `Named`, which only `Square` also implements, for cross-casts.
+const SQUARE_NAMED: &str = r#"
+trait Named {
+    String name();
+}
+
+extend Square with Named {
+    String name() { return "square"; }
+}
+"#;
+
+#[test]
+fn is_tests_the_struct_behind_a_trait_value() {
+    // A test holds no reference after it: the owned results of `make` are
+    // released, and a null value is no struct at all.
+    let (result, leaked) = run(&shapes(
+        r#"
+test(): int {
+    Shape s = Square(2);
+    if (!(s is Square)) { return 1; }
+    if (s is Rect) { return 2; }
+    if (!(make(5) is Rect)) { return 3; }
+    var b = make(1) is Rect;
+    if (b) { return 4; }
+    Shape none = __null;
+    if (none is Square) { return 5; }
+    if (destroyed.load() != 11) { return 6; }
+    return 0;
+}
+"#,
+    ));
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn match_and_is_bind_the_struct_behind_a_trait_value() {
+    // A binding is a copy of the reference, like any local: the object
+    // lives while either holds it.
+    let (result, leaked) = run(&shapes(
+        r#"
+side(s: Shape): int {
+    return match (s) {
+        Square(q) => q.side,
+        Rect(r) => r.w * 100 + r.h,
+        else => -1,
+    };
+}
+
+test(): int {
+    if (side(Square(3)) != 3) { return 1; }
+    if (side(make(4)) != 402) { return 2; }
+    var before = destroyed.load();
+    Shape s = Rect(7, 1);
+    if (s is Rect(r)) {
+        s = __null;
+        if (destroyed.load() != before) { return 3; }
+        if (r.w != 7) { return 4; }
+    } else {
+        return 5;
+    }
+    if (destroyed.load() != before + 10) { return 6; }
+    var found = 0;
+    match (make(2)) {
+        Rect(r) => { found = 1; }
+        Square(q) => { found = q.side; }
+    }
+    if (found != 2) { return 7; }
+    return 0;
+}
+"#,
+    ));
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn as_optional_converts_to_a_struct_or_another_trait() {
+    // `as?` gives `T?`: Empty when the value is something else. Converting
+    // to another trait finds the struct's other vtable.
+    let (result, leaked) = run(&format!(
+        "{}{}{}",
+        SHAPES,
+        SQUARE_NAMED,
+        r#"
+test(): int {
+    Shape s = Square(4);
+    var q = s as? Square;
+    if (q.value().side != 4) { return 1; }
+    if ((s as? Rect).is_value()) { return 2; }
+    var n = s as? Named;
+    if (n.value().name() != "square") { return 3; }
+    if ((make(5) as? Named).is_value()) { return 4; }
+    if (!(make(1) is Named)) { return 5; }
+    var named = match (make(2)) {
+        Named(x) => x.name(),
+        else => "",
+    };
+    if (named != "square") { return 6; }
+    return 0;
+}
+"#
+    ));
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn downcasts_reach_value_structs_and_generic_structs() {
+    // A value struct's trait value holds a box: the binding is a copy of
+    // the value in it.
+    let (result, leaked) = run(
+        r#"
+trait Shape { int area(); }
+
+[Value]
+struct Point {
+    int x;
+    construct(int x) { this.x = x; }
+    int area() { return x; }
+}
+extend Point with Shape;
+
+struct Cell<T> {
+    T value;
+    construct(T value) { this.value = value; }
+    int area() { return 7; }
+}
+extend Cell<int> with Shape;
+extend Cell<String> with Shape;
+
+make(n: int): Shape {
+    if (n == 0) { return Point(5); }
+    if (n == 1) { return Cell<int>(3); }
+    return Cell<String>("text");
+}
+
+test(): int {
+    if (make(0) is Point(p)) {
+        if (p.x != 5) { return 1; }
+    } else {
+        return 2;
+    }
+    if (make(1) is Cell<String>) { return 3; }
+    var cell = make(2) as? Cell<String>;
+    if (cell.value().value != "text") { return 4; }
+    var x = match (make(1)) {
+        Point(p) => p.x,
+        Cell<int>(c) => c.value,
+        else => -1,
+    };
+    if (x != 3) { return 5; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn type_patterns_report_what_a_trait_value_cannot_be() {
+    let error = compile_error(&shapes("struct Other {}\ntest(): int { return make(1) is Other ? 1 : 0; }\n"));
+    assert!(error.contains("error: 'Other' does not implement 'Shape', so a 'Shape' value never holds one"), "{}", error);
+    let error = compile_error(&shapes("test(): int { return make(1) is Circle ? 1 : 0; }\n"));
+    assert!(error.contains("error: no struct or trait named 'Circle': a value of trait type 'Shape' is matched by type"), "{}", error);
+    let error = compile_error(&shapes("test(): int { return match (make(1)) { Square(q) => 1, Rect(r) => 2 }; }\n"));
+    assert!(error.contains("error: 'match' on trait type 'Shape' needs an 'else' arm"), "{}", error);
+    let error = compile_error(&shapes("test(): int { match (make(1)) { Square(a) => {} Square(b) => {} } return 0; }\n"));
+    assert!(error.contains("error: type 'Square' is already handled"), "{}", error);
+    let error = compile_error(&shapes("test(): int { if (make(1) is Rect(a, b)) {} return 0; }\n"));
+    assert!(error.contains("error: type pattern 'Rect' binds one name, the value as a 'Rect', not 2"), "{}", error);
+    let error = compile_error(&shapes("test(): int { var q = Square(1) as? Square; return 0; }\n"));
+    assert!(error.contains("error: 'as?' converts a value of trait type, not one of 'Square': use 'as' to convert it"), "{}", error);
+}

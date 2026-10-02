@@ -1366,3 +1366,12 @@ test(): int {
 "#;
     assert_eq!(run(src), 1);
 }
+
+#[test]
+fn an_is_test_chooses_an_overload_as_a_bool() {
+    // `assert` is overloaded on its message; the `is` test is its `bool`.
+    assert_eq!(
+        run("enum E { A, B(x: int) }\ntest(): int {\n    var e = E.A;\n    assert(e is A, \"an A\");\n    return 0;\n}\n"),
+        0
+    );
+}

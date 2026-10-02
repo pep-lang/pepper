@@ -232,9 +232,44 @@ calling a method on it runs that struct's own method:
   same trait type (see [Copying trait values](memory.md#copying-trait-values)).
   It panics when that struct cannot be copied.
 
+#### Converting a trait value back
+
+A trait value remembers the struct it holds, so it converts back to that
+struct, or to another trait the struct declares. A **type pattern** names the
+type, like an enum case, and binds the value as that type:
+
+```pepper
+{{#include ../../examples/traits-downcast.pep}}
+```
+
+- **`value is Square`** tests whether the value holds a `Square`. As the
+  whole condition of an `if` or `while`, `value is Square(square)` also binds
+  it, as for [enums](enums.md#match-expressions-is-and-literal-patterns).
+- **`match (value) { Square(square) => ..., Rect(rect) => ..., else => ...
+  }`** picks the arm of the value's struct. Any struct may declare a trait,
+  so a `match` expression on a trait value needs an `else` arm.
+- **`value as? Square`** converts the value, giving `Square?`: Empty when the
+  value holds something else, or is null. `as` without the `?` is an error
+  for a trait value, since the conversion can fail.
+- **Another trait** works the same way: `value as? Named` and `value is
+  Named` succeed when the struct behind the value declares `Named` too.
+- A generic struct is named with its type arguments: `Cell<int>(cell)`.
+- A value struct's trait value holds a copy of it (see
+  [boxing](value-structs.md#value-structs-as-trait-values)), and converting
+  back copies it out again.
+- The bound value is another reference to the same object, like any copy
+  (see [Memory](memory.md)); a test holds no reference after it.
+- Naming a struct that does not declare the trait is an error, since the
+  value can never hold one:
+
+  ```text
+  main.pep:9:18: error: 'Point' does not implement 'Shape', so a 'Shape' value never holds one
+      9 |     if (shape is Point) {
+        |                  ^~~~~
+  ```
+
 What traits do not do yet:
 
-- **A trait value cannot convert back** to its struct, or to another trait.
 - **`Atomic<Shape>` is not supported.** A trait value is two pointers wide
   and cannot be swapped atomically.
 - **`Weak<Shape>` is not supported.** Take the weak reference to the struct

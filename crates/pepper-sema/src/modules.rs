@@ -1585,6 +1585,17 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
         p.constant = Some(renamed.unwrap_or(linked));
     }
 
+    fn visit_case_type(&mut self, p: &mut Pattern) {
+        let Some(ty) = &mut p.ty else { return };
+        // `Color.Red` names an enum's case, not a type in a module.
+        if let Some((q, _)) = ty.name.split_once('.')
+            && !self.bindings.qualified.contains_key(q)
+        {
+            return;
+        }
+        self.visit_type_name(ty);
+    }
+
     fn visit_symbol(&mut self, id: &mut String, span: Span) {
         if let Some(c) = self.unqualified(id, span, true) {
             *id = c;

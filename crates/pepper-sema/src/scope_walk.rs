@@ -587,6 +587,10 @@ macro_rules! scope_walker {
             /// names a module-scope constant ([`Pattern::constant`]).
             fn visit_pattern_name(&mut self, _p: &$($m)? Pattern) {}
 
+            /// A case pattern's name read as a type ([`Pattern::ty`]), for
+            /// a match on a trait value: linking resolves it like a type.
+            fn visit_case_type(&mut self, _p: &$($m)? Pattern) {}
+
             fn visit_pattern(&mut self, p: &$($m)? Pattern) {
                 self.visit_pattern_values(p);
                 self.visit_pattern_types(p);
@@ -630,6 +634,9 @@ macro_rules! scope_walker {
                 }
                 if let Some(q) = &$($m)? p.qualifier {
                     self.visit_type_name(q);
+                }
+                if p.ty.is_some() {
+                    self.visit_case_type(p);
                 }
                 for e in (&$($m)? p.elements).into_iter().flatten() {
                     self.visit_pattern_types(e);

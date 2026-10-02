@@ -695,6 +695,10 @@ struct Parser {
             var node = Node(NodeKind.Cast);
             node.add(operand);
             _take(node);
+            # `as?`: a trait value's conversion that may fail.
+            if (_at("?") and _adjacent(0)) {
+                _take(node);
+            }
             node.add(_type_name());
             return node;
         }
@@ -1493,6 +1497,13 @@ struct Parser {
         if (_at("..") or _at("..>")) {
             _pattern_range(node);
             return node;
+        }
+        # A type pattern's type arguments, over a trait value: `Box<int>(b)`.
+        if (_at("<") and _adjacent(0)) {
+            node.add(_type_arguments());
+            if (_failed) {
+                return node;
+            }
         }
         if (!_at("(")) {
             return node;

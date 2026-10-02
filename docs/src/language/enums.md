@@ -242,6 +242,9 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   iteration. Anywhere else, `is` cannot bind names. `is` is a keyword only
   between a value and a pattern, so it stays usable as a name
   (`token.is(text)`).
+- **A trait value** is matched by type rather than by case: `Circle(c)`
+  tests for the struct `Circle` and binds the value as one. See
+  [Converting a trait value back](traits-and-extensions.md#converting-a-trait-value-back).
 - **Literal patterns**: a `match` on an integer, a character, a `bool` or a
   `String` compares with literals (`1`, `-1`, `'a'`, `true`, `"import"`),
   using `==`. Literals cannot list every value, so such a `match` needs an

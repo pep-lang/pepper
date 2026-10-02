@@ -364,6 +364,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             operand: Box::new(expression(operand)?),
             loc: loc(*span),
         }),
+        ast::Expression::Cast { expr, ty, keyword_span, optional: true, span } => optional_cast(expr, ty, *keyword_span, *span),
         ast::Expression::Cast { expr, ty, keyword_span, .. } => Ok(Expression::Cast {
             expr: Box::new(expression(expr)?),
             ty: type_name_from(ty),
@@ -1159,6 +1160,67 @@ fn match_expression(m: &ast::MatchExpression) -> Result<Expression, Diagnostic> 
     Ok(Expression::WithSubject(Box::new(WithSubject { id: n, subject: expression(&m.value)?, body: chain, null_message: None, loc: at })))
 }
 
+/// The name `e as? T` binds the converted value to (see [`optional_cast`]).
+pub(crate) const CAST_VALUE: &str = "__cast_value";
+
+/// `e as? T`, a trait value's conversion that may fail: the `match`
+/// expression `match (e) { T(value) => Optional<T>.Value(value), else =>
+/// Optional<T>.Empty }`, so `enums::lower_matches` checks `T` and tests
+/// the value's type as for any type pattern.
+fn optional_cast(value: &ast::Expression, ty: &ast::TypeName, keyword: ast::Span, span: ast::Span) -> Result<Expression, Diagnostic> {
+    const BOUND: &str = CAST_VALUE;
+    let optional = ast::TypeName { name: "Optional".to_string(), generic_types: vec![ty.clone()], span: ty.span, labels: vec![] };
+    let call = |method: &str, arguments: Vec<ast::Expression>| ast::Expression::FunctionCall {
+        function: Box::new(ast::Expression::MemberAccess {
+            lhs: Box::new(ast::Expression::TypeLiteral(optional.clone())),
+            name: method.to_string(),
+            name_span: keyword,
+            span,
+        }),
+        arguments,
+        span,
+    };
+    let pattern = ast::Pattern {
+        literal: None,
+        elements: None,
+        qualifier: None,
+        case: ty.to_string(),
+        case_span: ty.span,
+        bindings: Some(vec![ast::Pattern {
+            literal: None,
+            elements: None,
+            qualifier: None,
+            case: BOUND.to_string(),
+            case_span: ty.span,
+            bindings: None,
+            range: None,
+            constant: None,
+            ty: None,
+            span: ty.span,
+        }]),
+        range: None,
+        constant: None,
+        ty: Some(ty.clone()),
+        span: ty.span,
+    };
+    let arm = ast::MatchValueArm {
+        patterns: vec![pattern],
+        guard: None,
+        value: call("Value", vec![ast::Expression::SymbolRef { id: BOUND.to_string(), span: ty.span }]),
+        span,
+    };
+    match_expression(&ast::MatchExpression {
+        value: value.clone(),
+        arms: vec![arm],
+        else_arm: Some((
+            keyword,
+            ast::Expression::MemberAccess { lhs: Box::new(ast::Expression::TypeLiteral(optional.clone())), name: "Empty".to_string(), name_span: keyword, span },
+        )),
+        keyword_span: keyword,
+        span,
+    })
+}
+
 /// `e is P` anywhere but the whole condition of an `if` or `while`: a
 /// single test over `e`, which may bind nothing.
 fn is_expression(value: &ast::Expression, pattern: &ast::Pattern, keyword: ast::Span) -> Result<Expression, Diagnostic> {
@@ -1234,6 +1296,7 @@ fn case_pattern(p: &ast::Pattern, subject: &Expression) -> Result<CasePattern, D
             range: false,
             constant: false,
             values: None,
+            ty: None,
         });
     }
     let at = loc(p.case_span);
@@ -1274,6 +1337,7 @@ fn case_pattern(p: &ast::Pattern, subject: &Expression) -> Result<CasePattern, D
         range: p.range.is_some(),
         constant: p.constant.is_some(),
         values,
+        ty: if p.literal.is_some() || p.constant.is_some() { None } else { p.ty.as_ref().map(type_name_from) },
     })
 }
 
@@ -1293,6 +1357,7 @@ fn case_path(subject: &Expression, p: &ast::Pattern, index: usize) -> Expression
         choices: vec![CaseChoice {
             case: p.case.clone(),
             case_loc: loc(p.case_span),
+            ty: p.ty.as_ref().map(type_name_from),
             index,
             bindings: subs.iter().map(|s| loc(s.span)).collect(),
             loc: at,
@@ -1510,6 +1575,7 @@ fn match_bindings(
             choices.push(CaseChoice {
                 case: pattern.case.clone(),
                 case_loc: loc(pattern.case_span),
+                ty: pattern.ty.as_ref().map(type_name_from),
                 index: *index,
                 bindings: all.iter().map(|s| loc(s.span)).collect(),
                 loc: loc(*at),

@@ -248,6 +248,10 @@ pub enum Expression {
         span: Span,
         /// The `as` keyword, where a cast error points.
         keyword_span: Span,
+        /// `expr as? Type`: a conversion of a trait value that may fail,
+        /// giving `Type?`.
+        #[serde(default)]
+        optional: bool,
     },
     Binary {
         lhs: Box<Expression>,
@@ -936,6 +940,13 @@ pub struct Pattern {
     /// linked name. The pattern then compares with it, like a literal.
     #[serde(default)]
     pub constant: Option<String>,
+    /// A case pattern's name read as a type (`Circle`, `shapes.Circle`,
+    /// `Box<int>`), with any type arguments written after it: what the
+    /// pattern tests for when the value matched is a trait value. Set by
+    /// the parser for every case pattern and resolved by module linking
+    /// like any type; ignored when the value is an enum.
+    #[serde(default)]
+    pub ty: Option<TypeName>,
     pub span: Span,
 }
 
@@ -1190,7 +1201,7 @@ impl Display for Expression {
                 }
             }
             Expression::Binary { lhs, op, rhs, .. } => write!(f, "({} {} {})", lhs, op, rhs),
-            Expression::Cast { expr, ty, .. } => write!(f, "({} as {})", expr, ty),
+            Expression::Cast { expr, ty, optional, .. } => write!(f, "({} as{} {})", expr, if *optional { "?" } else { "" }, ty),
             Expression::Ternary { condition, true_expr, false_expr, .. } => {
                 write!(f, "({} ? {} : {})", condition, true_expr, false_expr)
             }
@@ -1633,6 +1644,9 @@ impl Display for Pattern {
             write!(f, "{}.", q)?;
         }
         write!(f, "{}", self.case)?;
+        if let Some(ty) = self.ty.as_ref().filter(|t| !t.generic_types.is_empty()) {
+            write!(f, "<{}>", ty.generic_types.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "))?;
+        }
         if let Some(bindings) = &self.bindings {
             let shown: Vec<String> = bindings.iter().map(|b| b.to_string()).collect();
             write!(f, "({})", shown.join(", "))?;

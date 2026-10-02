@@ -1440,6 +1440,7 @@ fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Spa
         bindings: None,
         range: None,
         constant: None,
+        ty: None,
         span,
     };
     let mut elements: Vec<Pattern> =
@@ -1462,6 +1463,7 @@ fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Spa
             bindings: None,
             range: None,
             constant: None,
+            ty: None,
             span: tuple_span,
         }],
         value: join_parts(parts, span),
@@ -2182,7 +2184,8 @@ fn unary(input: &mut &str) -> Result<Expression> {
     cast(input)
 }
 
-/// `expr as Type` — static cast (docs/src/language/types-and-variables.md). Sits between the unary
+/// `expr as Type` — static cast (docs/src/language/types-and-variables.md), or
+/// `expr as? Type`, a trait value's conversion that may fail. Sits between the unary
 /// and `**` levels, so `as` binds tighter than unary: `-x as int` parses as
 /// `-(x as int)` and `2 ** 3 as float` as `(2 ** 3) as float`. C-style
 /// `(int)x` is NOT a cast.
@@ -2192,11 +2195,13 @@ fn cast(input: &mut &str) -> Result<Expression> {
     ws(input)?;
     if input.starts_with("as") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = expr.span().start;
-        let keyword_span = Span { start: pos(input), end: pos(input) + 2 };
-        *input = &input[2..];
+        let optional = input[2..].starts_with('?');
+        let length = if optional { 3 } else { 2 };
+        let keyword_span = Span { start: pos(input), end: pos(input) + length };
+        *input = &input[length..];
         ws(input)?;
         let ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-        return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) }, keyword_span });
+        return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) }, keyword_span, optional });
     }
     *input = before;
     Ok(expr)
@@ -3036,6 +3041,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
             bindings: None,
             range: None,
             constant: None,
+            ty: None,
             span,
         });
     }
@@ -3057,6 +3063,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
             bindings: None,
             range,
             constant: None,
+            ty: None,
             span,
         });
     }
@@ -3086,8 +3093,27 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
             bindings: None,
             range,
             constant: None,
+            ty: None,
             span,
         });
+    }
+    // The name read as a type, for a match on a trait value: with its type
+    // arguments when `<` follows (`Box<int>(b)`), else as written.
+    let names_end = pos(input);
+    let mut ty = TypeName {
+        name: segments.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join("."),
+        generic_types: vec![],
+        span: Span { start, end: names_end },
+        labels: vec![],
+    };
+    if input.starts_with('<') {
+        let mut probe = whole;
+        if let Ok(parsed) = type_name(&mut probe)
+            && !parsed.generic_types.is_empty()
+        {
+            ty = parsed;
+            *input = probe;
+        }
     }
     let (case, case_span) = segments.pop().expect("one segment");
     let qualifier = segments.first().map(|(_, first)| TypeName {
@@ -3126,6 +3152,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         bindings,
         range: None,
         constant: None,
+        ty: Some(ty),
         span: Span { start, end: pos(input) },
     })
 }

@@ -268,7 +268,14 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::Destructure { value: lhs, .. }
         | Expression::NamedArgument { value: lhs, .. }
         | Expression::Move { value: lhs, .. } => subst_expr(lhs, aliases, values),
-        Expression::CaseValue(value) => subst_expr(&mut value.subject, aliases, values),
+        Expression::CaseValue(value) => {
+            subst_expr(&mut value.subject, aliases, values);
+            for choice in &mut value.choices {
+                if let Some(ty) = &mut choice.ty {
+                    subst(ty, aliases);
+                }
+            }
+        }
         Expression::MatchArm(test) => {
             subst_expr(&mut test.subject, aliases, values);
             for p in &mut test.patterns {
@@ -304,6 +311,9 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         }
         Expression::Unary { operand, .. } => subst_expr(operand, aliases, values),
         Expression::ToTrait {
+            value, from, to, ..
+        }
+        | Expression::FromTrait {
             value, from, to, ..
         } => {
             subst_expr(value, aliases, values);

@@ -344,6 +344,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::StaticCase { ty, .. } => ty.clone(),
         Expression::Subject { ty, .. } => ty.clone(),
         Expression::WithSubject(with) => type_of_expr(&with.body, scopes, current_struct),
+        // An `is` test, or one arm's test of a `match`.
+        Expression::MatchArm(_) => TypeName::bool_(),
         Expression::CaseValue(value) => {
             let subject = type_of_expr(&value.subject, scopes, current_struct);
             let field = |name: &str| scopes.field_type(&subject, name);

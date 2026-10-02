@@ -1339,7 +1339,13 @@ export struct Formatter {
             }
             Cast => {
                 var result = concat().add(_expression(item.child(0))).add(text(" ")).add(_leaf(item.child(1)));
-                return result.add(text(" ")).add(_type_name(item.child(2)));
+                # `as?` keeps its `?` against the keyword.
+                ulong type_index = 2;
+                if (item.child(2).is_token("?")) {
+                    result.add(_leaf(item.child(2)));
+                    type_index = 3;
+                }
+                return result.add(text(" ")).add(_type_name(item.child(type_index)));
             }
             Ternary => {
                 var rest = concat()

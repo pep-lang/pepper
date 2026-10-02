@@ -433,7 +433,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         Expression::Subject { .. } | Expression::NoMatch | Expression::DefaultArgument { .. } => {}
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
-        Expression::ToTrait { value, .. } => walk_expression(value, f),
+        Expression::ToTrait { value, .. } | Expression::FromTrait { value, .. } => walk_expression(value, f),
         Expression::MethodAddress(_) | Expression::StaticValue(_) => {}
         Expression::StaticMember(member) => {
             for arg in &mut member.args {
@@ -587,7 +587,7 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
         Expression::Subject { .. } | Expression::NoMatch | Expression::DefaultArgument { .. } => {}
         Expression::ClosureLiteral(closure) => visit_block(&closure.body, f),
         Expression::MakeClosure { value, .. } => visit_expression(value, f),
-        Expression::ToTrait { value, .. } => visit_expression(value, f),
+        Expression::ToTrait { value, .. } | Expression::FromTrait { value, .. } => visit_expression(value, f),
         Expression::MethodAddress(_) | Expression::StaticValue(_) => {}
         Expression::StaticMember(member) => {
             for arg in &member.args {
@@ -707,6 +707,7 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer.as_mut()), args.iter_mut()),
         Expression::MakeClosure { value, .. }
         | Expression::ToTrait { value, .. }
+        | Expression::FromTrait { value, .. }
         | Expression::Destructure { value, .. }
         | Expression::Move { value, .. }
         | Expression::NamedArgument { value, .. } => Children::one(value.as_mut()),
@@ -761,7 +762,9 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         Expression::MethodCall { this, args, .. } => Children::Chain(Some(this), args.iter()),
         Expression::Invoke { callee, args } => Children::Chain(Some(callee), args.iter()),
         Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer), args.iter()),
-        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => Children::one(value),
+        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } | Expression::FromTrait { value, .. } => {
+            Children::one(value)
+        }
     }
 }
 

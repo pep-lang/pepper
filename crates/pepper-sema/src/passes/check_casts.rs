@@ -13,10 +13,11 @@ use pepper_parser::diagnostic::Diagnostic;
 pub fn check_casts(module: &mut Module) {
     let module = &*module;
     let table = StructTable::build(module);
+    let traits = &module.traits;
     let mut errors = vec![];
     let mut check = |function: &FunctionDef, current: Option<&TypeName>, unbound: &[String]| {
         if let Some(body) = &function.body {
-            super::visit_block(body, &mut |e| check_cast(e, &table, current, unbound, &mut errors));
+            super::visit_block(body, &mut |e| check_cast(e, &table, traits, current, unbound, &mut errors));
         }
     };
     for function in module.functions.iter().filter(|f| f.generic_params.is_empty()) {
@@ -34,7 +35,7 @@ pub fn check_casts(module: &mut Module) {
     }
     for var in &module.globals {
         if let Some(default) = &var.default {
-            super::visit_expression(default, &mut |e| check_cast(e, &table, None, &[], &mut errors));
+            super::visit_expression(default, &mut |e| check_cast(e, &table, traits, None, &[], &mut errors));
         }
     }
     for error in errors {
@@ -42,7 +43,14 @@ pub fn check_casts(module: &mut Module) {
     }
 }
 
-fn check_cast(e: &Expression, table: &StructTable, current: Option<&TypeName>, unbound: &[String], errors: &mut Vec<Diagnostic>) {
+fn check_cast(
+    e: &Expression,
+    table: &StructTable,
+    traits: &[TraitDef],
+    current: Option<&TypeName>,
+    unbound: &[String],
+    errors: &mut Vec<Diagnostic>,
+) {
     let Expression::Cast { expr, ty, loc, kind } = e else {
         return;
     };
@@ -57,6 +65,12 @@ fn check_cast(e: &Expression, table: &StructTable, current: Option<&TypeName>, u
         },
     };
     if let Err(message) = crate::casts::check(&from, ty, *kind) {
+        // A trait value may hold something else: its conversion can fail.
+        let message = if *kind == CastKind::Static && crate::traits::is_trait_type(traits, &from) {
+            format!("{}; use 'as?' to convert a trait value, which gives '{}?'", message, crate::casts::spelled(ty))
+        } else {
+            message
+        };
         errors.push(Diagnostic::error(message).at(*loc));
     }
 }

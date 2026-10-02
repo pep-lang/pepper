@@ -4782,6 +4782,33 @@ fn extern_overloaded_by_another_extern() {
 }
 
 #[test]
+fn type_pattern_names_a_struct_the_trait_value_never_holds() {
+    // At the type the pattern names, which is what the user must change.
+    assert_eq!(
+        error_of(
+            "type_pattern_never_holds",
+            "trait Shape { area(): int; }\nstruct Square { construct() {} area(): int { return 1; } }\nextend Square with Shape;\nstruct Point { construct() {} }\nmain(): int {\n    var shape: Shape = Square();\n    if (shape is Point) {\n        return 1;\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:7:18: error: 'Point' does not implement 'Shape', so a 'Shape' value never holds one\n\
+         \x20   7 |     if (shape is Point) {\n\
+         \x20     |                  ^~~~~"
+    );
+}
+
+#[test]
+fn as_from_a_trait_value_suggests_as_optional() {
+    assert_eq!(
+        error_of(
+            "as_from_trait_value",
+            "trait Shape { area(): int; }\nstruct Square { construct() {} area(): int { return 1; } }\nextend Square with Shape;\nmain(): int {\n    var shape: Shape = Square();\n    var square = shape as Square;\n    return 0;\n}\n"
+        ),
+        "main.pep:6:24: error: cannot cast 'Shape' to 'Square'; use 'as?' to convert a trait value, which gives 'Square?'\n\
+         \x20   6 |     var square = shape as Square;\n\
+         \x20     |                        ^~"
+    );
+}
+
+#[test]
 fn optional_old_method_names_warn_and_still_run() {
     let source = "test(): int {\n\
                   \x20   var a = Optional<int>.some(1);\n\

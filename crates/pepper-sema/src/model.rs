@@ -502,6 +502,24 @@ pub enum Expression {
         to: TypeName,
         loc: Loc,
     },
+    /// A trait value seen as one of its conformers (`shape is Circle`,
+    /// `shape as? Named`): `value`, of trait type `from`, tested for or
+    /// converted to `to`, a struct or another trait. `candidates` are the
+    /// structs that may be both: `to` itself, or each struct that declares
+    /// both traits. With `test`, a `bool`: whether the value's object is
+    /// one of them (false for a null value). Otherwise the object as a
+    /// `to`, which `enums::lower_matches` emits only where the test
+    /// succeeded (a pattern's binding); like `ToTrait` it does no refcount
+    /// work, and since `value` is always the `match`'s hidden subject, it
+    /// reads like any other place: the consuming slot acquires.
+    FromTrait {
+        value: Box<Expression>,
+        from: TypeName,
+        to: TypeName,
+        candidates: Vec<TypeName>,
+        test: bool,
+        loc: Loc,
+    },
     /// A compile-time value in a statement a `static` block emits
     /// (`field.name` in `builder.append(field.name)`): the expression as
     /// written, replaced by its value when the block is expanded
@@ -552,6 +570,7 @@ impl Expression {
             | Expression::MethodCall { loc, .. }
             | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. }
+            | Expression::FromTrait { loc, .. }
             | Expression::Destructure { loc, .. }
             | Expression::Move { loc, .. }
             | Expression::StringLiteral { loc, .. } => *loc,
@@ -647,6 +666,10 @@ pub struct CaseChoice {
     pub case: String,
     /// Location of the case name in the pattern.
     pub case_loc: Loc,
+    /// The case name read as a type, for a match on a trait value (see
+    /// [`CasePattern::ty`]).
+    #[serde(default)]
+    pub ty: Option<TypeName>,
     /// Position of the binding among the pattern's bindings.
     pub index: usize,
     /// Every binding of the pattern, `_` included.
@@ -685,6 +708,11 @@ pub struct CasePattern {
     /// when its bounds are integer or character literals: what an integer
     /// `match` checks coverage with.
     pub values: Option<(i128, i128)>,
+    /// The case name read as a type (`Circle`, `Box<int>`): what the
+    /// pattern tests for when the value matched is a trait value, which
+    /// `enums::lower_matches` turns into [`Expression::FromTrait`].
+    #[serde(default)]
+    pub ty: Option<TypeName>,
 }
 
 impl CasePattern {
@@ -707,9 +735,9 @@ impl CasePattern {
     }
 
     /// The enums named before cases in this pattern and the patterns nested
-    /// in it.
+    /// in it, and the types their case names read as ([`CasePattern::ty`]).
     pub fn qualifiers_mut(&mut self) -> Vec<&mut TypeName> {
-        let mut out: Vec<&mut TypeName> = self.qualifier.as_mut().into_iter().collect();
+        let mut out: Vec<&mut TypeName> = self.qualifier.as_mut().into_iter().chain(self.ty.as_mut()).collect();
         for e in self.elements.iter_mut().flatten().chain(self.bindings.iter_mut().flatten()) {
             out.extend(e.qualifiers_mut());
         }
