@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
+            window.path_to_searchindex_js = "../searchindex-0da5a2c1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-aa7f5379.js"></script>
+        <script src="../toc-11a2ae4f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -265,6 +265,72 @@ the same text as <code>decode</code>.</p>
     data.append(255);
     data.append(105);
     assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
+</code></pre>
+<h4 id="find_invalid"><a class="header" href="#find_invalid">find_invalid</a></h4>
+<pre><code class="language-pepper">static find_invalid(value: String): ulong?
+</code></pre>
+<p>Returns the byte offset of the first byte of <code>value</code> that does not
+start a valid UTF-8 sequence (see <code>is_valid</code>), or none when all of it
+is valid. A <code>String</code> made from checked bytes is always valid; one made
+from C memory may not be.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset of the first invalid byte, or none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+</code></pre>
+<h4 id="code_point_at"><a class="header" href="#code_point_at">code_point_at</a></h4>
+<pre><code class="language-pepper">static code_point_at(value: String, offset: ulong): (uint, ulong)
+</code></pre>
+<p>Decodes the code point whose UTF-8 sequence starts at byte <code>offset</code>
+of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to read</li>
+<li><code>offset</code> — the byte offset where the sequence starts</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the code point and the number of bytes its sequence takes, from 1 to 4, so <code>offset</code> plus that is where the next one starts</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>offset</code> is not less than <code>value.size</code> (“Utf8.code_point_at offset out of bounds”)</li>
+<li>if no valid sequence starts at <code>offset</code> (“Utf8.code_point_at found invalid UTF-8”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var (point, run) = text.Utf8.code_point_at("é!", 0);
+    assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+</code></pre>
+<h4 id="append_code_point"><a class="header" href="#append_code_point">append_code_point</a></h4>
+<pre><code class="language-pepper">static append_code_point(out: u8[], code_point: uint)
+</code></pre>
+<p>Appends the UTF-8 encoding of <code>code_point</code>, from 1 to 4 bytes, to
+<code>out</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>out</code> — the bytes to append to</li>
+<li><code>code_point</code> — the code point to encode</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>code_point</code> is a surrogate (U+D800 to U+DFFF) or above U+10FFFF (“Utf8.append_code_point needs a Unicode scalar value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var out = Array&lt;u8&gt;();
+    text.Utf8.append_code_point(out, 8364);
+    assert(text.Utf8.decode(out).value() == "€", "U+20AC");
 </code></pre>
 
                     </main>

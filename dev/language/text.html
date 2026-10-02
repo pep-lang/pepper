@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
+            window.path_to_searchindex_js = "../searchindex-0da5a2c1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-aa7f5379.js"></script>
+        <script src="../toc-11a2ae4f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -220,7 +220,7 @@ main(): int {
 <tr><th>Type</th><th>Encoding</th></tr>
 </thead>
 <tbody>
-<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding.</td></tr>
+<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding, and <code>find_invalid</code> gives the offset of a String’s first invalid byte. <code>code_point_at</code> reads one code point and <code>append_code_point</code> writes one.</td></tr>
 <tr><td><code>text.Utf16</code></td><td>UTF-16, two bytes per code unit, little-endian by default (<code>encode(s, true)</code> and <code>decode(bytes, true)</code> for big-endian). A code point past U+FFFF takes a surrogate pair.</td></tr>
 <tr><td><code>text.Ascii</code></td><td>ASCII: code points below 128, one byte each. <code>is_ascii</code> checks a String.</td></tr>
 </tbody>

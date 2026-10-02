@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1c0c2c1b.js";
+            window.path_to_searchindex_js = "../searchindex-0da5a2c1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-aa7f5379.js"></script>
+        <script src="../toc-11a2ae4f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -635,8 +635,9 @@ case names, not literals, and a match on <code>int</code> takes literals, not na
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
 <li>An enum whose cases carry nothing cannot be generic. The methods of any
-enum cannot be generic yet. An enum cannot declare operators or indexers
-yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
+enum cannot be generic yet. An enum whose cases carry values can declare
+indexers (<code>[]</code>), as a struct does; one whose cases carry nothing cannot
+declare operators or indexers yet, and has <code>==</code> and <code>!=</code> built in.</li>
 <li>A case’s values bind names only: a pattern cannot nest inside a case
 (<code>Some(Text(t))</code>) or compare its values (<code>Text("")</code>) yet. Patterns nest
 inside <a href="tuples.html#matching-tuples">tuple patterns</a> (<code>(Text(t), 0)</code>).

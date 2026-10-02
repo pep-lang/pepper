@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1c0c2c1b.js";
+            window.path_to_searchindex_js = "searchindex-0da5a2c1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-aa7f5379.js"></script>
+        <script src="toc-11a2ae4f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -2018,7 +2018,7 @@ main(): int {
 <tr><th>Type</th><th>Encoding</th></tr>
 </thead>
 <tbody>
-<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding.</td></tr>
+<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding, and <code>find_invalid</code> gives the offset of a String’s first invalid byte. <code>code_point_at</code> reads one code point and <code>append_code_point</code> writes one.</td></tr>
 <tr><td><code>text.Utf16</code></td><td>UTF-16, two bytes per code unit, little-endian by default (<code>encode(s, true)</code> and <code>decode(bytes, true)</code> for big-endian). A code point past U+FFFF takes a surrogate pair.</td></tr>
 <tr><td><code>text.Ascii</code></td><td>ASCII: code points below 128, one byte each. <code>is_ascii</code> checks a String.</td></tr>
 </tbody>
@@ -2206,6 +2206,180 @@ is_identifier(text: String): bool {
 <p>Each search keeps its working state to itself, and a <code>Match</code> (which holds
 the searched <code>String</code>) stays on the thread that found it.</p>
 <p>The <a href="#regexmodulepep">reference</a> lists every method.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="json"><a class="header" href="#json">JSON</a></h1>
+<p>The <code>json</code> module reads JSON text into a <code>JsonValue</code>, lets you look values
+up and change them, and writes them back as compact or indented text.</p>
+<pre><code class="language-pepper"># JSON: parse text, look values up, change them, and write them back.
+import json;
+
+main(): int {
+    var text = "{\"name\": \"pepper\", \"server\": {\"port\": 8080}, \"tags\": [\"fast\"]}";
+    var parsed = json.parse(text, path = "config.json");
+    if (parsed.is_err()) {
+        print(parsed.error().to_string());   # config.json:1:17: error: ...
+        return 1;
+    }
+    var root = parsed.value();
+
+    # Lookups chain, and a missing key gives Null instead of panicking.
+    assert(root["name"].as_string().value() == "pepper", "a string");
+    assert(root["server"]["port"].as_int().value_or(80) == 8080, "a number");
+    assert(root["server"]["host"].as_string().value_or("localhost") == "localhost", "a default");
+
+    # Match on the case to handle every kind.
+    var described = match (root["tags"]) {
+        Array(items) =&gt; $"{items.count} tag",
+        Null =&gt; "no tags",
+        else =&gt; "not a list",
+    };
+    assert(described == "1 tag", "an array");
+
+    # Change the value in place, then write it back. Keys keep their order.
+    root["tags"].append(json.JsonValue.String("safe"));
+    root["debug"] = json.JsonValue.Bool(false);
+    assert(root.to_string() == "{\"name\":\"pepper\",\"server\":{\"port\":8080},\"tags\":[\"fast\",\"safe\"],\"debug\":false}", "compact");
+
+    # Build a value from scratch.
+    var reply = json.JsonValue.object();
+    reply["id"] = json.JsonValue.Integer(42);
+    reply["ok"] = json.JsonValue.Bool(true);
+    assert(reply.to_pretty_string() == "{\n  \"id\": 42,\n  \"ok\": true\n}", "indented");
+
+    # An error names the line and column.
+    var bad = json.parse("{\n  \"a\": 1\n  \"b\": 2\n}", path = "bad.json");
+    assert(bad.error().to_string() == "bad.json:3:3: error: expected ',' or '}'", "where");
+
+    # JSONC: comments and trailing commas, on request.
+    var settings = json.parse("{\n  // the theme\n  \"theme\": \"dark\",\n}", comments = true);
+    assert(settings.value()["theme"].as_string().value() == "dark", "JSONC");
+    return 0;
+}
+</code></pre>
+<h2 id="values"><a class="header" href="#values">Values</a></h2>
+<p><code>json.JsonValue</code> is an <a href="#enums-and-match">enum</a> whose cases carry values, so
+<code>match</code> handles each kind:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th>Holds</th><th>JSON</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Null</code></td><td>nothing</td><td><code>null</code></td></tr>
+<tr><td><code>Bool(value: bool)</code></td><td>the boolean</td><td><code>true</code>, <code>false</code></td></tr>
+<tr><td><code>Integer(value: long)</code></td><td>an integer within ±(2^53 − 1)</td><td><code>42</code>, <code>-7</code></td></tr>
+<tr><td><code>Number(value: double)</code></td><td>any other number</td><td><code>2.5</code>, <code>1e3</code>, <code>9007199254740993</code></td></tr>
+<tr><td><code>String(value: String)</code></td><td>the string</td><td><code>"hi"</code></td></tr>
+<tr><td><code>Array(items: Array&lt;JsonValue&gt;)</code></td><td>the elements</td><td><code>[1, 2]</code></td></tr>
+<tr><td><code>Object(members: OrderedMap&lt;String, JsonValue&gt;)</code></td><td>the members, in insertion order</td><td><code>{"a": 1}</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong>Numbers keep their form.</strong> A number written without a fraction or an
+exponent is an <code>Integer</code> when it is within ±(2^53 − 1), the range every
+JSON implementation agrees on (RFC 7493). Any other number, including a
+larger integer, is a <code>Number</code>.</li>
+<li><strong>Make values</strong> with the cases (<code>JsonValue.Integer(42)</code>,
+<code>JsonValue.String("a")</code>, <code>JsonValue.Null</code>), and containers with
+<code>JsonValue.object()</code> and <code>JsonValue.array(items)</code>.</li>
+<li><strong>Containers are shared.</strong> An <code>Array</code> or <code>Object</code> holds its array or map
+by reference, so changing it through <code>value[key] = ...</code>, <code>append</code>, or the
+map from <code>as_object()</code> changes every holder of the value.</li>
+</ul>
+<h2 id="looking-values-up"><a class="header" href="#looking-values-up">Looking values up</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Expression</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td><code>value["key"]</code></td><td>the member, or <code>Null</code> when missing or not an object</td></tr>
+<tr><td><code>value[index]</code></td><td>the element, or <code>Null</code> when out of range or not an array</td></tr>
+<tr><td><code>value.as_string()</code>, <code>as_bool()</code>, <code>as_double()</code></td><td>the value, or none for another kind</td></tr>
+<tr><td><code>value.as_int()</code></td><td>an <code>Integer</code>, or a <code>Number</code> with no fraction that fits in a <code>long</code>; otherwise none</td></tr>
+<tr><td><code>value.as_array()</code>, <code>as_object()</code></td><td>the array or map itself, or none</td></tr>
+<tr><td><code>value.is_null()</code></td><td>whether it is <code>Null</code></td></tr>
+<tr><td><code>value.contains("key")</code></td><td>whether an object has the member, even a <code>null</code> one</td></tr>
+</tbody>
+</table>
+</div>
+<p>A lookup that finds nothing gives <code>Null</code> rather than panicking, so lookups
+chain and a default goes at the end:
+<code>root["server"]["port"].as_int().value_or(8080)</code>.</p>
+<h2 id="changing-values"><a class="header" href="#changing-values">Changing values</a></h2>
+<ul>
+<li><code>value["key"] = member</code> sets an object’s member. A new key goes at the
+end; an existing key keeps its place. It panics on a value that is not an
+object.</li>
+<li><code>value[index] = element</code> replaces an array’s element, and
+<code>value.append(element)</code> adds one at the end. Both panic on a value that is
+not an array.</li>
+<li><code>value.remove("key")</code> removes an object’s member and says whether it was
+there.</li>
+</ul>
+<h2 id="parsing"><a class="header" href="#parsing">Parsing</a></h2>
+<p><code>json.parse(text)</code> returns a <code>Result&lt;JsonValue, JsonError&gt;</code>. It is strict
+RFC 8259:</p>
+<ul>
+<li>The text holds one value, with only spaces, tabs and line breaks around
+it. A byte-order mark at the start is skipped.</li>
+<li>The text must be valid UTF-8; an invalid byte is an error at that byte.</li>
+<li>A string cannot hold a raw control character (write <code>\n</code>), and a <code>\u</code>
+escape of an unpaired surrogate (<code>"\uD800"</code>) is an error.</li>
+<li>No comments, trailing commas, single quotes, <code>NaN</code>, leading zeros
+(<code>01</code>) or <code>+</code> signs.</li>
+<li>When an object repeats a key, the last value wins, in the place of the
+first.</li>
+</ul>
+<p><code>parse</code> takes optional arguments, usually passed by name:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Argument</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>comments</code></td><td><code>false</code></td><td>Accept JSONC, as VS Code’s settings files are: <code>//</code> and <code>/* */</code> comments, and a comma after the last element or member.</td></tr>
+<tr><td><code>path</code></td><td><code>""</code></td><td>The name of the text, which the error’s <code>to_string()</code> puts first.</td></tr>
+<tr><td><code>max_depth</code></td><td><code>1000</code></td><td>How deeply arrays and objects may nest.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The parser keeps its own stack rather than recursing, so deep nesting in the
+text cannot overflow the call stack. <code>max_depth</code> still bounds it, because
+releasing a value releases its nested values recursively.</p>
+<h3 id="errors-1"><a class="header" href="#errors-1">Errors</a></h3>
+<p>A <code>JsonError</code> has the <code>message</code>, the <code>line</code> and <code>column</code> (from 1, counting
+bytes) and the byte <code>offset</code>. <code>to_string()</code> renders it like a compiler
+error:</p>
+<pre><code class="language-text">config.json:3:3: error: expected ',' or '}'
+</code></pre>
+<p>Without a <code>path</code>, it starts at the line: <code>3:3: error: expected ',' or '}'</code>.</p>
+<h2 id="writing"><a class="header" href="#writing">Writing</a></h2>
+<ul>
+<li><code>value.to_string()</code> writes compact text, with no spaces or line breaks:
+<code>{"id":42,"tags":["a","b"]}</code>. String interpolation uses it too.</li>
+<li><code>value.to_pretty_string()</code> puts each element and member on its own line,
+indented two spaces per level (<code>to_pretty_string(indent = 4)</code> for four),
+with a space after each <code>:</code>. An empty array or object stays <code>[]</code> or <code>{}</code>.</li>
+<li>Strings are written as UTF-8, escaping <code>"</code>, <code>\</code> and the control
+characters. <code>to_string(ascii_only = true)</code> and
+<code>to_pretty_string(ascii_only = true)</code> also escape everything outside ASCII
+as <code>\u</code>, with a surrogate pair past U+FFFF.</li>
+<li>A <code>Number</code> is written as Pepper writes a <code>double</code> (<code>0.5</code>, <code>1000.0</code>,
+<code>1e+16</code>), so it reads back as a <code>Number</code>. NaN and the infinities, which
+JSON cannot spell, are written as <code>null</code>.</li>
+<li>Objects keep their keys in insertion order, so parsing a document and
+writing it back keeps its order.</li>
+</ul>
+<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<ul>
+<li>Comments are skipped when parsing JSONC; they are not kept in the value
+or written back yet.</li>
+<li>Converting between JSON and structs (<code>json.encode</code>, <code>json.decode&lt;T&gt;</code>)
+is not supported yet.</li>
+</ul>
+<p>The <a href="#the-json-module">reference</a> lists every function.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="compression-and-archives"><a class="header" href="#compression-and-archives">Compression and archives</a></h1>
 <p>The <code>compress</code> module compresses and decompresses DEFLATE data, plain or
@@ -3532,7 +3706,7 @@ an error, as for <a href="#this-in-methods">closures</a>.
 A bound method is a function value, not the value the method returns:
 passing <code>p.name</code> where a <code>String</code> is expected is an error. Call it,
 <code>p.name()</code>. The methods of an enum whose cases carry nothing are not
-values at all (see <a href="#current-limits">enums</a>).</li>
+values at all (see <a href="#current-limits-1">enums</a>).</li>
 <li><strong>Traits and extensions.</strong> A method declared in an
 <a href="#traits-and-extensions">extension</a> works the same way, and so does a
 method of a trait-typed value (<code>shape.area</code>), which calls through the trait.</li>
@@ -6263,11 +6437,12 @@ using <code>==</code>. Literals cannot list every value, so such a <code>match</
 Matching the same literal twice is an error. A match on an enum takes its
 case names, not literals, and a match on <code>int</code> takes literals, not names.</li>
 </ul>
-<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
 <ul>
 <li>An enum whose cases carry nothing cannot be generic. The methods of any
-enum cannot be generic yet. An enum cannot declare operators or indexers
-yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
+enum cannot be generic yet. An enum whose cases carry values can declare
+indexers (<code>[]</code>), as a struct does; one whose cases carry nothing cannot
+declare operators or indexers yet, and has <code>==</code> and <code>!=</code> built in.</li>
 <li>A case’s values bind names only: a pattern cannot nest inside a case
 (<code>Some(Text(t))</code>) or compare its values (<code>Text("")</code>) yet. Patterns nest
 inside <a href="#matching-tuples">tuple patterns</a> (<code>(Text(t), 0)</code>).
@@ -9483,7 +9658,7 @@ optional object rather than an index, so search for these and rewrite them.
 <p>An <code>Optional&lt;T&gt;</code> says only that a value is missing. When the caller needs to
 know <em>why</em>, return a <a href="#error-handling-with-result"><code>Result</code></a> instead, whose Err carries an
 error.</p>
-<h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
+<h2 id="current-limits-2"><a class="header" href="#current-limits-2">Current limits</a></h2>
 <ul>
 <li>Some runtime APIs still use null references, default values or sentinels
 for “missing”: a <code>HashMap</code> returns the default value for a missing key,
@@ -12366,7 +12541,7 @@ manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 <code>create()</code> returns an error. On Windows it uses the system’s SChannel,
 which needs nothing installed; a server’s private key must be PKCS #8
 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or Server 2022.</p>
-<h2 id="errors-1"><a class="header" href="#errors-1">Errors</a></h2>
+<h2 id="errors-2"><a class="header" href="#errors-2">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
 <div class="table-wrapper">
@@ -12939,7 +13114,7 @@ a positional argument (by custom, standard input).</li>
 <li>Values are Strings; parse numbers yourself (<code>int.parse</code>) and report a bad
 one, as the example does.</li>
 </ul>
-<h2 id="errors-2"><a class="header" href="#errors-2">Errors</a></h2>
+<h2 id="errors-3"><a class="header" href="#errors-3">Errors</a></h2>
 <p><code>parse</code> writes a clang-style error, the usage and a hint to standard error
 and returns false, so the program can exit with 2:</p>
 <pre><code class="language-text">greet: error: unknown option '--lound'; did you mean '--loud'?
@@ -26369,7 +26544,7 @@ argument lists; this constructor is for the runtime.</p>
 <li><code>argument</code> — the declaration</li>
 </ul>
 <h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
-<h4 id="values"><a class="header" href="#values">values</a></h4>
+<h4 id="values-1"><a class="header" href="#values-1">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;String&gt;
 </code></pre>
 <p>Returns the values given, in command-line order.</p>
@@ -26731,6 +26906,470 @@ way checksums and git object ids are usually written.</p>
 
     assert(digest.to_hex([0, 15, 255]) == "000fff", "two digits per byte");
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/json/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-json-module"><a class="header" href="#the-json-module">The json module</a></h1>
+<p>JSON: parse text into a <code>JsonValue</code>, look values up and change them, and
+write them back as compact or indented text.</p>
+<p>Bring it in with <code>import json</code>. Parsing follows RFC 8259 strictly, and
+accepts JSONC (comments and trailing commas) on request. Objects keep
+their keys in the order they were written, so a document round-trips
+unchanged.</p>
+<ul>
+<li><a href="#jsonvalue">JsonValue</a>: <code>JsonValue</code></li>
+<li><a href="#parsing-1">Parsing</a>: <code>parse</code>, <code>JsonError</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    main(): int {
+        var parsed = json.parse("{\"name\": \"pepper\", \"port\": 8080}");
+        if (parsed.is_err()) {
+            print(parsed.error().to_string());
+            return 1;
+        }
+        var root = parsed.value();
+        assert(root["name"].as_string().value() == "pepper", "a string");
+        assert(root["port"].as_int().value_or(80) == 8080, "a number");
+        root["debug"] = json.JsonValue.Bool(true);
+        assert(root.to_string() == "{\"name\":\"pepper\",\"port\":8080,\"debug\":true}", "compact");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/json/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/json/value.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="jsonvalue"><a class="header" href="#jsonvalue">JsonValue</a></h1>
+<p><code>JsonValue</code>: a JSON value of any kind, and how it is written as text.</p>
+<p>Source: <code>runtime/json/value.pep</code></p>
+<h2 id="jsonvalue-1"><a class="header" href="#jsonvalue-1">JsonValue</a></h2>
+<pre><code class="language-pepper">enum JsonValue
+</code></pre>
+<p>A JSON value: <code>null</code>, a boolean, a number, a string, an array or an
+object. <code>json.parse</code> makes one from text and <code>to_string</code> writes it back.</p>
+<p>Look values up with <code>value["key"]</code> and <code>value[index]</code>. A lookup that
+finds nothing (a missing key, an index past the end, or a lookup on a
+value of another kind) gives <code>Null</code> rather than panicking, so lookups
+chain: <code>root["server"]["port"]</code>. Then read the value with an <code>as_</code> method,
+which gives none when the value is of another kind, or <code>match</code> on its
+case.</p>
+<p>Numbers keep the form they were written in: an integer within
+±(2^53 − 1), the range every JSON implementation agrees on (RFC 7493), is
+an <code>Integer</code>; any other number is a <code>Number</code>, a <code>double</code>.</p>
+<p>An <code>Array</code> or <code>Object</code> case holds its array or map by reference, so
+changing them through <code>value[key] = ...</code>, <code>append</code> or the map from
+<code>as_object()</code> changes every holder of the value.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var reply = json.JsonValue.object();
+    reply["id"] = json.JsonValue.Integer(42);
+    reply["tags"] = json.JsonValue.array([json.JsonValue.String("a")]);
+    assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
+    assert(reply["id"].as_int().value() == 42, "a lookup");
+    assert(reply["missing"]["deeper"].is_null(), "lookups chain");
+</code></pre>
+<h3 id="cases-9"><a class="header" href="#cases-9">Cases</a></h3>
+<h4 id="null-1"><a class="header" href="#null-1">Null</a></h4>
+<pre><code class="language-pepper">Null
+</code></pre>
+<p>JSON’s <code>null</code>, and what a lookup gives when it finds nothing.</p>
+<h4 id="bool"><a class="header" href="#bool">Bool</a></h4>
+<pre><code class="language-pepper">Bool(value: bool)
+</code></pre>
+<p><code>true</code> or <code>false</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the boolean</li>
+</ul>
+<h4 id="integer"><a class="header" href="#integer">Integer</a></h4>
+<pre><code class="language-pepper">Integer(value: long)
+</code></pre>
+<p>A number written without a fraction or an exponent, within
+±(2^53 − 1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the integer</li>
+</ul>
+<h4 id="number"><a class="header" href="#number">Number</a></h4>
+<pre><code class="language-pepper">Number(value: double)
+</code></pre>
+<p>Any other number: one with a fraction or an exponent, or an integer
+outside ±(2^53 − 1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number</li>
+</ul>
+<h4 id="string-3"><a class="header" href="#string-3">String</a></h4>
+<pre><code class="language-pepper">String(value: String)
+</code></pre>
+<p>A string.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text</li>
+</ul>
+<h4 id="array-3"><a class="header" href="#array-3">Array</a></h4>
+<pre><code class="language-pepper">Array(items: Array&lt;JsonValue&gt;)
+</code></pre>
+<p>An array, holding its elements in order.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements</li>
+</ul>
+<h4 id="object"><a class="header" href="#object">Object</a></h4>
+<pre><code class="language-pepper">Object(members: OrderedMap&lt;String, JsonValue&gt;)
+</code></pre>
+<p>An object, holding its members in insertion order: the order the
+text or the code wrote them, so a document round-trips unchanged.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>members</code> — the members, by key</li>
+</ul>
+<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h4 id="object-1"><a class="header" href="#object-1">object</a></h4>
+<pre><code class="language-pepper">static object(): JsonValue
+</code></pre>
+<p>Returns a new, empty object.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an <code>Object</code> with no members</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var config = json.JsonValue.object();
+    config["name"] = json.JsonValue.String("pepper");
+</code></pre>
+<h4 id="array-1-1"><a class="header" href="#array-1-1">array</a></h4>
+<pre><code class="language-pepper">static array(items: Array&lt;JsonValue&gt; = Array&lt;JsonValue&gt;()): JsonValue
+</code></pre>
+<p>Returns an array holding <code>items</code>, which it keeps by reference rather
+than copying.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements; an empty array when not given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an <code>Array</code> of <code>items</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+    list.append(json.JsonValue.Integer(2));
+    assert(list.to_string() == "[1,2]", "two elements");
+</code></pre>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
+<pre><code class="language-pepper">[](key: String): JsonValue
+</code></pre>
+<p>Reads <code>value[key]</code>: the member named <code>key</code> of an object.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the member’s key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the member, or <code>Null</code> when this is not an object or has no member named <code>key</code></li>
+</ul>
+<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator []</a></h4>
+<pre><code class="language-pepper">[](key: String, member: JsonValue): JsonValue
+</code></pre>
+<p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of an
+object. A new key goes at the end; an existing key keeps its place.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the member’s key</li>
+<li><code>member</code> — the value to store</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>member</code>, the value of the assignment expression</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an object (“JsonValue[key] = value needs an object”)</li>
+</ul>
+<h4 id="operator--2-5"><a class="header" href="#operator--2-5">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): JsonValue
+</code></pre>
+<p>Reads <code>value[index]</code>: an element of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the element’s position, from 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element, or <code>Null</code> when this is not an array or <code>index</code> is not less than its count</li>
+</ul>
+<h4 id="operator--3-5"><a class="header" href="#operator--3-5">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong, element: JsonValue): JsonValue
+</code></pre>
+<p>Writes <code>value[index] = element</code>: replaces an element of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the element’s position, from 0</li>
+<li><code>element</code> — the value to store</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>element</code>, the value of the assignment expression</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an array (“JsonValue[index] = value needs an array”)</li>
+<li>if <code>index</code> is not less than the array’s count (as <code>Array</code>’s indexer does)</li>
+</ul>
+<h4 id="append-5"><a class="header" href="#append-5">append</a></h4>
+<pre><code class="language-pepper">append(element: JsonValue)
+</code></pre>
+<p>Appends <code>element</code> to the end of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>element</code> — the value to append</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an array (“JsonValue.append needs an array”)</li>
+</ul>
+<h4 id="contains-5"><a class="header" href="#contains-5">contains</a></h4>
+<pre><code class="language-pepper">contains(key: String): bool
+</code></pre>
+<p>Returns whether this is an object with a member named <code>key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the member exists, even if its value is <code>Null</code></li>
+</ul>
+<h4 id="remove-6"><a class="header" href="#remove-6">remove</a></h4>
+<pre><code class="language-pepper">remove(key: String): bool
+</code></pre>
+<p>Removes the member named <code>key</code> from an object.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this is an object and the member was there</li>
+</ul>
+<h4 id="is_null"><a class="header" href="#is_null">is_null</a></h4>
+<pre><code class="language-pepper">is_null(): bool
+</code></pre>
+<p>Returns whether this is <code>Null</code>, which is also what a lookup that finds
+nothing gives.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>Null</code></li>
+</ul>
+<h4 id="as_bool"><a class="header" href="#as_bool">as_bool</a></h4>
+<pre><code class="language-pepper">as_bool(): bool?
+</code></pre>
+<p>Returns the boolean, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value of a <code>Bool</code>, or none</li>
+</ul>
+<h4 id="as_int"><a class="header" href="#as_int">as_int</a></h4>
+<pre><code class="language-pepper">as_int(): long?
+</code></pre>
+<p>Returns the number as an integer, when it is one: an <code>Integer</code>, or a
+<code>Number</code> with no fraction that fits in a <code>long</code> (<code>2.0</code>, <code>1e3</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the integer, or none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
+    assert(json.parse("1.5").value().as_int().is_none(), "a fraction");
+</code></pre>
+<h4 id="as_double"><a class="header" href="#as_double">as_double</a></h4>
+<pre><code class="language-pepper">as_double(): double?
+</code></pre>
+<p>Returns the number as a <code>double</code>, when this is an <code>Integer</code> or a
+<code>Number</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number, or none</li>
+</ul>
+<h4 id="as_string"><a class="header" href="#as_string">as_string</a></h4>
+<pre><code class="language-pepper">as_string(): String?
+</code></pre>
+<p>Returns the string, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text of a <code>String</code>, or none</li>
+</ul>
+<h4 id="as_array"><a class="header" href="#as_array">as_array</a></h4>
+<pre><code class="language-pepper">as_array(): Array&lt;JsonValue&gt;?
+</code></pre>
+<p>Returns the elements, when this is an array. The array is the one
+this value holds, not a copy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the elements of an <code>Array</code>, or none</li>
+</ul>
+<h4 id="as_object"><a class="header" href="#as_object">as_object</a></h4>
+<pre><code class="language-pepper">as_object(): OrderedMap&lt;String, JsonValue&gt;?
+</code></pre>
+<p>Returns the members, when this is an object. The map is the one this
+value holds, not a copy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the members of an <code>Object</code>, or none</li>
+</ul>
+<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the value as compact JSON text, with no spaces or line
+breaks: <code>{"id":42,"tags":["a","b"]}</code>.</p>
+<p>Strings are written as UTF-8, escaping <code>"</code>, <code>\</code> and the control
+characters. A <code>Number</code> that is not finite (NaN or an infinity, which
+JSON cannot spell) is written as <code>null</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the JSON text</li>
+</ul>
+<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<pre><code class="language-pepper">to_string(ascii_only: bool): String
+</code></pre>
+<p>Returns the value as compact JSON text, like <code>to_string()</code>, choosing
+whether to escape every character outside ASCII as <code>\u</code> (a pair of
+them past U+FFFF), so the text is plain ASCII.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>ascii_only</code> — whether to escape every non-ASCII character</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the JSON text</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var word = json.JsonValue.String("é");
+    assert(word.to_string(ascii_only = true) == "\"\\u00e9\"", "escaped");
+</code></pre>
+<h4 id="to_pretty_string"><a class="header" href="#to_pretty_string">to_pretty_string</a></h4>
+<pre><code class="language-pepper">to_pretty_string(indent: int = 2, ascii_only: bool = false): String
+</code></pre>
+<p>Returns the value as indented JSON text: each element and member on
+its own line, indented <code>indent</code> spaces per level, with a space after
+each <code>:</code>. An empty array or object stays <code>[]</code> or <code>{}</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>indent</code> — the number of spaces per level of nesting</li>
+<li><code>ascii_only</code> — whether to escape every non-ASCII character as <code>\u</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the JSON text, without a final line break</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>indent</code> is negative (“JsonValue.to_pretty_string needs a non-negative indent”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+    assert(list.to_pretty_string() == "[\n  1\n]", "two spaces");
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/json/parse.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="parsing-1"><a class="header" href="#parsing-1">Parsing</a></h1>
+<p><code>parse</code>: reading JSON text into a <code>JsonValue</code>, and <code>JsonError</code>, what it
+reports when the text is not JSON.</p>
+<p>Source: <code>runtime/json/parse.pep</code></p>
+<h2 id="jsonerror"><a class="header" href="#jsonerror">JsonError</a></h2>
+<pre><code class="language-pepper">struct JsonError
+</code></pre>
+<p>What <code>parse</code> reports when the text is not JSON: what is wrong, and the
+line and column where it is.</p>
+<p><code>to_string()</code> renders it like a compiler error:
+<code>config.json:3:17: error: expected ',' or '}'</code>.</p>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="message-3"><a class="header" href="#message-3">message</a></h4>
+<pre><code class="language-pepper">var message: String
+</code></pre>
+<p>What is wrong, worded like a compiler error (<code>expected ':'</code>).</p>
+<h4 id="path-6"><a class="header" href="#path-6">path</a></h4>
+<pre><code class="language-pepper">var path: String
+</code></pre>
+<p>The path given to <code>parse</code>, which names the text in <code>to_string()</code>;
+empty when none was given.</p>
+<h4 id="line"><a class="header" href="#line">line</a></h4>
+<pre><code class="language-pepper">var line: ulong
+</code></pre>
+<p>The line of the error, from 1.</p>
+<h4 id="column"><a class="header" href="#column">column</a></h4>
+<pre><code class="language-pepper">var column: ulong
+</code></pre>
+<p>The column of the error, from 1, counting bytes as clang does.</p>
+<h4 id="offset-1"><a class="header" href="#offset-1">offset</a></h4>
+<pre><code class="language-pepper">var offset: ulong
+</code></pre>
+<p>The byte offset of the error in the text, from 0.</p>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
+<pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
+</code></pre>
+<p>Creates an error.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — what is wrong</li>
+<li><code>path</code> — the name of the text, or empty</li>
+<li><code>line</code> — the line of the error, from 1</li>
+<li><code>column</code> — the column of the error, from 1</li>
+<li><code>offset</code> — the byte offset of the error, from 0</li>
+</ul>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h4 id="to_string-27"><a class="header" href="#to_string-27">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the error as a compiler prints one:
+<code>path:line:column: error: message</code>, without the <code>path:</code> when there
+is no path.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rendered error</li>
+</ul>
+<h2 id="parse-3"><a class="header" href="#parse-3">parse</a></h2>
+<pre><code class="language-pepper">parse( text: String, comments: bool = false, path: String = "", max_depth: ulong = 1000 ): Result&lt;JsonValue, JsonError&gt;
+</code></pre>
+<p>Parses JSON text into a <code>JsonValue</code>.</p>
+<p>Parsing is strict RFC 8259: one value, surrounded only by spaces, tabs
+and line breaks. A byte-order mark at the start is skipped. The text
+must be valid UTF-8, and a string cannot hold a raw control character
+or a <code>\u</code> escape of an unpaired surrogate (<code>"\uD800"</code>). When an object
+repeats a key, the last value wins, in the place of the first.</p>
+<p>With <code>comments = true</code> the text may be JSONC, as VS Code’s settings
+files are: <code>//</code> line comments, <code>/* */</code> block comments, and a trailing
+comma after the last element or member. The comments are skipped.</p>
+<p>Nesting comes from the text, so the parser keeps its own stack rather
+than recursing, and <code>max_depth</code> bounds it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the JSON text</li>
+<li><code>comments</code> — whether to accept comments and trailing commas</li>
+<li><code>path</code> — the name of the text (a file name, say), which the error’s <code>to_string()</code> puts first</li>
+<li><code>max_depth</code> — how deeply arrays and objects may nest</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or an error naming the first problem and its line and column</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    var parsed = json.parse("{\"server\": {\"port\": 8080}}");
+    assert(parsed.value()["server"]["port"].as_int().value() == 8080, "a lookup");
+    var bad = json.parse("[1 2]", path = "list.json");
+    assert(bad.error().to_string() == "list.json:1:4: error: expected ',' or ']'", "where");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -26789,7 +27428,7 @@ threads.</p>
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -26806,7 +27445,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -27015,7 +27654,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -27034,7 +27673,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -27141,7 +27780,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
         totals.requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -27359,7 +27998,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -27368,7 +28007,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -27522,12 +28161,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -27635,7 +28274,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -27644,7 +28283,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -27856,7 +28495,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -27880,7 +28519,7 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -27964,7 +28603,7 @@ holding it in the closure keeps it alive until the release runs).</p>
 </code></pre>
 <p>The resource. It stays readable after the handle is released or
 detached, but it no longer refers to anything the handle owns.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="handle-1"><a class="header" href="#handle-1">Handle()</a></h4>
 <pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
 </code></pre>
@@ -27975,7 +28614,7 @@ it is destroyed.</p>
 <li><code>value</code> — the resource to own</li>
 <li><code>release</code> — the function that frees <code>value</code>; it is called at most once</li>
 </ul>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="is_owned"><a class="header" href="#is_owned">is_owned</a></h4>
 <pre><code class="language-pepper">is_owned(): bool
 </code></pre>
@@ -28044,7 +28683,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -28110,12 +28749,12 @@ have no defined order, as HTTP allows.</p>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -28124,7 +28763,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li>a new array with one entry per name</li>
 </ul>
-<h4 id="values-1"><a class="header" href="#values-1">values</a></h4>
+<h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
 <pre><code class="language-pepper">values(name: String): String[]
 </code></pre>
 <p>Returns every value of the field named <code>name</code>, in the order added.</p>
@@ -28178,7 +28817,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li>true if a field has that name</li>
 </ul>
-<h4 id="remove-6"><a class="header" href="#remove-6">remove</a></h4>
+<h4 id="remove-7"><a class="header" href="#remove-7">remove</a></h4>
 <pre><code class="language-pepper">remove(name: String)
 </code></pre>
 <p>Removes the field named <code>name</code> and all its values.</p>
@@ -28186,7 +28825,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
+<h4 id="operator--18"><a class="header" href="#operator--18">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
@@ -28200,7 +28839,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator []</a></h4>
+<h4 id="operator--1-9"><a class="header" href="#operator--1-9">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -28226,7 +28865,7 @@ full.</p>
 <pre><code class="language-pepper">    var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
     request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -28286,7 +28925,7 @@ received.</p>
 <ul>
 <li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
 </ul>
-<h4 id="path-6"><a class="header" href="#path-6">path</a></h4>
+<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">path(): String
 </code></pre>
 <p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
@@ -28486,7 +29125,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -28497,7 +29136,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
+<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
 <h4 id="bind-3"><a class="header" href="#bind-3">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -28524,7 +29163,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -28588,7 +29227,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -28759,7 +29398,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -28871,13 +29510,13 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a closed listener: <code>is_open()</code> is false and every operation
 fails. Use <code>UnixListener.bind</code> to get an open one.</p>
-<h3 id="static-methods-16"><a class="header" href="#static-methods-16">Static methods</a></h3>
+<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(path: Path): IoResult&lt;UnixListener&gt;
 </code></pre>
@@ -28890,7 +29529,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -28899,7 +29538,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>false after <code>close()</code> and for a <code>UnixListener()</code> never bound</li>
 </ul>
-<h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
+<h4 id="path-8"><a class="header" href="#path-8">path</a></h4>
 <pre><code class="language-pepper">path(): Path
 </code></pre>
 <p>Returns the path the listener was bound to.</p>
@@ -29236,8 +29875,8 @@ overflow), <code>saturating_add</code> (clamped to the type’s range) and
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
 <pre><code class="language-pepper">extend char
 </code></pre>
-<h3 id="static-methods-17"><a class="header" href="#static-methods-17">Static methods</a></h3>
-<h4 id="parse-3"><a class="header" href="#parse-3">parse</a></h4>
+<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
+<h4 id="parse-4"><a class="header" href="#parse-4">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): char?
 </code></pre>
 <p>Parses <code>text</code> as a <code>char</code> (<code>i8</code>) written in <code>base</code>: an optional <code>+</code>
@@ -29260,7 +29899,7 @@ are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="wrapping_add"><a class="header" href="#wrapping_add">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: char): char
 </code></pre>
@@ -29973,7 +30612,7 @@ overflowed.</p>
 <pre><code class="language-pepper">extend int
 </code></pre>
 <h3 id="static-methods-4-1"><a class="header" href="#static-methods-4-1">Static methods</a></h3>
-<h4 id="parse-4"><a class="header" href="#parse-4">parse</a></h4>
+<h4 id="parse-4-1"><a class="header" href="#parse-4-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): int?
 </code></pre>
 <p>Parses <code>text</code> as an <code>int</code> (<code>i32</code>) written in <code>base</code>: an optional <code>+</code>
@@ -30790,7 +31429,7 @@ advances that variable.</p>
     var r = 0..10;
     assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="start-1"><a class="header" href="#start-1">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -30809,7 +31448,7 @@ advances that variable.</p>
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -30821,7 +31460,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -30845,7 +31484,7 @@ more each time.</p>
 <li>if <code>next()</code> was never called (“Range.current() before next()”)</li>
 <li>if <code>next()</code> already returned false (“Range.current() past the end”)</li>
 </ul>
-<h4 id="contains-5"><a class="header" href="#contains-5">contains</a></h4>
+<h4 id="contains-6"><a class="header" href="#contains-6">contains</a></h4>
 <pre><code class="language-pepper">contains(value: T): bool
 </code></pre>
 <p>Returns whether <code>value</code> lies in the range, whatever the iteration has
@@ -30932,7 +31571,7 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-18"><a class="header" href="#static-methods-18">Static methods</a></h3>
+<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
 <h4 id="parse-10"><a class="header" href="#parse-10">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
@@ -30969,7 +31608,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -31133,7 +31772,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
     var parts = regex.Regex(",\\s*").split("a, b,c");
     assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
+<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -31149,7 +31788,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -31245,7 +31884,7 @@ when it did not take part.</p>
 <ul>
 <li>if <code>index</code> is greater than <code>group_count()</code></li>
 </ul>
-<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<h4 id="to_string-1-3"><a class="header" href="#to_string-1-3">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the matched text.</p>
@@ -31305,7 +31944,7 @@ points below 128 have an ASCII byte.</p>
     assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-19"><a class="header" href="#static-methods-19">Static methods</a></h3>
+<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -31411,7 +32050,7 @@ is written, and one read is kept as part of the text.</p>
     assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-20"><a class="header" href="#static-methods-20">Static methods</a></h3>
+<h3 id="static-methods-21"><a class="header" href="#static-methods-21">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -31468,7 +32107,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
     var bytes = text.Utf8.encode("hi");
     assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-21"><a class="header" href="#static-methods-21">Static methods</a></h3>
+<h3 id="static-methods-22"><a class="header" href="#static-methods-22">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -31538,6 +32177,72 @@ the same text as <code>decode</code>.</p>
     data.append(105);
     assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
 </code></pre>
+<h4 id="find_invalid"><a class="header" href="#find_invalid">find_invalid</a></h4>
+<pre><code class="language-pepper">static find_invalid(value: String): ulong?
+</code></pre>
+<p>Returns the byte offset of the first byte of <code>value</code> that does not
+start a valid UTF-8 sequence (see <code>is_valid</code>), or none when all of it
+is valid. A <code>String</code> made from checked bytes is always valid; one made
+from C memory may not be.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset of the first invalid byte, or none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+</code></pre>
+<h4 id="code_point_at"><a class="header" href="#code_point_at">code_point_at</a></h4>
+<pre><code class="language-pepper">static code_point_at(value: String, offset: ulong): (uint, ulong)
+</code></pre>
+<p>Decodes the code point whose UTF-8 sequence starts at byte <code>offset</code>
+of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to read</li>
+<li><code>offset</code> — the byte offset where the sequence starts</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the code point and the number of bytes its sequence takes, from 1 to 4, so <code>offset</code> plus that is where the next one starts</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>offset</code> is not less than <code>value.size</code> (“Utf8.code_point_at offset out of bounds”)</li>
+<li>if no valid sequence starts at <code>offset</code> (“Utf8.code_point_at found invalid UTF-8”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var (point, run) = text.Utf8.code_point_at("é!", 0);
+    assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+</code></pre>
+<h4 id="append_code_point"><a class="header" href="#append_code_point">append_code_point</a></h4>
+<pre><code class="language-pepper">static append_code_point(out: u8[], code_point: uint)
+</code></pre>
+<p>Appends the UTF-8 encoding of <code>code_point</code>, from 1 to 4 bytes, to
+<code>out</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>out</code> — the bytes to append to</li>
+<li><code>code_point</code> — the code point to encode</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>code_point</code> is a surrogate (U+D800 to U+DFFF) or above U+10FFFF (“Utf8.append_code_point needs a Unicode scalar value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import text;
+
+    var out = Array&lt;u8&gt;();
+    text.Utf8.append_code_point(out, 8364);
+    assert(text.Utf8.decode(out).value() == "€", "U+20AC");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/tls/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="tlsmodulepep"><a class="header" href="#tlsmodulepep">tls/module.pep</a></h1>
 <p>Encrypted connections: TLS 1.2 and 1.3 over TCP, for clients and servers.</p>
@@ -31593,7 +32298,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -31602,7 +32307,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-22"><a class="header" href="#static-methods-22">Static methods</a></h3>
+<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -31611,7 +32316,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -31896,7 +32601,7 @@ has an empty query) differs from a missing one (<code>http://h/</code> has none)
     assert(Uri.decode(uri.path).value() == "/a b", "decoded");
     assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -31914,7 +32619,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var port: u16?
 </code></pre>
 <p>The port after the host, if the authority gives one.</p>
-<h4 id="path-8"><a class="header" href="#path-8">path</a></h4>
+<h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
 <p>The path, possibly empty, with its percent-escapes.</p>
@@ -31926,13 +32631,13 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty relative reference: no scheme, no authority, and an
 empty path.</p>
-<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
+<h3 id="static-methods-24"><a class="header" href="#static-methods-24">Static methods</a></h3>
 <h4 id="parse-11"><a class="header" href="#parse-11">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String): Result&lt;Uri&gt;
 </code></pre>
@@ -31973,7 +32678,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
@@ -32002,7 +32707,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-27"><a class="header" href="#to_string-27">to_string</a></h4>
+<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a
