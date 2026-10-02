@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0da5a2c1.js";
+            window.path_to_searchindex_js = "searchindex-574b86cb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11a2ae4f.js"></script>
@@ -7681,8 +7681,9 @@ declares, is emitted. Its compile-time parts are filled in first:
 <code>out.append(field.name)</code> emits <code>out.append("x")</code>.</li>
 <li>Everything else runs in the compiler: <code>var</code> declarations whose value uses
 no captured name, <code>if</code> on a compile-time condition (only the branch taken
-is kept), and <code>for</code> over a compile-time list, which is unrolled, one copy
-of its body per element.</li>
+is kept), <code>for</code> over a compile-time list, which is unrolled, one copy
+of its body per element, and <code>while</code> on a compile-time condition, which
+emits its body once per iteration.</li>
 <li>An <code>if</code> whose condition uses a captured name is emitted as a runtime
 <code>if</code>; its branches can still hold compile-time steps.</li>
 </ul>
@@ -7691,8 +7692,68 @@ counts as using a capture. Using a runtime value that is not captured is an
 error at that name:</p>
 <pre><code class="language-text">main.pep:9:24: error: 'total' is a runtime value; add it to the static block's capture list
 </code></pre>
-<p>Each pass of an unrolled <code>for</code>, and the branch an <code>if</code> keeps, is its own
-block, like the body of a real loop.</p>
+<p>Each pass of an unrolled <code>for</code> or <code>while</code>, and the branch an <code>if</code> keeps, is
+its own block, like the body of a real loop.</p>
+<h3 id="compile-time-loops"><a class="header" href="#compile-time-loops">Compile-time loops</a></h3>
+<p><code>break</code> and <code>continue</code> in a compile-time <code>for</code> or <code>while</code> run in the
+compiler: <code>continue</code> drops the rest of the pass, and <code>break</code> ends the
+unrolling. They cannot sit in a runtime <code>if</code>, whose condition the compiler
+does not know:</p>
+<pre><code class="language-text">main.pep:10:17: error: 'break' in a runtime 'if' cannot leave a compile-time loop; the condition is not known while compiling
+</code></pre>
+<p>A <code>while</code> that runs 100,000 times is taken to be endless and stops the
+compile at its <code>while</code>.</p>
+<pre><code class="language-pepper">struct Row {
+    var id: int;
+    var _cache: int;
+    var name: String;
+    var score: int;
+    var notes: String;
+}
+
+# The sum of the public `int` fields of `Row` before 'notes': `continue`
+# and `break` steer the unrolled `for`.
+sum_leading_ints(row: Row): int {
+    var total = 0;
+    static (total, row) {
+        for (var field in reflect.fields&lt;Row&gt;()) {
+            if (field.name.starts_with("_")) {
+                continue;
+            }
+            if (field.name == "notes") {
+                break;
+            }
+            if (reflect.is_same&lt;field.Type, int&gt;()) {
+                total += field.get(row);
+            }
+        }
+    }
+    return total;
+}
+
+# A compile-time `while` emits its body once per iteration: here, the
+# first four powers of three, as four additions.
+powers_of_three(): int {
+    var sum = 0;
+    static (sum) {
+        var power = 1;
+        while (power &lt; 30) {
+            sum += power;
+            power = power * 3;
+        }
+    }
+    return sum;
+}
+
+main(): int {
+    var row = Row();
+    row.id = 2;
+    row.score = 40;
+    assert(sum_leading_ints(row) == 42, "id and score; _cache is skipped");
+    assert(powers_of_three() == 1 + 3 + 9 + 27, "one addition per iteration");
+    return 0;
+}
+</code></pre>
 <h3 id="in-generic-code"><a class="header" href="#in-generic-code">In generic code</a></h3>
 <p>In a generic function, a <code>static</code> block runs once for each specialization,
 when its type arguments are known: <code>describe&lt;Point&gt;</code> and <code>describe&lt;Line&gt;</code>
@@ -7955,8 +8016,7 @@ main(): int {
 </code></pre>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
-<li>Calling functions other than the <code>reflect</code> functions at compile time,
-and <code>while</code> loops in the compiler.</li>
+<li>Calling functions other than the <code>reflect</code> functions at compile time.</li>
 <li><code>static</code> blocks at module scope, to compute constants.</li>
 <li>Reflecting methods and constructors (<code>reflect.methods&lt;T&gt;()</code>).</li>
 <li>The values of built-in attributes: <code>attribute&lt;Deprecated&gt;()</code> is an error;
