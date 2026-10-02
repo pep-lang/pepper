@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0f6521c0.js";
+            window.path_to_searchindex_js = "../searchindex-0096562c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-aa7f5379.js"></script>
@@ -332,7 +332,11 @@ main(): int {
 value does. The expression before the <code>.</code> is evaluated once, when the value
 is made. Inside a method, write <code>this.norm</code>; a bare <code>norm</code> is not a value.
 Storing <code>this.norm</code> in a field of <code>this</code> would be a reference cycle, and is
-an error, as for <a href="#this-in-methods">closures</a>.</li>
+an error, as for <a href="#this-in-methods">closures</a>.
+A bound method is a function value, not the value the method returns:
+passing <code>p.name</code> where a <code>String</code> is expected is an error. Call it,
+<code>p.name()</code>. The methods of an enum whose cases carry nothing are not
+values at all (see <a href="enums.html#current-limits">enums</a>).</li>
 <li><strong>Traits and extensions.</strong> A method declared in an
 <a href="traits-and-extensions.html">extension</a> works the same way, and so does a
 method of a trait-typed value (<code>shape.area</code>), which calls through the trait.</li>

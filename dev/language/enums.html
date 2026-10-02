@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0f6521c0.js";
+            window.path_to_searchindex_js = "../searchindex-0096562c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-aa7f5379.js"></script>
@@ -643,6 +643,11 @@ inside <a href="tuples.html#matching-tuples">tuple patterns</a> (<code>(Text(t),
 Patterns cannot match ranges (<code>1..9</code>) or have guards yet. A literal
 pattern is a literal, not a named constant.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
+<li>The methods of an enum whose cases carry nothing have no value form:
+<code>c.name</code> without the call is an error (“‘name’ is a method of ‘Color’:
+call it as ‘name()’”), where a struct’s <code>p.norm</code> is a
+<a href="function-types.html">bound method</a>. Wrap the call in a closure instead,
+<code>() =&gt; c.name()</code>.</li>
 <li>An enum whose cases carry nothing cannot be extended
 (<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
 conform to a trait either, and a trait value is a reference to an object,
