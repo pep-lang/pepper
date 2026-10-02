@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-da72a21e.js";
+            window.path_to_searchindex_js = "searchindex-402a8d7a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-c45e05eb.js"></script>
@@ -6545,8 +6545,9 @@ the others.</p>
 it is copied, not reference counted, and it can be stored in locals, fields,
 arrays and module-scope constants, and passed to and returned from functions.</p>
 <ul>
-<li><code>==</code> and <code>!=</code> compare two values of the same enum. No other operator
-applies to an enum.</li>
+<li><code>==</code> and <code>!=</code> compare two values of the same enum. Other operators apply
+only when the enum declares them (see
+<a href="#operators-and-indexers">Operators and indexers</a>).</li>
 <li>An enum does not mix with integers or with other enums: <code>int x = Color.Red</code>
 and <code>Color c = 0</code> are errors, and so is comparing a <code>Color</code> with a <code>Size</code>.</li>
 <li><code>value as int</code> (or any integer type) gives a case’s integer value. The
@@ -6746,6 +6747,56 @@ instead, as <code>next()</code> does. Such an enum can also declare a trait with
 <a href="#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
 it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
 the object, as in a struct’s method; its values still cannot change.</p>
+<h3 id="operators-and-indexers"><a class="header" href="#operators-and-indexers">Operators and indexers</a></h3>
+<p>An enum can declare <a href="#operators-1">operators</a> and an
+<a href="#indexers">indexer</a> the way a struct does: a method named after
+the operator (<code>&lt;(other: Level): bool</code>) or <code>[]</code>. For an enum whose cases
+carry nothing, <code>a &lt; b</code> calls <code>Level.&lt;</code> with <code>a</code> as <code>this</code>.</p>
+<pre><code class="language-pepper"># An enum can declare operators and an indexer, as a struct does.
+enum Level: u8 {
+    Low,
+    Mid,
+    High,
+
+    # `a &lt; b` calls `Level.&lt;`: the cases rank in order.
+    &lt;(other: Level): bool {
+        return (this as int) &lt; (other as int);
+    }
+
+    # `level + 1` moves up a level, stopping at the top.
+    +(steps: int): Level {
+        var next = Level.from_value((this as int + steps) as u8);
+        return next.is_ok() ? next.value() : Level.High;
+    }
+
+    # `-level` mirrors it.
+    -(): Level {
+        return match (this) {
+            Low =&gt; Level.High,
+            Mid =&gt; Level.Mid,
+            High =&gt; Level.Low,
+        };
+    }
+
+    # `level[i]` reads, like any indexer.
+    [](bit: int): bool {
+        return ((this as int) &gt;&gt; bit) &amp; 1 == 1;
+    }
+}
+
+main(): int {
+    var level = Level.Low;
+    assert(level &lt; Level.Mid &amp;&amp; !(Level.High &lt; level), "cases rank in order");
+    assert(level + 1 == Level.Mid &amp;&amp; level + 5 == Level.High, "a step up");
+    assert(-level == Level.High, "mirrored");
+    assert(Level.Mid[0] &amp;&amp; !Level.Mid[1] &amp;&amp; Level.High[1], "bits");
+    return 0;
+}
+</code></pre>
+<p>Its values never change and it already compares with <code>==</code> and <code>!=</code>, so
+such an enum cannot declare <code>==</code>, <code>!=</code>, a compound assignment (<code>+=</code>), an
+indexer that assigns (<code>[](index, value)</code>) or the truth test <code>!!</code>, and its
+operators are not <code>static</code>.</p>
 <h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
 <p>An enum can also declare computed <a href="#properties">properties</a> after its
 cases, <code>var name: T { get { ... } }</code>, which are read like fields
@@ -7219,10 +7270,14 @@ case.</li>
 </ul>
 <h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
 <ul>
-<li>An enum whose cases carry nothing cannot be generic. An enum whose cases
-carry values can declare indexers (<code>[]</code>), as a struct does; one whose
-cases carry nothing cannot declare operators or indexers yet, and has
-<code>==</code> and <code>!=</code> built in.</li>
+<li>An enum whose cases carry nothing cannot be generic, by design: its value
+is a plain integer, so a type parameter would have nothing to describe.
+An enum whose cases carry values can be (<code>enum List&lt;T&gt;</code>).</li>
+<li>An enum whose cases carry values has no derived <code>==</code> that compares the
+values: <code>==</code> compares identity, as for a struct, unless the enum declares
+<code>==</code> (with a matching <code>hash&lt;T&gt;</code> to be a key), or is a
+<a href="#value-enums"><code>[Value]</code> enum</a>. Deriving <code>==</code> and <code>hash</code> from the values
+is planned together with the same for structs.</li>
 <li>A constant is a pattern only when it is declared at module scope.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>The methods of an enum whose cases carry nothing have no value form:
@@ -7230,10 +7285,10 @@ cases carry nothing cannot declare operators or indexers yet, and has
 call it as ‘name()’”), where a struct’s <code>p.norm</code> is a
 <a href="#function-types-and-closures">bound method</a>. Wrap the call in a closure instead,
 <code>() =&gt; c.name()</code>.</li>
-<li>An enum whose cases carry nothing cannot be extended
-(<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
-conform to a trait either, and a trait value is a reference to an object,
-which such an enum’s value is not.</li>
+<li>An enum whose cases carry nothing is extended only with a trait
+(<code>extend Color with Describe { ... }</code>); declare its other methods inside
+it. It is never a trait value, since a trait value is a reference to an
+object, which such an enum’s value is not.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-and-reference-counting"><a class="header" href="#memory-and-reference-counting">Memory and reference counting</a></h1>
