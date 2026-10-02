@@ -3691,6 +3691,15 @@ fn named_function(input: &mut &str, name: String, name_span: Span, start: usize,
     })
 }
 
+
+/// The method an indexer `[](...)` declares: `__index_set` when it takes a
+/// value to store (two required parameters), else `__index_get`. A trailing
+/// defaulted parameter (`location: __ptr<char> = __caller_location()`)
+/// does not make a reader a writer.
+fn indexer_name(parameters: &[VariableDecl]) -> &'static str {
+    if parameters.iter().filter(|p| p.default_value.is_none()).count() >= 2 { "__index_set" } else { "__index_get" }
+}
+
 /// A method inside a struct or `extend` block:
 ///   - `static` modifier
 ///   - indexer method: `T [](params) { body }`
@@ -3728,7 +3737,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
             let mut f = named_function(input, op.clone(), op_span, start, attributes)?;
             f.is_static = is_static;
             if op == "[]" {
-                f.name = if f.parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() };
+                f.name = indexer_name(&f.parameters).into();
                 f.is_indexer = true;
             }
             return Ok(f);
@@ -3750,7 +3759,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
                 *input = after;
                 return Ok(FunctionDecl {
                     is_exported: false,
-                    name: if parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() },
+                    name: indexer_name(&parameters).into(),
                     name_span: ty.span,
                     generic_params: vec![],
                     return_type: ty,
@@ -6455,6 +6464,18 @@ f() { var r = c.Result<int>.ok(1); }");
             }
             other => panic!("{:?}", other),
         }
+    }
+
+    #[test]
+    fn a_defaulted_indexer_parameter_does_not_make_a_writer() {
+        // `[](i, location = ...)` reads; `[](i, x, location = ...)` writes (#354).
+        let source = "struct S {\n    int v;\n    [](i: ulong, location: __ptr<char> = __caller_location()): int { return v; }\n    \
+                      [](i: ulong, x: int, location: __ptr<char> = __caller_location()): void { v = x; }\n    \
+                      int [](ulong i, int at = 0) { return v; }\n}\n";
+        let m = parse(source);
+        let Declaration::Struct(s) = &m.declarations[0] else { panic!("expected a struct") };
+        let names: Vec<&str> = s.methods.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["__index_get", "__index_set", "__index_get"]);
     }
 
     #[test]

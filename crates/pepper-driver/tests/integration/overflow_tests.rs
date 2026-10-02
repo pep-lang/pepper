@@ -14,8 +14,8 @@ fn run(name: &str, body: &str, args: &[&str]) -> (bool, String) {
         body
     );
     let output = run_linked_with(name, &source, args, |_| {});
-    // A panic's message goes to standard output, the warnings to standard
-    // error: read both.
+    // A panic's message and the warnings go to standard error, what the
+    // program prints to standard output: read both.
     let text = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     (output.status.success(), text.replace('\r', ""))
 }
@@ -41,7 +41,7 @@ fn overflowing_operations_panic_with_their_location() {
     let results = parallel_map(PANICS, |&(name, body, message)| (name, message, run(&format!("overflow_{}", name), body, &[])));
     for (name, message, (success, stderr)) in results {
         assert!(!success, "{}: expected a panic", name);
-        // Located: <path>/overflow_<name>.pep:<line>:<column>: <message>.
+        // Located: <path>/overflow_<name>.pep:<line>:<column>: panic: <message>.
         let line = stderr.lines().find(|l| l.contains(message)).unwrap_or_else(|| panic!("{}: no '{}' in:\n{}", name, message, stderr));
         let at = format!("overflow_{}.pep:", name);
         let position = line.split_once(&at).map(|(_, rest)| rest).unwrap_or_else(|| panic!("{}: '{}' is not located", name, line));
@@ -54,7 +54,7 @@ fn overflowing_operations_panic_with_their_location() {
 fn panic_names_the_operator_position() {
     let (success, stderr) = run("overflow_position", "    int x = 2147483647;\n    var y = x + n;", &[]);
     assert!(!success);
-    assert!(stderr.contains("overflow_position.pep:6:15: integer overflow in 'int' addition"), "{}", stderr);
+    assert!(stderr.contains("overflow_position.pep:6:15: panic: integer overflow in 'int' addition"), "{}", stderr);
 }
 
 #[test]

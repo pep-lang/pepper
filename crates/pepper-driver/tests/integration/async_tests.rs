@@ -379,7 +379,7 @@ fn assert_panics(name: &str, source: &str, message: &str) {
 fn assert_panics_with(name: &str, source: &str, message: &str, env: &[(&str, &str)]) {
     let exe = build(name, source).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
     let output = support::run_program(Command::new(&exe).envs(env.iter().copied()), source).expect("spawn");
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stdout = support::output_text(&output);
     assert!(!output.status.success(), "{name} was expected to panic\nstdout:\n{stdout}");
     let last = stdout.lines().last().unwrap_or("");
     assert!(last.contains(message), "{name}: expected a panic containing {message:?}, got {last:?}\nstdout:\n{stdout}");

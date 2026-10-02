@@ -180,7 +180,7 @@ Reports whether this result is Err.
 #### value
 
 ```pepper
-value(): TValue
+value(location: __ptr<char> = __caller_location()): TValue
 ```
 
 Returns the success value, panicking if this result is Err.
@@ -190,6 +190,9 @@ keeps its reference too.
 
 For `Result<void>` it returns nothing: calling it only checks that the
 result is Ok.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the value of an Ok result
@@ -205,13 +208,16 @@ result is Ok.
 #### error
 
 ```pepper
-error(): TError
+error(location: __ptr<char> = __caller_location()): TError
 ```
 
 Returns the failure value, panicking if this result is Ok.
 
 For a struct `TError` the caller gets its own reference; the result
 keeps its reference too.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the error of an Err result

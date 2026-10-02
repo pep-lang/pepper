@@ -175,6 +175,7 @@ fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_m
                 let builtin = function.starts_with("_pep_")
                     || function.starts_with("trace_")
                     || function == "String"
+                    || function == crate::passes::CALLER_LOCATION
                     || function.contains('<')
                     || type_params.contains(function);
                 if !builtin && report_missing {

@@ -106,15 +106,16 @@ export enum Optional<T> {
     ## For a struct `T` the caller gets its own reference; the optional keeps
     ## its reference too.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the value of a Some optional
     ## @panics if the optional is None ("Optional.value on a None value")
     ## @example
     ##     var n = Optional<int>.some(42).value();   # 42
-    value(): T {
+    value(location: __ptr<char> = __caller_location()): T {
         if (this is Some(value)) {
             return value;
         }
-        panic("Optional.value on a None value");
+        panic("Optional.value on a None value", location);
     }
 
     ## Returns the value, or `fallback` if this optional is None.

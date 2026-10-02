@@ -1033,7 +1033,7 @@ fn an_override_of_the_files_own_generic_keeps_its_name() {
 #[test]
 fn a_forced_import_replaces_a_runtime_export() {
     let files = [
-        ("quiet/module.pep", "export assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("quiet/module.pep", "export assert(condition: bool, msg: __ptr<char>, location: __ptr<char> = __caller_location()): void { }"),
         ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
     ];
     assert_eq!(run_with("forced_replaces_runtime", &files, &["--import", "quiet"]), 7);
@@ -1045,7 +1045,7 @@ fn a_forced_import_replaces_only_the_overloads_it_declares() {
     // `String` message calls it, while the runtime's `__ptr<char>` member
     // (which a literal message would pick) stays in the set.
     let files = [
-        ("quiet/module.pep", "export assert(condition: bool, message: String): void { }"),
+        ("quiet/module.pep", "export assert(condition: bool, message: String, location: __ptr<char> = __caller_location()): void { }"),
         ("main.pep", "test(): int { var m = String(\"x\"); assert(false, m); return 7; }"),
     ];
     assert_eq!(run_with("forced_string_assert", &files, &["--import", "quiet"]), 7);
@@ -1084,7 +1084,7 @@ fn a_value_does_not_hide_an_unimported_type() {
 fn a_forced_modules_other_files_share_its_exemptions() {
     let files = [
         ("quiet/module.pep", "import \"impl\";\nexport assert;"),
-        ("quiet/impl.pep", "export assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("quiet/impl.pep", "export assert(condition: bool, msg: __ptr<char>, location: __ptr<char> = __caller_location()): void { }"),
         ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
     ];
     assert_eq!(run_with("forced_module_files", &files, &["--import", "quiet"]), 7);
@@ -1148,7 +1148,7 @@ fn a_keyword_prefixed_module_qualifies_local_and_field_types() {
 fn a_module_nested_in_a_forced_module_has_its_own_exports() {
     let files = [
         ("alt/module.pep", "import \"sub\" as s;\nexport f(): int { return s.g(); }"),
-        ("alt/sub/module.pep", "export g(): int { return 1; }\nexport assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("alt/sub/module.pep", "export g(): int { return 1; }\nexport assert(condition: bool, msg: __ptr<char>, location: __ptr<char> = __caller_location()): void { }"),
         ("main.pep", "test(): int { return f(); }"),
     ];
     // `sub` is a module of its own, not part of the forced one, so its

@@ -766,7 +766,7 @@ fn run_binary(name: &str, files: &[(&str, &str)]) -> (bool, String) {
     ]);
     pepper_driver::run(options).expect("compile + link");
     let output = Command::new(&out_path).output().expect("spawn linked binary");
-    (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
+    (output.status.success(), crate::support::output_text(&output))
 }
 
 #[test]

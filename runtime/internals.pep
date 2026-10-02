@@ -20,12 +20,15 @@ extern int fflush(void* stream);
 ## @param condition the condition that must hold
 ## @param message the text to print on failure; a null `String` prints a
 ##   generic message
-## @panics if `condition` is false: prints `message` and aborts (see `panic`)
+## @param location where the failure is reported, `file:line:col`; leave
+##   it out to report this call (see `panic`)
+## @panics if `condition` is false: prints the location and `message`, and
+##   aborts (see `panic`)
 ## @example
 ##     assert(count > 0, "count must be positive");
-export assert(condition: bool, message: String) {
+export assert(condition: bool, message: String, location: __ptr<char> = __caller_location()) {
     if (!condition) {
-        panic(message);
+        panic(message, location);
     }
 }
 
@@ -36,12 +39,15 @@ export assert(condition: bool, message: String) {
 ## @param condition the condition that must hold
 ## @param message the text to print on failure, or `__null` for a generic
 ##   message
-## @panics if `condition` is false: prints `message` and aborts (see `panic`)
+## @param location where the failure is reported, `file:line:col`; leave
+##   it out to report this call (see `panic`)
+## @panics if `condition` is false: prints the location and `message`, and
+##   aborts (see `panic`)
 ## @example
 ##     assert(count > 0, "count must be positive");
-export assert(condition: bool, message: __ptr<char>) {
+export assert(condition: bool, message: __ptr<char>, location: __ptr<char> = __caller_location()) {
     if (!condition) {
-        _pep_panic(message);
+        _pep_panic(message, location);
     }
 }
 
@@ -49,18 +55,18 @@ export assert(condition: bool, message: __ptr<char>) {
 # (function and trait values, `match` subjects) lower to: `message` is a
 # NUL-terminated C string, or `__null`. A build with
 # `--no-runtime-checks=null` drops them.
-export _pep_assert(condition: bool, message: __ptr<char>) {
+export _pep_assert(condition: bool, message: __ptr<char>, location: __ptr<char> = __caller_location()) {
     if (!condition) {
-        _pep_panic(message);
+        _pep_panic(message, location);
     }
 }
 
 # The index check of `Array` and `String` indexing: `_pep_assert`, except
 # that the compiler drops each call, condition and all, from a build with
 # `--no-runtime-checks=bounds`.
-export _pep_check_bounds(condition: bool, message: __ptr<char>) {
+export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<char> = __caller_location()) {
     if (!condition) {
-        _pep_panic(message);
+        _pep_panic(message, location);
     }
 }
 
@@ -173,47 +179,87 @@ export _pep_live_allocs(): long {
 
 ## Prints `message` and aborts the program. It never returns.
 ##
-## Writes `message` and a newline to standard output, or "Assertion failed
-## with no additional information" when `message` is null. Then it flushes
-## every C output stream, so the message is not lost when stdout is a pipe,
-## and calls C `abort()`. No destructors or releases run, and the process
-## ends abnormally (SIGABRT on POSIX).
+## Reports `message` as a panic and aborts.
+##
+## Flushes every C output stream, so output printed so far is not lost,
+## then writes `location: panic: message` and a newline to standard error
+## ("Assertion failed with no additional information" when `message` is
+## null), and calls C `abort()`. No destructors or releases run, and the
+## process ends abnormally (SIGABRT on POSIX).
+##
+## `location` is `file:line:col`. Left out, it is this call's location, the
+## way a C++ `std::source_location` default argument works. A function
+## that panics on its caller's behalf takes a `location` parameter of its
+## own with the same default and passes it on, so the panic names its
+## caller's line:
+##
+##     check_positive(value: int, location: __ptr<char> = __caller_location()) {
+##         if (value <= 0) {
+##             panic("expected a positive value", location);
+##         }
+##     }
 ##
 ## @param message the text to print
+## @param location where the panic is reported, or `__null` for none
 ## @panics always
 ## @example
 ##     panic("unreachable");
-export panic(message: String) {
+export panic(message: String, location: __ptr<char> = __caller_location()) {
     if (message === __null) {
-        _pep_panic(__null);
+        _pep_panic(__null, location);
     }
-    _pep_panic(message.c_str());
+    _pep_panic(message.c_str(), location);
 }
 
-## Writes `message`, a NUL-terminated C string, and a newline to standard
-## output (a generic message when it is `__null`), flushes every C output
-## stream, and aborts, as `panic(String)` does. A string literal message
-## picks this overload, so it allocates nothing.
+## Reports `message`, a NUL-terminated C string (a generic message when it
+## is `__null`), as a panic and aborts, as `panic(String)` does. A string
+## literal message picks this overload, so it allocates nothing.
 ##
 ## @param message the text to print, or `__null`
+## @param location where the panic is reported, or `__null` for none;
+##   left out, this call's location
 ## @panics always
 ## @example
 ##     panic("unreachable");
-export panic(message: __ptr<char>) {
-    _pep_panic(message);
+export panic(message: __ptr<char>, location: __ptr<char> = __caller_location()) {
+    _pep_panic(message, location);
 }
 
-# `panic` on a NUL-terminated C string (`__null` prints a generic message).
-# Compiler-generated checks lower to this, so a panic never has to allocate.
-export _pep_panic(message: __ptr<char>) {
-    if (message == __null) {
-        puts("Assertion failed with no additional information");
-    } else {
-        puts(message);
-    }
+[Target(!OS(Windows))]
+extern long write(int fd, void* buf, ulong n);
+[Target(OS(Windows))]
+extern int _write(int fd, void* buf, uint n);
+extern ulong strlen(char* s);
+
+# Write the C string `text` to standard error, unbuffered.
+[Target(!OS(Windows))]
+_pep_write_error(text: __ptr<char>) {
+    write(2, text, strlen(text));
+}
+
+[Target(OS(Windows))]
+_pep_write_error(text: __ptr<char>) {
+    _write(2, text, strlen(text) as uint);
+}
+
+# `panic` on NUL-terminated C strings: `message` (`__null` prints a generic
+# message) and `location` (`__null` for none). Compiler-generated checks
+# lower to this, so a panic never has to allocate.
+export _pep_panic(message: __ptr<char>, location: __ptr<char>) {
     # stdout is fully buffered when it is a pipe: flush it, or abort() drops
-    # the message just printed.
+    # what the program printed before the panic.
     fflush(__null);
+    if (location != __null) {
+        _pep_write_error(location);
+        _pep_write_error(": ");
+    }
+    _pep_write_error("panic: ");
+    if (message == __null) {
+        _pep_write_error("Assertion failed with no additional information");
+    } else {
+        _pep_write_error(message);
+    }
+    _pep_write_error("\n");
     abort();
 }
 

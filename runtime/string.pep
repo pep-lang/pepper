@@ -293,6 +293,7 @@ export struct String {
     ## visit every code point in O(size).
     ##
     ## @param idx the code-point index; negative counts from the end
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String that holds the one code point
     ## @panics if `idx` is not less than `length` after the negative index is
     ##   normalized, which includes any index into an empty String
@@ -300,7 +301,7 @@ export struct String {
     ##     var s = "TEST";
     ##     assert(s[0] == "T", "first");
     ##     assert(s[-1] == "T", "last");
-    [](idx: int): String {
+    [](idx: int, location: __ptr<char> = __caller_location()): String {
         # Normalize a negative index to the end-relative offset *before* the
         # bounds check: `idx < _length` compares int against ulong, which
         # promotes to unsigned (a negative idx would wrap to ~2^64).
@@ -309,7 +310,7 @@ export struct String {
                 idx = (idx + (_length as long)) as int;
             }
         }
-        _pep_check_bounds(idx < _length, "String[] idx must be < length");
+        _pep_check_bounds(idx < _length, "String[] idx must be < length", location);
         ulong begin = _pep_utf8_char_offset(_data, _size, idx);
         return String(_data + begin, 0, 1);
     }
@@ -488,14 +489,15 @@ export struct String {
     ## whole String. Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new Array with one new String per piece
     ## @panics if `separator` is empty
     ## @example
     ##     var parts = "a,b,,c".split(",");
     ##     assert(parts.count == 4, "four pieces");
     ##     assert(parts[2] == "", "an empty piece");
-    split(separator: String): String[] {
-        assert(separator._size > 0, "String.split: the separator is empty");
+    split(separator: String, location: __ptr<char> = __caller_location()): String[] {
+        assert(separator._size > 0, "String.split: the separator is empty", location);
         var result = Array<String>();
         ulong start = 0;
         while (true) {
@@ -515,6 +517,7 @@ export struct String {
     ## Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the pieces before and after the first `separator`, or none
     ## @panics if `separator` is empty
     ## @example
@@ -522,8 +525,8 @@ export struct String {
     ##     assert(header.is_some(), "has a colon");
     ##     var (name, value) = header.value();
     ##     assert(name == "Host" && value == "example.com", "split");
-    split_once(separator: String): (String, String)? {
-        assert(separator._size > 0, "String.split_once: the separator is empty");
+    split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)? {
+        assert(separator._size > 0, "String.split_once: the separator is empty", location);
         var found = find(separator);
         if (found < 0) {
             return Optional<(String, String)>.none();
@@ -565,12 +568,13 @@ export struct String {
     ##
     ## @param from the text to replace
     ## @param to the text to put in its place
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String
     ## @panics if `from` is empty
     ## @example
     ##     assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
-    replace(from: String, to: String): String {
-        assert(from._size > 0, "String.replace: the text to replace is empty");
+    replace(from: String, to: String, location: __ptr<char> = __caller_location()): String {
+        assert(from._size > 0, "String.replace: the text to replace is empty", location);
         var out = StringBuilder();
         ulong start = 0;
         while (true) {
@@ -696,13 +700,14 @@ export struct String {
     ## character literal (`s.byte_at(0) == '#'`).
     ##
     ## @param index the byte offset, less than `size`
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the byte at `index`
     ## @panics if `index` is not less than `size` ("String byte_at index out of bounds")
     ## @example
     ##     var s = "a=b";
     ##     assert(s.byte_at(1) == '=', "second byte");
-    byte_at(index: ulong): byte {
-        _pep_check_bounds(index < _size, "String byte_at index out of bounds");
+    byte_at(index: ulong, location: __ptr<char> = __caller_location()): byte {
+        _pep_check_bounds(index < _size, "String byte_at index out of bounds", location);
         return _data[index] as byte;
     }
 
@@ -712,6 +717,7 @@ export struct String {
     ##
     ## @param start the byte offset of the first byte to copy
     ## @param size the number of bytes to copy
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String that holds those bytes
     ## @panics if `start + size` is greater than `size` ("String substr_bytes range out of bounds")
     ## @panics if `start` or `start + size` falls inside a multi-byte code point
@@ -721,9 +727,9 @@ export struct String {
     ##     var eq = s.find("=") as ulong;
     ##     assert(s.substr_bytes(0, eq) == "key", "before '='");
     ##     assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
-    substr_bytes(start: ulong, size: ulong): String {
-        assert(start <= _size && size <= _size - start, "String substr_bytes range out of bounds");
-        assert(_is_boundary(start) && _is_boundary(start + size), "String substr_bytes splits a code point");
+    substr_bytes(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): String {
+        assert(start <= _size && size <= _size - start, "String substr_bytes range out of bounds", location);
+        assert(_is_boundary(start) && _is_boundary(start + size), "String substr_bytes splits a code point", location);
         # A zero size would tell the constructor to measure the C string.
         if (size == 0) {
             return String();

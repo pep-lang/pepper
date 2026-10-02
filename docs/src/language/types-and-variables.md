@@ -390,7 +390,7 @@ Integer arithmetic whose result does not fit its type stops the program, as in
 Swift (and Rust's debug builds), instead of wrapping around silently:
 
 ```text
-main.pep:3:16: integer overflow in 'int' addition
+main.pep:3:16: panic: integer overflow in 'int' addition
 ```
 
 The message names the operator's location and the type the operation ran at.

@@ -236,13 +236,43 @@ in the order the program wrote it, even when standard output is a pipe.
 A `float` or `double` prints its shortest exact text (`print(0.5)` prints
 `0.5`), and a tuple its elements in parentheses (`(1, two)`).
 
-For checks in your programs, the runtime also provides `assert(condition,
+## Assertions and panics
+
+For checks in your programs, the runtime provides `assert(condition,
 message)`, which stops the program with `message` when `condition` is false, and
 `panic(message)`, which always stops it. Each is
 [overloaded](overloading.md): the message may be a `String`, built at run time
 (`assert(n > 0, name + " must be positive")`), or a C string, which a string
 literal picks, so a literal message builds nothing when the assertion holds. See
 [Built-in functions](../reference/internals.md).
+
+A panic flushes what the program printed, writes the location of the failing
+call and the message to standard error, and aborts:
+
+```text
+main.pep:12:5: panic: count must be positive
+```
+
+The checks the compiler adds report the same way, at the expression that
+failed: an [overflowing operator](types-and-variables.md#integer-overflow), a
+null function value, a `match` on a null reference enum. So do the runtime's
+checking methods, which report their caller's line, not their own: indexing an
+`Array` or `String` out of range, `Array.pop()` on an empty array,
+`Optional.value()` on none, `Result.value()` on an error, and the like.
+
+They do it with an ordinary [default parameter](#default-parameter-values),
+`location: __ptr<char> = __caller_location()`. A call that leaves `location`
+out gets the place of that call, as `file:line:col`. Write the same parameter on
+a function of your own that checks its arguments, and pass `location` on to
+`assert` or `panic`, so a failure names the line that passed the bad value:
+
+```pepper
+{{#include ../../examples/functions-caller-location.pep}}
+```
+
+Written anywhere else, `__caller_location()` is its own location. A
+compiler-generated check with no single place to report, such as a call through
+a null trait value, prints the message alone.
 
 ## Command-line arguments and exit
 

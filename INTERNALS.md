@@ -1046,15 +1046,24 @@ How the language lowers:
   extern is declared returning `i32` and LLVM would not recognize the
   builtin; so a constant-size copy optimizes to loads and stores.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
-  `__is_pod`, and `__default<T>`. Without the `bounds` or `null` runtime
+  `__is_pod`, and `__default<T>`. `__caller_location()` is handled in
+  `codegen_expr` (#354): a constant C string `file:line:col`
+  (`location_text`, null when unknown) for its own `Loc`, or, while a call's
+  default arguments are generated (`codegen_default` sets
+  `in_default_argument`), for the call's (`call_loc`, which `codegen_expr`
+  sets for each `FunctionCall` and `MethodCall`). So `assert`, `panic`,
+  `_pep_assert`, `_pep_check_bounds` and the runtime's checking methods take
+  `location: __ptr<char> = __caller_location()` and report their caller;
+  the null checks codegen emits pass their own location
+  (`located_assert`). Without the `bounds` or `null` runtime
   check, a call to `_pep_check_bounds` (the runtime's index check) or
   `_pep_assert` (the null checks) is dropped, arguments and all.
 - **Runtime checks** (`checks.rs`, #265): `codegen_binary` and
   `codegen_unary` send integer `+ - * / % ** << >>`, unary `-`, `++` and
   `--` through `checked_int_binary` / `checked_arithmetic`, which use
   `llvm.{s,u}{add,sub,mul}.with.overflow` and `panic_if`: a branch to a
-  `check.fail` block calling `_pep_panic("file:line:col: integer overflow in
-  'int' addition")` (`llvm.trap` without the runtime). Two constant operands
+  `check.fail` block calling `_pep_panic("integer overflow in 'int'
+  addition", "file:line:col")` (`llvm.trap` without the runtime). Two constant operands
   are checked at compile time instead, an error at the operator.
   `CodeGenerator::runtime_checks` turns kinds off: overflow then wraps, a
   shift count is masked, a division is plain `sdiv`/`udiv`. Narrow types
@@ -1750,7 +1759,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call (`_pep_panic(message, location)` flushes stdout and writes `location: panic: message` to stderr with `write`/`_write`, then aborts), `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
 | `attributes.pep` | The built-in attributes (`Deprecated`, `Target`, `Link`, `Shared`, ...) as `[Attribute]` structs, so `static` blocks read their values (§2.8); the compiler acts on them by name. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. Both hash containers hold one `[Value] _HashTable<K, V>` inline; a `HashSet`'s values are the empty `_NoValue`, whose stores `sizeof<V>()` guards drop. |
@@ -1791,7 +1800,7 @@ diagnostics"). The mechanics:
   `_pep_interpolate` and `_pep_format*`. A name the compiler synthesizes must be exported:
   linking mangles private names per file. Every constructor calls `_pep_malloc`, and `__release`
   calls `_pep_free` once the weak count reaches 0. Compiler-generated checks (null function and trait
-  values) call `_pep_assert`, which takes a raw `char*`.
+  values) call `_pep_assert`, which takes a raw `char*` message and location.
   Codegen calls these by name after visibility has run, so they
   need not be exported.
 - **Intrinsics available to runtime code**: `__ptr<T>` (a raw pointer, the

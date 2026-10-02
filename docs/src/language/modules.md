@@ -256,9 +256,10 @@ itself (`export panic(...)`); re-exporting another function under a runtime
 export's name is an error, since the runtime's own files would keep calling
 their version. When the runtime's function is [overloaded](overloading.md),
 the prelude module replaces only the overloads it declares, matched by
-parameter types: an `export assert(condition: bool, message: String)`
-replaces the `String` form, and a string literal message still calls the
-runtime's `__ptr<char>` form.
+parameter types, defaulted ones included: an `export assert(condition: bool,
+message: String, location: __ptr<char> = __caller_location())` replaces the
+`String` form, and a string literal message still calls the runtime's
+`__ptr<char>` form.
 
 Only functions may be redefined this way. A struct, trait, type alias or
 variable that a prelude module exports under a name the runtime (or another

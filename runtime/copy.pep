@@ -319,6 +319,6 @@ export _pep_check_sync<T>(slot: __ptr<T>, waiting: ulong, locked: __ptr<char>) {
 # program asks for copies one (a `Copyable` container of such values that is
 # never copied): reaching it is a bug in the compiler's check.
 export _pep_copy_failed<T>(message: __ptr<char>): T {
-    _pep_panic(message);
+    _pep_panic(message, __null);
     return __default<T>();
 }

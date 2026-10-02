@@ -111,15 +111,16 @@ export enum Result<TValue, TError=Error> {
     ## For `Result<void>` it returns nothing: calling it only checks that the
     ## result is Ok.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the value of an Ok result
     ## @panics if the result is Err ("Result.value on an Err value")
     ## @example
     ##     var n = Result<int>.ok(42).value();   # 42
-    value(): TValue {
+    value(location: __ptr<char> = __caller_location()): TValue {
         if (this is Ok(value)) {
             return value;
         }
-        panic("Result.value on an Err value");
+        panic("Result.value on an Err value", location);
     }
 
     ## Returns the failure value, panicking if this result is Ok.
@@ -127,15 +128,16 @@ export enum Result<TValue, TError=Error> {
     ## For a struct `TError` the caller gets its own reference; the result
     ## keeps its reference too.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the error of an Err result
     ## @panics if the result is Ok ("Result.error on an Ok value")
     ## @example
     ##     var e = Result<int>.err(Error("boom")).error();   # e.message == "boom"
-    error(): TError {
+    error(location: __ptr<char> = __caller_location()): TError {
         if (this is Err(error)) {
             return error;
         }
-        panic("Result.error on an Ok value");
+        panic("Result.error on an Ok value", location);
     }
 
     ## Returns the success value, or `fallback` if this result is Err.

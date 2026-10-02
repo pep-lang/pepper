@@ -153,7 +153,8 @@ main(): int {
     let output = Command::new(&out_path).output().expect("spawn linked binary");
     assert!(!output.status.success(), "a failed assert must abort");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("before") && stdout.contains("the assert message"), "stdout: {stdout:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("before") && stderr.contains("the assert message"), "stdout: {stdout:?}\nstderr: {stderr:?}");
 }
 
 /// Under the JIT, a declared C function the test process cannot resolve

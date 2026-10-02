@@ -539,6 +539,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return parsed.sub_types.into_iter().next().unwrap_or_else(TypeName::auto);
                 }
                 "__is_pod" => return TypeName::bool_(),
+                crate::passes::CALLER_LOCATION => return TypeName::new("char*"),
                 "__atomic_store" | "__construct_at" => return TypeName::new("void"),
                 "__atomic_cmpxchg" => return TypeName::new("bool"),
                 _ => {}

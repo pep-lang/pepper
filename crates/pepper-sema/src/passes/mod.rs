@@ -5,6 +5,12 @@
 use crate::model::*;
 use std::mem;
 
+/// The intrinsic `__caller_location()`: a `__ptr<char>` holding
+/// `file:line:col`. As a parameter's default it is the location of the call
+/// that left the argument out, which is how `assert`, `panic` and the
+/// runtime's checking methods report where they were called (#354).
+pub const CALLER_LOCATION: &str = "__caller_location";
+
 /// The runtime's directory, found on first use, to tell which files are
 /// part of the runtime.
 #[derive(Default)]

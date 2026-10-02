@@ -140,7 +140,7 @@ fn value_of_none_panics() {
     ]);
     pepper_driver::run(options).expect("compile + link");
     let output = Command::new(&exe).output().expect("spawn");
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stdout = crate::support::output_text(&output);
     assert!(!output.status.success(), "expected a panic; stdout: {stdout:?}");
     assert!(stdout.contains("Optional.value on a None value"), "stdout: {stdout:?}");
     let _ = std::fs::remove_dir_all(dir);

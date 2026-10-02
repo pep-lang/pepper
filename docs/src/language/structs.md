@@ -337,7 +337,11 @@ An indexer lets you write `object[index]`. Declare it as a method named `[]`:
 - With two parameters, `[](index: int, value: String): String`, it handles
   writes: `shelf[i] = value`. The second parameter is the value being stored.
 
-The C-style form, `String [](int index)`, is accepted too.
+The C-style form, `String [](int index)`, is accepted too. Only parameters
+without a default count, so either kind can end with a defaulted parameter,
+such as the `location: __ptr<char> = __caller_location()` that `Array` uses to
+report an out-of-range index at the caller's line (see
+[Assertions and panics](functions.md#assertions-and-panics)).
 
 A struct can have both. With both, compound assignment through an index
 (`counts[i] += 1`) reads with the first and writes with the second.

@@ -200,7 +200,7 @@ this String sees the change. Runs in O(size + rhs.size).
 #### operator []
 
 ```pepper
-[](idx: int): String
+[](idx: int, location: __ptr<char> = __caller_location()): String
 ```
 
 Returns the code point at code-point index `idx` as a new
@@ -214,6 +214,7 @@ visit every code point in O(size).
 
 **Parameters**
 - `idx` — the code-point index; negative counts from the end
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String that holds the one code point
@@ -404,7 +405,7 @@ String, or -1 when it does not occur. An empty `needle` is found at
 #### split
 
 ```pepper
-split(separator: String): String[]
+split(separator: String, location: __ptr<char> = __caller_location()): String[]
 ```
 
 Splits the String at every occurrence of `separator` and returns the
@@ -416,6 +417,7 @@ whole String. Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new Array with one new String per piece
@@ -433,7 +435,7 @@ whole String. Runs in O(size * separator.size).
 #### split_once
 
 ```pepper
-split_once(separator: String): (String, String)?
+split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)?
 ```
 
 Splits the String at the first occurrence of `separator`: the text
@@ -442,6 +444,7 @@ Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the pieces before and after the first `separator`, or none
@@ -484,7 +487,7 @@ String, and one part gives a copy of it. Runs in O(total size).
 #### replace
 
 ```pepper
-replace(from: String, to: String): String
+replace(from: String, to: String, location: __ptr<char> = __caller_location()): String
 ```
 
 Returns a copy of this String with every occurrence of `from` replaced
@@ -495,6 +498,7 @@ size.
 **Parameters**
 - `from` — the text to replace
 - `to` — the text to put in its place
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String
@@ -631,7 +635,7 @@ a copy. O(1).
 #### byte_at
 
 ```pepper
-byte_at(index: ulong): byte
+byte_at(index: ulong, location: __ptr<char> = __caller_location()): byte
 ```
 
 Returns the byte at byte offset `index` of the UTF-8 data. O(1).
@@ -642,6 +646,7 @@ character literal (`s.byte_at(0) == '#'`).
 
 **Parameters**
 - `index` — the byte offset, less than `size`
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the byte at `index`
@@ -658,7 +663,7 @@ character literal (`s.byte_at(0) == '#'`).
 #### substr_bytes
 
 ```pepper
-substr_bytes(start: ulong, size: ulong): String
+substr_bytes(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): String
 ```
 
 Returns a new String of the `size` bytes starting at byte offset
@@ -668,6 +673,7 @@ Returns a new String of the `size` bytes starting at byte offset
 **Parameters**
 - `start` — the byte offset of the first byte to copy
 - `size` — the number of bytes to copy
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String that holds those bytes

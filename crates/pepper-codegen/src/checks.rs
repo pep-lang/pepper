@@ -3,8 +3,15 @@
 //! with a located message instead of wrapping or being undefined:
 //!
 //! ```text
-//! main.pep:3:14: integer overflow in 'int' addition
+//! main.pep:3:14: panic: integer overflow in 'int' addition
 //! ```
+//!
+//! Every panic is located the same way: `_pep_panic` takes the message and
+//! the location as two C strings. A check generated here passes the
+//! operator's location ([`CodeGenerator::location_text`]); `assert`,
+//! `panic` and the runtime's checking methods take a `location` parameter
+//! whose default, `__caller_location()`, is the location of the call that
+//! left it out (#354).
 //!
 //! Each checked operation branches to its own cold block that calls
 //! `_pep_panic` (noreturn, see [`crate::facts`]), so the fast path stays a
@@ -136,18 +143,34 @@ fn fits(value: i128, width: u32, unsigned: bool) -> bool {
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
-    /// `file:line:col: ` for `loc`, to start a check's message; empty when
-    /// the location is unknown.
-    fn check_prefix(&self, loc: Loc) -> String {
-        let Some((name, lines)) = loc.known().and_then(|loc| self.check_files.get(loc.file.0 as usize)) else {
-            return String::new();
-        };
+    /// `file:line:col` for `loc`; `None` when the location is unknown.
+    fn location_string(&self, loc: Loc) -> Option<String> {
+        let (name, lines) = loc.known().and_then(|loc| self.check_files.get(loc.file.0 as usize))?;
         let line = lines.partition_point(|&start| start <= loc.span.start);
         let column = loc.span.start - lines[line.max(1) - 1];
-        format!("{}:{}:{}: ", name, line.max(1), column + 1)
+        Some(format!("{}:{}:{}", name, line.max(1), column + 1))
     }
 
-    /// Record each source's name and line starts, for [`Self::check_prefix`].
+    /// `loc` as the constant C string `file:line:col` that `_pep_panic`
+    /// prints before a message, or a null pointer when the location is
+    /// unknown: the value of `__caller_location()`.
+    pub(crate) fn location_text(&mut self, loc: Loc) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+        match self.location_string(loc) {
+            Some(text) => self.check_message(&text),
+            None => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).const_null()),
+        }
+    }
+
+    /// The null check `_pep_assert(condition, message, location)`, located
+    /// at `loc`.
+    pub(crate) fn located_assert(&mut self, condition: IntValue<'ctx>, message: &str, loc: Loc) -> Result<(), String> {
+        let message = self.check_message(message)?;
+        let location = self.location_text(loc)?;
+        self.call_function("_pep_assert", vec![condition.into(), message.into(), location.into()])?;
+        Ok(())
+    }
+
+    /// Record each source's name and line starts, for [`Self::location_text`].
     pub(crate) fn index_check_files(&mut self, sources: &pepper_parser::diagnostic::SourceMap) {
         use pepper_parser::diagnostic::{FileId, Sources};
         self.check_files.clear();
@@ -169,12 +192,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         let ok = self.context.append_basic_block(function, "check.ok");
         self.builder.build_conditional_branch(failed, fail, ok).map_err(|e| e.to_string())?;
         self.builder.position_at_end(fail);
-        let text = format!("{}{}", self.check_prefix(loc), message);
         match self.module.get_function("_pep_panic").or_else(|| self.functions.get("_pep_panic").copied()) {
             Some(panic) => {
-                let text = self.check_message(&text)?;
-                let call = self.builder.build_call(panic, &[text.into()], "").map_err(|e| e.to_string())?;
-                // The call reads only its message (and the C library's own
+                let text = self.check_message(message)?;
+                let location = self.location_text(loc)?;
+                let call = self.builder.build_call(panic, &[text.into(), location.into()], "").map_err(|e| e.to_string())?;
+                // The call reads only its strings (and the C library's own
                 // state), and never returns: nothing after it can see the
                 // program's memory, so a reference count stepped around a
                 // check still folds away (#263). Encoded `MemoryEffects`:
@@ -197,7 +220,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// The constant C string `text`, one per distinct text, named by its
     /// hash: a unit's code must not depend on what was generated before it
     /// (the build cache checks that), so the name is no counter.
-    fn check_message(&mut self, text: &str) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+    pub(crate) fn check_message(&mut self, text: &str) -> Result<inkwell::values::PointerValue<'ctx>, String> {
         let hash = text.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
         let name = format!("__pep_check_message.{:016x}", hash);
         if let Some(global) = self.module.get_global(&name) {

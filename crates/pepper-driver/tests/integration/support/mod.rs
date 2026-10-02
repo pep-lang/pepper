@@ -65,6 +65,12 @@ pub fn stdout_of(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).replace('\r', "")
 }
 
+/// A program's standard output followed by its standard error, as text: a
+/// panic's message goes to standard error (#354).
+pub fn output_text(output: &Output) -> String {
+    format!("{}{}", stdout_of(output), String::from_utf8_lossy(&output.stderr).replace('\r', ""))
+}
+
 /// Calls `f` on every item, spread over one thread per logical CPU, and
 /// returns the results in item order.
 ///

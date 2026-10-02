@@ -32,7 +32,7 @@ pair(a: int, b: int): (Node, Node) {
 "#;
 
 /// Builds `source` into an executable and runs it; returns whether it
-/// exited cleanly and its stdout.
+/// exited cleanly and its stdout, then its stderr.
 fn run_exe(name: &str, source: &str) -> (bool, String) {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
@@ -53,7 +53,7 @@ fn run_exe(name: &str, source: &str) -> (bool, String) {
     pepper_driver::run(options).expect("compile + link");
     let output = Command::new(&exe).output().expect("spawn");
     let _ = std::fs::remove_dir_all(dir);
-    (output.status.success(), String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
+    (output.status.success(), crate::support::output_text(&output))
 }
 
 fn with_node(body: &str) -> String {

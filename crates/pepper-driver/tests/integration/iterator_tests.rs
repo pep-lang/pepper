@@ -37,7 +37,8 @@ fn assert_runs_clean(source: &str) {
     assert_eq!(leaked, 0, "allocations leaked or double-released");
 }
 
-/// Compile and link to a real executable, run it, and return (success, stdout).
+/// Compile and link to a real executable, run it, and return (success,
+/// stdout then stderr).
 fn run_binary(name: &str, source: &str) -> (bool, String) {
     std::env::set_current_dir(repo_root()).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_iterator_{name}_{}", std::process::id()));
@@ -53,7 +54,7 @@ fn run_binary(name: &str, source: &str) -> (bool, String) {
     ]);
     pepper_driver::run(options).expect("compile + link");
     let output = Command::new(&out_path).output().expect("spawn linked binary");
-    (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
+    (output.status.success(), crate::support::output_text(&output))
 }
 
 const ITEM: &str = r#"

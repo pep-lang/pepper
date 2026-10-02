@@ -173,7 +173,7 @@ Does not change the elements or invalidate iterators.
 #### operator []
 
 ```pepper
-[](idx: ulong): T
+[](idx: ulong, location: __ptr<char> = __caller_location()): T
 ```
 
 Returns the element at `idx`; this is the indexer read `a[idx]`.
@@ -183,6 +183,7 @@ itself; binding it to a variable acquires it like any shared copy.
 
 **Parameters**
 - `idx` — the zero-based position to read
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at `idx`
@@ -198,7 +199,7 @@ itself; binding it to a variable acquires it like any shared copy.
 #### operator []
 
 ```pepper
-[](idx: ulong, value: T): T
+[](idx: ulong, value: T, location: __ptr<char> = __caller_location()): T
 ```
 
 Replaces the element at `idx` with `value`; this is the indexer write
@@ -213,6 +214,7 @@ unchanged.
 **Parameters**
 - `idx` — the zero-based position to overwrite
 - `value` — the new element
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element now stored at `idx` (that is, `value`)
@@ -253,7 +255,7 @@ Invalidates running iterators.
 #### insert
 
 ```pepper
-insert(idx: ulong, item: T)
+insert(idx: ulong, item: T, location: __ptr<char> = __caller_location())
 ```
 
 Inserts `item` at position `idx`, shifting the element there and every
@@ -267,6 +269,7 @@ Invalidates running iterators.
 **Parameters**
 - `idx` — the position `item` will occupy; from 0 through `count`
 - `item` — the element to insert
+- `location` — where a failure is reported; left out, this call's location
 
 **Panics**
 - if `idx <= count` does not hold ("Array insert index out of bounds")
@@ -283,7 +286,7 @@ Invalidates running iterators.
 #### remove_at
 
 ```pepper
-remove_at(idx: ulong): T
+remove_at(idx: ulong, location: __ptr<char> = __caller_location()): T
 ```
 
 Removes and returns the element at `idx`, shifting every later element
@@ -296,6 +299,7 @@ capacity is unchanged. Invalidates running iterators.
 
 **Parameters**
 - `idx` — the position of the element to remove
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the removed element
@@ -314,13 +318,16 @@ capacity is unchanged. Invalidates running iterators.
 #### pop
 
 ```pepper
-pop(): T
+pop(location: __ptr<char> = __caller_location()): T
 ```
 
 Removes and returns the last element.
 
 Runs in O(1). For a struct `T` the Array's reference is transferred to
 the caller. The capacity is unchanged. Invalidates running iterators.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element that was last
@@ -336,10 +343,13 @@ the caller. The capacity is unchanged. Invalidates running iterators.
 #### first
 
 ```pepper
-first(): T
+first(location: __ptr<char> = __caller_location()): T
 ```
 
 Returns the first element without removing it; the same as `a[0]`.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at index 0
@@ -350,11 +360,14 @@ Returns the first element without removing it; the same as `a[0]`.
 #### last
 
 ```pepper
-last(): T
+last(location: __ptr<char> = __caller_location()): T
 ```
 
 Returns the last element without removing it; the same as
 `a[a.count - 1]`.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at index `count - 1`
@@ -401,7 +414,7 @@ actual shrink invalidates them. The capacity is kept.
 #### swap
 
 ```pepper
-swap(a: ulong, b: ulong)
+swap(a: ulong, b: ulong, location: __ptr<char> = __caller_location())
 ```
 
 Exchanges the elements at positions `a` and `b`.
@@ -413,6 +426,7 @@ element, but still invalidates running iterators like every swap.
 **Parameters**
 - `a` — the position of the first element
 - `b` — the position of the second element
+- `location` — where a failure is reported; left out, this call's location
 
 **Panics**
 - if `a < count` does not hold ("Array swap index out of bounds")

@@ -2,7 +2,7 @@
 //! coverage: each snippet is compiled together with the runtime prelude and
 //! JIT-executed through the entry function `test`.
 
-use crate::support::{compile_jit_with_runtime, jit_census, run_linked, stdout_of};
+use crate::support::{compile_jit_with_runtime, jit_census, run_linked};
 
 #[test]
 fn map_iterates_in_key_order() {
@@ -407,7 +407,7 @@ main(): int {{
 "#
         );
         let output = run_linked(name, &source, |_| {});
-        let stdout = stdout_of(&output);
+        let stdout = crate::support::output_text(&output);
         assert!(!output.status.success(), "{name}: expected a panic; stdout: {stdout:?}");
         assert!(stdout.contains(message), "{name}: stdout: {stdout:?}");
     }

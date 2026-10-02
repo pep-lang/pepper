@@ -238,12 +238,13 @@ export struct Array<T> {
     ## itself; binding it to a variable acquires it like any shared copy.
     ##
     ## @param idx the zero-based position to read
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the element at `idx`
     ## @panics if `idx < count` does not hold ("Array index read out of bounds")
     ## @example
     ##     var first = a[0];
-    [](idx: ulong): T {
-        _pep_check_bounds(idx < _size, "Array index read out of bounds");
+    [](idx: ulong, location: __ptr<char> = __caller_location()): T {
+        _pep_check_bounds(idx < _size, "Array index read out of bounds", location);
         return _data[idx];
     }
 
@@ -258,12 +259,13 @@ export struct Array<T> {
     ##
     ## @param idx the zero-based position to overwrite
     ## @param value the new element
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the element now stored at `idx` (that is, `value`)
     ## @panics if `idx < count` does not hold ("Array index write out of bounds")
     ## @example
     ##     a[0] = 42;
-    [](idx: ulong, value: T): T {
-        _pep_check_bounds(idx < _size, "Array index write out of bounds");
+    [](idx: ulong, value: T, location: __ptr<char> = __caller_location()): T {
+        _pep_check_bounds(idx < _size, "Array index write out of bounds", location);
         _version = _version + 1;
         _data[idx] = value;
         return _data[idx];
@@ -312,6 +314,7 @@ export struct Array<T> {
     ##
     ## @param idx the position `item` will occupy; from 0 through `count`
     ## @param item the element to insert
+    ## @param location where a failure is reported; left out, this call's location
     ## @panics if `idx <= count` does not hold ("Array insert index out of bounds")
     ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
@@ -319,8 +322,8 @@ export struct Array<T> {
     ##     a.append(1);
     ##     a.append(3);
     ##     a.insert(1, 2);   # a holds [1, 2, 3]
-    insert(idx: ulong, item: T) {
-        assert(idx <= _size, "Array insert index out of bounds");
+    insert(idx: ulong, item: T, location: __ptr<char> = __caller_location()) {
+        assert(idx <= _size, "Array insert index out of bounds", location);
         _version = _version + 1;
         grow();
         # Shift the tail up one slot as raw bytes: each reference moves to
@@ -344,6 +347,7 @@ export struct Array<T> {
     ## capacity is unchanged. Invalidates running iterators.
     ##
     ## @param idx the position of the element to remove
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the removed element
     ## @panics if `idx < count` does not hold ("Array remove index out of bounds")
     ## @example
@@ -351,8 +355,8 @@ export struct Array<T> {
     ##     a.append(1);
     ##     a.append(2);
     ##     var x = a.remove_at(0);   # x == 1; a holds [2]
-    remove_at(idx: ulong): T {
-        assert(idx < _size, "Array remove index out of bounds");
+    remove_at(idx: ulong, location: __ptr<char> = __caller_location()): T {
+        assert(idx < _size, "Array remove index out of bounds", location);
         _version = _version + 1;
         # The slot's reference moves to the caller, with no count step.
         var removed = move(_data[idx]);
@@ -371,12 +375,13 @@ export struct Array<T> {
     ## Runs in O(1). For a struct `T` the Array's reference is transferred to
     ## the caller. The capacity is unchanged. Invalidates running iterators.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the element that was last
     ## @panics if the Array is empty ("Array pop on empty Array")
     ## @example
     ##     var top = a.pop();
-    pop(): T {
-        assert(_size > 0, "Array pop on empty Array");
+    pop(location: __ptr<char> = __caller_location()): T {
+        assert(_size > 0, "Array pop on empty Array", location);
         _version = _version + 1;
         _size = _size - 1;
         # The slot's reference moves to the caller, with no count step.
@@ -385,20 +390,22 @@ export struct Array<T> {
 
     ## Returns the first element without removing it; the same as `a[0]`.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the element at index 0
     ## @panics if the Array is empty ("Array first on empty Array")
-    first(): T {
-        assert(_size > 0, "Array first on empty Array");
+    first(location: __ptr<char> = __caller_location()): T {
+        assert(_size > 0, "Array first on empty Array", location);
         return _data[0];
     }
 
     ## Returns the last element without removing it; the same as
     ## `a[a.count - 1]`.
     ##
+    ## @param location where a failure is reported; left out, this call's location
     ## @returns the element at index `count - 1`
     ## @panics if the Array is empty ("Array last on empty Array")
-    last(): T {
-        assert(_size > 0, "Array last on empty Array");
+    last(location: __ptr<char> = __caller_location()): T {
+        assert(_size > 0, "Array last on empty Array", location);
         return _data[_size - 1];
     }
 
@@ -442,11 +449,12 @@ export struct Array<T> {
     ##
     ## @param a the position of the first element
     ## @param b the position of the second element
+    ## @param location where a failure is reported; left out, this call's location
     ## @panics if `a < count` does not hold ("Array swap index out of bounds")
     ## @panics if `b < count` does not hold ("Array swap index out of bounds")
-    swap(a: ulong, b: ulong) {
-        assert(a < _size, "Array swap index out of bounds");
-        assert(b < _size, "Array swap index out of bounds");
+    swap(a: ulong, b: ulong, location: __ptr<char> = __caller_location()) {
+        assert(a < _size, "Array swap index out of bounds", location);
+        assert(b < _size, "Array swap index out of bounds", location);
         _version = _version + 1;
         if (a != b) {
             _array_swap(_slot(a), _slot(b), sizeof<T>());

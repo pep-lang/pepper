@@ -163,13 +163,16 @@ optional can stand as a condition by itself.
 #### value
 
 ```pepper
-value(): T
+value(location: __ptr<char> = __caller_location()): T
 ```
 
 Returns the value, panicking if this optional is None.
 
 For a struct `T` the caller gets its own reference; the optional keeps
 its reference too.
+
+**Parameters**
+- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the value of a Some optional

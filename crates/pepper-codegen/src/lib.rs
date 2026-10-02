@@ -26,6 +26,9 @@ use ops as llvm_ops;
 /// Field index of `__invoke` in a function object: after the
 /// `__refcount`/`__weakcount` head (see `passes::function_types`).
 const FUNCTION_INVOKE_INDEX: u32 = 2;
+/// The intrinsic that yields a call's location as a C string (see
+/// `checks.rs`).
+const CALLER_LOCATION: &str = pepper_sema::passes::CALLER_LOCATION;
 
 /// The name of a head count's address (`head_count_ptr`), by which
 /// [`facts::tbaa`] tells it from other byte addresses.
@@ -185,6 +188,13 @@ pub struct CodeGenerator<'ctx> {
     /// Each source's name and line starts, for the location a failed check
     /// prints.
     check_files: Vec<(String, Vec<usize>)>,
+    /// The location of the call being generated, which a
+    /// `__caller_location()` default argument reports.
+    call_loc: Loc,
+    /// Whether a call's default arguments are being generated: a
+    /// `__caller_location()` then stands for the call (`call_loc`), not for
+    /// itself.
+    in_default_argument: bool,
 }
 /// Stands in, under the JIT, for a C function the process cannot resolve.
 extern "C" fn unresolved_c_function() {
@@ -239,6 +249,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             debug_struct_loc: Loc::NONE,
             runtime_checks: checks::RuntimeChecks::ALL,
             check_files: Vec::new(),
+            call_loc: Loc::NONE,
+            in_default_argument: false,
         }
     }
 
@@ -1770,12 +1782,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .build_is_not_null(object, "is_set")
                 .map_err(|e| e.to_string())?;
             let message = format!("called '{}' on a null '{}'", method.name, trait_name);
-            let msg = self
-                .builder
-                .build_global_string_ptr(&message, "str")
-                .map_err(|e| e.to_string())?
-                .as_pointer_value();
-            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+            // A thunk serves every call, so it has no one place to report.
+            self.located_assert(is_set, &message, Loc::NONE)?;
         }
         let target = self.vtable_entry(value, slot)?;
         let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![object.into()];
@@ -3876,8 +3884,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        if let Expression::FunctionCall { function, loc, .. } = expr
+            && function == CALLER_LOCATION
+        {
+            let at = if self.in_default_argument { self.call_loc } else { *loc };
+            return Ok(self.location_text(at)?.into());
+        }
         let saved = self.enter_location(expr.loc());
+        // The call a `__caller_location()` default argument reports.
+        let is_call = matches!(expr, Expression::FunctionCall { .. } | Expression::MethodCall { .. });
+        let outer_call = is_call.then(|| std::mem::replace(&mut self.call_loc, expr.loc()));
+        let outer_default = std::mem::replace(&mut self.in_default_argument, false);
         let result = self.codegen_expr_unlocated(expr);
+        self.in_default_argument = outer_default;
+        if let Some(outer) = outer_call {
+            self.call_loc = outer;
+        }
         self.leave_location(saved);
         self.locate(&result, expr.loc());
         result
@@ -4650,7 +4672,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // A default argument is evaluated at the call, so an owned
                     // default (`String name = ""`) is a temporary like any other.
                     for extra in self.missing_args(&mangled, args.len())? {
-                        let v = self.codegen_expr(&extra)?;
+                        let v = self.codegen_default(&extra)?;
                         if let Some(ty) = self.owned_temp_type(&extra) {
                             owned_arg_temps.push((v, ty));
                         }
@@ -4740,7 +4762,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // A default argument is evaluated at the call, so an owned
                 // default (`String name = ""`) is a temporary like any other.
                 for extra in self.missing_args(&mangled, args.len())? {
-                    let v = self.codegen_expr(&extra)?;
+                    let v = self.codegen_default(&extra)?;
                     if let Some(ty) = self.owned_temp_type(&extra) {
                         owned_arg_temps.push((v, ty));
                     }
@@ -4978,7 +5000,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // A default argument is evaluated at the call, so an owned
         // default (`String name = ""`) is a temporary like any other.
         for extra in self.missing_args(&target, args.len())? {
-            let v = self.codegen_expr(&extra)?;
+            let v = self.codegen_default(&extra)?;
             if let Some(ty) = self.owned_temp_type(&extra) {
                 owned_arg_temps.push((v, ty));
             }
@@ -5037,12 +5059,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Calling a null C function pointer panics, never jumps through null.
         if self.runtime_checks.null && self.functions.contains_key("_pep_assert") {
             let is_set = self.builder.build_is_not_null(target, "fn_set").map_err(|e| e.to_string())?;
-            let msg = self
-                .builder
-                .build_global_string_ptr("called a null C function pointer", "str")
-                .map_err(|e| e.to_string())?
-                .as_pointer_value();
-            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+            self.located_assert(is_set, "called a null C function pointer", callee.loc())?;
         }
         let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![];
         let mut arg_names: Vec<String> = vec![];
@@ -5396,8 +5413,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             && self.functions.contains_key("_pep_assert")
         {
             let is_set = self.builder.build_is_not_null(value.into_pointer_value(), "subject_set").map_err(|e| e.to_string())?;
-            let msg = self.builder.build_global_string_ptr(message, "str").map_err(|e| e.to_string())?.as_pointer_value();
-            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+            self.located_assert(is_set, message, with.subject.loc())?;
         }
         let outer = self.subjects.insert(with.id, value);
         let result = self.codegen_expr(&with.body);
@@ -5504,12 +5520,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Calling a null function value panics, never jumps through null.
         if self.runtime_checks.null && self.functions.contains_key("_pep_assert") {
             let is_set = self.builder.build_is_not_null(object, "fn_set").map_err(|e| e.to_string())?;
-            let msg = self
-                .builder
-                .build_global_string_ptr("called a null function value", "str")
-                .map_err(|e| e.to_string())?
-                .as_pointer_value();
-            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+            self.located_assert(is_set, "called a null function value", callee.loc())?;
         }
         let slot = self
             .builder
@@ -5566,11 +5577,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             .get(target)
             .and_then(|defaults| defaults.get(index).cloned().flatten())
             .ok_or_else(|| format!("internal error: parameter {} of '{}' has no default", index + 1, target))?;
-        let v = self.codegen_expr(&default)?;
+        let v = self.codegen_default(&default)?;
         if let Some(ty) = self.owned_temp_type(&default) {
             owned_arg_temps.push((v, ty));
         }
         Ok((v, self.numeric_source_name(&default, &v)))
+    }
+
+    /// A default argument of the call being generated: a
+    /// `__caller_location()` in it reports the call.
+    fn codegen_default(&mut self, default: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let outer = std::mem::replace(&mut self.in_default_argument, true);
+        let result = self.codegen_expr(default);
+        self.in_default_argument = outer;
+        result
     }
 
     /// Default-argument expressions for the parameters a call did not supply.
