@@ -28,7 +28,7 @@ import process;
 # The release this entry point belongs to. A test keeps it equal to the
 # workspace version in Cargo.toml.
 version(): String {
-    return "0.2.1";
+    return "0.3.0";
 }
 
 main(args: String[]): int {
