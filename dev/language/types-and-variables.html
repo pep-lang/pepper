@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b397aeed.js";
+            window.path_to_searchindex_js = "../searchindex-2a157130.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -625,15 +625,81 @@ var wide = whole as long;
 <li>Integer to a wider integer sign-extends a signed source and zero-extends an
 unsigned one: <code>(-1 as i16) as long</code> is -1, and <code>(65535 as u16) as long</code> is
 65535.</li>
-<li>Casting between unrelated struct types is a compile error
-(<code>cannot cast to Q</code>).</li>
+<li><code>bool</code> and enums convert like integers: <code>true as int</code> is 1, and an enum
+converts to the integer it is stored as. An integer does not convert to an
+enum; name a case instead.</li>
+<li>A struct converts to a trait it conforms to: <code>dog as Named</code>.</li>
+<li>A pointer converts to <code>__ptr&lt;void&gt;</code> and back: <code>p as __ptr&lt;void&gt;</code>, then
+<code>v as __ptr&lt;int&gt;</code>.</li>
+<li>A value converts to its own type.</li>
 </ul>
+<p>Anything else is a compile error at the <code>as</code>, since it would not be a value
+conversion but a reinterpretation of memory:</p>
+<pre><code class="language-text">main.pep:3:15: error: cannot cast '__ptr&lt;int&gt;' to 'ulong' with 'as'; use 'unsafe_cast&lt;ulong&gt;(...)' to reinterpret
+    3 |     var a = p as ulong;
+      |               ^~
+</code></pre>
+<p>Casting between unrelated struct types, or between a struct and a number or
+pointer, is an error with no alternative (<code>cannot cast 'P' to 'Q'</code>).</p>
 <p><code>as</code> binds more tightly than the arithmetic operators, so <code>x * 10 as int</code> means
 <code>x * (10 as int)</code>. Put parentheses around the expression you want to convert:
 <code>(x * 10) as int</code>. C-style casts such as <code>(int)x</code> do not exist.</p>
 <p>Many conversions also happen without <code>as</code>: assigning or passing a number to a
 variable or parameter of another numeric type converts it, as in C, including
 narrowing conversions (<code>int n = 2.7;</code> stores 2).</p>
+<h2 id="reinterpreting-with-unsafe_cast"><a class="header" href="#reinterpreting-with-unsafe_cast">Reinterpreting with <code>unsafe_cast</code></a></h2>
+<p><code>unsafe_cast&lt;Type&gt;(value)</code> reinterprets a value’s bits as another type, like
+<code>reinterpret_cast</code> in C++. It is for C interop and low-level code, and nothing
+checks that the result makes sense:</p>
+<ul>
+<li>A pointer to a pointer of another type: <code>unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(text.c_str())</code>.</li>
+<li>A pointer to an integer, and an integer to a pointer:
+<code>unsafe_cast&lt;ulong&gt;(p)</code>, <code>unsafe_cast&lt;__ptr&lt;int&gt;&gt;(address)</code>.</li>
+<li>A number to another number of the same width, keeping its bits:
+<code>unsafe_cast&lt;uint&gt;(1.0 as float)</code> is <code>0x3F800000</code>, and
+<code>unsafe_cast&lt;double&gt;(bits)</code> turns a <code>ulong</code> back into a <code>double</code>.</li>
+</ul>
+<pre><code class="language-pepper"># `as` converts values; `unsafe_cast&lt;T&gt;(value)` reinterprets bits.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+main(): int {
+    # A float's bits, and back: the same 32 bits seen as a uint.
+    var one = 1.0 as float;
+    var bits = unsafe_cast&lt;uint&gt;(one);
+    assert(bits == 0x3F800000, "1.0 is 0x3F800000");
+    assert(unsafe_cast&lt;float&gt;(bits) == one, "the bits convert back");
+
+    # A double's sign bit is its top bit.
+    var negative = unsafe_cast&lt;ulong&gt;(-2.0);
+    assert((negative &gt;&gt; 63) == 1, "the sign bit is set");
+
+    # `as` converts a pointer to and from `__ptr&lt;void&gt;`.
+    var memory = malloc(8);
+    var words = memory as __ptr&lt;uint&gt;;
+    words[0] = 0x01020304;
+    words[1] = 0;
+
+    # Reading the same memory as bytes reinterprets it.
+    var bytes = unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(words);
+    assert(bytes[0] == 4 || bytes[0] == 1, "the first byte is the low or the high one");
+
+    # An address is an integer, and an integer is an address.
+    var address = unsafe_cast&lt;ulong&gt;(words);
+    assert(unsafe_cast&lt;__ptr&lt;uint&gt;&gt;(address + 4)[0] == 0, "the address four bytes on is the second word");
+
+    free(memory as __ptr&lt;void&gt;);
+    return 0;
+}
+</code></pre>
+<p>It never converts a struct, trait or function value, so it cannot get around
+reference counting. A conversion <code>as</code> can make is not a reinterpretation, so
+<code>unsafe_cast&lt;long&gt;(n)</code> on an <code>int</code> is an error that says to use <code>as</code>:</p>
+<pre><code class="language-text">main.pep:3:13: error: 'unsafe_cast' cannot convert 'int' to 'long': the sizes differ; use 'as' to convert the value
+    3 |     var w = unsafe_cast&lt;long&gt;(n);
+      |             ^~~~~~~~~~~
+</code></pre>
 <h2 id="arithmetic-follows-c"><a class="header" href="#arithmetic-follows-c">Arithmetic follows C</a></h2>
 <p>Arithmetic on numbers behaves exactly as it does in C (the “usual arithmetic
 conversions”), so code ported from C gives the same results:</p>

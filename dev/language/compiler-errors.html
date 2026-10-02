@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b397aeed.js";
+            window.path_to_searchindex_js = "../searchindex-2a157130.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -473,6 +473,14 @@ level, with a note where the chain started:</p>
 main.pep:6:13: note: asked for by 'main' here
     6 |     var f = Foo&lt;int&gt;();
       |             ^~~~~~~~
+</code></pre>
+<p><strong>A cast that reinterprets memory.</strong> <code>as</code> converts values, like <code>static_cast</code>
+(see <a href="types-and-variables.html#casting-with-as">Casting with <code>as</code></a>); a pointer to
+an integer, or to a pointer of another type, needs
+<a href="types-and-variables.html#reinterpreting-with-unsafe_cast"><code>unsafe_cast</code></a>:</p>
+<pre><code class="language-text">main.pep:3:15: error: cannot cast '__ptr&lt;int&gt;' to 'ulong' with 'as'; use 'unsafe_cast&lt;ulong&gt;(...)' to reinterpret
+    3 |     var a = p as ulong;
+      |               ^~
 </code></pre>
 <h2 id="errors-while-the-program-runs"><a class="header" href="#errors-while-the-program-runs">Errors while the program runs</a></h2>
 <p>Some problems can only be found while the program runs, such as an array index

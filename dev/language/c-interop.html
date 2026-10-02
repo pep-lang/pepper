@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b397aeed.js";
+            window.path_to_searchindex_js = "../searchindex-2a157130.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -356,11 +356,16 @@ A <code>void*</code> returned by an extern is a <code>__ptr&lt;void&gt;</code> i
 <tr><td><code>p + n</code></td><td>the address <code>n</code> elements after <code>p</code> (<code>n</code> bytes for <code>__ptr&lt;void&gt;</code>)</td></tr>
 <tr><td><code>p == __null</code>, <code>p != __null</code></td><td>compares with the null pointer</td></tr>
 <tr><td><code>p == q</code>, <code>p != q</code></td><td>compares two addresses (a pointer also compares with an integer address)</td></tr>
-<tr><td><code>p as ulong</code>, <code>p as long</code></td><td>the address as an integer</td></tr>
-<tr><td><code>p as __ptr&lt;U&gt;</code></td><td>the same address, seen as pointing at <code>U</code></td></tr>
+<tr><td><code>p as __ptr&lt;void&gt;</code>, <code>v as __ptr&lt;T&gt;</code></td><td>the same address, to and from <code>__ptr&lt;void&gt;</code></td></tr>
+<tr><td><code>unsafe_cast&lt;__ptr&lt;U&gt;&gt;(p)</code></td><td>the same address, seen as pointing at <code>U</code></td></tr>
+<tr><td><code>unsafe_cast&lt;ulong&gt;(p)</code>, <code>unsafe_cast&lt;__ptr&lt;T&gt;&gt;(n)</code></td><td>the address as an integer, and back</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>as</code> converts a pointer only to and from <code>__ptr&lt;void&gt;</code>, like <code>static_cast</code> in
+C++. Any other pointer conversion reinterprets memory, so it is spelled
+<code>unsafe_cast</code> (see <a href="types-and-variables.html#reinterpreting-with-unsafe_cast">Reinterpreting with
+<code>unsafe_cast</code></a>).</p>
 <p><code>__null</code> is the null pointer. <code>sizeof&lt;T&gt;()</code> gives the size of a type in bytes,
 which you need to allocate memory for C.</p>
 <p><code>T*</code> spelling is for extern prototypes only, since they mirror C. Everywhere
@@ -425,7 +430,7 @@ main(): int {
     # p + n moves by n elements, not n bytes.
     var third = numbers + 2;
     assert(third[0] == 30, "numbers + 2 points at the third element");
-    assert((third as ulong) - (numbers as ulong) == 8, "two ints are eight bytes");
+    assert(unsafe_cast&lt;ulong&gt;(third) - unsafe_cast&lt;ulong&gt;(numbers) == 8, "two ints are eight bytes");
 
     # __ptr&lt;void&gt; strides by bytes; cast to see the memory another way.
     var raw = numbers as __ptr&lt;void&gt;;
