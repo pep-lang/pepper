@@ -449,6 +449,14 @@ fn pep_fmt_formats_range_and_constant_patterns() {
 }
 
 #[test]
+fn pep_fmt_formats_enum_properties() {
+    assert_formats(
+        "enum Size {\n    Small,\n    Large,\n\n    var ounces:int { get { return 8; } }\n    double():int { return ounces*2; }\n}\n",
+        "enum Size {\n    Small,\n    Large,\n\n    var ounces: int {\n        get { return 8; }\n    }\n    double(): int { return ounces * 2; }\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_spaces_collection_literals() {
     assert_formats(
         "main(): int {\n    var a = [1,2 , 3];\n    var m = [\"a\" :1, \"b\":[2]];\n    HashMap<String, int> e = [ : ];\n    return 0;\n}\n",

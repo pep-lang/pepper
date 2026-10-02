@@ -551,7 +551,11 @@ with no extension, and `module_name()` is the output's stem.
     range and duplicates); such an enum is not a struct in the model. Each
     method becomes a free function named `E::m` (`enum_method`,
     `enums::method_name`); an instance method gets a first parameter
-    `this: E`, passed by value like any integer.
+    `this: E`, passed by value like any integer. A property's getter
+    becomes `E::__get_p` the same way (`PropertyOwner::Enum`), and
+    `passes::properties` reads a bare `p` in those functions as `this.p`.
+    Any enum's properties must be computed and have no `set`
+    (`enum_property_error`).
   - An enum with a case that carries values (a reference enum) *is* a
     struct in the model (`reference_enum_def`): `StructDef::enum_cases`
     lists its cases (`EnumCaseDef::payload` names each case's values, and

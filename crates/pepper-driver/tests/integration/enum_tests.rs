@@ -529,6 +529,76 @@ fn method_errors() {
     assert!(declared("pick<T>(x: T): T { return x; }").contains("methods of an enum cannot be generic yet ('pick')"));
 }
 
+#[test]
+fn properties_are_computed_and_read_without_parentheses() {
+    let src = r#"
+enum Light {
+    Red,
+    Amber,
+    Green,
+
+    var may_go: bool {
+        get { return this == Light.Green; }
+    }
+    var count: ulong {
+        get { return 3; }
+    }
+    # A bare property name reads it on `this`; a local of that name hides it.
+    twice(): ulong {
+        if (may_go) {
+            var count = 0 as ulong;
+            return count;
+        }
+        return count * 2;
+    }
+}
+
+enum Label {
+    Text(text: String),
+    Blank,
+
+    var shown: String {
+        get {
+            return match (this) {
+                Text(t) => t,
+                Blank => "",
+            };
+        }
+    }
+}
+
+test(): int {
+    var total = 0;
+    if (Light.Green.may_go && !Light.Red.may_go) { total += 1; }
+    total += ((Light.Amber.count + Light.Red.twice() + Light.Green.twice()) as int) * 10;
+    var label = Label.Text("hi");
+    if (label.shown == "hi" && Label.Blank.shown == "") { total += 100; }
+    return total;
+}
+"#;
+    assert_eq!(crate::support::jit_census(src), (1 + 90 + 100, 0));
+}
+
+#[test]
+fn property_errors() {
+    let declared = |cases: &str, member: &str| {
+        error_of(&format!("enum E {{\n    {},\n\n    {}\n}}\ntest(): int {{ return 0; }}\n", cases, member))
+    };
+    for cases in ["A, B", "A(v: int), B"] {
+        assert!(declared(cases, "var n: int { get; }")
+            .contains("property 'n' of enum 'E' must be computed: give 'get' a body that does not use 'field'"));
+        assert!(declared(cases, "var n: int { get { return field; } }")
+            .contains("property 'n' of enum 'E' must be computed"));
+        assert!(declared(cases, "var n: int { get { return 1; } set { } }")
+            .contains("property 'n' of enum 'E' cannot have a 'set' accessor: enum values are immutable"));
+        assert!(declared(cases, "var B: int { get { return 1; } }").contains("property 'B' has the same name as a case of 'E'"));
+        assert!(declared(cases, "var name: String { get { return \"\"; } }")
+            .contains("'name' is built into every enum and cannot be redeclared"));
+    }
+    let read = error_of("enum E {\n    A,\n\n    var n: int {\n        get { return 1; }\n    }\n}\ntest(): int { return E.A.n(); }\n");
+    assert!(read.contains("'n' is a property, not a method; read it without '()'"), "{}", read);
+}
+
 // ── Cases that carry values (phase 3) ──
 
 const SHAPE: &str = r#"

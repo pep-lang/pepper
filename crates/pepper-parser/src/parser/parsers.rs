@@ -4561,7 +4561,8 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         ws(input)?;
         let case_start = case_attrs.first().map(|a| a.span.start).unwrap_or(pos(input));
         let name_start = pos(input);
-        let is_static = keyword(&mut { *input }, "static");
+        // `static` starts a method and `var` a property: the cases are over.
+        let is_static = ["static", "var"].iter().any(|k| keyword(&mut { *input }, k));
         let case_name = match identifier(input) {
             Ok(n) if !is_static => n,
             _ => {
@@ -4614,6 +4615,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
     }
 
     let mut methods = vec![];
+    let mut properties = vec![];
     loop {
         ws(input)?;
         if input.is_empty() || input.starts_with('}') { break; }
@@ -4630,8 +4632,17 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
                 ws(input)?;
             }
             Err(_) => {
+                // A property: `var p: T { get { ... } }`.
                 *input = after_attrs;
-                expected(input, "a method");
+                let mut rest = *input;
+                if let Ok(v) = variable_declaration(&mut rest, m_attrs.clone())
+                    && next_is(&mut rest, |s| s.starts_with('{'))
+                {
+                    *input = rest;
+                    properties.push(property_declaration(input, v, after_attrs)?);
+                    continue;
+                }
+                expected(input, "a method or a property");
                 return Err(cut(input));
             }
         }
@@ -4645,7 +4656,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         name_span,
         generic_params,
         fields: vec![],
-        properties: vec![],
+        properties,
         methods,
         constructors: vec![],
         destructor: None,

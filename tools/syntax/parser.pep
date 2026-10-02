@@ -2216,9 +2216,9 @@ struct Parser {
         return node;
     }
 
-    # `enum Name [: Type] { cases, methods }`. A case list ends at a case
-    # without a `,`, or at a name that starts a method, as in the compiler's
-    # `enum_declaration`.
+    # `enum Name [: Type] { cases, methods and properties }`. A case list
+    # ends at a case without a `,`, or at a name that starts a method or a
+    # property, as in the compiler's `enum_declaration`.
     _enum(prefix: Node[]): Node {
         var node = Node(NodeKind.Enum);
         for (var item in prefix) {
@@ -2261,7 +2261,7 @@ struct Parser {
             if (_failed) {
                 return node;
             }
-            if (!_at_name() or _at_word("static")) {
+            if (!_at_name() or _at_word("static") or _at_word("var")) {
                 _restore(position);
                 break;
             }
@@ -2306,7 +2306,15 @@ struct Parser {
             if (_failed) {
                 return node;
             }
-            members.add(_method(attributes, false));
+            if (_at_word("var")) {
+                var variable = _variable_declaration(attributes);
+                if (_failed) {
+                    return node;
+                }
+                members.add(_property(variable));
+            } else {
+                members.add(_method(attributes, false));
+            }
             if (_failed) {
                 return node;
             }

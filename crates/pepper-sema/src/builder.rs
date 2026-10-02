@@ -1804,6 +1804,9 @@ enum PropertyOwner<'a> {
     Trait { name: &'a str },
     /// An extension of the struct `name`.
     Extension { name: &'a str },
+    /// An enum whose cases carry no values: its accessors become the free
+    /// functions `E::__get_p` (see [`enum_method`]).
+    Enum { name: &'a str },
 }
 
 /// The members a property lowers to (see [`PropertyDef`]).
@@ -1891,6 +1894,11 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
             ))
             .at(loc(property.name_span)));
         }
+        PropertyOwner::Enum { name: enum_name } => {
+            if let Some(error) = enum_property_error(enum_name, property, has_storage) {
+                return Err(error);
+            }
+        }
         PropertyOwner::Struct { shared: Some(shared), .. } => {
             if let Some(set) = &property.set {
                 return Err(Diagnostic::error(format!(
@@ -1956,7 +1964,10 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
         })
         .transpose()?;
     let owner_name = match owner {
-        PropertyOwner::Struct { name, .. } | PropertyOwner::Trait { name } | PropertyOwner::Extension { name } => name.to_string(),
+        PropertyOwner::Struct { name, .. }
+        | PropertyOwner::Trait { name }
+        | PropertyOwner::Extension { name }
+        | PropertyOwner::Enum { name } => name.to_string(),
     };
     PROPERTIES.with(|p| {
         p.borrow_mut().push(PropertyDef {
@@ -1972,6 +1983,45 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
         })
     });
     Ok(PropertyMembers { storage: storage_def, accessors: [Some(getter), setter].into_iter().flatten().collect() })
+}
+
+/// Why `property` of enum `enum_name` is an error, if it is: an enum value
+/// is immutable and has nowhere to keep anything, so its properties are
+/// computed and read-only.
+fn enum_property_error(enum_name: &str, property: &ast::PropertyDecl, has_storage: bool) -> Option<Diagnostic> {
+    if let Some(set) = &property.set {
+        return Some(
+            Diagnostic::error(format!(
+                "property '{}' of enum '{}' cannot have a 'set' accessor: enum values are immutable",
+                property.name, enum_name
+            ))
+            .at(loc(set.span)),
+        );
+    }
+    has_storage.then(|| {
+        Diagnostic::error(format!(
+            "property '{}' of enum '{}' must be computed: give 'get' a body that does not use 'field'",
+            property.name, enum_name
+        ))
+        .at(loc(property.name_span))
+    })
+}
+
+/// A property of an enum may not share a name with one of its cases.
+fn check_enum_property_names(decl: &ast::StructDecl) -> Result<(), Diagnostic> {
+    let body = decl.enumeration.as_ref().expect("an enum declaration");
+    for property in &decl.properties {
+        if let Some(case) = body.cases.iter().find(|c| c.name == property.name) {
+            return Err(Diagnostic::error(format!("property '{}' has the same name as a case of '{}'", property.name, decl.name))
+                .at(loc(property.name_span))
+                .with_note("case declared here", Some(loc(case.name_span))));
+        }
+        if crate::enums::BUILT_IN_METHODS.contains(&property.name.as_str()) || property.name == "name" {
+            return Err(Diagnostic::error(format!("'{}' is built into every enum and cannot be redeclared", property.name))
+                .at(loc(property.name_span)));
+        }
+    }
+    Ok(())
 }
 
 /// Inside an accessor body, `field` names the property's storage.
@@ -2314,12 +2364,19 @@ fn reference_enum_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
             loc: loc(case.name_span),
         });
     }
+    check_enum_property_names(decl)?;
     let mut lowered = decl.clone();
     lowered.enumeration = None;
     lowered.fields = fields;
     lowered.constructors = vec![];
     lowered.destructor = None;
     let mut st = struct_def(&lowered)?;
+    for property in &decl.properties {
+        let stored = st.field_members.iter().any(|f| f.name == property.name || f.name == storage_name(&property.name));
+        if let Some(error) = enum_property_error(&decl.name, property, stored) {
+            return Err(error);
+        }
+    }
     let at = loc(decl.name_span);
     st.field_members.insert(
         0,
@@ -2587,6 +2644,14 @@ fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> 
                 out.enums.push(enum_def(s)?);
                 for m in &s.methods {
                     out.functions.push(enum_method(s, m)?);
+                }
+                check_enum_property_names(s)?;
+                for property in &s.properties {
+                    for mut f in property_members(property, PropertyOwner::Enum { name: &s.name })?.accessors {
+                        f.name = crate::enums::method_name(&s.name, &f.name);
+                        f.parameters.insert(0, crate::enums::this_parameter(&s.name));
+                        out.functions.push(f);
+                    }
                 }
             }
             ast::Declaration::Struct(s) => out.structs.push(in_generic_scope(&s.generic_params, None, || struct_def(s))?),

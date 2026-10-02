@@ -90,6 +90,9 @@ An extension property that would need storage is an error:
 main.pep:5:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'
 ```
 
+An [enum](enums.md#properties) can declare computed properties too, under
+the same rule, and no `set`, since its values never change.
+
 ## Properties of `[Shared]` structs
 
 The fields of a [`[Shared]` struct](threads.md) are `const`, so the storage

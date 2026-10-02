@@ -154,6 +154,24 @@ instead, as `next()` does. Such an enum can also declare a trait with
 it is still never a trait value. For an enum whose cases carry values, `this` is
 the object, as in a struct's method; its values still cannot change.
 
+### Properties
+
+An enum can also declare computed [properties](properties.md) after its
+cases, `var name: T { get { ... } }`, which are read like fields
+(`size.ounces`). Inside the enum, a bare property name reads it on `this`.
+
+```pepper
+{{#include ../../examples/enums-properties.pep}}
+```
+
+An enum value has nowhere to keep anything and never changes, so an enum's
+property has a `get` with a body that does not use `field`, and no `set`:
+
+```text
+main.pep:6:9: error: property 'n' of enum 'E' must be computed: give 'get' a body that does not use 'field'
+main.pep:6:38: error: property 'n' of enum 'E' cannot have a 'set' accessor: enum values are immutable
+```
+
 ### Built-in methods
 
 Every enum has these methods without declaring them, and cannot declare

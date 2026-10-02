@@ -178,6 +178,19 @@ pub(crate) fn lower(
 /// binds like any other.
 fn bare_to_member(e: &mut Expression, properties: &Properties, site: &Site, is_local: &dyn Fn(&str) -> bool) -> bool {
     let Expression::SymbolRef { id, loc, .. } = e else { return false };
+    // An instance method of an enum whose cases carry nothing is the free
+    // function `E::m`, whose `this` is its first parameter.
+    if site.current.is_none()
+        && let Some((enum_name, _)) = crate::enums::method_of(site.function)
+    {
+        let ty = TypeName::new(enum_name);
+        if properties.find(&ty, id).is_none() || is_local(id) || !is_local("this") {
+            return false;
+        }
+        let this = Expression::SymbolRef { id: "this".to_string(), ty, loc: Loc::NONE };
+        *e = Expression::MemberRef { lhs: Box::new(this), name: id.clone(), loc: *loc };
+        return true;
+    }
     let Some(current) = site.current else { return false };
     let Some(property) = properties.find(current, id) else { return false };
     if property.get == AccessorKind::Default && property.set != Some(AccessorKind::Body) || is_local(id) {
