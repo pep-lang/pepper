@@ -963,3 +963,77 @@ fn type_patterns_report_what_a_trait_value_cannot_be() {
     let error = compile_error(&shapes("test(): int { var q = Square(1) as? Square; return 0; }\n"));
     assert!(error.contains("error: 'as?' converts a value of trait type, not one of 'Square': use 'as' to convert it"), "{}", error);
 }
+
+#[test]
+fn weak_trait_values_upgrade_while_the_object_lives() {
+    // `Weak<Shape>` holds the object's weak reference and its vtable: it
+    // upgrades to a `Shape` while a strong reference is left, and the last
+    // strong release still runs the concrete destructor.
+    let (result, leaked) = run(&shapes(
+        r#"
+struct Node {
+    Weak<Shape> parent;
+    construct(Shape parent) { this.parent = Weak<Shape>(parent); }
+}
+
+test(): int {
+    Shape s = Rect(2, 3);
+    var w = Weak<Shape>(s);
+    with (var live = w) {
+        if (live.area() != 6) { return 1; }
+    } else {
+        return 2;
+    }
+    var node = Node(s);
+    if (w.expired() or node.parent.expired()) { return 3; }
+    s = __null;
+    if (destroyed.load() != 10) { return 4; }
+    if (!w.expired() or !node.parent.expired()) { return 5; }
+    with (var live = w) {
+        return 6;
+    }
+    var empty = Weak<Shape>(make(1));
+    if (!empty.expired()) { return 7; }
+    return 0;
+}
+"#,
+    ));
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn weak_trait_values_keep_a_value_structs_box() {
+    // A value struct's trait value is a box; a weak reference to it keeps
+    // the box's memory until the weak reference goes too.
+    let (result, leaked) = run(
+        r#"
+trait Shape { int area(); }
+
+[Value]
+struct Point {
+    int x;
+    construct(int x) { this.x = x; }
+    int area() { return x; }
+}
+extend Point with Shape;
+
+test(): int {
+    Shape s = Point(4);
+    var w = Weak<Shape>(s);
+    with (var live = w) {
+        if (live.area() != 4) { return 1; }
+    }
+    s = __null;
+    if (!w.expired()) { return 2; }
+    var weak_points = Array<Weak<Shape>>();
+    Shape t = Point(1);
+    weak_points.append(Weak<Shape>(t));
+    weak_points.append(Weak<Shape>(t));
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}

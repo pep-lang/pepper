@@ -117,6 +117,8 @@ everything that points back up holds a `Weak<T>`, so there is no cycle.
   the object has already been destroyed, the body is skipped and the `else`
   block runs. See [Scoped blocks with `with`](scopes.md).
 - **`expired()`** reports whether the object has been destroyed.
+- **`T` may be a trait**: `Weak<Shape>` upgrades to a `Shape` (see
+  [Weak references and atomics](traits-and-extensions.md#weak-references-and-atomics)).
 - **The object is destroyed on time.** When its last strong reference goes,
   its destructor runs and its fields are released, even if weak references
   remain. Only the object's small header stays allocated until the last weak

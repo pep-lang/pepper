@@ -112,6 +112,12 @@ pub fn synthesize_function_types(module: &mut Module) {
             // base waits for its specializations.
             if let Some(shared) = module.structs.iter().find(|st| st.name == target.to_string()).map(|st| st.is_shared()) {
                 module.structs.push(crate::passes::weak_types::weak_struct(&ty, shared));
+            } else if crate::traits::is_trait_type(&module.traits, target) {
+                // A weak trait value (`__weak<Shape>`) is the object and its
+                // vtable, as a trait value is: codegen gives it that layout
+                // and its own counting (`weak_trait_thunk`). Its object may
+                // be `[Shared]`, so it counts atomically.
+                module.structs.push(crate::passes::weak_types::weak_struct(&ty, true));
             }
             continue;
         }

@@ -72,29 +72,6 @@ impl Converter {
         self.trait_types.get(&key)
     }
 
-    /// Reports a weak reference to a trait type (`Weak<Shape>`,
-    /// `__weak<Shape>`) anywhere in `ty`: a weak view needs the concrete
-    /// struct's head, which a trait value hides behind its vtable.
-    fn reject_weak_trait(&self, ty: &TypeName, loc: Loc) -> bool {
-        let parsed = crate::passes::gather_generics::parse_type_string(
-            ty.to_string().trim_end_matches('*'),
-        );
-        if (parsed.name == "Weak" || parsed.name == "__weak")
-            && let Some(target) = parsed.sub_types.first()
-            && traits::is_trait_type(&self.trait_defs, target)
-        {
-            crate::errors::report(
-                Diagnostic::error(format!(
-                    "weak reference to trait type '{}' is not supported",
-                    target.display()
-                ))
-                .at(loc),
-            );
-            return true;
-        }
-        parsed.sub_types.iter().any(|sub| self.reject_weak_trait(sub, loc))
-    }
-
     /// `value` flows into a slot of type `expected`.
     fn convert(
         &mut self,
@@ -127,6 +104,14 @@ impl Converter {
         // literal is a `WithSubject` too, handled above).
         if let Expression::WithSubject(with) = value {
             self.convert(&mut with.body, expected, current, fallback);
+            return;
+        }
+        // A null weak trait value (`__weak<Shape>`, an object and a vtable,
+        // like a trait value) is its zero pair.
+        if matches!(value, Expression::PointerLiteral)
+            && expected.weak_target().is_some_and(|t| traits::is_trait_type(&self.trait_defs, t))
+        {
+            *value = Expression::Default(expected.clone());
             return;
         }
         let to_trait = traits::is_trait_type(&self.trait_defs, expected);
@@ -575,9 +560,6 @@ impl Converter {
                 args,
                 loc,
             } => {
-                if self.reject_weak_trait(&TypeName::new(function), *loc) {
-                    return;
-                }
                 // Constructors are listed with the functions, by name.
                 let params = self.functions.get(function.as_str()).cloned();
                 if let Some(params) = params {
@@ -642,10 +624,6 @@ impl Converter {
                     } else {
                         var.type_loc
                     };
-                    // An inferred type is checked at its initializer.
-                    if !var.type_loc.is_none() && self.reject_weak_trait(&ty, var.type_loc) {
-                        continue;
-                    }
                     if let Some(default) = &mut var.default {
                         self.expression(default, current);
                         self.convert(default, &ty, current, fallback);

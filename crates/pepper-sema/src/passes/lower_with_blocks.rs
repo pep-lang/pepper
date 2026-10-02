@@ -29,7 +29,8 @@ pub fn lower_with_blocks(module: &mut Module) {
         .iter()
         .filter_map(|st| st.method_members.iter().find(|m| m.name == "enter").map(|m| (st.name.clone(), m.ty.clone())))
         .collect();
-    let types = Types { structs, enter_types };
+    let traits = module.traits.clone();
+    let types = Types { structs, enter_types, traits };
     for st in &mut module.structs {
         // Generic bases never reach codegen; their `enter()` types are
         // still template parameters.
@@ -57,11 +58,13 @@ struct Types {
     structs: HashSet<String>,
     /// Struct name → what its `enter()` returns.
     enter_types: HashMap<String, TypeName>,
+    /// The traits: a trait value (`Weak<Shape>.enter()`'s) may be null too.
+    traits: Vec<TraitDef>,
 }
 
 impl Types {
     fn nullable(&self, ty: &TypeName) -> bool {
-        ty.is_pointer() || self.structs.contains(&ty.to_string())
+        ty.is_pointer() || self.structs.contains(&ty.to_string()) || crate::traits::is_trait_type(&self.traits, ty)
     }
 }
 

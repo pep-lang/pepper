@@ -503,17 +503,6 @@ fn trait_method_signature_mismatch() {
 }
 
 #[test]
-fn weak_reference_to_trait_type() {
-    let source = "trait Shape {\n    int area();\n}\nstruct Square {\n    construct() {}\n}\nextend Square with Shape {\n    int area() { return 1; }\n}\nmain(): int {\n    var w: Weak<Shape> = __null;\n    return 0;\n}\n";
-    assert_eq!(
-        error_of("weak_reference_to_trait_type", source),
-        "main.pep:11:12: error: weak reference to trait type 'Shape' is not supported\n\
-         \x20  11 |     var w: Weak<Shape> = __null;\n\
-         \x20     |            ^~~~~~~~~~~"
-    );
-}
-
-#[test]
 fn assigning_a_captured_local() {
     assert_eq!(
         error_of(

@@ -268,9 +268,27 @@ type, like an enum case, and binds the value as that type:
         |                  ^~~~~
   ```
 
-What traits do not do yet:
+#### Weak references and atomics
 
-- **`Atomic<Shape>` is not supported.** A trait value is two pointers wide
-  and cannot be swapped atomically.
-- **`Weak<Shape>` is not supported.** Take the weak reference to the struct
-  type instead.
+**`Weak<Shape>`** is a [weak reference](memory.md#weak-references) to a
+trait value: it holds the struct's weak reference and its vtable, and a
+`with` block upgrades it to a `Shape` while a strong reference is left:
+
+```pepper
+{{#include ../../examples/traits-weak.pep}}
+```
+
+**`Atomic<Shape>` is ruled out.** `Atomic<T>` needs a thread-safe `T`, and
+a trait value may hold any struct, thread-safe or not; it is also two
+pointers wide, more than one atomic instruction swaps on every platform.
+The error is the one for any type that is not thread-safe:
+
+```text
+main.pep:8:32: error: 'Shape' does not conform to 'Shared', required by 'T' in 'Atomic'
+    8 |     var current = async.Atomic<Shape>();
+      |                                ^~~~~
+```
+
+To share a trait value between threads, keep it in a
+[`Mutex<Shape>`](threads.md#mutexes-and-conditions) and swap it with
+`replace`, or use `Atomic<Square>` for one `[Shared]` struct type.

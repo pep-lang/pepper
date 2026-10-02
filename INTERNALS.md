@@ -1296,6 +1296,18 @@ value is a struct reference with its concrete type erased, like a
   object, a value struct copied out of its box, or for another trait the
   object paired with the vtable `select`ed by id. The binding reads the
   `match`'s hidden subject, so it is an lvalue read like any other.
+- **Weak trait values.** `__weak<Shape>` (inside `Weak<Shape>`) is the
+  object's weak reference plus its vtable. Sema synthesizes its weak
+  struct as for a struct target (atomic counts, since the object may be
+  `[Shared]`), and `convert_to_traits` turns a `__null` flowing into one
+  into `Default`. Codegen keeps the struct out (`weak_traits`) and gives
+  the type a trait value's `[2 x ptr]` layout with its own
+  `__acquire`/`__release` (`emit_weak_trait_thunk`: an atomic step of the
+  head's weak count, freeing at 0); `codegen_weak` takes the object out of
+  the pair and upgrades to the same pair, or a null one. A value struct's
+  box (`box_member`) gives up the strong references' weak reference at
+  its last release, as `struct_body` does, so a weak reference keeps the
+  box's memory.
 - **Identity.** `==`/`!=` on trait values compare objects, and
   `store_refcount_ops` treats the same object as self-assignment.
   `__address`/`__refcount` read the object. Array slots of a trait type are
@@ -2458,8 +2470,8 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
 - **Trait values are one level deep.** There are no supertraits, so one
   trait type converts to another only through `as?` or a type pattern,
   which test the struct behind it at run time. `Atomic<T>` of a trait type is rejected (a trait type is not `Shared`): two
-  pointers do not swap atomically. `Weak<T>`/`__weak<T>` of a trait type is rejected by
-  `convert_to_traits`: the weak view needs the concrete struct's head. `for` and `with` still choose their
+  pointers do not swap atomically, and the struct behind it may not be
+  thread-safe; the book points to `Mutex<Shape>`. `for` and `with` still choose their
   protocol by the methods a type has (`ForIterator`), statically for a
   struct and through the vtable for a trait value.
 - **Constrained bodies are checked, not compiled, against their

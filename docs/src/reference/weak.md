@@ -12,7 +12,8 @@ Source: `runtime/weak.pep`
 struct Weak<T>
 ```
 
-A reference to a struct object that does not keep it alive, for back
+A reference to a struct object, or to the struct behind a trait value
+(`Weak<Shape>`), that does not keep it alive, for back
 pointers (a child's parent, an observer's subject) that would otherwise
 form a reference cycle and leak.
 
@@ -25,7 +26,7 @@ A `Weak<T>` never changes what it points at, so copies of it can be shared
 freely.
 
 **Type parameters**
-- `T` — the struct type pointed at
+- `T` — the struct or trait type pointed at
 
 **See also**
 - `Scoped`

@@ -53,7 +53,8 @@ Some details differ from C++:
   `Atomic<String>` is a compile error at `String` (see
   [the `Shared` constraint](generics.md#the-shared-constraint)). A tuple is
   thread-safe, but its value cannot be stored atomically, so `Atomic` of a
-  tuple is an error too.
+  tuple is an error too, and so is `Atomic` of a trait type (see
+  [Weak references and atomics](traits-and-extensions.md#weak-references-and-atomics)).
 
 ## Common patterns
 

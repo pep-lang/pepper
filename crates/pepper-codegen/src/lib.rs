@@ -99,6 +99,10 @@ pub struct CodeGenerator<'ctx> {
     pub structs: HashMap<String, StructDesc<'ctx>>,
     /// Traits used as types, by type name.
     pub traits: HashMap<String, TraitDesc>,
+    /// Weak trait values (`__weak<Shape>`): laid out like a trait value
+    /// (object, vtable), with their own counting thunks
+    /// ([`Self::emit_weak_trait_thunk`]) in place of their sema struct's.
+    weak_traits: std::collections::HashSet<String>,
     /// Tuple types (`__tuple<A, B>`), by type name: the sema type name of
     /// each element. A tuple value is a literal LLVM struct of its elements,
     /// held by value (see `types::Types::register_tuple`).
@@ -228,6 +232,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             types: types::Types::new(context),
             structs: HashMap::new(),
             traits: HashMap::new(),
+            weak_traits: std::collections::HashSet::new(),
             tuples: HashMap::new(),
             tuple_order: Vec::new(),
             values: HashMap::new(),
@@ -373,7 +378,17 @@ impl<'ctx> CodeGenerator<'ctx> {
             order
         };
         let sort = self.unit.is_some();
-        let structs = by_name(module.structs.iter().map(|s| s.name.as_str()).collect(), sort);
+        // A weak trait value is no object: its sema struct only types it.
+        self.weak_traits = module
+            .structs
+            .iter()
+            .filter(|st| st.ty.weak_target().is_some_and(|t| pepper_sema::traits::is_trait_type(&module.traits, t)))
+            .map(|st| st.name.clone())
+            .collect();
+        let structs: Vec<usize> = by_name(module.structs.iter().map(|s| s.name.as_str()).collect(), sort)
+            .into_iter()
+            .filter(|&idx| !self.weak_traits.contains(&module.structs[idx].name))
+            .collect();
         let externs = by_name(module.externs.iter().map(|e| e.name.as_str()).collect(), sort);
         let functions = by_name(module.functions.iter().map(|f| f.name.as_str()).collect(), sort);
         let trait_names: Vec<String> = module.trait_types.iter().map(|t| t.ty.to_string()).collect();
@@ -392,6 +407,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Trait types are values of their own layout; a field may hold one.
         for &idx in &traits {
             self.types.register_trait(&module.trait_types[idx].ty.to_string());
+        }
+        let mut weak_traits: Vec<String> = self.weak_traits.iter().cloned().collect();
+        weak_traits.sort();
+        for name in &weak_traits {
+            self.types.register_trait(name);
+            self.traits.insert(name.clone(), TraitDesc { methods: vec![] });
         }
         // So are tuples: a struct field or another tuple may hold one.
         for &idx in &structs {
@@ -435,6 +456,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         for &idx in &traits {
             self.instantiate_trait(&module.trait_types[idx])?;
         }
+        for name in &weak_traits {
+            self.emit_weak_trait_thunk(name, true)?;
+            self.emit_weak_trait_thunk(name, false)?;
+        }
         // Value structs' thunks are declared before any thunk body calls
         // them: a tuple (or a value struct) can hold a value struct, such as
         // `(int, Optional<Box>)`.
@@ -471,6 +496,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             for idx in 0..module.structs.len() {
                 let st = module.structs[idx].clone();
+                if self.weak_traits.contains(&st.name) {
+                    continue;
+                }
                 self.codegen_struct(&st)?;
             }
             for idx in 0..module.functions.len() {
@@ -517,7 +545,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // for errors.
         let mut callables: Vec<(FunctionDef, Loc)> = vec![];
         for st in &module.structs {
-            if st.ty.is_generic() && st.name == st.ty.name {
+            if (st.ty.is_generic() && st.name == st.ty.name) || self.weak_traits.contains(&st.name) {
                 continue;
             }
             callables.extend(self.patched_ctors(st).into_iter().map(|c| (c, st.loc)));
@@ -1734,6 +1762,52 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// `__weak<Shape>.__acquire` / `__release` (`increment` or not): nothing
+    /// for a null value, else a step of the object's weak count, freeing
+    /// the memory when the last weak reference goes and no strong one is
+    /// left (as `weak_types` does for a struct's weak view). The object's
+    /// struct may be `[Shared]`, so the step is atomic.
+    fn emit_weak_trait_thunk(&mut self, name: &str, increment: bool) -> Result<(), String> {
+        let fat = self.types.get(name).ok_or_else(|| format!("unknown weak type {}", name))?;
+        let member = if increment { "__acquire" } else { "__release" };
+        let thunk = self.module.add_function(
+            &format!("{}.{}", name, member),
+            self.context.void_type().fn_type(&[fat.into()], false),
+            Some(inkwell::module::Linkage::Private),
+        );
+        self.functions.insert(format!("{}.{}", name, member), thunk);
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        let step = self.context.append_basic_block(thunk, "step");
+        let done = self.context.append_basic_block(thunk, "done");
+        self.builder.position_at_end(entry);
+        let value = thunk.get_nth_param(0).expect("this");
+        let object = self.object_pointer(value)?;
+        let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
+        self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(step);
+        let after = self.count_step(object, sema::CountField::Weak, increment, true, false)?;
+        if increment {
+            self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        } else {
+            let free = self.context.append_basic_block(thunk, "free");
+            let zero = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, after, self.context.i32_type().const_zero(), "last")
+                .map_err(|e| e.to_string())?;
+            self.builder.build_conditional_branch(zero, free, done).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(free);
+            self.call_function("_pep_free", vec![object.into()])?;
+            self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        }
+        self.builder.position_at_end(done);
+        self.builder.build_return(None).map_err(|e| e.to_string())?;
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
     /// `Trait.method(value, args...)`: call the vtable's implementation with
     /// the object as `this`. The arguments pass through untouched, so the
     /// implementation's own parameter acquires and the caller's temporary
@@ -2057,6 +2131,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let slot = self.builder.build_struct_gep(box_type, object, 2, "boxed").map_err(|e| e.to_string())?;
                 let held = self.builder.build_load(box_type.get_field_type_at_index(2).expect("value"), slot, "value").map_err(|e| e.to_string())?;
                 self.call_function(&format!("{}.__release", value), vec![held])?;
+                // The strong references' weak reference: a weak trait value
+                // (`Weak<Shape>`) may still hold the box, and frees it last.
+                let weak = self.count_step(object, sema::CountField::Weak, false, true, false)?;
+                let free = self.context.append_basic_block(thunk, "free");
+                let unreferenced = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, weak, count_type.const_zero(), "unreferenced")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_conditional_branch(unreferenced, free, done).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(free);
                 self.call_function("_pep_free", vec![object.into()])?;
                 self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
             }
@@ -5315,14 +5399,18 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_weak(&mut self, op: sema::WeakOp, ty: &TypeName, arg: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
-        let struct_ty = match self.types.get(&ty.to_string()) {
-            Some(BasicTypeEnum::StructType(sct)) if self.structs.contains_key(&ty.to_string()) => sct,
-            _ => return Err(format!("{}<{}> needs a struct type", op.name(), ty)),
+        // A trait value's weak reference is its object's, with its vtable
+        // carried along: the counts sit in every object's head.
+        let fat = match self.types.get(&ty.to_string()) {
+            Some(BasicTypeEnum::StructType(_)) if self.structs.contains_key(&ty.to_string()) => None,
+            Some(BasicTypeEnum::ArrayType(at)) if self.is_trait_name(&ty.to_string()) => Some(at),
+            _ => return Err(format!("{}<{}> needs a struct or trait type", op.name(), ty)),
         };
         let arg_temp = self.owned_temp_type(arg);
         let val = self.codegen_expr(arg)?;
         let ptr = match val {
             BasicValueEnum::PointerValue(p) => p,
+            BasicValueEnum::ArrayValue(_) if fat.is_some() => self.object_pointer(val)?,
             other => return Err(format!("{} expects a reference, got {:?}", op.name(), other)),
         };
         let result: BasicValueEnum<'ctx> = match op {
@@ -5335,7 +5423,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             sema::WeakOp::Expired => {
                 // Expired iff null or no strong reference is left. The head
                 // load must not run on null: branch, then phi.
-                let _ = struct_ty;
                 let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
                 let entry = self.builder.get_insert_block().expect("no insert block");
                 let then_block = self.context.append_basic_block(fn_value, "weak_nonnull");
@@ -5387,10 +5474,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let won = self.builder.build_extract_value(cas, 1, "upgrade_ok").map_err(|e| e.to_string())?.into_int_value();
                 self.builder.build_conditional_branch(won, merge_block, loop_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(merge_block);
-                let null = self.context.ptr_type(inkwell::AddressSpace::default()).const_null();
-                let phi = self.builder.build_phi(self.context.ptr_type(inkwell::AddressSpace::default()), "upgraded").map_err(|e| e.to_string())?;
-                phi.add_incoming(&[(&null, entry), (&null, loop_block), (&ptr, try_block)]);
-                phi.as_basic_value()
+                match fat {
+                    // The same vtable, or a null trait value.
+                    Some(fat) => {
+                        let null = fat.const_zero();
+                        let phi = self.builder.build_phi(fat, "upgraded").map_err(|e| e.to_string())?;
+                        phi.add_incoming(&[(&null, entry), (&null, loop_block), (&val, try_block)]);
+                        phi.as_basic_value()
+                    }
+                    None => {
+                        let null = self.context.ptr_type(inkwell::AddressSpace::default()).const_null();
+                        let phi = self.builder.build_phi(self.context.ptr_type(inkwell::AddressSpace::default()), "upgraded").map_err(|e| e.to_string())?;
+                        phi.add_incoming(&[(&null, entry), (&null, loop_block), (&ptr, try_block)]);
+                        phi.as_basic_value()
+                    }
+                }
             }
         };
         if let Some(temp) = arg_temp {
