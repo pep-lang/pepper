@@ -240,6 +240,11 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   Patterns cannot match ranges (`1..9`) or have guards yet. A literal
   pattern is a literal, not a named constant.
 - A `match` cannot examine floating-point values.
+- The methods of an enum whose cases carry nothing have no value form:
+  `c.name` without the call is an error ("'name' is a method of 'Color':
+  call it as 'name()'"), where a struct's `p.norm` is a
+  [bound method](function-types.md). Wrap the call in a closure instead,
+  `() => c.name()`.
 - An enum whose cases carry nothing cannot be extended
   (`extend Color { ... }`); declare its methods inside it. So it cannot
   conform to a trait either, and a trait value is a reference to an object,

@@ -521,6 +521,7 @@ fn method_errors() {
     assert!(with("Light.nope();").contains("no member named 'nope' in 'Light'"));
     assert!(with("Light.may_go();").contains("'may_go' is not static: call it on a value of 'Light', such as 'Light.Red.may_go()'"));
     assert!(with("Light.Red.first();").contains("'first' is a static method of 'Light': call it as 'Light.first(...)'"));
+    assert!(with("var n = Light.Red.may_go;").contains("'may_go' is a method of 'Light': call it as 'may_go()'"));
     let declared = |member: &str| error_of(&format!("enum E {{ A\n    {}\n}}\ntest(): int {{ return 0; }}", member));
     assert!(declared("name(): String { return \"\"; }").contains("'name' is built into every enum and cannot be redeclared"));
     assert!(error_of(&format!("{}extend Light {{ extra(): int {{ return 1; }} }}\ntest(): int {{ return 0; }}", LIGHT))

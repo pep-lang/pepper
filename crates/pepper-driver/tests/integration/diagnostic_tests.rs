@@ -4563,3 +4563,38 @@ fn unsafe_cast_arguments() {
          \x20     |             ^~~~~~~~~~~"
     );
 }
+
+#[test]
+fn enum_method_read_without_a_call() {
+    let error = |test: &str, body: &str| error_of(test, &format!("enum L {{ A, B }}\nmain(): int {{\n    {}\n    return 0;\n}}\n", body));
+    assert_eq!(
+        error("enum_method_read", "print(L.A.name);"),
+        "main.pep:3:15: error: 'name' is a method of 'L': call it as 'name()'\n\
+         \x20   3 |     print(L.A.name);\n\
+         \x20     |               ^~~~"
+    );
+    assert_eq!(
+        error("enum_static_method_read", "var f = L.from_value;"),
+        "main.pep:3:15: error: 'from_value' is a method of 'L': call it as 'L.from_value(...)'\n\
+         \x20   3 |     var f = L.from_value;\n\
+         \x20     |               ^~~~~~~~~~"
+    );
+}
+
+#[test]
+fn bound_method_passed_as_a_value() {
+    // A reference enum's `name` is a struct method: `r.name` is a bound
+    // method, which is not a `String`.
+    assert_eq!(
+        error_of("reference_enum_method_read", "enum R { A(x: int), B }\nmain(): int {\n    var r = R.A(1);\n    print(r.name);\n    return 0;\n}\n"),
+        "main.pep:4:13: error: cannot pass a value of type '() => String' as argument 1 of 'print', which has type 'String'; call it with '()'\n\
+         \x20   4 |     print(r.name);\n\
+         \x20     |             ^~~~"
+    );
+    assert_eq!(
+        error_of("bound_method_into_int", "struct S {\n    m(x: int): int { return x; }\n}\nmain(): int {\n    var s = S();\n    var n: int = s.m;\n    return 0;\n}\n"),
+        "main.pep:6:20: error: cannot initialize variable 'n' of type 'int' with a value of type '(int) => int'\n\
+         \x20   6 |     var n: int = s.m;\n\
+         \x20     |                    ^"
+    );
+}

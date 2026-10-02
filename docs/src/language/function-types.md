@@ -69,6 +69,10 @@ too:
   is made. Inside a method, write `this.norm`; a bare `norm` is not a value.
   Storing `this.norm` in a field of `this` would be a reference cycle, and is
   an error, as for [closures](#this-in-methods).
+  A bound method is a function value, not the value the method returns:
+  passing `p.name` where a `String` is expected is an error. Call it,
+  `p.name()`. The methods of an enum whose cases carry nothing are not
+  values at all (see [enums](enums.md#current-limits)).
 - **Traits and extensions.** A method declared in an
   [extension](traits-and-extensions.md) works the same way, and so does a
   method of a trait-typed value (`shape.area`), which calls through the trait.

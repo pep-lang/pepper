@@ -1212,6 +1212,16 @@ fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Opt
                 return;
             }
         }
+        // `c.name` without a call: an enum's methods have no value form.
+        if let Expression::MemberRef { lhs, name, loc } = e {
+            let lhs_type = type_of_expr(lhs, scopes, current).to_string();
+            if let Some(key) = crate::value_types::key(&lhs_type).or_else(|| crate::enums::is_enum(&lhs_type).then(|| lhs_type.clone()))
+                && let Some(error) = crate::enums::method_read(&key, name, *loc)
+            {
+                crate::errors::report(error);
+                return;
+            }
+        }
         if let Expression::MethodCall { this, method, args, loc } = e {
             let this_type = type_of_expr(this, scopes, current);
             if !scopes.has_method(&this_type, method)

@@ -276,6 +276,19 @@ pub fn call_on_value(enum_name: &str, method: &str, this: Expression, args: Vec<
     }
 }
 
+/// The error for a method of enum (or other value type) `enum_name` read
+/// without a call, `c.name`: a value type's methods are free functions,
+/// which no value stands for. `None` when `method` is not one of its
+/// methods.
+pub fn method_read(enum_name: &str, method: &str, loc: Loc) -> Option<Diagnostic> {
+    let call = if method_is_static(enum_name, method)? {
+        format!("'{}.{}(...)'", enum_name, method)
+    } else {
+        format!("'{}()'", method)
+    };
+    Some(Diagnostic::error(format!("'{}' is a method of '{}': call it as {}", method, enum_name, call)).at(loc))
+}
+
 /// Make `enums` the enums [`representation`] knows, replacing any earlier
 /// run's.
 pub fn install(enums: &[EnumDef]) {
@@ -502,7 +515,7 @@ pub fn resolve_enum_cases(module: &mut Module) {
         };
         match e.case(name) {
             Some(case) => *expr = case_value(e, case, *loc),
-            None => report(no_case(name, e, *loc)),
+            None => report(method_read(&e.name, name, *loc).unwrap_or_else(|| no_case(name, e, *loc))),
         }
     };
     let mut in_block = |block: &mut Block, _generic: bool| {

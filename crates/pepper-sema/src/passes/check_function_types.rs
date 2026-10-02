@@ -194,6 +194,17 @@ impl<'a> Checker<'a> {
         let Some(actual) = actual else {
             return;
         };
+        // A function value (a bound method `s.m` read without a call) is
+        // never a number, enum or struct.
+        let function = crate::passes::gather_generics::parse_type_string(&actual.to_string());
+        if function.is_function_type() && !matches!(expected_kind, Kind::Pointer) {
+            let mut message = (slot.mismatch)(&pepper_spelling(expected), &function.display());
+            if function.function_params().is_empty() && function.function_return().is_some_and(|r| same_type(r, expected)) {
+                message += "; call it with '()'";
+            }
+            self.report(message, value, slot);
+            return;
+        }
         let Some(actual_kind) = self.kind_of(&actual) else {
             return;
         };
