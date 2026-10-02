@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fd49ca35.js";
+            window.path_to_searchindex_js = "../searchindex-b397aeed.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -367,11 +367,6 @@ know <em>why</em>, return a <a href="results.html"><code>Result</code></a> inste
 error.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>An optional is checked as a condition (or with <code>is_some()</code> or
-<code>is_none()</code>) and read with <code>value()</code> or <code>value_or</code>; <code>match</code> does not work
-on it yet. <code>Optional</code> will become an <a href="enums.html">enum</a> with <code>None</code> and
-<code>Some(value)</code> cases, as enum cases can now carry values; its methods stay
-the same.</li>
 <li>Some runtime APIs still use null references, default values or sentinels
 for “missing”: a <code>HashMap</code> returns the default value for a missing key,
 and <code>String.find</code> returns <code>-1</code>, for example.</li>

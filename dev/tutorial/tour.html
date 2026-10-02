@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fd49ca35.js";
+            window.path_to_searchindex_js = "../searchindex-b397aeed.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3dba6a77.js"></script>
@@ -466,18 +466,12 @@ export struct WordCounter {
         }
     }
 
-    # Splits `text` into words at spaces and counts each one.
+    # Splits `text` into words at spaces and counts each one. `add` skips
+    # the empty pieces that runs of spaces leave.
     add_text(text: String) {
-        var word = String();
-        for (var c in text) {
-            if c == " " {
-                this.add(word);
-                word = String();
-            } else {
-                word += c;
-            }
+        for (var word in text.split(" ")) {
+            this.add(word);
         }
-        this.add(word);
     }
 
     count(word: String): int {
@@ -531,15 +525,12 @@ the import:</p>
 <pre><code class="language-sh">pepper main.pep -o word-count
 ./word-count
 </code></pre>
-<p>It prints each word followed by its count, one value per line, and then the
-error message for the missing file (its exact text comes from the operating
+<p>It prints each word with its count, one word per line, and then the error
+message for the missing file (its exact text comes from the operating
 system):</p>
-<pre><code class="language-text">the
-3
-cat
-1
-sat
-2
+<pre><code class="language-text">the: 3
+cat: 1
+sat: 2
 ...
 No such file or directory
 </code></pre>
@@ -560,9 +551,9 @@ file at once: <code>File.write_text</code> and <code>File.read_to_string</code>.
 error is an <a href="../reference/io-types.html"><code>IoError</code></a>, so reading a missing file
 is an ordinary error value, not a crash. <code>count_file</code> turns it into its own
 <code>Result&lt;WordCounter&gt;</code>.</li>
-<li><strong>Strings character by character.</strong> <code>add_text</code> walks the text one character
-at a time and builds each word with <code>+=</code>, since the <code>String</code> type has no
-<code>split</code> method yet.</li>
+<li><strong>Splitting strings.</strong> <code>add_text</code> breaks the text into words with
+<code>split(" ")</code>, which returns an <code>Array&lt;String&gt;</code> of the pieces between the
+spaces (see <a href="../reference/string.html"><code>String</code></a>).</li>
 </ul>
 <h2 id="where-to-go-next"><a class="header" href="#where-to-go-next">Where to go next</a></h2>
 <p>You have now seen most of what you need to write everyday Pepper code. The
