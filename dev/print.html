@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-758c8f0c.js";
+            window.path_to_searchindex_js = "searchindex-ec8e1c85.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-3dba6a77.js"></script>
+        <script src="toc-aa7f5379.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -248,6 +248,10 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 (see <a href="#implicit-conversions">implicit conversions</a>).</li>
 <li>Free functions, methods, operators, constructors, extension methods and
 trait members can be <a href="#overloading-1">overloaded</a>.</li>
+<li>A <code>static</code> block runs in the compiler: it can list a struct’s fields and
+the attributes on them (<code>[Attribute]</code> structs of your own) and generate
+code for each, so one function can encode any struct (see
+<a href="#reflection-and-attributes">reflection and attributes</a>).</li>
 <li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
 skip defaulted parameters or pass them in any order (see
 <a href="#named-arguments">named arguments</a>).</li>
@@ -7320,6 +7324,355 @@ or of a generic the file’s own function of that name hides.</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="#extending-generic-structs">extension</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="reflection-and-attributes"><a class="header" href="#reflection-and-attributes">Reflection and attributes</a></h1>
+<p>A program can look at its own types while it compiles: list a struct’s
+fields, read the attributes written on them, and generate code for each
+one. This is how one function can turn any struct into JSON, declare a
+command-line option per field, or compare two values field by field.</p>
+<p>The work happens in the compiler, in a <code>static</code> block, so it costs nothing
+at run time and needs no type information in the program. This is the model
+of Zig’s <code>comptime</code> and C++’s static reflection, not of Java or C# runtime
+reflection.</p>
+<pre><code class="language-pepper">struct Point {
+    var x: int;
+    var y: int;
+    var label: String;
+}
+
+# One function describes any struct: the `static` block runs in the
+# compiler, once per type `describe` is called with.
+describe&lt;T&gt;(value: T): String {
+    var out = StringBuilder();
+    static (out, value) {
+        out.append(reflect.name&lt;T&gt;());
+        out.append("(");
+        for (var field in reflect.properties&lt;T&gt;()) {
+            # `field.name` is a compile-time string; `field.get(value)` reads
+            # the field. Both statements use `out`, a captured runtime
+            # value, so they are emitted once per field.
+            out.append($"{field.name} = {field.get(value)}");
+            if (!field.is_last) {
+                out.append(", ");
+            }
+        }
+    }
+    out.append(")");
+    return out.to_string();
+}
+
+main(): int {
+    var p = Point();
+    p.x = 3;
+    p.y = 4;
+    p.label = "corner";
+    assert(describe(p) == "Point(x = 3, y = 4, label = corner)", "one line per field, in declaration order");
+    return 0;
+}
+</code></pre>
+<h2 id="static-blocks"><a class="header" href="#static-blocks"><code>static</code> blocks</a></h2>
+<p>A <code>static</code> block is written inside a function. It names, in parentheses, the
+runtime values it may emit code against: its <strong>capture list</strong>.</p>
+<pre><code class="language-pepper">static (out, value) {
+    ...
+}
+</code></pre>
+<p><code>static { ... }</code> with no list is pure compile-time work, such as a check
+with <code>reflect.assert</code>.</p>
+<p>Each statement in the block either runs in the compiler or is <strong>emitted</strong>
+into the function:</p>
+<ul>
+<li>A statement that uses a captured name, or a runtime local the block
+declares, is emitted. Its compile-time parts are filled in first:
+<code>out.append(field.name)</code> emits <code>out.append("x")</code>.</li>
+<li>Everything else runs in the compiler: <code>var</code> declarations whose value uses
+no captured name, <code>if</code> on a compile-time condition (only the branch taken
+is kept), and <code>for</code> over a compile-time list, which is unrolled, one copy
+of its body per element.</li>
+<li>An <code>if</code> whose condition uses a captured name is emitted as a runtime
+<code>if</code>; its branches can still hold compile-time steps.</li>
+</ul>
+<p>A <code>var</code> with a captured name in its value is a runtime local, and using it
+counts as using a capture. Using a runtime value that is not captured is an
+error at that name:</p>
+<pre><code class="language-text">main.pep:9:24: error: 'total' is a runtime value; add it to the static block's capture list
+</code></pre>
+<p>Each pass of an unrolled <code>for</code>, and the branch an <code>if</code> keeps, is its own
+block, like the body of a real loop.</p>
+<h3 id="in-generic-code"><a class="header" href="#in-generic-code">In generic code</a></h3>
+<p>In a generic function, a <code>static</code> block runs once for each specialization,
+when its type arguments are known: <code>describe&lt;Point&gt;</code> and <code>describe&lt;Line&gt;</code>
+each get their own expansion. Code the block emits can call other generic
+functions, such as <code>describe(field.get(value))</code> for a field that is itself a
+struct, and those are specialized in turn. A mistake in a block is reported
+when some specialization uses it, with the pass it happened in:</p>
+<pre><code class="language-text">main.pep:14:13: error: 'print' cannot be called at compile time
+main.pep:12:27: note: in pass 1 of 2 (member 'x')
+note: a 'static' block can call the 'reflect' functions and the methods of what they return; calling other functions at compile time is not supported yet
+main.pep:10:1: note: in the static block of 'dump&lt;Point&gt;'
+</code></pre>
+<h3 id="what-the-compiler-can-evaluate"><a class="header" href="#what-the-compiler-can-evaluate">What the compiler can evaluate</a></h3>
+<p>Compile-time values are integers, floating-point numbers, <code>bool</code>, strings,
+enum cases, and what the <code>reflect</code> functions return: members, cases,
+functions, lists and attributes. Expressions can use literals, the
+arithmetic, comparison and logical operators, <code>+</code> on strings, interpolated
+strings (<code>$"{field.name}: "</code>), <code>?:</code>, assignment to a compile-time <code>var</code>
+(<code>n += 1</code>), and indexing a list. A string has <code>length</code>, <code>is_empty</code>,
+<code>starts_with</code>, <code>ends_with</code> and <code>contains</code>; a list has <code>count</code> and
+<code>is_empty</code>.</p>
+<p>Emitted code can use a compile-time number, <code>bool</code>, string or enum case;
+the compiler writes it as a literal.</p>
+<h2 id="the-reflect-functions"><a class="header" href="#the-reflect-functions">The <code>reflect</code> functions</a></h2>
+<p><code>reflect</code> is built in: a <code>static</code> block uses it without an import.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Returns</th></tr>
+</thead>
+<tbody>
+<tr><td><code>reflect.name&lt;T&gt;()</code></td><td>the type’s name, as written (<code>"Box&lt;int&gt;"</code>)</td></tr>
+<tr><td><code>reflect.properties&lt;T&gt;()</code></td><td>the public fields and <a href="#properties">properties</a> of a struct, in declaration order</td></tr>
+<tr><td><code>reflect.fields&lt;T&gt;()</code></td><td>every field of a struct, private ones and a property’s storage included; only in the file that declares <code>T</code></td></tr>
+<tr><td><code>reflect.cases&lt;E&gt;()</code></td><td>an enum’s cases, in order</td></tr>
+<tr><td><code>reflect.functions_with&lt;A&gt;()</code></td><td>every function in the program that carries attribute <code>A</code></td></tr>
+<tr><td><code>reflect.is_struct&lt;T&gt;()</code>, <code>is_enum&lt;T&gt;()</code>, <code>is_trait&lt;T&gt;()</code></td><td>what kind of type <code>T</code> is</td></tr>
+<tr><td><code>reflect.is_same&lt;A, B&gt;()</code></td><td>whether <code>A</code> and <code>B</code> are the same type (<code>int</code> and <code>i32</code> are)</td></tr>
+<tr><td><code>reflect.has_attribute&lt;T, A&gt;()</code>, <code>reflect.attribute&lt;T, A&gt;()</code></td><td>attribute <code>A</code> on struct or enum <code>T</code></td></tr>
+<tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling</td></tr>
+<tr><td><code>reflect.error(message)</code></td><td>fails the compile with <code>message</code></td></tr>
+<tr><td><code>reflect.assert(condition, message)</code></td><td>fails the compile with <code>message</code> when <code>condition</code> is false</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>fields</code> exists for code a struct’s author writes, such as a field-by-field
+<code>==</code>; anywhere else it is an error, which points at <code>properties</code>:</p>
+<pre><code class="language-text">main.pep:4:24: error: 'fields' of 'Account' is only available in the file that declares 'Account'; use 'properties'
+</code></pre>
+<p>A <strong>member</strong> (from <code>properties</code> or <code>fields</code>) has:</p>
+<ul>
+<li><code>name</code>, <code>index</code>, <code>is_last</code>, <code>is_const</code>, <code>is_property</code></li>
+<li><code>type_name</code>: its type as a string; <code>field.Type</code> is the type itself, usable
+wherever a type is written: <code>var copy: field.Type = ...</code>,
+<code>reflect.is_same&lt;field.Type, String&gt;()</code>, <code>parse&lt;field.Type&gt;(text)</code></li>
+<li><code>has_attribute&lt;A&gt;()</code> and <code>attribute&lt;A&gt;()</code></li>
+<li><code>get(value)</code> and <code>set(value, x)</code>, which emit <code>value.name</code> and
+<code>value.name = x</code></li>
+</ul>
+<p>A <strong>case</strong> (from <code>cases</code>) has <code>name</code>, <code>value</code> (its integer value), <code>index</code>,
+<code>is_last</code>, <code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code>, and <code>get()</code>, which
+emits the case itself, for an enum whose cases carry no values.</p>
+<p>A <strong>function</strong> (from <code>functions_with</code>) has <code>name</code>, <code>has_attribute&lt;A&gt;()</code>,
+<code>attribute&lt;A&gt;()</code>, and <code>call(arguments...)</code>, which emits a direct call.</p>
+<pre><code class="language-pepper">enum Level {
+    Low,
+    High = 10,
+}
+
+struct Settings {
+    var name: String;
+    var retries: int;
+    var verbose: bool;
+    var level: Level;
+}
+
+# A compile-time `if` keeps only the branch it takes, so each field is
+# written by the code that fits its type.
+render&lt;T&gt;(value: T): String {
+    var out = StringBuilder();
+    static (out, value) {
+        for (var field in reflect.properties&lt;T&gt;()) {
+            out.append($"{field.name}=");
+            if (reflect.is_same&lt;field.Type, String&gt;()) {
+                out.append($"\"{field.get(value)}\"");
+            } else if (reflect.is_enum&lt;field.Type&gt;()) {
+                out.append(level_name(field.get(value)));
+            } else {
+                out.append($"{field.get(value)}");
+            }
+            out.append(";");
+        }
+    }
+    return out.to_string();
+}
+
+# `reflect.cases&lt;E&gt;()` lists an enum's cases; `case.get()` is the case
+# itself in emitted code.
+level_name(level: Level): String {
+    var name = "";
+    static (level, name) {
+        for (var case in reflect.cases&lt;Level&gt;()) {
+            if (level == case.get()) {
+                name = case.name;
+            }
+        }
+    }
+    return name;
+}
+
+# `field.set(value, x)` assigns a field.
+reset_counts&lt;T&gt;(value: T) {
+    static (value) {
+        for (var field in reflect.properties&lt;T&gt;()) {
+            if (reflect.is_same&lt;field.Type, int&gt;()) {
+                field.set(value, 0);
+            }
+        }
+    }
+}
+
+main(): int {
+    var settings = Settings();
+    settings.name = "fast";
+    settings.retries = 3;
+    settings.level = Level.High;
+    assert(
+        render(settings) == "name=\"fast\";retries=3;verbose=false;level=High;",
+        "each field is written by the code for its type"
+    );
+    reset_counts(settings);
+    assert(settings.retries == 0, "set assigns the int fields");
+    return 0;
+}
+</code></pre>
+<pre><code class="language-pepper">struct Account {
+    var owner: String;
+    var _balance: int;
+
+    construct(this.owner = "", this._balance = 0) {}
+
+    # `reflect.fields&lt;T&gt;()` lists private fields too, so it is available
+    # only in the file that declares `T`: code its author writes, like this
+    # field-by-field `==`.
+    ==(other: Account): bool {
+        var same = true;
+        static (same, other) {
+            for (var field in reflect.fields&lt;Account&gt;()) {
+                same = same &amp;&amp; field.get(this) == field.get(other);
+            }
+        }
+        return same;
+    }
+}
+
+main(): int {
+    assert(Account("ann", 5) == Account("ann", 5), "equal fields compare equal");
+    assert(!(Account("ann", 5) == Account("ann", 6)), "a private field takes part");
+    return 0;
+}
+</code></pre>
+<h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
+<p>An attribute is a struct marked <code>[Attribute]</code>. Writing it above a
+declaration records a compile-time value of that struct, which
+<code>has_attribute&lt;A&gt;()</code> tests for and <code>attribute&lt;A&gt;()</code> returns.</p>
+<pre><code class="language-pepper"># An attribute is a struct marked `[Attribute]`. Its fields hold what a
+# use of it says; a field with an initializer may be left out.
+[Attribute]
+struct Name {
+    const value: String;
+}
+
+[Attribute]
+struct Ignore {}
+
+struct User {
+    [Name("user_id")]
+    var id: int;
+    var email: String;
+    [Ignore]
+    var session: int;
+}
+
+# The keys a struct's fields are written under: each field's `[Name]` if
+# it has one, else the field's own name, skipping `[Ignore]`d fields.
+keys&lt;T&gt;(): String[] {
+    var keys: String[] = [];
+    static (keys) {
+        for (var field in reflect.properties&lt;T&gt;()) {
+            if (!field.has_attribute&lt;Ignore&gt;()) {
+                var key = field.name;
+                if (field.has_attribute&lt;Name&gt;()) {
+                    key = field.attribute&lt;Name&gt;().value;
+                }
+                keys.append(key);
+            }
+        }
+    }
+    return keys;
+}
+
+main(): int {
+    var found = keys&lt;User&gt;();
+    assert(found.count == 2, "the [Ignore]d field is skipped");
+    assert(found[0] == "user_id", "[Name] renames the key");
+    assert(found[1] == "email", "a field without [Name] keeps its name");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Fields</strong> of an attribute struct are numbers, <code>bool</code>, <code>char</code>, <code>String</code>,
+or enums whose cases carry no values.</li>
+<li><strong>Arguments</strong> are constants: literals, a negated number, an enum case
+(<code>Level.High</code>), or strings joined with <code>+</code>. They can be
+<a href="#named-arguments">named</a>: <code>[Check(weight = 3)]</code>.</li>
+<li>Without a constructor, the arguments set the fields in order, and a field
+with an initializer may be left out. A constructor may take <code>this.field</code>
+parameters, or parameters its body assigns to fields
+(<code>this.long_name = long_name;</code>), which is all its body may do.</li>
+<li>An attribute that names neither a built-in attribute nor an <code>[Attribute]</code>
+struct is an error, at its name: <code>unknown attribute 'Optoin'</code>.</li>
+<li>Built-in attributes (<code>Target</code>, <code>Shared</code>, <code>Deprecated</code>, …) are visible
+too: <code>field.has_attribute&lt;Deprecated&gt;()</code> tests for one.</li>
+</ul>
+<p>Attributes can go on structs, enums and their cases, fields, functions,
+methods, constructors, parameters and module-scope variables.</p>
+<pre><code class="language-pepper">[Attribute]
+struct Check {
+    const weight: int = 1;
+}
+
+[Check]
+check_addition(): bool {
+    return 1 + 1 == 2;
+}
+
+[Check(weight = 3)]
+check_strings(): bool {
+    return "ab" + "c" == "abc";
+}
+
+# `reflect.functions_with&lt;A&gt;()` lists every function in the program that
+# carries `A`; `check.call()` calls it directly.
+run_checks(): int {
+    var score = 0;
+    static (score) {
+        for (var check in reflect.functions_with&lt;Check&gt;()) {
+            if (check.call()) {
+                score += check.attribute&lt;Check&gt;().weight;
+            }
+        }
+    }
+    return score;
+}
+
+main(): int {
+    assert(run_checks() == 4, "each [Check] function runs once, weighted");
+    return 0;
+}
+</code></pre>
+<h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
+<ul>
+<li>Calling functions other than the <code>reflect</code> functions at compile time,
+and <code>while</code> loops in the compiler.</li>
+<li><code>static</code> blocks at module scope, to compute constants.</li>
+<li>Reflecting methods and constructors (<code>reflect.methods&lt;T&gt;()</code>).</li>
+<li>The values of built-in attributes: <code>attribute&lt;Deprecated&gt;()</code> is an error;
+<code>has_attribute&lt;Deprecated&gt;()</code> works.</li>
+<li><code>get()</code> on a case of an enum whose cases carry values.</li>
+<li>Limiting where an attribute may be used (<code>[AttributeTargets(...)]</code>).</li>
+<li>Showing the code a block expands to, and tracing the blocks the compiler
+runs.</li>
+<li>Type information at run time.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="type-aliases"><a class="header" href="#type-aliases">Type aliases</a></h1>
 <p>A type alias gives an existing type another name. Use one to shorten a long
 type that you write often, such as <code>HashMap&lt;String, Array&lt;int&gt;&gt;</code>, or to say
@@ -12534,9 +12887,9 @@ usage.</li>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li><strong>Declaring options as a struct</strong>, with an attribute on each field
-(<code>[Option("o")] var output: String;</code>), needs compile-time reflection
-(#232). The builder above is the only style until then; the struct style
-is tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362</a>.</li>
+(<code>[Option("o")] var output: String;</code>). The
+<a href="#reflection-and-attributes">reflection</a> it needs is in place; the struct style is
+tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362</a>.</li>
 <li>Typed values (integers, <code>io.Path</code>): values are Strings.</li>
 <li>Options that apply after a subcommand’s name (clap’s global options).</li>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
