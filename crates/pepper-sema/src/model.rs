@@ -589,6 +589,10 @@ pub struct ElementName {
     /// every pattern of the arm has it at the same element. Otherwise it
     /// must turn out to be a case wherever it appears.
     pub declared: bool,
+    /// A pattern of the arm that does not have the name (as written, and
+    /// the location of its case): the name must then be a case wherever it
+    /// appears, and binding it is an error naming that pattern.
+    pub missing: Option<(String, Loc)>,
 }
 
 /// The `match` statement an arm belongs to: every arm of one `match`
@@ -659,8 +663,10 @@ pub struct CasePattern {
     pub case: String,
     /// Location of the case name.
     pub loc: Loc,
-    /// The names bound to the case's values; `None` without parentheses.
-    pub bindings: Option<Vec<(String, Loc)>>,
+    /// The patterns of the case's values, each over its value (a
+    /// [`CaseValue`] of the subject); `None` without parentheses. A bare name
+    /// binds the value unless the value's enum has a case of that name.
+    pub bindings: Option<Vec<CasePattern>>,
     /// For a literal pattern (`1`, `"import"`): the test `subject ==
     /// literal`, built by the builder so the passes type and resolve it like
     /// any `==`. `case` then holds the literal as written.
@@ -685,7 +691,7 @@ impl CasePattern {
     /// This pattern and every pattern nested in it, outermost first.
     pub fn all(&self) -> Vec<&CasePattern> {
         let mut out = vec![self];
-        for e in self.elements.iter().flatten() {
+        for e in self.elements.iter().flatten().chain(self.bindings.iter().flatten()) {
             out.extend(e.all());
         }
         out
@@ -694,7 +700,7 @@ impl CasePattern {
     /// The literal tests of this pattern and the patterns nested in it.
     pub fn literals_mut(&mut self) -> Vec<&mut Expression> {
         let mut out: Vec<&mut Expression> = self.literal.as_mut().into_iter().collect();
-        for e in self.elements.iter_mut().flatten() {
+        for e in self.elements.iter_mut().flatten().chain(self.bindings.iter_mut().flatten()) {
             out.extend(e.literals_mut());
         }
         out
@@ -704,7 +710,7 @@ impl CasePattern {
     /// in it.
     pub fn qualifiers_mut(&mut self) -> Vec<&mut TypeName> {
         let mut out: Vec<&mut TypeName> = self.qualifier.as_mut().into_iter().collect();
-        for e in self.elements.iter_mut().flatten() {
+        for e in self.elements.iter_mut().flatten().chain(self.bindings.iter_mut().flatten()) {
             out.extend(e.qualifiers_mut());
         }
         out

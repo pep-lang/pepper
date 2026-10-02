@@ -236,3 +236,157 @@ fn range_and_constant_pattern_errors() {
     let err = compile_error("test(): int { var n = 3; return match (4) { n => 1, else => 0 }; }");
     assert!(err.contains("'n' is not a literal"), "{err}");
 }
+
+const DOC: &str = r#"
+enum Doc {
+    Text(text: String),
+    Line,
+    Pair(left: Doc, right: Doc),
+}
+"#;
+
+#[test]
+fn patterns_nest_inside_a_cases_values() {
+    let src = format!(
+        "{}{}",
+        DOC,
+        r#"
+kind(o: Optional<Doc>): int {
+    return match (o) {
+        Empty => 0,
+        Value(Text("")) => 1,
+        Value(Text(t)) => (t.length as int) * 10,
+        Value(Line) => 2,
+        Value(Pair(Line, _)) => 3,
+        Value(Pair(Text(a), Pair(_, Text(b)))) => 4,
+        Value(Pair) => 5,
+    };
+}
+
+count(n: Optional<int>): int {
+    match (n) {
+        Value(0) => { return 100; }
+        Value(1..10) => { return 200; }
+        Value(x) if x < 0 => { return 300; }
+        Value(x) => { return x; }
+        Empty => { return -1; }
+    }
+}
+
+test(): int {
+    var total = kind(Optional<Doc>.Empty) + kind(Optional<Doc>.Value(Doc.Text(""))) + kind(Optional<Doc>.Value(Doc.Text("abc")));
+    total += kind(Optional<Doc>.Value(Doc.Line)) + kind(Optional<Doc>.Value(Doc.Pair(Doc.Line, Doc.Line)));
+    total += kind(Optional<Doc>.Value(Doc.Pair(Doc.Text("a"), Doc.Pair(Doc.Line, Doc.Text("b")))));
+    total += kind(Optional<Doc>.Value(Doc.Pair(Doc.Text("a"), Doc.Line)));
+    total += count(Optional<int>.Value(0)) + count(Optional<int>.Value(5)) + count(Optional<int>.Value(-5));
+    total += count(Optional<int>.Value(42)) + count(Optional<int>.Empty);
+    var d = Doc.Pair(Doc.Text("x"), Doc.Line);
+    if (d is Pair(Text(s), Line)) {
+        total += (s.length as int) * 1000;
+    }
+    return total;
+}
+"#
+    );
+    assert_eq!(jit_census(&src), (1 + 30 + 2 + 3 + 4 + 5 + 100 + 200 + 300 + 42 - 1 + 1000, 0));
+}
+
+#[test]
+fn a_bare_name_in_a_cases_values_is_a_case_of_the_values_enum() {
+    let src = r#"
+depth(o: Optional<Optional<int>>): int {
+    return match (o) {
+        Empty => 0,
+        Value(Empty) => 1,
+        Value(Value(n)) => 2 + n,
+    };
+}
+
+test(): int {
+    return depth(Optional<Optional<int>>.Empty) + depth(Optional<Optional<int>>.Value(Optional<int>.Empty)) * 10
+        + depth(Optional<Optional<int>>.Value(Optional<int>.Value(5))) * 100;
+}
+"#;
+    assert_eq!(jit_census(src), (10 + 700, 0));
+}
+
+#[test]
+fn nested_patterns_count_toward_every_case_handled() {
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Optional<Doc>.Empty) { Empty => 0, Value(Text(t)) => 1, Value(Pair) => 2 }; }"
+    ));
+    assert!(err.contains("match on 'Optional<Doc>' does not handle 'Value(Line)'"), "{err}");
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Doc.Line) { Text(\"\") => 0, Line => 1, Pair => 2 }; }"
+    ));
+    assert!(err.contains("match on 'Doc' does not handle 'Text'"), "{err}");
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Doc.Line) { Text(t) => 0, Line => 1, Pair(Line, _) => 2, Pair(_, Line) => 3 }; }"
+    ));
+    assert!(err.contains("match on 'Doc' does not handle 'Pair(Text, Text)'"), "{err}");
+}
+
+#[test]
+fn a_nested_pattern_the_earlier_arms_cover_is_an_error() {
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Doc.Line) { Pair(Line, _) => 0, Pair(_, _) => 1, Pair(Line, Line) => 2, else => 3 }; }"
+    ));
+    assert!(err.contains("case 'Pair' is already handled"), "{err}");
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Doc.Line) { Pair(Line, _) => 0, Pair(_, Line) => 1, Pair(Line, Line) => 2, else => 3 }; }"
+    ));
+    assert!(err.contains("pattern 'Pair(Line, Line)' is already handled"), "{err}");
+}
+
+#[test]
+fn nested_pattern_errors() {
+    let err = compile_error(&format!("{}{}", DOC, "test(): int { return match (Doc.Line) { Text(Line(x)) => 0, else => 1 }; }"));
+    assert!(err.contains("'Line' cannot match a value of 'String': it is not an enum"), "{err}");
+    let err = compile_error(&format!("{}{}", DOC, "test(): int { return match (Doc.Line) { Pair(x, x) => 0, else => 1 }; }"));
+    assert!(err.contains("'x' binds an element here"), "{err}");
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): bool { var d = Doc.Line; return d is Text(t); }"
+    ));
+    assert!(err.contains("cannot bind 't' here"), "{err}");
+}
+
+#[test]
+fn alternatives_bind_a_nested_name_at_the_same_place() {
+    let src = format!(
+        "{}{}",
+        DOC,
+        r#"
+left_text(d: Doc): int {
+    return match (d) {
+        Pair(Text(t), Line), Pair(Text(t), Pair) => t.length as int,
+        else => 0,
+    };
+}
+
+test(): int {
+    return left_text(Doc.Pair(Doc.Text("ab"), Doc.Line))
+        + left_text(Doc.Pair(Doc.Text("abc"), Doc.Pair(Doc.Line, Doc.Line))) * 10
+        + left_text(Doc.Pair(Doc.Text("abcd"), Doc.Text(""))) * 100;
+}
+"#
+    );
+    assert_eq!(jit_census(&src), (2 + 30, 0));
+    let err = compile_error(&format!(
+        "{}{}",
+        DOC,
+        "test(): int { return match (Doc.Line) { Pair(Text(t), _), Pair(_, Text(t)) => 1, else => 0 }; }"
+    ));
+    assert!(err.contains("'t' is bound at a different element than in the arm's first pattern"), "{err}");
+}

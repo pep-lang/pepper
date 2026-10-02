@@ -180,8 +180,10 @@ library or the network) to a case, since `as` only goes the other way.
   (`Light.Red`).
 - A pattern for a case that carries values can **bind** them:
   `Rect(w, h)` declares `w` and `h` in its arm, holding the case's values in
-  order. The bindings are `const`. `_` skips a value. A pattern binds all of
+  order. The bindings are `const`. `_` skips a value. A pattern lists all of
   its case's values or, written without parentheses (`Rect`), none.
+  Each value can also be a pattern of its own (see
+  [Nested patterns](#nested-patterns)).
 - Patterns that share an arm must bind the same names, with the same types
   (`Rect(w, _), Square(w)`).
 - An `else => { ... }` arm, last, handles every case the other arms do not.
@@ -229,6 +231,33 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   Matching the same literal twice is an error. A match on an enum takes its
   case names, not literals, and a match on `int` takes literals, not names
   (except [constants](#ranges-and-constants)).
+
+## Nested patterns
+
+The values in a case's parentheses are patterns, as a tuple pattern's
+elements are, so patterns nest to any depth:
+
+```pepper
+{{#include ../../examples/enums-nested.pep}}
+```
+
+- Each value takes `_`, a name, a case of its enum (with patterns of its
+  own values: `Value(Pair(Line, _))`), a literal, a
+  [range or constant](#ranges-and-constants), or a
+  [tuple pattern](tuples.md#matching-tuples).
+- A bare name binds the value, unless the value's enum has a case of that
+  name, which it then matches (`Value(Empty)`), or it names a module-scope
+  constant. A name repeated in one pattern (`Pair(x, x)`) must be a case.
+- A nested pattern handles part of its case: the arms must still handle
+  every value. A case that only nested patterns handle is reported with the
+  value they miss (``match on 'Optional<Doc>' does not handle
+  'Value(Line)'``), and a pattern whose values the earlier arms already
+  match is an error.
+- Patterns that share an arm bind the same names, each at the same place:
+  `Pair(Text(t), Line), Pair(Text(t), Pair)` binds `t` from either, but
+  `Pair(Text(t), _), Pair(_, Text(t))` is an error.
+- A nested test reads a value only once the case around it matched, so the
+  tests stop at the first part that does not match.
 
 ## Ranges and constants
 
@@ -290,10 +319,7 @@ the next arm is tried, as if this one had not matched.
   enum cannot be generic yet. An enum whose cases carry values can declare
   indexers (`[]`), as a struct does; one whose cases carry nothing cannot
   declare operators or indexers yet, and has `==` and `!=` built in.
-- A case's values bind names only: a pattern cannot nest inside a case
-  (`Value(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
-  inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).
-  A constant is a pattern only when it is declared at module scope.
+- A constant is a pattern only when it is declared at module scope.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:
   `c.name` without the call is an error ("'name' is a method of 'Color':

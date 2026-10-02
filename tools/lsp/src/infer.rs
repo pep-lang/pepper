@@ -401,21 +401,6 @@ fn walk<'a>(mut stack: Vec<Node<'a>>, mut visit: impl FnMut(Item<'a>)) {
 
 /// Each pattern in `patterns` and nested in them, with the type of the value
 /// it matches when known: a tuple pattern's elements match the tuple's.
-fn with_subjects<'p>(patterns: &'p [ast::Pattern], subject: Option<Ty>) -> Vec<(&'p ast::Pattern, Option<Ty>)> {
-    let mut out = vec![];
-    let mut stack: Vec<(&ast::Pattern, Option<Ty>)> = patterns.iter().map(|p| (p, subject.clone())).collect();
-    while let Some((p, ty)) = stack.pop() {
-        if let Some(elements) = &p.elements {
-            for (i, e) in elements.iter().enumerate() {
-                let element = ty.as_ref().filter(|t| t.name == ast::TUPLE_TYPE).and_then(|t| t.args.get(i).cloned());
-                stack.push((e, element));
-            }
-        }
-        out.push((p, ty));
-    }
-    out
-}
-
 fn contains(span: Span, offset: usize) -> bool {
     span.start <= offset && offset <= span.end
 }
@@ -800,7 +785,7 @@ impl<'a> Typer<'a> {
             }
             Site::Bound(patterns, subject) => {
                 let subject_type = self.type_at(subject, expression_start(subject), depth + 1);
-                with_subjects(patterns, subject_type).into_iter().find_map(|(p, ty)| self.bound_type(p, ty.as_ref(), span))
+                self.with_subjects(patterns, subject_type).into_iter().find_map(|(p, ty)| self.bound_type(p, ty.as_ref(), span))
             }
         }
     }
@@ -851,17 +836,43 @@ impl<'a> Typer<'a> {
         found
     }
 
+    /// Each of `patterns` and the patterns nested in them, with the type of
+    /// the value it matches: a tuple's element, or a case's value.
+    fn with_subjects<'p>(&self, patterns: &'p [ast::Pattern], subject: Option<Ty>) -> Vec<(&'p ast::Pattern, Option<Ty>)> {
+        let mut out = vec![];
+        let mut stack: Vec<(&ast::Pattern, Option<Ty>)> = patterns.iter().map(|p| (p, subject.clone())).collect();
+        while let Some((p, ty)) = stack.pop() {
+            if let Some(elements) = &p.elements {
+                for (i, e) in elements.iter().enumerate() {
+                    let element = ty.as_ref().filter(|t| t.name == ast::TUPLE_TYPE).and_then(|t| t.args.get(i).cloned());
+                    stack.push((e, element));
+                }
+            }
+            if let Some(subs) = &p.bindings {
+                let found = self.case_of(p, ty.as_ref());
+                for (i, sub) in subs.iter().enumerate() {
+                    let value = found.as_ref().and_then(|f| match &f.kind {
+                        Kind::Case(case) => {
+                            let value = case.payload.as_ref()?.get(i)?;
+                            Some(Ty::from_ast(&value.type_name).substitute(&f.bindings))
+                        }
+                        _ => None,
+                    });
+                    stack.push((sub, value));
+                }
+            }
+            out.push((p, ty));
+        }
+        out
+    }
+
     /// The type of the name pattern `p` binds at `span`, matching a value of
     /// type `subject`.
     fn bound_type(&self, p: &ast::Pattern, subject: Option<&Ty>, span: Span) -> Option<Ty> {
         if p.is_bare_name() && p.case_span == span {
             return subject.cloned();
         }
-        let index = p.bindings.as_ref()?.iter().position(|(_, s)| *s == span)?;
-        let found = self.case_of(p, subject)?;
-        let Kind::Case(case) = &found.kind else { return None };
-        let value = case.payload.as_ref()?.get(index)?;
-        Some(Ty::from_ast(&value.type_name).substitute(&found.bindings))
+        None
     }
 
     /// The case pattern `p` names, matching a value of type `subject`: of the
@@ -906,8 +917,7 @@ impl<'a> Typer<'a> {
                 // names at the arguments' own spans.
                 for p in patterns.iter().flat_map(|p| p.all()).filter(|p| !p.case.starts_with("_pep_")) {
                     let on_case = p.literal.is_none() && p.elements.is_none() && contains(p.case_span, offset);
-                    let on_binding = p.bindings.iter().flatten().any(|(_, s)| contains(*s, offset));
-                    if on_case || on_binding {
+                    if on_case {
                         hit = Some((p, subject, patterns));
                         return;
                     }
@@ -916,12 +926,9 @@ impl<'a> Typer<'a> {
         });
         let (p, subject, patterns) = hit?;
         let subject_type = self.type_at(subject, expression_start(subject), 0);
-        let subject_type = with_subjects(patterns, subject_type).into_iter().find(|(q, _)| std::ptr::eq(*q, p))?.1;
-        if let Some((name, span)) = p.bindings.iter().flatten().find(|(_, s)| contains(*s, offset)) {
-            let ty = self.bound_type(p, subject_type.as_ref(), *span);
-            return Some(PatternHit::Binding { name: name.clone(), span: *span, ty });
-        }
-        // A bare name in a tuple pattern binds the element unless it is a case.
+        let subject_type = self.with_subjects(patterns, subject_type).into_iter().find(|(q, _)| std::ptr::eq(*q, p))?.1;
+        // A bare name in a tuple pattern or a case's values binds the value
+        // unless it is a case.
         match self.case_of(p, subject_type.as_ref()) {
             Some(found) => Some(PatternHit::Case(found)),
             None if p.is_bare_name() && p.case != "_" => {

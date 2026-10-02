@@ -1410,6 +1410,23 @@ fn match_patterns_and_their_bindings() {
     assert!(definition(&uri, &text, &program, at(&text, "+= head", 0, 3)).1.starts_with("head, tail)"));
 }
 
+/// A pattern nested in a case's values goes to its case, and a name it binds
+/// has the type of the nested case's value.
+#[test]
+fn nested_patterns_and_their_bindings() {
+    let source = format!(
+        "{}{}",
+        MATCHED_SHAPES,
+        "second(list: List): int {\n    return match (list) {\n        Cons(_, Cons(next, _)) => next,\n        else => 0,\n    };\n}\n"
+    );
+    let (uri, text, program) = load("nested_patterns", &source, "main.pep");
+    let nested = at(&text, "Cons(next", 0, 0);
+    assert!(definition(&uri, &text, &program, nested).1.starts_with("Cons(head: int"));
+    let h = hover(&uri, &text, &program, at(&text, "next, _", 0, 0));
+    assert!(h.starts_with("`next` — `int`"), "{}", h);
+    assert!(hover(&uri, &text, &program, at(&text, "=> next", 0, 3)).starts_with("`next` — `int`"));
+}
+
 /// The values an enum case carries hover where they are declared, and their
 /// types go to their declarations.
 #[test]

@@ -1163,18 +1163,10 @@ fn match_expression(m: &ast::MatchExpression) -> Result<Expression, Diagnostic> 
 /// single test over `e`, which may bind nothing.
 fn is_expression(value: &ast::Expression, pattern: &ast::Pattern, keyword: ast::Span) -> Result<Expression, Diagnostic> {
     let mut element_names = vec![];
-    for (name, span, leaf) in pattern_names(pattern, &Expression::NoMatch) {
-        if let Leaf::Element { .. } = leaf {
-            // A case of the element's enum, or else an error once its type
-            // is known.
-            element_names.push(ElementName { name, loc: loc(span), declared: false });
-            continue;
-        }
-        return Err(Diagnostic::error(format!(
-            "cannot bind '{}' here: 'is' binds names only as the whole condition of an 'if' or 'while'",
-            name
-        ))
-        .at(loc(span)));
+    for (name, span, _) in pattern_names(pattern, &Expression::NoMatch) {
+        // A case of the value's enum, or else an error once its type is
+        // known.
+        element_names.push(ElementName { name, loc: loc(span), declared: false, missing: None });
     }
     let n = next_match();
     let at = loc(value.span());
@@ -1268,7 +1260,15 @@ fn case_pattern(p: &ast::Pattern, subject: &Expression) -> Result<CasePattern, D
         qualifier: if p.constant.is_some() { None } else { p.qualifier.as_ref().map(type_name_from) },
         case: if p.literal.is_some() || p.constant.is_some() { p.to_string() } else { p.case.clone() },
         loc: if p.range.is_some() { loc(p.span) } else { at },
-        bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
+        bindings: match &p.bindings {
+            Some(subs) => Some(
+                subs.iter()
+                    .enumerate()
+                    .map(|(i, sub)| case_pattern(sub, &case_path(subject, p, i)))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            None => None,
+        },
         literal,
         elements: None,
         range: p.range.is_some(),
@@ -1282,14 +1282,35 @@ fn element_path(subject: &Expression, index: usize, at: Loc) -> Expression {
     Expression::MemberRef { lhs: Box::new(subject.clone()), name: index.to_string(), loc: at }
 }
 
+/// Value `index` of case pattern `p` over `subject`, the value the
+/// pattern's sub-pattern at `index` matches: a [`CaseValue`] with one choice.
+fn case_path(subject: &Expression, p: &ast::Pattern, index: usize) -> Expression {
+    let subs = p.bindings.as_deref().unwrap_or_default();
+    let at = subs.get(index).map_or(loc(p.case_span), |s| loc(s.span));
+    Expression::CaseValue(Box::new(CaseValue {
+        subject: subject.clone(),
+        name: String::new(),
+        choices: vec![CaseChoice {
+            case: p.case.clone(),
+            case_loc: loc(p.case_span),
+            index,
+            bindings: subs.iter().map(|s| loc(s.span)).collect(),
+            loc: at,
+        }],
+        loc: at,
+    }))
+}
+
 /// What a name in a pattern binds.
 enum Leaf<'p> {
-    /// A bare name inside a tuple pattern: the element at `path` (`key` its
-    /// positions), unless the element's enum has a case of that name.
-    Element { path: Expression, key: Vec<usize> },
+    /// A bare name inside a tuple pattern or a nested case pattern: the
+    /// element at `path` (`key` its positions), unless the element's enum has
+    /// a case of that name.
+    Element { path: Expression, key: Vec<String> },
     /// A value the case of `pattern` carries, at `index` among its bindings;
-    /// `path` is the enum value.
-    Payload { path: Expression, key: Vec<usize>, pattern: &'p ast::Pattern, index: usize },
+    /// `path` is the enum value. It binds unless the value's enum has a case
+    /// of that name.
+    Payload { path: Expression, key: Vec<String>, pattern: &'p ast::Pattern, index: usize },
 }
 
 /// Every name `p` may bind over `subject`, `_` left out, in order.
@@ -1297,14 +1318,14 @@ fn pattern_names<'p>(p: &'p ast::Pattern, subject: &Expression) -> Vec<(String, 
     fn walk<'p>(
         p: &'p ast::Pattern,
         path: Expression,
-        key: Vec<usize>,
+        key: Vec<String>,
         in_tuple: bool,
         out: &mut Vec<(String, ast::Span, Leaf<'p>)>,
     ) {
         if let Some(elements) = &p.elements {
             for (i, e) in elements.iter().enumerate() {
                 let mut inner = key.clone();
-                inner.push(i);
+                inner.push(i.to_string());
                 walk(e, element_path(&path, i, loc(e.span)), inner, true, out);
             }
             return;
@@ -1312,10 +1333,17 @@ fn pattern_names<'p>(p: &'p ast::Pattern, subject: &Expression) -> Vec<(String, 
         if in_tuple && p.is_bare_name() && p.case != "_" {
             out.push((p.case.clone(), p.case_span, Leaf::Element { path: path.clone(), key: key.clone() }));
         }
-        for (index, (name, span)) in p.bindings.iter().flatten().enumerate() {
-            if name != "_" {
-                out.push((name.clone(), *span, Leaf::Payload { path: path.clone(), key: key.clone(), pattern: p, index }));
+        for (index, sub) in p.bindings.iter().flatten().enumerate() {
+            if sub.is_bare_name() {
+                if sub.case != "_" {
+                    out.push((sub.case.clone(), sub.case_span, Leaf::Payload { path: path.clone(), key: key.clone(), pattern: p, index }));
+                }
+                continue;
             }
+            // A pattern the value must match: its own names bind inside it.
+            let mut inner = key.clone();
+            inner.push(format!("{}.{}", p.case, index));
+            walk(sub, case_path(&path, p, index), inner, true, out);
         }
     }
     let mut out = vec![];
@@ -1393,12 +1421,22 @@ fn match_bindings(
     patterns: &[ast::Pattern],
     subject: &Expression,
 ) -> Result<(Vec<(String, Expression, Loc)>, Vec<ElementName>), Diagnostic> {
-    let per: Vec<Vec<(String, ast::Span, Leaf)>> = patterns.iter().map(|p| pattern_names(p, subject)).collect();
+    let mut per: Vec<Vec<(String, ast::Span, Leaf)>> = patterns.iter().map(|p| pattern_names(p, subject)).collect();
     let is_payload = |leaf: &Leaf| matches!(leaf, Leaf::Payload { .. });
-    for names in &per {
-        for (i, (name, span, leaf)) in names.iter().enumerate() {
-            if is_payload(leaf) && names[..i].iter().any(|(n, _, l)| n == name && is_payload(l)) {
-                return Err(Diagnostic::error(format!("'{}' is bound twice in one pattern", name)).at(loc(*span)));
+    // A name twice in a case's values (`Pair(Line, Line)`) must be a case
+    // there, like a bare name a tuple pattern repeats.
+    for names in &mut per {
+        let twice: Vec<String> = names
+            .iter()
+            .enumerate()
+            .filter(|(i, (n, _, l))| is_payload(l) && names[..*i].iter().any(|(m, _, k)| m == n && is_payload(k)))
+            .map(|(_, (n, _, _))| n.clone())
+            .collect();
+        for (name, _, leaf) in names.iter_mut() {
+            if let Leaf::Payload { path, key, .. } = leaf
+                && twice.contains(name)
+            {
+                *leaf = Leaf::Element { path: path.clone(), key: key.clone() };
             }
         }
     }
@@ -1424,33 +1462,37 @@ fn match_bindings(
             let first = entries.first().and_then(|e| e.first()).map(|(_, _, l)| key_of(l));
             let consistent = entries.iter().all(|e| e.len() == 1 && Some(key_of(&e[0].2)) == first);
             for (_, at, _) in entries.iter().flatten() {
-                element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: consistent });
+                element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: consistent, missing: None });
             }
             if consistent {
                 out.push((name.clone(), path_of(&entries[0][0].2), loc(span)));
             }
             continue;
         }
+        // A pattern without the name: then it binds nothing, and must be a
+        // case wherever it appears (`Pair(Line, _), Line`).
+        let lacking = patterns.iter().zip(&entries).find(|(_, found)| !found.iter().any(|(_, _, l)| is_payload(l)));
+        if let Some((p, _)) = lacking {
+            let shown = match &p.literal {
+                Some(l) => l.to_string(),
+                None if p.elements.is_some() => p.to_string(),
+                None => p.case.clone(),
+            };
+            for (_, at, _) in entries.iter().flatten() {
+                let missing = Some((shown.clone(), loc(p.case_span)));
+                element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: false, missing });
+            }
+            continue;
+        }
         let mut choices = vec![];
-        let mut first: Option<(Vec<usize>, Expression, ast::Span)> = None;
-        for (p, found) in patterns.iter().zip(&entries) {
+        let mut first: Option<(Vec<String>, Expression, ast::Span)> = None;
+        for found in &entries {
             for (_, at, leaf) in found.iter().filter(|(_, _, l)| !is_payload(l)) {
                 let _ = leaf;
-                element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: false });
+                element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: false, missing: None });
             }
-            let Some((_, at, Leaf::Payload { path, key, pattern, index })) = found.iter().copied().find(|(_, _, l)| is_payload(l))
-            else {
-                let shown = match &p.literal {
-                    Some(l) => l.to_string(),
-                    None if p.elements.is_some() => p.to_string(),
-                    None => p.case.clone(),
-                };
-                return Err(Diagnostic::error(format!(
-                    "'{}' is not bound by '{}': every pattern of an arm binds the same names",
-                    name, shown
-                ))
-                .at(loc(p.case_span))
-                .with_note(format!("'{}' is bound here", name), Some(loc(span))));
+            let Some((_, at, Leaf::Payload { path, key, pattern, index })) = found.iter().copied().find(|(_, _, l)| is_payload(l)) else {
+                continue;
             };
             match &first {
                 None => first = Some((key.clone(), path.clone(), *at)),
@@ -1469,9 +1511,14 @@ fn match_bindings(
                 case: pattern.case.clone(),
                 case_loc: loc(pattern.case_span),
                 index: *index,
-                bindings: all.iter().map(|(_, s)| loc(*s)).collect(),
+                bindings: all.iter().map(|s| loc(s.span)).collect(),
                 loc: loc(*at),
             });
+        }
+        // A bare name in a case's values may turn out to be a case of the
+        // value's enum (`Value(Empty)`), which only the value's type decides.
+        for (_, at, _) in entries.iter().flatten().filter(|(_, _, l)| is_payload(l)) {
+            element_names.push(ElementName { name: name.clone(), loc: loc(*at), declared: true, missing: None });
         }
         let path = first.map(|(_, path, _)| path).unwrap_or_else(|| subject.clone());
         let value = CaseValue { subject: path, name: name.clone(), choices, loc: loc(span) };

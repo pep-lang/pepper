@@ -1443,8 +1443,10 @@ struct Parser {
     }
 
     # A case pattern: `Case`, `Enum.Case`, `module.Enum.Case`, or
-    # `Case(x, _)`; a literal: a number (`-1` too), string, character,
-    # `true` or `false`; or a tuple pattern of two or more, `(Case, x, 0)`.
+    # `Case(x, _)`, whose values are patterns too (`Value(Text(t))`); a
+    # literal: a number (`-1` too), string, character, `true` or `false`,
+    # or a range of them (`1..9`); or a tuple pattern of two or more,
+    # `(Case, x, 0)`.
     _pattern(): Node {
         var node = Node(NodeKind.Pattern);
         if (_at("(")) {
@@ -1500,7 +1502,7 @@ struct Parser {
             if (_at(")")) {
                 break;
             }
-            _expect_name(node, "a name to bind");
+            node.add(_pattern());
             if (_at(",")) {
                 _take(node);
                 continue;

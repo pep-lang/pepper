@@ -921,9 +921,12 @@ pub struct Pattern {
     pub qualifier: Option<TypeName>,
     pub case: String,
     pub case_span: Span,
-    /// The names bound to the case's values; `None` without parentheses. A
-    /// binding named `_` skips its value.
-    pub bindings: Option<Vec<(String, Span)>>,
+    /// The patterns of the case's values, in order; `None` without
+    /// parentheses. Like a tuple pattern's elements, each is `_` (any
+    /// value), a name that binds the value (unless it is a case of the
+    /// value's enum or a constant), or a pattern the value must match
+    /// (`Value(Text(t))`, `Text("")`, `Circle(0..10)`).
+    pub bindings: Option<Vec<Pattern>>,
     /// A range pattern (`1..9`, `'a'..>'z'`): `literal` is its start and
     /// this its end.
     #[serde(default)]
@@ -954,14 +957,14 @@ impl Pattern {
     /// This pattern and every pattern nested in it, outermost first.
     pub fn all(&self) -> Vec<&Pattern> {
         let mut out = vec![self];
-        for e in self.elements.iter().flatten() {
+        for e in self.elements.iter().flatten().chain(self.bindings.iter().flatten()) {
             out.extend(e.all());
         }
         out
     }
 
-    /// The names the pattern may bind, `_` left out: a case's bindings, and
-    /// inside a tuple pattern each bare name.
+    /// The names the pattern may bind, `_` left out: each bare name inside a
+    /// tuple pattern or a case's parentheses.
     pub fn bound_names(&self) -> Vec<(String, Span)> {
         let mut out = vec![];
         self.collect_names(false, &mut out);
@@ -978,7 +981,9 @@ impl Pattern {
         if in_tuple && self.is_bare_name() && self.case != "_" {
             out.push((self.case.clone(), self.case_span));
         }
-        out.extend(self.bindings.iter().flatten().filter(|(n, _)| n != "_").cloned());
+        for b in self.bindings.iter().flatten() {
+            b.collect_names(true, out);
+        }
     }
 }
 
@@ -1629,8 +1634,8 @@ impl Display for Pattern {
         }
         write!(f, "{}", self.case)?;
         if let Some(bindings) = &self.bindings {
-            let names: Vec<&str> = bindings.iter().map(|(n, _)| n.as_str()).collect();
-            write!(f, "({})", names.join(", "))?;
+            let shown: Vec<String> = bindings.iter().map(|b| b.to_string()).collect();
+            write!(f, "({})", shown.join(", "))?;
         }
         Ok(())
     }

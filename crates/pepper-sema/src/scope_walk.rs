@@ -604,6 +604,12 @@ macro_rules! scope_walker {
                     }
                     return;
                 }
+                if let Some(subs) = &$($m)? p.bindings {
+                    for sub in subs {
+                        self.visit_pattern_values(sub);
+                    }
+                    return;
+                }
                 if let Some(range) = &$($m)? p.range {
                     if let Some(start) = &$($m)? p.literal {
                         self.visit_expression(start);
@@ -625,10 +631,11 @@ macro_rules! scope_walker {
                 if let Some(q) = &$($m)? p.qualifier {
                     self.visit_type_name(q);
                 }
-                if let Some(elements) = &$($m)? p.elements {
-                    for e in elements {
-                        self.visit_pattern_types(e);
-                    }
+                for e in (&$($m)? p.elements).into_iter().flatten() {
+                    self.visit_pattern_types(e);
+                }
+                for sub in (&$($m)? p.bindings).into_iter().flatten() {
+                    self.visit_pattern_types(sub);
                 }
             }
 

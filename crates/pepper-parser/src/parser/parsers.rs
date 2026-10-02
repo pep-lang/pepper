@@ -3105,9 +3105,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         loop {
             ws(input)?;
             if input.starts_with(')') { break; }
-            let binding_start = pos(input);
-            let name = identifier(input).map_err(|_| cut_expecting(input, "a name to bind"))?;
-            names.push((name, Span { start: binding_start, end: pos(input) }));
+            names.push(pattern(input)?);
             ws(input)?;
             if input.starts_with(',') {
                 *input = &input[1..];
