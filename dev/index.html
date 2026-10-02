@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2de0a4c1.js";
+            window.path_to_searchindex_js = "searchindex-779cff09.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-bea1f4dd.js"></script>
+        <script src="toc-4c7b0bab.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -272,7 +272,11 @@ the compiler keeping each locked value apart from the rest of the program
 <a href="language/threads.html#what-a-lock-body-may-do">threads</a>).</li>
 <li>Integer arithmetic that overflows panics instead of wrapping, at every
 optimization level; <code>wrapping_add</code> and its siblings wrap on purpose (see
-<a href="language/types-and-variables.html#integer-overflow">integer overflow</a>).</li>
+<a href="language/types-and-variables.html#integer-overflow">integer overflow</a>).
+Bit counting, rotation, byte swapping and the floating-point functions
+are methods that compile to LLVM’s intrinsics, and any other intrinsic
+can be declared as an extern (see
+<a href="language/c-interop.html#llvm-intrinsics">LLVM intrinsics</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="language/memory.html#weak-references">weak reference</a> on one side.</li>

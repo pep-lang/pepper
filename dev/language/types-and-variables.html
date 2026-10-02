@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2de0a4c1.js";
+            window.path_to_searchindex_js = "../searchindex-779cff09.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-bea1f4dd.js"></script>
+        <script src="../toc-4c7b0bab.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -879,6 +879,78 @@ on and the compiler warns
 <code>warning: '--no-runtime-checks' has no effect at -O0</code>. It applies from <code>-O1</code>
 up, <code>-g</code> included. The setting is part of the build cache’s key, like the
 optimization level.</p>
+<h2 id="bit-operations-and-math-functions"><a class="header" href="#bit-operations-and-math-functions">Bit operations and math functions</a></h2>
+<p>Each integer type has methods that compile to a single instruction on most
+CPUs, through LLVM’s intrinsics, for code that would otherwise loop over
+bits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Returns</th></tr>
+</thead>
+<tbody>
+<tr><td><code>leading_zeros()</code>, <code>trailing_zeros()</code></td><td>The zero bits above the highest set bit, or below the lowest; the type’s width for zero.</td></tr>
+<tr><td><code>count_ones()</code>, <code>count_zeros()</code></td><td>How many bits are set, or clear.</td></tr>
+<tr><td><code>swap_bytes()</code></td><td>The value with its bytes reversed, to convert between little and big endian.</td></tr>
+<tr><td><code>reverse_bits()</code></td><td>The value with its bits reversed.</td></tr>
+<tr><td><code>rotate_left(n)</code>, <code>rotate_right(n)</code></td><td>The bits rotated by <code>n</code>, modulo the width.</td></tr>
+<tr><td><code>min(x)</code>, <code>max(x)</code></td><td>The smaller or the larger value.</td></tr>
+<tr><td><code>abs()</code></td><td>The value without its sign (signed types). Panics for the lowest value, whose negation does not fit.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Like the overflow methods, they work at their type’s own width:
+<code>byte 1.leading_zeros()</code> is 7.</p>
+<pre><code class="language-pepper"># Bit operations on integers: counting, reversing and rotating bits.
+main(): int {
+    uint mask = 0x00F0;
+    assert(mask.trailing_zeros() == 4, "the lowest set bit is bit 4");
+    assert(mask.leading_zeros() == 24, "the highest set bit is bit 7");
+    assert(mask.count_ones() == 4, "four bits are set");
+
+    # Zero has no set bit: its counts are the type's width.
+    assert((0 as ulong).trailing_zeros() == 64, "no set bit");
+
+    # The methods work at their type's own width.
+    byte low = 1;
+    assert(low.leading_zeros() == 7, "a byte has 8 bits");
+    assert(low.rotate_right(1) == 0x80, "the bottom bit comes back at the top");
+
+    # Byte order: swap_bytes converts between little and big endian.
+    assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
+    assert((1 as uint).reverse_bits() == 0x80000000, "bits reversed");
+
+    # min, max and abs.
+    assert((-7).abs() == 7, "without its sign");
+    assert((3).min(5) == 3 &amp;&amp; (3).max(5) == 5, "smaller and larger");
+    return 0;
+}
+</code></pre>
+<p><code>float</code> and <code>double</code> have <code>square_root()</code>, <code>floor()</code>, <code>ceiling()</code>,
+<code>truncate()</code>, <code>round()</code> (halfway cases away from zero), <code>abs()</code>,
+<code>copy_sign(sign)</code>, <code>multiply_add(factor, addend)</code> (<code>this * factor + addend</code>
+rounded once) and <code>min(x)</code> and <code>max(x)</code> (which ignore a NaN argument):</p>
+<pre><code class="language-pepper"># Floating-point functions: square root, rounding, sign and fused
+# multiply-add.
+main(): int {
+    var side = (2.0).square_root();
+    assert(side * side &gt; 1.999 &amp;&amp; side * side &lt; 2.001, "close to 2");
+
+    assert((-1.5).floor() == -2.0, "toward negative infinity");
+    assert((-1.5).ceiling() == -1.0, "toward positive infinity");
+    assert((-1.5).truncate() == -1.0, "toward zero");
+    assert((2.5).round() == 3.0, "halfway cases away from zero");
+
+    assert((-4.0).abs() == 4.0, "without its sign");
+    assert((4.0).copy_sign(-1.0) == -4.0, "the sign of the argument");
+    assert((2.0).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1, rounded once");
+    assert((1.5).min(-2.0) == -2.0 &amp;&amp; (1.5).max(-2.0) == 1.5, "smaller and larger");
+    return 0;
+}
+</code></pre>
+<p>Hints for the optimizer (<code>likely</code>, <code>unlikely</code>, <code>prefetch_read</code>) are in the
+<a href="hints.html"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
+extern; see <a href="c-interop.html#llvm-intrinsics">LLVM intrinsics</a>.</p>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <pre><code class="language-pepper"># Operators on numbers and booleans.
 main(): int {

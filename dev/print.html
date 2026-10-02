@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2de0a4c1.js";
+            window.path_to_searchindex_js = "searchindex-779cff09.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-bea1f4dd.js"></script>
+        <script src="toc-4c7b0bab.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -270,7 +270,11 @@ the compiler keeping each locked value apart from the rest of the program
 <a href="#what-a-lock-body-may-do">threads</a>).</li>
 <li>Integer arithmetic that overflows panics instead of wrapping, at every
 optimization level; <code>wrapping_add</code> and its siblings wrap on purpose (see
-<a href="#integer-overflow">integer overflow</a>).</li>
+<a href="#integer-overflow">integer overflow</a>).
+Bit counting, rotation, byte swapping and the floating-point functions
+are methods that compile to LLVM’s intrinsics, and any other intrinsic
+can be declared as an extern (see
+<a href="#llvm-intrinsics">LLVM intrinsics</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="#weak-references">weak reference</a> on one side.</li>
@@ -1588,6 +1592,78 @@ on and the compiler warns
 <code>warning: '--no-runtime-checks' has no effect at -O0</code>. It applies from <code>-O1</code>
 up, <code>-g</code> included. The setting is part of the build cache’s key, like the
 optimization level.</p>
+<h2 id="bit-operations-and-math-functions"><a class="header" href="#bit-operations-and-math-functions">Bit operations and math functions</a></h2>
+<p>Each integer type has methods that compile to a single instruction on most
+CPUs, through LLVM’s intrinsics, for code that would otherwise loop over
+bits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Returns</th></tr>
+</thead>
+<tbody>
+<tr><td><code>leading_zeros()</code>, <code>trailing_zeros()</code></td><td>The zero bits above the highest set bit, or below the lowest; the type’s width for zero.</td></tr>
+<tr><td><code>count_ones()</code>, <code>count_zeros()</code></td><td>How many bits are set, or clear.</td></tr>
+<tr><td><code>swap_bytes()</code></td><td>The value with its bytes reversed, to convert between little and big endian.</td></tr>
+<tr><td><code>reverse_bits()</code></td><td>The value with its bits reversed.</td></tr>
+<tr><td><code>rotate_left(n)</code>, <code>rotate_right(n)</code></td><td>The bits rotated by <code>n</code>, modulo the width.</td></tr>
+<tr><td><code>min(x)</code>, <code>max(x)</code></td><td>The smaller or the larger value.</td></tr>
+<tr><td><code>abs()</code></td><td>The value without its sign (signed types). Panics for the lowest value, whose negation does not fit.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Like the overflow methods, they work at their type’s own width:
+<code>byte 1.leading_zeros()</code> is 7.</p>
+<pre><code class="language-pepper"># Bit operations on integers: counting, reversing and rotating bits.
+main(): int {
+    uint mask = 0x00F0;
+    assert(mask.trailing_zeros() == 4, "the lowest set bit is bit 4");
+    assert(mask.leading_zeros() == 24, "the highest set bit is bit 7");
+    assert(mask.count_ones() == 4, "four bits are set");
+
+    # Zero has no set bit: its counts are the type's width.
+    assert((0 as ulong).trailing_zeros() == 64, "no set bit");
+
+    # The methods work at their type's own width.
+    byte low = 1;
+    assert(low.leading_zeros() == 7, "a byte has 8 bits");
+    assert(low.rotate_right(1) == 0x80, "the bottom bit comes back at the top");
+
+    # Byte order: swap_bytes converts between little and big endian.
+    assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
+    assert((1 as uint).reverse_bits() == 0x80000000, "bits reversed");
+
+    # min, max and abs.
+    assert((-7).abs() == 7, "without its sign");
+    assert((3).min(5) == 3 &amp;&amp; (3).max(5) == 5, "smaller and larger");
+    return 0;
+}
+</code></pre>
+<p><code>float</code> and <code>double</code> have <code>square_root()</code>, <code>floor()</code>, <code>ceiling()</code>,
+<code>truncate()</code>, <code>round()</code> (halfway cases away from zero), <code>abs()</code>,
+<code>copy_sign(sign)</code>, <code>multiply_add(factor, addend)</code> (<code>this * factor + addend</code>
+rounded once) and <code>min(x)</code> and <code>max(x)</code> (which ignore a NaN argument):</p>
+<pre><code class="language-pepper"># Floating-point functions: square root, rounding, sign and fused
+# multiply-add.
+main(): int {
+    var side = (2.0).square_root();
+    assert(side * side &gt; 1.999 &amp;&amp; side * side &lt; 2.001, "close to 2");
+
+    assert((-1.5).floor() == -2.0, "toward negative infinity");
+    assert((-1.5).ceiling() == -1.0, "toward positive infinity");
+    assert((-1.5).truncate() == -1.0, "toward zero");
+    assert((2.5).round() == 3.0, "halfway cases away from zero");
+
+    assert((-4.0).abs() == 4.0, "without its sign");
+    assert((4.0).copy_sign(-1.0) == -4.0, "the sign of the argument");
+    assert((2.0).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1, rounded once");
+    assert((1.5).min(-2.0) == -2.0 &amp;&amp; (1.5).max(-2.0) == 1.5, "smaller and larger");
+    return 0;
+}
+</code></pre>
+<p>Hints for the optimizer (<code>likely</code>, <code>unlikely</code>, <code>prefetch_read</code>) are in the
+<a href="#optimizer-hints"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
+extern; see <a href="#llvm-intrinsics">LLVM intrinsics</a>.</p>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <pre><code class="language-pepper"># Operators on numbers and booleans.
 main(): int {
@@ -14856,6 +14932,55 @@ supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
 when hashing secrets. There is no HMAC yet.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="optimizer-hints"><a class="header" href="#optimizer-hints">Optimizer hints</a></h1>
+<p>The <code>hint</code> module tells the optimizer what it cannot see in the code:
+which way a branch usually goes, and which memory a loop will soon touch.
+A hint never changes what a program computes, only how fast it runs, so a
+wrong hint costs speed and nothing else.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Tells the optimizer</th></tr>
+</thead>
+<tbody>
+<tr><td><code>hint.likely(condition)</code></td><td><code>condition</code> is usually true: lay out the true case as the straight-line path.</td></tr>
+<tr><td><code>hint.unlikely(condition)</code></td><td><code>condition</code> is usually false: move the true case, such as error handling, out of the way.</td></tr>
+<tr><td><code>hint.prefetch_read(address)</code></td><td><code>address</code> will be read soon: start loading its cache line now.</td></tr>
+<tr><td><code>hint.prefetch_write(address)</code></td><td><code>address</code> will be written soon.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>likely</code> and <code>unlikely</code> return their argument, so they wrap the condition
+of an <code>if</code> or a loop in place. A prefetch never faults, even for an address
+that is not mapped, and does nothing where the CPU has no prefetch
+instruction.</p>
+<pre><code class="language-pepper"># Optimizer hints: which way a branch usually goes, and memory a loop will
+# soon read.
+import hint;
+
+main(): int {
+    var values = [3, 1, 2];
+    var total = 0;
+    for (var value in values) {
+        # Negative values are rare: keep the loop's fast path free of them.
+        if (hint.unlikely(value &lt; 0)) {
+            return 1;
+        }
+        total += value;
+    }
+    assert(total == 6, "summed");
+
+    var text = "a long text that a loop will read";
+    hint.prefetch_read(text.c_str());
+    assert(text.length &gt; 0, "a hint changes nothing the program computes");
+    return 0;
+}
+</code></pre>
+<p>They are LLVM’s <code>llvm.expect</code> and <code>llvm.prefetch</code> intrinsics (see
+<a href="#llvm-intrinsics">LLVM intrinsics</a>). Hints matter only with
+optimization (<code>-O2</code> and up, where the runtime’s functions inline into the
+caller); at <code>-O0</code> they cost a call and do nothing.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -15423,6 +15548,61 @@ most one symbol. Anything else is an error, such as:</p>
 </code></pre>
 <p>The earlier <code>[LinkName("symbol")]</code> was removed; it is an error that suggests
 the <code>[Link(name = "symbol")]</code> that replaces it.</p>
+<h2 id="llvm-intrinsics"><a class="header" href="#llvm-intrinsics">LLVM intrinsics</a></h2>
+<p>An extern whose <code>[Link(name = ...)]</code> symbol starts with <code>llvm.</code> is not a C
+function but an <a href="https://llvm.org/docs/LangRef.html#intrinsic-functions">LLVM intrinsic</a>:
+a call to it compiles to the operation itself, usually one instruction, and
+nothing is linked. The runtime’s bit and math methods
+(<a href="#bit-operations-and-math-functions">Bit operations</a>)
+are written this way; declare one yourself for an intrinsic they do not
+cover, such as a CPU-specific one:</p>
+<pre><code class="language-pepper"># An extern bound to an LLVM intrinsic: a call is the instruction itself.
+[Link(name = "llvm.umin")]
+extern ulong smaller(ulong a, ulong b);
+
+# `llvm.ctlz` takes a second argument that must be a constant.
+[Link(name = "llvm.ctlz")]
+extern ushort leading_zeros(ushort value, bool is_zero_poison);
+
+main(): int {
+    assert(smaller(7, 3) == 3, "llvm.umin.i64");
+    assert(leading_zeros(1, false) == 15, "llvm.ctlz.i16");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The extern’s prototype is the intrinsic’s signature, in the types Pepper
+maps to LLVM’s: <code>byte</code> and <code>char</code> are <code>i8</code>, <code>ushort</code> and <code>short</code> <code>i16</code>,
+<code>uint</code> and <code>int</code> <code>i32</code>, <code>ulong</code> and <code>long</code> <code>i64</code>, <code>bool</code> <code>i1</code>, <code>float</code> and
+<code>double</code> themselves, any pointer <code>ptr</code>, and a <code>void</code> return is <code>void</code>.
+Intrinsics that take or return vectors or structs cannot be declared yet.</p>
+</li>
+<li>
+<p>Name an overloaded intrinsic by its base name (<code>llvm.ctpop</code>): the
+overload is picked from the prototype (<code>llvm.ctpop.i32</code> for a <code>uint</code>).
+The mangled name works too.</p>
+</li>
+<li>
+<p>A prototype that matches no overload is an error at the extern, with
+LLVM’s reason:</p>
+<pre><code class="language-text">main.pep:2:13: error: 'popcount' does not match the signature of LLVM intrinsic 'llvm.ctpop': intrinsic has incorrect argument type
+    2 | extern long popcount(int value);
+      |             ^~~~~~~~
+</code></pre>
+</li>
+<li>
+<p>Some arguments must be constants, such as <code>llvm.ctlz</code>’s
+<code>is_zero_poison</code>; passing a variable is an error at the argument:</p>
+<pre><code class="language-text">main.pep:5:19: error: argument 2 to 'leading_zeros' must be a constant
+    5 |     return leading_zeros(1, zero_poison);
+      |                             ^~~~~~~~~~~
+</code></pre>
+</li>
+</ul>
+<p>An unknown name (<code>llvm.nonsense</code>) is an error too. A target-specific
+intrinsic (<code>llvm.x86.*</code>, <code>llvm.aarch64.*</code>) only exists on its architecture,
+so pair it with <a href="#platform-selection"><code>[Target(Arch(...))]</code></a>.</p>
 <h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
 <p>A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach
@@ -31158,6 +31338,94 @@ then frees itself.</p>
 <ul>
 <li>the resource</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/hint/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="hintmodulepep"><a class="header" href="#hintmodulepep">hint/module.pep</a></h1>
+<p>Hints to the optimizer: which way a branch usually goes, and memory a
+loop will soon read or write.</p>
+<p>Bring it in with <code>import hint</code>. A hint never changes what a program
+computes, only how fast: the optimizer lays out the likely path as the
+straight-line one, and a prefetch starts loading a cache line early. At
+<code>-O0</code>, and where the CPU has no prefetch instruction, they cost little
+and do nothing.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import hint;
+
+    main(): int {
+        var values = [3, 1, 2];
+        var total = 0;
+        for (var value in values) {
+            if (hint.unlikely(value &lt; 0)) {
+                return 1;
+            }
+            total += value;
+        }
+        assert(total == 6, "summed");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/hint/module.pep</code></p>
+<h2 id="likely"><a class="header" href="#likely">likely</a></h2>
+<pre><code class="language-pepper">likely(condition: bool): bool
+</code></pre>
+<p>Returns <code>condition</code>, telling the optimizer it is usually true, so the
+code for the true case is laid out as the fast path (<code>llvm.expect</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>condition</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    if (hint.likely(index &lt; count)) {
+        # the common case
+    }
+</code></pre>
+<h2 id="unlikely"><a class="header" href="#unlikely">unlikely</a></h2>
+<pre><code class="language-pepper">unlikely(condition: bool): bool
+</code></pre>
+<p>Returns <code>condition</code>, telling the optimizer it is usually false, so the
+code for the true case, such as error handling, is moved out of the
+fast path (<code>llvm.expect</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>condition</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    if (hint.unlikely(length &gt; LIMIT)) {
+        return error;
+    }
+</code></pre>
+<h2 id="prefetch_read"><a class="header" href="#prefetch_read">prefetch_read</a></h2>
+<pre><code class="language-pepper">prefetch_read(address: __ptr&lt;void&gt;)
+</code></pre>
+<p>Starts loading the cache line holding <code>address</code> for reading, so a read
+of it soon after does not wait on memory (<code>llvm.prefetch</code>). It never
+faults, even for an address that is not mapped, and does nothing where
+the CPU has no prefetch instruction.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — memory that will be read soon</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    hint.prefetch_read(text.c_str());
+</code></pre>
+<h2 id="prefetch_write"><a class="header" href="#prefetch_write">prefetch_write</a></h2>
+<pre><code class="language-pepper">prefetch_write(address: __ptr&lt;void&gt;)
+</code></pre>
+<p>Starts loading the cache line holding <code>address</code> for writing, so a
+store to it soon after does not wait on memory (<code>llvm.prefetch</code>). It
+never faults, even for an address that is not mapped, and does nothing
+where the CPU has no prefetch instruction.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — memory that will be written soon</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/client.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="httpclientpep"><a class="header" href="#httpclientpep">http/client.pep</a></h1>
 <p>The HTTP client: <code>Client</code> sends a <code>Request</code> over HTTP or HTTPS and
@@ -32383,6 +32651,12 @@ notation. Each spelling of a type is the same type, so <code>i32.parse</code> is
 overflow), <code>saturating_add</code> (clamped to the type’s range) and
 <code>overflowing_add</code> (the wrapped result and whether it overflowed), with
 <code>sub</code> and <code>mul</code> forms of each.</p>
+<p>Each integer type also has bit operations that compile to one
+instruction on most CPUs (<code>leading_zeros</code>, <code>trailing_zeros</code>,
+<code>count_ones</code>, <code>count_zeros</code>, <code>swap_bytes</code>, <code>reverse_bits</code>, <code>rotate_left</code>,
+<code>rotate_right</code>), and <code>min</code>, <code>max</code> and, when signed, <code>abs</code>. <code>float</code> and
+<code>double</code> have <code>square_root</code>, <code>floor</code>, <code>ceiling</code>, <code>truncate</code>, <code>round</code>,
+<code>abs</code>, <code>copy_sign</code>, <code>multiply_add</code>, <code>min</code> and <code>max</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var port = int.parse("8080");
     assert(port.is_value() &amp;&amp; port.value() == 8080, "parsed");
@@ -32390,6 +32664,7 @@ overflow), <code>saturating_add</code> (clamped to the type’s range) and
     int big = 2147483647;
     assert(big.wrapping_add(1) == -2147483648, "wraps around");
     assert(big.checked_add(1).is_empty(), "does not fit");
+    assert((40 as uint).trailing_zeros() == 3, "40 is 0b101000");
 </code></pre>
 <p>Source: <code>runtime/number.pep</code></p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
@@ -32576,6 +32851,161 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros"><a class="header" href="#leading_zeros">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 8 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as char)).leading_zeros() == 7, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros"><a class="header" href="#trailing_zeros">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 8 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as char).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones"><a class="header" href="#count_ones">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as char).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros"><a class="header" href="#count_zeros">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as char).count_zeros() == 5, "three bits set");
+</code></pre>
+<h4 id="swap_bytes"><a class="header" href="#swap_bytes">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): char
+</code></pre>
+<p>Returns this value with its bytes in reverse order: a one-byte value
+is itself. Each integer type has this method; see <code>int.swap_bytes</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this value</li>
+</ul>
+<h4 id="reverse_bits"><a class="header" href="#reverse_bits">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): char
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 8 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as char)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left"><a class="header" href="#rotate_left">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): char
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 8, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as char).rotate_left(7) == (9 as char).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right"><a class="header" href="#rotate_right">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): char
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 8, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as char)).rotate_right(1) == ((1 as char)).rotate_left(7), "the bottom bit to the top");
+</code></pre>
+<h4 id="min"><a class="header" href="#min">min</a></h4>
+<pre><code class="language-pepper">min(other: char): char
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as char).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max"><a class="header" href="#max">max</a></h4>
+<pre><code class="language-pepper">max(other: char): char
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as char).max(5) == 5, "larger");
+</code></pre>
+<h4 id="abs"><a class="header" href="#abs">abs</a></h4>
+<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): char
+</code></pre>
+<p>Returns the absolute value: <code>this</code> without its sign. The lowest
+value, -128, has no positive counterpart in a <code>char</code>, so it panics, as
+its negation does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>-this</code> when this value is negative, else <code>this</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this value is -128 (“integer overflow in ‘char’ absolute value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-5 as char).abs() == 5, "negative");
+</code></pre>
 <h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
 <pre><code class="language-pepper">extend byte
 </code></pre>
@@ -32760,6 +33190,140 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-1"><a class="header" href="#leading_zeros-1">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 8 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as byte)).leading_zeros() == 7, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-1"><a class="header" href="#trailing_zeros-1">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 8 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as byte).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-1"><a class="header" href="#count_ones-1">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as byte).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-1"><a class="header" href="#count_zeros-1">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 8</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as byte).count_zeros() == 5, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-1"><a class="header" href="#swap_bytes-1">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): byte
+</code></pre>
+<p>Returns this value with its bytes in reverse order: a one-byte value
+is itself. Each integer type has this method; see <code>int.swap_bytes</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this value</li>
+</ul>
+<h4 id="reverse_bits-1"><a class="header" href="#reverse_bits-1">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): byte
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 8 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as byte)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-1"><a class="header" href="#rotate_left-1">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): byte
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 8, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as byte).rotate_left(7) == (9 as byte).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-1"><a class="header" href="#rotate_right-1">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): byte
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 8, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as byte)).rotate_right(1) == ((1 as byte)).rotate_left(7), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-1"><a class="header" href="#min-1">min</a></h4>
+<pre><code class="language-pepper">min(other: byte): byte
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as byte).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-1"><a class="header" href="#max-1">max</a></h4>
+<pre><code class="language-pepper">max(other: byte): byte
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as byte).max(5) == 5, "larger");
+</code></pre>
 <h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
 <pre><code class="language-pepper">extend short
 </code></pre>
@@ -32944,6 +33508,164 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-2"><a class="header" href="#leading_zeros-2">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 16 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as short)).leading_zeros() == 15, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-2"><a class="header" href="#trailing_zeros-2">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 16 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as short).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-2"><a class="header" href="#count_ones-2">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as short).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-2"><a class="header" href="#count_zeros-2">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as short).count_zeros() == 13, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-2"><a class="header" href="#swap_bytes-2">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): short
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 2 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x1234 as short).swap_bytes() == 0x3412, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-2"><a class="header" href="#reverse_bits-2">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): short
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 16 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as short)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-2"><a class="header" href="#rotate_left-2">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): short
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 16, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as short).rotate_left(15) == (9 as short).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-2"><a class="header" href="#rotate_right-2">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): short
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 16, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as short)).rotate_right(1) == ((1 as short)).rotate_left(15), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-2"><a class="header" href="#min-2">min</a></h4>
+<pre><code class="language-pepper">min(other: short): short
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as short).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-2"><a class="header" href="#max-2">max</a></h4>
+<pre><code class="language-pepper">max(other: short): short
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as short).max(5) == 5, "larger");
+</code></pre>
+<h4 id="abs-1"><a class="header" href="#abs-1">abs</a></h4>
+<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): short
+</code></pre>
+<p>Returns the absolute value: <code>this</code> without its sign. The lowest
+value, -32768, has no positive counterpart in a <code>short</code>, so it panics, as
+its negation does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>-this</code> when this value is negative, else <code>this</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this value is -32768 (“integer overflow in ‘short’ absolute value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-5 as short).abs() == 5, "negative");
+</code></pre>
 <h2 id="extend-ushort"><a class="header" href="#extend-ushort">extend ushort</a></h2>
 <pre><code class="language-pepper">extend ushort
 </code></pre>
@@ -33128,6 +33850,143 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-3"><a class="header" href="#leading_zeros-3">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 16 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ushort)).leading_zeros() == 15, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-3"><a class="header" href="#trailing_zeros-3">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 16 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as ushort).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-3"><a class="header" href="#count_ones-3">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as ushort).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-3"><a class="header" href="#count_zeros-3">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 16</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as ushort).count_zeros() == 13, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-3"><a class="header" href="#swap_bytes-3">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): ushort
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 2 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x1234 as ushort).swap_bytes() == 0x3412, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-3"><a class="header" href="#reverse_bits-3">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): ushort
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 16 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ushort)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-3"><a class="header" href="#rotate_left-3">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): ushort
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 16, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as ushort).rotate_left(15) == (9 as ushort).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-3"><a class="header" href="#rotate_right-3">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): ushort
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 16, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ushort)).rotate_right(1) == ((1 as ushort)).rotate_left(15), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-3"><a class="header" href="#min-3">min</a></h4>
+<pre><code class="language-pepper">min(other: ushort): ushort
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as ushort).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-3"><a class="header" href="#max-3">max</a></h4>
+<pre><code class="language-pepper">max(other: ushort): ushort
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as ushort).max(5) == 5, "larger");
+</code></pre>
 <h2 id="extend-int"><a class="header" href="#extend-int">extend int</a></h2>
 <pre><code class="language-pepper">extend int
 </code></pre>
@@ -33314,6 +34173,164 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-4"><a class="header" href="#leading_zeros-4">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 32 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as int)).leading_zeros() == 31, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-4"><a class="header" href="#trailing_zeros-4">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 32 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as int).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-4"><a class="header" href="#count_ones-4">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as int).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-4"><a class="header" href="#count_zeros-4">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as int).count_zeros() == 29, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-4"><a class="header" href="#swap_bytes-4">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): int
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 4 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x12345678 as int).swap_bytes() == 0x78563412, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-4"><a class="header" href="#reverse_bits-4">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): int
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 32 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as int)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-4"><a class="header" href="#rotate_left-4">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): int
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 32, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as int).rotate_left(31) == (9 as int).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-4"><a class="header" href="#rotate_right-4">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): int
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 32, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as int)).rotate_right(1) == ((1 as int)).rotate_left(31), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-4"><a class="header" href="#min-4">min</a></h4>
+<pre><code class="language-pepper">min(other: int): int
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as int).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-4"><a class="header" href="#max-4">max</a></h4>
+<pre><code class="language-pepper">max(other: int): int
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as int).max(5) == 5, "larger");
+</code></pre>
+<h4 id="abs-2"><a class="header" href="#abs-2">abs</a></h4>
+<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): int
+</code></pre>
+<p>Returns the absolute value: <code>this</code> without its sign. The lowest
+value, -2147483648, has no positive counterpart in a <code>int</code>, so it panics, as
+its negation does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>-this</code> when this value is negative, else <code>this</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this value is -2147483648 (“integer overflow in ‘int’ absolute value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-5 as int).abs() == 5, "negative");
+</code></pre>
 <h2 id="extend-uint"><a class="header" href="#extend-uint">extend uint</a></h2>
 <pre><code class="language-pepper">extend uint
 </code></pre>
@@ -33498,6 +34515,143 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-5"><a class="header" href="#leading_zeros-5">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 32 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as uint)).leading_zeros() == 31, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-5"><a class="header" href="#trailing_zeros-5">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 32 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as uint).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-5"><a class="header" href="#count_ones-5">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as uint).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-5"><a class="header" href="#count_zeros-5">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 32</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as uint).count_zeros() == 29, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-5"><a class="header" href="#swap_bytes-5">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): uint
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 4 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-5"><a class="header" href="#reverse_bits-5">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): uint
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 32 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as uint)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-5"><a class="header" href="#rotate_left-5">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): uint
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 32, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as uint).rotate_left(31) == (9 as uint).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-5"><a class="header" href="#rotate_right-5">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): uint
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 32, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as uint)).rotate_right(1) == ((1 as uint)).rotate_left(31), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-5"><a class="header" href="#min-5">min</a></h4>
+<pre><code class="language-pepper">min(other: uint): uint
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as uint).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-5"><a class="header" href="#max-5">max</a></h4>
+<pre><code class="language-pepper">max(other: uint): uint
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as uint).max(5) == 5, "larger");
+</code></pre>
 <h2 id="extend-long"><a class="header" href="#extend-long">extend long</a></h2>
 <pre><code class="language-pepper">extend long
 </code></pre>
@@ -33683,6 +34837,164 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-6"><a class="header" href="#leading_zeros-6">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 64 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as long)).leading_zeros() == 63, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-6"><a class="header" href="#trailing_zeros-6">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 64 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as long).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-6"><a class="header" href="#count_ones-6">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as long).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-6"><a class="header" href="#count_zeros-6">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as long).count_zeros() == 61, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-6"><a class="header" href="#swap_bytes-6">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): long
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 8 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x0102030405060708 as long).swap_bytes() == 0x0807060504030201, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-6"><a class="header" href="#reverse_bits-6">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): long
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 64 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as long)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-6"><a class="header" href="#rotate_left-6">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): long
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 64, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as long).rotate_left(63) == (9 as long).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-6"><a class="header" href="#rotate_right-6">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): long
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 64, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as long)).rotate_right(1) == ((1 as long)).rotate_left(63), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-6"><a class="header" href="#min-6">min</a></h4>
+<pre><code class="language-pepper">min(other: long): long
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as long).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-6"><a class="header" href="#max-6">max</a></h4>
+<pre><code class="language-pepper">max(other: long): long
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as long).max(5) == 5, "larger");
+</code></pre>
+<h4 id="abs-3"><a class="header" href="#abs-3">abs</a></h4>
+<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): long
+</code></pre>
+<p>Returns the absolute value: <code>this</code> without its sign. The lowest
+value, -9223372036854775808, has no positive counterpart in a <code>long</code>, so it panics, as
+its negation does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>-this</code> when this value is negative, else <code>this</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this value is -9223372036854775808 (“integer overflow in ‘long’ absolute value”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-5 as long).abs() == 5, "negative");
+</code></pre>
 <h2 id="extend-ulong"><a class="header" href="#extend-ulong">extend ulong</a></h2>
 <pre><code class="language-pepper">extend ulong
 </code></pre>
@@ -33867,6 +35179,143 @@ overflowed.</p>
 <ul>
 <li>the wrapped product, and true when it overflowed</li>
 </ul>
+<h4 id="leading_zeros-7"><a class="header" href="#leading_zeros-7">leading_zeros</a></h4>
+<pre><code class="language-pepper">leading_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits above the highest set bit: 64 for
+zero, 0 when the highest bit is set. One instruction on most CPUs
+(<code>llvm.ctlz</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of leading zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ulong)).leading_zeros() == 63, "one bit, at the bottom");
+</code></pre>
+<h4 id="trailing_zeros-7"><a class="header" href="#trailing_zeros-7">trailing_zeros</a></h4>
+<pre><code class="language-pepper">trailing_zeros(): int
+</code></pre>
+<p>Returns the number of zero bits below the lowest set bit: 64 for
+zero. One instruction on most CPUs (<code>llvm.cttz</code>), so it finds the
+first set bit of a mask without a loop.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of trailing zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((8 as ulong).trailing_zeros() == 3, "8 is 0b1000");
+</code></pre>
+<h4 id="count_ones-7"><a class="header" href="#count_ones-7">count_ones</a></h4>
+<pre><code class="language-pepper">count_ones(): int
+</code></pre>
+<p>Returns the number of bits that are set (the population count,
+<code>llvm.ctpop</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of one bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as ulong).count_ones() == 3, "three bits set");
+</code></pre>
+<h4 id="count_zeros-7"><a class="header" href="#count_zeros-7">count_zeros</a></h4>
+<pre><code class="language-pepper">count_zeros(): int
+</code></pre>
+<p>Returns the number of bits that are clear.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the count of zero bits, from 0 to 64</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((11 as ulong).count_zeros() == 61, "three bits set");
+</code></pre>
+<h4 id="swap_bytes-7"><a class="header" href="#swap_bytes-7">swap_bytes</a></h4>
+<pre><code class="language-pepper">swap_bytes(): ulong
+</code></pre>
+<p>Returns this value with its bytes in reverse order (<code>llvm.bswap</code>), to
+convert between little-endian and big-endian byte order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 8 bytes reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((0x0102030405060708 as ulong).swap_bytes() == 0x0807060504030201, "bytes reversed");
+</code></pre>
+<h4 id="reverse_bits-7"><a class="header" href="#reverse_bits-7">reverse_bits</a></h4>
+<pre><code class="language-pepper">reverse_bits(): ulong
+</code></pre>
+<p>Returns this value with its bits in reverse order: the lowest bit
+becomes the highest (<code>llvm.bitreverse</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value with its 64 bits reversed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ulong)).reverse_bits().leading_zeros() == 0, "bottom to top");
+</code></pre>
+<h4 id="rotate_left-7"><a class="header" href="#rotate_left-7">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): ulong
+</code></pre>
+<p>Returns this value’s bits rotated left by <code>count</code>: the bits shifted
+out at the top come back in at the bottom (<code>llvm.fshl</code>). <code>count</code> is
+taken modulo 64, so a negative count rotates right.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((9 as ulong).rotate_left(63) == (9 as ulong).rotate_right(1), "the same rotation");
+</code></pre>
+<h4 id="rotate_right-7"><a class="header" href="#rotate_right-7">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): ulong
+</code></pre>
+<p>Returns this value’s bits rotated right by <code>count</code>: the bits shifted
+out at the bottom come back in at the top (<code>llvm.fshr</code>). <code>count</code> is
+taken modulo 64, so a negative count rotates left.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many places to rotate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(((1 as ulong)).rotate_right(1) == ((1 as ulong)).rotate_left(63), "the bottom bit to the top");
+</code></pre>
+<h4 id="min-7"><a class="header" href="#min-7">min</a></h4>
+<pre><code class="language-pepper">min(other: ulong): ulong
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as ulong).min(5) == 3, "smaller");
+</code></pre>
+<h4 id="max-7"><a class="header" href="#max-7">max</a></h4>
+<pre><code class="language-pepper">max(other: ulong): ulong
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3 as ulong).max(5) == 5, "larger");
+</code></pre>
 <h2 id="extend-float"><a class="header" href="#extend-float">extend float</a></h2>
 <pre><code class="language-pepper">extend float
 </code></pre>
@@ -33891,6 +35340,144 @@ hexadecimal are accepted.</p>
 <pre><code class="language-pepper">    assert(float.parse("0.25").value() == 0.25, "decimal");
     assert(float.parse("1e39").is_empty(), "too big");
 </code></pre>
+<h3 id="methods-8-1"><a class="header" href="#methods-8-1">Methods</a></h3>
+<h4 id="square_root"><a class="header" href="#square_root">square_root</a></h4>
+<pre><code class="language-pepper">square_root(): float
+</code></pre>
+<p>Returns the square root (<code>llvm.sqrt</code>, one instruction on most CPUs):
+NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the non-negative square root</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.25 as float).square_root() == 1.5, "exact");
+</code></pre>
+<h4 id="floor"><a class="header" href="#floor">floor</a></h4>
+<pre><code class="language-pepper">floor(): float
+</code></pre>
+<p>Returns the largest whole number not greater than this value
+(<code>llvm.floor</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward negative infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as float).floor() == -2.0, "down");
+</code></pre>
+<h4 id="ceiling"><a class="header" href="#ceiling">ceiling</a></h4>
+<pre><code class="language-pepper">ceiling(): float
+</code></pre>
+<p>Returns the smallest whole number not less than this value
+(<code>llvm.ceil</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward positive infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as float).ceiling() == -1.0, "up");
+</code></pre>
+<h4 id="truncate-2"><a class="header" href="#truncate-2">truncate</a></h4>
+<pre><code class="language-pepper">truncate(): float
+</code></pre>
+<p>Returns this value without its fractional part (<code>llvm.trunc</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward zero</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as float).truncate() == -1.0, "toward zero");
+</code></pre>
+<h4 id="round"><a class="header" href="#round">round</a></h4>
+<pre><code class="language-pepper">round(): float
+</code></pre>
+<p>Returns the nearest whole number, halfway cases away from zero
+(<code>llvm.round</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rounded value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.5 as float).round() == 3.0, "half away from zero");
+</code></pre>
+<h4 id="abs-4"><a class="header" href="#abs-4">abs</a></h4>
+<pre><code class="language-pepper">abs(): float
+</code></pre>
+<p>Returns the absolute value: this value with its sign bit cleared
+(<code>llvm.fabs</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value without its sign</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-2.0 as float).abs() == 2.0, "negative");
+</code></pre>
+<h4 id="copy_sign"><a class="header" href="#copy_sign">copy_sign</a></h4>
+<pre><code class="language-pepper">copy_sign(sign: float): float
+</code></pre>
+<p>Returns this value’s magnitude with the sign of <code>sign</code>
+(<code>llvm.copysign</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>sign</code> — the value whose sign the result takes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>abs()</code> of this value, negated when <code>sign</code> is negative</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3.0 as float).copy_sign(-0.0) == -3.0, "negative zero is negative");
+</code></pre>
+<h4 id="multiply_add"><a class="header" href="#multiply_add">multiply_add</a></h4>
+<pre><code class="language-pepper">multiply_add(factor: float, addend: float): float
+</code></pre>
+<p>Returns <code>this * factor + addend</code> with a single rounding, as one fused
+multiply-add (<code>llvm.fma</code>): more precise than the two operations, and
+one instruction where the CPU has it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>factor</code> — the value to multiply by</li>
+<li><code>addend</code> — the value to add to the product</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the fused product and sum</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.0 as float).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+</code></pre>
+<h4 id="min-8"><a class="header" href="#min-8">min</a></h4>
+<pre><code class="language-pepper">min(other: float): float
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>; when one of them is
+NaN, the other (<code>llvm.minnum</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the smaller value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((1.5 as float).min(-2.0) == -2.0, "smaller");
+</code></pre>
+<h4 id="max-8"><a class="header" href="#max-8">max</a></h4>
+<pre><code class="language-pepper">max(other: float): float
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>; when one of them is
+NaN, the other (<code>llvm.maxnum</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the larger value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((1.5 as float).max(-2.0) == 1.5, "larger");
+</code></pre>
 <h2 id="extend-double"><a class="header" href="#extend-double">extend double</a></h2>
 <pre><code class="language-pepper">extend double
 </code></pre>
@@ -33914,6 +35501,144 @@ hexadecimal are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
     assert(double.parse("1.5.2").is_empty(), "not a number");
+</code></pre>
+<h3 id="methods-9-1"><a class="header" href="#methods-9-1">Methods</a></h3>
+<h4 id="square_root-1"><a class="header" href="#square_root-1">square_root</a></h4>
+<pre><code class="language-pepper">square_root(): double
+</code></pre>
+<p>Returns the square root (<code>llvm.sqrt</code>, one instruction on most CPUs):
+NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the non-negative square root</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.25 as double).square_root() == 1.5, "exact");
+</code></pre>
+<h4 id="floor-1"><a class="header" href="#floor-1">floor</a></h4>
+<pre><code class="language-pepper">floor(): double
+</code></pre>
+<p>Returns the largest whole number not greater than this value
+(<code>llvm.floor</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward negative infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as double).floor() == -2.0, "down");
+</code></pre>
+<h4 id="ceiling-1"><a class="header" href="#ceiling-1">ceiling</a></h4>
+<pre><code class="language-pepper">ceiling(): double
+</code></pre>
+<p>Returns the smallest whole number not less than this value
+(<code>llvm.ceil</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward positive infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as double).ceiling() == -1.0, "up");
+</code></pre>
+<h4 id="truncate-1-1"><a class="header" href="#truncate-1-1">truncate</a></h4>
+<pre><code class="language-pepper">truncate(): double
+</code></pre>
+<p>Returns this value without its fractional part (<code>llvm.trunc</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value rounded toward zero</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-1.5 as double).truncate() == -1.0, "toward zero");
+</code></pre>
+<h4 id="round-1"><a class="header" href="#round-1">round</a></h4>
+<pre><code class="language-pepper">round(): double
+</code></pre>
+<p>Returns the nearest whole number, halfway cases away from zero
+(<code>llvm.round</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rounded value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.5 as double).round() == 3.0, "half away from zero");
+</code></pre>
+<h4 id="abs-5"><a class="header" href="#abs-5">abs</a></h4>
+<pre><code class="language-pepper">abs(): double
+</code></pre>
+<p>Returns the absolute value: this value with its sign bit cleared
+(<code>llvm.fabs</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value without its sign</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((-2.0 as double).abs() == 2.0, "negative");
+</code></pre>
+<h4 id="copy_sign-1"><a class="header" href="#copy_sign-1">copy_sign</a></h4>
+<pre><code class="language-pepper">copy_sign(sign: double): double
+</code></pre>
+<p>Returns this value’s magnitude with the sign of <code>sign</code>
+(<code>llvm.copysign</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>sign</code> — the value whose sign the result takes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>abs()</code> of this value, negated when <code>sign</code> is negative</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((3.0 as double).copy_sign(-0.0) == -3.0, "negative zero is negative");
+</code></pre>
+<h4 id="multiply_add-1"><a class="header" href="#multiply_add-1">multiply_add</a></h4>
+<pre><code class="language-pepper">multiply_add(factor: double, addend: double): double
+</code></pre>
+<p>Returns <code>this * factor + addend</code> with a single rounding, as one fused
+multiply-add (<code>llvm.fma</code>): more precise than the two operations, and
+one instruction where the CPU has it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>factor</code> — the value to multiply by</li>
+<li><code>addend</code> — the value to add to the product</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the fused product and sum</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((2.0 as double).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+</code></pre>
+<h4 id="min-9"><a class="header" href="#min-9">min</a></h4>
+<pre><code class="language-pepper">min(other: double): double
+</code></pre>
+<p>Returns the smaller of this value and <code>other</code>; when one of them is
+NaN, the other (<code>llvm.minnum</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the smaller value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((1.5 as double).min(-2.0) == -2.0, "smaller");
+</code></pre>
+<h4 id="max-9"><a class="header" href="#max-9">max</a></h4>
+<pre><code class="language-pepper">max(other: double): double
+</code></pre>
+<p>Returns the larger of this value and <code>other</code>; when one of them is
+NaN, the other (<code>llvm.maxnum</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the larger value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert((1.5 as double).max(-2.0) == 1.5, "larger");
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/range.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="rangepep"><a class="header" href="#rangepep">range.pep</a></h1>

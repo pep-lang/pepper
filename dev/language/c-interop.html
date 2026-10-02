@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2de0a4c1.js";
+            window.path_to_searchindex_js = "../searchindex-779cff09.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-bea1f4dd.js"></script>
+        <script src="../toc-4c7b0bab.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -748,6 +748,61 @@ most one symbol. Anything else is an error, such as:</p>
 </code></pre>
 <p>The earlier <code>[LinkName("symbol")]</code> was removed; it is an error that suggests
 the <code>[Link(name = "symbol")]</code> that replaces it.</p>
+<h2 id="llvm-intrinsics"><a class="header" href="#llvm-intrinsics">LLVM intrinsics</a></h2>
+<p>An extern whose <code>[Link(name = ...)]</code> symbol starts with <code>llvm.</code> is not a C
+function but an <a href="https://llvm.org/docs/LangRef.html#intrinsic-functions">LLVM intrinsic</a>:
+a call to it compiles to the operation itself, usually one instruction, and
+nothing is linked. The runtime’s bit and math methods
+(<a href="types-and-variables.html#bit-operations-and-math-functions">Bit operations</a>)
+are written this way; declare one yourself for an intrinsic they do not
+cover, such as a CPU-specific one:</p>
+<pre><code class="language-pepper"># An extern bound to an LLVM intrinsic: a call is the instruction itself.
+[Link(name = "llvm.umin")]
+extern ulong smaller(ulong a, ulong b);
+
+# `llvm.ctlz` takes a second argument that must be a constant.
+[Link(name = "llvm.ctlz")]
+extern ushort leading_zeros(ushort value, bool is_zero_poison);
+
+main(): int {
+    assert(smaller(7, 3) == 3, "llvm.umin.i64");
+    assert(leading_zeros(1, false) == 15, "llvm.ctlz.i16");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The extern’s prototype is the intrinsic’s signature, in the types Pepper
+maps to LLVM’s: <code>byte</code> and <code>char</code> are <code>i8</code>, <code>ushort</code> and <code>short</code> <code>i16</code>,
+<code>uint</code> and <code>int</code> <code>i32</code>, <code>ulong</code> and <code>long</code> <code>i64</code>, <code>bool</code> <code>i1</code>, <code>float</code> and
+<code>double</code> themselves, any pointer <code>ptr</code>, and a <code>void</code> return is <code>void</code>.
+Intrinsics that take or return vectors or structs cannot be declared yet.</p>
+</li>
+<li>
+<p>Name an overloaded intrinsic by its base name (<code>llvm.ctpop</code>): the
+overload is picked from the prototype (<code>llvm.ctpop.i32</code> for a <code>uint</code>).
+The mangled name works too.</p>
+</li>
+<li>
+<p>A prototype that matches no overload is an error at the extern, with
+LLVM’s reason:</p>
+<pre><code class="language-text">main.pep:2:13: error: 'popcount' does not match the signature of LLVM intrinsic 'llvm.ctpop': intrinsic has incorrect argument type
+    2 | extern long popcount(int value);
+      |             ^~~~~~~~
+</code></pre>
+</li>
+<li>
+<p>Some arguments must be constants, such as <code>llvm.ctlz</code>’s
+<code>is_zero_poison</code>; passing a variable is an error at the argument:</p>
+<pre><code class="language-text">main.pep:5:19: error: argument 2 to 'leading_zeros' must be a constant
+    5 |     return leading_zeros(1, zero_poison);
+      |                             ^~~~~~~~~~~
+</code></pre>
+</li>
+</ul>
+<p>An unknown name (<code>llvm.nonsense</code>) is an error too. A target-specific
+intrinsic (<code>llvm.x86.*</code>, <code>llvm.aarch64.*</code>) only exists on its architecture,
+so pair it with <a href="platform-selection.html"><code>[Target(Arch(...))]</code></a>.</p>
 <h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
 <p>A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach
@@ -768,7 +823,7 @@ declaration visible to other Pepper files (see <a href="visibility.html">Visibil
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../language/digest.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../language/hints.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -782,7 +837,7 @@ declaration visible to other Pepper files (see <a href="visibility.html">Visibil
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../language/digest.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../language/hints.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
