@@ -31,10 +31,6 @@ compiled for those exact types. There is no runtime cost for using them.
   next level (`'Foo' is specialized 65 levels deep, past the limit of 64`),
   with a note where the chain started.
 
-> **Note:** Inside a generic struct, `var top = items.last();` cannot infer a
-> type that involves a type parameter yet, and fails with
-> `unknown type name 'T'`. Write the type out: `var top: T = items.last();`.
-
 ## Generic functions
 
 A free function takes type parameters the same way:

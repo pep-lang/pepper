@@ -16,8 +16,9 @@ struct Stack<T> {
     }
 
     peek(): T {
-        # Inside the struct, T can be used like any other type name.
-        var top: T = items.last();
+        # `top` is inferred as `T`: an `int` in `Stack<int>`, a `String`
+        # in `Stack<String>`.
+        var top = items.last();
         return top;
     }
 

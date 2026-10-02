@@ -304,3 +304,39 @@ test(): int {
 "#;
     assert_eq!(run(src), (7_421_522, 0));
 }
+
+/// Inside a generic struct, `var` infers types that mention the struct's
+/// type parameters, specialized per instantiation (#377).
+#[test]
+fn var_infers_type_parameter_types_in_generic_struct() {
+    let src = r#"
+struct Stack<T> {
+    var items: Array<T>;
+    construct() { items = Array<T>(); }
+    push(item: T) { items.append(item); }
+    peek(): T {
+        var top = items.last();
+        return top;
+    }
+    copy(): Array<T> {
+        var all = items.clone();
+        return all;
+    }
+    paired(): (T, ulong) {
+        var pair = (items.last(), items.count);
+        return pair;
+    }
+}
+
+test(): int {
+    var numbers = Stack<int>();
+    numbers.push(1);
+    numbers.push(2);
+    var words = Stack<String>();
+    words.push("pepper");
+    var (word, count) = words.paired();
+    return numbers.peek() + (words.peek().size as int) + numbers.copy().count as int + (word.size as int) + count as int;
+}
+"#;
+    assert_eq!(run(src), (2 + 6 + 2 + 6 + 1, 0));
+}

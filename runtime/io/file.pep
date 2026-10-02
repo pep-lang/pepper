@@ -571,9 +571,9 @@ export struct File {
     ## and a single call moves at most about 2 GiB on POSIX or 1 GiB on
     ## Windows. Loop until it returns 0 to read everything, or use
     ## `read_all`. On POSIX an interrupted read (`EINTR`) is retried. On
-    ## failure `buf` keeps its previous contents.
+    ## failure `buffer` keeps its previous contents.
     ##
-    ## @param buf the array the bytes are appended to
+    ## @param buffer the array the bytes are appended to
     ## @param max the most bytes to read; 0 reads nothing and returns 0
     ## @returns the number of bytes appended, 0 at end of file; an error when
     ##   the File is closed, or `is_is_a_directory()` when it is a directory,
@@ -586,7 +586,7 @@ export struct File {
     ##             break;
     ##         }
     ##     }
-    read(buf: u8[], max: ulong): IoResult<ulong> {
+    read(buffer: u8[], max: ulong): IoResult<ulong> {
         var c = check_open();
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
@@ -594,12 +594,12 @@ export struct File {
         if (max == 0) {
             return IoResult<ulong>.ok(0);
         }
-        buf.reserve(buf._size + max);
-        buf._pins = buf._pins + 1;
-        var r = _io_file_transfer(_handle, buf._data + buf._size, max, false);
-        buf._pins = buf._pins - 1;
+        buffer.reserve(buffer._size + max);
+        buffer._pins = buffer._pins + 1;
+        var r = _io_file_transfer(_handle, buffer._data + buffer._size, max, false);
+        buffer._pins = buffer._pins - 1;
         if (r.is_ok()) {
-            buf._size = buf._size + r.value();
+            buffer._size = buffer._size + r.value();
         }
         return r;
     }
