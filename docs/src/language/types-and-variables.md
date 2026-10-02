@@ -106,6 +106,18 @@ strings (`__ptr<char>`). The ASCII characters have the same value as a `char`
 and as a `byte`; `'\xFF'` is 255 as a `byte` but -1 read through a `char`.
 Text is a `String`, and a single character of it is a one-code-point `String`.
 
+`byte` and `char` classify ASCII characters as C's `ctype.h` does in the "C"
+locale: `is_digit`, `is_hex_digit`, `is_alphabetic`, `is_alphanumeric`,
+`is_upper`, `is_lower`, `is_whitespace`, `is_blank`, `is_punctuation`,
+`is_graphic`, `is_printable`, `is_control` and `is_ascii`, plus `to_upper`,
+`to_lower` and `digit_value(base)`. The names are spelled out (`is_punctuation`
+for C's `ispunct`). A byte above 127, which is a negative `char`, is never a
+letter, digit, space or punctuation. Unicode classification is not covered.
+
+```pepper
+{{#include ../../examples/types-characters-classify.pep}}
+```
+
 ### Strings
 
 `String` is a UTF-8 string. A string literal such as `"hello"` is a `String`

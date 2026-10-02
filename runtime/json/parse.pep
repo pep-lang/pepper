@@ -510,7 +510,7 @@ struct _JsonParser {
         }
         if (_peek() == '0') {
             _position = _position + 1;
-            if (_is_digit(_peek())) {
+            if (_peek().is_digit()) {
                 _fail("a number cannot start with '0'");
                 return false;
             }
@@ -554,18 +554,14 @@ struct _JsonParser {
 
     # Consumes one or more digits.
     _digits(): bool {
-        if (!_is_digit(_peek())) {
+        if (!_peek().is_digit()) {
             _fail("expected a digit");
             return false;
         }
-        while (_is_digit(_peek())) {
+        while (_peek().is_digit()) {
             _position = _position + 1;
         }
         return true;
-    }
-
-    _is_digit(b: byte): bool {
-        return b >= '0' and b <= '9';
     }
 
     # Reads a string, starting at its opening '"', into `_string_value`.

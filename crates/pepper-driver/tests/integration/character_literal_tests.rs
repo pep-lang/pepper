@@ -105,3 +105,85 @@ fn parse_errors() {
          \x20     |              ^~~"
     );
 }
+
+/// The classification methods (`is_digit`, `is_punctuation`, ...) on all 256
+/// `byte` and `char` values, checked against Rust's ASCII methods, which
+/// match C's ctype.h in the "C" locale (plus `\v` for `isspace`).
+#[test]
+fn classification_matches_c_ctype() {
+    let mut masks = Vec::new();
+    let mut uppers = Vec::new();
+    let mut lowers = Vec::new();
+    let mut digits = Vec::new();
+    for b in 0..=255u8 {
+        let flags = [
+            b.is_ascii_digit(),
+            b.is_ascii_hexdigit(),
+            b.is_ascii_alphabetic(),
+            b.is_ascii_alphanumeric(),
+            b.is_ascii_uppercase(),
+            b.is_ascii_lowercase(),
+            b.is_ascii_whitespace() || b == 0x0B,
+            b == b' ' || b == b'\t',
+            b.is_ascii_punctuation(),
+            b.is_ascii_graphic(),
+            b.is_ascii_graphic() || b == b' ',
+            b.is_ascii_control(),
+            b.is_ascii(),
+        ];
+        masks.push(flags.iter().enumerate().map(|(i, &f)| (f as u32) << i).sum::<u32>().to_string());
+        uppers.push(b.to_ascii_uppercase().to_string());
+        lowers.push(b.to_ascii_lowercase().to_string());
+        digits.push((b as char).to_digit(36).map_or(-1, |d| d as i32).to_string());
+    }
+    let source = format!(
+        r#"mask(b: byte): int {{
+    var flags = [b.is_digit(), b.is_hex_digit(), b.is_alphabetic(), b.is_alphanumeric(),
+        b.is_upper(), b.is_lower(), b.is_whitespace(), b.is_blank(), b.is_punctuation(),
+        b.is_graphic(), b.is_printable(), b.is_control(), b.is_ascii()];
+    var result = 0;
+    for (var i in 0..flags.count) {{
+        if (flags[i]) {{ result = result | (1 << i); }}
+    }}
+    return result;
+}}
+char_mask(c: char): int {{
+    var flags = [c.is_digit(), c.is_hex_digit(), c.is_alphabetic(), c.is_alphanumeric(),
+        c.is_upper(), c.is_lower(), c.is_whitespace(), c.is_blank(), c.is_punctuation(),
+        c.is_graphic(), c.is_printable(), c.is_control(), c.is_ascii()];
+    var result = 0;
+    for (var i in 0..flags.count) {{
+        if (flags[i]) {{ result = result | (1 << i); }}
+    }}
+    return result;
+}}
+test(): int {{
+    var masks = [{masks}];
+    var uppers = [{uppers}];
+    var lowers = [{lowers}];
+    var digits = [{digits}];
+    for (var i in 0..256) {{
+        var b = i as byte;
+        var c = b as char;
+        if (mask(b) != masks[i] or char_mask(c) != masks[i]) {{ return 1000 + i; }}
+        if (b.to_upper() != uppers[i] or (c.to_upper() as byte) != uppers[i]) {{ return 2000 + i; }}
+        if (b.to_lower() != lowers[i] or (c.to_lower() as byte) != lowers[i]) {{ return 3000 + i; }}
+        for (var base in 2..>36) {{
+            var expected = digits[i] >= 0 and digits[i] < base ? digits[i] : -1;
+            var value = b.digit_value(base);
+            var actual = value.is_value() ? value.value() : -1;
+            var char_value = c.digit_value(base);
+            var char_actual = char_value.is_value() ? char_value.value() : -1;
+            if (actual != expected or char_actual != expected) {{ return 4000 + i; }}
+        }}
+    }}
+    if ('7'.digit_value().value() != 7 or 'a'.digit_value().is_value()) {{ return 1; }}
+    return 0;
+}}"#,
+        masks = masks.join(", "),
+        uppers = uppers.join(", "),
+        lowers = lowers.join(", "),
+        digits = digits.join(", "),
+    );
+    assert_cases(&source);
+}

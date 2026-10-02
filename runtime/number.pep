@@ -177,21 +177,6 @@ extern double _min_64(double a, double b);
 [Link(name = "llvm.maxnum")]
 extern double _max_64(double a, double b);
 
-# The value of the digit `c` in bases up to 36 (`0`-`9`, then `a`-`z` or
-# `A`-`Z`), or 36 when `c` is not a digit.
-_digit_value(c: byte): ulong {
-    if (c >= '0' && c <= '9') {
-        return (c - '0') as ulong;
-    }
-    if (c >= 'a' && c <= 'z') {
-        return (c - 'a' + 10) as ulong;
-    }
-    if (c >= 'A' && c <= 'Z') {
-        return (c - 'A' + 10) as ulong;
-    }
-    return 36;
-}
-
 # Reads the digits of `text` from `index` to the end in `base`, failing on a
 # non-digit, on no digits, or on a value above `limit`.
 _parse_digits(text: String, index: ulong, base: int, limit: ulong): (bool, ulong) {
@@ -202,8 +187,12 @@ _parse_digits(text: String, index: ulong, base: int, limit: ulong): (bool, ulong
     var radix = base as ulong;
     ulong magnitude = 0;
     while (index < size) {
-        var digit = _digit_value(text.byte_at(index));
-        if (digit >= radix || magnitude > (limit - digit) / radix) {
+        var value = text.byte_at(index).digit_value(base);
+        if (value.is_empty()) {
+            return (false, 0);
+        }
+        var digit = value.value() as ulong;
+        if (magnitude > (limit - digit) / radix) {
             return (false, 0);
         }
         magnitude = magnitude * radix + digit;
@@ -266,13 +255,13 @@ _is_decimal(text: String): bool {
         index = index + 1;
     }
     ulong digits = 0;
-    while (index < size && _digit_value(text.byte_at(index)) < 10) {
+    while (index < size && text.byte_at(index).is_digit()) {
         index = index + 1;
         digits = digits + 1;
     }
     if (index < size && text.byte_at(index) == '.') {
         index = index + 1;
-        while (index < size && _digit_value(text.byte_at(index)) < 10) {
+        while (index < size && text.byte_at(index).is_digit()) {
             index = index + 1;
             digits = digits + 1;
         }
@@ -286,7 +275,7 @@ _is_decimal(text: String): bool {
             index = index + 1;
         }
         ulong exponent = 0;
-        while (index < size && _digit_value(text.byte_at(index)) < 10) {
+        while (index < size && text.byte_at(index).is_digit()) {
             index = index + 1;
             exponent = exponent + 1;
         }
@@ -317,6 +306,140 @@ export extend char {
             return Optional<char>.Empty;
         }
         return Optional<char>.Value(value as char);
+    }
+
+    ## Whether this is an ASCII decimal digit, `0` to `9`, like C's
+    ## `isdigit`.
+    ##
+    ## Like every classification method on `char`, it looks at ASCII only,
+    ## as C does in the "C" locale: a negative `char` (a byte of UTF-8 text
+    ## above 127) is never a digit, letter, space or punctuation. Unlike C's
+    ## functions, it is defined for every value, negative ones included.
+    ##
+    ## @returns true for `0` to `9`
+    is_digit(): bool {
+        return (this as byte).is_digit();
+    }
+
+    ## Whether this is an ASCII hexadecimal digit, `0` to `9`, `a` to `f` or
+    ## `A` to `F`, like C's `isxdigit`.
+    ##
+    ## @returns true for a hexadecimal digit, either case
+    is_hex_digit(): bool {
+        return (this as byte).is_hex_digit();
+    }
+
+    ## Whether this is an ASCII letter, `a` to `z` or `A` to `Z`, like C's
+    ## `isalpha`.
+    ##
+    ## @returns true for an ASCII letter
+    is_alphabetic(): bool {
+        return (this as byte).is_alphabetic();
+    }
+
+    ## Whether this is an ASCII letter or digit, like C's `isalnum`.
+    ##
+    ## @returns true for `a` to `z`, `A` to `Z` or `0` to `9`
+    is_alphanumeric(): bool {
+        return (this as byte).is_alphanumeric();
+    }
+
+    ## Whether this is an ASCII uppercase letter, `A` to `Z`, like C's
+    ## `isupper`.
+    ##
+    ## @returns true for `A` to `Z`
+    is_upper(): bool {
+        return (this as byte).is_upper();
+    }
+
+    ## Whether this is an ASCII lowercase letter, `a` to `z`, like C's
+    ## `islower`.
+    ##
+    ## @returns true for `a` to `z`
+    is_lower(): bool {
+        return (this as byte).is_lower();
+    }
+
+    ## Whether this is ASCII whitespace: a space, tab (`\t`), line feed
+    ## (`\n`), vertical tab, form feed or carriage return (`\r`), like C's
+    ## `isspace`. `String.trim` strips the same set.
+    ##
+    ## @returns true for one of the six whitespace characters
+    is_whitespace(): bool {
+        return (this as byte).is_whitespace();
+    }
+
+    ## Whether this is a space or a tab, like C's `isblank`.
+    ##
+    ## @returns true for `' '` and `'\t'`
+    is_blank(): bool {
+        return (this as byte).is_blank();
+    }
+
+    ## Whether this is ASCII punctuation: printable, but not a letter, digit
+    ## or space, like C's `ispunct`. That is ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
+    ##
+    ## @returns true for one of the 32 ASCII punctuation characters
+    is_punctuation(): bool {
+        return (this as byte).is_punctuation();
+    }
+
+    ## Whether this is printable and not a space, `!` to `~`, like C's
+    ## `isgraph`.
+    ##
+    ## @returns true for a letter, digit or punctuation
+    is_graphic(): bool {
+        return (this as byte).is_graphic();
+    }
+
+    ## Whether this is printable, a space through `~` (`0x20` to `0x7E`),
+    ## like C's `isprint`.
+    ##
+    ## @returns true for a space, letter, digit or punctuation
+    is_printable(): bool {
+        return (this as byte).is_printable();
+    }
+
+    ## Whether this is an ASCII control character, `0x00` to `0x1F` or
+    ## `0x7F` (delete), like C's `iscntrl`.
+    ##
+    ## @returns true for a control character
+    is_control(): bool {
+        return (this as byte).is_control();
+    }
+
+    ## Whether this is ASCII, `0x00` to `0x7F`, like C's `isascii`.
+    ##
+    ## @returns true for a value from 0 to 127
+    is_ascii(): bool {
+        return (this as byte).is_ascii();
+    }
+
+    ## Returns the uppercase letter for an ASCII lowercase letter, and this
+    ## value unchanged for anything else, like C's `toupper`.
+    ##
+    ## @returns `A` to `Z` for `a` to `z`, otherwise this value
+    to_upper(): char {
+        return (this as byte).to_upper() as char;
+    }
+
+    ## Returns the lowercase letter for an ASCII uppercase letter, and this
+    ## value unchanged for anything else, like C's `tolower`.
+    ##
+    ## @returns `a` to `z` for `A` to `Z`, otherwise this value
+    to_lower(): char {
+        return (this as byte).to_lower() as char;
+    }
+
+    ## Returns the value of this digit in `base`: `0` to `9` are 0 to 9,
+    ## and the letters, either case, are 10 and up (`a` is 10, `z` is 35).
+    ##
+    ## @param base the base the digit is written in, from 2 to 36; 10 by
+    ##   default
+    ## @returns the digit's value, or none when this is not a digit in `base`
+    ## @panics if `base` is less than 2 or greater than 36
+    digit_value(base: int = 10): int? {
+        return (this as byte).digit_value(base);
     }
 
     ## Returns `this + other` modulo 2^8: on overflow the result wraps
@@ -588,6 +711,170 @@ export extend byte {
             return Optional<byte>.Empty;
         }
         return Optional<byte>.Value(value as byte);
+    }
+
+    ## Whether this is an ASCII decimal digit, `0` to `9`, like C's
+    ## `isdigit`.
+    ##
+    ## Like every classification method on `byte`, it looks at ASCII only,
+    ## as C does in the "C" locale: a value above 127 is never a digit,
+    ## letter, space or punctuation.
+    ##
+    ## @returns true for `0` to `9`
+    ## @example
+    ##     assert(('7' as byte).is_digit(), "a digit");
+    ##     assert(!('x' as byte).is_digit(), "a letter");
+    is_digit(): bool {
+        return this >= '0' && this <= '9';
+    }
+
+    ## Whether this is an ASCII hexadecimal digit, `0` to `9`, `a` to `f` or
+    ## `A` to `F`, like C's `isxdigit`.
+    ##
+    ## @returns true for a hexadecimal digit, either case
+    is_hex_digit(): bool {
+        return is_digit() || (this >= 'a' && this <= 'f') || (this >= 'A' && this <= 'F');
+    }
+
+    ## Whether this is an ASCII letter, `a` to `z` or `A` to `Z`, like C's
+    ## `isalpha`.
+    ##
+    ## @returns true for an ASCII letter
+    is_alphabetic(): bool {
+        return is_lower() || is_upper();
+    }
+
+    ## Whether this is an ASCII letter or digit, like C's `isalnum`.
+    ##
+    ## @returns true for `a` to `z`, `A` to `Z` or `0` to `9`
+    is_alphanumeric(): bool {
+        return is_alphabetic() || is_digit();
+    }
+
+    ## Whether this is an ASCII uppercase letter, `A` to `Z`, like C's
+    ## `isupper`.
+    ##
+    ## @returns true for `A` to `Z`
+    is_upper(): bool {
+        return this >= 'A' && this <= 'Z';
+    }
+
+    ## Whether this is an ASCII lowercase letter, `a` to `z`, like C's
+    ## `islower`.
+    ##
+    ## @returns true for `a` to `z`
+    is_lower(): bool {
+        return this >= 'a' && this <= 'z';
+    }
+
+    ## Whether this is ASCII whitespace: a space, tab (`\t`), line feed
+    ## (`\n`), vertical tab, form feed or carriage return (`\r`), like C's
+    ## `isspace`. `String.trim` strips the same set.
+    ##
+    ## @returns true for one of the six whitespace characters
+    is_whitespace(): bool {
+        return this == ' ' || (this >= '\t' && this <= '\r');
+    }
+
+    ## Whether this is a space or a tab, like C's `isblank`.
+    ##
+    ## @returns true for `' '` and `'\t'`
+    is_blank(): bool {
+        return this == ' ' || this == '\t';
+    }
+
+    ## Whether this is ASCII punctuation: printable, but not a letter, digit
+    ## or space, like C's `ispunct`. That is ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
+    ##
+    ## @returns true for one of the 32 ASCII punctuation characters
+    ## @example
+    ##     assert((';' as byte).is_punctuation(), "punctuation");
+    ##     assert(!(' ' as byte).is_punctuation(), "a space is not");
+    is_punctuation(): bool {
+        return is_graphic() && !is_alphanumeric();
+    }
+
+    ## Whether this is printable and not a space, `!` to `~`, like C's
+    ## `isgraph`.
+    ##
+    ## @returns true for a letter, digit or punctuation
+    is_graphic(): bool {
+        return this > ' ' && this <= '~';
+    }
+
+    ## Whether this is printable, a space through `~` (`0x20` to `0x7E`),
+    ## like C's `isprint`.
+    ##
+    ## @returns true for a space, letter, digit or punctuation
+    is_printable(): bool {
+        return this >= ' ' && this <= '~';
+    }
+
+    ## Whether this is an ASCII control character, `0x00` to `0x1F` or
+    ## `0x7F` (delete), like C's `iscntrl`.
+    ##
+    ## @returns true for a control character
+    is_control(): bool {
+        return this < ' ' || this == 127;
+    }
+
+    ## Whether this is ASCII, `0x00` to `0x7F`, like C's `isascii`.
+    ##
+    ## @returns true for a value below 128
+    is_ascii(): bool {
+        return this < 128;
+    }
+
+    ## Returns the uppercase letter for an ASCII lowercase letter, and this
+    ## value unchanged for anything else, like C's `toupper`.
+    ##
+    ## @returns `A` to `Z` for `a` to `z`, otherwise this value
+    ## @example
+    ##     assert(('q' as byte).to_upper() == 'Q', "raised");
+    ##     assert(('?' as byte).to_upper() == '?', "kept");
+    to_upper(): byte {
+        if (is_lower()) {
+            return (this - 'a' + 'A') as byte;
+        }
+        return this;
+    }
+
+    ## Returns the lowercase letter for an ASCII uppercase letter, and this
+    ## value unchanged for anything else, like C's `tolower`.
+    ##
+    ## @returns `a` to `z` for `A` to `Z`, otherwise this value
+    to_lower(): byte {
+        if (is_upper()) {
+            return (this - 'A' + 'a') as byte;
+        }
+        return this;
+    }
+
+    ## Returns the value of this digit in `base`: `0` to `9` are 0 to 9,
+    ## and the letters, either case, are 10 and up (`a` is 10, `z` is 35).
+    ##
+    ## @param base the base the digit is written in, from 2 to 36; 10 by
+    ##   default
+    ## @returns the digit's value, or none when this is not a digit in `base`
+    ## @panics if `base` is less than 2 or greater than 36
+    ## @example
+    ##     assert(('7' as byte).digit_value().value() == 7, "decimal");
+    ##     assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
+    ##     assert(('9' as byte).digit_value(8).is_empty(), "not octal");
+    digit_value(base: int = 10): int? {
+        assert(base >= 2 && base <= 36, "digit_value: the base must be from 2 to 36");
+        var value = base;
+        if (is_digit()) {
+            value = (this - '0') as int;
+        } else if (is_lower()) {
+            value = (this - 'a' + 10) as int;
+        } else if (is_upper()) {
+            value = (this - 'A' + 10) as int;
+        }
+        if (value >= base) {
+            return Optional<int>.Empty;
+        }
+        return Optional<int>.Value(value);
     }
 
     ## Returns `this + other` modulo 2^8: on overflow the result wraps

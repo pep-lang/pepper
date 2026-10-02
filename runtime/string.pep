@@ -821,7 +821,7 @@ export struct String {
     ##     assert("  indented".trim_end() == "  indented", "leading kept");
     trim_end(): String {
         ulong end = _size;
-        while (end > 0 && _is_space(_data[end - 1] as byte)) {
+        while (end > 0 && (_data[end - 1] as byte).is_whitespace()) {
             end = end - 1;
         }
         return substr_bytes(0, end);
@@ -836,7 +836,7 @@ export struct String {
     ##     assert("  \tcode".trim_start() == "code", "leading whitespace");
     trim_start(): String {
         ulong start = 0;
-        while (start < _size && _is_space(_data[start] as byte)) {
+        while (start < _size && (_data[start] as byte).is_whitespace()) {
             start = start + 1;
         }
         return substr_bytes(start, _size - start);
@@ -892,11 +892,6 @@ export struct String {
         var result = String(copy, _size, _length);
         _pep_free(copy);
         return result;
-    }
-
-    # Whether `value` is ASCII whitespace: space, \t, \n, \v, \f or \r.
-    static _is_space(value: byte): bool {
-        return value == ' ' || (value >= '\t' && value <= '\r');
     }
 
     ## Splits the String into lines and returns them without their line

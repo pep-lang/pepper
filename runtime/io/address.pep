@@ -503,10 +503,6 @@ export _io_v4_text(value: ulong): String {
 
 # ── Parsing helpers: each reads p[start, end) of the n bytes at p ───────────
 
-export _io_is_digit(c: int): bool {
-    return c >= '0' && c <= '9';
-}
-
 # Dotted decimal: exactly four parts of 0 to 255, no leading zeros. Returns
 # the 32-bit value, or none when the text is not an IPv4 address.
 export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
@@ -519,7 +515,7 @@ export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
         ulong digits = 0;
         while (i < end) {
             var c = _io_byte(p, n, i);
-            if (!_io_is_digit(c)) {
+            if (!(c as byte).is_digit()) {
                 break;
             }
             part = part * 10 + (c - '0') as ulong;
@@ -658,7 +654,7 @@ export _io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? 
     var i = start;
     while (i < end) {
         var c = _io_byte(p, n, i);
-        if (!_io_is_digit(c)) {
+        if (!(c as byte).is_digit()) {
             return Optional<ulong>.Empty;
         }
         value = value * 10 + (c - '0') as ulong;

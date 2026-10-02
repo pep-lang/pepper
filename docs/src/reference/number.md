@@ -73,6 +73,207 @@ are accepted.
 
 ### Methods
 
+#### is_digit
+
+```pepper
+is_digit(): bool
+```
+
+Whether this is an ASCII decimal digit, `0` to `9`, like C's
+`isdigit`.
+
+Like every classification method on `char`, it looks at ASCII only,
+as C does in the "C" locale: a negative `char` (a byte of UTF-8 text
+above 127) is never a digit, letter, space or punctuation. Unlike C's
+functions, it is defined for every value, negative ones included.
+
+**Returns**
+- true for `0` to `9`
+
+#### is_hex_digit
+
+```pepper
+is_hex_digit(): bool
+```
+
+Whether this is an ASCII hexadecimal digit, `0` to `9`, `a` to `f` or
+`A` to `F`, like C's `isxdigit`.
+
+**Returns**
+- true for a hexadecimal digit, either case
+
+#### is_alphabetic
+
+```pepper
+is_alphabetic(): bool
+```
+
+Whether this is an ASCII letter, `a` to `z` or `A` to `Z`, like C's
+`isalpha`.
+
+**Returns**
+- true for an ASCII letter
+
+#### is_alphanumeric
+
+```pepper
+is_alphanumeric(): bool
+```
+
+Whether this is an ASCII letter or digit, like C's `isalnum`.
+
+**Returns**
+- true for `a` to `z`, `A` to `Z` or `0` to `9`
+
+#### is_upper
+
+```pepper
+is_upper(): bool
+```
+
+Whether this is an ASCII uppercase letter, `A` to `Z`, like C's
+`isupper`.
+
+**Returns**
+- true for `A` to `Z`
+
+#### is_lower
+
+```pepper
+is_lower(): bool
+```
+
+Whether this is an ASCII lowercase letter, `a` to `z`, like C's
+`islower`.
+
+**Returns**
+- true for `a` to `z`
+
+#### is_whitespace
+
+```pepper
+is_whitespace(): bool
+```
+
+Whether this is ASCII whitespace: a space, tab (`\t`), line feed
+(`\n`), vertical tab, form feed or carriage return (`\r`), like C's
+`isspace`. `String.trim` strips the same set.
+
+**Returns**
+- true for one of the six whitespace characters
+
+#### is_blank
+
+```pepper
+is_blank(): bool
+```
+
+Whether this is a space or a tab, like C's `isblank`.
+
+**Returns**
+- true for `' '` and `'\t'`
+
+#### is_punctuation
+
+```pepper
+is_punctuation(): bool
+```
+
+Whether this is ASCII punctuation: printable, but not a letter, digit
+or space, like C's `ispunct`. That is ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
+
+**Returns**
+- true for one of the 32 ASCII punctuation characters
+
+#### is_graphic
+
+```pepper
+is_graphic(): bool
+```
+
+Whether this is printable and not a space, `!` to `~`, like C's
+`isgraph`.
+
+**Returns**
+- true for a letter, digit or punctuation
+
+#### is_printable
+
+```pepper
+is_printable(): bool
+```
+
+Whether this is printable, a space through `~` (`0x20` to `0x7E`),
+like C's `isprint`.
+
+**Returns**
+- true for a space, letter, digit or punctuation
+
+#### is_control
+
+```pepper
+is_control(): bool
+```
+
+Whether this is an ASCII control character, `0x00` to `0x1F` or
+`0x7F` (delete), like C's `iscntrl`.
+
+**Returns**
+- true for a control character
+
+#### is_ascii
+
+```pepper
+is_ascii(): bool
+```
+
+Whether this is ASCII, `0x00` to `0x7F`, like C's `isascii`.
+
+**Returns**
+- true for a value from 0 to 127
+
+#### to_upper
+
+```pepper
+to_upper(): char
+```
+
+Returns the uppercase letter for an ASCII lowercase letter, and this
+value unchanged for anything else, like C's `toupper`.
+
+**Returns**
+- `A` to `Z` for `a` to `z`, otherwise this value
+
+#### to_lower
+
+```pepper
+to_lower(): char
+```
+
+Returns the lowercase letter for an ASCII uppercase letter, and this
+value unchanged for anything else, like C's `tolower`.
+
+**Returns**
+- `a` to `z` for `A` to `Z`, otherwise this value
+
+#### digit_value
+
+```pepper
+digit_value(base: int = 10): int?
+```
+
+Returns the value of this digit in `base`: `0` to `9` are 0 to 9,
+and the letters, either case, are 10 and up (`a` is 10, `z` is 35).
+
+**Parameters**
+- `base` — the base the digit is written in, from 2 to 36; 10 by default
+
+**Returns**
+- the digit's value, or none when this is not a digit in `base`
+
+**Panics**
+- if `base` is less than 2 or greater than 36
+
 #### wrapping_add
 
 ```pepper
@@ -490,6 +691,231 @@ accepted.
 ```
 
 ### Methods
+
+#### is_digit
+
+```pepper
+is_digit(): bool
+```
+
+Whether this is an ASCII decimal digit, `0` to `9`, like C's
+`isdigit`.
+
+Like every classification method on `byte`, it looks at ASCII only,
+as C does in the "C" locale: a value above 127 is never a digit,
+letter, space or punctuation.
+
+**Returns**
+- true for `0` to `9`
+
+**Example**
+```pepper
+    assert(('7' as byte).is_digit(), "a digit");
+    assert(!('x' as byte).is_digit(), "a letter");
+```
+
+#### is_hex_digit
+
+```pepper
+is_hex_digit(): bool
+```
+
+Whether this is an ASCII hexadecimal digit, `0` to `9`, `a` to `f` or
+`A` to `F`, like C's `isxdigit`.
+
+**Returns**
+- true for a hexadecimal digit, either case
+
+#### is_alphabetic
+
+```pepper
+is_alphabetic(): bool
+```
+
+Whether this is an ASCII letter, `a` to `z` or `A` to `Z`, like C's
+`isalpha`.
+
+**Returns**
+- true for an ASCII letter
+
+#### is_alphanumeric
+
+```pepper
+is_alphanumeric(): bool
+```
+
+Whether this is an ASCII letter or digit, like C's `isalnum`.
+
+**Returns**
+- true for `a` to `z`, `A` to `Z` or `0` to `9`
+
+#### is_upper
+
+```pepper
+is_upper(): bool
+```
+
+Whether this is an ASCII uppercase letter, `A` to `Z`, like C's
+`isupper`.
+
+**Returns**
+- true for `A` to `Z`
+
+#### is_lower
+
+```pepper
+is_lower(): bool
+```
+
+Whether this is an ASCII lowercase letter, `a` to `z`, like C's
+`islower`.
+
+**Returns**
+- true for `a` to `z`
+
+#### is_whitespace
+
+```pepper
+is_whitespace(): bool
+```
+
+Whether this is ASCII whitespace: a space, tab (`\t`), line feed
+(`\n`), vertical tab, form feed or carriage return (`\r`), like C's
+`isspace`. `String.trim` strips the same set.
+
+**Returns**
+- true for one of the six whitespace characters
+
+#### is_blank
+
+```pepper
+is_blank(): bool
+```
+
+Whether this is a space or a tab, like C's `isblank`.
+
+**Returns**
+- true for `' '` and `'\t'`
+
+#### is_punctuation
+
+```pepper
+is_punctuation(): bool
+```
+
+Whether this is ASCII punctuation: printable, but not a letter, digit
+or space, like C's `ispunct`. That is ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
+
+**Returns**
+- true for one of the 32 ASCII punctuation characters
+
+**Example**
+```pepper
+    assert((';' as byte).is_punctuation(), "punctuation");
+    assert(!(' ' as byte).is_punctuation(), "a space is not");
+```
+
+#### is_graphic
+
+```pepper
+is_graphic(): bool
+```
+
+Whether this is printable and not a space, `!` to `~`, like C's
+`isgraph`.
+
+**Returns**
+- true for a letter, digit or punctuation
+
+#### is_printable
+
+```pepper
+is_printable(): bool
+```
+
+Whether this is printable, a space through `~` (`0x20` to `0x7E`),
+like C's `isprint`.
+
+**Returns**
+- true for a space, letter, digit or punctuation
+
+#### is_control
+
+```pepper
+is_control(): bool
+```
+
+Whether this is an ASCII control character, `0x00` to `0x1F` or
+`0x7F` (delete), like C's `iscntrl`.
+
+**Returns**
+- true for a control character
+
+#### is_ascii
+
+```pepper
+is_ascii(): bool
+```
+
+Whether this is ASCII, `0x00` to `0x7F`, like C's `isascii`.
+
+**Returns**
+- true for a value below 128
+
+#### to_upper
+
+```pepper
+to_upper(): byte
+```
+
+Returns the uppercase letter for an ASCII lowercase letter, and this
+value unchanged for anything else, like C's `toupper`.
+
+**Returns**
+- `A` to `Z` for `a` to `z`, otherwise this value
+
+**Example**
+```pepper
+    assert(('q' as byte).to_upper() == 'Q', "raised");
+    assert(('?' as byte).to_upper() == '?', "kept");
+```
+
+#### to_lower
+
+```pepper
+to_lower(): byte
+```
+
+Returns the lowercase letter for an ASCII uppercase letter, and this
+value unchanged for anything else, like C's `tolower`.
+
+**Returns**
+- `a` to `z` for `A` to `Z`, otherwise this value
+
+#### digit_value
+
+```pepper
+digit_value(base: int = 10): int?
+```
+
+Returns the value of this digit in `base`: `0` to `9` are 0 to 9,
+and the letters, either case, are 10 and up (`a` is 10, `z` is 35).
+
+**Parameters**
+- `base` — the base the digit is written in, from 2 to 36; 10 by default
+
+**Returns**
+- the digit's value, or none when this is not a digit in `base`
+
+**Panics**
+- if `base` is less than 2 or greater than 36
+
+**Example**
+```pepper
+    assert(('7' as byte).digit_value().value() == 7, "decimal");
+    assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
+    assert(('9' as byte).digit_value(8).is_empty(), "not octal");
+```
 
 #### wrapping_add
 
