@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2785b6a3.js";
+            window.path_to_searchindex_js = "searchindex-65f7fe71.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-65b09c31.js"></script>
+        <script src="toc-219e7a7f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -12143,6 +12143,186 @@ supported yet.</li>
 <li><code>total_memory()</code> does not take a container’s memory limit into account.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="command-line-options"><a class="header" href="#command-line-options">Command-line options</a></h1>
+<p>The <code>cli</code> module parses a program’s command line. Declare each option and
+positional argument on a <code>cli.Parser</code>, call <code>parse</code>, then read the values
+through the handles the declarations returned. The help, <code>--version</code> and
+the error messages all come from the declarations. Bring it in with
+<code>import cli</code>; the full API is in the <a href="#the-cli-module">reference</a>.</p>
+<pre><code class="language-pepper"># Command-line parsing: declare options and arguments, then parse.
+import cli;
+
+main(args: String[]): int {
+    var parser = cli.Parser("greet", "Greets someone", version = "1.0");
+    var greeting = parser.option("greeting", "g", "what to say", default_value = "hello");
+    var loud = parser.flag("loud", "l", "shout it");
+    var times = parser.option("times", "n", "how many times to say it", value_name = "COUNT");
+    var names = parser.positionals("names", "who to greet");
+
+    # `parse` prints --help and --version and exits; on a mistake it writes
+    # the error and the usage to standard error and returns false.
+    if (!parser.parse(args)) {
+        return 2;
+    }
+
+    var people = names.is_set ? names.values() : ["world"];
+    var count = int.parse(times.value_or("1"));
+    if (!count) {
+        print("greet: error: '--times' needs a number");
+        return 2;
+    }
+    for (var person in people) {
+        var line = $"{greeting.value()}, {person}";
+        for (var _ in 0..count.value()) {
+            print(loud.is_set ? line.upper() : line);
+        }
+    }
+    return 0;
+}
+</code></pre>
+<p><code>greet --help</code> prints:</p>
+<pre><code class="language-text">Greets someone
+
+usage: greet [OPTIONS] [names]...
+
+Arguments:
+  &lt;names&gt;...  who to greet
+
+Options:
+  -g, --greeting &lt;GREETING&gt;  what to say [default: hello]
+  -l, --loud                 shout it
+  -n, --times &lt;COUNT&gt;        how many times to say it
+  -h, --help                 show this help
+  -V, --version              show the version
+</code></pre>
+<p>The raw arguments stay where they were: <code>main(args: String[])</code> receives
+them, and <code>process.arguments()</code> returns them. <code>parse</code> takes them as <code>main</code>
+receives them, program name first.</p>
+<h2 id="declaring"><a class="header" href="#declaring">Declaring</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Declaration</th><th>Handle</th><th>Reads</th></tr>
+</thead>
+<tbody>
+<tr><td><code>flag(name, short_name, help)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
+<tr><td><code>option(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>multiple(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>positional(name, help, required, default_value)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>positionals(name, help, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>An option’s <code>name</code> is its long name without <code>--</code>; <code>short_name</code> is one
+character without <code>-</code>, or empty for none. Pass the rest by
+<a href="#named-arguments">name</a>: <code>option("output", "o", "the executable to write", default_value = "a.out")</code>.</li>
+<li><code>value()</code> returns the value given, else the default; it panics when the
+argument was left out and has no default, so use <code>value_or</code> or check
+<code>is_set</code> for an optional one. <code>is_set</code> (a
+<a href="#properties">property</a>, like <code>occurrences</code> and <code>is_selected</code>) is false
+for a value that came from the default.</li>
+<li>Positional arguments fill in declaration order. A required one cannot
+follow an optional one, and <code>positionals</code> takes every value that is left,
+so it comes last.</li>
+<li><code>-h</code>/<code>--help</code> is always there, and <code>-V</code>/<code>--version</code> when the parser has a
+<code>version</code>. Declaring <code>-h</code> or <code>-V</code> yourself takes the short name; the long
+forms keep working.</li>
+<li>A mistake in the declarations, such as a name declared twice or a short
+name longer than one character, panics: it is a bug in the program, not
+in its input.</li>
+</ul>
+<h2 id="on-the-command-line"><a class="header" href="#on-the-command-line">On the command line</a></h2>
+<ul>
+<li>A value follows its option as <code>--output a.out</code>, <code>--output=a.out</code>,
+<code>-o a.out</code>, <code>-oa.out</code> or <code>-o=a.out</code>. It is taken as it is, even when it
+starts with <code>-</code>.</li>
+<li>Short flags combine: <code>-vq</code> is <code>-v -q</code>, and <code>-vo a.out</code> gives <code>-v</code> and
+then <code>-o a.out</code>. <code>-vvv</code> counts three <code>occurrences</code>.</li>
+<li>Options and positional arguments mix in any order. <code>--</code> ends the
+options, so <code>rm -- -file</code> removes a file named <code>-file</code>, and <code>-</code> alone is
+a positional argument (by custom, standard input).</li>
+<li>An option that takes one value keeps the last one given.</li>
+<li>Values are Strings; parse numbers yourself (<code>int.parse</code>) and report a bad
+one, as the example does.</li>
+</ul>
+<h2 id="errors-2"><a class="header" href="#errors-2">Errors</a></h2>
+<p><code>parse</code> writes a clang-style error, the usage and a hint to standard error
+and returns false, so the program can exit with 2:</p>
+<pre><code class="language-text">greet: error: unknown option '--lound'; did you mean '--loud'?
+usage: greet [OPTIONS] [names]...
+Run 'greet --help' for more information.
+</code></pre>
+<p>The messages:</p>
+<ul>
+<li><code>unknown option '--x'</code> (with <code>did you mean '--y'?</code> for a near miss) and
+<code>unknown option '-x'</code></li>
+<li><code>missing value for '-o'</code></li>
+<li><code>option '--loud' takes no value</code> (for <code>--loud=yes</code>)</li>
+<li><code>missing required option '--target'</code>, <code>missing required argument '&lt;source&gt;'</code></li>
+<li><code>unexpected argument 'x'</code> when there is no positional argument left for it</li>
+<li><code>unknown command 'x'</code> and <code>missing command: expected 'add' or 'update'</code></li>
+</ul>
+<p><code>try_parse</code> does the same parse and writes nothing. It returns a
+<code>Result&lt;String?&gt;</code>: an error holding the message, some text when <code>--help</code> or
+<code>--version</code> asked for it (print it and exit with 0), or none when the
+arguments were parsed. Tests use it, and so can a program that reports
+errors its own way.</p>
+<h2 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h2>
+<p><code>command(name, about)</code> declares a subcommand, as in <code>git add</code> or
+<code>pep-package update</code>, and returns its own <code>Parser</code> to declare its options
+and arguments on. The first argument that is not an option names the
+command; after <code>parse</code>, <code>is_selected</code> tells which command was given.</p>
+<pre><code class="language-pepper"># Subcommands, and handling the outcome yourself with try_parse.
+import cli;
+
+main(): int {
+    var parser = cli.Parser("pkg", "Manages packages");
+    var verbose = parser.flag("verbose", "v", "say more");
+    var add = parser.command("add", "Adds a dependency");
+    var name = add.positional("name", "the package to add");
+    var dev = add.flag("dev", "d", "only for development");
+    var update = parser.command("update", "Updates dependencies");
+    var packages = update.positionals("packages", "what to update; everything when none");
+
+    # The arguments as `main(args: String[])` would receive them.
+    var parsed = parser.try_parse(["pkg", "-v", "add", "--dev", "yaml"]);
+    assert(parsed.is_ok() &amp;&amp; parsed.value().is_none(), "parsed, no help asked for");
+    assert(add.is_selected &amp;&amp; !update.is_selected, "the add command");
+    assert(verbose.is_set &amp;&amp; dev.is_set &amp;&amp; name.value() == "yaml", "its values");
+
+    # A mistake is an error with a clang-style message.
+    parsed = parser.try_parse(["pkg", "updat"]);
+    assert(parsed.error().message == "unknown command 'updat'; did you mean 'update'?", "a suggestion");
+
+    # --help gives the text to print, for the command it follows.
+    parsed = parser.try_parse(["pkg", "update", "--help"]);
+    print(parsed.value().value());
+    return 0;
+}
+</code></pre>
+<ul>
+<li>A parser with commands needs one, and cannot have positional arguments
+of its own.</li>
+<li>Options before the command’s name belong to the parent, and everything
+after it to the command, so <code>pkg -v add x</code> works and <code>pkg add -v x</code> does
+not.</li>
+<li><code>--help</code> after a command shows that command’s help, and errors show its
+usage.</li>
+<li>Commands nest: a command’s parser can declare commands too.</li>
+</ul>
+<h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
+<ul>
+<li><strong>Declaring options as a struct</strong>, with an attribute on each field
+(<code>[Option("o")] var output: String;</code>), needs compile-time reflection
+(#232). The builder above is the only style until then; the struct style
+is tracked in <a href="https://github.com/justinboswell/pepper/issues/362">#362</a>.</li>
+<li>Typed values (integers, <code>io.Path</code>): values are Strings.</li>
+<li>Options that apply after a subcommand’s name (clap’s global options).</li>
+<li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
+<li>Generating shell completions.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -13573,7 +13753,7 @@ pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
 <p>A directory stands for every <code>.pep</code> file under it, in name order, skipping
 directories whose names start with <code>.</code> (such as <code>.git</code> and the <code>.pep</code> build
-cache). <code>-w</code> rewrites only the files whose formatting changes. <code>--check</code>
+cache). <code>-w</code> (or <code>--write</code>) rewrites only the files whose formatting changes. <code>--check</code>
 changes nothing, prints the path of each file that <code>-w</code> would rewrite, and
 exits with status 1 if there is one, which suits a CI step. The two can be
 combined.</p>
@@ -13584,7 +13764,8 @@ files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
 </code></pre>
 <p>A file that cannot be read or written also exits with status 1, and an
 unknown option exits with status 2 after printing the usage (<code>pep-fmt -h</code>
-prints it too).</p>
+prints the full help). pep-fmt parses its options with the
+<a href="#command-line-options"><code>cli</code> module</a>.</p>
 <h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
 declaration or statement that owns it, and <code>else</code> goes between the braces:</p>
@@ -24116,6 +24297,364 @@ database’s entry when <code>HOME</code> is unset or empty; on Windows
 <ul>
 <li>the temporary directory</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-cli-module"><a class="header" href="#the-cli-module">The cli module</a></h1>
+<p>Command-line parsing: declare a program’s options and arguments, then
+parse them, with the help, version and error messages generated from
+the declarations.</p>
+<p>Bring it in with <code>import cli</code>. The raw arguments stay where they are,
+in <code>main(args: String[])</code> and <code>process.arguments()</code>.</p>
+<ul>
+<li><a href="#parser">Parser</a>: <code>Parser</code>, and the handles its declarations
+return: <code>Flag</code>, <code>Argument</code>, <code>ArgumentList</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import cli;
+
+    main(args: String[]): int {
+        var parser = cli.Parser("greet", "Greets someone");
+        var loud = parser.flag("loud", "l", "shout the greeting");
+        var name = parser.positional("name", "who to greet", required = false, default_value = "world");
+        if (!parser.parse(args)) {
+            return 2;
+        }
+        var greeting = $"hello, {name.value()}";
+        print(loud.is_set ? greeting.upper() : greeting);
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/cli/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/parser.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="parser"><a class="header" href="#parser">Parser</a></h1>
+<p>Parser and the handles its declarations return: Flag, Argument and
+ArgumentList.</p>
+<p>Source: <code>runtime/cli/parser.pep</code></p>
+<h2 id="parser-1"><a class="header" href="#parser-1">Parser</a></h2>
+<pre><code class="language-pepper">struct Parser
+</code></pre>
+<p>Declares a program’s command-line interface and parses its arguments.</p>
+<p>Declare each option and positional argument with <code>flag</code>, <code>option</code>,
+<code>multiple</code>, <code>positional</code> and <code>positionals</code>; each returns a handle that
+reads its value once <code>parse</code> has run. <code>parse</code> also writes the help
+(<code>--help</code>), the version (<code>--version</code>) and clang-style errors, all from
+the declarations.</p>
+<p>Options have a long name (<code>--output</code>) and an optional one-letter short
+name (<code>-o</code>). A value follows as <code>--output a.out</code>, <code>--output=a.out</code>,
+<code>-o a.out</code> or <code>-oa.out</code>; short flags combine (<code>-vq</code> is <code>-v -q</code>), and
+<code>--</code> ends the options, so every argument after it is positional. A value
+is taken as it is, even when it starts with <code>-</code>. When an option that
+takes one value is given twice, the last value wins.</p>
+<p>Subcommands (<code>git add</code>, <code>pep-package update</code>) are parsers of their own,
+made with <code>command</code>. Options before the command’s name belong to this
+parser, and everything after it to the command’s.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import cli;
+
+    main(args: String[]): int {
+        var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
+        var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
+        var imports = parser.multiple("import-path", "I", "a directory to search for modules");
+        var verbose = parser.flag("verbose", "v", "say what is happening");
+        var source = parser.positional("source", "the program's entry file");
+        if (!parser.parse(args)) {
+            return 2;
+        }
+        print($"{source.value()} -&gt; {output.value()}");
+        return 0;
+    }
+</code></pre>
+<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
+<pre><code class="language-pepper">var is_selected: bool { get; }
+</code></pre>
+<p>Whether the last <code>parse</code> reached this parser: whether this command
+was given. The top-level parser is selected whenever its arguments
+were parsed.</p>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
+<pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
+</code></pre>
+<p>Makes a parser for the program <code>name</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the program’s name, as the help and errors show it</li>
+<li><code>about</code> — a sentence on what the program does, the help’s first line</li>
+<li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
+</ul>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h4 id="flag"><a class="header" href="#flag">flag</a></h4>
+<pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
+</code></pre>
+<p>Declares an option that takes no value, such as <code>--verbose</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option does, for the help</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that tells whether the flag was given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="option"><a class="header" href="#option">option</a></h4>
+<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument
+</code></pre>
+<p>Declares an option that takes one value, such as <code>--output a.out</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option sets, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>OUTPUT</code>)</li>
+<li><code>default_value</code> — the value when the option is not given; empty for none</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="multiple"><a class="header" href="#multiple">multiple</a></h4>
+<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList
+</code></pre>
+<p>Declares an option that may be given any number of times, each with a
+value, such as <code>-I src -I lib</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option adds, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="positional"><a class="header" href="#positional">positional</a></h4>
+<pre><code class="language-pepper">positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument
+</code></pre>
+<p>Declares the next positional argument. Positional arguments are
+filled in the order they are declared.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what it is, for the help</li>
+<li><code>required</code> — whether leaving it out is an error</li>
+<li><code>default_value</code> — the value when it is left out; empty for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if a required argument follows an optional one, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="positionals"><a class="header" href="#positionals">positionals</a></h4>
+<pre><code class="language-pepper">positionals(name: String, help: String = "", required: bool = false): ArgumentList
+</code></pre>
+<p>Declares a positional argument that takes every remaining value, such
+as a list of files. It must be the last positional argument.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what the values are, for the help</li>
+<li><code>required</code> — whether at least one value must be given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="command-3"><a class="header" href="#command-3">command</a></h4>
+<pre><code class="language-pepper">command(name: String, about: String = ""): Parser
+</code></pre>
+<p>Declares a subcommand, such as <code>add</code> in <code>pep-package add NAME</code>, and
+returns its parser, on which to declare its own options and
+arguments.</p>
+<p>A parser with commands requires one: the first argument that is not
+an option names it, and the arguments after it go to its parser.
+After <code>parse</code>, <code>is_selected</code> on the command’s parser tells whether
+it was the one given.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the command’s name</li>
+<li><code>about</code> — what the command does, for the help</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the command’s parser</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty, starts with <code>-</code> or is already declared, or if this parser has positional arguments</li>
+</ul>
+<h4 id="usage"><a class="header" href="#usage">usage</a></h4>
+<pre><code class="language-pepper">usage(): String
+</code></pre>
+<p>Returns the one-line usage, such as
+<code>usage: pepper [OPTIONS] &lt;source&gt;</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the usage line, without a line break</li>
+</ul>
+<h4 id="help"><a class="header" href="#help">help</a></h4>
+<pre><code class="language-pepper">help(): String
+</code></pre>
+<p>Returns the help that <code>--help</code> prints: what the program does, the
+usage, and a line for each argument, option and command.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the help text, ending in a line break</li>
+</ul>
+<h4 id="try_parse"><a class="header" href="#try_parse">try_parse</a></h4>
+<pre><code class="language-pepper">try_parse(args: String[]): Result&lt;String?&gt;
+</code></pre>
+<p>Parses <code>args</code> and fills in every handle, or reports the problem.</p>
+<p>Writes nothing. Use it to handle errors, help and the version
+yourself; <code>parse</code> does it the usual way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>args</code> — the arguments as <code>main</code> receives them: the program’s name, then its arguments</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>some text when <code>--help</code> or <code>--version</code> was given (the program should print it and exit with 0), none when the arguments were parsed, or an error when they are wrong, with a clang-style message such as <code>missing value for '-o'</code></li>
+</ul>
+<h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
+<pre><code class="language-pepper">parse(args: String[]): bool
+</code></pre>
+<p>Parses <code>args</code> and fills in every handle.</p>
+<p>For <code>--help</code> or <code>--version</code> it prints the text to standard output and
+ends the program with status 0. When the arguments are wrong it
+writes the error, the usage and a hint to standard error, such as</p>
+<pre><code>pepper: error: missing value for '-o'
+usage: pepper [OPTIONS] &lt;source&gt;
+Run 'pepper --help' for more information.
+</code></pre>
+<p>and returns false; exit with status 2, as the example does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>args</code> — the arguments as <code>main</code> receives them: the program’s name, then its arguments</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the arguments were parsed, false after an error</li>
+</ul>
+<h2 id="flag-1"><a class="header" href="#flag-1">Flag</a></h2>
+<pre><code class="language-pepper">struct Flag
+</code></pre>
+<p>An option that takes no value, from <code>Parser.flag</code>.</p>
+<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h4 id="is_set-1"><a class="header" href="#is_set-1">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether the flag was given at least once.</p>
+<h4 id="occurrences"><a class="header" href="#occurrences">occurrences</a></h4>
+<pre><code class="language-pepper">var occurrences: int { get; }
+</code></pre>
+<p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
+<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.flag</code> makes flags; this constructor is
+for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h2 id="argument-1"><a class="header" href="#argument-1">Argument</a></h2>
+<pre><code class="language-pepper">struct Argument
+</code></pre>
+<p>An option or positional argument that takes one value, from
+<code>Parser.option</code> or <code>Parser.positional</code>.</p>
+<h3 id="properties-2-1"><a class="header" href="#properties-2-1">Properties</a></h3>
+<h4 id="is_set-1-1"><a class="header" href="#is_set-1-1">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether a value was given on the command line; false when the
+argument was left out, even when it has a default.</p>
+<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h4 id="argument-1-1"><a class="header" href="#argument-1-1">Argument()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.option</code> and <code>Parser.positional</code> make
+arguments; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
+<pre><code class="language-pepper">value(): String
+</code></pre>
+<p>Returns the value given, or the default when it was left out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the argument was left out and has no default; check <code>is_set</code> or use <code>value_or</code> for an optional argument</li>
+</ul>
+<h4 id="value_or-1"><a class="header" href="#value_or-1">value_or</a></h4>
+<pre><code class="language-pepper">value_or(fallback: String): String
+</code></pre>
+<p>Returns the value given, or <code>fallback</code> when it was left out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>fallback</code> — the value to use when the argument was left out</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value given, else the declared default, else <code>fallback</code></li>
+</ul>
+<h2 id="argumentlist"><a class="header" href="#argumentlist">ArgumentList</a></h2>
+<pre><code class="language-pepper">struct ArgumentList
+</code></pre>
+<p>An option that may be given many times, or a positional argument that
+takes every remaining value, from <code>Parser.multiple</code> or
+<code>Parser.positionals</code>.</p>
+<h3 id="properties-3-1"><a class="header" href="#properties-3-1">Properties</a></h3>
+<h4 id="is_set-2"><a class="header" href="#is_set-2">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether at least one value was given.</p>
+<h3 id="constructor-3-4"><a class="header" href="#constructor-3-4">Constructor</a></h3>
+<h4 id="argumentlist-1"><a class="header" href="#argumentlist-1">ArgumentList()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.multiple</code> and <code>Parser.positionals</code> make
+argument lists; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h4 id="values"><a class="header" href="#values">values</a></h4>
+<pre><code class="language-pepper">values(): Array&lt;String&gt;
+</code></pre>
+<p>Returns the values given, in command-line order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the values, empty when none was given</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -24168,13 +24707,13 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
+<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
 <h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -24191,7 +24730,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -24313,7 +24852,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="constructor-1-13"><a class="header" href="#constructor-1-13">Constructor</a></h3>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -24323,7 +24862,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24400,7 +24939,7 @@ not end the wait for the lock.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -24419,7 +24958,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -24532,7 +25071,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
@@ -24547,7 +25086,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -24610,7 +25149,7 @@ cancel does not end it, since the caller’s loop would only wait again;
         }
     }
 </code></pre>
-<h3 id="constructor-2-9"><a class="header" href="#constructor-2-9">Constructor</a></h3>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
@@ -24624,7 +25163,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
 <h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -24744,7 +25283,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -24753,7 +25292,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -24815,7 +25354,7 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -24829,7 +25368,7 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
 <h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -24907,12 +25446,12 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
         }
     }
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -25020,7 +25559,7 @@ used it have finished.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -25029,7 +25568,7 @@ used it have finished.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -25076,7 +25615,7 @@ no value (for a struct <code>T</code>).</p>
         }
     }
 </code></pre>
-<h4 id="is_set-1"><a class="header" href="#is_set-1">is_set</a></h4>
+<h4 id="is_set-3"><a class="header" href="#is_set-3">is_set</a></h4>
 <pre><code class="language-pepper">is_set(): bool
 </code></pre>
 <p>Reports whether the calling task has stored a value since it started
@@ -25101,7 +25640,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -25111,7 +25650,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -25241,7 +25780,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -25265,12 +25804,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -25354,7 +25893,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -25415,17 +25954,17 @@ have no defined order, as HTTP allows.</p>
     headers["accept"] = "application/json";   # replaces it
     assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
+<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
 <h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -25434,7 +25973,7 @@ have no defined order, as HTTP allows.</p>
 <ul>
 <li>a new array with one entry per name</li>
 </ul>
-<h4 id="values"><a class="header" href="#values">values</a></h4>
+<h4 id="values-1"><a class="header" href="#values-1">values</a></h4>
 <pre><code class="language-pepper">values(name: String): String[]
 </code></pre>
 <p>Returns every value of the field named <code>name</code>, in the order added.</p>
@@ -25551,7 +26090,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -25561,7 +26100,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -25661,7 +26200,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -25670,7 +26209,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -25796,7 +26335,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -25834,7 +26373,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -25898,7 +26437,7 @@ Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any str
         return count;
     }
 </code></pre>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -25985,7 +26524,7 @@ of a value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -26069,7 +26608,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -26078,7 +26617,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>source</code> — the open stream to read</li>
 </ul>
-<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
 <h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -26109,7 +26648,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <ul>
 <li><code>Reader.chunks</code></li>
 </ul>
-<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
+<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
 <h4 id="chunks-2"><a class="header" href="#chunks-2">Chunks()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader, size: ulong)
 </code></pre>
@@ -26181,7 +26720,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26200,7 +26739,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -26268,7 +26807,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -26291,7 +26830,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
+<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -26330,7 +26869,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
     var reply = Array&lt;u8&gt;();
     stream.read_exact(reply, 4).value();
 </code></pre>
-<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26364,7 +26903,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
+<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
 <h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -26537,7 +27076,7 @@ type, so <code>i32.parse</code> is <code>int.parse</code>.</p>
 <pre><code class="language-pepper">extend char
 </code></pre>
 <h3 id="static-methods-15"><a class="header" href="#static-methods-15">Static methods</a></h3>
-<h4 id="parse-2"><a class="header" href="#parse-2">parse</a></h4>
+<h4 id="parse-3"><a class="header" href="#parse-3">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): char?
 </code></pre>
 <p>Parses <code>text</code> as a <code>char</code> (<code>i8</code>) written in <code>base</code>: an optional <code>+</code>
@@ -26618,7 +27157,7 @@ separators are accepted.</p>
 <pre><code class="language-pepper">extend ushort
 </code></pre>
 <h3 id="static-methods-3-2"><a class="header" href="#static-methods-3-2">Static methods</a></h3>
-<h4 id="parse-3"><a class="header" href="#parse-3">parse</a></h4>
+<h4 id="parse-3-1"><a class="header" href="#parse-3-1">parse</a></h4>
 <pre><code class="language-pepper">static parse(text: String, base: int = 10): ushort?
 </code></pre>
 <p>Parses <code>text</code> as a <code>ushort</code> (<code>u16</code>) written in <code>base</code>: an optional
@@ -26847,13 +27386,13 @@ advances that variable.</p>
 <pre><code class="language-pepper">bool inclusive
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
-<h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
+<h3 id="properties-10"><a class="header" href="#properties-10">Properties</a></h3>
 <h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -26865,7 +27404,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -27013,7 +27552,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
     assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -27193,7 +27732,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -27205,7 +27744,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -27302,7 +27841,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
 <h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -27313,7 +27852,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
 <h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -27637,7 +28176,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -27655,7 +28194,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -27725,7 +28264,7 @@ one.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -27749,7 +28288,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -27789,7 +28328,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
+<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -27800,7 +28339,7 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -27970,7 +28509,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -28017,7 +28556,7 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
     assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="is_absolute-1"><a class="header" href="#is_absolute-1">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2785b6a3.js";
+            window.path_to_searchindex_js = "../searchindex-65f7fe71.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-65b09c31.js"></script>
+        <script src="../toc-219e7a7f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,7 +200,7 @@ pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
 <p>A directory stands for every <code>.pep</code> file under it, in name order, skipping
 directories whose names start with <code>.</code> (such as <code>.git</code> and the <code>.pep</code> build
-cache). <code>-w</code> rewrites only the files whose formatting changes. <code>--check</code>
+cache). <code>-w</code> (or <code>--write</code>) rewrites only the files whose formatting changes. <code>--check</code>
 changes nothing, prints the path of each file that <code>-w</code> would rewrite, and
 exits with status 1 if there is one, which suits a CI step. The two can be
 combined.</p>
@@ -211,7 +211,8 @@ files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
 </code></pre>
 <p>A file that cannot be read or written also exits with status 1, and an
 unknown option exits with status 2 after printing the usage (<code>pep-fmt -h</code>
-prints it too).</p>
+prints the full help). pep-fmt parses its options with the
+<a href="../language/cli.html"><code>cli</code> module</a>.</p>
 <h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
 declaration or statement that owns it, and <code>else</code> goes between the braces:</p>
