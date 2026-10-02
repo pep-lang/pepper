@@ -1020,7 +1020,7 @@ fn lower_statement(
                 lower_expressions(e, enums, subjects, coverage);
             }
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::Static(_) => {}
     }
 }
 

@@ -881,7 +881,7 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
                 }
             }
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::Static(_) => {}
     }
 }
 

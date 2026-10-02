@@ -364,6 +364,10 @@ fn substitute_statement(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
                 substitute_expression(expr, type_map);
             }
         }
+        Statement::Static(block) => {
+            block.substitute(type_map);
+            block.for_each_emitted_mut(&mut |s| substitute_statement(s, type_map), &mut |e| substitute_expression(e, type_map));
+        }
         Statement::LoopBreak(_) => {}
     }
 }

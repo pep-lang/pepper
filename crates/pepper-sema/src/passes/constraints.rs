@@ -1024,7 +1024,7 @@ fn visit_block(block: &Block, f: &mut dyn FnMut(&Expression)) {
                     visit_expression(default, f);
                 }
             }
-            Statement::Declaration(_) | Statement::LoopBreak(_) => {}
+            Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) => {}
             Statement::Branch(branch) => {
                 visit_expression(&branch.condition, f);
                 visit_block(&branch.if_block, f);

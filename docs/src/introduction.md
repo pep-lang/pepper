@@ -74,6 +74,10 @@ Some that you will meet quickly:
   (see [implicit conversions](language/structs.md#implicit-conversions)).
 - Free functions, methods, operators, constructors, extension methods and
   trait members can be [overloaded](language/overloading.md).
+- A `static` block runs in the compiler: it can list a struct's fields and
+  the attributes on them (`[Attribute]` structs of your own) and generate
+  code for each, so one function can encode any struct (see
+  [reflection and attributes](language/reflection.md)).
 - A call can name its arguments, `window("Editor", resizable = false)`, to
   skip defaulted parameters or pass them in any order (see
   [named arguments](language/functions.md#named-arguments)).

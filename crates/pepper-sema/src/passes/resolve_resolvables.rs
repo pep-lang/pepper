@@ -148,7 +148,7 @@ fn resolve_statement(stmt: &mut Statement, view: &ResolvedModuleView, report_mis
                 resolve_expression(expr, view, report_missing);
             }
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::Static(_) => {}
     }
 }
 

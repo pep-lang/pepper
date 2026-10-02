@@ -71,6 +71,7 @@ pub mod check_confinement;
 pub mod interpolation;
 pub mod properties;
 pub mod named_arguments;
+pub mod static_blocks;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -103,6 +104,11 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
+    // Attributes name a built-in attribute or an `[Attribute]` struct.
+    step!(static_blocks::check_attributes(module));
+    // `static` blocks in concrete code, before the passes lower what they
+    // emit; those in generic code wait for their specializations.
+    step!(static_blocks::expand(module, false));
     // Enum cases (`Color.Red`) before anything infers a type from them.
     step!(crate::enums::resolve_enum_cases(module));
     // `main(args: String[])` becomes a `main()` that passes the arguments.
@@ -139,6 +145,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // `a..b` over a non-integer, before the runtime's `Range<T>` fails inside.
     step!(ranges::check_ranges(module));
     step!(generic_methods::specialize_methods(module));
+    step!(static_blocks::expand(module, true));
     step!(synthesize_function_types(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false)); // resolve what remains
@@ -162,22 +169,30 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         step!(specialize_structs(module));
         step!(specialize_functions(module));
         step!(ranges::check_ranges(module));
+        // The `static` blocks of what the round specialized, now that their
+        // type arguments are known.
+        let expanded = static_blocks::expand(module, true);
+        if let Some(error) = crate::errors::take() {
+            return Err(error);
+        }
         // A generic method call on a value whose type the round just
         // specialized (`c.map(f)` with `c: Box<long>`) is typed, and its type
         // arguments inferred, only now.
         // Likewise a call to an overloaded function whose arguments the
-        // round just typed (`f(x)` with `x: T`, now `int`).
-        if generic_methods::has_generic_methods(module) || overloads::has_overloads(module) {
+        // round just typed (`f(x)` with `x: T`, now `int`), and a call a
+        // `static` block emitted (`to_json(value.x)`).
+        if expanded || generic_methods::has_generic_methods(module) || overloads::has_overloads(module) {
             step!(resolve_implicit_types(module));
         }
         let methods_added = generic_methods::specialize_methods(module);
+        let methods_expanded = static_blocks::expand(module, true);
         // `copy` of a type whose specialization just appeared: its `_pep_copy`
         // methods call `copies.copy<F>` for each field, specialized next round.
         let copies_added = copies::synthesize_copies(module);
         if let Some(error) = crate::errors::take() {
             return Err(error);
         }
-        if (module.structs.len(), module.functions.len()) == before && !methods_added && !copies_added {
+        if (module.structs.len(), module.functions.len()) == before && !methods_added && !copies_added && !expanded && !methods_expanded {
             // The round's inference can still have named a new instance
             // (`wrap(u)` in a method specialized this round, now
             // `wrap<bool>`): done only when gathering asks for nothing new.
@@ -188,6 +203,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             }
         }
     }
+    // Every specialization expanded its `static` blocks; the generic
+    // bases' are done with.
+    static_blocks::remove_from_generic_code(module);
     // And those in the specializations of generic code.
     step!(interpolation::check_interpolations(module));
     // Calls of members a constrained extension withheld.
@@ -197,6 +215,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Specialized extensions (`extend Box<int>`) of the instances the loop
     // made (once per extension and struct).
     step!(apply_extensions(module, true));
+    // A trait's default method with a `static` block, copied into a struct
+    // the loop made.
+    step!(static_blocks::expand(module, true));
     step!(convert_member_refs(module));
     step!(synthesize_function_types(module));
 
@@ -293,6 +314,28 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
             }
         }
         Statement::LoopBreak(_) => {}
+        // The statements a `static` block emits, so a generic base's are
+        // lowered with the rest of it.
+        Statement::Static(block) => walk_static_items(&mut block.items, f),
+    }
+}
+
+fn walk_static_items(items: &mut [StaticItem], f: &mut impl FnMut(&mut Expression)) {
+    for item in items {
+        match item {
+            StaticItem::For { body, .. } | StaticItem::Block(body) => walk_static_items(body, f),
+            StaticItem::If { then_items, else_items, .. } => {
+                walk_static_items(then_items, f);
+                walk_static_items(else_items, f);
+            }
+            StaticItem::EmitIf { condition, then_items, else_items } => {
+                walk_expression(condition, f);
+                walk_static_items(then_items, f);
+                walk_static_items(else_items, f);
+            }
+            StaticItem::Emit(statement) => walk_statement(statement, f),
+            StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+        }
     }
 }
 
@@ -377,7 +420,12 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
-        Expression::MethodAddress(_) => {}
+        Expression::MethodAddress(_) | Expression::StaticValue(_) => {}
+        Expression::StaticMember(member) => {
+            for arg in &mut member.args {
+                walk_expression(arg, f);
+            }
+        }
         Expression::CallPointer { pointer, args } => {
             walk_expression(pointer, f);
             for arg in args {
@@ -422,6 +470,26 @@ pub fn visit_statement<'e>(stmt: &'e Statement, f: &mut impl FnMut(&'e Expressio
             }
         }
         Statement::LoopBreak(_) => {}
+        Statement::Static(block) => visit_static_items(&block.items, f),
+    }
+}
+
+fn visit_static_items<'e>(items: &'e [StaticItem], f: &mut impl FnMut(&'e Expression)) {
+    for item in items {
+        match item {
+            StaticItem::For { body, .. } | StaticItem::Block(body) => visit_static_items(body, f),
+            StaticItem::If { then_items, else_items, .. } => {
+                visit_static_items(then_items, f);
+                visit_static_items(else_items, f);
+            }
+            StaticItem::EmitIf { condition, then_items, else_items } => {
+                visit_expression(condition, f);
+                visit_static_items(then_items, f);
+                visit_static_items(else_items, f);
+            }
+            StaticItem::Emit(statement) => visit_statement(statement, f),
+            StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+        }
     }
 }
 
@@ -506,7 +574,12 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
         Expression::ClosureLiteral(closure) => visit_block(&closure.body, f),
         Expression::MakeClosure { value, .. } => visit_expression(value, f),
         Expression::ToTrait { value, .. } => visit_expression(value, f),
-        Expression::MethodAddress(_) => {}
+        Expression::MethodAddress(_) | Expression::StaticValue(_) => {}
+        Expression::StaticMember(member) => {
+            for arg in &member.args {
+                visit_expression(arg, f);
+            }
+        }
         Expression::CallPointer { pointer, args } => {
             visit_expression(pointer, f);
             for arg in args {
@@ -587,7 +660,9 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         | Expression::MethodAddress(_)
         | Expression::CountStep { .. }
         | Expression::FunctionPointer { .. }
+        | Expression::StaticValue(_)
         | Expression::ClosureLiteral(_) => Children::none(),
+        Expression::StaticMember(member) => Children::Chain(None, member.args.iter_mut()),
         Expression::MemberRef { lhs, .. } => Children::one(lhs.as_mut()),
         Expression::Binary { lhs, rhs, .. }
         | Expression::Index { lhs, rhs, .. }
@@ -644,7 +719,9 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         | Expression::Subject { .. }
         | Expression::NoMatch
         | Expression::DefaultArgument { .. }
+        | Expression::StaticValue(_)
         | Expression::ClosureLiteral(_) => Children::none(),
+        Expression::StaticMember(member) => Children::Chain(None, member.args.iter()),
         Expression::CaseValue(case) => Children::one(&case.subject),
         Expression::WithSubject(with) => Children::two(&with.subject, &with.body),
         Expression::MemberRef { lhs, .. } => Children::one(lhs),

@@ -462,7 +462,7 @@ impl<'a> Uses<'a> {
                     }
                     self.scopes.last_mut().expect("scope").push((var.name.clone(), var.is_const.then_some(var.loc)));
                 }
-                Statement::Declaration(_) | Statement::LoopBreak(_) => {}
+                Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) => {}
                 Statement::Branch(branch) => {
                     self.expression(&branch.condition, found);
                     if let Some(else_block) = &branch.else_block {

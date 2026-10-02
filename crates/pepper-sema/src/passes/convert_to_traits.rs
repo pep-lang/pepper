@@ -670,7 +670,7 @@ impl Converter {
                         self.convert(expr, returns, current, loc);
                     }
                 }
-                Statement::LoopBreak(_) => {}
+                Statement::LoopBreak(_) | Statement::Static(_) => {}
             }
         }
     }

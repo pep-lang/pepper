@@ -153,6 +153,10 @@ fn replace_stmt_types(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
                 replace_expr_types(expr, type_map);
             }
         }
+        Statement::Static(block) => {
+            block.substitute(type_map);
+            block.for_each_emitted_mut(&mut |s| replace_stmt_types(s, type_map), &mut |e| replace_expr_types(e, type_map));
+        }
         Statement::LoopBreak(_) => {}
     }
 }

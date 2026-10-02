@@ -332,6 +332,7 @@ fn walk<'a>(mut stack: Vec<Node<'a>>, mut visit: impl FnMut(Item<'a>)) {
                         stack.extend(w.else_block.iter().map(Node::Block));
                     }
                     ast::Statement::Return(r) => stack.extend(r.expr.iter().map(Node::Expression)),
+                    ast::Statement::Static(s) => stack.push(Node::Block(&s.block)),
                     ast::Statement::Destructure(d) => stack.push(Node::Expression(&d.value)),
                     ast::Statement::Match(m) => {
                         stack.push(Node::Expression(&m.value));

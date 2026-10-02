@@ -34,6 +34,8 @@ pub(crate) enum Scope {
     /// A trait whose default method bodies are being walked. It binds no
     /// names.
     Trait(String),
+    /// A `static` block: binds `reflect`, the compile-time API, like a local.
+    Static(HashSet<String>),
 }
 
 /// The locally bound names at one point of the walk, innermost last, each
@@ -47,7 +49,7 @@ impl Scopes {
     /// local, generic parameter, or a member `is_member` accepts.
     pub(crate) fn is_local(&self, name: &str, is_member: impl Fn(&str, &str) -> bool) -> bool {
         self.0.iter().any(|s| match s {
-            Scope::Values(names) | Scope::Generics(names) => names.contains(name),
+            Scope::Values(names) | Scope::Generics(names) | Scope::Static(names) => names.contains(name),
             Scope::Members(st) => is_member(st, name),
             Scope::Trait(_) => false,
         })
@@ -63,7 +65,13 @@ impl Scopes {
 
     /// `name` is bound here as a parameter or local.
     pub(crate) fn is_value_bound(&self, name: &str) -> bool {
-        self.0.iter().any(|s| matches!(s, Scope::Values(names) if names.contains(name)))
+        self.0.iter().any(|s| matches!(s, Scope::Values(names) | Scope::Static(names) if names.contains(name)))
+    }
+
+    /// The walk is inside a `static` block, where a compile-time value
+    /// qualifies a type (`field.Type`) as a module does.
+    pub(crate) fn in_static_block(&self) -> bool {
+        self.0.iter().any(|s| matches!(s, Scope::Static(_)))
     }
 
     /// The value `name` refers to here (the innermost binding of it) was
@@ -456,6 +464,13 @@ macro_rules! scope_walker {
                         // they belong to the enclosing block.
                         self.visit_expression(&$($m)? d.value);
                         self.bind_pattern(&$($m)? d.bindings);
+                    }
+                    Statement::Static(s) => {
+                        // `reflect` is the compile-time API, not a module or
+                        // a top-level name.
+                        self.scopes_mut().push(Scope::Static(HashSet::from(["reflect".to_string()])));
+                        self.walk_block(&$($m)? s.block);
+                        self.scopes_mut().pop();
                     }
                     Statement::Match(m) => {
                         self.visit_expression(&$($m)? m.value);

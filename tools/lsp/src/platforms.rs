@@ -111,6 +111,7 @@ fn statements(b: &ast::Block, out: &mut Vec<Span>) {
                     block(e, out);
                 }
             }
+            ast::Statement::Static(s) => block(&s.block, out),
             ast::Statement::Match(m) => {
                 for arm in &m.arms {
                     block(&arm.body, out);

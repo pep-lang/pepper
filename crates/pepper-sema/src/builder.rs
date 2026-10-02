@@ -6,6 +6,9 @@ use crate::type_name::TypeName;
 use pepper_parser::ast;
 use pepper_parser::diagnostic::{Diagnostic, FileId};
 
+mod static_items;
+pub(crate) use static_items::{INTERPOLATE, REFLECT};
+
 thread_local! {
     /// The file being built, whose id every location built carries. Set by
     /// [`build_file`] for the duration of one build.
@@ -304,6 +307,10 @@ fn call_arguments(arguments: &[ast::Expression]) -> Result<Vec<Expression>, Diag
 }
 
 fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
+    // `field.name` in a statement a `static` block emits.
+    if let Some(placeholder) = static_items::placeholder(expr)? {
+        return Ok(placeholder);
+    }
     match expr {
         ast::Expression::NamedArgument { name_span, .. } => {
             Err(Diagnostic::error("a named argument can only appear in a call").at(loc(*name_span)))
@@ -695,6 +702,7 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         ast::Statement::For(f) => for_loop(f),
         ast::Statement::With(w) => with_block(w),
         ast::Statement::Match(m) => match_statement(m),
+        ast::Statement::Static(s) => static_items::static_block(s),
         ast::Statement::Return(ret) => {
             if let (Some(value), Some(returns)) = (&ret.expr, RETURN_TYPE.with(|r| r.borrow().clone())) {
                 check_literal_labels(&returns, value)?;

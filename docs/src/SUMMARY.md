@@ -29,6 +29,7 @@
 - [Enums and `match`](language/enums.md)
 - [Memory and reference counting](language/memory.md)
 - [Generics](language/generics.md)
+- [Reflection and attributes](language/reflection.md)
 - [Type aliases](language/type-aliases.md)
 - [Traits and extensions](language/traits-and-extensions.md)
 - [Iteration](language/iteration.md)

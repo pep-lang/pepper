@@ -836,6 +836,32 @@ pub enum Statement {
     LoopBreak(LoopBreak),
     Destructure(Destructure),
     Match(Match),
+    Static(StaticBlock),
+}
+
+/// `static (captures) { ... }`: work done at compile time, such as
+/// reflection (`docs/src/language/reflection.md`). A statement in the block
+/// that uses a captured name, or a runtime local the block declares, is
+/// emitted into the function; everything else runs in the compiler.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StaticBlock {
+    /// The runtime values the block may emit code against, each with the
+    /// span of its name.
+    pub captures: Vec<(String, Span)>,
+    pub block: Block,
+    /// Span of the `static` keyword.
+    pub keyword_span: Span,
+    pub span: Span,
+}
+
+impl Display for StaticBlock {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.captures.is_empty() {
+            return write!(f, "static {}", self.block);
+        }
+        let names: Vec<&str> = self.captures.iter().map(|(name, _)| name.as_str()).collect();
+        write!(f, "static ({}) {}", names.join(", "), self.block)
+    }
 }
 
 /// `match (value) { pattern, ... => { ... } ... else => { ... } }`.
@@ -934,6 +960,7 @@ impl Statement {
             Statement::LoopBreak(l) => l.span,
             Statement::Destructure(d) => d.span,
             Statement::Match(m) => m.span,
+            Statement::Static(s) => s.span,
         }
     }
 }
@@ -1525,6 +1552,7 @@ impl Display for Statement {
                 write!(f, "{} ({}) = {};", if d.is_const { "const" } else { "var" }, bindings.join(", "), d.value)
             }
             Statement::Match(m) => write!(f, "{}", m),
+            Statement::Static(s) => write!(f, "{}", s),
         }
     }
 }

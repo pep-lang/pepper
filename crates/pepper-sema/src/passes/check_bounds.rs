@@ -283,7 +283,7 @@ impl Checker<'_> {
                 }
                 walk.scopes.last_mut().expect("scope").insert(var.name.clone(), ty);
             }
-            Statement::Declaration(_) | Statement::LoopBreak(_) => {}
+            Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) => {}
             Statement::Branch(branch) => {
                 self.expression(&branch.condition, walk);
                 self.block(&branch.if_block, walk);

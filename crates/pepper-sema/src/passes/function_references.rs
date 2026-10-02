@@ -281,7 +281,7 @@ impl Replacer<'_> {
                         self.expression(e, false);
                     }
                 }
-                Statement::LoopBreak(_) => {}
+                Statement::LoopBreak(_) | Statement::Static(_) => {}
             }
         }
     }

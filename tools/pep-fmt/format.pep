@@ -521,7 +521,7 @@ export struct Formatter {
             Block, Members, MatchArms => {
                 return _braced(item);
             }
-            If, While, For, With, Match => {
+            If, While, For, With, Static, Match => {
                 return _control(item);
             }
             Return, Jump, ExpressionStatement, Destructure, Empty => {

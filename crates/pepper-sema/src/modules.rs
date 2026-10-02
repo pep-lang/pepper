@@ -1557,6 +1557,9 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
             match self.bindings.qualified.get(q).copied() {
                 Some(target) => self.qualified(target, q, name, ty.span, false),
                 None if self.bindings.unresolved.contains(q) => None,
+                // `field.Type` in a `static` block: the type of a member
+                // the block reflects, known when it is expanded.
+                None if self.scopes.in_static_block() && self.scopes.is_value_bound(q) => None,
                 None => {
                     self.errors.push(ModuleError { note: None,
                         unresolved: false,

@@ -125,9 +125,9 @@ command; after `parse`, `is_selected` tells which command was given.
 ## Not yet
 
 - **Declaring options as a struct**, with an attribute on each field
-  (`[Option("o")] var output: String;`), needs compile-time reflection
-  (#232). The builder above is the only style until then; the struct style
-  is tracked in [#362](https://github.com/justinboswell/pepper/issues/362).
+  (`[Option("o")] var output: String;`). The
+  [reflection](reflection.md) it needs is in place; the struct style is
+  tracked in [#362](https://github.com/justinboswell/pepper/issues/362).
 - Typed values (integers, `io.Path`): values are Strings.
 - Options that apply after a subcommand's name (clap's global options).
 - Windows-style `/option` forms: every platform uses `-` and `--`.

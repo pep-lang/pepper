@@ -87,6 +87,9 @@ export enum NodeKind {
     For,
     ## `with [(] (VARIABLE | expression) [)] BLOCK [else BLOCK]`
     With,
+    ## `static [ARGUMENTS] BLOCK`: a compile-time block and the names it
+    ## captures, `static (out, value) { ... }`.
+    Static,
     ## `return [expression] [;]`
     Return,
     ## `break [;]` or `continue [;]`

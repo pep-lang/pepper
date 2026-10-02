@@ -5,7 +5,7 @@
 
 use crate::model::{Expression, Module, VariableDef};
 
-fn convert(expr: &mut Expression) {
+pub(crate) fn convert(expr: &mut Expression) {
     if let Expression::StringLiteral { value, is_raw, loc } = expr {
         // Raw literals are `char*` globals (synthesized ctor tracing and the
         // first ctor argument); they must not become ctor calls.

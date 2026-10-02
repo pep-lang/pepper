@@ -66,6 +66,7 @@ mod process_tests;
 mod property_tests;
 mod ptr_syntax_tests;
 mod refcount_optimizer_tests;
+mod reflection_tests;
 mod regex_tests;
 mod result_tests;
 mod runtime_docs_tests;

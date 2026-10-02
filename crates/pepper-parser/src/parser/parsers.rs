@@ -43,6 +43,8 @@ thread_local! {
     /// construction only for these; otherwise `a.b < c, d > (e)` stays two
     /// comparisons.
     static QUALIFIERS: std::cell::RefCell<std::collections::HashSet<String>> = std::cell::RefCell::new(Default::default());
+    /// How many `static` blocks enclose the parse position.
+    static STATIC_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Set while an expression is probed as a generic type literal.
     static EXPRESSION_PROBE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Warnings found so far in the current parse; `parse_module` moves them
@@ -132,6 +134,7 @@ impl SourceGuard {
         WARNINGS.with(|w| w.borrow_mut().clear());
         ERROR.with(|e| *e.borrow_mut() = None);
         NESTING.with(|n| n.set(0));
+        STATIC_DEPTH.with(|d| d.set(0));
         DEEPEST.with(|d| d.set(0));
         SourceGuard(prev)
     }
@@ -2593,6 +2596,45 @@ fn block_body(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
     Ok(Block { statements, span: Span { start, end: pos(input) }, attributes })
 }
 
+/// `static { ... }` or `static (a, b) { ... }`: a block of compile-time work
+/// with the runtime values it may emit code against. Inside it, a `for`
+/// loop's variable qualifies types and generic calls like a module does
+/// (`field.Type`, `parse<field.Type>(s)`), until the block ends.
+fn static_block(input: &mut &str) -> Result<StaticBlock> {
+    let start = pos(input);
+    *input = &input[6..];
+    let keyword_span = Span { start, end: pos(input) };
+    ws(input)?;
+    let mut captures = vec![];
+    if input.starts_with('(') {
+        *input = &input[1..];
+        loop {
+            ws(input)?;
+            if input.starts_with(')') {
+                *input = &input[1..];
+                break;
+            }
+            let name_start = pos(input);
+            let name = identifier(input).map_err(|_| cut_expecting(input, "captured name"))?;
+            captures.push((name, Span { start: name_start, end: pos(input) }));
+            ws(input)?;
+            if input.starts_with(',') {
+                *input = &input[1..];
+            } else if !input.starts_with(')') {
+                return Err(cut_expecting(input, "')'"));
+            }
+        }
+        ws(input)?;
+    }
+    let qualifiers = QUALIFIERS.with(|q| q.borrow().clone());
+    STATIC_DEPTH.with(|d| d.set(d.get() + 1));
+    let block = block(input, vec![]);
+    STATIC_DEPTH.with(|d| d.set(d.get() - 1));
+    QUALIFIERS.with(|q| *q.borrow_mut() = qualifiers);
+    let block = block?;
+    Ok(StaticBlock { captures, span: Span { start, end: block.span.end }, block, keyword_span })
+}
+
 fn branch(input: &mut &str) -> Result<Branch> {
     let start = pos(input);
     if !input.starts_with("if") || input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -2676,6 +2718,9 @@ fn for_loop(input: &mut &str) -> Result<For> {
         let binding = variable_declaration(input, vec![]).map_err(|_| cut(input))?;
         if binding.is_const || binding.default_value.is_some() {
             return Err(cut(input));
+        }
+        if STATIC_DEPTH.with(|d| d.get()) > 0 {
+            QUALIFIERS.with(|q| q.borrow_mut().insert(binding.name.clone()));
         }
         binding
     };
@@ -3096,6 +3141,9 @@ fn statement(input: &mut &str) -> Result<Statement> {
     }
     if keyword(&mut { *input }, "match") {
         return Ok(Statement::Match(match_statement(input)?));
+    }
+    if keyword(&mut { *input }, "static") {
+        return Ok(Statement::Static(static_block(input)?));
     }
     if input.starts_with("return") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::Return(return_statement(input)?));
@@ -4990,6 +5038,7 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
             m.arms.iter().try_for_each(|arm| ptr_check_block(&arm.body))?;
             m.else_arm.as_ref().map_or(Ok(()), |(_, b)| ptr_check_block(b))
         }
+        Statement::Static(s) => ptr_check_block(&s.block),
     }
 }
 

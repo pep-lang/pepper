@@ -4432,6 +4432,56 @@ fn trait_method_with_other_parameter_names_warns_with_a_rename() {
 }
 
 #[test]
+fn reflect_fields_outside_the_declaring_file() {
+    let others = [("shapes.pep", "export struct Account {\n    var owner: String;\n    var _balance: int;\n}\n")];
+    assert_eq!(
+        error_of_files(
+            "reflect_fields",
+            "import \"shapes\";\n\nmain(): int {\n    static {\n        for (var f in reflect.fields<Account>()) {\n        }\n    }\n    return 0;\n}\n",
+            &others
+        ),
+        "main.pep:5:31: error: 'fields' of 'Account' is only available in the file that declares 'Account'; use 'properties'\n\
+         \x20   5 |         for (var f in reflect.fields<Account>()) {\n\
+         \x20     |                               ^~~~~~\n\
+         shapes.pep:1:15: note: 'Account' declared here\n\
+         \x20   1 | export struct Account {\n\
+         \x20     |               ^~~~~~~\n\
+         main.pep:3:1: note: in the static block of 'main'\n\
+         \x20   3 | main(): int {\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
+fn unknown_attribute_on_a_field() {
+    assert_eq!(
+        error_of("unknown_attribute", "struct P {\n    [Nmae(\"x\")]\n    var x: int;\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:6: error: unknown attribute 'Nmae'\n\
+         \x20   2 |     [Nmae(\"x\")]\n\
+         \x20     |      ^~~~"
+    );
+}
+
+#[test]
+fn static_block_runtime_value_not_captured() {
+    assert_eq!(
+        error_of(
+            "static_capture",
+            "struct P {\n    var x: int;\n}\n\nmain(): int {\n    var n = 0;\n    static {\n        for (var f in reflect.properties<P>()) {\n            n += 1;\n        }\n    }\n    return n;\n}\n"
+        ),
+        "main.pep:9:13: error: 'n' is a runtime value; add it to the static block's capture list\n\
+         \x20   9 |             n += 1;\n\
+         \x20     |             ^\n\
+         main.pep:8:23: note: in pass 1 of 1 (member 'x')\n\
+         \x20   8 |         for (var f in reflect.properties<P>()) {\n\
+         \x20     |                       ^~~~~~~~~~~~~~~~~~~~~~~\n\
+         main.pep:5:1: note: in the static block of 'main'\n\
+         \x20   5 | main(): int {\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
 fn cast_that_reinterprets_needs_unsafe_cast() {
     // `as` is a static cast: a pointer to an integer reinterprets, so the
     // error is at the `as` and names `unsafe_cast`.

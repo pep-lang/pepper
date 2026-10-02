@@ -1131,6 +1131,18 @@ struct Parser {
         if (_at_word("with")) {
             return _with_statement();
         }
+        if (_at_word("static") and (_peek_at(1).is("(") or _peek_at(1).is("{"))) {
+            var node = Node(NodeKind.Static);
+            _take(node);
+            if (_at("(")) {
+                node.add(_arguments());
+                if (_failed) {
+                    return node;
+                }
+            }
+            node.add(_block(Array<Node>()));
+            return node;
+        }
         if (_at_word("match")) {
             return _match_statement();
         }

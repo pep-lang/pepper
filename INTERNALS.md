@@ -773,6 +773,63 @@ lowered to ordinary members; nothing after sema knows about it.
   property, or with a plain field through a synthesized accessor
   (`field_accessor`), and reports `'S' does not implement property 'P'`.
 
+### 2.8 Static blocks and reflection (`builder/static_items.rs`, `passes/static_blocks.rs`)
+
+`static (captures) { ... }` (`ast::StaticBlock`, parsed by `static_block`)
+is compile-time work; docs/src/language/reflection.md describes the
+language side.
+
+- **Parser.** Inside a static block, each `for` loop's variable is added to
+  `QUALIFIERS` until the block ends, so `field.Type` and
+  `parse<field.Type>(s)` parse as types the way `module.Type` does
+  (`STATIC_DEPTH`). The scope walk binds `reflect` like a local
+  (`Scope::Static`), and linking leaves a type qualified by a value in
+  scope alone (`Scopes::in_static_block`).
+- **Builder.** `static_items::static_block` sorts the statements by name:
+  one that uses a capture or a runtime local of the block (or calls `get`,
+  `set` or `call`) is emitted, the rest is compile-time. The result is a
+  `model::StaticBlock` of `StaticItem`s: `For`, `If`, `Var` and `Evaluate`
+  keep their compile-time expressions as the AST; `Emit` holds a model
+  statement, built normally except that a sub-expression of only
+  compile-time names becomes `Expression::StaticValue` and `x.get(v)` /
+  `x.set(v, y)` / `x.call(...)` become `Expression::StaticMember`
+  (`placeholder`, through the `COMPILE_TIME` thread-local that
+  `expression` checks first); `EmitIf` is a runtime `if` whose branches
+  hold items.
+- **Generic code.** The walks in `passes/mod.rs` reach the emitted
+  statements, so the early passes lower them with the rest of a generic
+  base; passes with their own statement walks skip `Statement::Static`.
+  Specialization records its type arguments in the block
+  (`StaticBlock::substitute`, from `replace_stmt_types` and
+  `substitute_statement`) and substitutes them in the emitted statements.
+- **Expansion.** `static_blocks::expand` replaces each block in concrete
+  code (non-generic functions, methods of structs that are not generic
+  bases) with a block of what it emits: it evaluates the compile-time items
+  (`Expander::evaluate`, a small interpreter over `Value`s: numbers, `bool`,
+  strings, enum cases, members, functions, lists and attribute values),
+  unrolls each `For` into one block per element, and fills in the emitted
+  statements: `x.Type` types first (`replace_body_types`), then each
+  placeholder (`fill`). `transform_pass` calls it at the start (concrete
+  code, `lowered = false`), after the first specialization, inside the
+  specialization loop after `specialize_functions` and after
+  `specialize_methods` (an expansion forces `resolve_implicit_types` and
+  another round, since emitted calls ask for new specializations), and
+  after the loop's `apply_extensions`. `remove_from_generic_code` then
+  empties the blocks left in generic bases. Errors carry a note per `for`
+  pass and one naming the specialization.
+- **Reflection.** `reflect.properties<T>()` lists the public fields and the
+  properties of a struct, in source order; `fields<T>()` every field but
+  synthesized ones, only in `T`'s file. A member's attributes are its
+  field's, or its getter's for a property.
+- **Attributes.** A struct marked `[Attribute]` is an attribute.
+  `check_attributes` (first in `transform_pass`) reports an attribute that
+  is neither one of `BUILT_IN_ATTRIBUTES` nor an `[Attribute]` struct
+  (`unknown attribute 'X'`, at the name), an argument that is not a
+  constant of its field's type, and an attribute field of another type.
+  `attribute_value` binds the arguments to the struct's `slots`: the
+  constructor's parameters (`this.f`, or assigned to a field in its body)
+  or, without one, the fields in order.
+
 ## 3. Sema transform passes (`crates/pepper-sema/src/passes/`)
 
 `transform_pass(&mut Module) -> Result<(), Diagnostic>` runs the steps below
@@ -782,6 +839,7 @@ several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
+| 0′ | `static_blocks::check_attributes`, `static_blocks::expand` (`static_blocks.rs`) | Reports unknown attributes and bad attribute arguments, then expands the `static` blocks of concrete code (§2.8). |
 | 0 | `enums::resolve_enum_cases` (`enums.rs`) | First, `value_types::lower_extensions` (`value_types.rs`) turns each extension of a value type (a number type, `char`, `bool`, or an enum whose cases carry no values; `value_types::key` files them under the enum's name or the number's canonical spelling, `i32` for `int`) into free functions `X::m` like an enum's own methods, copies the trait defaults its conformances need, reports a missing member and an enum extension without a trait, and leaves the extension in `module.extensions` with no methods (and `resolved` set) as the declaration of its conformances, which `Conformance` reads for `T: Tr`; `value_types::resolve_static_calls` turns `int.zero()` into `i32::zero()`, and `rewrite_static_calls` does the same for `T.zero()` in a specialization. `convert_to_traits` reports a value type flowing into a trait slot (`'int' cannot be converted to trait 'Tr'`). Installs the reference enums (structs with `enum_cases`) in their own registry (`enums::reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E::from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums::method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums::call_on_value`); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
 | 0a | `entry_point::lower_main_arguments` (`entry_point.rs`) | The C `main` the compiler emits takes no `argc`/`argv`, so a root file's `main(args: String[])` is renamed `main@#args` (`MAIN_WITH_ARGUMENTS`; `#` cannot start a namespace, and messages demangle it to `main`) and a `main()` is synthesized at its location that returns `main@#args(_pep_arguments())` (a `void` one is called, then 0 returned). `_pep_arguments` is `arguments()` under a name a program's own `arguments` cannot shadow. Reports any other parameter list on `main` and `main` declared twice. `is_entry_point` gives both forms the inferred `int` return. |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
@@ -807,8 +865,8 @@ several passes run more than once on purpose.
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
 | 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). In a trait's default method copied into a struct (`FunctionDef::trait_default`, set by `apply_extensions`), only the trait's methods count and no fields. |
 | 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`BinaryOp::identity_as_equality`), addresses for references. `unary_operators::dispatch` turns `-x`, `~x` and `!x` on a struct declaring the operator into a zero-argument method call named after it, and a struct value in a boolean context (`if`/`while` condition, ternary condition, operand of `&&`/`\|\|` that the struct does not overload, operand of `!`) into `x.!!()`; `!x` without its own `!` is `!(x.!!())`, and `!!x` is `x.!!()`. `StructInfo::unary_operators` records which of `-`, `~`, `!`, `!!` a struct or trait declares as parameterless instance methods. |
-| loop ≤16× | `gather_generics`, `constraints::check_specializations`, `specialize_structs`, `specialize_functions`, `check_ranges`, `specialize_methods`, `copies::synthesize_copies` | `check_specializations` checks the gathered `struct_specs` and `func_specs` of constrained generics before they are cloned; one that fails came from an inferred call (a written use was checked at 9c) and is reported at the call argument whose parameter type mentions the failing type parameter (`spec_site`). Repeats until the counts of structs, functions and methods stop growing and no copy was synthesized (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. `synthesize_copies` (`copies.rs`) serves `copy(value)`: it checks every copy the program asks for (a `copy<T>` call outside a `Copyable` method) through everything it reaches and reports `cannot copy 'X' because it contains 'Y', ...` at the request (a `Channel<T>` is found through `check_shared_types::use_site`), with a note per field hop and, for a struct with a destructor or a raw pointer field, a `Copyable<T>` skeleton note and `Fix` that inserts it after the struct. It then lowers each concrete `__copy<T>(value, copies)` (the body of `Copies.copy<T>`) to `value` for a thread-safe `T`, to `copies._copy_object<T>(value)` for a struct, which calls the struct's `_pep_copy` method, or to a panicking `_pep_copy_failed<T>` for a type nothing asks to copy. A trait type `T` lowers to `copies._copy_trait<T>(value)`, which calls `value._pep_copy_trait(copies)` through the vtable: each round, `add_trait_copies` gives every trait that member (`_pep_copy_trait(copies: Copies): Tr<T>`) and every concrete struct that declares a trait the method `return copies.copy<S>(this);`, or a `_pep_copy_failed<S>` panic naming the blocker when `S` cannot be copied (or is `[Isolated]`). Every trait gets the slot whether or not the program copies it, so a vtable depends only on declarations and a cached unit's vtable stays valid when another unit starts copying (`a_cached_vtable_serves_a_new_copy_of_its_trait`). It gives each such struct `_pep_copy`: `this.copy(copies)` when the struct implements `Copyable<T>` (has `copy(Copies)`), else a field-by-field copy that allocates with `Expression::Allocate` (no constructor), registers the copy before copying fields (cycles), copies thread-safe fields as they are and others with `copies.copy<F>`, and defers weak fields to a `_pep_fix_weak` method run by `Copies._finish`. `[NotCopyable("why")]` on a struct forbids copying it. |
-| then | `check_interpolations`, `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
+| loop ≤16× | `gather_generics`, `constraints::check_specializations`, `specialize_structs`, `specialize_functions`, `check_ranges`, `static_blocks::expand`, `specialize_methods`, `static_blocks::expand`, `copies::synthesize_copies` | `check_specializations` checks the gathered `struct_specs` and `func_specs` of constrained generics before they are cloned; one that fails came from an inferred call (a written use was checked at 9c) and is reported at the call argument whose parameter type mentions the failing type parameter (`spec_site`). Repeats until the counts of structs, functions and methods stop growing and no copy was synthesized (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. `synthesize_copies` (`copies.rs`) serves `copy(value)`: it checks every copy the program asks for (a `copy<T>` call outside a `Copyable` method) through everything it reaches and reports `cannot copy 'X' because it contains 'Y', ...` at the request (a `Channel<T>` is found through `check_shared_types::use_site`), with a note per field hop and, for a struct with a destructor or a raw pointer field, a `Copyable<T>` skeleton note and `Fix` that inserts it after the struct. It then lowers each concrete `__copy<T>(value, copies)` (the body of `Copies.copy<T>`) to `value` for a thread-safe `T`, to `copies._copy_object<T>(value)` for a struct, which calls the struct's `_pep_copy` method, or to a panicking `_pep_copy_failed<T>` for a type nothing asks to copy. A trait type `T` lowers to `copies._copy_trait<T>(value)`, which calls `value._pep_copy_trait(copies)` through the vtable: each round, `add_trait_copies` gives every trait that member (`_pep_copy_trait(copies: Copies): Tr<T>`) and every concrete struct that declares a trait the method `return copies.copy<S>(this);`, or a `_pep_copy_failed<S>` panic naming the blocker when `S` cannot be copied (or is `[Isolated]`). Every trait gets the slot whether or not the program copies it, so a vtable depends only on declarations and a cached unit's vtable stays valid when another unit starts copying (`a_cached_vtable_serves_a_new_copy_of_its_trait`). It gives each such struct `_pep_copy`: `this.copy(copies)` when the struct implements `Copyable<T>` (has `copy(Copies)`), else a field-by-field copy that allocates with `Expression::Allocate` (no constructor), registers the copy before copying fields (cycles), copies thread-safe fields as they are and others with `copies.copy<F>`, and defers weak fields to a `_pep_fix_weak` method run by `Copies._finish`. `[NotCopyable("why")]` on a struct forbids copying it. |
+| then | `static_blocks::remove_from_generic_code`, `check_interpolations`, `convert_intrinsics`, `resolve_resolvables`, `apply_extensions(true)`, `static_blocks::expand`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `unary_operators::check_conditions`, `resolve_resolvables(true)`, `synthesize_function_types` | `check_conditions` reports a struct or trait value still in a boolean context, one whose type declares no `!!` (`'S' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'`, with a note at the declaration): a struct is never null-tested implicitly. Pointers, numbers, `bool` and function values (synthesized `__…` structs) keep codegen's `as_bool`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
@@ -2067,8 +2125,10 @@ rendered-output test in `crates/pepper-driver/tests/integration/diagnostic_tests
 
 The parser accepts any `[Name]` or `[Name(args)]` on functions, externs,
 structs, members, traits, extensions, aliases, globals, imports,
-re-exports, and blocks, and sema carries it on `attributes`. Attributes
-nobody reads are ignored silently. To give one meaning, read it where it
+re-exports, and blocks, and sema carries it on `attributes`. An attribute
+must be one of `static_blocks::BUILT_IN_ATTRIBUTES` or a struct marked
+`[Attribute]` (`check_attributes` reports any other), so a new built-in
+attribute goes in that list. To give one meaning, read it where it
 applies:
 
 - `[Link("lib")]`, `[Link(lib = "lib", name = "sym")]` → `ExternDef::link`

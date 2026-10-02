@@ -458,6 +458,36 @@ pub enum Expression {
         to: TypeName,
         loc: Loc,
     },
+    /// A compile-time value in a statement a `static` block emits
+    /// (`field.name` in `builder.append(field.name)`): the expression as
+    /// written, replaced by its value when the block is expanded
+    /// (`passes::static_blocks`). Never reaches codegen.
+    StaticValue(Box<StaticValue>),
+    /// `field.get(value)`, `field.set(value, x)` or `function.call(args)` in a
+    /// statement a `static` block emits: becomes `value.name`,
+    /// `value.name = x` or a call when the block is expanded. Never reaches
+    /// codegen.
+    StaticMember(Box<StaticMember>),
+}
+
+/// See [`Expression::StaticValue`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StaticValue {
+    pub expr: ast::Expression,
+    pub loc: Loc,
+}
+
+/// See [`Expression::StaticMember`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StaticMember {
+    /// The compile-time receiver, as written (`field`).
+    pub member: ast::Expression,
+    /// `get`, `set` or `call`.
+    pub method: String,
+    /// The runtime arguments, built like any others.
+    pub args: Vec<Expression>,
+    /// Location of the method name.
+    pub loc: Loc,
 }
 
 impl Expression {
@@ -482,6 +512,8 @@ impl Expression {
             | Expression::Move { loc, .. }
             | Expression::StringLiteral { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
+            Expression::StaticValue(v) => v.loc,
+            Expression::StaticMember(m) => m.loc,
             _ => Loc::NONE,
         }
     }
@@ -784,6 +816,86 @@ pub enum Statement {
     While(While),
     Return(ReturnStatement),
     LoopBreak(LoopBreak),
+    /// A `static` block, until `passes::static_blocks` expands it: kept as
+    /// written in a generic base, and expanded in each specialization once
+    /// its type arguments are known. Never reaches codegen.
+    Static(Box<StaticBlock>),
+}
+
+/// A `static (captures) { ... }` block: the compile-time steps, and the
+/// statements each pass emits. See `passes::static_blocks`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StaticBlock {
+    pub captures: Vec<String>,
+    pub items: Vec<StaticItem>,
+    /// The type arguments a specialization substituted for the generic
+    /// parameters in scope (`T` → `Point`), which the compile-time
+    /// expressions, kept as written, still name.
+    pub type_map: Vec<(String, TypeName)>,
+    /// Location of the `static` keyword.
+    pub loc: Loc,
+}
+
+impl StaticBlock {
+    /// Applies `statement` to every statement the block emits and
+    /// `condition` to every runtime `if` condition, in order.
+    pub fn for_each_emitted_mut(&mut self, statement: &mut impl FnMut(&mut Statement), condition: &mut impl FnMut(&mut Expression)) {
+        fn items(list: &mut [StaticItem], statement: &mut impl FnMut(&mut Statement), condition: &mut impl FnMut(&mut Expression)) {
+            for item in list {
+                match item {
+                    StaticItem::For { body, .. } | StaticItem::Block(body) => items(body, statement, condition),
+                    StaticItem::If { then_items, else_items, .. } => {
+                        items(then_items, statement, condition);
+                        items(else_items, statement, condition);
+                    }
+                    StaticItem::EmitIf { condition: test, then_items, else_items } => {
+                        condition(test);
+                        items(then_items, statement, condition);
+                        items(else_items, statement, condition);
+                    }
+                    StaticItem::Emit(emitted) => statement(emitted),
+                    StaticItem::Var { .. } | StaticItem::Evaluate(_) => {}
+                }
+            }
+        }
+        items(&mut self.items, statement, condition);
+    }
+
+    /// Records a specialization's type arguments (`T` → `Point`), applying
+    /// them to those recorded by an outer one.
+    pub fn substitute(&mut self, type_map: &[(String, TypeName)]) {
+        for (_, ty) in &mut self.type_map {
+            crate::type_name::replace_map(ty, type_map);
+        }
+        for (param, ty) in type_map {
+            if !self.type_map.iter().any(|(known, _)| known == param) {
+                self.type_map.push((param.clone(), ty.clone()));
+            }
+        }
+    }
+}
+
+/// One step of a [`StaticBlock`]. Compile-time expressions are kept as
+/// written and evaluated when the block is expanded.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum StaticItem {
+    /// `for (var name in list)` over a compile-time list: unrolled.
+    For { name: String, iterable: ast::Expression, body: Vec<StaticItem>, loc: Loc },
+    /// `if` on a compile-time condition: only the branch taken is expanded.
+    If { condition: ast::Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem>, loc: Loc },
+    /// A runtime `if` (its condition uses a captured name), whose branches
+    /// may hold compile-time steps.
+    EmitIf { condition: Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem> },
+    /// A nested block, a scope for the names declared in it.
+    Block(Vec<StaticItem>),
+    /// `var name = value;` with a compile-time value.
+    Var { name: String, value: ast::Expression, loc: Loc },
+    /// A compile-time expression statement: `reflect.print(x)`, `n += 1`.
+    Evaluate(ast::Expression),
+    /// A statement emitted into the function once per pass, with its
+    /// [`Expression::StaticValue`]s and [`Expression::StaticMember`]s
+    /// replaced.
+    Emit(Statement),
 }
 
 // ── Declarations ─────────────────────────────────────────────────────────────

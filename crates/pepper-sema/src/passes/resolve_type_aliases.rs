@@ -236,6 +236,9 @@ fn subst_stmt(stmt: &mut Statement, aliases: &HashMap<String, &TypeAliasDef>, va
                 subst_expr(expr, aliases, values);
             }
         }
+        Statement::Static(block) => {
+            block.for_each_emitted_mut(&mut |s| subst_stmt(s, aliases, values), &mut |e| subst_expr(e, aliases, values))
+        }
         Statement::LoopBreak(_) => {}
         _ => {}
     }
@@ -252,7 +255,13 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::FloatLiteral(_)
         | Expression::IntLiteral(_)
         | Expression::StringLiteral { .. }
+        | Expression::StaticValue(_)
         | Expression::PointerLiteral => {}
+        Expression::StaticMember(member) => {
+            for arg in &mut member.args {
+                subst_expr(arg, aliases, values);
+            }
+        }
         Expression::MemberRef { lhs, .. }
         | Expression::ForIterator(lhs)
         | Expression::WithEntered(lhs)

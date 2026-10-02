@@ -2440,6 +2440,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::Branch(branch) => self.codegen_branch(branch)?,
             Statement::While(wh) => self.codegen_while(wh)?,
             Statement::LoopBreak(lb) => self.codegen_loop_break(lb)?,
+            Statement::Static(_) => return Err("internal error: unexpanded 'static' block".to_string()),
             Statement::Return(ret) => {
                 let return_block = self
                     .frame
@@ -4471,6 +4472,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.subjects.get(id).copied().ok_or_else(|| "internal error: 'match' value read outside its 'match'".to_string())
             }
             Expression::NoMatch => Err("internal error: unlowered 'match' expression".to_string()),
+            Expression::StaticValue(_) | Expression::StaticMember(_) => Err("internal error: unexpanded 'static' block".to_string()),
             Expression::NamedArgument { .. } => Err("internal error: unbound named argument".to_string()),
             Expression::DefaultArgument { .. } => Err("internal error: default argument outside a call".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
@@ -6744,6 +6746,7 @@ fn statement_loc(stmt: &Statement) -> Loc {
         Statement::While(wh) => wh.condition.loc(),
         Statement::Declaration(Declaration::Variable(var)) => var.loc,
         Statement::Declaration(_) | Statement::Block(_) | Statement::LoopBreak(_) => Loc::NONE,
+        Statement::Static(block) => block.loc,
     }
 }
 

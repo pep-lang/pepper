@@ -356,6 +356,11 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                         collect_locals_upto(e, offset, out);
                     }
                 }
+                ast::Statement::Static(s) => {
+                    if s.block.span.start <= offset && offset < s.block.span.end {
+                        collect_locals_upto(&s.block, offset, out);
+                    }
+                }
                 ast::Statement::Match(m) => {
                     for arm in &m.arms {
                         if arm.body.span.start <= offset && offset < arm.body.span.end {
@@ -807,6 +812,7 @@ fn closure_in_block(block: &ast::Block, offset: usize) -> Option<&ast::ClosureLi
             ast::Statement::With(w) => in_expr(&w.scope)
                 .or_else(|| closure_in_block(&w.block, offset))
                 .or_else(|| w.else_block.as_ref().and_then(|e| closure_in_block(e, offset))),
+            ast::Statement::Static(s) => closure_in_block(&s.block, offset),
             ast::Statement::Match(m) => in_expr(&m.value).or_else(|| {
                 m.arms.iter().map(|a| &a.body).chain(m.else_arm.as_ref().map(|(_, b)| b)).find_map(|b| closure_in_block(b, offset))
             }),
@@ -1030,6 +1036,11 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                     return Some(found);
                 }
             }
+            ast::Statement::Static(s) => {
+                if let Some(found) = find_expr_in_block(&s.block, offset) {
+                    return Some(found);
+                }
+            }
             ast::Statement::Match(m) => {
                 if let Some(found) = expr_at(&m.value, offset) {
                     return Some(found);
@@ -1146,6 +1157,7 @@ fn find_match_by<'a>(module: &'a ast::Module, start: usize, matches: &dyn Fn(&as
             ast::Statement::With(w) => {
                 in_block(&w.block, start, matches).or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, start, matches)))
             }
+            ast::Statement::Static(s) => in_block(&s.block, start, matches),
             _ => None,
         }
     }

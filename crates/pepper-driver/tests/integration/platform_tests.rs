@@ -186,7 +186,8 @@ fn multiple_attributes_anded() {
     let expected = if is_windows() { 1 } else { 2 };
     assert_eq!(
         compile_jit(
-            "[Target(OS(Windows))] [Export] f(): int {\n\
+            "[Attribute] struct Inline {}\n\
+             [Target(OS(Windows))] [Export] f(): int {\n\
              return 1;\n\
              }\n\
              [Target(!OS(Windows))] [Inline] f(): int {\n\

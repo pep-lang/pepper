@@ -175,7 +175,7 @@ fn block_types(block: &Block, add: &mut impl FnMut(&TypeName)) {
                     expression_types(expr, add);
                 }
             }
-            Statement::LoopBreak(_) => {}
+            Statement::LoopBreak(_) | Statement::Static(_) => {}
         }
     }
 }
