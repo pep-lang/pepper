@@ -20,7 +20,7 @@ and always succeeds.
 
     main(): int {
         var bytes = text.Utf8.encode("héllo");
-        assert(bytes.count() == 6, "é takes two bytes");
+        assert(bytes.count == 6, "é takes two bytes");
         assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
         return 0;
     }

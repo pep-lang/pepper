@@ -75,7 +75,7 @@ export struct _RegexProgram {
     const anchored: bool;
 
     construct(builder: _RegexBuilder, pattern: String) {
-        op_count = builder.ops.count();
+        op_count = builder.ops.count;
         ops = _pep_malloc(op_count * sizeof<int>() + 1);
         a = _regex_freeze(builder.a);
         b = _regex_freeze(builder.b);
@@ -86,11 +86,11 @@ export struct _RegexProgram {
         }
         ranges = _regex_freeze(builder.ranges);
         class_starts = _regex_freeze(builder.class_starts);
-        group_count = builder.names.count() - 1;
+        group_count = builder.names.count - 1;
         name_offsets = _pep_malloc((group_count + 2) * sizeof<ulong>());
         ulong total = 0;
         for (var name in builder.names) {
-            total += name.size();
+            total += name.size;
         }
         name_bytes = _pep_malloc(total + 1);
         ulong at = 0;
@@ -98,11 +98,11 @@ export struct _RegexProgram {
         for (var name in builder.names) {
             name_offsets[index] = at;
             _regex_copy_bytes(name, name_bytes + at);
-            at += name.size();
+            at += name.size;
             index += 1;
         }
         name_offsets[index] = at;
-        pattern_size = pattern.size();
+        pattern_size = pattern.size;
         pattern_bytes = _pep_malloc(pattern_size + 1);
         _regex_copy_bytes(pattern, pattern_bytes);
         anchored = builder.anchored;
@@ -171,7 +171,7 @@ export struct _RegexProgram {
 
 # A heap copy of `values`, which the caller frees.
 _regex_freeze(values: ulong[]): __ptr<ulong> {
-    var count = values.count();
+    var count = values.count;
     __ptr<ulong> copy = _pep_malloc(count * sizeof<ulong>() + 1);
     ulong index = 0;
     while (index < count) {
@@ -183,7 +183,7 @@ _regex_freeze(values: ulong[]): __ptr<ulong> {
 
 # Copies the bytes of `text` to `destination`.
 _regex_copy_bytes(text: String, destination: __ptr<u8>) {
-    var size = text.size();
+    var size = text.size;
     __ptr<u8> source = text._data as __ptr<u8>;
     ulong index = 0;
     while (index < size) {
@@ -227,7 +227,7 @@ _regex_starts_anchored(node: _RegexNode): bool {
     if (node.kind == _REGEX_NODE_ASSERT) {
         return node.value == (_REGEX_AT_TEXT_START as uint);
     }
-    if (node.kind == _REGEX_NODE_CONCAT && node.children.count() > 0) {
+    if (node.kind == _REGEX_NODE_CONCAT && node.children.count > 0) {
         return _regex_starts_anchored(node.children[0]);
     }
     if (node.kind == _REGEX_NODE_GROUP) {
@@ -247,7 +247,7 @@ export struct _RegexCompiler {
 
     # Appends an instruction and returns its index.
     emit(op: int, a: ulong, b: ulong): ulong {
-        var index = program.ops.count();
+        var index = program.ops.count;
         if (index >= _REGEX_MAX_INSTRUCTIONS) {
             too_large = true;
             return index;
@@ -260,17 +260,17 @@ export struct _RegexCompiler {
 
     # The index the next instruction gets.
     here(): ulong {
-        return program.ops.count();
+        return program.ops.count;
     }
 
     _patch_a(index: ulong, target: ulong) {
-        if (index < program.a.count()) {
+        if (index < program.a.count) {
             program.a[index] = target;
         }
     }
 
     _patch_b(index: ulong, target: ulong) {
-        if (index < program.b.count()) {
+        if (index < program.b.count) {
             program.b[index] = target;
         }
     }
@@ -308,22 +308,22 @@ export struct _RegexCompiler {
     }
 
     _compile_class(ranges: ulong[]) {
-        if (ranges.count() == 1 && _regex_range_low(ranges[0]) == _regex_range_high(ranges[0])) {
+        if (ranges.count == 1 && _regex_range_low(ranges[0]) == _regex_range_high(ranges[0])) {
             emit(_REGEX_OP_CHAR, _regex_range_low(ranges[0]) as ulong, 0);
             return;
         }
-        var index = program.class_starts.count() - 1;
+        var index = program.class_starts.count - 1;
         for (var range in ranges) {
             program.ranges.append(range);
         }
-        program.class_starts.append(program.ranges.count());
+        program.class_starts.append(program.ranges.count);
         emit(_REGEX_OP_CLASS, index, 0);
     }
 
     # a|b|c: SPLIT L1, next; L1: a; JUMP end; next: SPLIT L2, L3; ...
     _compile_alternate(branches: _RegexNode[]) {
         var jumps = Array<ulong>();
-        var count = branches.count();
+        var count = branches.count;
         ulong index = 0;
         while (index + 1 < count) {
             var split = emit(_REGEX_OP_SPLIT, 0, 0);

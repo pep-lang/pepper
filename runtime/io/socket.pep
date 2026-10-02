@@ -524,7 +524,7 @@ export struct TcpStream {
     ##   another platform error
     ## @example
     ##     var buffer = Array<u8>();
-    ##     var n = stream.read(buffer, 4096).value();   # buffer.count() == n
+    ##     var n = stream.read(buffer, 4096).value();   # buffer.count == n
     read(buffer: u8[], max: ulong): IoResult<ulong> {
         return _io_stream_read(_handle, buffer, max);
     }
@@ -545,12 +545,12 @@ export struct TcpStream {
     ## Sends bytes from `data` with a single system call, waiting until the
     ## system can take at least some of them.
     ##
-    ## The send may be partial: it can send fewer than `data.count()` bytes.
+    ## The send may be partial: it can send fewer than `data.count` bytes.
     ## Use `write_all` to send everything.
     ##
     ## @param data the bytes to send
     ## @returns the number of bytes sent, which may be less than
-    ##   `data.count()`; an error with `is_connection_reset()` when the peer
+    ##   `data.count`; an error with `is_connection_reset()` when the peer
     ##   has closed or reset the connection, an error when the stream is
     ##   closed, or another platform error
     write(data: u8[]): IoResult<ulong> {
@@ -902,10 +902,10 @@ export _io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
 # `File.write_all` does.
 export _io_socket_send_text(h: SocketHandle, text: String): IoResult<void> {
     if (!_io_in_task()) {
-        return _io_socket_send_all(h, text.c_str() as __ptr<u8>, text.size());
+        return _io_socket_send_all(h, text.c_str() as __ptr<u8>, text.size);
     }
     var bytes = _io_text_copy(text);
-    var r = _io_socket_send_all(h, bytes, text.size());
+    var r = _io_socket_send_all(h, bytes, text.size);
     _pep_free(bytes);
     return r;
 }

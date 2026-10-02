@@ -8,7 +8,7 @@ main(): int {
     var b = Result<int>.err(Error("boom"));
     if (b.is_ok()) { return 3; }
     if (!b.is_err()) { return 4; }
-    if (b.error().message.length() != 4) { return 5; }
+    if (b.error().message.length != 4) { return 5; }
 
     # ok_or: value on Ok, fallback on Err.
     if (a.ok_or(-1) != 42) { return 6; }
@@ -18,7 +18,7 @@ main(): int {
     var c = Result<int>.ok(1);
     var d = Result<int>.err(Error("e"));
     if (!c.is_ok() || d.is_ok()) { return 8; }
-    if (d.error().message.length() != 1) { return 9; }
+    if (d.error().message.length != 1) { return 9; }
 
     # The cases build results too, and a match reads them.
     var e = Result<int>.Err(Error("e"));
@@ -28,7 +28,7 @@ main(): int {
     var n = Result<void>.ok();
     if (!n.is_ok()) { return 11; }
     var m = Result<void>.err(Error("no"));
-    if (!m.is_err() || m.error().message.length() != 2) { return 12; }
+    if (!m.is_err() || m.error().message.length != 2) { return 12; }
 
     return 0;
 }

@@ -3,7 +3,7 @@ import os;
 import process;
 
 main(args: String[]): int {
-    if (args.count() > 1) {
+    if (args.count > 1) {
         io.File.stdout().write_all(os.environment("GREETING").value_or("unset"));
         return 0;
     }

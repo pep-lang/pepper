@@ -331,10 +331,10 @@ extend _IoUringDriver with _Driver {
                     var still = 0;
                     if (waits.contains(handle)) {
                         var parked = waits.get(handle);
-                        if (parked._readers.count() > 0) {
+                        if (parked._readers.count > 0) {
                             still = still | io._IO_READABLE;
                         }
-                        if (parked._writers.count() > 0) {
+                        if (parked._writers.count > 0) {
                             still = still | io._IO_WRITABLE;
                         }
                     }
@@ -377,7 +377,7 @@ extend _IoUringDriver with _Driver {
 
     _finished_files(finished: Array<(task: ulong, result: long)>) {
         var i: ulong = 0;
-        while (i < this._finished.count()) {
+        while (i < this._finished.count) {
             finished.append(this._finished[i]);
             i = i + 1;
         }

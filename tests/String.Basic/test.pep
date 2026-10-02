@@ -2,5 +2,5 @@
 
 main(): int {
     const STR = "TEST";
-    return STR.length() - 4;
+    return STR.length - 4;
 }

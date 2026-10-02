@@ -27,7 +27,7 @@ import "wait";
 # `path` as a sockaddr_un.
 export _io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
     var text = path._value;
-    var n = text.size();
+    var n = text.size;
     var capacity = _io_sys_unix_path_capacity();
     if (n == 0 || n + 1 > capacity) {
         var message = $"a Unix socket path must be 1 to {capacity - 1} bytes: '{text}'";
@@ -363,7 +363,7 @@ export struct UnixStream {
     ##
     ## @param data the bytes to send
     ## @returns the number of bytes sent, which may be less than
-    ##   `data.count()`; an error when the peer has closed the connection,
+    ##   `data.count`; an error when the peer has closed the connection,
     ##   when the stream is closed, or another platform error
     write(data: u8[]): IoResult<ulong> {
         return _io_stream_write(_handle, data);

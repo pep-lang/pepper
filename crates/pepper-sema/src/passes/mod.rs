@@ -68,6 +68,7 @@ pub mod copies;
 pub mod strip_bodies;
 pub mod check_confinement;
 pub mod interpolation;
+pub mod properties;
 pub mod named_arguments;
 
 use apply_extensions::apply_extensions;

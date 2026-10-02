@@ -11,7 +11,7 @@ import "utf8";
 ##     import text;
 ##
 ##     var bytes = text.Utf16.encode("hi");
-##     assert(bytes.count() == 4 && bytes[0] == 104 && bytes[1] == 0, "little-endian");
+##     assert(bytes.count == 4 && bytes[0] == 104 && bytes[1] == 0, "little-endian");
 ##     assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 export struct Utf16 {
     ## Returns the UTF-16 bytes of `value`.
@@ -21,9 +21,9 @@ export struct Utf16 {
     ##   false (little-endian) by default
     ## @returns a new array of two bytes per code unit
     static encode(value: String, big_endian: bool = false): u8[] {
-        var out = Array<u8>(value.size() * 2);
+        var out = Array<u8>(value.size * 2);
         __ptr<u8> data = value._data as __ptr<u8>;
-        var size = value.size();
+        var size = value.size;
         ulong index = 0;
         while (index < size) {
             # A String holds valid UTF-8, so every sequence has a length.
@@ -94,7 +94,7 @@ _text_unit(data: __ptr<u8>, index: ulong, big_endian: bool): uint {
 # Decodes the UTF-16 in `bytes` into UTF-8 in `out`. Something invalid
 # becomes U+FFFD when `lossy`, or stops the decoding with false otherwise.
 _text_utf16_decode(bytes: u8[], big_endian: bool, lossy: bool, out: u8[]): bool {
-    var size = bytes.count();
+    var size = bytes.count;
     __ptr<u8> data = bytes._data;
     ulong index = 0;
     while (index + 1 < size) {

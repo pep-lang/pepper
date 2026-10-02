@@ -401,7 +401,7 @@ enum Shape {
         match (this) {
             Circle(r) => { return 3 * r * r; }
             Rect(w, h) => { return w * h; }
-            Label(t) => { return t.size() as int; }
+            Label(t) => { return t.size as int; }
             Point => { return 0; }
         }
         return 0;
@@ -449,7 +449,7 @@ parse(text: String): Result<int> {
     if (text == "") {
         return Result<int>.err(Error("empty"));
     }
-    return Result<int>.ok(text.length() as int);
+    return Result<int>.ok(text.length as int);
 }
 
 test(): int {

@@ -21,6 +21,7 @@
 - [Function types and closures](language/function-types.md)
 - [Overloading](language/overloading.md)
 - [Structs](language/structs.md)
+- [Properties](language/properties.md)
 - [Value structs](language/value-structs.md)
 - [Hashing and equality](language/hashing.md)
 - [Enums and `match`](language/enums.md)

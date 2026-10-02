@@ -219,7 +219,7 @@ fn optional_is_an_enum_with_none_and_some_cases() {
 describe(o: String?): int {
     return match (o) {
         None => 0,
-        Some(text) => text.length() as int,
+        Some(text) => text.length as int,
     };
 }
 

@@ -347,7 +347,7 @@ system can take at least some of them. The send may be partial; use
 - `data` — the bytes to send
 
 **Returns**
-- the number of bytes sent, which may be less than `data.count()`; an error when the peer has closed the connection, when the stream is closed, or another platform error
+- the number of bytes sent, which may be less than `data.count`; an error when the peer has closed the connection, when the stream is closed, or another platform error
 
 #### write_all
 

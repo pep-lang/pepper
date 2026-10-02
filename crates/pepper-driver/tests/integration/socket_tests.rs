@@ -101,9 +101,9 @@ main(): int {
     assert(io.IpAddress().is_unspecified() && io.IpAddress().is_v4(), "default is 0.0.0.0");
     assert(io.IpAddress.unspecified_v6().is_unspecified(), ":: unspecified");
     var bytes = a.to_bytes();
-    assert(bytes.count() == 4 && bytes[0] == 10 && bytes[3] == 1, "v4 bytes");
+    assert(bytes.count == 4 && bytes[0] == 10 && bytes[3] == 1, "v4 bytes");
     var bytes6 = io.IpAddress.loopback_v6().to_bytes();
-    assert(bytes6.count() == 16 && bytes6[0] == 0 && bytes6[15] == 1, "v6 bytes");
+    assert(bytes6.count == 16 && bytes6[0] == 0 && bytes6[15] == 1, "v6 bytes");
 
     # Socket addresses
     assert(socket("1.2.3.4:0") == "1.2.3.4:0", "port 0");
@@ -131,7 +131,7 @@ main(): int {
 
     # A literal host resolves to itself without a lookup.
     var literal = io.resolve("192.0.2.7", 99).value();
-    assert(literal.count() == 1 && literal[0].to_string() == "192.0.2.7:99", "literal host");
+    assert(literal.count == 1 && literal[0].to_string() == "192.0.2.7:99", "literal host");
     var literal6 = io.resolve("::1", 7).value();
     assert(literal6[0].to_string() == "[::1]:7", "literal v6 host");
     assert(io.resolve("", 80).error().is_invalid_input(), "empty host");
@@ -149,12 +149,12 @@ loopback(port: u16): io.SocketAddress {
 }
 
 bytes_equal(buffer: u8[], text: String): bool {
-    if (buffer.count() != text.size()) {
+    if (buffer.count != text.size) {
         return false;
     }
     var p = text.c_str() as __ptr<u8>;
     ulong i = 0;
-    while (i < text.size()) {
+    while (i < text.size) {
         if (buffer[i] != p[i]) {
             return false;
         }
@@ -261,7 +261,7 @@ by_name() {
     var (server, peer) = listener.accept().value();
     assert(peer.address().is_loopback(), "from loopback");
     var names = io.resolve("localhost", 80).value();
-    assert(names.count() >= 1, "localhost resolves");
+    assert(names.count >= 1, "localhost resolves");
     for (var address in names) {
         assert(address.port() == 80 && address.address().is_loopback(), "localhost is loopback");
     }
@@ -300,7 +300,7 @@ incoming() {
     for (var connection in listener.incoming()) {
         assert(connection.is_ok(), "accepted");
         assert(connection.value().read_exact(received, 1).is_ok(), "read from the accepted stream");
-        if (received.count() == 2) {
+        if (received.count == 2) {
             break;
         }
     }
@@ -324,7 +324,7 @@ stream_lines() {
     for (var line in server.lines()) {
         got.append(line.value());
     }
-    assert(got.count() == 2 && got[0] == "first" && got[1] == "second", "lines over a socket");
+    assert(got.count == 2 && got[0] == "first" && got[1] == "second", "lines over a socket");
 }
 
 main(): int {
@@ -363,7 +363,7 @@ main(): int {
     var buffer = Array<u8>();
     buffer.append(9);
     var (n, from) = b.receive_from(buffer, 100).value();
-    assert(n == 3 && buffer.count() == 4 && buffer[1] == 1 && buffer[3] == 3, "receive_from appends");
+    assert(n == 3 && buffer.count == 4 && buffer[1] == 1 && buffer[3] == 3, "receive_from appends");
     assert(from == a_address, "sender address");
 
     # A longer datagram is cut to max.
@@ -376,7 +376,7 @@ main(): int {
     a.send_to(long, b_address);
     var cut = Array<u8>();
     var (m, _) = b.receive_from(cut, 4).value();
-    assert(m == 4 && cut.count() == 4 && cut[3] == 3, "truncated to max");
+    assert(m == 4 && cut.count == 4 && cut[3] == 3, "truncated to max");
 
     # connect / send / receive
     assert(a.connect(b_address).is_ok(), "connect");
@@ -477,7 +477,7 @@ main(): int {
     var request = Array<u8>();
     while (server.read(request, 4096).value() > 0) {
     }
-    assert(request.count() == 4, "the whole request arrived");
+    assert(request.count == 4, "the whole request arrived");
     assert(server.write_all("pong").is_ok(), "send the reply");
     var reply = Array<u8>();
     assert(client.read_exact(reply, 4).is_ok(), "read the reply");

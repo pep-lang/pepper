@@ -19,7 +19,7 @@ const letters = async.Atomic<long>(0);
 count_letters() {
     for (var order in orders) {
         for (var item in order.items) {
-            letters.fetch_add(item.length() as long);
+            letters.fetch_add(item.length as long);
         }
     }
 }

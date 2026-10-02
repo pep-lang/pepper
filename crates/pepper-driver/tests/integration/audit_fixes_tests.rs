@@ -213,7 +213,7 @@ bump(result: bool): bool {
 }
 test(): int {
     var a = Array<int>();
-    if (a.count() > 0 && a[0] == 1) { return 100; }
+    if (a.count > 0 && a[0] == 1) { return 100; }
     if (bump(false) && bump(true)) { return 101; }
     if (!(bump(true) || bump(true))) { return 102; }
     if (!(bump(false) or bump(true))) { return 103; }
@@ -362,7 +362,7 @@ test(): int {
     if (s != "abcabc") { return 1; }
     s.append(s);
     if (s != "abcabcabcabc") { return 2; }
-    if (s.length() != 12 || s.size() != 12) { return 3; }
+    if (s.length != 12 || s.size != 12) { return 3; }
     return 0;
 }
 "#),
@@ -377,14 +377,14 @@ fn string_substr_empty_and_pointer_length() {
 test(): int {
     var s = "hello";
     var none = s.substr(1, 0);
-    if (none.size() != 0 || none.length() != 0 || !none.empty()) { return 1; }
+    if (none.size != 0 || none.length != 0 || !none.is_empty) { return 1; }
     var from_ptr = String(s.c_str());
-    if (from_ptr.length() != 5 || from_ptr.size() != 5) { return 2; }
+    if (from_ptr.length != 5 || from_ptr.size != 5) { return 2; }
     var sized = String(s.c_str(), 3);
-    if (sized.length() != 3 || sized != "hel") { return 3; }
+    if (sized.length != 3 || sized != "hel") { return 3; }
     var utf8 = "héllo";
     var copy = String(utf8.c_str());
-    if (copy.length() != 5 || copy.size() != 6) { return 4; }
+    if (copy.length != 5 || copy.size != 6) { return 4; }
     return 0;
 }
 "#),
@@ -683,7 +683,7 @@ fn string_escape_sequences() {
 test(): int {
     var s = "a\tb\"c\\d\n\u{e9}\x41\0";
     # a, tab, b, quote, c, backslash, d, newline, two bytes of e-acute, A, NUL
-    if (s.size() != 12 || s.length() != 11) {
+    if (s.size != 12 || s.length != 11) {
         return 1;
     }
     var p = s.c_str();

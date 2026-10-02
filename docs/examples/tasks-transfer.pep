@@ -10,7 +10,7 @@ main(): int {
             var reply = Array<u8>();
             while (stream.read(reply, 64).value() > 0) {
             }
-            return reply.count();
+            return reply.count;
         });
 
         var (stream, peer) = listener.accept().value();

@@ -78,7 +78,7 @@ export struct _RegexMatcher {
     # `earliest`, stops at the first position where any match ends, and
     # returns only whether there is one (the slots are not meaningful).
     search(text: String, from: ulong, earliest: bool): long[]? {
-        var size = text.size();
+        var size = text.size;
         __ptr<u8> data = text._data as __ptr<u8>;
         _current.count = 0;
         var position = from;
@@ -180,7 +180,7 @@ export struct _RegexMatcher {
     _add(threads: _RegexThreads, start: ulong, position: ulong, data: __ptr<u8>, size: ulong) {
         _stack.clear();
         _stack.append(start as long);
-        while (_stack.count() > 0) {
+        while (_stack.count > 0) {
             var top = _stack.pop();
             if (top < 0) {
                 var slot = (-top - 1) as ulong;

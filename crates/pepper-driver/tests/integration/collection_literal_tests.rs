@@ -16,9 +16,9 @@ struct Point {
 }
 check(): int {
     var a = [1, 2, 3];
-    if (!(a.count() == 3 && a[2] == 3)) { return -1; }
+    if (!(a.count == 3 && a[2] == 3)) { return -1; }
     var words = ["===", "!==", "=>",];
-    if (!(words.count() == 3 && words[1] == "!==")) { return -2; }
+    if (!(words.count == 3 && words[1] == "!==")) { return -2; }
     var nested = [[1, 2], [3]];
     if (!(nested[1][0] == 3)) { return -3; }
     var points = [Point(1), Point(2)];
@@ -26,7 +26,7 @@ check(): int {
     long total = 0;
     for (var n in [10, 20]) { total = total + n; }
     if (!(total == 30)) { return -5; }
-    if (!([5].count() == 1)) { return -6; }
+    if (!([5].count == 1)) { return -6; }
     var longs = [1 as long, 2];
     if (!(longs[1] == 2)) { return -7; }
     return 0;
@@ -86,7 +86,7 @@ check(): int {
     Shape[] shapes = [Square(2), Circle()];
     if (!(shapes[0].area() + shapes[1].area() == 7)) { return -4; }
     HashSet<String> keywords = ["if", "else", "if"];
-    if (!(keywords.count() == 2 && keywords.contains("else"))) { return -5; }
+    if (!(keywords.count == 2 && keywords.contains("else"))) { return -5; }
     return 0;
 }
 
@@ -112,22 +112,22 @@ fn map_and_set_literals() {
         compile_jit_with_runtime(
             r#"
 count_of(m: HashMap<String, long>): long {
-    return m.count() as long;
+    return m.count as long;
 }
 check(): int {
     var ages = ["Ada": 36, "Alan": 41];
-    if (!(ages.count() == 2 && ages["Alan"] == 41)) { return -1; }
+    if (!(ages.count == 2 && ages["Alan"] == 41)) { return -1; }
     HashMap<String, long> big = ["x": 1];
     if (!(big["x"] == 1)) { return -2; }
     HashMap<String, int> none = [:];
-    if (!(none.count() == 0)) { return -3; }
+    if (!(none.count == 0)) { return -3; }
     if (!(count_of(["a": 1, "b": 2, "a": 3]) == 2)) { return -4; }
     var dup = ["k": 1, "k": 2];
     if (!(dup["k"] == 2)) { return -5; }
     HashSet<String> empty_set = [];
-    if (!(empty_set.count() == 0)) { return -6; }
+    if (!(empty_set.count == 0)) { return -6; }
     long[] empty = [];
-    if (!(empty.count() == 0)) { return -7; }
+    if (!(empty.count == 0)) { return -7; }
     var table = ["ops": ["+", "-"], "cmp": ["<"]];
     if (!(table["ops"][1] == "-")) { return -8; }
     var pick = true ? 1 : 2;
@@ -166,7 +166,7 @@ struct Keywords {
 test(): int {
     var k = Keywords();
     k.words.insert("if");
-    return k.words.count() as int - 1;
+    return k.words.count as int - 1;
 }"#
         ),
         0

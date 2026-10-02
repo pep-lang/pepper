@@ -30,7 +30,7 @@ test(): int {
             break;                       # both locals are live here
         }
     }
-    return kept.count() - 5;
+    return kept.count - 5;
 }
 "#,
     );
@@ -56,7 +56,7 @@ test(): int {
         }
         var c = b + a;
     }
-    return shared.size() - 1;
+    return shared.size - 1;
 }
 "#,
     );

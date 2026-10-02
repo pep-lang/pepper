@@ -61,6 +61,10 @@ Fields and methods declared inside a struct's body are reached through the
 struct, so they share the struct's visibility: if you can use the struct, you
 can use all of its members.
 
+To let other code read a value but not write it, make it a
+[property](properties.md) with only a `get`: `var balance: long { get; }`
+can be assigned only by the struct's own constructors and methods.
+
 Methods added by an extension share the **extension's** visibility instead. In
 the example, `norm()` is added by a private extension, so only `lib.pep` can
 call it, even though `Point` itself is exported:

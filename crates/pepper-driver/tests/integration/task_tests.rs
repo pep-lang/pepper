@@ -65,7 +65,7 @@ main(): int {
         for (var t in sleepers) {
             t.join();
         }
-        assert(order.count() == 5, "every sleeper woke");
+        assert(order.count == 5, "every sleeper woke");
         assert(order[0] == 4 && order[1] == 3 && order[2] == 2, "deadline order");
         assert(order[3] == 1 && order[4] == 0, "deadline order");
 
@@ -98,7 +98,7 @@ main(): int {
         assert(outer.join().value() == 42, "nested join");
         assert(inner.join().value() == 7, "join twice");
     });
-    assert(log.count() == 5, "five entries");
+    assert(log.count == 5, "five entries");
     assert(log[0] == "main" && log[1] == "a1" && log[2] == "b1", "round robin");
     assert(log[3] == "a2" && log[4] == "b2", "round robin");
     log.clear();
@@ -168,7 +168,7 @@ main(): int {
         });
         async.sleep(10);
     });
-    assert(events.count() == 2, "both leftover tasks finished");
+    assert(events.count == 2, "both leftover tasks finished");
     events.clear();
     assert(_pep_live_allocs() == before + 2, "cancelled tasks are freed");
     return 0;
@@ -271,8 +271,8 @@ main(): int {
                     var message = $"message {k} {round}";
                     assert(stream.write_all(message).is_ok(), "write");
                     var buffer = Array<u8>();
-                    assert(stream.read_exact(buffer, message.size()).is_ok(), "read");
-                    echoed = echoed + buffer.count() as int;
+                    assert(stream.read_exact(buffer, message.size).is_ok(), "read");
+                    echoed = echoed + buffer.count as int;
                     async.yield_now();
                     round = round + 1;
                 }
@@ -288,8 +288,8 @@ main(): int {
         # A write far larger than the socket buffers waits for the reader.
         var big = Array<u8>();
         var size: ulong = 8388608;
-        while (big.count() < size) {
-            big.append((big.count() % 251) as u8);
+        while (big.count < size) {
+            big.append((big.count % 251) as u8);
         }
         var sender = async.Task<void>.spawn_local(() => {
             var (stream, peer) = listener.accept().value();
@@ -404,7 +404,7 @@ echo_once(): long {
     while (read < 3) {
         read = read + client.read(reply, 64).value();
     }
-    return server.join().value() + reply.count() as long;
+    return server.join().value() + reply.count as long;
 }
 
 main(): int {
@@ -641,7 +641,7 @@ main(): int {
                         break;
                     }
                 }
-                total = total + reply.count() as long;
+                total = total + reply.count as long;
                 i = i + 1;
             }
             return total;
@@ -689,18 +689,18 @@ main(): int {
                 stream.write_all("hi").value();
             }
         });
-        assert(loops.count() == 4, "one loop per worker");
+        assert(loops.count == 4, "one loop per worker");
         var i = 0;
         while (i < 20) {
             var client = io.TcpStream.connect_host("127.0.0.1", port).value();
             var reply = Array<u8>();
             while (client.read(reply, 64).value() > 0) {
             }
-            assert(reply.count() == 2, "served");
+            assert(reply.count == 2, "served");
             i = i + 1;
         }
         var seen = Array<ulong>();
-        while (seen.count() < 4) {
+        while (seen.count < 4) {
             var id = threads.receive().value();
             for (var other in seen) {
                 assert(other != id, "each loop on its own worker");
@@ -981,7 +981,7 @@ round_trip(path: io.Path, size: ulong): long {
         reads = reads + 1;
     }
     file.close();
-    assert(back.count() == size + 4, "every byte came back");
+    assert(back.count == size + 4, "every byte came back");
     i = 0;
     while (i < size) {
         assert(back[i] == (i % 251) as u8, "the bytes match");
@@ -1057,7 +1057,7 @@ main(): int {
             file.read(buffer, 64);
         });
         async.yield_now();
-        buffer.reserve(buffer.capacity() + 1);
+        buffer.reserve(buffer.capacity + 1);
         reader.join();
     });
     return 0;
@@ -1123,7 +1123,7 @@ main(): int {
                 Ok(event) => {
                     match (event) {
                         Number(value) => { sum = sum + value; }
-                        Word(text) => { letters = letters + text.length() as int; }
+                        Word(text) => { letters = letters + text.length as int; }
                     }
                 }
                 Err(error) => {
@@ -1160,8 +1160,8 @@ main(): int {
         var taken: long = 0;
         while (taken < 5) {
             with (var list = jobs.lock()) {
-                ready.wait_while((queue: Array<long>): bool => queue.count() == 0);
-                taken = taken + list.count() as long;
+                ready.wait_while((queue: Array<long>): bool => queue.count == 0);
+                taken = taken + list.count as long;
                 list.clear();
             }
         }
@@ -1212,7 +1212,7 @@ handle(id: long) {
     async.yield_now();
     with (var list = names.enter()) {
         list.append("step");
-        assert(list.count() == 1, "each task has its own list");
+        assert(list.count == 1, "each task has its own list");
     }
     noisy.set(Noisy(id));
     noisy.set(Noisy(id));
@@ -1284,7 +1284,7 @@ main(): int {
         slow.join();
         fast.join();
     });
-    assert(order.count() == 2 && order[0] == 0 && order[1] == 1, "shorter sleep first");
+    assert(order.count == 2 && order[0] == 0 && order[1] == 1, "shorter sleep first");
 
     # The millisecond overload still works, and a zero duration returns.
     async.sleep(1);

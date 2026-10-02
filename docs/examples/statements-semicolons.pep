@@ -25,13 +25,13 @@ main(): int {
     # A chain of calls may break before each `.`.
     for (var word in words
         .iterate()
-        .filter((w) => w.length() > 4)) {  # comments are fine anywhere
+        .filter((w) => w.length > 4)) {  # comments are fine anywhere
         long_words += 1;
     }
     assert(long_words == 1, "one word is longer than four characters");
 
     # So may a call's arguments.
-    assert(volume + words[0].length() == 64,
+    assert(volume + words[0].length == 64,
         "60 + 4");
     return 0;
 }

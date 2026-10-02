@@ -1,7 +1,7 @@
 //! Port of `source/Sema/ApplyExtensions.h`: clone extension methods onto the
 //! target struct, record traits; two-pass applied-set.
 
-use crate::model::{Diagnostic, ExtensionDef, FunctionDef, Module, StructDef, TraitDef};
+use crate::model::{BinaryOp, Block, Diagnostic, Expression, ExtensionDef, FunctionDef, Kind, Module, ReturnStatement, Statement, StructDef, TraitDef};
 use crate::passes::overloads::set_name;
 use crate::passes::specialize_structs::{substitute, substitute_block};
 use crate::type_name::TypeName;
@@ -80,6 +80,12 @@ fn conform(
             check_signature(st, have, required, trait_name, &type_map, traits);
             continue;
         }
+        // A trait's property is met by a plain field of its name too: its
+        // accessors read and write the field.
+        if let Some(accessor) = field_accessor(st, required) {
+            st.method_members.push(accessor);
+            continue;
+        }
         match &required.body {
             Some(_) => {
                 let mut method = clone_method(required, &st.name);
@@ -107,7 +113,10 @@ fn conform(
             }
             None => {
                 // An overloaded member is named with its parameter types.
-                let wanted = if set == required.name {
+                let property = required.name.strip_prefix("__get_").or_else(|| required.name.strip_prefix("__set_"));
+                let wanted = if let Some(property) = property {
+                    property.to_string()
+                } else if set == required.name {
                     set.to_string()
                 } else {
                     let params: Vec<String> = required
@@ -123,8 +132,9 @@ fn conform(
                 };
                 crate::errors::report(
                     Diagnostic::error(format!(
-                        "'{}' does not implement '{}', required by trait '{}'",
+                        "'{}' does not implement {}'{}', required by trait '{}'",
                         st.ty.display(),
+                        if property.is_some() { "property " } else { "" },
                         wanted,
                         trait_name.display()
                     ))
@@ -134,6 +144,36 @@ fn conform(
             }
         }
     }
+}
+
+/// For a trait property's accessor `required` (`__get_p` or `__set_p`), the
+/// accessor of a plain field `p` of `st` that meets it.
+fn field_accessor(st: &StructDef, required: &FunctionDef) -> Option<FunctionDef> {
+    let (name, getter) = match (required.name.strip_prefix("__get_"), required.name.strip_prefix("__set_")) {
+        (Some(name), _) => (name, true),
+        (_, Some(name)) => (name, false),
+        _ => return None,
+    };
+    let field = st.field_members.iter().find(|f| f.name == name && f.kind == Kind::Field && !f.hidden)?;
+    let at = required.loc;
+    let field_ref = Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: name.to_string(), loc: at };
+    let statement = if getter {
+        Statement::Return(ReturnStatement { expr: Some(field_ref), loc: at })
+    } else {
+        Statement::Expression(Expression::Binary {
+            op: BinaryOp::Assign,
+            lhs: Box::new(field_ref),
+            rhs: Box::new(Expression::SymbolRef { id: "value".to_string(), ty: field.ty.clone(), loc: at }),
+            loc: at,
+        })
+    };
+    let mut accessor = clone_method(required, &st.name);
+    accessor.ty = if getter { field.ty.clone() } else { TypeName::void() };
+    if let Some(value) = accessor.parameters.first_mut() {
+        value.ty = field.ty.clone();
+    }
+    accessor.body = Some(Block { name: String::new(), items: vec![statement], attributes: vec![] });
+    Some(accessor)
 }
 
 /// Whether `have` takes the parameter types trait member `required`

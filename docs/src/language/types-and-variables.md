@@ -110,7 +110,7 @@ Text is a `String`, and a single character of it is a one-code-point `String`.
 `String` is a UTF-8 string. A string literal such as `"hello"` is a `String`
 value, except where it is stored or passed as a `__ptr<char>`: there it is the
 literal's NUL-terminated bytes (see [Passing strings](c-interop.md#passing-strings)). `+` joins two strings into a new one, `==` and `!=` compare contents,
-`length()` counts code points, `size()` counts bytes, and `s[i]` gives the code
+the `length` property counts code points, `size` counts bytes, and `s[i]` gives the code
 point at index `i` as a one-code-point `String`.
 
 ```pepper
@@ -327,7 +327,7 @@ conversions"), so code ported from C gives the same results:
 - **Division** of integers truncates toward zero (`-7 / 2` is -3), and `%` takes
   the sign of the left operand (`-7 % 3` is -1).
 - **Conditionals.** `c ? a : b` with numeric arms of different types has
-  their common type by the same rules (`c ? 0 : s.length()` is a `long`), and
+  their common type by the same rules (`c ? 0 : s.length` is a `long`), and
   so does a [`match` expression](enums.md#match-expressions-is-and-literal-patterns)
   over its arms. The value converts from that type wherever it goes.
 - **Shifts** take the type of the (promoted) left operand. `>>` keeps the sign for
@@ -358,7 +358,7 @@ conversions"), so code ported from C gives the same results:
 | Conditional | `condition ? a : b` |
 
 `&&` and `||` short-circuit: the right operand is evaluated only when the left
-one does not decide the result, so `items.count() > 0 && items[0] == 1` never
+one does not decide the result, so `items.count > 0 && items[0] == 1` never
 reads `items[0]` from an empty array.
 
 Unary operators nest: `-~x` is `-(~x)`, and `!!x` is `!(!x)`, which turns a

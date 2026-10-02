@@ -103,7 +103,7 @@ test(): int {
     ops.append(square);
     var total = 0;
     var i = 0;
-    while (i < ops.count()) {
+    while (i < ops.count) {
         total = total + ops[i](i + 2);
         i = i + 1;
     }
@@ -171,7 +171,7 @@ add(a: int, b: int): int { return a + b; }
 fold(values: int[], combine: Binary<int>, start: int): int {
     var total = start;
     var i = 0;
-    while (i < values.count()) {
+    while (i < values.count) {
         total = combine(total, values[i]);
         i = i + 1;
     }

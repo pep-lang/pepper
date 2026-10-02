@@ -937,6 +937,63 @@ pub struct StructDef {
     pub enum_cases: Option<Vec<EnumCaseDef>>,
 }
 
+/// How a property's accessor is written (see [`PropertyDef`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum AccessorKind {
+    /// `get;` / `set;`: reads or writes the implied storage. Accesses go to
+    /// the storage directly, never through the accessor method.
+    Default,
+    /// `get { ... }` / `set { ... }`: accesses call the accessor method.
+    Body,
+}
+
+/// A property (`var name: T { get; set; }`) of a struct, a trait or an
+/// extension. The builder lowers it to plain members: its implied storage
+/// (a field named [`PropertyDef::storage`]), a getter method
+/// ([`getter_name`]) and, with a `set`, a setter method ([`setter_name`])
+/// taking `value`. `passes::properties` then rewrites every `x.name` to the
+/// storage or to an accessor call.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PropertyDef {
+    pub name: String,
+    /// The base name of the struct or trait that declares it, or that an
+    /// extension adds it to.
+    pub owner: String,
+    /// Declared by a trait: a requirement, with no storage or bodies.
+    pub in_trait: bool,
+    /// Location of the property's name.
+    pub loc: Loc,
+    pub get: AccessorKind,
+    /// `None` when the property has no `set`: outside its struct it cannot
+    /// be assigned; inside, an assignment writes the storage.
+    pub set: Option<AccessorKind>,
+    /// Location of the `set` keyword ([`Loc::NONE`] without one).
+    pub set_loc: Loc,
+    /// The field holding the implied storage: the property's own name when
+    /// its `get` is the default one, else [`storage_name`]. `None` for a
+    /// computed property.
+    pub storage: Option<String>,
+    /// Its struct is `[Shared]`: the storage is `const`, set only in
+    /// constructors.
+    pub shared: bool,
+}
+
+/// The getter method of property `name`.
+pub fn getter_name(name: &str) -> String {
+    ast::property_getter_name(name)
+}
+
+/// The setter method of property `name`.
+pub fn setter_name(name: &str) -> String {
+    ast::property_setter_name(name)
+}
+
+/// The storage field of property `name` when its `get` has a body (with a
+/// default `get`, the storage keeps the property's name).
+pub fn storage_name(name: &str) -> String {
+    format!("__field_{}", name)
+}
+
 /// The attribute that makes a struct shareable between threads.
 pub const SHARED_ATTRIBUTE: &str = "Shared";
 
@@ -1236,6 +1293,10 @@ pub struct Module {
     /// arguments miss a constrained extension's constraint (see
     /// [`Withheld`]), for the error at a call of one.
     pub withheld: Vec<Withheld>,
+    /// Every property of a struct, trait or extension (see
+    /// `passes::properties`).
+    #[serde(default)]
+    pub properties: Vec<PropertyDef>,
     /// Every generic type written with arguments, for `passes::constraints`
     /// (see [`TypeUse`]).
     pub type_uses: Vec<TypeUse>,
@@ -1450,6 +1511,7 @@ impl Module {
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);
         self.withheld.extend(other.withheld);
+        self.properties.extend(other.properties);
         self.literal_args.extend(other.literal_args);
         let offset = self.use_contexts.len();
         self.use_contexts.extend(other.use_contexts);

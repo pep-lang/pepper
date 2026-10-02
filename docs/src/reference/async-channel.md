@@ -63,6 +63,17 @@ threads.
     }
 ```
 
+### Properties
+
+#### count
+
+```pepper
+var count: ulong { get; }
+```
+
+The number of values waiting to be received. Other threads may
+change it as soon as it returns.
+
 ### Constructor
 
 #### Channel()
@@ -201,18 +212,6 @@ Reports whether `close()` has been called.
 
 **Returns**
 - true once the channel is closed, even while values are still queued
-
-#### count
-
-```pepper
-count(): ulong
-```
-
-Returns the number of values waiting to be received. Other threads may
-change it as soon as it returns.
-
-**Returns**
-- the number of queued values
 
 #### iterate
 

@@ -5,7 +5,7 @@ import async;
 [Shared]
 struct Label {
     const length: ulong;
-    construct(String text) { length = text.length(); }
+    construct(String text) { length = text.length; }
 }
 
 const LIMIT = 7;

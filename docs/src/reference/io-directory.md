@@ -25,7 +25,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 
     var list = io.Directory.open(io.Path("src")).value().entries().value();
     ulong i = 0;
-    while (i < list.count()) {
+    while (i < list.count) {
         if (list[i].is_file) {
             print(list[i].Name);
         }
@@ -140,7 +140,7 @@ afresh.
     var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
         var d = io.Directory.open(dir).value();
-        var count = d.entries().value().count();
+        var count = d.entries().value().count;
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 ```
@@ -374,7 +374,7 @@ at a time instead, loop over the `Directory` itself (see `iterate`).
 
     var list = io.Directory.open(io.Path(".")).value().entries();
     if (list.is_ok()) {
-        var n = list.value().count();
+        var n = list.value().count;
     }
 ```
 

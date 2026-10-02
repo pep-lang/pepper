@@ -52,6 +52,33 @@ next step of such a loop panics with "Array modified during iteration".
     }
 ```
 
+### Properties
+
+#### count
+
+```pepper
+var count: ulong { get; }
+```
+
+The number of elements in the Array.
+
+#### capacity
+
+```pepper
+var capacity: ulong { get; }
+```
+
+The number of elements the Array can hold before its buffer
+must be reallocated.
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the Array has no elements.
+
 ### Constructor
 
 #### Array()
@@ -68,11 +95,11 @@ element is added. Preallocating avoids the reallocations `append`
 would otherwise perform while the Array grows to a known size.
 
 **Parameters**
-- `capacity` — the number of element slots to allocate up front; `count()` is still 0
+- `capacity` — the number of element slots to allocate up front; `count` is still 0
 
 **Example**
 ```pepper
-    var a = Array<int>(16);   # a.count() == 0, a.capacity() == 16
+    var a = Array<int>(16);   # a.count == 0, a.capacity == 16
 ```
 
 ### Methods
@@ -101,40 +128,6 @@ panic.
     }
 ```
 
-#### count
-
-```pepper
-count(): ulong
-```
-
-Returns the number of elements in the Array.
-
-**Returns**
-- the element count; 0 for an empty Array
-
-#### capacity
-
-```pepper
-capacity(): ulong
-```
-
-Returns the number of elements the Array can hold before its buffer
-must be reallocated.
-
-**Returns**
-- the allocated slot count, which is at least `count()`
-
-#### empty
-
-```pepper
-empty(): bool
-```
-
-Reports whether the Array has no elements.
-
-**Returns**
-- true when `count()` is 0
-
 #### reserve
 
 ```pepper
@@ -158,7 +151,7 @@ existing elements, which costs O(count).
 **Example**
 ```pepper
     var a = Array<int>();
-    a.reserve(8);   # a.capacity() >= 8
+    a.reserve(8);   # a.capacity >= 8
     a.reserve(2);   # no effect: capacity never shrinks
 ```
 
@@ -195,7 +188,7 @@ itself; binding it to a variable acquires it like any shared copy.
 - the element at `idx`
 
 **Panics**
-- if `idx < count()` does not hold ("Array index read out of bounds")
+- if `idx < count` does not hold ("Array index read out of bounds")
 
 **Example**
 ```pepper
@@ -225,7 +218,7 @@ unchanged.
 - the element now stored at `idx` (that is, `value`)
 
 **Panics**
-- if `idx < count()` does not hold ("Array index write out of bounds")
+- if `idx < count` does not hold ("Array index write out of bounds")
 
 **Example**
 ```pepper
@@ -267,16 +260,16 @@ Inserts `item` at position `idx`, shifting the element there and every
 later element up by one.
 
 Runs in O(count - idx), plus a reallocation when the buffer is full.
-`idx == count()` appends. For a struct `T` the Array acquires a
+`idx == count` appends. For a struct `T` the Array acquires a
 reference to `item`; shifted elements keep their reference counts.
 Invalidates running iterators.
 
 **Parameters**
-- `idx` — the position `item` will occupy; from 0 through `count()`
+- `idx` — the position `item` will occupy; from 0 through `count`
 - `item` — the element to insert
 
 **Panics**
-- if `idx <= count()` does not hold ("Array insert index out of bounds")
+- if `idx <= count` does not hold ("Array insert index out of bounds")
 - if the buffer must grow while an I/O operation in a task is using it
 
 **Example**
@@ -308,7 +301,7 @@ capacity is unchanged. Invalidates running iterators.
 - the removed element
 
 **Panics**
-- if `idx < count()` does not hold ("Array remove index out of bounds")
+- if `idx < count` does not hold ("Array remove index out of bounds")
 
 **Example**
 ```pepper
@@ -361,10 +354,10 @@ last(): T
 ```
 
 Returns the last element without removing it; the same as
-`a[a.count() - 1]`.
+`a[a.count - 1]`.
 
 **Returns**
-- the element at index `count() - 1`
+- the element at index `count - 1`
 
 **Panics**
 - if the Array is empty ("Array last on empty Array")
@@ -392,7 +385,7 @@ truncate(count: ulong)
 Shortens the Array to its first `count` elements, removing the rest.
 
 Runs in O(removed elements). For a struct `T` each removed element's
-reference is released. A `count` at or above the current `count()`
+reference is released. A `count` at or above the current `count`
 does nothing (the Array never grows) and leaves iterators valid; an
 actual shrink invalidates them. The capacity is kept.
 
@@ -422,8 +415,8 @@ element, but still invalidates running iterators like every swap.
 - `b` — the position of the second element
 
 **Panics**
-- if `a < count()` does not hold ("Array swap index out of bounds")
-- if `b < count()` does not hold ("Array swap index out of bounds")
+- if `a < count` does not hold ("Array swap index out of bounds")
+- if `b < count` does not hold ("Array swap index out of bounds")
 
 #### reverse
 
@@ -457,7 +450,7 @@ order.
 `b`, 0 when their order does not matter, and a positive number when
 `a` belongs after `b`, the convention `String.compare` follows. It is
 a merge sort: O(count log count) calls to `compare`, plus a scratch
-buffer of `count()` slots. Elements move between the two buffers
+buffer of `count` slots. Elements move between the two buffers
 without changing any reference count. Invalidates running iterators
 when there are two or more elements.
 
@@ -563,7 +556,7 @@ Returns a new Array holding the same elements in the same order.
 Runs in O(count). The copy is shallow: for a struct `T` both Arrays
 refer to the same element objects (each acquired once more), but adding
 or removing elements in one does not affect the other. The new Array's
-capacity equals this Array's `count()`.
+capacity equals this Array's `count`.
 
 **Returns**
 - an independent Array with the same elements
@@ -613,7 +606,7 @@ Reports whether both Arrays have the same count and pairwise equal
 elements, compared with `==` as `find` does.
 
 Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. `capacity()` is not compared.
+equal. `capacity` is not compared.
 
 **Parameters**
 - `rhs` — the Array to compare with

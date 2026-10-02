@@ -17,7 +17,7 @@ main(): int {
     var next = Array<String>();
     next.append("third");
     var old = log.replace(move(next));
-    print($"{old.count()}");     # 2
+    print($"{old.count}");     # 2
     print(old[1]);               # second
     return 0;
 }

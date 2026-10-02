@@ -303,7 +303,7 @@ export _io_o_cloexec(): int {
 
 [Target(!OS(Windows))]
 export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<FileHandle>.err(_io_posix_empty_path());
     }
     var writes = options._write || options._append;
@@ -537,7 +537,7 @@ export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
 
 [Target(!OS(Windows))]
 export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<Metadata>.err(_io_posix_empty_path());
     }
     var buf = _IoBuffer(_io_stat_buf_size());
@@ -579,7 +579,7 @@ export _io_dirent_name_offset(): ulong { return 21; }
 # `iterator._entry`: false when there is none.
 [Target(!OS(Windows))]
 export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
-    if (iterator._path._value.size() == 0) {
+    if (iterator._path._value.size == 0) {
         return IoResult<bool>.err(_io_posix_empty_path());
     }
     iterator._handle = opendir(iterator._path._value.c_str());
@@ -640,7 +640,7 @@ export _io_sys_directory_close(handle: __ptr<void>) {
 
 [Target(!OS(Windows))]
 export _io_sys_mkdir(path: Path): IoResult<void> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(mkdir(path._value.c_str(), 511));  # 0777, less the umask
@@ -648,7 +648,7 @@ export _io_sys_mkdir(path: Path): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_rmdir(path: Path): IoResult<void> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rmdir(path._value.c_str()));
@@ -656,7 +656,7 @@ export _io_sys_rmdir(path: Path): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_unlink(path: Path): IoResult<void> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(unlink(path._value.c_str()));
@@ -670,7 +670,7 @@ export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_rename(from: Path, to: Path): IoResult<void> {
-    if (from._value.size() == 0 || to._value.size() == 0) {
+    if (from._value.size == 0 || to._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rename(from._value.c_str(), to._value.c_str()));
@@ -696,7 +696,7 @@ export _io_sys_getcwd(): IoResult<Path> {
 
 [Target(!OS(Windows))]
 export _io_sys_chdir(path: Path): IoResult<void> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(chdir(path._value.c_str()));
@@ -704,7 +704,7 @@ export _io_sys_chdir(path: Path): IoResult<void> {
 
 [Target(!OS(Windows))]
 export _io_sys_realpath(path: Path): IoResult<Path> {
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
     var buf = _IoBuffer(4096);  # PATH_MAX (Linux 4096, macOS 1024)
@@ -718,13 +718,13 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
 [Target(!OS(Windows))]
 export _io_sys_temp_dir(): Path {
     var s = String(getenv("TMPDIR"));
-    if (s.size() == 0) {
+    if (s.size == 0) {
         return Path("/tmp");
     }
     # macOS's TMPDIR ends in '/'.
     var p = s.c_str() as __ptr<u8>;
-    var n = s.size();
-    while (n > 1 && _io_byte(p, s.size(), n - 1) == '/') {
+    var n = s.size;
+    while (n > 1 && _io_byte(p, s.size, n - 1) == '/') {
         n = n - 1;
     }
     return Path(_io_slice(s, 0, n));

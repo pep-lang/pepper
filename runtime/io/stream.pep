@@ -75,7 +75,7 @@ export trait Reader {
     ## @example
     ##     var total = 0;
     ##     for (var chunk in stream.chunks(4096)) {
-    ##         total += chunk.value().count();
+    ##         total += chunk.value().count;
     ##     }
     chunks(size: ulong): Chunks {
         assert(size > 0, "Reader.chunks() needs a size above 0");
@@ -210,7 +210,7 @@ export struct Lines {
         }
         _line.clear();
         while (true) {
-            if (_position == _chunk.count()) {
+            if (_position == _chunk.count) {
                 _chunk.clear();
                 _position = 0;
                 var read = _source.read(_chunk, _io_chunk_size());
@@ -220,7 +220,7 @@ export struct Lines {
                 }
                 if (read.value() == 0) {
                     _finished = true;
-                    if (_line.empty()) {
+                    if (_line.is_empty) {
                         return false;
                     }
                     return _yield_line();
@@ -237,7 +237,7 @@ export struct Lines {
 
     # Makes the collected bytes, without a final `\r`, the current element.
     _yield_line(): bool {
-        if (!_line.empty() && _line.last() == '\r') {
+        if (!_line.is_empty && _line.last() == '\r') {
             _line.pop();
         }
         var decoded = text.Utf8.decode(_line);

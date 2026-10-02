@@ -26,6 +26,16 @@ have no defined order, as HTTP allows.
     assert(headers["ACCEPT"] == "application/json", "one value");
 ```
 
+### Properties
+
+#### count
+
+```pepper
+var count: ulong { get; }
+```
+
+The number of field names.
+
 ### Constructor
 
 #### Headers()
@@ -37,17 +47,6 @@ construct()
 Creates an empty set of fields.
 
 ### Methods
-
-#### count
-
-```pepper
-count(): ulong
-```
-
-Returns the number of field names.
-
-**Returns**
-- the number of names; a name with several values counts once
 
 #### names
 

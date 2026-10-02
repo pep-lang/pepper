@@ -93,7 +93,7 @@ export struct Doc {
                 return true;
             }
             Choice => {
-                return parts.count() > 0 and parts[0].is_hard();
+                return parts.count > 0 and parts[0].is_hard();
             }
             else => {
                 for (var part in parts) {
@@ -193,13 +193,13 @@ struct Frame {
 fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
     var stack = Array<Frame>();
     stack.append(Frame(indent, Mode.Flat, item));
-    ulong rest_index = rest.count();
+    ulong rest_index = rest.count;
     int current = column;
     while (true) {
         if (current > width) {
             return false;
         }
-        if (stack.empty()) {
+        if (stack.is_empty) {
             if (rest_index == 0) {
                 return true;
             }
@@ -211,7 +211,7 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
         var doc = frame.item;
         match (doc.kind) {
             Text => {
-                current += doc.text.length() as int;
+                current += doc.text.length as int;
             }
             Concat, Indent, Group => {
                 int nested = frame.indent;
@@ -222,14 +222,14 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
                 if (doc.kind == DocKind.Group and doc.is_hard()) {
                     nested_mode = Mode.Break;
                 }
-                ulong i = doc.parts.count();
+                ulong i = doc.parts.count;
                 while (i > 0) {
                     i -= 1;
                     stack.append(Frame(nested, nested_mode, doc.parts[i], frame.in_rest));
                 }
             }
             Choice => {
-                if (doc.parts.count() > 0) {
+                if (doc.parts.count > 0) {
                     stack.append(Frame(frame.indent, frame.mode, doc.parts[0], frame.in_rest));
                 }
             }
@@ -269,21 +269,21 @@ export render(document: Doc, width: int): String {
     int column = 0;
     var stack = Array<Frame>();
     stack.append(Frame(0, Mode.Break, document));
-    while (!stack.empty()) {
+    while (!stack.is_empty) {
         var frame = stack.pop();
         var doc = frame.item;
         var breaks = false;
         match (doc.kind) {
             Text => {
                 current.append(doc.text);
-                column += doc.text.length() as int;
+                column += doc.text.length as int;
             }
             Concat, Indent => {
                 int nested = frame.indent;
                 if (doc.kind == DocKind.Indent) {
                     nested += INDENT_WIDTH;
                 }
-                ulong i = doc.parts.count();
+                ulong i = doc.parts.count;
                 while (i > 0) {
                     i -= 1;
                     stack.append(Frame(nested, frame.mode, doc.parts[i]));
@@ -296,14 +296,14 @@ export render(document: Doc, width: int): String {
                 } else if (frame.mode == Mode.Break and !fits(doc, frame.indent, column, width, stack)) {
                     mode = Mode.Break;
                 }
-                ulong i = doc.parts.count();
+                ulong i = doc.parts.count;
                 while (i > 0) {
                     i -= 1;
                     stack.append(Frame(frame.indent, mode, doc.parts[i]));
                 }
             }
             Choice => {
-                ulong count = doc.parts.count();
+                ulong count = doc.parts.count;
                 ulong chosen = count - 1;
                 var mode = Mode.Break;
                 ulong i = 0;

@@ -29,6 +29,8 @@ thread_local! {
     /// The literal arguments of the calls built so far (see
     /// `Module::literal_args`).
     static LITERAL_ARGS: std::cell::RefCell<Vec<(Loc, usize, Loc)>> = const { std::cell::RefCell::new(vec![]) };
+    /// The properties built so far in this file (see [`property_members`]).
+    static PROPERTIES: std::cell::RefCell<Vec<PropertyDef>> = const { std::cell::RefCell::new(vec![]) };
 }
 
 /// Records where each literal among `arguments` of the call at `call` is
@@ -1578,7 +1580,13 @@ fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
     Ok(TraitDef {
         name: t.name.clone(),
         generic_params: t.generic_params.iter().map(generic_param_from).collect(),
-        methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        methods: {
+            let mut methods = t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?;
+            for property in &t.properties {
+                methods.extend(property_members(property, PropertyOwner::Trait { name: &t.name })?.accessors);
+            }
+            methods
+        },
         attributes: t.attributes.clone(),
         loc: loc(t.name_span),
     })
@@ -1597,11 +1605,206 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
             .enumerate()
             .flat_map(|(i, bounds)| bounds.iter().map(move |b| (i, Bound { ty: type_name_from(b), loc: loc(b.span) })))
             .collect(),
-        methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        methods: {
+            let mut methods = e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?;
+            let target = type_name_from(&e.target);
+            for property in &e.properties {
+                methods.extend(property_members(property, PropertyOwner::Extension { name: &target.name })?.accessors);
+            }
+            methods
+        },
         attributes: e.attributes.clone(),
         loc: loc(e.target.span),
         is_exported: e.is_exported,
     })
+}
+
+/// Who declares a property, for [`property_members`].
+enum PropertyOwner<'a> {
+    /// A struct, with its `[Shared]` attribute if it has one.
+    Struct { name: &'a str, shared: Option<&'a ast::Attribute> },
+    Trait { name: &'a str },
+    /// An extension of the struct `name`.
+    Extension { name: &'a str },
+}
+
+/// The members a property lowers to (see [`PropertyDef`]).
+struct PropertyMembers {
+    storage: Option<VariableDef>,
+    accessors: Vec<FunctionDef>,
+}
+
+/// Lower `property` to its storage field and accessor methods, and record
+/// its [`PropertyDef`] for `passes::properties`.
+fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Result<PropertyMembers, Diagnostic> {
+    check_deprecation(&property.attributes)?;
+    reject_implicit(&property.attributes)?;
+    let name = &property.name;
+    let Some(get) = &property.get else {
+        let at = property.set.as_ref().map_or(property.name_span, |s| s.span);
+        return Err(Diagnostic::error(format!("property '{}' has no 'get' accessor; a property must have one", name)).at(loc(at)));
+    };
+    let parent = match owner {
+        PropertyOwner::Struct { name, .. } => Some(name.to_string()),
+        _ => None,
+    };
+    let accessor = |method: String, parameters: Vec<ast::VariableDecl>, return_type: ast::TypeName, body: &Option<ast::Block>, span: ast::Span| {
+        let decl = ast::FunctionDecl {
+            is_exported: false,
+            name: method,
+            name_span: span,
+            generic_params: vec![],
+            return_type,
+            parameters,
+            external: false,
+            body: body.clone(),
+            is_static: false,
+            is_indexer: false,
+            is_variadic: false,
+            span,
+            attributes: property.attributes.clone(),
+        };
+        member_def(&decl, parent.clone())
+    };
+    let mut getter = accessor(getter_name(name), vec![], property.type_name.clone(), &get.function.body, property.name_span)?;
+    let value = ast::VariableDecl {
+        attributes: vec![],
+        name: ast::PROPERTY_VALUE.to_string(),
+        name_span: property.name_span,
+        type_name: property.type_name.clone(),
+        default_value: None,
+        is_const: false,
+        span: property.name_span,
+        is_exported: false,
+    };
+    let void = ast::TypeName { name: "void".to_string(), generic_types: vec![], span: property.name_span, labels: vec![] };
+    let mut setter = match &property.set {
+        Some(set) => Some(accessor(setter_name(name), vec![value], void, &set.function.body, set.span)?),
+        None => None,
+    };
+    let uses_field = |f: &FunctionDef| {
+        let mut found = false;
+        if let Some(body) = &f.body {
+            crate::passes::visit_block(body, &mut |e| {
+                found |= matches!(e, Expression::SymbolRef { id, .. } if id == ast::PROPERTY_FIELD);
+            });
+        }
+        found
+    };
+    let has_storage = get.function.body.is_none()
+        || property.set.as_ref().is_some_and(|s| s.function.body.is_none())
+        || uses_field(&getter)
+        || setter.as_ref().is_some_and(uses_field);
+    let storage = if get.function.body.is_none() { name.clone() } else { storage_name(name) };
+    let field_ref = |at: Loc| Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: storage.clone(), loc: at };
+    match owner {
+        PropertyOwner::Trait { .. } => {
+            if let Some(body) = [&property.get, &property.set].into_iter().flatten().find_map(|a| a.function.body.as_ref().map(|_| a.span)) {
+                return Err(Diagnostic::error(format!("an accessor of trait property '{}' cannot have a body", name)).at(loc(body)));
+            }
+            if let Some(value) = &property.default_value {
+                return Err(Diagnostic::error(format!("trait property '{}' cannot have an initializer", name)).at(loc(value.span())));
+            }
+        }
+        PropertyOwner::Extension { .. } if has_storage => {
+            return Err(Diagnostic::error(format!(
+                "an extension cannot add storage: property '{}' must be computed, with accessor bodies that do not use 'field'",
+                name
+            ))
+            .at(loc(property.name_span)));
+        }
+        PropertyOwner::Struct { shared: Some(shared), .. } => {
+            if let Some(set) = &property.set {
+                return Err(Diagnostic::error(format!(
+                    "property '{}' of a '[{}]' struct cannot have a 'set' accessor: its storage is 'const'",
+                    name, SHARED_ATTRIBUTE
+                ))
+                .at(loc(set.span))
+                .with_note(format!("'[{}]' declared here", SHARED_ATTRIBUTE), Some(loc(shared.span))));
+            }
+        }
+        _ => {}
+    }
+    if !has_storage {
+        if let Some(value) = &property.default_value {
+            return Err(Diagnostic::error(format!("property '{}' has no storage to initialize: it is computed", name))
+                .at(loc(value.span())));
+        }
+    }
+    let in_trait = matches!(owner, PropertyOwner::Trait { .. });
+    // Default bodies read and write the storage; `field` in a written body
+    // is the storage.
+    if !in_trait {
+        let at = loc(property.name_span);
+        match &mut getter.body {
+            Some(body) => replace_field(body, &storage),
+            None => {
+                getter.body = Some(Block {
+                    name: String::new(),
+                    items: vec![Statement::Return(ReturnStatement { expr: Some(field_ref(at)), loc: at })],
+                    attributes: vec![],
+                })
+            }
+        }
+        if let Some(setter) = &mut setter {
+            match &mut setter.body {
+                Some(body) => replace_field(body, &storage),
+                None => {
+                    let assign = Expression::Binary {
+                        op: BinaryOp::Assign,
+                        lhs: Box::new(field_ref(at)),
+                        rhs: Box::new(Expression::SymbolRef { id: ast::PROPERTY_VALUE.to_string(), ty: TypeName::auto(), loc: at }),
+                        loc: at,
+                    };
+                    setter.body = Some(Block { name: String::new(), items: vec![Statement::Expression(assign)], attributes: vec![] })
+                }
+            }
+        }
+    }
+    let shared = matches!(owner, PropertyOwner::Struct { shared: Some(_), .. });
+    let storage_def = (has_storage && !in_trait)
+        .then(|| -> Result<VariableDef, Diagnostic> {
+            let field = ast::VariableDecl {
+                attributes: property.attributes.clone(),
+                name: storage.clone(),
+                name_span: property.name_span,
+                type_name: property.type_name.clone(),
+                default_value: property.default_value.clone(),
+                is_const: shared,
+                span: property.span,
+                is_exported: false,
+            };
+            variable_def(&field, Kind::Field)
+        })
+        .transpose()?;
+    let owner_name = match owner {
+        PropertyOwner::Struct { name, .. } | PropertyOwner::Trait { name } | PropertyOwner::Extension { name } => name.to_string(),
+    };
+    PROPERTIES.with(|p| {
+        p.borrow_mut().push(PropertyDef {
+            name: name.clone(),
+            owner: owner_name,
+            in_trait,
+            loc: loc(property.name_span),
+            get: if get.function.body.is_some() { AccessorKind::Body } else { AccessorKind::Default },
+            set: property.set.as_ref().map(|s| if s.function.body.is_some() { AccessorKind::Body } else { AccessorKind::Default }),
+            set_loc: property.set.as_ref().map_or(Loc::NONE, |s| loc(s.span)),
+            storage: (has_storage && !in_trait).then(|| storage.clone()),
+            shared,
+        })
+    });
+    Ok(PropertyMembers { storage: storage_def, accessors: [Some(getter), setter].into_iter().flatten().collect() })
+}
+
+/// Inside an accessor body, `field` names the property's storage.
+fn replace_field(body: &mut Block, storage: &str) {
+    crate::passes::walk_block(body, &mut |e| {
+        if let Expression::SymbolRef { id, loc, .. } = e
+            && id == ast::PROPERTY_FIELD
+        {
+            *e = Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: storage.to_string(), loc: *loc };
+        }
+    });
 }
 
 /// A `[Value]` struct has no object: nothing destroys it, and it is
@@ -1650,13 +1853,23 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         .iter()
         .map(|f| variable_def(f, Kind::Field))
         .collect::<Result<Vec<_>, _>>()?;
-    let (generic_methods, method_members): (Vec<FunctionDef>, Vec<FunctionDef>) = decl
+    let (generic_methods, mut method_members): (Vec<FunctionDef>, Vec<FunctionDef>) = decl
         .methods
         .iter()
         .map(|m| function_def(m, Some(base_name.clone())))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .partition(|m| m.is_generic_func);
+    let mut field_members = field_members;
+    let shared = decl
+        .attributes
+        .iter()
+        .find(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == SHARED_ATTRIBUTE));
+    for property in &decl.properties {
+        let built = property_members(property, PropertyOwner::Struct { name: &base_name, shared })?;
+        field_members.extend(built.storage);
+        method_members.extend(built.accessors);
+    }
 
     // Several constructors overload one another as the set `Point$1`,
     // `Point$2`, … (declaration order); a single one is named after the type.
@@ -2117,6 +2330,7 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     let previous_error = LABEL_ERROR.with(|e| e.take());
     let previous_uses = TYPE_USES.with(|u| u.take());
     let previous_literals = LITERAL_ARGS.with(|l| l.take());
+    let previous_properties = PROPERTIES.with(|p| p.take());
     let previous_context = CONTEXT.with(|c| c.take());
     let previous_index = CONTEXT_INDEX.with(|i| i.take());
     // Hidden locals are numbered per file, so a file's code (and its build
@@ -2126,12 +2340,14 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     let built = build_module(module);
     let (uses, contexts) = TYPE_USES.with(|u| u.replace(previous_uses));
     let literals = LITERAL_ARGS.with(|l| l.replace(previous_literals));
+    let properties = PROPERTIES.with(|p| p.replace(previous_properties));
     CONTEXT.with(|c| *c.borrow_mut() = previous_context);
     CONTEXT_INDEX.with(|i| i.set(previous_index));
     let built = built.map(|mut m| {
         m.type_uses = uses;
         m.use_contexts = contexts;
         m.literal_args = literals;
+        m.properties = properties;
         m
     });
     set_counters(previous_counters);

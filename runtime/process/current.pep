@@ -60,7 +60,7 @@ export _process_arguments(): Array<String> {
 ##     import process;
 ##
 ##     main(): int {
-##         if (process.arguments().count() < 2) {
+##         if (process.arguments().count < 2) {
 ##             print("usage: tool FILE");
 ##             process.exit(2);
 ##         }

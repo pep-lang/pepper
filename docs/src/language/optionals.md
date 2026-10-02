@@ -99,9 +99,9 @@ than a sentinel value:
 
 **Breaking change.** `Array.find` used to return a `long` that was `-1` for
 "not found", and the `Path` methods above returned an empty `Path` or
-`String` (or `name.size()` for `dot_index`). Code written against the old
+`String` (or `name.size` for `dot_index`). Code written against the old
 API must test the optional instead: `a.find(x) >= 0` becomes
-`a.find(x).is_some()`, `p.parent().is_empty()` becomes
+`a.find(x).is_some()`, `p.parent().is_empty` becomes
 `p.parent().is_none()`, and a value is read with `value()` or `value_or`.
 A comparison such as `a.find(x) == -1` still compiles but compares the
 optional object rather than an index, so search for these and rewrite them.

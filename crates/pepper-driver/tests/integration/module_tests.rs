@@ -263,7 +263,7 @@ fn re_export_of_unknown_symbol_is_rejected() {
 
 #[test]
 fn runtime_prelude_needs_no_import() {
-    let main = "test(): int { var s: String = \"abc\"; return s.length() as int; }";
+    let main = "test(): int { var s: String = \"abc\"; return s.length as int; }";
     assert_eq!(run("prelude", &[("main.pep", main)]), 3);
 }
 

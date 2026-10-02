@@ -135,10 +135,10 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
     var method = request.method;
     var sends_body = match (method) {
         "POST", "PUT", "PATCH" => true,
-        else => request._body.count() > 0,
+        else => request._body.count > 0,
     };
     if (sends_body) {
-        headers.add("Content-Length", to_string(request._body.count()));
+        headers.add("Content-Length", to_string(request._body.count));
     }
     headers.add("Connection", "close");
     var out = Array<u8>();
@@ -147,7 +147,7 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
     if (sent.is_err()) {
         return io.IoResult<Response>.err(sent.error());
     }
-    if (request._body.count() > 0) {
+    if (request._body.count > 0) {
         var body = connection._write_all(request._body);
         if (body.is_err()) {
             return io.IoResult<Response>.err(body.error());
@@ -177,7 +177,7 @@ _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
     }
     var line = status_line.value();
     # HTTP/1.x SP code [SP reason]
-    if (!line.starts_with("HTTP/1.") || line.size() < 12) {
+    if (!line.starts_with("HTTP/1.") || line.size < 12) {
         return io.IoResult<Response>.err(_http_error($"not an HTTP/1.x response: '{line}'"));
     }
     var code = _http_parse_decimal(line.substr_bytes(9, 3));
@@ -185,8 +185,8 @@ _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
         return io.IoResult<Response>.err(_http_error($"invalid status line: '{line}'"));
     }
     var response = Response(code as int);
-    if (line.size() > 13) {
-        response.reason = line.substr_bytes(13, line.size() - 13);
+    if (line.size > 13) {
+        response.reason = line.substr_bytes(13, line.size - 13);
     }
     var fields = _http_read_headers(reader, response.headers);
     if (fields.is_err()) {
@@ -266,7 +266,7 @@ _http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
         return _http_invalid_url(url, "user information is not supported");
     }
     parsed._host = uri.host.value();
-    if (parsed._host.size() == 0) {
+    if (parsed._host.size == 0) {
         return _http_invalid_url(url, "no host");
     }
     if (uri.port.is_some()) {

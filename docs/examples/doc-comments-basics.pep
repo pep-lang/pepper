@@ -29,15 +29,15 @@ struct Stack<T> {
     ## @panics if the stack is empty
     ## @see Stack.push
     pop(): T {
-        assert(items.count() > 0, "pop() on an empty Stack");
-        return items.remove_at(items.count() - 1);
+        assert(items.count > 0, "pop() on an empty Stack");
+        return items.remove_at(items.count - 1);
     }
 
     ## Returns the number of elements.
     ##
     ## @returns how many elements the stack holds
     count(): ulong {
-        return items.count();
+        return items.count;
     }
 }
 

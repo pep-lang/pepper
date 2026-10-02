@@ -129,7 +129,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `io.TcpStream.write_string(String)`, `io.UnixStream.write_string(String)`, `tls.TlsStream.write_string(String)` | `write_all(String)` |
 | `io.File.seek(Offset, int)` | `io.File.seek(io.SeekFrom)` |
 | `io.File.std_file(int, String)` | `io.File.std_file(io.StdStream, String)` |
-| `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
+| `HashMap.cap()`, `HashSet.cap()` | the `capacity` property |
 | `arguments()`, `exit(code)` in the prelude | `process.arguments()`, `process.exit(code)` (`import process`) |
 | `Channel.send(x)`, `try_send(x)` with a variable something else references (now an error: `send` no longer copies) | `send(move(x))`, or `send(copy(x))` to keep using `x` |
 | `[Sending]` parameter attribute (now an error) | `[Move]` |

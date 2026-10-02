@@ -11,7 +11,7 @@ struct Span {
     }
 
     construct(text: String) {
-        length = text.length() as int;
+        length = text.length as int;
     }
 }
 

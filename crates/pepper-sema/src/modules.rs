@@ -752,7 +752,11 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
         for d in f.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             match d {
                 Declaration::Struct(s) => members.of_body.entry(own[i].get(&s.name).unwrap_or(&s.name).clone()).or_default().extend(
-                    s.fields.iter().map(|x| x.name.clone()).chain(s.methods.iter().filter(kept_method).map(|m| m.name.clone())),
+                    s.fields
+                        .iter()
+                        .map(|x| x.name.clone())
+                        .chain(s.properties.iter().map(|p| p.name.clone()))
+                        .chain(s.methods.iter().filter(kept_method).map(|m| m.name.clone())),
                 ),
                 Declaration::Extend(e) => {
                     let target = members.resolve(&resolve(i, &e.target.name)).to_string();
@@ -764,7 +768,13 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
                         .of_extensions
                         .entry(target)
                         .or_default()
-                        .extend(e.methods.iter().filter(kept_method).map(|m| (m.name.clone(), i, e.is_exported)))
+                        .extend(
+                            e.methods
+                                .iter()
+                                .filter(kept_method)
+                                .map(|m| (m.name.clone(), i, e.is_exported))
+                                .chain(e.properties.iter().map(|p| (p.name.clone(), i, e.is_exported))),
+                        )
                 }
                 _ => {}
             }

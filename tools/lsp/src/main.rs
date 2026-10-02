@@ -164,6 +164,9 @@ fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
             ty: type_string(&field.type_name),
         });
     }
+    for property in &s.properties {
+        out.push(Symbol { name: property.name.clone(), name_span: property.name_span, ty: type_string(&property.type_name) });
+    }
     for ctor in &s.constructors {
         let params = ctor
             .parameters
@@ -383,12 +386,13 @@ fn function_at(module: &ast::Module, offset: usize) -> Option<(&ast::FunctionDec
         match decl {
             ast::Declaration::Function(f) if inside(&f) => return Some((f, None)),
             ast::Declaration::Struct(s) if s.span.start <= offset && offset < s.span.end => {
-                if let Some(f) = s.methods.iter().chain(&s.constructors).find(inside) {
+                let accessors = s.properties.iter().flat_map(|p| p.accessors());
+                if let Some(f) = s.methods.iter().chain(&s.constructors).chain(accessors).find(inside) {
                     return Some((f, Some(s)));
                 }
             }
             ast::Declaration::Extend(e) => {
-                if let Some(f) = e.methods.iter().find(inside) {
+                if let Some(f) = e.methods.iter().chain(e.properties.iter().flat_map(|p| p.accessors())).find(inside) {
                     return Some((f, None));
                 }
             }
@@ -550,9 +554,11 @@ fn parameter_at(module: &ast::Module, offset: usize) -> Option<Symbol> {
     let functions = module.declarations.iter().flat_map(|d| -> Box<dyn Iterator<Item = &ast::FunctionDecl>> {
         match d {
             ast::Declaration::Function(f) => Box::new(std::iter::once(f)),
-            ast::Declaration::Struct(s) => Box::new(s.methods.iter().chain(&s.constructors)),
+            ast::Declaration::Struct(s) => {
+                Box::new(s.methods.iter().chain(&s.constructors).chain(s.properties.iter().flat_map(|p| p.accessors())))
+            }
             ast::Declaration::Trait(t) => Box::new(t.methods.iter()),
-            ast::Declaration::Extend(e) => Box::new(e.methods.iter()),
+            ast::Declaration::Extend(e) => Box::new(e.methods.iter().chain(e.properties.iter().flat_map(|p| p.accessors()))),
             _ => Box::new(std::iter::empty()),
         }
     });
@@ -1151,8 +1157,11 @@ fn find_match_by<'a>(module: &'a ast::Module, start: usize, matches: &dyn Fn(&as
                 .filter_map(|m| m.body.as_ref())
                 .chain(s.constructors.iter().filter_map(|c| c.body.as_ref()))
                 .chain(s.destructor.as_ref())
+                .chain(s.properties.iter().flat_map(|p| p.accessors()).filter_map(|m| m.body.as_ref()))
                 .collect(),
-            ast::Declaration::Extend(e) => e.methods.iter().filter_map(|m| m.body.as_ref()).collect(),
+            ast::Declaration::Extend(e) => {
+                e.methods.iter().chain(e.properties.iter().flat_map(|p| p.accessors())).filter_map(|m| m.body.as_ref()).collect()
+            }
             ast::Declaration::Trait(t) => t.methods.iter().filter_map(|m| m.body.as_ref()).collect(),
             _ => vec![],
         };
@@ -1427,6 +1436,7 @@ const PRINT_HOVER: &str = "`print` — built-in function\n\nPrints each argument
 fn found_hover(program: Option<&Program>, text: &str, found: &infer::Found) -> String {
     let (name, start) = match &found.kind {
         infer::Kind::Field(v) => (format!(".{}", v.name), v.attributes.iter().map(|a| a.span.start).chain([v.span.start]).min()),
+        infer::Kind::Property(p) => (format!(".{}", p.name), p.attributes.iter().map(|a| a.span.start).chain([p.span.start]).min()),
         infer::Kind::Method(f) => (
             demangle_name(&f.name).to_string(),
             f.attributes.iter().map(|a| a.span.start).chain([f.span.start, f.name_span.start]).min(),

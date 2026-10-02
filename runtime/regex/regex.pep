@@ -86,7 +86,7 @@ export struct Regex {
     static escape(text: String): String {
         var out = StringBuilder();
         var start: ulong = 0;
-        var size = text.size();
+        var size = text.size;
         ulong index = 0;
         while (index < size) {
             var c = text.byte_at(index);
@@ -159,11 +159,11 @@ export struct Regex {
     ## at the character before it.
     ##
     ## @param text the text to search
-    ## @param start the byte offset to search from, at most `text.size()`
+    ## @param start the byte offset to search from, at most `text.size`
     ## @returns the first match from `start`, or none
-    ## @panics if `start` is greater than `text.size()`
+    ## @panics if `start` is greater than `text.size`
     find_at(text: String, start: ulong): Match? {
-        assert(start <= text.size(), "Regex.find_at: start is past the end of the text");
+        assert(start <= text.size, "Regex.find_at: start is past the end of the text");
         var slots = _RegexMatcher(_program).search(text, start, false);
         if (slots.is_none()) {
             return Optional<Match>.none();
@@ -182,7 +182,7 @@ export struct Regex {
     ##
     ##     var total = 0;
     ##     for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
-    ##         total += number.text().size();   # 1, then 2, then 3
+    ##         total += number.text().size;   # 1, then 2, then 3
     ##     }
     find_all(text: String): Matches {
         return Matches(_program, text);
@@ -236,7 +236,7 @@ export struct Regex {
                 break;
             }
         }
-        out.append(text.substr_bytes(last, text.size() - last));
+        out.append(text.substr_bytes(last, text.size - last));
         return out.to_string();
     }
 
@@ -250,7 +250,7 @@ export struct Regex {
     ##     import regex;
     ##
     ##     var parts = regex.Regex(",\\s*").split("a, b,c");
-    ##     assert(parts.count() == 3 && parts[1] == "b", "three pieces");
+    ##     assert(parts.count == 3 && parts[1] == "b", "three pieces");
     split(text: String): String[] {
         var pieces = Array<String>();
         ulong last = 0;
@@ -258,7 +258,7 @@ export struct Regex {
             pieces.append(text.substr_bytes(last, found.start() - last));
             last = found.end();
         }
-        pieces.append(text.substr_bytes(last, text.size() - last));
+        pieces.append(text.substr_bytes(last, text.size - last));
         return pieces;
     }
 
@@ -322,7 +322,7 @@ export struct Match {
     ##
     ## @returns the number of groups in the pattern
     group_count(): ulong {
-        return _slots.count() / 2 - 1;
+        return _slots.count / 2 - 1;
     }
 
     ## Returns the text that group `index` matched, or none when the group
@@ -376,7 +376,7 @@ export struct Match {
 
     # Appends `replacement` to `out` with its `$` references filled in.
     _expand(replacement: String, out: StringBuilder) {
-        var size = replacement.size();
+        var size = replacement.size;
         ulong last = 0;
         ulong index = 0;
         while (index < size) {
@@ -463,7 +463,7 @@ export struct Matches {
     ##
     ## @returns true when there is another match, false once they are exhausted
     next(): bool {
-        var size = _text.size();
+        var size = _text.size;
         while (!_done && _position <= size) {
             var slots = _matcher.search(_text, _position, false);
             if (slots.is_none()) {

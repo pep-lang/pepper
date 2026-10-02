@@ -239,7 +239,7 @@ extend _IocpDriver with _Driver {
         }
         var drained = Array<(handle: ulong, interest: int)>();
         var rounds = 0;
-        while (this._pending.count() > 0 && rounds < 100) {
+        while (this._pending.count > 0 && rounds < 100) {
             this._poll(HashMap<ulong, _SocketWaits>(), 10, drained);
             rounds = rounds + 1;
         }
@@ -276,7 +276,7 @@ _async_iocp_close_handle(handle: __ptr<void>) {
 [Target(OS(Windows))]
 _async_iocp_open_afd(port: __ptr<void>): __ptr<void> {
     var name = "\\Device\\Afd\\Pepper";
-    var units = name.size();
+    var units = name.size;
     var wide = io._io_win_wide(name);
     __ptr<u8> unicode = _pep_malloc(16);  # UNICODE_STRING
     (unicode as __ptr<u16>)[0] = (units * 2) as u16;

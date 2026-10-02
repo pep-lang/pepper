@@ -15,7 +15,7 @@ The default error type of `Result`: a human-readable message.
 **Example**
 ```pepper
     var r = Result<int>.err(Error("boom"));
-    var n = r.error().message.length();   # 4
+    var n = r.error().message.length;   # 4
 ```
 
 ### Fields
@@ -77,7 +77,7 @@ nothing, so it only checks that the result is Ok.
         if (a.value() != 42) { return 1; }
         var b = Result<int>.err(Error("boom"));
         if (!b.is_err()) { return 2; }
-        var n = match (b) { Ok(v) => v, Err(e) => e.message.length() };   # 4
+        var n = match (b) { Ok(v) => v, Err(e) => e.message.length };   # 4
         return b.ok_or(0);   # 0
     }
 ```

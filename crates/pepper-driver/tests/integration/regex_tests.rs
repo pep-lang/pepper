@@ -212,8 +212,8 @@ test(): int {
     var comma = regex.Regex(",\\s*");
     if (joined(comma.split("a, b,c")) != "a|b|c") { return -30; }
     if (joined(comma.split(",a,")) != "|a|") { return -31; }
-    if (comma.split("abc").count() != 1) { return -32; }
-    if (comma.split("").count() != 1) { return -33; }
+    if (comma.split("abc").count != 1) { return -32; }
+    if (comma.split("").count != 1) { return -33; }
 
     var after = regex.Regex("\\d").find_at("1a2b3", 1).value();
     if (after.text() != "2" || after.start() != 2) { return -40; }
@@ -352,7 +352,7 @@ count_words() {
     var i = 0;
     while (i < 200) {
         for (var each in word.find_all("one two three")) {
-            if (each.group("word").value().size() > 0) {
+            if (each.group("word").value().size > 0) {
                 found.fetch_add(1);
             }
         }

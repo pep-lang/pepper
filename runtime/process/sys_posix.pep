@@ -200,13 +200,13 @@ _process_stream(
 # it; free it with `_pep_free`.
 [Target(!OS(Windows))]
 _process_c_strings(values: Array<String>): __ptr<__ptr<char>> {
-    __ptr<__ptr<char>> array = _pep_malloc((values.count() + 1) * 8);
+    __ptr<__ptr<char>> array = _pep_malloc((values.count + 1) * 8);
     ulong index = 0;
-    while (index < values.count()) {
+    while (index < values.count) {
         array[index] = values[index].c_str();
         index = index + 1;
     }
-    array[values.count()] = __null;
+    array[values.count] = __null;
     return array;
 }
 

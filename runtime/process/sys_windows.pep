@@ -117,9 +117,9 @@ export _process_sys_executable_path(): io.IoResult<io.Path> {
 # end, and kept as it is elsewhere.
 [Target(OS(Windows))]
 _process_quote(line: String, argument: String): String {
-    var plain = argument.size() > 0;
+    var plain = argument.size > 0;
     ulong index = 0;
-    while (index < argument.size()) {
+    while (index < argument.size) {
         var c = argument.byte_at(index);
         if (c == 32 || c == 9 || c == 10 || c == 11 || c == 34) {
             plain = false;
@@ -133,7 +133,7 @@ _process_quote(line: String, argument: String): String {
     bytes.append(34);
     index = 0;
     ulong backslashes = 0;
-    while (index < argument.size()) {
+    while (index < argument.size) {
         var c = argument.byte_at(index);
         if (c == 92) {
             backslashes = backslashes + 1;

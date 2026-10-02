@@ -24,7 +24,7 @@ build(): int {
     a2.append(s2);
     if (!m.insert(1, a1)) { return -1; }
     if (!m.insert(2, a2)) { return -2; }
-    if (m.count() != 2) { return -3; }
+    if (m.count != 2) { return -3; }
     # Compare through the creator variables: a literal in the expression
     # would allocate a temporary String that nothing releases.
     if (m[1][0] != s1) { return -4; }
@@ -68,8 +68,8 @@ build(): int {
         m.insert(i, a);
         i = i + 1;
     }
-    if (m.count() != 5) { return -1; }
-    if (m[4][0].size() != 1) { return -2; }
+    if (m.count != 5) { return -1; }
+    if (m[4][0].size != 1) { return -2; }
     return 0;
 }
 test(): int {
@@ -105,7 +105,7 @@ build(): int {
     inner2.insert(3, 30);
     if (!m.insert(k1, inner1)) { return -1; }
     if (!m.insert(k2, inner2)) { return -2; }
-    if (m.count() != 2) { return -3; }
+    if (m.count != 2) { return -3; }
     if (m[k1][1] != 10) { return -4; }
     if (m[k2][3] != 30) { return -5; }
     # build's scope exit drops the creators' refs: String keys and inner maps.
@@ -142,7 +142,7 @@ build(): int {
     a2.append(4);
     if (!s.insert(a1)) { return -1; }
     if (!s.insert(a2)) { return -2; }
-    if (s.count() != 2) { return -3; }
+    if (s.count != 2) { return -3; }
     # The set's slots hold one ref each; build's scope exit drops the
     # creators' refs.
     return 0;

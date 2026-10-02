@@ -98,12 +98,12 @@ export struct _HttpReader {
     }
 
     _available(): ulong {
-        return this._buffer.count() - this._start;
+        return this._buffer.count - this._start;
     }
 
     # Reads more bytes; 0 at the end of the stream.
     _fill(): io.IoResult<ulong> {
-        if (this._start > 0 && this._start == this._buffer.count()) {
+        if (this._start > 0 && this._start == this._buffer.count) {
             this._buffer.clear();
             this._start = 0;
         }
@@ -189,7 +189,7 @@ export struct _HttpReader {
         while (true) {
             var take = this._available();
             if (take > 0) {
-                if (into.count() + take > limit) {
+                if (into.count + take > limit) {
                     return io.IoResult<void>.err(_http_too_large("the body is too large"));
                 }
                 into._append_raw(this._buffer._data + this._start, take);
@@ -216,10 +216,10 @@ export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<vo
             return io.IoResult<void>.err(read.error());
         }
         var line = read.value();
-        if (line.size() == 0) {
+        if (line.size == 0) {
             return io.IoResult<void>.ok();
         }
-        total = total + line.size();
+        total = total + line.size;
         if (total > _HTTP_MAX_HEAD) {
             return io.IoResult<void>.err(_http_too_large("the header fields are too large"));
         }
@@ -228,7 +228,7 @@ export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<vo
             return io.IoResult<void>.err(_http_error($"a header field has no name: '{line}'"));
         }
         var name = line.substr_bytes(0, colon as ulong);
-        var value = line.substr_bytes(colon as ulong + 1, line.size() - colon as ulong - 1).trim();
+        var value = line.substr_bytes(colon as ulong + 1, line.size - colon as ulong - 1).trim();
         headers.add(name, value);
     }
     return io.IoResult<void>.ok();
@@ -282,7 +282,7 @@ export _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoR
             # The trailer fields, which are dropped.
             return _http_read_headers(reader, Headers());
         }
-        if (into.count() + size as ulong > limit) {
+        if (into.count + size as ulong > limit) {
             return io.IoResult<void>.err(_http_too_large("the body is too large"));
         }
         var data = reader._bytes(into, size as ulong);
@@ -328,7 +328,7 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
 }
 
 export _http_append(out: u8[], text: String) {
-    out._append_raw(text.c_str() as __ptr<u8>, text.size());
+    out._append_raw(text.c_str() as __ptr<u8>, text.size);
 }
 
 # ── Text ─────────────────────────────────────────────────────────────────────
@@ -336,13 +336,13 @@ export _http_append(out: u8[], text: String) {
 # A non-negative decimal number, or -1.
 export _http_parse_decimal(text: String): long {
     var t = text.trim();
-    if (t.size() == 0 || t.size() > 18) {
+    if (t.size == 0 || t.size > 18) {
         return -1;
     }
     var p = t.c_str() as __ptr<u8>;
     long value = 0;
     ulong i = 0;
-    while (i < t.size()) {
+    while (i < t.size) {
         var c = p[i];
         if (c < '0' || c > '9') {
             return -1;
@@ -355,13 +355,13 @@ export _http_parse_decimal(text: String): long {
 
 # A non-negative hexadecimal number, or -1.
 export _http_parse_hex(text: String): long {
-    if (text.size() == 0 || text.size() > 15) {
+    if (text.size == 0 || text.size > 15) {
         return -1;
     }
     var p = text.c_str() as __ptr<u8>;
     long value = 0;
     ulong i = 0;
-    while (i < text.size()) {
+    while (i < text.size) {
         var digit = _pep_hex_digit(p[i]);
         if (digit < 0) {
             return -1;
@@ -388,7 +388,7 @@ export _http_contains_token(list: String, token: String): bool {
         if (comma < 0) {
             return false;
         }
-        rest = rest.substr_bytes(comma as ulong + 1, rest.size() - comma as ulong - 1);
+        rest = rest.substr_bytes(comma as ulong + 1, rest.size - comma as ulong - 1);
     }
     return false;
 }

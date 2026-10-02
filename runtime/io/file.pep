@@ -441,7 +441,7 @@ export struct File {
                 IoError(_io_sys_code_invalid_input(), "create and truncate need write or append")
             );
         }
-        if (path._value.size() == 0) {
+        if (path._value.size == 0) {
             return IoResult<File>.err(IoError(_io_sys_code_not_found(), "empty path"));
         }
         var h = _io_sys_open(path, options);
@@ -650,14 +650,14 @@ export struct File {
     ## Writes bytes from `data` at the current position (or at the end, in
     ## append mode) with a single system call, and advances the position.
     ##
-    ## The write may be partial: it can write fewer than `data.count()`
+    ## The write may be partial: it can write fewer than `data.count`
     ## bytes, and one call moves at most about 2 GiB on POSIX or 1 GiB on
     ## Windows. Use `write_all` to write everything. On POSIX an interrupted
     ## write (`EINTR`) is retried.
     ##
     ## @param data the bytes to write
     ## @returns the number of bytes written, which may be less than
-    ##   `data.count()`; an error when the File is closed or was not opened
+    ##   `data.count`; an error when the File is closed or was not opened
     ##   for writing, or another platform error
     write(data: u8[]): IoResult<ulong> {
         var c = _check_writable();
@@ -671,7 +671,7 @@ export struct File {
     }
 
     ## Writes all of `data`, repeating the write until every byte is
-    ## written. Advances the position by `data.count()`.
+    ## written. Advances the position by `data.count`.
     ##
     ## If an error occurs part of `data` may already have been written.
     ##
@@ -709,12 +709,12 @@ export struct File {
             return c;
         }
         if (!_io_in_task()) {
-            return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size());
+            return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size);
         }
         # Another task could change `s` while the write waits, so write a
         # copy.
         var bytes = _io_text_copy(s);
-        var r = _io_write_all_raw(_handle, bytes, s.size());
+        var r = _io_write_all_raw(_handle, bytes, s.size);
         _pep_free(bytes);
         return r;
     }
@@ -917,7 +917,7 @@ export struct File {
     ## @example
     ##     var r = File.read_bytes(Path("image.png"));
     ##     if (r.is_ok()) {
-    ##         var n = r.value().count();
+    ##         var n = r.value().count;
     ##     }
     static read_bytes(path: Path): IoResult<u8[]> {
         var f = open(path);

@@ -96,10 +96,10 @@ extend _PollDriver with _Driver {
         for (var entry in waits) {
             var (key, waiting) = entry;
             var interest = 0;
-            if (waiting._readers.count() > 0) {
+            if (waiting._readers.count > 0) {
                 interest = interest | io._IO_READABLE;
             }
-            if (waiting._writers.count() > 0) {
+            if (waiting._writers.count > 0) {
                 interest = interest | io._IO_WRITABLE;
             }
             if (interest != 0) {
@@ -107,7 +107,7 @@ extend _PollDriver with _Driver {
             }
         }
         watched.append((this._bell as ulong, io._IO_READABLE));
-        var count = watched.count();
+        var count = watched.count;
         var size = _async_poll_entry_size();
         __ptr<u8> descriptors = _pep_malloc(count * size);
         var i: ulong = 0;

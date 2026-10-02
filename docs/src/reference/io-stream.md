@@ -110,7 +110,7 @@ error is yielded and ends it.
 ```pepper
     var total = 0;
     for (var chunk in stream.chunks(4096)) {
-        total += chunk.value().count();
+        total += chunk.value().count;
     }
 ```
 

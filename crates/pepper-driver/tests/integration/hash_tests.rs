@@ -48,8 +48,8 @@ fn empty_map() {
             r#"
 test(): int {
     var m = HashMap<int, int>();
-    if (!m.empty()) { return -1; }
-    if (m.count() != 0) { return -2; }
+    if (!m.is_empty) { return -1; }
+    if (m.count != 0) { return -2; }
     if (m.contains(1)) { return -3; }
     if (m[42] != 0) { return -4; }
     return 0;
@@ -68,7 +68,7 @@ test(): int {
     var m = HashMap<int, int>();
     if (!m.insert(1, 10)) { return -1; }
     if (m.insert(2, 20) != true) { return -2; }
-    if (m.count() != 2) { return -3; }
+    if (m.count != 2) { return -3; }
     if (!m.contains(1) || !m.contains(2)) { return -4; }
     if (m[1] != 10 || m[2] != 20) { return -5; }
     if (m.get(2) != 20) { return -6; }
@@ -89,11 +89,11 @@ test(): int {
     var m = HashMap<int, int>();
     if (!m.insert(5, 1)) { return -1; }
     if (m.insert(5, 2) != false) { return -2; }
-    if (m.count() != 1) { return -3; }
+    if (m.count != 1) { return -3; }
     if (m[5] != 2) { return -4; }
     m[5] = 3;
     if (m[5] != 3) { return -5; }
-    if (m.count() != 1) { return -6; }
+    if (m.count != 1) { return -6; }
     return 0;
 }"#
         ),
@@ -115,7 +115,7 @@ test(): int {
     while ((hash<int>(other) & 7) != (hash<int>(1) & 7)) { other = other + 1; }
     if (!m.insert(1, 100)) { return -2; }
     if (!m.insert(other, 200)) { return -3; }
-    if (m.count() != 2) { return -4; }
+    if (m.count != 2) { return -4; }
     if (m[1] != 100 || m[other] != 200) { return -5; }
     if (!m.remove(1)) { return -6; }
     if (m[other] != 200) { return -7; }
@@ -138,8 +138,8 @@ test(): int {
         if (!m.insert(i, i * 10)) { return -1; }
         i = i + 1;
     }
-    if (m.count() != 25) { return -2; }
-    if (m.capacity() < 64) { return -3; }
+    if (m.count != 25) { return -2; }
+    if (m.capacity < 64) { return -3; }
     var j = 0;
     while (j < 25) {
         if (m[j] != j * 10) { return -4; }
@@ -163,11 +163,11 @@ test(): int {
     if (!m.insert(11, 110)) { return -2; }
     if (m.remove(99) != false) { return -3; }
     if (!m.remove(3)) { return -4; }
-    if (m.count() != 1) { return -5; }
+    if (m.count != 1) { return -5; }
     if (m.contains(3)) { return -6; }
     if (m[3] != 0) { return -7; }
     if (!m.insert(3, 31)) { return -8; }
-    if (m.count() != 2) { return -9; }
+    if (m.count != 2) { return -9; }
     if (m[3] != 31 || m[11] != 110) { return -10; }
     return 0;
 }"#
@@ -186,8 +186,8 @@ test(): int {
     m.insert(1, 1);
     m.insert(2, 2);
     m.clear();
-    if (!m.empty()) { return -1; }
-    if (m.count() != 0) { return -2; }
+    if (!m.is_empty) { return -1; }
+    if (m.count != 0) { return -2; }
     if (!m.insert(3, 3)) { return -3; }
     if (m[3] != 3) { return -4; }
     return 0;
@@ -220,10 +220,10 @@ build(): int {
     q.y = 2;
     if (m.contains(q)) { return -2; }
     if (!m.insert(q, 7)) { return -3; }
-    if (m.count() != 2) { return -4; }
+    if (m.count != 2) { return -4; }
     if (m.get(p) != 42 || m.get(q) != 7) { return -5; }
     if (!m.remove(q)) { return -6; }
-    if (m.count() != 1 || !m.contains(p)) { return -7; }
+    if (m.count != 1 || !m.contains(p)) { return -7; }
     if (m.get(p) != 42) { return -8; }
     return 0;
 }
@@ -253,9 +253,9 @@ test(): int {
     if (m.get(s) != 1) { return -3; }
     m[s] = 5;
     if (m["hello"] != 5) { return -4; }
-    if (m.count() != 1) { return -5; }
+    if (m.count != 1) { return -5; }
     if (!m.insert("world", 2)) { return -6; }
-    if (m.count() != 2) { return -7; }
+    if (m.count != 2) { return -7; }
     if (m["hello"] != 5 || m["world"] != 2) { return -8; }
     return 0;
 }"#
@@ -271,8 +271,8 @@ fn empty_set() {
             r#"
 test(): int {
     var s = HashSet<int>();
-    if (!s.empty()) { return -1; }
-    if (s.count() != 0) { return -2; }
+    if (!s.is_empty) { return -1; }
+    if (s.count != 0) { return -2; }
     if (s.contains(1)) { return -3; }
     if (s[7] != 0) { return -4; }
     return 0;
@@ -291,15 +291,15 @@ test(): int {
     var s = HashSet<int>();
     if (!s.insert(1)) { return -1; }
     if (s.insert(1) != false) { return -2; }
-    if (s.count() != 1) { return -3; }
+    if (s.count != 1) { return -3; }
     if (!s.contains(1)) { return -4; }
     if (s[1] != 1) { return -5; }
     if (s[9] != 0) { return -6; }
     s[2] = 2;
-    if (s.count() != 2) { return -7; }
+    if (s.count != 2) { return -7; }
     if (!s.remove(1)) { return -8; }
     if (s.remove(1) != false) { return -9; }
-    if (s.count() != 1 || !s.contains(2)) { return -10; }
+    if (s.count != 1 || !s.contains(2)) { return -10; }
     return 0;
 }"#
         ),
@@ -319,16 +319,16 @@ test(): int {
         if (!s.insert(i)) { return -1; }
         i = i + 1;
     }
-    if (s.count() != 20) { return -2; }
+    if (s.count != 20) { return -2; }
     var j = 0;
     while (j < 20) {
         if (!s.contains(j)) { return -3; }
         j = j + 1;
     }
     s.clear();
-    if (!s.empty()) { return -4; }
+    if (!s.is_empty) { return -4; }
     if (!s.insert(5)) { return -5; }
-    if (s.count() != 1) { return -6; }
+    if (s.count != 1) { return -6; }
     return 0;
 }
 "#
@@ -359,14 +359,14 @@ build(): int {
     q.x = 3;
     q.y = 4;
     if (!s.insert(q)) { return -2; }
-    if (s.count() != 2) { return -3; }
+    if (s.count != 2) { return -3; }
     var r = Point();
     r.x = 4;
     r.y = 3;
     if (!s.insert(r)) { return -4; }
-    if (s.count() != 3) { return -5; }
+    if (s.count != 3) { return -5; }
     if (!s.remove(q)) { return -6; }
-    if (s.count() != 2 || !s.contains(p) || !s.contains(r)) { return -7; }
+    if (s.count != 2 || !s.contains(p) || !s.contains(r)) { return -7; }
     if (s.contains(q)) { return -8; }
     return 0;
 }
@@ -394,9 +394,9 @@ test(): int {
     if (m[1] != "alpha") { return -2; }
     m[1] = "beta";
     if (m[1] != "beta") { return -3; }
-    if (m.count() != 1) { return -4; }
+    if (m.count != 1) { return -4; }
     if (!m.remove(1)) { return -5; }
-    if (!m.empty()) { return -6; }
+    if (!m.is_empty) { return -6; }
     return 0;
 }"#
         ),
@@ -479,7 +479,7 @@ build(): int {
         kept.append(p);
         i = i + 1;
     }
-    if (m.count() != 4) { return -5; }
+    if (m.count != 4) { return -5; }
     if (m.get(kept[2]) != 30) { return -6; }
     var fresh = Point();
     fresh.x = 3;
@@ -525,7 +525,7 @@ build(): int {
         kept.append(p);
         i = i + 1;
     }
-    if (s.count() != 4) { return -5; }
+    if (s.count != 4) { return -5; }
     if (!s.contains(kept[1])) { return -6; }
     var fresh = Point();
     fresh.x = 9;
@@ -643,10 +643,10 @@ test(): int {
         ages[Person($"p{i}", i)] = i;
         i = i + 1;
     }
-    if (ages.count() != 100) { return -1; }
+    if (ages.count != 100) { return -1; }
     if (ages[Person("p42", 42, "nick")] != 42) { return -2; }
     if (ages.insert(Person("p7", 7), 70)) { return -3; }
-    if (ages[Person("p7", 7)] != 70 || ages.count() != 100) { return -4; }
+    if (ages[Person("p7", 7)] != 70 || ages.count != 100) { return -4; }
     if (ages.contains(Person("p7", 8))) { return -5; }
     if (!ages.remove(Person("p7", 7)) || ages.contains(Person("p7", 7))) { return -6; }
     var total = 0;

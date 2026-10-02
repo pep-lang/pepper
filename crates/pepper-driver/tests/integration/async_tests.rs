@@ -100,7 +100,7 @@ run_threads() {
         assert(!worker.is_joinable(), "not joinable after join");
         ids.insert(worker.id());
     }
-    assert(ids.count() == 8, "every thread has its own id");
+    assert(ids.count == 8, "every thread has its own id");
     assert(ran.load() == 8, "every thread ran");
     assert(names_ok.load() == 8, "every thread saw its own Thread");
 
@@ -879,7 +879,7 @@ drop_with_queued() {
     }
     var r = c.receive();
     assert(r.value().id == 0, "the oldest message comes first");
-    assert(c.count() == 39, "39 left");
+    assert(c.count == 39, "39 left");
 }
 
 main(): int {
@@ -1007,9 +1007,9 @@ produce() {
 consume() {
     for (var order in orders) {
         assert(order.customer == "ada", "the copy was taken before the change");
-        received_items.fetch_add(order.items.count() as long);
+        received_items.fetch_add(order.items.count as long);
         for (var item in order.items) {
-            received_letters.fetch_add(item.length() as long);
+            received_letters.fetch_add(item.length as long);
         }
     }
 }
@@ -1080,7 +1080,7 @@ write_lines() {
     while (i < 500) {
         with (var l = log.lock()) {
             l.lines.append("line");
-            if (l.lines.count() % 100 == 0) {
+            if (l.lines.count % 100 == 0) {
                 l.dropped = l.dropped + 1;
             }
         }
@@ -1105,14 +1105,14 @@ first_line(): String {
 
 count_lines(): ulong {
     with (var l = log.lock()) {
-        return l.lines.count();
+        return l.lines.count;
     }
     return 0;
 }
 
 swap_out() {
     var old = log.replace(Log());
-    assert(old.lines.count() == 2001, "replace returns the whole old value");
+    assert(old.lines.count == 2001, "replace returns the whole old value");
 }
 
 main(): int {
@@ -1248,7 +1248,7 @@ typed() {
             Ok(event) => {
                 events = events + 1;
                 match (event) {
-                    Word(text) => { letters = letters + text.length() as int; }
+                    Word(text) => { letters = letters + text.length as int; }
                     Number(value) => { total = total + value; }
                     Stop => { assert(false, "quit only closes"); }
                 }
@@ -1375,17 +1375,17 @@ main(): int {
     var taken = 0;
     while (taken < COUNT) {
         with (var list = jobs.lock()) {
-            ready.wait_while((queue: Array<String>): bool => queue.count() == 0);
-            assert(list.count() > 0, "the predicate held when it returned");
+            ready.wait_while((queue: Array<String>): bool => queue.count == 0);
+            assert(list.count > 0, "the predicate held when it returned");
             list.remove_at(0);
             taken = taken + 1;
         }
     }
     thread.join();
     with (var list = jobs.lock()) {
-        assert(!ready.wait_while_for(20, (queue: Array<String>): bool => queue.count() == 0), "the time ran out");
+        assert(!ready.wait_while_for(20, (queue: Array<String>): bool => queue.count == 0), "the time ran out");
         list.append("late");
-        assert(ready.wait_while_for(20, (queue: Array<String>): bool => queue.count() == 0), "already true");
+        assert(ready.wait_while_for(20, (queue: Array<String>): bool => queue.count == 0), "already true");
     }
     return 0;
 }

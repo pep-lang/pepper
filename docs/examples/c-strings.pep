@@ -13,12 +13,12 @@ main(): int {
     # constructor, which copies it.
     __ptr<char> greeting = "hello";
     assert(strlen(greeting) == 5, "a literal in a __ptr<char> is a C string");
-    assert(String("hello").size() == 5, "String(literal) copies its bytes");
+    assert(String("hello").size == 5, "String(literal) copies its bytes");
 
     # A String value goes through c_str().
     var name = "Pepper";
     name += " and C";
-    assert(strlen(name.c_str()) == name.size(), "c_str() is the String's bytes");
+    assert(strlen(name.c_str()) == name.size, "c_str() is the String's bytes");
 
     # A char* result is a __ptr<char>. Copy it into a String with the
     # constructor: the byte size and the number of code points.

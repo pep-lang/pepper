@@ -26,7 +26,7 @@ main(): int {
 
     var names = Names();        # construct through the alias
     names.append("Ada");
-    assert(names.count() == 1, "Names is Array<String>");
+    assert(names.count == 1, "Names is Array<String>");
 
     var p = Team();
     p.best = s;

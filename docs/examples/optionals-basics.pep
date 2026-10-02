@@ -16,7 +16,7 @@ find_adult(people: Array<Person>): Optional<Person> {
 # `ulong?` is shorthand for `Optional<ulong>`.
 index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
-    while (i < text.length()) {
+    while (i < text.length) {
         if (text[i] == wanted) { return Optional<ulong>.some(i); }
         i = i + 1;
     }

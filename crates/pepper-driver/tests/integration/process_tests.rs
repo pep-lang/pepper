@@ -16,7 +16,7 @@ fn run_with(name: &str, source: &str, arguments: &[&str]) -> Output {
 fn arguments_follow_the_program_name() {
     let output = run_with(
         "arguments",
-        "import process;\nmain(): int {\n    var parts = process.arguments();\n    var index = 1;\n    while (index < parts.count()) {\n        print(\"[\" + parts[index] + \"]\");\n        index = index + 1;\n    }\n    return parts.count() as int;\n}\n",
+        "import process;\nmain(): int {\n    var parts = process.arguments();\n    var index = 1;\n    while (index < parts.count) {\n        print(\"[\" + parts[index] + \"]\");\n        index = index + 1;\n    }\n    return parts.count as int;\n}\n",
         &["one", "two words", "", "three"],
     );
     assert_eq!(stdout_of(&output), "[one]\n[two words]\n[]\n[three]\n");
@@ -49,7 +49,7 @@ fn exit_ends_with_the_code_and_keeps_printed_output() {
 fn main_receives_the_arguments_when_it_declares_them() {
     let output = run_with(
         "main_args",
-        "main(args: String[]): int {\n    var index = 1;\n    while (index < args.count()) {\n        print(\"[\" + args[index] + \"]\");\n        index = index + 1;\n    }\n    return args[0].contains(\"main_args\") ? args.count() as int : 100;\n}\n",
+        "main(args: String[]): int {\n    var index = 1;\n    while (index < args.count) {\n        print(\"[\" + args[index] + \"]\");\n        index = index + 1;\n    }\n    return args[0].contains(\"main_args\") ? args.count as int : 100;\n}\n",
         &["one", "two words", ""],
     );
     assert_eq!(stdout_of(&output), "[one]\n[two words]\n[]\n");
@@ -60,7 +60,7 @@ fn main_receives_the_arguments_when_it_declares_them() {
 fn main_with_arguments_falls_off_its_end_with_zero() {
     let output = run_with(
         "main_args_implicit",
-        "main(args: String[]) {\n    if (args.count() > 1) {\n        return 3;\n    }\n}\n",
+        "main(args: String[]) {\n    if (args.count > 1) {\n        return 3;\n    }\n}\n",
         &[],
     );
     assert_eq!(output.status.code(), Some(0));
@@ -70,7 +70,7 @@ fn main_with_arguments_falls_off_its_end_with_zero() {
 fn a_void_main_with_arguments_exits_zero() {
     let output = run_with(
         "main_args_void",
-        "main(args: String[]): void {\n    print($\"{args.count()}\");\n}\n",
+        "main(args: String[]): void {\n    print($\"{args.count}\");\n}\n",
         &["x"],
     );
     assert_eq!(stdout_of(&output), "2\n");
@@ -81,7 +81,7 @@ fn a_void_main_with_arguments_exits_zero() {
 fn main_arguments_ignore_a_program_function_named_arguments() {
     let output = run_with(
         "main_args_shadow",
-        "arguments(): int {\n    return 9;\n}\nmain(args: String[]): int {\n    return (args.count() as int) * 10 + arguments();\n}\n",
+        "arguments(): int {\n    return 9;\n}\nmain(args: String[]): int {\n    return (args.count as int) * 10 + arguments();\n}\n",
         &["a", "b"],
     );
     assert_eq!(output.status.code(), Some(39));
@@ -91,7 +91,7 @@ fn main_arguments_ignore_a_program_function_named_arguments() {
 fn the_deprecated_prelude_functions_still_work() {
     let output = run_with(
         "deprecated_prelude",
-        "main(): int {\n    if (arguments().count() == 2) {\n        exit(4);\n    }\n    return 0;\n}\n",
+        "main(): int {\n    if (arguments().count == 2) {\n        exit(4);\n    }\n    return 0;\n}\n",
         &["x"],
     );
     assert_eq!(output.status.code(), Some(4));
@@ -110,7 +110,7 @@ child(args: String[]): int {
     var mode = args[1];
     if (mode == "arguments") {
         var index = 2;
-        while (index < args.count()) {
+        while (index < args.count) {
             print("[" + args[index] + "]");
             index = index + 1;
         }
@@ -157,7 +157,7 @@ child(args: String[]): int {
 }
 
 main(args: String[]): int {
-    if (args.count() > 1) {
+    if (args.count > 1) {
         return child(args);
     }
     var self = process.executable_path().value().to_string();
@@ -193,7 +193,7 @@ main(args: String[]): int {
     print($"missing {missing.is_err() && missing.error().is_not_found()}");
 
     var silent = process.Command(self).argument("streams").stdout(process.Stream.Null).stderr(process.Stream.Null).run().value();
-    print($"null {silent.stdout.size()} {silent.stderr.size()}");
+    print($"null {silent.stdout.size} {silent.stderr.size}");
 
     async.run(() => {
         var tasks = Array<async.Task<int>>();
@@ -202,7 +202,7 @@ main(args: String[]): int {
             tasks.append(async.spawn<int>(() => {
                 var me = process.executable_path().value().to_string();
                 var big = process.Command(me).argument("big").run().value();
-                return (big.stdout.size() + big.stderr.size()) as int;
+                return (big.stdout.size + big.stderr.size) as int;
             }));
             index = index + 1;
         }

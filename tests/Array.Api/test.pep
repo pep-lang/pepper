@@ -6,25 +6,25 @@ struct Widget {
 
 main(): int {
     var a = Array<int>();
-    assert(a.empty(), "fresh Array is empty");
+    assert(a.is_empty, "fresh Array is empty");
     a.append(1);
     a.append(2);
     a.append(3);
-    assert(a.count() == 3, "append grows count");
+    assert(a.count == 3, "append grows count");
     assert(a[0] == 1 && a[1] == 2 && a[2] == 3, "index reads appended values");
     a.insert(1, 9);
-    assert(a.count() == 4 && a[1] == 9 && a[2] == 2, "insert shifts the tail");
+    assert(a.count == 4 && a[1] == 9 && a[2] == 2, "insert shifts the tail");
     var removed = a.remove_at(0);
-    assert(removed == 1 && a.count() == 3 && a[0] == 9, "remove_at returns and shifts");
+    assert(removed == 1 && a.count == 3 && a[0] == 9, "remove_at returns and shifts");
     var popped = a.pop();
-    assert(popped == 3 && a.count() == 2, "pop drops the last element");
+    assert(popped == 3 && a.count == 2, "pop drops the last element");
     assert(a.find(9).value() == 0, "find locates an element");
     assert(a.find(42).is_none(), "find reports a missing element as none");
     assert(a.contains(9), "contains reports membership");
     assert(!a.contains(42), "contains rejects missing elements");
     var b = a.clone();
     b.append(7);
-    assert(b.count() == 3 && a.count() == 2, "clone is independent of the source");
+    assert(b.count == 3 && a.count == 2, "clone is independent of the source");
     assert(a[1] == 2 && b[1] == 2, "clone copies element values");
     var c = Array<int>();
     c.append(9);

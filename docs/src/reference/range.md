@@ -70,6 +70,17 @@ bool inclusive
 
 Whether `end` is part of the range: true for `a..>b`, false for `a..b`.
 
+### Properties
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the range holds no numbers, whatever the iteration has
+reached.
+
 ### Constructor
 
 #### Range()
@@ -131,15 +142,3 @@ reached.
 
 **Returns**
 - true if `start <= value` and `value` is before `end` (or equal to it, for a closed range)
-
-#### is_empty
-
-```pepper
-is_empty(): bool
-```
-
-Returns whether the range holds no numbers, whatever the iteration has
-reached.
-
-**Returns**
-- true if `start` is past the end of the range

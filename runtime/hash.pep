@@ -49,7 +49,7 @@ export hash<T>(value: T): u64 {
 ## wherever they are stored. Keeps equal `String` keys of a `HashMap` or
 ## `HashSet` in one bucket.
 ##
-## Hashes the `size()` bytes of the String (not the NUL terminator) 8 bytes
+## Hashes the `size` bytes of the String (not the NUL terminator) 8 bytes
 ## at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 ## (0xcbf29ce484222325).
 ##
@@ -58,7 +58,7 @@ export hash<T>(value: T): u64 {
 ## @example
 ##     assert(hash<String>("hello") == hash<String>("hello"), "content hash");
 export hash<String>(value: String): u64 {
-    return _pep_hash_bytes(value.c_str(), value.size());
+    return _pep_hash_bytes(value.c_str(), value.size);
 }
 
 # ── The table ───────────────────────────────────────────────────────────────
@@ -348,7 +348,7 @@ export struct _HashTable<K, V> {
 ##     assert(ages["ada"] == 36, "lookup");
 ##     assert(ages.get("grace") == 0, "a missing key reads as the default");
 ##     assert(ages.remove("alan"), "removed");
-##     assert(ages.count() == 1, "one entry left");
+##     assert(ages.count == 1, "one entry left");
 export struct HashMap<K, V> {
     ## The hash table holding the entries. Internal.
     _HashTable<K, V> _table;
@@ -394,35 +394,35 @@ export struct HashMap<K, V> {
         _table._grow();
     }
 
-    ## Returns the number of entries in the map. O(1).
-    ##
-    ## @returns the number of live key-value pairs
-    count(): int {
-        return _table._size;
+    ## The number of entries in the map. O(1).
+    var count: int {
+        get {
+            return _table._size;
+        }
     }
 
-    ## Returns whether the map has no entries. O(1).
-    ##
-    ## @returns true when `count()` is 0
-    empty(): bool {
-        return _table._size == 0;
+    ## Whether the map has no entries. O(1).
+    var is_empty: bool {
+        get {
+            return _table._size == 0;
+        }
     }
 
-    ## Returns the number of slots in the table, a power of two and at least 8.
+    ## The number of slots in the table, a power of two and at least 8.
     ## The map grows before its entries and tombstones reach half of it. O(1).
-    ##
-    ## @returns the current slot count
-    capacity(): ulong {
-        return _table._capacity;
+    var capacity: ulong {
+        get {
+            return _table._capacity;
+        }
     }
 
     ## Deprecated: use `capacity` instead. Returns the number of slots in
     ## the table.
     ##
-    ## @returns the same as `capacity()`
-    [Deprecated("use 'capacity' instead", "capacity")]
+    ## @returns the same as `capacity`
+    [Deprecated("use the 'capacity' property instead")]
     cap(): ulong {
-        return capacity();
+        return capacity;
     }
 
     ## Removes every entry and releases the map's references to their keys
@@ -596,7 +596,7 @@ export struct HashMap<K, V> {
 ##     seen["b"] = "b";   # the same as seen.insert("b")
 ##     assert(seen.contains("a"), "member");
 ##     assert(!seen.insert("a"), "already a member");
-##     assert(seen.count() == 2, "two members");
+##     assert(seen.count == 2, "two members");
 export struct HashSet<K> {
     ## The hash table holding the members. Internal.
     _HashTable<K, _NoValue> _table;
@@ -623,7 +623,7 @@ export struct HashSet<K> {
     ##     assert(keywords.contains("else"), "a member");
     [Implicit]
     construct(items: Array<K>) {
-        _init(items.count() * 2);
+        _init(items.count * 2);
         for (var item in items) {
             insert(item);
         }
@@ -659,35 +659,35 @@ export struct HashSet<K> {
         _table._grow();
     }
 
-    ## Returns the number of members in the set. O(1).
-    ##
-    ## @returns the number of members
-    count(): int {
-        return _table._size;
+    ## The number of members in the set. O(1).
+    var count: int {
+        get {
+            return _table._size;
+        }
     }
 
-    ## Returns whether the set has no members. O(1).
-    ##
-    ## @returns true when `count()` is 0
-    empty(): bool {
-        return _table._size == 0;
+    ## Whether the set has no members. O(1).
+    var is_empty: bool {
+        get {
+            return _table._size == 0;
+        }
     }
 
-    ## Returns the number of slots in the table, a power of two and at least 8.
+    ## The number of slots in the table, a power of two and at least 8.
     ## O(1).
-    ##
-    ## @returns the current slot count
-    capacity(): ulong {
-        return _table._capacity;
+    var capacity: ulong {
+        get {
+            return _table._capacity;
+        }
     }
 
     ## Deprecated: use `capacity` instead. Returns the number of slots in
     ## the table.
     ##
-    ## @returns the same as `capacity()`
-    [Deprecated("use 'capacity' instead", "capacity")]
+    ## @returns the same as `capacity`
+    [Deprecated("use the 'capacity' property instead")]
     cap(): ulong {
-        return capacity();
+        return capacity;
     }
 
     ## Removes every member and releases the set's references to them. The

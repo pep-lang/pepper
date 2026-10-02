@@ -2,7 +2,7 @@ import io;
 import process;
 
 main(args: String[]): int {
-    if (args.count() > 1) {
+    if (args.count > 1) {
         # The child: read standard input to the end, and write it back in
         # capitals.
         var text = io.File.stdin().read_string().value();

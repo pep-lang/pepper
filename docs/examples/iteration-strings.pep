@@ -5,7 +5,7 @@ main(): int {
     var count = 0;
     var copy = "";
     for (var c in word) {
-        assert(c.length() == 1, "each piece is one code point");
+        assert(c.length == 1, "each piece is one code point");
         copy.append(c);
         count = count + 1;
     }

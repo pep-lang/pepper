@@ -52,6 +52,8 @@ const BUILT_IN: &[&str] = &[
     "float", "double", "sbyte", "__ptr", "__weak", "__null", "sizeof", "assert", "panic", "as", "with",
     "break", "continue", "not", "async", "await", "yield", "type", "extend", "with", "__default",
     "__function_pointer", "__weak_from", "__weak_upgrade", "__move", "__unreachable", "_", "print",
+    // A property's accessors.
+    "get", "set",
 ];
 
 /// The line of `text` around `offset`, trimmed, with the name marked.

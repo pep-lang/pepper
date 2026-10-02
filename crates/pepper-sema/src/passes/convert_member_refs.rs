@@ -172,6 +172,29 @@ pub fn convert_member_refs(module: &mut Module) {
             }
             (fields, methods)
         };
+        // A bare property whose storage is not a field of its name (see
+        // `passes::properties`) is `this.p` too, which the next
+        // `resolve_implicit_types` rewrites.
+        let fields = {
+            let mut fields = fields;
+            let st = &module.structs[st_idx];
+            for property in module.properties.iter().filter(|p| p.owner == st.ty.name && !p.in_trait) {
+                if !fields.iter().any(|f| f.name == property.name) {
+                    fields.push(VariableDef {
+                        name: property.name.clone(),
+                        ty: TypeName::auto(),
+                        default: None,
+                        hidden: true,
+                        kind: Kind::Field,
+                        attributes: vec![],
+                        loc: property.loc,
+                        type_loc: Loc::NONE,
+                        is_const: false,
+                    });
+                }
+            }
+            fields
+        };
         let st_name = module.structs[st_idx].name.clone();
         // A generic base's own type parameters name types, not members: the
         // receiver of a static call through one (`T.zero()`), which each

@@ -315,7 +315,7 @@ export _async_sys_physical_cpus(): ulong {
         }
         cpu = cpu + 1;
     }
-    return cores.count() as ulong;
+    return cores.count as ulong;
 }
 
 [Target(OS(Mac))]

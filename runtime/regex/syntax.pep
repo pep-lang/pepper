@@ -77,7 +77,7 @@ export struct _RegexParser {
 
     construct(pattern: String) {
         _data = pattern.bytes();
-        _size = _data.count();
+        _size = _data.count;
         _position = 0;
         _case_insensitive = false;
         _multi_line = false;
@@ -132,7 +132,7 @@ export struct _RegexParser {
             _position += 1;
             branches.append(_parse_concat());
         }
-        if (branches.count() == 1) {
+        if (branches.count == 1) {
             return branches[0];
         }
         var node = _RegexNode(_REGEX_NODE_ALTERNATE);
@@ -153,7 +153,7 @@ export struct _RegexParser {
             }
             items.append(_parse_repeat(atom));
         }
-        if (items.count() == 1) {
+        if (items.count == 1) {
             return items[0];
         }
         var node = _RegexNode(_REGEX_NODE_CONCAT);
@@ -769,7 +769,7 @@ export _regex_range_high(range: ulong): uint {
 
 # Adds the other ASCII case of every letter in `ranges`.
 export _regex_add_other_cases(ranges: ulong[]) {
-    var count = ranges.count();
+    var count = ranges.count;
     ulong index = 0;
     while (index < count) {
         var low = _regex_range_low(ranges[index]);
@@ -813,7 +813,7 @@ export _regex_canonical(ranges: ulong[], negated: bool): ulong[] {
     for (var range in sorted) {
         var low = _regex_range_low(range);
         var high = _regex_range_high(range);
-        var count = merged.count();
+        var count = merged.count;
         if (count > 0) {
             var last_high = _regex_range_high(merged[count - 1]);
             if (low <= last_high + 1) {

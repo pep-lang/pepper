@@ -62,7 +62,7 @@ Measured on this container (Linux x86-64, LLVM 20, `-O`, i.e. `-O2`),
 | Loop body (10M iterations) | Time | `malloc` calls |
 | --- | --- | --- |
 | `for (var v in values)` over a 4-element `Array<int>` | 0.82 s | 10,000,020 |
-| same sum with `while (i < values.count())` and `values[i]` | 0.09 s | 22 |
+| same sum with `while (i < values.count)` and `values[i]` | 0.09 s | 22 |
 | `half(k).value_or(0)`, `half` returning `int?` | 0.27 s | 10,000,024 |
 | `checked(k).ok_or(0)`, `checked` returning `Result<int>` (Ok path) | 0.30 s | 10,000,026 |
 

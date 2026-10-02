@@ -37,7 +37,7 @@ Returns the UTF-8 bytes of `value`, without a terminating NUL.
 - `value` — the text to encode
 
 **Returns**
-- a new array of `value.size()` bytes
+- a new array of `value.size` bytes
 
 #### is_valid
 

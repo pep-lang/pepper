@@ -13,7 +13,7 @@ struct Money {
 
     # Static methods overload among themselves.
     static of(cents: long): Money { return Money(cents); }
-    static of(text: String): Money { return Money(text.size() as long); }
+    static of(text: String): Money { return Money(text.size as long); }
 
     # Operators are methods, so they overload by operand type too.
     +(other: Money): Money { return add(other); }

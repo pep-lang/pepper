@@ -177,7 +177,7 @@ export struct Select<E> {
     # Looks at each channel once, starting at `_next`: the first value found
     # (Ready), else Empty if any channel is still open, else Closed.
     _poll(): _Polled<E> {
-        var count = _cases.count();
+        var count = _cases.count;
         var closed: ulong = 0;
         var i: ulong = 0;
         while (i < count) {
@@ -203,7 +203,7 @@ export struct Select<E> {
 
     # `wait` until `deadline` (monotonic milliseconds, 0 for none).
     _wait(deadline: ulong): Result<E> {
-        if (_cases.count() == 0) {
+        if (_cases.count == 0) {
             return Result<E>.err(Error("the select has no channels"));
         }
         while (true) {
@@ -246,7 +246,7 @@ export struct Select<E> {
     _sleep(deadline: ulong): _SyncWake {
         var in_task = _async_in_task();
         var waiter = in_task ? _async_sync_waiter() : _SyncWaiter(_ThreadWake());
-        var count = _cases.count();
+        var count = _cases.count;
         var joined: ulong = 0;
         var closed: ulong = 0;
         var ready = false;

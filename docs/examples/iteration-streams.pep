@@ -25,7 +25,7 @@ main(): int {
     for (var line in file.lines()) {
         lines.append(line.value());
     }
-    assert(lines.count() == 3 && lines[1] == "second", "three lines, \\r\\n removed");
+    assert(lines.count == 3 && lines[1] == "second", "three lines, \\r\\n removed");
 
     # Adapters work on streams too: number the lines.
     var again = File.open(dir.join("notes.txt")).value();

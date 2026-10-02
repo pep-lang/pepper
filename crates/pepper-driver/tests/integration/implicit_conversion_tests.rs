@@ -163,7 +163,7 @@ maybe(m: Meters): int { return (m == __null) ? 1 : 0; }
 test(): int {
     if (maybe(__null) != 1) { return 1; }
     var plain = "text";
-    if (plain.length() != 4) { return 2; }
+    if (plain.length != 4) { return 2; }
     return (made.load() == 0) ? 0 : 3;
 }
 "#,

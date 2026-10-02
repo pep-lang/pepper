@@ -172,7 +172,7 @@ test(): int {
     var by_tag = HashSet<Tag>();
     by_tag.insert(Tag(2));
     var sets = copy(by_tag);
-    if (sets.count() != 1) { return 6; }
+    if (sets.count != 1) { return 6; }
     return 0;
 }"#,
     );
@@ -275,7 +275,7 @@ test(): int {
     h.id = 3;
     handles.append(Optional<Handle>.some(h));
     handles.append(Optional<Handle>.none());
-    if (handles.count() != 2 || handles[0].value().id != 3 || handles[1].is_some()) { return 1; }
+    if (handles.count != 2 || handles[0].value().id != 3 || handles[1].is_some()) { return 1; }
     return 0;
 }"#,
     );

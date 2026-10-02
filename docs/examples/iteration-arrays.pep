@@ -73,6 +73,6 @@ main(): int {
 
     # Modifying the array after the loop is fine.
     nums.append(100);
-    assert(nums.count() == 4, "appended after the loop");
+    assert(nums.count == 4, "appended after the loop");
     return 0;
 }

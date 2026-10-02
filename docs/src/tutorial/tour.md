@@ -74,7 +74,7 @@ not need to import them:
   reading past the end stops the program with an error rather than reading
   stray memory. `sort` takes a function that compares two elements, such as
   the closure `(a, b) => a - b`.
-- [`String`](../reference/string.md) holds UTF-8 text. `length()` counts
+- [`String`](../reference/string.md) holds UTF-8 text. The `length` property counts
   characters (code points), and `s[i]` is the character at index `i`, as a
   one-character string. Strings compare by content with `==`.
 - [`HashMap<K, V>`](../reference/hash.md) maps keys to values. Reading a key

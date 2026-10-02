@@ -67,7 +67,7 @@ export struct Uri {
     ##     assert(Uri.parse("a b").is_err(), "a space must be encoded");
     static parse(text: String): Result<Uri> {
         var data = text.bytes();
-        var size = data.count();
+        var size = data.count;
         ulong index = 0;
         while (index < size) {
             var c = data[index] as int;
@@ -111,7 +111,7 @@ export struct Uri {
             }
             var authority = text.substr_bytes(start, end - start);
             var failure = _uri_parse_authority(uri, authority);
-            if (failure.size() > 0) {
+            if (failure.size > 0) {
                 return _uri_invalid(text, failure);
             }
             start = end;
@@ -151,7 +151,7 @@ export struct Uri {
     ##     assert(Uri.decode("100%").is_err(), "a lone '%'");
     static decode(text: String): Result<String> {
         var data = text.bytes();
-        var size = data.count();
+        var size = data.count;
         var decoded = Array<u8>(size);
         ulong index = 0;
         while (index < size) {
@@ -180,7 +180,7 @@ export struct Uri {
     ##
     ## @returns true when `scheme` is not empty
     is_absolute(): bool {
-        return scheme.size() > 0;
+        return scheme.size > 0;
     }
 
     ## Returns the authority as it appears after `//`: user information,
@@ -216,7 +216,7 @@ export struct Uri {
     ##
     ## @returns the path and query, such as `/items?page=2`
     path_and_query(): String {
-        var text = path.size() == 0 ? "/" : path;
+        var text = path.size == 0 ? "/" : path;
         if (query.is_some()) {
             return $"{text}?{query.value()}";
         }
@@ -230,7 +230,7 @@ export struct Uri {
     ## @returns the URI reference as a String
     to_string(): String {
         var text = StringBuilder();
-        if (scheme.size() > 0) {
+        if (scheme.size > 0) {
             text.append(scheme);
             text.append(":");
         }
@@ -266,7 +266,7 @@ _uri_ends_segment(c: u8): bool {
 # Whether `text` is a scheme: a letter, then letters, digits, '+', '-' or '.'.
 _uri_is_scheme(text: String): bool {
     ulong index = 0;
-    while (index < text.size()) {
+    while (index < text.size) {
         var c = text.byte_at(index) as int;
         var letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
         var other = (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.';
@@ -275,7 +275,7 @@ _uri_is_scheme(text: String): bool {
         }
         index = index + 1;
     }
-    return text.size() > 0;
+    return text.size > 0;
 }
 
 # Fills `uri`'s user information, host and port from `authority`, and
@@ -285,7 +285,7 @@ _uri_parse_authority(uri: Uri, authority: String): String {
     var at = rest.find("@");
     if (at >= 0) {
         uri.user_info = Optional<String>.some(rest.substr_bytes(0, at as ulong));
-        rest = rest.substr_bytes(at as ulong + 1, rest.size() - at as ulong - 1);
+        rest = rest.substr_bytes(at as ulong + 1, rest.size - at as ulong - 1);
     }
     var port_text = "";
     var has_port = false;
@@ -295,31 +295,31 @@ _uri_parse_authority(uri: Uri, authority: String): String {
             return "no ']' after an IPv6 address";
         }
         uri.host = Optional<String>.some(rest.substr_bytes(1, close as ulong - 1));
-        var after = rest.substr_bytes(close as ulong + 1, rest.size() - close as ulong - 1);
-        if (after.size() > 0) {
+        var after = rest.substr_bytes(close as ulong + 1, rest.size - close as ulong - 1);
+        if (after.size > 0) {
             if (!after.starts_with(":")) {
                 return "unexpected text after the IPv6 address";
             }
             has_port = true;
-            port_text = after.substr_bytes(1, after.size() - 1);
+            port_text = after.substr_bytes(1, after.size - 1);
         }
     } else {
         var colon = rest.find(":");
         if (colon >= 0) {
             has_port = true;
-            port_text = rest.substr_bytes(colon as ulong + 1, rest.size() - colon as ulong - 1);
+            port_text = rest.substr_bytes(colon as ulong + 1, rest.size - colon as ulong - 1);
             rest = rest.substr_bytes(0, colon as ulong);
         }
         uri.host = Optional<String>.some(rest);
     }
     # An empty port ("host:") is allowed and means none.
-    if (has_port && port_text.size() > 0) {
-        if (port_text.size() > 5) {
+    if (has_port && port_text.size > 0) {
+        if (port_text.size > 5) {
             return $"invalid port '{port_text}'";
         }
         long port = 0;
         ulong index = 0;
-        while (index < port_text.size()) {
+        while (index < port_text.size) {
             var c = port_text.byte_at(index) as int;
             if (c < '0' || c > '9') {
                 return $"invalid port '{port_text}'";

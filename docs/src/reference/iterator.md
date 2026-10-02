@@ -116,7 +116,7 @@ the result advances this iterator. Every type that declares
 **Example**
 ```pepper
     var names = Array<String>();
-    for (var size in names.iterate().map((name) => name.size())) {
+    for (var size in names.iterate().map((name) => name.size)) {
         print(size);
     }
 ```
@@ -158,7 +158,7 @@ Returns an iterator over the elements paired with their positions:
 `(0, first)`, `(1, second)`, and so on.
 
 Lazy, like `map`. Destructure the pair in the loop to name both parts.
-The positions count in `ulong`, like `Array.count()`; name another
+The positions count in `ulong`, like `Array.count`; name another
 integer type to count in it (`enumerate<int>()`). Every type that
 declares `Iterator<T>` gets this method.
 

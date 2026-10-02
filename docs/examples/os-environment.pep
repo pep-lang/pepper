@@ -3,7 +3,7 @@ import os;
 main(): int {
     # An optional: none when the variable is not set.
     var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
-    assert(!runtime.empty(), "a fallback when unset");
+    assert(!runtime.is_empty, "a fallback when unset");
     assert(os.environment("PEPPER_SURELY_NOT_SET").is_none(), "unset");
 
     var count = 0;

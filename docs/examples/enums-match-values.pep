@@ -33,7 +33,7 @@ keyword(word: String): int {
 length_of(word: String): int {
     return match (word) {
         "" => 0,
-        else => word.length(),
+        else => word.length,
     };
 }
 

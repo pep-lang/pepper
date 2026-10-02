@@ -17,7 +17,7 @@ main(): int {
 
     # lines() splits on "\n" or "\r\n"; trim_end() drops trailing whitespace.
     var lines = "one  \r\ntwo\n".lines();
-    assert(lines.count() == 2, "no empty line after the final newline");
+    assert(lines.count == 2, "no empty line after the final newline");
     assert(lines[0].trim_end() == "one", "trim_end");
 
     # trim() drops whitespace at both ends; lower() and upper() change ASCII case.

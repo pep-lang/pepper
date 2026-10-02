@@ -88,8 +88,8 @@ total = first_value_that_is_long_enough
     + third_value_that_is_long_and_longer_still;
 var count = words
     .iterate()
-    .filter((w) => w.length() > 4)
-    .map((w) => w.length() * 2)
+    .filter((w) => w.length > 4)
+    .map((w) => w.length * 2)
     .count_them_all();
 ```
 

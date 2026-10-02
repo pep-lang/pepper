@@ -278,7 +278,7 @@ task, and so do the waits of `Mutex` and `Condition` below.)
 - `for (var v in channel)` receives until the channel is closed and empty.
   Several threads can loop over one channel; each value goes to one of them.
 - Values from one sender arrive in the order they were sent.
-- `count()` and `is_closed()` report the channel's state, which other
+- The `count` property and `is_closed()` report the channel's state, which other
   threads may change right after.
 
 `send` and `try_send` take a **new** value, which nothing on the sending

@@ -65,7 +65,7 @@ argument's type declares: given `total<T>(items: Iterator<T>)`, the call
 Iterator<int>`.
 
 Inference works through closures in both directions. In
-`transform(words, (w) => w.size())`, where `transform<T, U>(items: Array<T>,
+`transform(words, (w) => w.size)`, where `transform<T, U>(items: Array<T>,
 f: (T) => U)`, `words` gives `T`, which types the closure's parameter `w`, and
 the closure's result gives `U`.
 

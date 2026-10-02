@@ -46,7 +46,7 @@ test(): int {
     var r = Result<int>.err(Error("boom"));
     if (r.is_ok()) { return -1; }
     if (!r.is_err()) { return -2; }
-    if (r.error().message.length() != 4) { return -3; }
+    if (r.error().message.length != 4) { return -3; }
     return 0;
 }"#
         ),
@@ -86,7 +86,7 @@ test(): int {
     var a = Result<int>.ok(1);
     var b = Result<int>.err(Error("e"));
     if (!a.is_ok() || b.is_ok()) { return -1; }
-    if (b.error().message.length() != 1) { return -2; }
+    if (b.error().message.length != 1) { return -2; }
     return 0;
 }"#
         ),
@@ -173,7 +173,7 @@ test(): int {
     }
     if (!(parse("42") is Ok)) { return -4; }
     if (parse("x") is Err(e)) {
-        if (e.message.length() != 12) { return -5; }
+        if (e.message.length != 12) { return -5; }
     } else {
         return -6;
     }
@@ -265,7 +265,7 @@ test(): int {
         ok.value();
         var err = check(false);
         if (!err.is_err()) { return -2; }
-        if (err.error().message.length() != 3) { return -3; }
+        if (err.error().message.length != 3) { return -3; }
     }
     var after = _pep_live_allocs();
     if (after != before) { return -4; }

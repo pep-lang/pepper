@@ -117,8 +117,8 @@ export struct Thread {
     ## @param body the function the thread runs
     construct(name: String, body: ThreadBody) {
         _id = _async_next_id.fetch_add(1);
-        _name_size = name.size();
-        _name_length = name.length();
+        _name_size = name.size;
+        _name_length = name.length;
         if (_name_size > 0) {
             _name_data = _pep_malloc(_name_size + 1);
             memcpy(_name_data, name.c_str(), _name_size);

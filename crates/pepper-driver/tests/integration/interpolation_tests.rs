@@ -164,7 +164,7 @@ test(): int {
     if (!($"{ a * (b + 1) }" == "8")) { return -4; }
     if (!($"[{$"<{a}>"}]" == "[<2>]")) { return -5; }
     if (!($"{"}"}{'{' == '{'}" == "}true")) { return -6; }
-    if (!($"{items.count()} item" == "1 item")) { return -7; }
+    if (!($"{items.count} item" == "1 item")) { return -7; }
     if (!($"{-a}" == "-2")) { return -8; }
     return 0;
 }"#

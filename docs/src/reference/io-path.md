@@ -21,7 +21,7 @@ optional, as in Rust: `parent()` of a root is none.
 
 Breaking change: `parent()`, `file_name()`, `file_stem()`, `extension()`
 and `dot_index()` used to return an empty Path or String (or
-`name.size()`) for "none"; they now return `Path?`, `String?` and
+`name.size`) for "none"; they now return `Path?`, `String?` and
 `ulong?`.
 
 Separators: on POSIX only `/` separates components (`\` is an ordinary
@@ -44,6 +44,17 @@ dots are ASCII, so splitting at them never cuts a character in two.
         print(p.to_string());
     }
 ```
+
+### Properties
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the path has no text at all. File-system operations
+on the empty path fail.
 
 ### Constructor
 
@@ -68,7 +79,7 @@ takes a `Path` also accepts text.
     import io;
 
     var p = io.Path("/usr/lib");
-    var empty = io.Path();   # is_empty() is true
+    var empty = io.Path();   # is_empty is true
     var q: io.Path = "docs";   # converted implicitly
 ```
 
@@ -95,7 +106,7 @@ Returns the byte offset of the dot that starts the extension in the
 file name `name`: the last `.` that is not the first byte. A leading
 dot (`.bashrc`) starts the name, not an extension.
 
-Breaking change: this used to return `name.size()` for "no
+Breaking change: this used to return `name.size` for "no
 extension"; it now returns none.
 
 **Parameters**
@@ -116,18 +127,6 @@ Returns the path's text, the same String the Path holds, not a copy.
 
 **Returns**
 - the path as a String
-
-#### is_empty
-
-```pepper
-is_empty(): bool
-```
-
-Returns whether the path has no text at all. File-system operations
-on the empty path fail.
-
-**Returns**
-- true when the path's text is `""`
 
 #### is_absolute
 

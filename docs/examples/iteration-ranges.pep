@@ -16,8 +16,8 @@ main(): int {
     # The bounds give the type: count() is a ulong, so i is too.
     var names = ["Ada", "Grace", "Edsger"];
     ulong letters = 0;
-    for (var i in 0..names.count()) {
-        letters += names[i].size();
+    for (var i in 0..names.count) {
+        letters += names[i].size;
     }
     assert(letters == 14, "letters in every name");
 

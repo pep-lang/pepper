@@ -106,12 +106,12 @@ export struct Range<T> {
         return value < end;
     }
 
-    ## Returns whether the range holds no numbers, whatever the iteration has
+    ## Whether the range holds no numbers, whatever the iteration has
     ## reached.
-    ##
-    ## @returns true if `start` is past the end of the range
-    is_empty(): bool {
-        return !contains(start);
+    var is_empty: bool {
+        get {
+            return !contains(start);
+        }
     }
 }
 

@@ -227,7 +227,7 @@ _os_passwd_field(field: ulong): String? {
 [Target(!OS(Windows))]
 export _os_sys_user_name(): String? {
     var name = _os_passwd_field(0);
-    if (name.is_some() && !name.value().empty()) {
+    if (name.is_some() && !name.value().is_empty) {
         return name;
     }
     return _os_nonempty_environment("USER");

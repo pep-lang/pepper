@@ -20,7 +20,7 @@ import "types";
 ##
 ##     var list = io.Directory.open(io.Path("src")).value().entries().value();
 ##     ulong i = 0;
-##     while (i < list.count()) {
+##     while (i < list.count) {
 ##         if (list[i].is_file) {
 ##             print(list[i].Name);
 ##         }
@@ -80,7 +80,7 @@ export struct DirEntry {
 ##     var dir = io.Directory.temp().join("scratch").join("logs");
 ##     if (io.Directory.create_all(dir).is_ok()) {
 ##         var d = io.Directory.open(dir).value();
-##         var count = d.entries().value().count();
+##         var count = d.entries().value().count;
 ##         io.Directory.remove_all(io.Directory.temp().join("scratch"));
 ##     }
 export struct Directory {
@@ -136,7 +136,7 @@ export struct Directory {
     ##
     ##     var list = io.Directory.open(io.Path(".")).value().entries();
     ##     if (list.is_ok()) {
-    ##         var n = list.value().count();
+    ##         var n = list.value().count;
     ##     }
     entries(): IoResult<DirEntry[]> {
         return _io_list(path);
@@ -199,7 +199,7 @@ export struct Directory {
     ##
     ##     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
     static create_all(path: Path): IoResult<void> {
-        if (path._value.size() == 0) {
+        if (path._value.size == 0) {
             return _io_ok_void();
         }
         if (path.is_directory()) {
@@ -273,7 +273,7 @@ export struct Directory {
         }
         var entries = list.value();
         ulong i = 0;
-        while (i < entries.count()) {
+        while (i < entries.count) {
             var entry = entries[i];
             i = i + 1;
             if (entry.is_directory && !entry.is_symlink) {

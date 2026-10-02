@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pepper_parser::ast::{Declaration, FunctionDecl, Import, Module, VariableDecl};
+use pepper_parser::ast::{Declaration, FunctionDecl, Import, Module, PropertyDecl, VariableDecl};
 use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_doc, is_public_member, member_name};
 
 /// Page titles for the runtime files, in the order the reference lists them.
@@ -179,12 +179,36 @@ fn method(out: &mut String, source: &str, owner: &str, f: &FunctionDecl) {
     entry(out, 4, &title, &function_signature(source, f), doc);
 }
 
-fn members(out: &mut String, source: &str, owner: &str, fields: &[VariableDecl], constructors: &[FunctionDecl], methods: &[FunctionDecl]) {
+/// A property's entry: its declaration with the accessors' bodies left out
+/// (`var count: ulong { get; }`).
+fn property(out: &mut String, source: &str, p: &PropertyDecl) {
+    let doc = doc_comment_before(source, p.span.start);
+    let accessors: Vec<&str> = [("get;", &p.get), ("set;", &p.set)].into_iter().filter(|(_, a)| a.is_some()).map(|(k, _)| k).collect();
+    let ty = source.get(p.type_name.span.start..p.type_name.span.end).map_or_else(|| p.type_name.to_string(), str::to_string);
+    entry(out, 4, &p.name, &format!("var {}: {} {{ {} }}", p.name, ty, accessors.join(" ")), doc);
+}
+
+fn members(
+    out: &mut String,
+    source: &str,
+    owner: &str,
+    fields: &[VariableDecl],
+    properties: &[PropertyDecl],
+    constructors: &[FunctionDecl],
+    methods: &[FunctionDecl],
+) {
     let fields: Vec<_> = fields.iter().filter(|f| is_public(&f.name)).collect();
     if !fields.is_empty() {
         out.push_str("\n### Fields\n");
         for f in fields {
             field(out, source, f);
+        }
+    }
+    let properties: Vec<_> = properties.iter().filter(|p| is_public(&p.name)).collect();
+    if !properties.is_empty() {
+        out.push_str("\n### Properties\n");
+        for p in properties {
+            property(out, source, p);
         }
     }
     if !constructors.is_empty() {
@@ -270,17 +294,17 @@ fn page_body(module: &Module, source: &str) -> String {
                         entry(&mut out, 4, &case.name, &signature(source, start, case.span.end), doc);
                     }
                 }
-                members(&mut out, source, &s.name, &s.fields, &s.constructors, &s.methods);
+                members(&mut out, source, &s.name, &s.fields, &s.properties, &s.constructors, &s.methods);
             }
             Declaration::Trait(t) if is_public(&t.name) => {
                 let end = source[t.name_span.end..].find('{').map_or(t.span.end, |i| t.name_span.end + i);
                 entry(&mut out, 2, &t.name, &signature(source, start, end), doc);
-                members(&mut out, source, &t.name, &[], &[], &t.methods);
+                members(&mut out, source, &t.name, &[], &t.properties, &[], &t.methods);
             }
             Declaration::Extend(e) => {
                 let end = source[e.target.span.end..].find('{').map_or(e.span.end, |i| e.target.span.end + i);
                 entry(&mut out, 2, &format!("extend {}", e.target), &signature(source, start, end), doc);
-                members(&mut out, source, &e.target.name, &[], &[], &e.methods);
+                members(&mut out, source, &e.target.name, &[], &e.properties, &[], &e.methods);
             }
             Declaration::TypeAlias(t) if is_public(&t.name) => {
                 entry(&mut out, 2, &t.name, &signature(source, start, t.span.end), doc);

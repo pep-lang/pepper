@@ -62,9 +62,9 @@ export struct Array<T> {
     ## `_capacity` is 0. Internal storage; use the methods instead of touching
     ## it directly.
     __ptr<T> _data;
-    ## The number of live elements; always at most `_capacity`. Read it through `count()`.
+    ## The number of live elements; always at most `_capacity`. Read it through `count`.
     ulong _size;
-    ## The number of element slots allocated in `_data`; never shrinks. Read it through `capacity()`.
+    ## The number of element slots allocated in `_data`; never shrinks. Read it through `capacity`.
     ulong _capacity;
     ## The modification counter: incremented by every mutating operation so
     ## that an `ArrayIterator` can detect changes made while it runs. Its
@@ -83,9 +83,9 @@ export struct Array<T> {
     ## element is added. Preallocating avoids the reallocations `append`
     ## would otherwise perform while the Array grows to a known size.
     ##
-    ## @param capacity the number of element slots to allocate up front; `count()` is still 0
+    ## @param capacity the number of element slots to allocate up front; `count` is still 0
     ## @example
-    ##     var a = Array<int>(16);   # a.count() == 0, a.capacity() == 16
+    ##     var a = Array<int>(16);   # a.count == 0, a.capacity == 16
     construct(capacity: ulong = 0) {
         if (capacity > 0) {
             _data = _pep_malloc(sizeof<T>() * capacity);
@@ -171,26 +171,26 @@ export struct Array<T> {
         return it;
     }
 
-    ## Returns the number of elements in the Array.
-    ##
-    ## @returns the element count; 0 for an empty Array
-    count(): ulong {
-        return _size;
+    ## The number of elements in the Array.
+    var count: ulong {
+        get {
+            return _size;
+        }
     }
 
-    ## Returns the number of elements the Array can hold before its buffer
+    ## The number of elements the Array can hold before its buffer
     ## must be reallocated.
-    ##
-    ## @returns the allocated slot count, which is at least `count()`
-    capacity(): ulong {
-        return _capacity;
+    var capacity: ulong {
+        get {
+            return _capacity;
+        }
     }
 
-    ## Reports whether the Array has no elements.
-    ##
-    ## @returns true when `count()` is 0
-    empty(): bool {
-        return _size == 0;
+    ## Whether the Array has no elements.
+    var is_empty: bool {
+        get {
+            return _size == 0;
+        }
     }
 
     ## Ensures the buffer has room for at least `capacity` elements,
@@ -205,7 +205,7 @@ export struct Array<T> {
     ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
     ##     var a = Array<int>();
-    ##     a.reserve(8);   # a.capacity() >= 8
+    ##     a.reserve(8);   # a.capacity >= 8
     ##     a.reserve(2);   # no effect: capacity never shrinks
     reserve(capacity: ulong) {
         if (capacity > _capacity) {
@@ -239,7 +239,7 @@ export struct Array<T> {
     ##
     ## @param idx the zero-based position to read
     ## @returns the element at `idx`
-    ## @panics if `idx < count()` does not hold ("Array index read out of bounds")
+    ## @panics if `idx < count` does not hold ("Array index read out of bounds")
     ## @example
     ##     var first = a[0];
     [](idx: ulong): T {
@@ -259,7 +259,7 @@ export struct Array<T> {
     ## @param idx the zero-based position to overwrite
     ## @param value the new element
     ## @returns the element now stored at `idx` (that is, `value`)
-    ## @panics if `idx < count()` does not hold ("Array index write out of bounds")
+    ## @panics if `idx < count` does not hold ("Array index write out of bounds")
     ## @example
     ##     a[0] = 42;
     [](idx: ulong, value: T): T {
@@ -305,13 +305,13 @@ export struct Array<T> {
     ## later element up by one.
     ##
     ## Runs in O(count - idx), plus a reallocation when the buffer is full.
-    ## `idx == count()` appends. For a struct `T` the Array acquires a
+    ## `idx == count` appends. For a struct `T` the Array acquires a
     ## reference to `item`; shifted elements keep their reference counts.
     ## Invalidates running iterators.
     ##
-    ## @param idx the position `item` will occupy; from 0 through `count()`
+    ## @param idx the position `item` will occupy; from 0 through `count`
     ## @param item the element to insert
-    ## @panics if `idx <= count()` does not hold ("Array insert index out of bounds")
+    ## @panics if `idx <= count` does not hold ("Array insert index out of bounds")
     ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
     ##     var a = Array<int>();
@@ -344,7 +344,7 @@ export struct Array<T> {
     ##
     ## @param idx the position of the element to remove
     ## @returns the removed element
-    ## @panics if `idx < count()` does not hold ("Array remove index out of bounds")
+    ## @panics if `idx < count` does not hold ("Array remove index out of bounds")
     ## @example
     ##     var a = Array<int>();
     ##     a.append(1);
@@ -392,9 +392,9 @@ export struct Array<T> {
     }
 
     ## Returns the last element without removing it; the same as
-    ## `a[a.count() - 1]`.
+    ## `a[a.count - 1]`.
     ##
-    ## @returns the element at index `count() - 1`
+    ## @returns the element at index `count - 1`
     ## @panics if the Array is empty ("Array last on empty Array")
     last(): T {
         assert(_size > 0, "Array last on empty Array");
@@ -417,7 +417,7 @@ export struct Array<T> {
     ## Shortens the Array to its first `count` elements, removing the rest.
     ##
     ## Runs in O(removed elements). For a struct `T` each removed element's
-    ## reference is released. A `count` at or above the current `count()`
+    ## reference is released. A `count` at or above the current `count`
     ## does nothing (the Array never grows) and leaves iterators valid; an
     ## actual shrink invalidates them. The capacity is kept.
     ##
@@ -441,8 +441,8 @@ export struct Array<T> {
     ##
     ## @param a the position of the first element
     ## @param b the position of the second element
-    ## @panics if `a < count()` does not hold ("Array swap index out of bounds")
-    ## @panics if `b < count()` does not hold ("Array swap index out of bounds")
+    ## @panics if `a < count` does not hold ("Array swap index out of bounds")
+    ## @panics if `b < count` does not hold ("Array swap index out of bounds")
     swap(a: ulong, b: ulong) {
         assert(a < _size, "Array swap index out of bounds");
         assert(b < _size, "Array swap index out of bounds");
@@ -482,7 +482,7 @@ export struct Array<T> {
     ## `b`, 0 when their order does not matter, and a positive number when
     ## `a` belongs after `b`, the convention `String.compare` follows. It is
     ## a merge sort: O(count log count) calls to `compare`, plus a scratch
-    ## buffer of `count()` slots. Elements move between the two buffers
+    ## buffer of `count` slots. Elements move between the two buffers
     ## without changing any reference count. Invalidates running iterators
     ## when there are two or more elements.
     ##
@@ -649,7 +649,7 @@ export struct Array<T> {
     ## Runs in O(count). The copy is shallow: for a struct `T` both Arrays
     ## refer to the same element objects (each acquired once more), but adding
     ## or removing elements in one does not affect the other. The new Array's
-    ## capacity equals this Array's `count()`.
+    ## capacity equals this Array's `count`.
     ##
     ## @returns an independent Array with the same elements
     ## @example
@@ -692,7 +692,7 @@ export struct Array<T> {
     ## elements, compared with `==` as `find` does.
     ##
     ## Runs in O(count); stops at the first difference. Two empty Arrays are
-    ## equal. `capacity()` is not compared.
+    ## equal. `capacity` is not compared.
     ##
     ## @param rhs the Array to compare with
     ## @returns true when the Arrays are element-wise equal
@@ -772,7 +772,7 @@ export struct ArrayIterator<T> {
     ## The Array being iterated; the iterator holds a reference to it for its whole lifetime.
     Array<T> _source;
     ## The position of the current element in `_source`. Meaningful only after
-    ## `_started` is set; equals `_source.count()` once iteration has finished.
+    ## `_started` is set; equals `_source.count` once iteration has finished.
     ulong _index;
     ## The `_source._version` recorded when iteration began; a mismatch means the Array was modified.
     ulong _version;

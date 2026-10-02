@@ -19,7 +19,7 @@
 //! destructors are always walked, since platform selection never drops them.
 
 use crate::passes::platform::keep;
-use pepper_parser::ast::{Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Pattern, Span, Statement, TypeName};
+use pepper_parser::ast::{Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Pattern, PropertyDecl, Span, Statement, TypeName};
 use std::collections::HashSet;
 
 /// One level of names bound inside a declaration.
@@ -232,6 +232,9 @@ macro_rules! scope_walker {
                             }
                             self.exit_declaration();
                         }
+                        for p in &$($m)? s.properties {
+                            self.walk_property(p);
+                        }
                         // Platform selection never drops a constructor or
                         // destructor, whatever its attributes.
                         for c in &$($m)? s.constructors {
@@ -258,6 +261,9 @@ macro_rules! scope_walker {
                             .map(|m| m.name.clone())
                             .collect();
                         self.scopes_mut().push(Scope::Values(methods));
+                        for p in &$($m)? t.properties {
+                            self.walk_property(p);
+                        }
                         for m in &$($m)? t.methods {
                             self.walk_function(m);
                         }
@@ -278,6 +284,9 @@ macro_rules! scope_walker {
                             self.visit_type_name(t);
                         }
                         self.scopes_mut().push(Scope::Members(e.target.name.clone()));
+                        for p in &$($m)? e.properties {
+                            self.walk_property(p);
+                        }
                         for m in &$($m)? e.methods {
                             self.walk_function(m);
                         }
@@ -298,6 +307,31 @@ macro_rules! scope_walker {
                 if keep(&f.attributes).unwrap_or(true) {
                     self.walk_function_body(f);
                 }
+            }
+
+            /// A property: its type, its initializer and its accessors'
+            /// bodies, where `field` and `value` are bound.
+            fn walk_property(&mut self, p: &$($m)? PropertyDecl) {
+                self.enter_declaration(&p.attributes);
+                self.visit_type_name(&$($m)? p.type_name);
+                if let Some(e) = &$($m)? p.default_value {
+                    self.visit_expression(e);
+                }
+                self.scopes_mut().push(Scope::Values(HashSet::new()));
+                self.scopes_mut().bind_value(pepper_parser::ast::PROPERTY_FIELD, false);
+                self.scopes_mut().bind_value(pepper_parser::ast::PROPERTY_VALUE, false);
+                if let Some(get) = &$($m)? p.get {
+                    if let Some(body) = &$($m)? get.function.body {
+                        self.walk_block(body);
+                    }
+                }
+                if let Some(set) = &$($m)? p.set {
+                    if let Some(body) = &$($m)? set.function.body {
+                        self.walk_block(body);
+                    }
+                }
+                self.scopes_mut().pop();
+                self.exit_declaration();
             }
 
             fn walk_function_body(&mut self, f: &$($m)? FunctionDecl) {

@@ -257,7 +257,7 @@ struct Child {
     destruct { freed.fetch_add(1); }
     int owner_length() {
         with (var parent = this.owner) {
-            return parent.name.length() as int;
+            return parent.name.length as int;
         } else {
             return -1;
         }

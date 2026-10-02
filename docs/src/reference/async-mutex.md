@@ -433,7 +433,7 @@ value from outside.
 **Example**
 ```pepper
     with (var queue = jobs.lock()) {
-        not_empty.wait_while((queue: Array<Job>): bool => queue.count() == 0);
+        not_empty.wait_while((queue: Array<Job>): bool => queue.count == 0);
         var job = queue.remove_at(0);
     }
 ```

@@ -29,7 +29,7 @@ build(): int {
     outer.append(a);
     outer.append(b);
     outer.append(c);
-    if (outer.count() != 3) { return -1; }
+    if (outer.count != 3) { return -1; }
     if (outer[0][1] != 2) { return -2; }
     if (outer[2][0] != 5) { return -3; }
     # The slots hold one ref each; build's scope exit drops the creators'
@@ -77,7 +77,7 @@ build(): int {
     var removed = outer.remove_at(1);
     if (removed[0] != 1) { return -3; }
     # order: c, b
-    if (outer.count() != 2) { return -4; }
+    if (outer.count != 2) { return -4; }
     if (outer[1][0] != 2) { return -5; }
     outer.append(d);
     outer.swap(0, 2);
@@ -120,7 +120,7 @@ build(): int {
         # is dropped when the loop body's scope exits.
         i = i + 1;
     }
-    if (outer.count() != 10) { return -1; }
+    if (outer.count != 10) { return -1; }
     if (outer[9][0] != 90) { return -2; }
     return 0;
 }
@@ -149,14 +149,14 @@ build(): int {
     var a = Array<String>(1);
     var s1 = "one";
     a.append(s1);
-    if (a.count() != 1) { return -1; }
-    if (s1.size() != 3) { return -2; }
+    if (a.count != 1) { return -1; }
+    if (s1.size != 3) { return -2; }
     var b = Array<String>(1);
     var s2 = "two";
     b.append(s2);
     outer.append(a);
     outer.append(b);
-    if (outer.count() != 2) { return -3; }
+    if (outer.count != 2) { return -3; }
     # Compare through the creator variables: a literal in the expression
     # would allocate a temporary String that nothing releases.
     if (outer[0][0] != s1) { return -4; }
@@ -192,9 +192,9 @@ build(): int {
     b.append(2);
     outer.append(a);
     outer.append(b);
-    if (outer.count() != 2) { return -1; }
+    if (outer.count != 2) { return -1; }
     outer.clear();
-    if (!outer.empty()) { return -2; }
+    if (!outer.is_empty) { return -2; }
     # clear released the slots' refs; build's scope exit drops the
     # creators' too. The later destruct must then find nothing to release -
     # no double free, no leak.
@@ -226,12 +226,12 @@ build(): int {
     a.append(7);
     outer.append(a);
     var copy = outer.clone();
-    if (copy.count() != 1) { return -1; }
+    if (copy.count != 1) { return -1; }
     if (copy[0][0] != 7) { return -2; }
     # The clone shares the inner Array: a mutation through the clone is
     # visible in the original.
     copy[0].append(8);
-    if (outer[0].count() != 2) { return -3; }
+    if (outer[0].count != 2) { return -3; }
     if (outer[0][1] != 8) { return -4; }
     # The clone shares the inner Array: build's scope exit releases both
     # owners, freeing every inner Array.

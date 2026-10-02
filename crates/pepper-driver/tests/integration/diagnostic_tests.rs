@@ -877,7 +877,7 @@ fn part_of_a_locked_value_cannot_be_returned() {
 fn a_closure_cannot_capture_a_locked_value() {
     let error = confinement_error(
         "confine_closure",
-        "main(): int {\n    with (var list = names.lock()) {\n        var f = () => list.count();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    with (var list = names.lock()) {\n        var f = () => list.count;\n    }\n    return 0;\n}\n",
     );
     assert!(error.starts_with("main.pep:7:17: error: closure captures 'list', which is part of the value locked by 'names'\n"), "{error}");
 }
@@ -905,7 +905,7 @@ fn new_values_and_copies_cross_a_lock() {
         &main,
         format!(
             "{LOCKED_NAMES}first(): String {{\n    with (var list = names.lock()) {{\n        return list[0].copy();\n    }}\n    return \"\";\n}}\n\n\
-             main(): int {{\n    var line = \"x\";\n    with (var list = names.lock()) {{\n        list.append(\"worker\");\n        list.append(line + \"!\");\n        list.append(copy(line));\n        var n = list.count();\n        var found = list.contains(line);\n    }}\n    return 0;\n}}\n"
+             main(): int {{\n    var line = \"x\";\n    with (var list = names.lock()) {{\n        list.append(\"worker\");\n        list.append(line + \"!\");\n        list.append(copy(line));\n        var n = list.count;\n        var found = list.contains(line);\n    }}\n    return 0;\n}}\n"
         ),
     )
     .unwrap();
@@ -1014,10 +1014,10 @@ fn use_after_move_is_an_error() {
     assert_eq!(
         confinement_error(
             "move_use_after",
-            "main(): int {\n    var a = Array<String>();\n    names.replace(move(a));\n    return a.count();\n}\n"
+            "main(): int {\n    var a = Array<String>();\n    names.replace(move(a));\n    return a.count;\n}\n"
         ),
         "main.pep:8:12: error: 'a' is used after its value was moved\n\
-         \x20   8 |     return a.count();\n\
+         \x20   8 |     return a.count;\n\
          \x20     |            ^\n\
          main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again\n\
          \x20   7 |     names.replace(move(a));\n\
@@ -1120,7 +1120,7 @@ fn a_locked_predicate_cannot_keep_the_value() {
         error_of(
             "locked_keep",
             &format!(
-                "{WAIT_WHILE_HEADER}main(): int {{\n    var saved = Array<String>();\n    with (var list = jobs.lock()) {{\n        ready.wait_while((queue: Array<String>): bool => {{\n            saved.append(queue[0]);\n            return queue.count() == 0;\n        }});\n    }}\n    return 0;\n}}\n"
+                "{WAIT_WHILE_HEADER}main(): int {{\n    var saved = Array<String>();\n    with (var list = jobs.lock()) {{\n        ready.wait_while((queue: Array<String>): bool => {{\n            saved.append(queue[0]);\n            return queue.count == 0;\n        }});\n    }}\n    return 0;\n}}\n"
             )
         ),
         "main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock\n\
@@ -1157,7 +1157,7 @@ fn a_locked_parameter_takes_a_closure() {
     let error = error_of(
         "locked_named",
         &format!(
-            "{WAIT_WHILE_HEADER}empty(queue: Array<String>): bool {{\n    return queue.count() == 0;\n}}\n\nmain(): int {{\n    with (var list = jobs.lock()) {{\n        ready.wait_while(empty);\n    }}\n    return 0;\n}}\n"
+            "{WAIT_WHILE_HEADER}empty(queue: Array<String>): bool {{\n    return queue.count == 0;\n}}\n\nmain(): int {{\n    with (var list = jobs.lock()) {{\n        ready.wait_while(empty);\n    }}\n    return 0;\n}}\n"
         ),
     );
     assert!(
@@ -1734,10 +1734,10 @@ fn shared_closure_captures_not_thread_safe() {
     assert_eq!(
         error_of(
             "shared_closure_returned",
-            "make(): shared () => int {\n    var s = \"x\";\n    return () => s.length() as int;\n}\nmain(): int { return 0; }\n"
+            "make(): shared () => int {\n    var s = \"x\";\n    return () => s.length as int;\n}\nmain(): int { return 0; }\n"
         ),
         "main.pep:3:18: error: closure returned as 'shared () => int' captures 's' of type 'String', which is not thread-safe\n\
-         \x20   3 |     return () => s.length() as int;\n\
+         \x20   3 |     return () => s.length as int;\n\
          \x20     |                  ^\n\
          main.pep:2:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct\n\
          \x20   2 |     var s = \"x\";\n\
@@ -4086,7 +4086,7 @@ fn range_of_a_non_integer() {
 #[test]
 fn hash_key_with_equality_but_no_hash_is_an_error_at_the_operator() {
     let source = "struct Point {\n    int x;\n    ==(other: Point): bool { return x == other.x; }\n}\n\
-                  test(): int {\n    var seen = HashSet<Point>();\n    return seen.count();\n}\n";
+                  test(): int {\n    var seen = HashSet<Point>();\n    return seen.count;\n}\n";
     assert_eq!(
         error_of("hash_key_equality", source),
         "main.pep:3:5: error: 'Point' declares '==' but no 'hash<Point>', so as a HashMap or HashSet key, equal values will not find each other\n\
@@ -4100,7 +4100,7 @@ fn hash_key_with_equality_but_no_hash_is_an_error_at_the_operator() {
 fn hash_key_with_hash_but_no_equality_is_an_error_at_the_override() {
     let source = "struct Node {\n    int id;\n}\n\
                   hash<Node>(value: Node): u64 { return hash<int>(value.id); }\n\
-                  test(): int {\n    var seen = HashMap<Node, int>();\n    return seen.count();\n}\n";
+                  test(): int {\n    var seen = HashMap<Node, int>();\n    return seen.count;\n}\n";
     assert_eq!(
         error_of("hash_key_hash", source),
         "main.pep:4:1: error: 'hash<Node>' is overridden but 'Node' declares no '==', so HashMap and HashSet keys still compare by identity\n\
@@ -4118,8 +4118,94 @@ fn hash_keys_with_both_halves_or_neither_compile_cleanly() {
                   hash<Point>(value: Point): u64 { return hash<int>(value.x); }\n\
                   struct Node {\n    int id;\n}\n\
                   [Value]\nstruct Cell {\n    int row;\n}\n\
-                  test(): int {\n    var a = HashSet<Point>();\n    var b = HashSet<Node>();\n    var c = HashSet<Cell>();\n    return a.count() + b.count() + c.count();\n}\n";
+                  test(): int {\n    var a = HashSet<Point>();\n    var b = HashSet<Node>();\n    var c = HashSet<Cell>();\n    return a.count + b.count + c.count;\n}\n";
     assert_eq!(warnings_of(source), "");
+}
+
+// Properties (`docs/src/language/properties.md`).
+
+#[test]
+fn assigning_a_get_only_property_points_at_the_property() {
+    assert_eq!(
+        error_of("get_only_property", "struct A {\n    var balance: long { get; }\n}\nmain(): int {\n    var a = A();\n    a.balance = 3;\n    return 0;\n}\n"),
+        "main.pep:6:7: error: cannot assign to 'balance': it has no 'set' accessor\n\
+         \x20   6 |     a.balance = 3;\n\
+         \x20     |       ^~~~~~~\n\
+         main.pep:2:9: note: 'balance' declared here\n\
+         \x20   2 |     var balance: long { get; }\n\
+         \x20     |         ^~~~~~~"
+    );
+}
+
+#[test]
+fn a_set_only_property_points_at_its_set() {
+    assert_eq!(
+        error_of("set_only_property", "struct A {\n    var x: int { set; }\n}\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:18: error: property 'x' has no 'get' accessor; a property must have one\n\
+         \x20   2 |     var x: int { set; }\n\
+         \x20     |                  ^~~"
+    );
+}
+
+#[test]
+fn a_shared_struct_property_with_set_points_at_the_set() {
+    assert_eq!(
+        error_of("shared_property", "[Shared]\nstruct A {\n    var x: int { get; set; }\n}\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:3:23: error: property 'x' of a '[Shared]' struct cannot have a 'set' accessor: its storage is 'const'\n\
+         \x20   3 |     var x: int { get; set; }\n\
+         \x20     |                       ^~~\n\
+         main.pep:1:1: note: '[Shared]' declared here\n\
+         \x20   1 | [Shared]\n\
+         \x20     | ^~~~~~~~"
+    );
+}
+
+#[test]
+fn an_extension_property_with_storage_points_at_its_name() {
+    assert_eq!(
+        error_of("ext_property", "struct A {\n    var x: int;\n}\nextend A {\n    var y: int { get; }\n}\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:5:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'\n\
+         \x20   5 |     var y: int { get; }\n\
+         \x20     |         ^"
+    );
+}
+
+#[test]
+fn a_missing_trait_property_points_at_the_extension() {
+    assert_eq!(
+        error_of("trait_property", "trait T {\n    var label: String { get; }\n}\nstruct D {\n    var x: int;\n}\nextend D with T;\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:7:8: error: 'D' does not implement property 'label', required by trait 'T'\n\
+         \x20   7 | extend D with T;\n\
+         \x20     |        ^\n\
+         main.pep:2:9: note: 'label' declared here\n\
+         \x20   2 |     var label: String { get; }\n\
+         \x20     |         ^~~~~"
+    );
+}
+
+#[test]
+fn a_property_initializer_before_its_accessors_points_at_it() {
+    assert_eq!(
+        error_of("init_property", "struct A {\n    var x: int = 3 { get; }\n}\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:18: error: the initializer of property 'x' goes after its accessors\n\
+         \x20   2 |     var x: int = 3 { get; }\n\
+         \x20     |                  ^"
+    );
+}
+
+#[test]
+fn calling_a_property_points_at_its_name() {
+    let error = error_of("property_call", "main(): int {\n    var a = Array<int>();\n    return a.count() as int;\n}\n");
+    assert!(
+        error.starts_with(
+            "main.pep:3:14: error: 'count' is a property, not a method; read it without '()'\n\
+             \x20   3 |     return a.count() as int;\n\
+             \x20     |              ^~~~~\n"
+        ),
+        "{}",
+        error
+    );
+    assert!(error.replace('\\', "/").contains("runtime/array.pep:"), "{}", error);
 }
 
 #[test]

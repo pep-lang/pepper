@@ -15,6 +15,6 @@ main(): int {
 
     # A host name goes to the system resolver; an IP address is used as is.
     var local = io.resolve("localhost", 80).value();
-    assert(local.count() >= 1 && local[0].address().is_loopback(), "localhost is loopback");
+    assert(local.count >= 1 && local[0].address().is_loopback(), "localhost is loopback");
     return 0;
 }

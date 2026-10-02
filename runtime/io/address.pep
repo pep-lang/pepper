@@ -128,7 +128,7 @@ export struct IpAddress {
     ##     print(r.is_err());   # true: 300 is out of range
     static parse(text: String): IoResult<IpAddress> {
         var p = text.c_str() as __ptr<u8>;
-        var n = text.size();
+        var n = text.size;
         var v4 = _io_parse_v4(p, n, 0, n);
         if (v4.is_some()) {
             var address = IpAddress();
@@ -336,7 +336,7 @@ export struct SocketAddress {
     ##     var b = SocketAddress.parse("[::1]:8080").value();
     static parse(text: String): IoResult<SocketAddress> {
         var p = text.c_str() as __ptr<u8>;
-        var n = text.size();
+        var n = text.size;
         var bad = IoResult<SocketAddress>.err(IoError(_io_sys_code_invalid_input(), "invalid socket address syntax"));
         if (n == 0) {
             return bad;
@@ -467,7 +467,7 @@ export struct SocketAddress {
 ##         }
 ##     }
 export resolve(host: String, port: u16): IoResult<SocketAddress[]> {
-    if (host.size() == 0) {
+    if (host.size == 0) {
         return IoResult<SocketAddress[]>.err(IoError(_io_sys_code_invalid_input(), "empty host name"));
     }
     var literal = IpAddress.parse(host);
@@ -488,7 +488,7 @@ export resolve(host: String, port: u16): IoResult<SocketAddress[]> {
             unique.append(address);
         }
     }
-    if (unique.count() == 0) {
+    if (unique.count == 0) {
         return IoResult<SocketAddress[]>.err(IoError(_io_sys_code_not_found(), "no address found for '" + host + "'"));
     }
     return IoResult<SocketAddress[]>.ok(unique);
@@ -626,7 +626,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<
             return fail;  # a trailing single colon
         }
     }
-    var count = head.count() + tail.count();
+    var count = head.count + tail.count;
     if (gap && count > 7) {
         return fail;
     }
@@ -637,7 +637,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<
     for (var g in head) {
         all.append(g);
     }
-    while (all.count() + tail.count() < 8) {
+    while (all.count + tail.count < 8) {
         all.append(0);
     }
     for (var g in tail) {

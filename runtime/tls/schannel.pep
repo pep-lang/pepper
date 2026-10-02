@@ -339,15 +339,15 @@ _tls_pem_blocks(text: String, label: String): Array<u8[]> {
         if (stop < 0) {
             return blocks;
         }
-        var block_end = stop as ulong + end.size();
+        var block_end = stop as ulong + end.size;
         var block = text.substr_bytes(start as ulong, block_end - start as ulong);
         __ptr<uint> size = _pep_malloc(4);
         size[0] = 0;
         # CRYPT_STRING_BASE64HEADER
-        if (CryptStringToBinaryA(block.c_str(), block.size() as uint, 0, __null, size, __null, __null) != 0) {
+        if (CryptStringToBinaryA(block.c_str(), block.size as uint, 0, __null, size, __null, __null) != 0) {
             var der = Array<u8>(size[0] as ulong);
             der.reserve(size[0] as ulong);
-            if (CryptStringToBinaryA(block.c_str(), block.size() as uint, 0, der._data, size, __null, __null) != 0) {
+            if (CryptStringToBinaryA(block.c_str(), block.size as uint, 0, der._data, size, __null, __null) != 0) {
                 der._size = size[0] as ulong;
                 blocks.append(der);
             }
@@ -506,7 +506,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
         return io.IoResult<__ptr<void>>.err(chain_text.error());
     }
     var certificates = _tls_pem_blocks(chain_text.value(), "CERTIFICATE");
-    if (certificates.count() == 0) {
+    if (certificates.count == 0) {
         return io.IoResult<__ptr<void>>.err(
             _tls_error($"cannot load the certificate chain '{chain}': no certificate in it")
         );
@@ -516,7 +516,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
         return io.IoResult<__ptr<void>>.err(key_text.error());
     }
     var keys = _tls_pem_blocks(key_text.value(), "PRIVATE KEY");
-    if (keys.count() == 0) {
+    if (keys.count == 0) {
         return io.IoResult<__ptr<void>>.err(
             _tls_error($"cannot load the private key '{key}': no PKCS #8 PRIVATE KEY block in it")
         );
@@ -526,7 +526,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     leaf[0] = __null;
     var loaded = _tls_add_certificate(store, certificates[0], leaf);
     ulong i = 1;
-    while (loaded && i < certificates.count()) {
+    while (loaded && i < certificates.count) {
         loaded = _tls_add_certificate(store, certificates[i], __null);
         i = i + 1;
     }
@@ -581,7 +581,7 @@ export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void>
         return io.IoResult<void>.err(text.error());
     }
     var certificates = _tls_pem_blocks(text.value(), "CERTIFICATE");
-    if (certificates.count() == 0) {
+    if (certificates.count == 0) {
         return io.IoResult<void>.err(_tls_error($"cannot load the certificates in '{path}': none found"));
     }
     var store = _tls_pointer(context as __ptr<u8>, 24) as __ptr<void>;
@@ -619,7 +619,7 @@ _tls_session_new(context: __ptr<void>, h: io.SocketHandle, host: String): __ptr<
     _tls_set_pointer(session, 24, context as __ptr<u8>);
     _tls_set_pointer(session, 32, _pep_malloc(_TLS_BUFFER_SIZE));
     _tls_set_pointer(session, 48, _pep_malloc(_TLS_BUFFER_SIZE));
-    if (host.size() > 0) {
+    if (host.size > 0) {
         _tls_set_pointer(session, 96, io._io_win_wide(host) as __ptr<u8>);
     }
     return session;

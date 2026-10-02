@@ -12,7 +12,7 @@ export struct Utf8 {
     ## Returns the UTF-8 bytes of `value`, without a terminating NUL.
     ##
     ## @param value the text to encode
-    ## @returns a new array of `value.size()` bytes
+    ## @returns a new array of `value.size` bytes
     static encode(value: String): u8[] {
         return value.bytes();
     }
@@ -24,7 +24,7 @@ export struct Utf8 {
     ## @param bytes the bytes to check
     ## @returns true when every byte is part of a valid sequence
     static is_valid(bytes: u8[]): bool {
-        var size = bytes.count();
+        var size = bytes.count;
         ulong index = 0;
         while (index < size) {
             var run = String._utf8_sequence(bytes._data, index, size);

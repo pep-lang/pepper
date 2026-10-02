@@ -246,9 +246,9 @@ export struct Child {
                     return;
                 }
                 var data = bytes.value();
-                __ptr<u8> copy = _pep_malloc(data.count() + 1);
-                memcpy(copy, data._data, data.count());
-                error_size.store(data.count());
+                __ptr<u8> copy = _pep_malloc(data.count + 1);
+                memcpy(copy, data._data, data.count);
+                error_size.store(data.count);
                 error_data.store(copy);
             }));
         }

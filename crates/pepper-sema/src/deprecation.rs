@@ -145,6 +145,7 @@ pub fn check_uses(files: &[ProgramFile], scopes: &[FileScope]) -> Vec<Diagnostic
                     types.insert(&s.name);
                     let names = members.entry(&s.name).or_default();
                     names.extend(s.fields.iter().map(|f| f.name.as_str()));
+                    names.extend(s.properties.iter().map(|p| p.name.as_str()));
                     names.extend(s.methods.iter().map(|m| m.name.as_str()));
                     // Overloaded constructors are checked per call, once
                     // resolved (`passes::check_deprecated_members`).
@@ -161,7 +162,9 @@ pub fn check_uses(files: &[ProgramFile], scopes: &[FileScope]) -> Vec<Diagnostic
                     types.insert(&t.name);
                 }
                 Declaration::Extend(e) => {
-                    members.entry(&e.target.name).or_default().extend(e.methods.iter().map(|m| m.name.as_str()));
+                    let names = members.entry(&e.target.name).or_default();
+                    names.extend(e.methods.iter().map(|m| m.name.as_str()));
+                    names.extend(e.properties.iter().map(|p| p.name.as_str()));
                 }
                 _ => {}
             }

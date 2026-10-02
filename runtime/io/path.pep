@@ -95,7 +95,7 @@ export _io_slice(s: String, begin: ulong, end: ulong): String {
 # End of the prefix plus any root separators: the part no operation strips.
 export _io_path_root_end(s: String): ulong {
     var p = s.c_str() as __ptr<u8>;
-    var n = s.size();
+    var n = s.size;
     var i = _io_path_prefix_len(p, n);
     while (i < n && _io_path_is_sep(_io_byte(p, n, i))) {
         i = i + 1;
@@ -107,8 +107,8 @@ export _io_path_root_end(s: String): ulong {
 export _io_path_trimmed_end(s: String): ulong {
     var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
-    var e = s.size();
-    while (e > root && _io_path_is_sep(_io_byte(p, s.size(), e - 1))) {
+    var e = s.size;
+    while (e > root && _io_path_is_sep(_io_byte(p, s.size, e - 1))) {
         e = e - 1;
     }
     return e;
@@ -119,7 +119,7 @@ export _io_path_name_start(s: String, e: ulong): ulong {
     var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
     var i = e;
-    while (i > root && !_io_path_is_sep(_io_byte(p, s.size(), i - 1))) {
+    while (i > root && !_io_path_is_sep(_io_byte(p, s.size, i - 1))) {
         i = i - 1;
     }
     return i;
@@ -131,7 +131,7 @@ export _io_path_name_start(s: String, e: ulong): ulong {
 export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
     var parts = Array<String>();
     var p = s.c_str() as __ptr<u8>;
-    var n = s.size();
+    var n = s.size;
     var i = _io_path_root_end(s);
     var first = true;
     while (i < n) {
@@ -162,7 +162,7 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 ##
 ## Breaking change: `parent()`, `file_name()`, `file_stem()`, `extension()`
 ## and `dot_index()` used to return an empty Path or String (or
-## `name.size()`) for "none"; they now return `Path?`, `String?` and
+## `name.size`) for "none"; they now return `Path?`, `String?` and
 ## `ulong?`.
 ##
 ## Separators: on POSIX only `/` separates components (`\` is an ordinary
@@ -200,7 +200,7 @@ export struct Path {
     ##     import io;
     ##
     ##     var p = io.Path("/usr/lib");
-    ##     var empty = io.Path();   # is_empty() is true
+    ##     var empty = io.Path();   # is_empty is true
     ##     var q: io.Path = "docs";   # converted implicitly
     [Implicit]
     construct(value: String = "") {
@@ -222,12 +222,12 @@ export struct Path {
         return _value;
     }
 
-    ## Returns whether the path has no text at all. File-system operations
+    ## Whether the path has no text at all. File-system operations
     ## on the empty path fail.
-    ##
-    ## @returns true when the path's text is `""`
-    is_empty(): bool {
-        return _value.size() == 0;
+    var is_empty: bool {
+        get {
+            return _value.size == 0;
+        }
     }
 
     ## Returns whether the path is absolute, meaning it does not depend on
@@ -242,7 +242,7 @@ export struct Path {
     ## @returns true when the path is absolute
     is_absolute(): bool {
         var p = _value.c_str() as __ptr<u8>;
-        var n = _value.size();
+        var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         return _io_path_absolute(p, prefix, has_root);
@@ -275,15 +275,15 @@ export struct Path {
     ##     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
     ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
     join(other: Path): Path {
-        if (other._value.size() == 0) {
+        if (other._value.size == 0) {
             return Path(_value.copy());
         }
-        if (_value.size() == 0 || other.is_absolute() || other.has_root_or_prefix()) {
+        if (_value.size == 0 || other.is_absolute() || other.has_root_or_prefix()) {
             return Path(other._value.copy());
         }
         var p = _value.c_str() as __ptr<u8>;
         var s = _value.copy();
-        if (!_io_path_is_sep(_io_byte(p, _value.size(), _value.size() - 1))) {
+        if (!_io_path_is_sep(_io_byte(p, _value.size, _value.size - 1))) {
             s.append(_io_path_separator());
         }
         s.append(other._value);
@@ -314,7 +314,7 @@ export struct Path {
     ## @returns true when the path has a root separator or a prefix
     has_root_or_prefix(): bool {
         var p = _value.c_str() as __ptr<u8>;
-        var n = _value.size();
+        var n = _value.size;
         if (_io_path_prefix_len(p, n) > 0) {
             return true;
         }
@@ -356,7 +356,7 @@ export struct Path {
         }
         var p = _value.c_str() as __ptr<u8>;
         var j = start;
-        while (j > root && _io_path_is_sep(_io_byte(p, _value.size(), j - 1))) {
+        while (j > root && _io_path_is_sep(_io_byte(p, _value.size, j - 1))) {
             j = j - 1;
         }
         return Optional<Path>.some(Path(_io_slice(_value, 0, j)));
@@ -392,7 +392,7 @@ export struct Path {
     ## file name `name`: the last `.` that is not the first byte. A leading
     ## dot (`.bashrc`) starts the name, not an extension.
     ##
-    ## Breaking change: this used to return `name.size()` for "no
+    ## Breaking change: this used to return `name.size` for "no
     ## extension"; it now returns none.
     ##
     ## @param name a file name (one component, as `file_name()` returns)
@@ -422,7 +422,7 @@ export struct Path {
             return Optional<String>.none();
         }
         var text = name.value();
-        var dot = Path.dot_index(text).value_or(text.size());
+        var dot = Path.dot_index(text).value_or(text.size);
         return Optional<String>.some(_io_slice(text, 0, dot));
     }
 
@@ -447,7 +447,7 @@ export struct Path {
         if (!dot) {
             return Optional<String>.none();
         }
-        return Optional<String>.some(_io_slice(text, dot.value() + 1, text.size()));
+        return Optional<String>.some(_io_slice(text, dot.value() + 1, text.size));
     }
 
     ## Returns this path with its file name's extension replaced by `ext`,
@@ -473,7 +473,7 @@ export struct Path {
         var start = _io_path_name_start(_value, e);
         var s = _io_slice(_value, 0, start);
         s.append(stem.value());
-        if (ext.size() > 0) {
+        if (ext.size > 0) {
             s.append(".");
             s.append(ext);
         }
@@ -497,7 +497,7 @@ export struct Path {
     components(): Array<String> {
         var out = Array<String>();
         var p = _value.c_str() as __ptr<u8>;
-        var n = _value.size();
+        var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         if (prefix > 0) {
             out.append(_io_slice(_value, 0, prefix));
@@ -531,22 +531,22 @@ export struct Path {
     ##     var q = io.Path("a/..").normalize();         # "."
     ## @see canonicalize
     normalize(): Path {
-        if (_value.size() == 0) {
+        if (_value.size == 0) {
             return Path();
         }
         var p = _value.c_str() as __ptr<u8>;
-        var n = _value.size();
+        var n = _value.size;
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         var parts = _io_path_parts(_value, false);
         var kept = Array<String>();
         ulong k = 0;
-        while (k < parts.count()) {
+        while (k < parts.count) {
             var part = parts[k];
             k = k + 1;
             if (part == "..") {
                 var climb = false;
-                if (kept.count() > 0) {
+                if (kept.count > 0) {
                     climb = kept.last() != "..";
                 }
                 if (climb) {
@@ -566,14 +566,14 @@ export struct Path {
             s.append(sep);
         }
         ulong i = 0;
-        while (i < kept.count()) {
+        while (i < kept.count) {
             if (i > 0) {
                 s.append(sep);
             }
             s.append(kept[i]);
             i = i + 1;
         }
-        if (s.size() == 0) {
+        if (s.size == 0) {
             s = ".";
         }
         return Path(s);

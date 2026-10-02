@@ -235,7 +235,7 @@ fn array_elements() {
     a.append(65535);
     a.append(7);
     a.append(70000);
-    if (a.count() != 3) { return 1; }
+    if (a.count != 3) { return 1; }
     if (a[0] != 65535) { return 2; }
     if (a[2] != 4464) { return 3; }
     long sum = a[0] + a[1];

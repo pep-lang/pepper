@@ -184,7 +184,11 @@ fn declaration_span(module: &Module, name: &str, kind: VisibilityErrorKind) -> O
         Declaration::Extend(e)
             if matches!(kind, VisibilityErrorKind::PrivateExtension | VisibilityErrorKind::ExtensionNotImported) =>
         {
-            e.methods.iter().find(|m| m.name == name).map(|m| m.name_span)
+            e.methods
+                .iter()
+                .find(|m| m.name == name)
+                .map(|m| m.name_span)
+                .or_else(|| e.properties.iter().find(|p| p.name == name).map(|p| p.name_span))
         }
         Declaration::Extend(_) => None,
         d if demangle_name(d.name()) == name => Some(d.name_span()),
@@ -275,7 +279,12 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
                 }
                 Declaration::Trait(t) => {
-                    let methods = t.methods.iter().filter(|m| keep(&m.attributes).unwrap_or(true)).map(|m| m.name.as_str());
+                    let methods = t
+                        .methods
+                        .iter()
+                        .filter(|m| keep(&m.attributes).unwrap_or(true))
+                        .map(|m| m.name.as_str())
+                        .chain(t.properties.iter().map(|p| p.name.as_str()));
                     traits.insert(&t.name, (i, t.is_exported, methods.collect::<Vec<_>>()));
                     types.insert(&t.name);
                     types.insert(demangle_name(&t.name));
@@ -292,6 +301,11 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                         let target = resolve_alias(&aliases, &e.target.name);
                         members.of_extensions.entry(target).or_default().push((&m.name, i, e.is_exported));
                         members.in_extensions.entry(&m.name).or_default().push((i, e.is_exported));
+                    }
+                    for p in &e.properties {
+                        let target = resolve_alias(&aliases, &e.target.name);
+                        members.of_extensions.entry(target).or_default().push((&p.name, i, e.is_exported));
+                        members.in_extensions.entry(&p.name).or_default().push((i, e.is_exported));
                     }
                 }
             }
@@ -487,7 +501,11 @@ fn resolve_alias<'b>(aliases: &HashMap<&'b str, &'b str>, mut name: &'b str) -> 
 }
 
 fn struct_member_names(s: &StructDecl) -> impl Iterator<Item = &str> {
-    s.fields.iter().map(|f| f.name.as_str()).chain(s.methods.iter().map(|m| m.name.as_str()))
+    s.fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .chain(s.properties.iter().map(|p| p.name.as_str()))
+        .chain(s.methods.iter().map(|m| m.name.as_str()))
 }
 
 struct Checker<'a, 'e> {

@@ -10,9 +10,9 @@ fn empty_string() {
             r#"
 test(): int {
     var e = "";
-    if (!e.empty()) { return -1; }
-    if (e.length() != 0) { return -2; }
-    if (e.size() != 0) { return -3; }
+    if (!e.is_empty) { return -1; }
+    if (e.length != 0) { return -2; }
+    if (e.size != 0) { return -3; }
     if (!(e == "")) { return -4; }
     return 0;
 }"#
@@ -45,8 +45,8 @@ fn utf8_length_counts_chars_not_bytes() {
             r#"
 test(): int {
     var u = "aé中";
-    if (u.length() != 3) { return -1; }
-    if (u.size() != 6) { return -2; }
+    if (u.length != 3) { return -1; }
+    if (u.size != 6) { return -2; }
     if (!(u[0] == "a")) { return -3; }
     if (!(u[1] == "é")) { return -4; }
     if (!(u[2] == "中")) { return -5; }
@@ -142,7 +142,7 @@ test(): int {
     x += "ab";
     x += "cd";
     if (!(x == "abcd")) { return -1; }
-    if (x.length() != 4) { return -2; }
+    if (x.length != 4) { return -2; }
     return 0;
 }"#
         ),
@@ -195,13 +195,13 @@ fn append_grows_capacity() {
             r#"
 test(): int {
     var s = "ab";
-    if (s.size() != 2) { return -1; }
+    if (s.size != 2) { return -1; }
     var i = 0;
     while (i < 64) {
         s += "x";
         i = i + 1;
     }
-    if (s.length() != 66) { return -2; }
+    if (s.length != 66) { return -2; }
     if (!(s[0] == "a") || !(s[65] == "x")) { return -3; }
     return 0;
 }"#
@@ -258,9 +258,9 @@ test(): int {
     var kv = "key=value";
     var eq = kv.find("=") as ulong;
     if (!(kv.substr_bytes(0, eq) == "key")) { return -2; }
-    if (!(kv.substr_bytes(eq + 1, kv.size() - eq - 1) == "value")) { return -3; }
+    if (!(kv.substr_bytes(eq + 1, kv.size - eq - 1) == "value")) { return -3; }
     if (!(kv.substr_bytes(3, 0) == "")) { return -4; }
-    if (!("aé".substr_bytes(1, 2).length() == 1)) { return -5; }
+    if (!("aé".substr_bytes(1, 2).length == 1)) { return -5; }
     if (!("apple".compare("banana") < 0)) { return -6; }
     if (!("banana".compare("apple") > 0)) { return -7; }
     if (!("ab".compare("abc") < 0)) { return -8; }
@@ -285,13 +285,13 @@ test(): int {
     if (!("   ".trim_end() == "")) { return -2; }
     if (!("  x".trim_end() == "  x")) { return -3; }
     var lines = "first\r\nsecond\n\nfourth".lines();
-    if (!(lines.count() == 4)) { return -4; }
+    if (!(lines.count == 4)) { return -4; }
     if (!(lines[0] == "first" && lines[1] == "second" && lines[2] == "" && lines[3] == "fourth")) { return -5; }
-    if (!("a\nb\n".lines().count() == 2)) { return -6; }
-    if (!("".lines().count() == 0)) { return -7; }
-    if (!("\n".lines().count() == 1)) { return -8; }
+    if (!("a\nb\n".lines().count == 2)) { return -6; }
+    if (!("".lines().count == 0)) { return -7; }
+    if (!("\n".lines().count == 1)) { return -8; }
     if (!("ab".repeat(3) == "ababab")) { return -9; }
-    if (!("é".repeat(2).length() == 2)) { return -10; }
+    if (!("é".repeat(2).length == 2)) { return -10; }
     if (!("x".repeat(0) == "")) { return -11; }
     if (!("".repeat(5) == "")) { return -12; }
     if (!("  \tcode".trim_start() == "code")) { return -13; }
@@ -299,14 +299,14 @@ test(): int {
     if (!("   ".trim() == "")) { return -15; }
     if (!("Content-Type 1".lower() == "content-type 1")) { return -16; }
     if (!("get ÄÖ".upper() == "GET ÄÖ")) { return -17; }
-    if (!("Ärger".lower() == "Ärger" && "Ärger".lower().length() == 5)) { return -18; }
+    if (!("Ärger".lower() == "Ärger" && "Ärger".lower().length == 5)) { return -18; }
     if (!("".upper() == "")) { return -19; }
     var data = "hé".bytes();
-    if (!(data.count() == 3 && data[0] == 104 && data[1] == 195 && data[2] == 169)) { return -20; }
-    if (!(String._from_bytes(data) == "hé" && String._from_bytes(data).length() == 2)) { return -21; }
+    if (!(data.count == 3 && data[0] == 104 && data[1] == 195 && data[2] == 169)) { return -20; }
+    if (!(String._from_bytes(data) == "hé" && String._from_bytes(data).length == 2)) { return -21; }
     data.append(255);
     data.append(105);
-    if (!(String._from_bytes(data) == "hé\u{FFFD}i" && String._from_bytes(data).length() == 4)) { return -22; }
+    if (!(String._from_bytes(data) == "hé\u{FFFD}i" && String._from_bytes(data).length == 4)) { return -22; }
     var cut = Array<u8>();
     cut.append(226);
     cut.append(130);
@@ -315,7 +315,7 @@ test(): int {
     surrogate.append(237);
     surrogate.append(160);
     surrogate.append(128);
-    if (!(String._from_bytes(surrogate).length() == 3)) { return -24; }
+    if (!(String._from_bytes(surrogate).length == 3)) { return -24; }
     if (!(String._from_bytes(Array<u8>()) == "")) { return -25; }
     return 0;
 }"#
@@ -362,10 +362,10 @@ fn string_builder() {
             r#"
 test(): int {
     var out = StringBuilder();
-    if (!(out.empty() && out.to_string() == "")) { return -1; }
+    if (!(out.is_empty && out.to_string() == "")) { return -1; }
     out.append("line ").append(to_string(3)).append("\n");
     if (!(out.to_string() == "line 3\n")) { return -2; }
-    if (!(out.length() == 7 && out.size() == 7)) { return -3; }
+    if (!(out.length == 7 && out.size == 7)) { return -3; }
     var many = StringBuilder(4);
     var i = 0;
     while (i < 1000) {
@@ -373,9 +373,9 @@ test(): int {
         i = i + 1;
     }
     var t = many.to_string();
-    if (!(t.length() == 1000 && t.size() == 2000)) { return -4; }
+    if (!(t.length == 1000 && t.size == 2000)) { return -4; }
     many.clear();
-    if (!(many.empty() && many.to_string() == "")) { return -5; }
+    if (!(many.is_empty && many.to_string() == "")) { return -5; }
     many.append("again");
     if (!(many.to_string() == "again")) { return -6; }
     return 0;
@@ -400,7 +400,7 @@ test(): int {
     if (!(text.Utf8.decode(bad).is_none())) { return -2; }
     if (!(text.Utf8.decode_lossy(bad) == "h\u{FFFD}")) { return -3; }
     var le = text.Utf16.encode(s);
-    if (!(le.count() == 18)) { return -4; }
+    if (!(le.count == 18)) { return -4; }
     if (!(text.Utf16.decode(le).value() == s)) { return -5; }
     var be = text.Utf16.encode(s, true);
     if (!(be[0] == 0 && be[1] == 104)) { return -6; }
@@ -410,10 +410,10 @@ test(): int {
     lone.append(216);
     if (!(text.Utf16.decode(lone).is_none())) { return -8; }
     if (!(text.Utf16.decode_lossy(lone) == "\u{FFFD}")) { return -9; }
-    if (!(text.Ascii.encode("ok").value().count() == 2)) { return -10; }
+    if (!(text.Ascii.encode("ok").value().count == 2)) { return -10; }
     if (!(text.Ascii.encode(s).is_none())) { return -11; }
     var q = text.Ascii.encode_lossy("aé€");
-    if (!(q.count() == 3 && q[1] == 63)) { return -12; }
+    if (!(q.count == 3 && q[1] == 63)) { return -12; }
     if (!(text.Ascii.decode(bad).is_none())) { return -13; }
     if (!(text.Ascii.decode_lossy(bad) == "h\u{FFFD}")) { return -14; }
     var before = _pep_live_allocs();
@@ -444,10 +444,10 @@ test(): int {
         if ("abc".rfind("") != 3) { return -7; }
         if ("abcabc".rfind("abc") != 3) { return -8; }
         var parts = "a,b,,c".split(",");
-        if (parts.count() != 4 || !(parts[2] == "") || !(parts[3] == "c")) { return -9; }
-        if ("".split(",").count() != 1) { return -10; }
-        if (",a,".split(",").count() != 3) { return -11; }
-        if ("a--b".split("--").count() != 2) { return -12; }
+        if (parts.count != 4 || !(parts[2] == "") || !(parts[3] == "c")) { return -9; }
+        if ("".split(",").count != 1) { return -10; }
+        if (",a,".split(",").count != 3) { return -11; }
+        if ("a--b".split("--").count != 2) { return -12; }
         var once = "Host: x: y".split_once(": ");
         if (!once.is_some()) { return -13; }
         var (name, value) = once.value();

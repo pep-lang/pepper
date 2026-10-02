@@ -15,7 +15,7 @@ main(): int {
     for (var name in people.iterate().filter((p) => p.age >= 18).map((p) => p.name)) {
         names.append(name);
     }
-    assert(names.count() == 2, "two adults");
+    assert(names.count == 2, "two adults");
     assert(names[0] == "Ada", "Ada first");
     assert(names[1] == "Cyd", "then Cyd");
 
@@ -42,6 +42,6 @@ main(): int {
 
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) => p.age).to_array();
-    assert(ages.count() == 3 && ages[2] == 40, "every age");
+    assert(ages.count == 3 && ages[2] == 40, "every age");
     return 0;
 }

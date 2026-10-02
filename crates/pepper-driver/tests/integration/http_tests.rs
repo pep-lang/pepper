@@ -49,10 +49,10 @@ raw(port: u16, request: u8[]): String {
             break;
         }
     }
-    if (reply.count() == 0) {
+    if (reply.count == 0) {
         return "";
     }
-    return String(reply._data as __ptr<char>, reply.count());
+    return String(reply._data as __ptr<char>, reply.count);
 }
 
 # Counts the occurrences of `needle` in `text`.
@@ -65,7 +65,7 @@ occurrences(text: String, needle: String): int {
             return count;
         }
         count = count + 1;
-        rest = rest.substr_bytes(at as ulong + needle.size(), rest.size() - at as ulong - needle.size());
+        rest = rest.substr_bytes(at as ulong + needle.size, rest.size - at as ulong - needle.size);
     }
     return count;
 }
@@ -97,7 +97,7 @@ main(): int {
         var echoed = client.send(request).value();
         assert(echoed.text() == "payload" && echoed.headers["X-Method"] == "PUT", "PUT with a body");
         var twice = echoed.headers.values("X-TWICE");
-        assert(twice.count() == 2 && twice[0] == "one" && twice[1] == "two", "a repeated field keeps its values in order");
+        assert(twice.count == 2 && twice[0] == "one" && twice[1] == "two", "a repeated field keeps its values in order");
         assert(echoed.headers["x-missing"] == "" && !echoed.headers.has("x-missing"), "a missing field reads as empty");
         var asking = http.Request("GET", base + "/headers");
         asking.headers["X-Test"] = "custom";
@@ -111,11 +111,11 @@ main(): int {
             i = i + 1;
         }
         var large = client.send(http.Request("POST", base + "/echo").set_body(big)).value();
-        assert(large.body().count() == 300000 && large.body()[299999] == big[299999], "a large binary body both ways");
-        assert(large.text().size() > 300000, "text() replaces the bytes that are not UTF-8");
+        assert(large.body().count == 300000 && large.body()[299999] == big[299999], "a large binary body both ways");
+        assert(large.text().size > 300000, "text() replaces the bytes that are not UTF-8");
 
         var head = client.send(http.Request("HEAD", base + "/hello")).value();
-        assert(head.status == 200 && head.body().count() == 0, "HEAD has no body");
+        assert(head.status == 200 && head.body().count == 0, "HEAD has no body");
 
         # Many clients at once.
         var tasks = Array<async.Task<bool>>();

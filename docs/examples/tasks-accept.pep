@@ -30,7 +30,7 @@ main(): int {
             var reply = Array<u8>();
             while (client.read(reply, 64).value() > 0) {
             }
-            assert(reply.count() == 5, "greeted");
+            assert(reply.count == 5, "greeted");
             i = i + 1;
         }
     });

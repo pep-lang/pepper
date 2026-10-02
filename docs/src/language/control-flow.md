@@ -49,7 +49,7 @@ the left one does not already decide the result. A guard can therefore come
 first in the same condition:
 
 ```pepper
-if items.count() > 0 && items[0] > 100 {
+if items.count > 0 && items[0] > 100 {
     print("starts high");
 }
 ```

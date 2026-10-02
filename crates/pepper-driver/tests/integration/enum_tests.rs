@@ -576,7 +576,7 @@ enum Doc {
 
     width(): int {
         match (this) {
-            Text(t) => { return t.length() as int; }
+            Text(t) => { return t.length as int; }
             Concat(parts), Indent(parts) => {
                 var total = 0;
                 for (var p in parts) { total += p.width(); }
@@ -713,7 +713,7 @@ enum Maybe<T> {
 }
 
 length_of(d: Describe): int {
-    return d.describe().length() as int;
+    return d.describe().length as int;
 }
 
 test(): int {
@@ -802,7 +802,7 @@ enum Handle {
 }
 test(): int {
     match (Handle.Path("x")) {
-        Path(t) => { return t.length() as int; }
+        Path(t) => { return t.length as int; }
         else => { return 2; }
     }
     return 0;
@@ -866,7 +866,7 @@ test(): int {
         var a = text_of(Doc.Line);
         var b = text_of(make("abc"));
         var c = match (make("xy")) { Text(t) => t, else => String("") };
-        total += (a.length() as int) + (b.length() as int) * 10 + (c.length() as int) * 100;
+        total += (a.length as int) + (b.length as int) * 10 + (c.length as int) * 100;
         i += 1;
     }
     if (_pep_live_allocs() != before) { return -1; }
@@ -890,13 +890,13 @@ enum Message {
 describe(m: Message): int {
     return match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     };
 }
 
 long_first(m: Message): int {
     return match (m) {
-        Text(text) => text.length(),
+        Text(text) => text.length,
         Empty => 0,
     };
 }
@@ -906,33 +906,33 @@ take(x: int): int { return x; }
 take_long(x: long): long { return x; }
 
 pick(c: bool, s: String): int {
-    return c ? 0 : s.length();
+    return c ? 0 : s.length;
 }
 
 test(): int {
     var m = Message.Text("four");
     var init: int = match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     };
     var inferred = match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     };
     var argument = take(match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     });
     var wide = take_long(match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     });
     var assigned = 0;
     assigned = match (m) {
         Empty => 0,
-        Text(text) => text.length(),
+        Text(text) => text.length,
     };
-    var ternary: int = init == 4 ? 1 : "ab".length();
+    var ternary: int = init == 4 ? 1 : "ab".length;
     var unsigned_arm = init == 4 ? 200 as byte : -1;
     var signed_arm: long = init == 4 ? -1 as char : 7 as long;
     if (describe(m) != 4 || describe(Message.Empty) != 0 || long_first(m) != 4) { return 1; }

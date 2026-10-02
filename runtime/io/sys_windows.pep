@@ -82,10 +82,10 @@ extern int WideCharToMultiByte(
 # always suffice.
 [Target(OS(Windows))]
 export _io_win_wide(s: String): __ptr<u16> {
-    var units = s.size() + 1;
+    var units = s.size + 1;
     var w = _pep_malloc(units * 2) as __ptr<u16>;
-    if (s.size() > 0) {
-        MultiByteToWideChar(65001, 0, s.c_str(), s.size() as int, w, units as int);  # CP_UTF8
+    if (s.size > 0) {
+        MultiByteToWideChar(65001, 0, s.c_str(), s.size as int, w, units as int);  # CP_UTF8
     }
     return w;
 }
@@ -139,7 +139,7 @@ export _io_sys_error_message(code: ErrorCode): String {
     }
     var s = _io_win_narrow(buf, n);
     _pep_free(buf);
-    if (s.size() == 0) {
+    if (s.size == 0) {
         return "unknown error";
     }
     return s;
@@ -463,7 +463,7 @@ export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
 export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
     var path = iterator._path;
     # An empty path would search `*`, the current directory; POSIX fails.
-    if (path._value.size() == 0) {
+    if (path._value.size == 0) {
         return IoResult<bool>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
     var w = _io_win_wide(path.join(Path("*"))._value);
@@ -628,10 +628,10 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
     var s = _io_win_narrow(buf, n as int);
     # Drop the `\\?\` prefix, keeping a UNC path's `\\`.
     if (s.starts_with("\\\\?\\UNC\\")) {
-        return IoResult<Path>.ok(Path("\\\\" + _io_slice(s, 8, s.size())));
+        return IoResult<Path>.ok(Path("\\\\" + _io_slice(s, 8, s.size)));
     }
     if (s.starts_with("\\\\?\\")) {
-        return IoResult<Path>.ok(Path(_io_slice(s, 4, s.size())));
+        return IoResult<Path>.ok(Path(_io_slice(s, 4, s.size)));
     }
     return IoResult<Path>.ok(Path(s));
 }

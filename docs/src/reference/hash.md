@@ -64,7 +64,7 @@ Returns a 64-bit hash of a String's bytes, so equal strings hash equally
 wherever they are stored. Keeps equal `String` keys of a `HashMap` or
 `HashSet` in one bucket.
 
-Hashes the `size()` bytes of the String (not the NUL terminator) 8 bytes
+Hashes the `size` bytes of the String (not the NUL terminator) 8 bytes
 at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 (0xcbf29ce484222325).
 
@@ -117,8 +117,35 @@ never shrinks.
     assert(ages["ada"] == 36, "lookup");
     assert(ages.get("grace") == 0, "a missing key reads as the default");
     assert(ages.remove("alan"), "removed");
-    assert(ages.count() == 1, "one entry left");
+    assert(ages.count == 1, "one entry left");
 ```
+
+### Properties
+
+#### count
+
+```pepper
+var count: int { get; }
+```
+
+The number of entries in the map. O(1).
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the map has no entries. O(1).
+
+#### capacity
+
+```pepper
+var capacity: ulong { get; }
+```
+
+The number of slots in the table, a power of two and at least 8.
+The map grows before its entries and tombstones reach half of it. O(1).
 
 ### Constructor
 
@@ -159,51 +186,17 @@ costs memory. Runs in O(capacity). It replaces the table's arrays and
 moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.
 
-#### count
-
-```pepper
-count(): int
-```
-
-Returns the number of entries in the map. O(1).
-
-**Returns**
-- the number of live key-value pairs
-
-#### empty
-
-```pepper
-empty(): bool
-```
-
-Returns whether the map has no entries. O(1).
-
-**Returns**
-- true when `count()` is 0
-
-#### capacity
-
-```pepper
-capacity(): ulong
-```
-
-Returns the number of slots in the table, a power of two and at least 8.
-The map grows before its entries and tombstones reach half of it. O(1).
-
-**Returns**
-- the current slot count
-
 #### cap
 
 ```pepper
-[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+[Deprecated("use the 'capacity' property instead")] cap(): ulong
 ```
 
 Deprecated: use `capacity` instead. Returns the number of slots in
 the table.
 
 **Returns**
-- the same as `capacity()`
+- the same as `capacity`
 
 #### clear
 
@@ -422,8 +415,35 @@ may change, and writing to them breaks the set.
     seen["b"] = "b";   # the same as seen.insert("b")
     assert(seen.contains("a"), "member");
     assert(!seen.insert("a"), "already a member");
-    assert(seen.count() == 2, "two members");
+    assert(seen.count == 2, "two members");
 ```
+
+### Properties
+
+#### count
+
+```pepper
+var count: int { get; }
+```
+
+The number of members in the set. O(1).
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the set has no members. O(1).
+
+#### capacity
+
+```pepper
+var capacity: ulong { get; }
+```
+
+The number of slots in the table, a power of two and at least 8.
+O(1).
 
 ### Constructors
 
@@ -476,51 +496,17 @@ Doubles the table and reinserts every member, dropping all tombstones.
 costs memory. Runs in O(capacity). It replaces the table's arrays and
 moves members to new slots.
 
-#### count
-
-```pepper
-count(): int
-```
-
-Returns the number of members in the set. O(1).
-
-**Returns**
-- the number of members
-
-#### empty
-
-```pepper
-empty(): bool
-```
-
-Returns whether the set has no members. O(1).
-
-**Returns**
-- true when `count()` is 0
-
-#### capacity
-
-```pepper
-capacity(): ulong
-```
-
-Returns the number of slots in the table, a power of two and at least 8.
-O(1).
-
-**Returns**
-- the current slot count
-
 #### cap
 
 ```pepper
-[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
+[Deprecated("use the 'capacity' property instead")] cap(): ulong
 ```
 
 Deprecated: use `capacity` instead. Returns the number of slots in
 the table.
 
 **Returns**
-- the same as `capacity()`
+- the same as `capacity`
 
 #### clear
 

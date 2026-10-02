@@ -413,8 +413,8 @@ extern void memcpy(void* dest, void* src, ulong n);
 # A new buffer (free it with `_pep_free`) holding a copy of `text`'s bytes,
 # for a write that may wait while another task changes `text`.
 export _io_text_copy(text: String): __ptr<u8> {
-    __ptr<u8> bytes = _pep_malloc(text.size() + 1);
-    memcpy(bytes, text.c_str(), text.size());
+    __ptr<u8> bytes = _pep_malloc(text.size + 1);
+    memcpy(bytes, text.c_str(), text.size);
     return bytes;
 }
 

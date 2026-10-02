@@ -204,7 +204,7 @@ test(): int {
     var s = "a";
     s.append("b");
     s.append("c");
-    return s.length() - 3;
+    return s.length - 3;
 }
 "#
         ),
@@ -365,7 +365,7 @@ fn array_pass_by_ref() {
 sum(a: Array<int>): int {
     var s = 0;
     var i = 0;
-    while (i < a.count()) {
+    while (i < a.count) {
         s += a[i];
         i += 1;
     }
@@ -1216,7 +1216,7 @@ fn unicode_comment_and_string() {
 # café — üñíçødé comment
 test(): int {
     var s = "héllo";
-    return s.length() - 5;
+    return s.length - 5;
 }
 "#
         ),
@@ -1252,7 +1252,7 @@ fn string_global_init() {
 [Shared]
 struct Name {
     const length: ulong;
-    construct(String text) { length = text.length(); }
+    construct(String text) { length = text.length; }
 }
 const s = Name("pepper");
 test(): int { return (s.length as int) - 6; }
@@ -1514,10 +1514,14 @@ struct Buffer {
     construct(ulong size = 0) {
         _size = size;
     }
-    size(): ulong { return _size; }
+    var size: ulong {
+        get {
+            return _size;
+        }
+    }
 }
 test(): int {
-    return Buffer(7).size() as int;
+    return Buffer(7).size as int;
 }
 "#
         ),

@@ -160,13 +160,13 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     var last = _http_last_space(line);
     if (space <= 0
         || last <= space
-        || !line.substr_bytes(last as ulong + 1, line.size() - last as ulong - 1).starts_with("HTTP/1.")) {
+        || !line.substr_bytes(last as ulong + 1, line.size - last as ulong - 1).starts_with("HTTP/1.")) {
         _http_refuse(reader, 400);
         return false;
     }
     var method = line.substr_bytes(0, space as ulong);
     var target = line.substr_bytes(space as ulong + 1, (last - space - 1) as ulong);
-    var version = line.substr_bytes(last as ulong + 1, line.size() - last as ulong - 1);
+    var version = line.substr_bytes(last as ulong + 1, line.size - last as ulong - 1);
     var request = Request(method, target);
     var fields = _http_read_headers(reader, request.headers);
     if (fields.is_err()) {
@@ -211,7 +211,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
 # The position of the last space in `line`, or -1.
 _http_last_space(line: String): long {
     var p = line.c_str() as __ptr<u8>;
-    var i = line.size();
+    var i = line.size;
     while (i > 0) {
         i = i - 1;
         if (p[i] == ' ') {
@@ -241,13 +241,13 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
     var status = response.status;
     var bodiless = status < 200 || status == 204 || status == 304;
     if (!bodiless) {
-        headers.add("Content-Length", to_string(response._body.count()));
+        headers.add("Content-Length", to_string(response._body.count));
     }
     if (!keep) {
         headers.add("Connection", "close");
     }
     var reason = response.reason;
-    if (reason.size() == 0) {
+    if (reason.size == 0) {
         reason = reason_phrase(status);
     }
     var out = Array<u8>();

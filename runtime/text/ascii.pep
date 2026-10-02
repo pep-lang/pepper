@@ -8,7 +8,7 @@ import "utf8";
 ## @example
 ##     import text;
 ##
-##     assert(text.Ascii.encode("ok").value().count() == 2, "one byte each");
+##     assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
 ##     assert(text.Ascii.encode("é").is_none(), "not ASCII");
 export struct Ascii {
     ## Returns the ASCII bytes of `value`, or none when it holds a code
@@ -29,9 +29,9 @@ export struct Ascii {
     ## @param value the text to encode
     ## @returns a new array of one byte per code point
     static encode_lossy(value: String): u8[] {
-        var out = Array<u8>(value.size());
+        var out = Array<u8>(value.size);
         __ptr<u8> data = value._data as __ptr<u8>;
-        var size = value.size();
+        var size = value.size;
         ulong index = 0;
         while (index < size) {
             var run = String._utf8_sequence(data, index, size);
@@ -52,7 +52,7 @@ export struct Ascii {
     static is_ascii(value: String): bool {
         __ptr<u8> data = value._data as __ptr<u8>;
         ulong index = 0;
-        while (index < value.size()) {
+        while (index < value.size) {
             if (data[index] >= 128) {
                 return false;
             }
@@ -67,7 +67,7 @@ export struct Ascii {
     ## @returns the text, or none when `bytes` is not all ASCII
     static decode(bytes: u8[]): String? {
         ulong index = 0;
-        while (index < bytes.count()) {
+        while (index < bytes.count) {
             if (bytes[index] >= 128) {
                 return Optional<String>.none();
             }
@@ -82,9 +82,9 @@ export struct Ascii {
     ## @param bytes the bytes to decode
     ## @returns the text
     static decode_lossy(bytes: u8[]): String {
-        var out = Array<u8>(bytes.count());
+        var out = Array<u8>(bytes.count);
         ulong index = 0;
-        while (index < bytes.count()) {
+        while (index < bytes.count) {
             var value = bytes[index];
             if (value >= 128) {
                 _text_append_utf8(out, 65533);

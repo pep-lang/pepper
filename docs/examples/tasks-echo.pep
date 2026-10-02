@@ -42,8 +42,8 @@ main(): int {
                 var message = $"hello from {k}";
                 stream.write_all(message);
                 var buffer = Array<u8>();
-                stream.read_exact(buffer, message.size());
-                return buffer.count();
+                stream.read_exact(buffer, message.size);
+                return buffer.count;
             }));
             i = i + 1;
         }

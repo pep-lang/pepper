@@ -92,6 +92,6 @@ export struct Token {
     ##
     ## @returns true when the token has leading or trailing comments
     has_comments(): bool {
-        return leading_comments.count() > 0 or !trailing_comment.empty();
+        return leading_comments.count > 0 or !trailing_comment.is_empty;
     }
 }

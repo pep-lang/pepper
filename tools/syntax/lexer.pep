@@ -103,7 +103,7 @@ punctuation_table(): String[] {
 
 # Whether the bytes of `text` occur in `data` at `offset`.
 matches_at(data: __ptr<char>, size: ulong, offset: ulong, text: String): bool {
-    ulong length = text.size();
+    ulong length = text.size;
     if (offset + length > size) {
         return false;
     }
@@ -215,7 +215,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
     var tokens = Array<Token>();
     var table = punctuation_table();
     var data = source.c_str();
-    ulong size = source.size();
+    ulong size = source.size;
     ulong i = 0;
     var pending = Array<Comment>();
     int newlines = 0;
@@ -245,7 +245,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 end -= 1;
             }
             var text = slice(data, start, end);
-            if (tokens.count() > 0 and newlines == 0 and tokens.last().trailing_comment.empty()) {
+            if (tokens.count > 0 and newlines == 0 and tokens.last().trailing_comment.is_empty) {
                 tokens.last().trailing_comment = text;
             } else {
                 pending.append(Comment(text, newlines_since_comment, start));
@@ -354,7 +354,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
             bool found = false;
             for (var p in table) {
                 if (matches_at(data, size, i, p)) {
-                    i += p.size();
+                    i += p.size;
                     found = true;
                     break;
                 }
@@ -396,7 +396,7 @@ export line_of(source: String, offset: ulong): ulong {
     var data = source.c_str();
     ulong line = 1;
     ulong i = 0;
-    while (i < offset and i < source.size()) {
+    while (i < offset and i < source.size) {
         if (data[i] == '\n') {
             line += 1;
         }
@@ -413,8 +413,8 @@ export line_of(source: String, offset: ulong): ulong {
 export column_of(source: String, offset: ulong): ulong {
     var data = source.c_str();
     ulong i = offset;
-    if (i > source.size()) {
-        i = source.size();
+    if (i > source.size) {
+        i = source.size;
     }
     ulong column = 1;
     while (i > 0 and data[i - 1] != '\n') {

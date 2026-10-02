@@ -13,7 +13,7 @@ test(): int {
     a.append(1);
     a.append(2);
     a.append(3);
-    if (a.count() != 3) { return -1; }
+    if (a.count != 3) { return -1; }
     var sum = a[0] + a[1] + a[2];
     return 6 - sum;
 }"#
@@ -34,7 +34,7 @@ test(): int {
         a.append(i);
         i = i + 1;
     }
-    if (a.count() != 10) { return -1; }
+    if (a.count != 10) { return -1; }
     var j = 0;
     var bad = 0;
     while (j < 10) {
@@ -55,9 +55,9 @@ fn ctor_capacity() {
             r#"
 test(): int {
     var a = Array<int>(8);
-    if (a.capacity() < 8) { return -1; }
-    if (a.count() != 0) { return -2; }
-    if (!a.empty()) { return -3; }
+    if (a.capacity < 8) { return -1; }
+    if (a.count != 0) { return -2; }
+    if (!a.is_empty) { return -3; }
     return 0;
 }"#
         ),
@@ -74,7 +74,7 @@ test(): int {
     var a = Array<int>();
     a.reserve(8);
     a.reserve(2);
-    if (a.capacity() < 8) { return -1; }
+    if (a.capacity < 8) { return -1; }
     return 0;
 }"#
         ),
@@ -112,8 +112,8 @@ test(): int {
     a.append(5);
     a.insert(0, 1);
     a.insert(1, 3);
-    a.insert(a.count(), 9);
-    if (a.count() != 4) { return -1; }
+    a.insert(a.count, 9);
+    if (a.count != 4) { return -1; }
     if (a[0] != 1 || a[1] != 3 || a[2] != 5 || a[3] != 9) { return -2; }
     return 0;
 }"#
@@ -134,7 +134,7 @@ test(): int {
     a.append(3);
     var r = a.remove_at(1);
     if (r != 2) { return -1; }
-    if (a.count() != 2 || a[0] != 1 || a[1] != 3) { return -2; }
+    if (a.count != 2 || a[0] != 1 || a[1] != 3) { return -2; }
     return 0;
 }"#
         ),
@@ -153,7 +153,7 @@ test(): int {
     a.append(2);
     var r = a.pop();
     if (r != 2) { return -1; }
-    if (a.count() != 1 || a[0] != 1) { return -2; }
+    if (a.count != 1 || a[0] != 1) { return -2; }
     return 0;
 }"#
         ),
@@ -189,9 +189,9 @@ test(): int {
     var a = Array<int>();
     a.append(1);
     a.clear();
-    if (!a.empty()) { return -1; }
+    if (!a.is_empty) { return -1; }
     a.append(9);
-    if (a.count() != 1 || a[0] != 9) { return -2; }
+    if (a.count != 1 || a[0] != 9) { return -2; }
     return 0;
 }"#
         ),
@@ -210,9 +210,9 @@ test(): int {
     a.append(2);
     a.append(3);
     a.truncate(1);
-    if (a.count() != 1 || a[0] != 1) { return -1; }
+    if (a.count != 1 || a[0] != 1) { return -1; }
     a.truncate(5);
-    if (a.count() != 1) { return -2; }
+    if (a.count != 1) { return -2; }
     return 0;
 }"#
         ),
@@ -272,8 +272,8 @@ test(): int {
     a.append(1);
     var b = a.clone();
     b.append(2);
-    if (a.count() != 1) { return -1; }
-    if (b.count() != 2 || b[1] != 2) { return -2; }
+    if (a.count != 1) { return -1; }
+    if (b.count != 2 || b[1] != 2) { return -2; }
     return 0;
 }"#
         ),
@@ -293,7 +293,7 @@ test(): int {
     b.append(2);
     b.append(3);
     a += b;
-    if (a.count() != 3) { return -1; }
+    if (a.count != 3) { return -1; }
     if (a[0] != 1 || a[1] != 2 || a[2] != 3) { return -2; }
     return 0;
 }"#
@@ -313,8 +313,8 @@ test(): int {
     var b = Array<int>();
     b.append(2);
     var c = a + b;
-    if (c.count() != 2) { return -1; }
-    if (a.count() != 1 || b.count() != 1) { return -2; }
+    if (c.count != 2) { return -1; }
+    if (a.count != 1 || b.count != 1) { return -2; }
     if (c[0] != 1 || c[1] != 2) { return -3; }
     return 0;
 }"#
@@ -427,7 +427,7 @@ test(): int {
     inner.append(1);
     inner.append(2);
     outer.append(inner);
-    if (outer.count() != 1) { return -1; }
+    if (outer.count != 1) { return -1; }
     if (outer[0][1] != 2) { return -2; }
     var sum = outer[0][0] + outer[0][1];
     return 3 - sum;
@@ -446,7 +446,7 @@ test(): int {
     int[] xs = Array<int>();
     xs.append(1);
     xs.append(2);
-    if (xs.count() != 2) { return -1; }
+    if (xs.count != 2) { return -1; }
     var sum = xs[0] + xs[1];
     return 3 - sum;
 }"#
@@ -468,7 +468,7 @@ test(): int {
     a.append(4);
     a.append(5);
     int[] r = echo(a);
-    if (r.count() != 2) { return -1; }
+    if (r.count != 2) { return -1; }
     var sum = r[0] + r[1];
     return 9 - sum;
 }"#
@@ -571,7 +571,7 @@ test(): int {
     var plain = Array<(int, long)>();
     plain.append((1, 2));
     plain.clear();
-    if (!plain.empty()) { return -3; }
+    if (!plain.is_empty) { return -3; }
     return 0;
 }"#
         ),
@@ -599,7 +599,7 @@ test(): int {
     a.append(Tally());
     a.truncate(2);
     if (__refcount<Tally>(t) != 2) { return -1; }
-    if (a.count() != 2) { return -2; }
+    if (a.count != 2) { return -2; }
     if (t.alive != 1) { return -3; }
     a.truncate(0);
     if (__refcount<Tally>(t) != 1) { return -4; }
@@ -729,11 +729,11 @@ test(): int {
     a.append(Tally());
     a.append(Tally());
     a.insert(0, Tally());
-    if (a.count() != 3) { return -1; }
+    if (a.count != 3) { return -1; }
     if (a[0].alive != 1 || a[1].alive != 1 || a[2].alive != 1) { return -2; }
     var r = a.remove_at(0);
     if (r.alive != 1) { return -3; }
-    if (a.count() != 2) { return -4; }
+    if (a.count != 2) { return -4; }
     if (a[0].alive != 1 || a[1].alive != 1) { return -5; }
     a.clear();
     if (r.alive != 1) { return -6; }
@@ -753,14 +753,14 @@ fn empty_array_boundaries() {
             r#"
 test(): int {
     var e = Array<int>();
-    if (!e.empty()) { return -1; }
-    if (e.count() != 0) { return -2; }
+    if (!e.is_empty) { return -1; }
+    if (e.count != 0) { return -2; }
     if (e.find(1).is_some()) { return -3; }
     if (e.contains(1)) { return -4; }
     var f = Array<int>();
     if (!(e == f)) { return -5; }
     e.truncate(0);
-    if (!e.empty()) { return -6; }
+    if (!e.is_empty) { return -6; }
     return 0;
 }"#
         ),
@@ -780,8 +780,8 @@ test(): int {
         g.append(i * i);
         i = i + 1;
     }
-    if (g.capacity() < 10) { return -1; }
-    if (g.count() != 10) { return -2; }
+    if (g.capacity < 10) { return -1; }
+    if (g.count != 10) { return -2; }
     i = 0;
     while (i < 10) {
         if (g[i] != i * i) { return -3; }
@@ -804,7 +804,7 @@ test(): int {
     h.append(1);
     h.append(2);
     h += h;
-    if (h.count() != 4) { return -1; }
+    if (h.count != 4) { return -1; }
     if (!(h[0] == 1 && h[1] == 2 && h[2] == 1 && h[3] == 2)) { return -2; }
     return 0;
 }"#
@@ -822,11 +822,11 @@ test(): int {
     var p = Array<int>();
     p.append(5);
     var q = p + Array<int>();
-    if (q.count() != 1) { return -1; }
+    if (q.count != 1) { return -1; }
     if (q[0] != 5) { return -2; }
-    if (p.count() != 1) { return -3; }
+    if (p.count != 1) { return -3; }
     var r = Array<int>() + p;
-    if (r.count() != 1 || r[0] != 5) { return -4; }
+    if (r.count != 1 || r[0] != 5) { return -4; }
     return 0;
 }"#
         ),
@@ -842,10 +842,10 @@ fn insert_into_empty_and_remove_only_element() {
 test(): int {
     var r = Array<int>();
     r.insert(0, 7);
-    if (r.count() != 1 || r[0] != 7) { return -1; }
+    if (r.count != 1 || r[0] != 7) { return -1; }
     var last = r.remove_at(0);
     if (last != 7) { return -2; }
-    if (!r.empty()) { return -3; }
+    if (!r.is_empty) { return -3; }
     return 0;
 }"#
         ),
@@ -863,9 +863,9 @@ test(): int {
     t.append(1);
     t.append(2);
     t.truncate(2);
-    if (t.count() != 2) { return -1; }
+    if (t.count != 2) { return -1; }
     t.truncate(99);
-    if (t.count() != 2) { return -2; }
+    if (t.count != 2) { return -2; }
     if (!(t[0] == 1 && t[1] == 2)) { return -3; }
     return 0;
 }"#
@@ -885,10 +885,10 @@ test(): int {
     w.swap(0, 0);
     if (w[0] != 1) { return -1; }
     w.reverse();
-    if (w.count() != 1 || w[0] != 1) { return -2; }
+    if (w.count != 1 || w[0] != 1) { return -2; }
     var z = Array<int>();
     z.reverse();
-    if (!z.empty()) { return -3; }
+    if (!z.is_empty) { return -3; }
     var two = Array<int>();
     two.append(1);
     two.append(2);
@@ -928,7 +928,7 @@ test(): int {
     var s = Array<int>();
     s.reserve(0);
     s.append(3);
-    if (s.count() != 1 || s[0] != 3) { return -1; }
+    if (s.count != 1 || s[0] != 3) { return -1; }
     return 0;
 }"#
         ),
@@ -952,8 +952,8 @@ test(): int {
     if (nc[0][2] != 3) { return -1; }
     # struct-typed elements are references: the clone shares the inner Array,
     # so the append is visible through both views.
-    if (n[0].count() != 3) { return -2; }
-    if (nc[0].count() != 3) { return -3; }
+    if (n[0].count != 3) { return -2; }
+    if (nc[0].count != 3) { return -3; }
     return 0;
 }"#
         ),
@@ -995,7 +995,7 @@ roundtrip(int[] xs): int[] {
 }
 test(): int {
     var out = roundtrip(Array<int>());
-    if (out.count() != 1) { return -1; }
+    if (out.count != 1) { return -1; }
     if (out[0] != 9) { return -2; }
     return 0;
 }"#
@@ -1019,11 +1019,11 @@ test(): int {
     inner.append(10);
     inner.append(20);
     outer._data[0] = inner;
-    if (outer._data[0].count() != 2) { return -1; }
+    if (outer._data[0].count != 2) { return -1; }
     if (outer._data[0][1] != 20) { return -2; }
     var empty = Array<int>();
     outer._data[1] = empty;
-    if (!outer._data[1].empty()) { return -3; }
+    if (!outer._data[1].is_empty) { return -3; }
     return 0;
 }"#
         ),
@@ -1105,7 +1105,7 @@ check(): int {
     }
     var empty = Array<int>();
     empty.sort((a, b) => a - b);
-    if (!(empty.count() == 0)) { return -6; }
+    if (!(empty.count == 0)) { return -6; }
     return 0;
 }
 test(): int {
@@ -1154,9 +1154,9 @@ test(): int {
         a.swap(0, 2);
         if (a[0].x != 1 || a[2].x != 5) { return -3; }
         a += a;
-        if (a.count() != 6 || __refcount<Point>(p) != 3) { return -4; }
+        if (a.count != 6 || __refcount<Point>(p) != 3) { return -4; }
         var b = a + a.clone();
-        if (b.count() != 12 || __refcount<Point>(p) != 7) { return -5; }
+        if (b.count != 12 || __refcount<Point>(p) != 7) { return -5; }
         b.truncate(1);
         if (__refcount<Point>(q) != 4 || __refcount<Point>(p) != 3) { return -6; }
         var popped = a.pop();
@@ -1188,7 +1188,7 @@ test(): int {
         a.insert(3, (100, "inserted"));
         var gone = a.remove_at(5);
         a.sort((m, n) => m.0 - n.0);
-        if (a[0].0 != 1 || a[a.count() - 1].1 != "inserted") { return -1; }
+        if (a[0].0 != 1 || a[a.count - 1].1 != "inserted") { return -1; }
         a.reverse();
         a.append_all(a);
         a.truncate(30);
@@ -1247,7 +1247,7 @@ test(): int {
         var nested = Array<Array<int>>();
         nested.append([3, 4]);
         nested.append([1]);
-        nested.sort((a, b) => (a.count() as int) - (b.count() as int));
+        nested.sort((a, b) => (a.count as int) - (b.count as int));
         if (nested[0][0] != 1) { return -2; }
     }
     return 0;

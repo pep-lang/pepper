@@ -23,7 +23,7 @@ main(): int {
     var swapped = regex.Regex("(\\w+)@(\\w+)").replace_all("ann@home bob@work", "$2:$1");
     assert(swapped == "home:ann work:bob", "groups swapped");
     var parts = regex.Regex("\\s*,\\s*").split("a , b,c");
-    assert(parts.count() == 3 && parts[1] == "b", "three pieces");
+    assert(parts.count == 3 && parts[1] == "b", "three pieces");
 
     # Flags go inside the pattern: (?i) ignores case.
     assert(regex.Regex("(?i)^hello").is_match("HeLLo there"), "any case");

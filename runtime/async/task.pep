@@ -228,7 +228,7 @@ struct _TaskCore {
     # Releases the task's `TaskLocal` values, newest first. A value's
     # destructor may store another, which is released in turn.
     _release_locals() {
-        while (this._locals.count() > 0) {
+        while (this._locals.count > 0) {
             var local = this._locals.pop();
             local._release();
         }
@@ -354,7 +354,7 @@ struct _Worker {
     _spawn(body: () => void): _TaskCore {
         var core = _TaskCore(this._next_id, body);
         this._next_id = this._next_id + 1;
-        core._index = this._tasks.count();
+        core._index = this._tasks.count;
         this._tasks.append(core);
         this._ready.append(core);
         return core;
@@ -464,7 +464,7 @@ struct _Worker {
         var wait = timeout;
         this._inbox._sleeping.store(1);
         this._inbox._notified.store(0);
-        var pending = this._inbox._messages.count() + this._inbox._pinned.count() + this._runtime._queue.count();
+        var pending = this._inbox._messages.count + this._inbox._pinned.count + this._runtime._queue.count;
         if (pending > 0) {
             wait = 0;
         }
@@ -484,13 +484,13 @@ struct _Worker {
     }
 
     _has_ready(): bool {
-        return this._ready_head < this._ready.count();
+        return this._ready_head < this._ready.count;
     }
 
     _pop_ready(): _TaskCore {
         var core = this._ready[this._ready_head];
         this._ready_head = this._ready_head + 1;
-        if (this._ready_head == this._ready.count()) {
+        if (this._ready_head == this._ready.count) {
             this._ready.clear();
             this._ready_head = 0;
         }
@@ -499,7 +499,7 @@ struct _Worker {
 
     _add_timer(timer: _Timer) {
         this._timers.append(timer);
-        var i = this._timers.count() - 1;
+        var i = this._timers.count - 1;
         while (i > 0) {
             var parent = (i - 1) / 2;
             if (this._timers[parent]._deadline <= this._timers[i]._deadline) {
@@ -513,7 +513,7 @@ struct _Worker {
     _remove_first_timer(): _Timer {
         var first = this._timers[0];
         var last = this._timers.pop();
-        var count = this._timers.count();
+        var count = this._timers.count;
         if (count == 0) {
             return first;
         }
@@ -567,11 +567,11 @@ struct _Worker {
     _fire_timers() {
         # Every scheduler pass comes here; with no timers, skip the clock
         # read (a system call and an allocation on POSIX).
-        if (this._timers.count() == 0) {
+        if (this._timers.count == 0) {
             return;
         }
         var now = _async_sys_monotonic_milliseconds();
-        while (this._timers.count() > 0) {
+        while (this._timers.count > 0) {
             if (this._timers[0]._deadline > now) {
                 return;
             }
@@ -589,7 +589,7 @@ struct _Worker {
         this._since_poll = 0;
         this._driver._poll(this._waits, timeout, this._ready_sockets);
         var i: ulong = 0;
-        while (i < this._ready_sockets.count()) {
+        while (i < this._ready_sockets.count) {
             var (key, interest) = this._ready_sockets[i];
             if (this._waits.contains(key)) {
                 var waits = this._waits.get(key);
@@ -605,7 +605,7 @@ struct _Worker {
         this._ready_sockets.clear();
         this._driver._finished_files(this._finished_files);
         i = 0;
-        while (i < this._finished_files.count()) {
+        while (i < this._finished_files.count) {
             var (task, result) = this._finished_files[i];
             this._file_results.insert(task, result);
             if (this._file_waits.contains(task)) {
@@ -621,7 +621,7 @@ struct _Worker {
     # empty.
     _wake_all(tasks: Array<_TaskCore>) {
         ulong index = 0;
-        while (index < tasks.count()) {
+        while (index < tasks.count) {
             this._wake(tasks[index]);
             index = index + 1;
         }
@@ -647,7 +647,7 @@ struct _Worker {
         }
         if (!core._started) {
             core._started = true;
-            if (this._idle.count() > 0) {
+            if (this._idle.count > 0) {
                 core._fiber = this._idle.pop();
             } else {
                 core._fiber = _async_fiber_create(this._stack_size, __function_pointer(_async_fiber_main));
@@ -691,7 +691,7 @@ struct _Worker {
                     this._stop();
                 }
             }
-            if (this._stopping && this._tasks.count() == 0 && this._remote.count() == 0) {
+            if (this._stopping && this._tasks.count == 0 && this._remote.count == 0) {
                 if (!this._take_shared()) {
                     return;
                 }
@@ -711,22 +711,22 @@ struct _Worker {
             if (this._has_ready() || this._take_shared()) {
                 continue;
             }
-            if (this._stopping && this._tasks.count() == 0 && this._remote.count() == 0) {
+            if (this._stopping && this._tasks.count == 0 && this._remote.count == 0) {
                 continue;
             }
             # With no tasks here, every timer left is stale.
             var timeout: long = -1;
-            if (this._timers.count() > 0 && this._tasks.count() > 0) {
+            if (this._timers.count > 0 && this._tasks.count > 0) {
                 var now = _async_sys_monotonic_milliseconds();
                 var deadline = this._timers[0]._deadline;
                 timeout = 0;
                 if (deadline > now) {
                     timeout = (deadline - now) as long;
                 }
-            } else if (this._tasks.count() > 0
+            } else if (this._tasks.count > 0
                 && this._io_waiting == 0
-                && this._remote.count() == 0
-                && this._sync_waits.count() == 0) {
+                && this._remote.count == 0
+                && this._sync_waits.count == 0) {
                 panic("async.run: every task is waiting for another task and none can continue");
             }
             this._sleep(timeout);
@@ -760,7 +760,7 @@ export struct _SocketWaits {
 # Removes `core` from `tasks`, if it is there.
 _async_remove_task(tasks: Array<_TaskCore>, core: _TaskCore) {
     var i: ulong = 0;
-    while (i < tasks.count()) {
+    while (i < tasks.count) {
         if (tasks[i]._id == core._id) {
             tasks.remove_at(i);
             return;
@@ -826,7 +826,7 @@ extend _Worker with io._IoWaiter {
         var key = handle as ulong;
         if (this._waits.contains(key)) {
             var waits = this._waits.get(key);
-            if (waits._readers.count() == 0 && waits._writers.count() == 0) {
+            if (waits._readers.count == 0 && waits._writers.count == 0) {
                 this._driver._release(handle);
                 this._waits.remove(key);
             }
@@ -897,7 +897,7 @@ export _async_task_local_slot(id: ulong): __ptr<void> {
     # an iterator every time.
     var locals = _async_worker()._current._locals;
     ulong index = 0;
-    while (index < locals.count()) {
+    while (index < locals.count) {
         if (locals[index]._id == id) {
             return locals[index]._slot;
         }
@@ -917,7 +917,7 @@ export _async_task_local_add(id: ulong, slot: __ptr<void>, release: () => void) 
 export _async_task_local_clear(id: ulong) {
     var locals = _async_worker()._current._locals;
     var i: ulong = 0;
-    while (i < locals.count()) {
+    while (i < locals.count) {
         if (locals[i]._id == id) {
             var local = locals.remove_at(i);
             local._release();

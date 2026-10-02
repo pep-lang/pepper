@@ -225,8 +225,8 @@ export struct Duration {
             return $"{whole}{suffix}";
         }
         var text = $"{fraction}";
-        text = "0".repeat(digits - text.size()) + text;
-        var size = text.size();
+        text = "0".repeat(digits - text.size) + text;
+        var size = text.size;
         while (text.byte_at(size - 1) == '0') {
             size = size - 1;
         }

@@ -300,15 +300,15 @@ export struct Channel<T> {
         return closed;
     }
 
-    ## Returns the number of values waiting to be received. Other threads may
+    ## The number of values waiting to be received. Other threads may
     ## change it as soon as it returns.
-    ##
-    ## @returns the number of queued values
-    count(): ulong {
-        _async_sys_mutex_lock(_lock);
-        var queued = _state[1];
-        _async_sys_mutex_unlock(_lock);
-        return queued;
+    var count: ulong {
+        get {
+            _async_sys_mutex_lock(_lock);
+            var queued = _state[1];
+            _async_sys_mutex_unlock(_lock);
+            return queued;
+        }
     }
 
     ## Returns an iterator that receives until the channel is closed and

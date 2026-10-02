@@ -16,7 +16,7 @@ test(): int {
     var words = Array<String>();
     words.append("hello");
     var word = first(words);
-    return larger(3, 9) + (word.size() as int);
+    return larger(3, 9) + (word.size as int);
 }
 "#;
     assert_eq!(run(src), (14, 0));
@@ -39,7 +39,7 @@ test(): int {
     var words = Array<String>();
     words.append("hi");
     words.append("there");
-    var sizes = transform(words, (w) => w.size());
+    var sizes = transform(words, (w) => w.size);
     return apply((x) => x + 1, 2) * 100 + (sizes[1] as int);
 }
 "#;
@@ -60,7 +60,7 @@ test(): int {
     var explicit = b.map<long>((x: int): long => x + 1);
     var tens = b.map((x) => x * 10);
     var text = tens.map((x) => "abc");
-    return (explicit.value as int) * 100 + (tens.value as int) + (text.value.size() as int);
+    return (explicit.value as int) * 100 + (tens.value as int) + (text.value.size as int);
 }
 "#;
     assert_eq!(run(src), (543, 0));
@@ -82,7 +82,7 @@ test(): int {
     people.append(Person("Cyd", 40));
     var letters = 0;
     for (var name in people.iterate().filter((p) => p.age >= 18).map((p) => p.name)) {
-        letters = letters + (name.size() as int);
+        letters = letters + (name.size as int);
     }
     var kept = 0;
     for (var c in "hello".iterate().filter((c) => c != "l")) {
@@ -144,7 +144,7 @@ test(): int {
     var names = ["Ada", "Grace"];
     var zipped = 0;
     for (var (item, name) in items.iterate().zip(names.iterate())) {
-        zipped += item.v * (name.size() as int);     # 3 + 10, stops at the shorter
+        zipped += item.v * (name.size as int);     # 3 + 10, stops at the shorter
     }
     var big = items.iterate().filter((x) => x.v > 1).to_array();
     var it = items.iterate();
@@ -153,8 +153,8 @@ test(): int {
         return -1;
     }
     var pairs = (0..2).zip(names.iterate()).to_array();
-    return (weighted as int) * 1000 + (signed + 3) * 100 + zipped + (big.count() as int) * 10000
-        + (all.count() as int) * 100000 + (pairs[1].1.size() as int) * 1000000;
+    return (weighted as int) * 1000 + (signed + 3) * 100 + zipped + (big.count as int) * 10000
+        + (all.count as int) * 100000 + (pairs[1].1.size as int) * 1000000;
 }
 "#;
     assert_eq!(run(src), (5_328_013, 0));
@@ -295,7 +295,7 @@ test(): int {
     sum.put_all(numbers.iterate());
     return count_all(numbers.iterate())
         + count_all<int>(numbers.iterate()) * 10
-        + (first(words.iterate()).size() as int) * 100
+        + (first(words.iterate()).size as int) * 100
         + pick<int>(1, "x") * 1000
         + counter.total() * 10000
         + (tally.count_all(numbers.iterate()) + tally.count_all<int>(numbers.iterate())) * 100000

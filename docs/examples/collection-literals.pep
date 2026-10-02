@@ -27,7 +27,7 @@ total(values: long[]): long {
 main(): int {
     # An array literal is an Array of its elements' type.
     var primes = [2, 3, 5, 7];
-    assert(primes.count() == 4 && primes[3] == 7, "an Array<int>");
+    assert(primes.count == 4 && primes[3] == 7, "an Array<int>");
 
     # A trailing comma lets a long literal put one element per line.
     var operators = [
@@ -48,11 +48,11 @@ main(): int {
 
     # An array literal where a HashSet is expected makes a set.
     HashSet<String> keywords = ["if", "else", "if"];
-    assert(keywords.count() == 2, "duplicates are kept once");
+    assert(keywords.count == 2, "duplicates are kept once");
 
     # [] and [:] are empty, where the type is declared.
     long[] none = [];
     HashMap<String, int> nobody = [:];
-    assert(none.empty() && nobody.count() == 0, "empty collections");
+    assert(none.is_empty && nobody.count == 0, "empty collections");
     return 0;
 }

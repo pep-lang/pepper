@@ -3945,6 +3945,7 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
     *input = &input[1..];
 
     let mut methods = vec![];
+    let mut properties = vec![];
     loop {
         ws(input)?;
         if input.is_empty() || input.starts_with('}') { break; }
@@ -3953,6 +3954,10 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
             continue;
         }
         let m_attrs = attributes(input)?;
+        if let Some(property) = member_property(input, m_attrs.clone())? {
+            properties.push(property);
+            continue;
+        }
         methods.push(trait_method(input, m_attrs)?);
         ws(input)?;
         if input.starts_with(';') {
@@ -3963,7 +3968,7 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
 }
 
 /// `extend TypeName[<...>] [with Trait, ...] { methods }`, or
@@ -4001,7 +4006,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     // the same as an empty `{}` body.
     if !traits.is_empty() && input.starts_with(';') {
         *input = &input[1..];
-        return Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods: vec![], span: Span { start: decl_start, end: pos(input) }, is_exported: false });
+        return Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods: vec![], properties: vec![], span: Span { start: decl_start, end: pos(input) }, is_exported: false });
     }
     if !input.starts_with('{') {
         if traits.is_empty() { return Err(cut_expecting(input, "'{'")); }
@@ -4013,6 +4018,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     *input = &input[1..];
 
     let mut methods = vec![];
+    let mut properties = vec![];
     loop {
         ws(input)?;
         if input.is_empty() || input.starts_with('}') { break; }
@@ -4021,6 +4027,10 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
             continue;
         }
         let m_attrs = attributes(input)?;
+        if let Some(property) = member_property(input, m_attrs.clone())? {
+            properties.push(property);
+            continue;
+        }
         methods.push(struct_method(input, &m_attrs)?);
         ws(input)?;
         if input.starts_with(';') {
@@ -4031,7 +4041,126 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+    Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+}
+
+/// A property in a trait or an extension, where fields cannot appear: `var`
+/// starts one, and the accessor block is required.
+fn member_property(input: &mut &str, attributes: Vec<Attribute>) -> Result<Option<PropertyDecl>> {
+    ws(input)?;
+    if !keyword(&mut { *input }, "var") {
+        return Ok(None);
+    }
+    let start = *input;
+    let f = variable_declaration(input, attributes)?;
+    if !next_is(input, |s| s.starts_with('{')) {
+        return Err(cut_expecting(input, "'{'"));
+    }
+    property_declaration(input, f, start).map(Some)
+}
+
+/// The rest of a property, after `var name: T` (parsed as `field`): its
+/// accessor block `{ get; set { ... } }` and an optional `= initializer;`.
+/// `start` is where the declaration began, after its attributes.
+fn property_declaration(input: &mut &str, field: VariableDecl, start: &str) -> Result<PropertyDecl> {
+    let name_span = field.name_span;
+    if field.is_const || !keyword(&mut { start }, "var") {
+        return Err(error_at(name_span, format!("property '{}' must be declared with 'var'", field.name)));
+    }
+    if field.type_name.name == AUTO_TYPE {
+        return Err(error_at(name_span, format!("property '{}' needs a type: 'var {}: T {{ ... }}'", field.name, field.name)));
+    }
+    if let Some(value) = &field.default_value {
+        return Err(error_at(value.span(), format!("the initializer of property '{}' goes after its accessors", field.name)));
+    }
+    let open = pos(input);
+    *input = &input[1..];
+    let mut get: Option<Accessor> = None;
+    let mut set: Option<Accessor> = None;
+    loop {
+        ws(input)?;
+        if input.starts_with('}') {
+            break;
+        }
+        let keyword_start = pos(input);
+        let is_get = keyword(input, "get");
+        if !is_get && !keyword(input, "set") {
+            if input.is_empty() {
+                expected_with_note(input, "'}'", Some((open, "to match this '{'")));
+                return Err(cut(input));
+            }
+            return Err(cut_expecting(input, "'get' or 'set'"));
+        }
+        let span = Span { start: keyword_start, end: pos(input) };
+        let slot = if is_get { &mut get } else { &mut set };
+        if slot.is_some() {
+            let which = if is_get { "get" } else { "set" };
+            return Err(error_at(span, format!("redefinition of the '{}' accessor of '{}'", which, field.name)));
+        }
+        ws(input)?;
+        let body = if input.starts_with(';') {
+            *input = &input[1..];
+            None
+        } else if input.starts_with('{') {
+            Some(block(input, vec![])?)
+        } else {
+            return Err(cut_expecting(input, "';' or '{'"));
+        };
+        let (name, parameters, return_type) = if is_get {
+            (property_getter_name(&field.name), vec![], field.type_name.clone())
+        } else {
+            let value = VariableDecl {
+                attributes: vec![],
+                name: PROPERTY_VALUE.to_string(),
+                name_span: span,
+                type_name: field.type_name.clone(),
+                default_value: None,
+                is_const: false,
+                span,
+                is_exported: false,
+            };
+            let void = TypeName { name: "void".to_string(), generic_types: vec![], span, labels: vec![] };
+            (property_setter_name(&field.name), vec![value], void)
+        };
+        let end = body.as_ref().map_or(span.end, |_| pos(input));
+        let function = FunctionDecl {
+            is_exported: false,
+            name,
+            name_span: if is_get { name_span } else { span },
+            generic_params: vec![],
+            return_type,
+            parameters,
+            external: false,
+            body,
+            is_static: false,
+            is_indexer: false,
+            is_variadic: false,
+            span: Span { start: keyword_start, end },
+            attributes: field.attributes.clone(),
+        };
+        *slot = Some(Accessor { span, function });
+    }
+    *input = &input[1..];
+    let mut default_value = None;
+    let mut end = pos(input);
+    if next_is(input, is_assign) {
+        *input = &input[1..];
+        ws(input)?;
+        let value = expression(input)?;
+        end = pos(input);
+        semicolon(input, end)?;
+        default_value = Some(value);
+    }
+    Ok(PropertyDecl {
+        attributes: field.attributes,
+        name: field.name,
+        name_span,
+        type_name: field.type_name,
+        default_value,
+        get,
+        set,
+        span: Span { start: field.span.start, end },
+    })
 }
 
 fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDecl> {
@@ -4060,6 +4189,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     *input = &input[1..];
 
     let mut fields = vec![];
+    let mut properties = vec![];
     let mut methods = vec![];
     let mut constructors = vec![];
     let mut destructor = None;
@@ -4169,6 +4299,10 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             return Err(cut(input));
         }
         let f = variable_declaration(input, m_attrs)?;
+        if next_is(input, |s| s.starts_with('{')) {
+            properties.push(property_declaration(input, f, after_attrs)?);
+            continue;
+        }
         let end = f.span.end;
         if !decl_boundary(input) {
             if missing_decl_semicolon(input) {
@@ -4185,7 +4319,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructors, destructor, destruct_span, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, properties, methods, constructors, destructor, destruct_span, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
 }
 
 /// `enum Name[<T, ...>] [: IntegerType] { Case, Case = value, Case(x: T), ... methods }`.
@@ -4313,6 +4447,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         name_span,
         generic_params,
         fields: vec![],
+        properties: vec![],
         methods,
         constructors: vec![],
         destructor: None,

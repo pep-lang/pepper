@@ -31,7 +31,7 @@ _digit_value(c: byte): ulong {
 # Reads the digits of `text` from `index` to the end in `base`, failing on a
 # non-digit, on no digits, or on a value above `limit`.
 _parse_digits(text: String, index: ulong, base: int, limit: ulong): (bool, ulong) {
-    var size = text.size();
+    var size = text.size;
     if (index == size) {
         return (false, 0);
     }
@@ -54,7 +54,7 @@ _parse_signed(text: String, base: int, lowest: ulong, highest: ulong): (bool, lo
     assert(base >= 2 && base <= 36, "parse: the base must be from 2 to 36");
     ulong index = 0;
     var negative = false;
-    if (text.size() > 0 && (text.byte_at(0) == '-' || text.byte_at(0) == '+')) {
+    if (text.size > 0 && (text.byte_at(0) == '-' || text.byte_at(0) == '+')) {
         negative = text.byte_at(0) == '-';
         index = 1;
     }
@@ -71,7 +71,7 @@ _parse_signed(text: String, base: int, lowest: ulong, highest: ulong): (bool, lo
 _parse_unsigned(text: String, base: int, highest: ulong): (bool, ulong) {
     assert(base >= 2 && base <= 36, "parse: the base must be from 2 to 36");
     ulong index = 0;
-    if (text.size() > 0 && text.byte_at(0) == '+') {
+    if (text.size > 0 && text.byte_at(0) == '+') {
         index = 1;
     }
     return _parse_digits(text, index, base, highest);
@@ -82,7 +82,7 @@ _parse_unsigned(text: String, base: int, highest: ulong): (bool, ulong) {
 # `E`, an optional sign and digits. strtod would also skip leading spaces and
 # read `inf`, `nan` and hexadecimal, which `parse` does not accept.
 _is_decimal(text: String): bool {
-    var size = text.size();
+    var size = text.size;
     ulong index = 0;
     if (index < size && (text.byte_at(index) == '-' || text.byte_at(index) == '+')) {
         index = index + 1;

@@ -38,7 +38,7 @@ main(): int {
             stream.write_all("ping");
             var reply = Array<u8>();
             while (stream.read(reply, 4096).value() > 0) {}
-            assert(reply.count() == 4 && reply[0] == 'p' && reply[1] == 'o', "the reply is pong");
+            assert(reply.count == 4 && reply[0] == 'p' && reply[1] == 'o', "the reply is pong");
             server.join();
         }
     );

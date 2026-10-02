@@ -269,7 +269,7 @@ export struct Command {
             entries = os._os_environment_entries();
         }
         var index: ulong = 0;
-        while (index < _environment_names.count()) {
+        while (index < _environment_names.count) {
             var name = _environment_names[index];
             var kept = Array<String>();
             for (var entry in entries) {
@@ -289,7 +289,7 @@ export struct Command {
 
     # Whether the child's environment differs from the parent's.
     _changes_environment(): bool {
-        return _clear_environment || _environment_names.count() > 0;
+        return _clear_environment || _environment_names.count > 0;
     }
 }
 
@@ -305,10 +305,10 @@ _stream_or(stream: Stream?): Stream {
 # Windows a leading '=' belongs to the name (such as `=C:`), and names are
 # compared without regard to case.
 _process_entry_names(entry: String, name: String): bool {
-    if (entry.size() <= name.size() || entry.byte_at(name.size()) != 61) {
+    if (entry.size <= name.size || entry.byte_at(name.size) != 61) {
         return false;
     }
-    var own = entry.substr_bytes(0, name.size());
+    var own = entry.substr_bytes(0, name.size);
     if (_process_sys_names_ignore_case()) {
         return own.lower() == name.lower();
     }

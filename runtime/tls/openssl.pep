@@ -306,7 +306,7 @@ _tls_openssl_loaded(): io.IoResult<_OpenSsl> {
     if (!ssl._loaded) {
         var names = "";
         for (var path in _tls_openssl_paths()) {
-            names = names.size() > 0 ? $"{names}, {path}" : path;
+            names = names.size > 0 ? $"{names}, {path}" : path;
         }
         return io.IoResult<_OpenSsl>.err(_tls_error($"OpenSSL 3 was not found (tried {names})"));
     }
@@ -381,7 +381,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
     } else if (check_key(context) != 1) {
         failure = "the private key does not match the certificate";
     }
-    if (failure.size() > 0) {
+    if (failure.size > 0) {
         var e = _tls_openssl_error(failure);
         var context_free = ssl._context_free;
         context_free(context);

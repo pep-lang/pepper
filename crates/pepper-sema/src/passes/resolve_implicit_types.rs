@@ -37,6 +37,8 @@ struct Tables {
     globals: HashMap<String, TypeName>,
     /// Struct declared name → its type.
     struct_types: HashMap<String, TypeName>,
+    /// Every property, for `passes::properties`.
+    properties: crate::passes::properties::Properties,
 }
 
 /// Insert `(key, value)` pairs, keeping the first value of a repeated key.
@@ -108,6 +110,7 @@ impl Tables {
             generic_functions,
             globals: first_wins(module.globals.iter().map(|v| (v.name.clone(), v.ty.clone()))),
             struct_types: first_wins(module.structs.iter().map(|s| (s.name.clone(), s.ty.clone()))),
+            properties: crate::passes::properties::Properties::of(module),
         }
     }
 }
@@ -145,6 +148,11 @@ struct Scopes<'t> {
     /// function): its types still name its type parameters, so calls are
     /// not inferred here; each specialization infers its own.
     generic_base: bool,
+    /// Walking a constructor's body.
+    in_constructor: bool,
+    /// The function or method being walked, and where it is declared.
+    function: String,
+    function_loc: Loc,
 }
 
 impl<'t> Scopes<'t> {
@@ -160,6 +168,9 @@ impl<'t> Scopes<'t> {
             unbound: vec![],
             resolved: Default::default(),
             generic_base: false,
+            in_constructor: false,
+            function: String::new(),
+            function_loc: Loc::NONE,
         }
     }
 
@@ -306,6 +317,13 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return field.ty.clone();
                 }
             }
+            // A property read before `passes::properties` rewrites it: the
+            // type its getter returns.
+            if scopes.tables.properties.find(&lhs_type, name).is_some() {
+                if let Some(ty) = scopes.method_return(&lhs_type, &getter_name(name)) {
+                    return ty;
+                }
+            }
             TypeName::auto()
         }
         Expression::SymbolRef { id, .. } => {
@@ -321,6 +339,13 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 return ty;
             }
             if let Some(ty) = scopes.find_symbol(id) {
+                return ty;
+            }
+            // A bare property in its struct's methods.
+            if let Some(st) = current_struct
+                && scopes.tables.properties.find(st, id).is_some()
+                && let Some(ty) = scopes.method_return(st, &getter_name(id))
+            {
                 return ty;
             }
             // The symbol may be the name of a struct.
@@ -705,7 +730,11 @@ fn resolve_once(module: &mut Module) -> bool {
             if let Some(body) = &mut c.body {
                 scopes.push(&c.name);
                 scopes.params.push(c.parameters.clone());
+                scopes.in_constructor = true;
+                scopes.function = c.name.clone();
+                scopes.function_loc = c.loc;
                 resolve_block(body, &mut scopes, &Some(current_struct.clone()));
+                scopes.in_constructor = false;
                 scopes.pop();
             }
         }
@@ -722,6 +751,8 @@ fn resolve_once(module: &mut Module) -> bool {
             resolve_parameter_defaults(&mut method.parameters, &mut scopes, &Some(method_struct.clone()));
             scopes.returns = infers_return(method).then(Vec::new);
             if let Some(body) = &mut method.body {
+                scopes.function = method.name.clone();
+                scopes.function_loc = method.loc;
                 scopes.push(&method.name);
                 scopes.params.push(method.parameters.clone());
                 resolve_block(body, &mut scopes, &Some(method_struct.clone()));
@@ -744,6 +775,8 @@ fn resolve_once(module: &mut Module) -> bool {
             scopes.generic_base = function.is_generic_func;
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
+            scopes.function = function.name.clone();
+            scopes.function_loc = function.loc;
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             resolve_block(body, &mut scopes, &None);
@@ -1108,6 +1141,17 @@ fn bind_named_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
 fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Option<TypeName>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
+        {
+            let scopes: &Scopes = scopes;
+            let site = crate::passes::properties::Site { current, in_constructor: scopes.in_constructor, function: &scopes.function, function_loc: scopes.function_loc };
+            crate::passes::properties::lower(
+                e,
+                &scopes.tables.properties,
+                &site,
+                &|x| type_of_expr(x, scopes, current),
+                &|name| scopes.param(name).is_some() || scopes.symbol(name).is_some(),
+            );
+        }
         bind_named_arguments(e, scopes, current);
         resolve_overload(e, scopes, current);
         resolve_method_overload(e, scopes, current);

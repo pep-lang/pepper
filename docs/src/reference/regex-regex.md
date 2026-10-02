@@ -192,13 +192,13 @@ at the character before it.
 
 **Parameters**
 - `text` — the text to search
-- `start` — the byte offset to search from, at most `text.size()`
+- `start` — the byte offset to search from, at most `text.size`
 
 **Returns**
 - the first match from `start`, or none
 
 **Panics**
-- if `start` is greater than `text.size()`
+- if `start` is greater than `text.size`
 
 #### find_all
 
@@ -222,7 +222,7 @@ skipped, so `a*` finds `a` twice in `"aba"`, not also between them.
 
     var total = 0;
     for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
-        total += number.text().size();   # 1, then 2, then 3
+        total += number.text().size;   # 1, then 2, then 3
     }
 ```
 
@@ -306,7 +306,7 @@ or last piece, and text with no match gives one piece, the whole text.
     import regex;
 
     var parts = regex.Regex(",\\s*").split("a, b,c");
-    assert(parts.count() == 3 && parts[1] == "b", "three pieces");
+    assert(parts.count == 3 && parts[1] == "b", "three pieces");
 ```
 
 #### to_string

@@ -22,11 +22,11 @@ export struct Headers {
         this._fields = HashMap<String, String[]>();
     }
 
-    ## Returns the number of field names.
-    ##
-    ## @returns the number of names; a name with several values counts once
-    count(): ulong {
-        return this._fields.count() as ulong;
+    ## The number of field names.
+    var count: ulong {
+        get {
+            return this._fields.count as ulong;
+        }
     }
 
     ## Returns the field names, lowercased, in no defined order.
@@ -200,7 +200,7 @@ export struct Request {
             return "";
         }
         var path = parsed.value().path;
-        if (path.size() == 0) {
+        if (path.size == 0) {
             return "/";
         }
         return path;

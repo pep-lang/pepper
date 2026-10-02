@@ -15,9 +15,9 @@ A mutable, reference-counted string of UTF-8 text. String literals
 
 Two measures describe a String, and each API says which one it uses:
 
-- **Code points** (Unicode characters): `length()`, `empty()`,
+- **Code points** (Unicode characters): `length`, `is_empty`,
   the indexer `s[i]`, `substr`, and iteration.
-- **Bytes** of UTF-8: `size()`, `find`, `starts_with`, and
+- **Bytes** of UTF-8: `size`, `find`, `starts_with`, and
   `ends_with`. The byte size is the authoritative length, so the data may
   contain NUL bytes. It is never derived from a terminator.
 
@@ -38,8 +38,8 @@ the String interpolation chapter).
 **Example**
 ```pepper
     var s = "héllo";
-    assert(s.length() == 5, "5 code points");
-    assert(s.size() == 6, "6 bytes: 'é' is 2");
+    assert(s.length == 5, "5 code points");
+    assert(s.size == 6, "6 bytes: 'é' is 2");
     s.append(" world");
     assert(s.find("world") == 7, "find returns a byte offset");
     assert(s[1] == "é", "the indexer counts code points");
@@ -47,6 +47,39 @@ the String interpolation chapter).
         print(c);   # one code point per line
     }
 ```
+
+### Properties
+
+#### length
+
+```pepper
+var length: ulong { get; }
+```
+
+The number of Unicode code points. O(1).
+
+**See also**
+- `size`
+
+#### size
+
+```pepper
+var size: ulong { get; }
+```
+
+The number of bytes of UTF-8, not counting the NUL
+terminator. O(1).
+
+**See also**
+- `length`
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the String has no code points. O(1).
 
 ### Constructor
 
@@ -79,7 +112,7 @@ trusted, not checked against the data. Runs in O(size).
 ```pepper
     var empty = String();
     var s = "abc";
-    var copy = String(s.c_str(), s.size(), s.length());
+    var copy = String(s.c_str(), s.size, s.length);
 ```
 
 ### Static methods
@@ -113,30 +146,16 @@ bytes(): u8[]
 ```
 
 Returns a new array holding the String's UTF-8 bytes, without a
-terminating NUL. Runs in O(size()).
+terminating NUL. Runs in O(size).
 
 **Returns**
-- a new array of `size()` bytes
+- a new array of `size` bytes
 
 **Example**
 ```pepper
     var data = "hi".bytes();
-    assert(data.count() == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
+    assert(data.count == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
 ```
-
-#### length
-
-```pepper
-length(): ulong
-```
-
-Returns the number of Unicode code points. O(1).
-
-**Returns**
-- the length in code points, not bytes
-
-**See also**
-- `size`
 
 #### grow
 
@@ -145,9 +164,9 @@ grow(new_size: ulong)
 ```
 
 Extends the byte buffer to `new_size` bytes and fills the new bytes
-with zeros. Does nothing when `new_size` is not greater than `size()`.
+with zeros. Does nothing when `new_size` is not greater than `size`.
 
-A low-level primitive for `append`. It updates `size()` but not `length()`,
+A low-level primitive for `append`. It updates `size` but not `length`,
 so the zero bytes it adds are not counted as code points until the
 caller overwrites them and fixes the length. When it grows the buffer,
 it invalidates running iterators and may reallocate the buffer, which invalidates
@@ -162,12 +181,12 @@ pointers from `c_str()`. Runs in O(new_size).
 append(rhs: String)
 ```
 
-Appends the content of `rhs` to this String in place, updating `size()`
-and `length()`.
+Appends the content of `rhs` to this String in place, updating `size`
+and `length`.
 
 Always invalidates running iterators, even when `rhs` is empty, so
 appending during iteration panics. It may reallocate the buffer. Every reference to
-this String sees the change. Runs in O(size() + rhs.size()).
+this String sees the change. Runs in O(size + rhs.size).
 
 **Parameters**
 - `rhs` — the String to append; it is not modified
@@ -188,7 +207,7 @@ Returns the code point at code-point index `idx` as a new
 one-code-point String.
 
 A negative `idx` counts from the end (`s[-1]` is the last code point).
-`length()` is added until the index is non-negative, so any negative
+`length` is added until the index is non-negative, so any negative
 index wraps, and `s[-7]` of a 3-code-point String is `s[2]`. Runs in
 O(idx) because it walks the UTF-8 bytes. Use `for (var c in s)` to
 visit every code point in O(size).
@@ -200,7 +219,7 @@ visit every code point in O(size).
 - a new String that holds the one code point
 
 **Panics**
-- if `idx` is not less than `length()` after the negative index is normalized, which includes any index into an empty String
+- if `idx` is not less than `length` after the negative index is normalized, which includes any index into an empty String
 
 **Example**
 ```pepper
@@ -216,8 +235,8 @@ visit every code point in O(size).
 ```
 
 Returns whether this String and `rhs` have the same content, compared
-byte by byte. Strings with different `length()` are unequal without
-comparing bytes. Runs in O(size()).
+byte by byte. Strings with different `length` are unequal without
+comparing bytes. Runs in O(size).
 
 **Parameters**
 - `rhs` — the String to compare with
@@ -247,21 +266,6 @@ shares, and invalidates running iterators.
     s += "b";   # s == "ab"
 ```
 
-#### size
-
-```pepper
-size(): ulong
-```
-
-Returns the number of bytes of UTF-8, not counting the NUL
-terminator. O(1).
-
-**Returns**
-- the length in bytes, not code points
-
-**See also**
-- `length`
-
 #### iterate
 
 ```pepper
@@ -287,17 +291,6 @@ panic.
     }
 ```
 
-#### empty
-
-```pepper
-empty(): bool
-```
-
-Returns whether the String has no code points. O(1).
-
-**Returns**
-- true when `length()` is 0
-
 #### c_str
 
 ```pepper
@@ -321,7 +314,7 @@ copy(copies: Copies = __null): String
 ```
 
 Returns a new String with the same content and its own buffer, so
-later changes to either String do not affect the other. Runs in O(size()).
+later changes to either String do not affect the other. Runs in O(size).
 
 This is also how `copy(value)` copies a String (the `Copyable<String>`
 implementation), which passes `copies`.
@@ -364,7 +357,7 @@ The offset counts bytes, not code points. To use it with `s[i]` or
 `substr`, convert it with `String.length_of(s.c_str(), offset)`.
 An empty `needle` is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(size() * needle.size()).
+valid UTF-8. Runs in O(size * needle.size).
 
 With `from`, the search starts at that byte offset, which must be a
 code point boundary (an offset `find` returned, plus a match's size,
@@ -394,7 +387,7 @@ rfind(needle: String): long
 
 Returns the byte offset of the last place `needle` occurs in this
 String, or -1 when it does not occur. An empty `needle` is found at
-`size()`. Runs in O(size() * needle.size()).
+`size`. Runs in O(size * needle.size).
 
 **Parameters**
 - `needle` — the text to search for
@@ -419,7 +412,7 @@ pieces between them, in order. Adjacent separators give an empty
 piece, and so does a separator at either end: `"a,,b".split(",")` is
 `["a", "", "b"]` and `",a".split(",")` is `["", "a"]`. A String
 without `separator`, the empty String included, gives one piece: the
-whole String. Runs in O(size() * separator.size()).
+whole String. Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
@@ -433,7 +426,7 @@ whole String. Runs in O(size() * separator.size()).
 **Example**
 ```pepper
     var parts = "a,b,,c".split(",");
-    assert(parts.count() == 4, "four pieces");
+    assert(parts.count == 4, "four pieces");
     assert(parts[2] == "", "an empty piece");
 ```
 
@@ -445,7 +438,7 @@ split_once(separator: String): (String, String)?
 
 Splits the String at the first occurrence of `separator`: the text
 before it and the text after it, or none when it does not occur.
-Runs in O(size() * separator.size()).
+Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
@@ -496,7 +489,7 @@ replace(from: String, to: String): String
 
 Returns a copy of this String with every occurrence of `from` replaced
 by `to`, scanning left to right without overlaps: `"aaa".replace("aa",
-"b")` is `"ba"`. Runs in O(size() * from.size()) plus the result's
+"b")` is `"ba"`. Runs in O(size * from.size) plus the result's
 size.
 
 **Parameters**
@@ -522,7 +515,7 @@ contains(needle: String): bool
 
 Returns whether `needle` occurs in this String (`find(needle) >= 0`).
 Because of that, an empty String contains nothing, not even `""`.
-Runs in O(size() * needle.size()).
+Runs in O(size * needle.size).
 
 **Parameters**
 - `needle` — the text to search for
@@ -537,13 +530,13 @@ starts_with(prefix: String): bool
 ```
 
 Returns whether this String begins with the bytes of `prefix`. An
-empty `prefix` always matches. Runs in O(prefix.size()).
+empty `prefix` always matches. Runs in O(prefix.size).
 
 **Parameters**
 - `prefix` — the text to test for
 
 **Returns**
-- true when the first `prefix.size()` bytes equal `prefix`
+- true when the first `prefix.size` bytes equal `prefix`
 
 #### ends_with
 
@@ -552,13 +545,13 @@ ends_with(suffix: String): bool
 ```
 
 Returns whether this String ends with the bytes of `suffix`. An empty
-`suffix` always matches. Runs in O(suffix.size()).
+`suffix` always matches. Runs in O(suffix.size).
 
 **Parameters**
 - `suffix` — the text to test for
 
 **Returns**
-- true when the last `suffix.size()` bytes equal `suffix`
+- true when the last `suffix.size` bytes equal `suffix`
 
 #### substr
 
@@ -570,7 +563,7 @@ Returns a new String of up to `count` code points starting at
 code-point index `start`. Both arguments count code points, not bytes.
 
 `count` is clamped to the code points that remain. When `start` is at
-or past `length()`, the result is an empty String. Runs in O(size()).
+or past `length`, the result is an empty String. Runs in O(size).
 
 **Parameters**
 - `start` — the code-point index of the first code point to copy
@@ -594,7 +587,7 @@ or past `length()`, the result is an empty String. Runs in O(size()).
 ```
 
 Returns whether this String and `rhs` differ in content, the negation
-of `==`. Runs in O(size()).
+of `==`. Runs in O(size).
 
 **Parameters**
 - `rhs` — the String to compare with
@@ -609,7 +602,7 @@ of `==`. Runs in O(size()).
 ```
 
 Returns a new String that holds this String followed by `rhs`. Neither
-operand is modified. Runs in O(size() + rhs.size()).
+operand is modified. Runs in O(size + rhs.size).
 
 **Parameters**
 - `rhs` — the String to append to the copy
@@ -648,13 +641,13 @@ multi-byte code point is returned as it is. Compare the result with a
 character literal (`s.byte_at(0) == '#'`).
 
 **Parameters**
-- `index` — the byte offset, less than `size()`
+- `index` — the byte offset, less than `size`
 
 **Returns**
 - the byte at `index`
 
 **Panics**
-- if `index` is not less than `size()` ("String byte_at index out of bounds")
+- if `index` is not less than `size` ("String byte_at index out of bounds")
 
 **Example**
 ```pepper
@@ -680,7 +673,7 @@ Returns a new String of the `size` bytes starting at byte offset
 - a new String that holds those bytes
 
 **Panics**
-- if `start + size` is greater than `size()` ("String substr_bytes range out of bounds")
+- if `start + size` is greater than `size` ("String substr_bytes range out of bounds")
 - if `start` or `start + size` falls inside a multi-byte code point ("String substr_bytes splits a code point")
 
 **Example**
@@ -688,7 +681,7 @@ Returns a new String of the `size` bytes starting at byte offset
     var s = "key=value";
     var eq = s.find("=") as ulong;
     assert(s.substr_bytes(0, eq) == "key", "before '='");
-    assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+    assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
 ```
 
 #### compare
@@ -699,7 +692,7 @@ compare(other: String): int
 
 Compares this String with `other` byte by byte, for sorting. For
 valid UTF-8 this is code-point order; a String that is a prefix of the
-other orders first. Runs in O(min(size(), other.size())).
+other orders first. Runs in O(min(size, other.size)).
 
 **Parameters**
 - `other` — the String to compare with
@@ -780,7 +773,7 @@ trim_end(): String
 
 Returns a new String without the whitespace at the end: spaces, tabs,
 carriage returns, line feeds, vertical tabs and form feeds (ASCII
-only). Runs in O(size()).
+only). Runs in O(size).
 
 **Returns**
 - a new String with the trailing whitespace removed
@@ -799,7 +792,7 @@ trim_start(): String
 
 Returns a new String without the whitespace at the start: spaces,
 tabs, carriage returns, line feeds, vertical tabs and form feeds
-(ASCII only). Runs in O(size()).
+(ASCII only). Runs in O(size).
 
 **Returns**
 - a new String with the leading whitespace removed
@@ -816,7 +809,7 @@ trim(): String
 ```
 
 Returns a new String without the whitespace at either end, as
-`trim_start` and `trim_end` do. Runs in O(size()).
+`trim_start` and `trim_end` do. Runs in O(size).
 
 **Returns**
 - a new String with the leading and trailing whitespace removed
@@ -835,7 +828,7 @@ lower(): String
 Returns a new String with the ASCII letters `A` to `Z` changed to `a`
 to `z`. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).
+O(size).
 
 **Returns**
 - a new String in lowercase
@@ -855,7 +848,7 @@ upper(): String
 Returns a new String with the ASCII letters `a` to `z` changed to `A`
 to `Z`. Every other character, including non-ASCII letters, is kept
 as it is, so the result is valid UTF-8 of the same size. Runs in
-O(size()).
+O(size).
 
 **Returns**
 - a new String in uppercase
@@ -875,7 +868,7 @@ Splits the String into lines and returns them without their line
 endings. A line ends at `"\n"` or `"\r\n"`. A final line with no
 ending is included, but the end of the String after a final line
 ending does not start another line, so `"a\nb\n"` and `"a\nb"` both
-give `["a", "b"]`, and `""` gives no lines. Runs in O(size()).
+give `["a", "b"]`, and `""` gives no lines. Runs in O(size).
 
 **Returns**
 - a new Array with one new String per line
@@ -883,7 +876,7 @@ give `["a", "b"]`, and `""` gives no lines. Runs in O(size()).
 **Example**
 ```pepper
     var lines = "first\r\nsecond\n\nfourth".lines();
-    assert(lines.count() == 4, "four lines");
+    assert(lines.count == 4, "four lines");
     assert(lines[1] == "second", "\\r\\n removed");
     assert(lines[2] == "", "an empty line");
 ```
@@ -896,13 +889,13 @@ repeat(count: ulong): String
 
 Returns a new String that holds this String `count` times in a row.
 `count` 0, or an empty String, gives an empty String. Runs in
-O(size() * count).
+O(size * count).
 
 **Parameters**
 - `count` — how many copies to join
 
 **Returns**
-- a new String of `size() * count` bytes
+- a new String of `size * count` bytes
 
 **Example**
 ```pepper
@@ -1409,6 +1402,33 @@ when it is full, so appending is amortized O(piece size). Call
     var text = out.to_string();   # "line 3\n"
 ```
 
+### Properties
+
+#### size
+
+```pepper
+var size: ulong { get; }
+```
+
+The number of bytes of UTF-8 appended so far. O(1).
+
+#### length
+
+```pepper
+var length: ulong { get; }
+```
+
+The number of code points appended so far. O(1).
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether nothing has been appended since the builder was
+created or last cleared. O(1).
+
 ### Constructor
 
 #### StringBuilder()
@@ -1432,7 +1452,7 @@ append(text: String): StringBuilder
 ```
 
 Appends the text of `text` and returns this builder, so calls can be
-chained. Runs in amortized O(text.size()).
+chained. Runs in amortized O(text.size).
 
 **Parameters**
 - `text` — the String to append; it is not modified
@@ -1445,40 +1465,6 @@ chained. Runs in amortized O(text.size()).
     var b = StringBuilder();
     b.append("a").append("b");   # b.to_string() == "ab"
 ```
-
-#### size
-
-```pepper
-size(): ulong
-```
-
-Returns the number of bytes of UTF-8 appended so far. O(1).
-
-**Returns**
-- the size in bytes
-
-#### length
-
-```pepper
-length(): ulong
-```
-
-Returns the number of code points appended so far. O(1).
-
-**Returns**
-- the length in code points
-
-#### empty
-
-```pepper
-empty(): bool
-```
-
-Returns whether nothing has been appended since the builder was
-created or last cleared. O(1).
-
-**Returns**
-- true when `size()` is 0
 
 #### clear
 
@@ -1495,7 +1481,7 @@ to_string(): String
 ```
 
 Returns a new String holding the text appended so far. The builder
-is unchanged. Runs in O(size()).
+is unchanged. Runs in O(size).
 
 **Returns**
 - a new String

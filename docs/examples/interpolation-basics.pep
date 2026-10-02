@@ -11,7 +11,7 @@ main(): int {
     # Any expression fits between the braces, strings included.
     var sizes = [2, 5];
     assert($"total {sizes[0] + sizes[1]}" == "total 7", "arithmetic and index");
-    assert($"{name.size()} letters" == "6 letters", "call");
+    assert($"{name.size} letters" == "6 letters", "call");
     assert($"{count > 1 ? "many" : "one"}" == "many", "ternary with strings");
 
     # Doubled braces are literal braces; escapes work as in any string.

@@ -14,7 +14,7 @@ struct Named {
     construct(String n = "anon") { name = n; }
     String greet(String prefix = "hi ") { return prefix + name; }
 }
-label(String s = ""): int { return s.size(); }
+label(String s = ""): int { return s.size; }
 test(): int {
     var a = Named();                     # ctor default
     if (!(a.name == "anon")) { return 1; }

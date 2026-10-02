@@ -31,7 +31,7 @@ export user_name(): String? {
 ##     }
 export home_directory(): io.Path? {
     var path = _os_sys_home_directory();
-    if (path.is_none() || path.value().empty()) {
+    if (path.is_none() || path.value().is_empty) {
         return Optional<io.Path>.none();
     }
     return Optional<io.Path>.some(io.Path(path.value()));
@@ -48,7 +48,7 @@ export temp_directory(): io.Path {
 # A variable's value when it is set and not empty.
 export _os_nonempty_environment(name: String): String? {
     var value = environment(name);
-    if (value.is_some() && value.value().empty()) {
+    if (value.is_some() && value.value().is_empty) {
         return Optional<String>.none();
     }
     return value;

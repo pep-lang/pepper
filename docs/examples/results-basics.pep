@@ -29,7 +29,7 @@ main(): int {
     var doubled = match (parsed) { Ok(n) => n * 2, Err(e) => 0 };
     assert(doubled == 14, "match binds the value");
     if (bad is Err(e)) {
-        assert(e.message.length() > 0, "is binds the error");
+        assert(e.message.length > 0, "is binds the error");
     }
 
     # An operation with no value to return uses void.

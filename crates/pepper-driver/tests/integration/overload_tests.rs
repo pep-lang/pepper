@@ -121,7 +121,7 @@ fn a_string_literal_passes_its_characters_to_a_pointer_member() {
     let source = r#"
 extern ulong strlen(char* s);
 size(p: __ptr<char>): ulong { return strlen(p) * 10; }
-size(s: String): ulong { return s.size(); }
+size(s: String): ulong { return s.size; }
 test(): int {
     var text = "hello";
     return (size("abc") + size(text)) as int;
@@ -189,7 +189,7 @@ fn nested_and_recursive_calls_resolve() {
 inc(x: int) { return x + 1; }
 inc(x: double) { return x + 0.5; }
 count(n: int): int { if (n == 0) { return 0; } return count(n - 1) + 1; }
-count(s: String): int { return count(s.length() as int); }
+count(s: String): int { return count(s.length as int); }
 test(): int {
     var d = inc(inc(1.0));
     if (d != 2.0) { return -1; }
@@ -203,7 +203,7 @@ test(): int {
 fn a_function_value_takes_the_member_its_slot_s_type_names() {
     let source = r#"
 twice(x: int): int { return x * 2; }
-twice(s: String): int { return s.size() as int; }
+twice(s: String): int { return s.size as int; }
 apply(f: (int) => int, x: int): int { return f(x); }
 chooser(): (String) => int { return twice; }
 test(): int {
@@ -301,7 +301,7 @@ struct Meter {
     int n;
     construct(int v) { n = v; }
     static of(x: int): Meter { return Meter(x); }
-    static of(s: String): Meter { return Meter(s.size() as int); }
+    static of(s: String): Meter { return Meter(s.size as int); }
 }
 test(): int { return Meter.of(3).n * 10 + Meter.of("abcd").n; }
 "#;
@@ -495,7 +495,7 @@ struct Point {
     construct() { x = 1; y = 2; }
     construct(v: int) { x = v; y = v; }
     construct(a: int, b: int) { x = a; y = b; }
-    construct(s: String) { x = s.length() as int; y = 0; }
+    construct(s: String) { x = s.length as int; y = 0; }
 }
 test(): int {
     var a = Point();
@@ -521,7 +521,7 @@ test(): int {
     var a = Pair<int>(7);
     var b = Pair<int>(1, 2);
     var c = Pair<String>("x");
-    return a.first * 1000 + a.second * 100 + b.first * 10 + b.second + (c.first.length() as int) * 0;
+    return a.first * 1000 + a.second * 100 + b.first * 10 + b.second + (c.first.length as int) * 0;
 }
 "#;
     assert_eq!(value(source), 7712);

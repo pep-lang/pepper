@@ -55,7 +55,7 @@ test(): int {
     a.append(1);
     a.append(2);
     a.append(3);
-    if (a.count() != 3) { return -1; }
+    if (a.count != 3) { return -1; }
     if (a[0] != 1 || a[1] != 2 || a[2] != 3) { return -2; }
     return 0;
 }"#
@@ -75,7 +75,7 @@ test(): int {{
     var p = Point();
     p.x = 5;
     a.append(p);
-    if (a.count() != 1) {{ return -1; }}
+    if (a.count != 1) {{ return -1; }}
     if (a[0].x != 5) {{ return -2; }}
     if (__refcount<Point>(p) != 2) {{ return -3; }}
     return 0;
@@ -101,10 +101,10 @@ test(): int {
     b.append(2);
     b.append(3);
     a += b;
-    if (a.count() != 3) { return -1; }
+    if (a.count != 3) { return -1; }
     if (a[0] != 1 || a[1] != 2 || a[2] != 3) { return -2; }
     # b is untouched.
-    if (b.count() != 2 || b[0] != 2 || b[1] != 3) { return -3; }
+    if (b.count != 2 || b[0] != 2 || b[1] != 3) { return -3; }
     return 0;
 }"#
         ),
@@ -130,13 +130,13 @@ test(): int {{
     if (__refcount<Point>(p1) != 2) {{ return -1; }}
     if (__refcount<Point>(p2) != 2) {{ return -2; }}
     a += b;
-    if (a.count() != 2) {{ return -3; }}
+    if (a.count != 2) {{ return -3; }}
     if (a[0].x != 1 || a[1].x != 2) {{ return -4; }}
     # The append acquired each moved reference into its new slot.
     if (__refcount<Point>(p1) != 2) {{ return -5; }}
     if (__refcount<Point>(p2) != 3) {{ return -6; }}
     # b keeps its own copy of p2.
-    if (b.count() != 1 || b[0].x != 2) {{ return -7; }}
+    if (b.count != 1 || b[0].x != 2) {{ return -7; }}
     return 0;
 }}"#,
                 point = POINT
@@ -156,7 +156,7 @@ test(): int {
     h.append(1);
     h.append(2);
     h += h;
-    if (h.count() != 4) { return -1; }
+    if (h.count != 4) { return -1; }
     if (!(h[0] == 1 && h[1] == 2 && h[2] == 1 && h[3] == 2)) { return -2; }
     return 0;
 }"#
@@ -178,7 +178,7 @@ test(): int {{
     h.append(p);
     if (__refcount<Point>(p) != 2) {{ return -1; }}
     h += h;
-    if (h.count() != 2) {{ return -2; }}
+    if (h.count != 2) {{ return -2; }}
     # Each element now has two references in the Array plus p's own.
     if (__refcount<Point>(p) != 3) {{ return -3; }}
     if (h[0].x != 9 || h[1].x != 9) {{ return -4; }}
@@ -204,7 +204,7 @@ test(): int {
     a.append(2);
     var v = a.pop();
     if (v != 2) { return -1; }
-    if (a.count() != 1 || a[0] != 1) { return -2; }
+    if (a.count != 1 || a[0] != 1) { return -2; }
     return 0;
 }"#
         ),
@@ -229,7 +229,7 @@ test(): int {{
     # p's count is unchanged and q aliases p.
     if (__refcount<Point>(p) != 2) {{ return -2; }}
     if (q.x != 7) {{ return -3; }}
-    if (a.count() != 0) {{ return -4; }}
+    if (a.count != 0) {{ return -4; }}
     return 0;
 }}"#,
                 point = POINT
@@ -251,7 +251,7 @@ test(): int {
     a.append(3);
     var v = a.remove_at(1);
     if (v != 2) { return -1; }
-    if (a.count() != 2 || a[0] != 1 || a[1] != 3) { return -2; }
+    if (a.count != 2 || a[0] != 1 || a[1] != 3) { return -2; }
     return 0;
 }"#
         ),
@@ -281,7 +281,7 @@ test(): int {{
     # The removed reference is returned: p2 keeps its count.
     if (r.x != 2) {{ return -2; }}
     if (__refcount<Point>(p2) != 2) {{ return -3; }}
-    if (a.count() != 2 || a[0].x != 1 || a[1].x != 3) {{ return -4; }}
+    if (a.count != 2 || a[0].x != 1 || a[1].x != 3) {{ return -4; }}
     # p1 and p3 were shifted into new slots: their counts are unchanged.
     if (__refcount<Point>(p1) != 2) {{ return -5; }}
     if (__refcount<Point>(p3) != 2) {{ return -6; }}
@@ -304,7 +304,7 @@ test(): int {
     a.append(1);
     a.append(2);
     a.clear();
-    if (a.count() != 0) { return -1; }
+    if (a.count != 0) { return -1; }
     return 0;
 }"#
         ),
@@ -347,8 +347,8 @@ test(): int {
     a.append(1);
     var b = a.clone();
     b.append(2);
-    if (a.count() != 1) { return -1; }
-    if (b.count() != 2 || b[1] != 2) { return -2; }
+    if (a.count != 1) { return -1; }
+    if (b.count != 2 || b[1] != 2) { return -2; }
     return 0;
 }"#
         ),
@@ -371,7 +371,7 @@ test(): int {{
     var b = a.clone();
     # clone copies the reference into b's slot: acquires p.
     if (__refcount<Point>(p) != 3) {{ return -2; }}
-    if (b.count() != 1 || b[0].x != 4) {{ return -3; }}
+    if (b.count != 1 || b[0].x != 4) {{ return -3; }}
     a.clear();
     # a's copy is released; b keeps its own.
     if (__refcount<Point>(p) != 2) {{ return -4; }}
@@ -1009,7 +1009,7 @@ import async;
 int count(async.Mutex<Array<String>> m) {
     with (var list = m.lock()) {
         var extra = "local";
-        return list.count() as int;
+        return list.count as int;
     }
     return -1;
 }
@@ -1028,7 +1028,7 @@ test(): int {
     }
     if (count(m) != 4) { return 1; }
     var old = m.replace(Array<String>());
-    if (old.count() != 4) { return 2; }
+    if (old.count != 4) { return 2; }
     if (count(m) != 0) { return 3; }
     return 0;
 }"#,
@@ -1068,7 +1068,7 @@ struct Child {
         if (now !== __default<Child>()) {
             owner.seen = owner.seen * 10 + now.id;
         }
-        if (owner.items.count() > 0) {
+        if (owner.items.count > 0) {
             var first = owner.items[0];
             if (first !== __default<Child>()) {
                 owner.seen = owner.seen * 10 + first.id;

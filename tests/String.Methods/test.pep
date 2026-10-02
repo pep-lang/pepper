@@ -9,7 +9,7 @@ main(): int {
     assert(s.ends_with("ING"), "ends_with");
     assert(s.contains("STI"), "contains");
     assert(s.find("STI") == 2, "find returns a byte offset");
-    assert(!s.empty(), "empty");
+    assert(!s.is_empty, "empty");
     assert(s[0] == "T", "index yields a one-character string");
-    return s.length() - 7;
+    return s.length - 7;
 }

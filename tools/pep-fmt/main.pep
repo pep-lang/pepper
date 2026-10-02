@@ -34,7 +34,7 @@ main(args: String[]): int {
     var check = false;
     var paths = Array<Path>();
     ulong index = 1;
-    while (index < args.count()) {
+    while (index < args.count) {
         var part = args[index];
         if (part == "-w") {
             write = true;
@@ -43,7 +43,7 @@ main(args: String[]): int {
         } else if (part == "-h" or part == "--help") {
             File.stdout().write_all(usage());
             return 0;
-        } else if (part.starts_with("-") and part.size() > 1) {
+        } else if (part.starts_with("-") and part.size > 1) {
             File.stderr().write_all("pep-fmt: error: unknown option '" + part + "'\n" + usage());
             return 2;
         } else {
@@ -51,7 +51,7 @@ main(args: String[]): int {
         }
         index += 1;
     }
-    if (paths.empty()) {
+    if (paths.is_empty) {
         if (write or check) {
             File.stderr().write_all("pep-fmt: error: -w and --check need files\n" + usage());
             return 2;

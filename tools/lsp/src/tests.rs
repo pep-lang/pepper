@@ -1435,7 +1435,7 @@ struct Holder {
     first<T>(box: Box<T>): T {
         var copy = Box<T>.make(box.get());
         var inner = copy.get();
-        var count = sizes.count();
+        var count = sizes.count;
         var (a, b) = (count, inner);
         return copy.get<T>();
     }
@@ -1460,7 +1460,7 @@ fn a_generic_body_nothing_instantiates() {
     // A member of a runtime type.
     let (file, rest) = definition(&uri, &text, &program, at(&text, "sizes.count", 0, 6));
     assert_eq!(file, "runtime/array.pep");
-    assert!(rest.starts_with("count()"), "{}", rest);
+    assert!(rest.starts_with("count: ulong"), "{}", rest);
     assert!(hover(&uri, &text, &program, at(&text, "count = ", 0, 0)).starts_with("`count` — `ulong`"));
     assert!(hover(&uri, &text, &program, at(&text, "var (a, b)", 0, 8)).starts_with("`b` — `T`"));
     // The type argument of a call.
@@ -1530,4 +1530,37 @@ walk<T>(node: Node) {
     let (uri, text, program) = load("closure_shadowing", main, "main.pep");
     let h = hover(&uri, &text, &program, at(&text, "(node) =>", 0, 1));
     assert!(h.starts_with("`node` — `Node`"), "{}", h);
+}
+
+/// Names inside a property's accessor bodies resolve like a method's: a
+/// local, a sibling member, the `set` accessor's `value`, and a property read
+/// from outside goes to its declaration.
+#[test]
+fn property_accessor_bodies_resolve() {
+    let main = r#"struct Account {
+    var _cents: long;
+    var dollars: long {
+        get {
+            var whole = _cents;
+            return whole / 100;
+        }
+        set {
+            _cents = value * 100;
+        }
+    }
+}
+test(): int {
+    var a = Account();
+    a.dollars = 3;
+    return a.dollars as int;
+}
+"#;
+    let (uri, text, program) = load("property_accessors", main, "main.pep");
+    let h = hover(&uri, &text, &program, at(&text, "whole /", 0, 0));
+    assert!(h.starts_with("`whole` — `long`"), "{}", h);
+    assert!(definition(&uri, &text, &program, at(&text, "_cents;", 0, 0)).1.starts_with("_cents: long"));
+    let h = hover(&uri, &text, &program, at(&text, "value *", 0, 0));
+    assert!(h.starts_with("`value` — `long`"), "{}", h);
+    let (_, rest) = definition(&uri, &text, &program, at(&text, "dollars as", 0, 0));
+    assert!(rest.starts_with("dollars: long"), "{}", rest);
 }

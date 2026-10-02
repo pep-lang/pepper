@@ -262,7 +262,7 @@ fn closure_capturing_a_string() {
     let src = r#"
 test(): int {
     var greeting = "hello";
-    var length = () => greeting.size();
+    var length = () => greeting.size;
     return length();
 }
 "#;
@@ -399,7 +399,7 @@ test(): int {
     var get = h.getter();
     var s = Holder<String>("abc");
     var get_s = s.getter();
-    return get() + get_s().size();
+    return get() + get_s().size;
 }
 "#;
     assert_eq!(run(src), (12, 0));

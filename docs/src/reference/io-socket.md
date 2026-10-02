@@ -448,7 +448,7 @@ Waits until data arrives, then appends up to `max` bytes of it to
 **Example**
 ```pepper
     var buffer = Array<u8>();
-    var n = stream.read(buffer, 4096).value();   # buffer.count() == n
+    var n = stream.read(buffer, 4096).value();   # buffer.count == n
 ```
 
 #### read_exact
@@ -475,14 +475,14 @@ write(data: u8[]): IoResult<ulong>
 Sends bytes from `data` with a single system call, waiting until the
 system can take at least some of them.
 
-The send may be partial: it can send fewer than `data.count()` bytes.
+The send may be partial: it can send fewer than `data.count` bytes.
 Use `write_all` to send everything.
 
 **Parameters**
 - `data` — the bytes to send
 
 **Returns**
-- the number of bytes sent, which may be less than `data.count()`; an error with `is_connection_reset()` when the peer has closed or reset the connection, an error when the stream is closed, or another platform error
+- the number of bytes sent, which may be less than `data.count`; an error with `is_connection_reset()` when the peer has closed or reset the connection, an error when the stream is closed, or another platform error
 
 #### write_all
 

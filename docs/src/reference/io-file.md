@@ -724,7 +724,7 @@ Reads the whole file at `path` into a byte array (Rust's
 ```pepper
     var r = File.read_bytes(Path("image.png"));
     if (r.is_ok()) {
-        var n = r.value().count();
+        var n = r.value().count;
     }
 ```
 
@@ -981,7 +981,7 @@ write(data: u8[]): IoResult<ulong>
 Writes bytes from `data` at the current position (or at the end, in
 append mode) with a single system call, and advances the position.
 
-The write may be partial: it can write fewer than `data.count()`
+The write may be partial: it can write fewer than `data.count`
 bytes, and one call moves at most about 2 GiB on POSIX or 1 GiB on
 Windows. Use `write_all` to write everything. On POSIX an interrupted
 write (`EINTR`) is retried.
@@ -990,7 +990,7 @@ write (`EINTR`) is retried.
 - `data` — the bytes to write
 
 **Returns**
-- the number of bytes written, which may be less than `data.count()`; an error when the File is closed or was not opened for writing, or another platform error
+- the number of bytes written, which may be less than `data.count`; an error when the File is closed or was not opened for writing, or another platform error
 
 #### write_all
 
@@ -999,7 +999,7 @@ write_all(data: u8[]): IoResult<void>
 ```
 
 Writes all of `data`, repeating the write until every byte is
-written. Advances the position by `data.count()`.
+written. Advances the position by `data.count`.
 
 If an error occurs part of `data` may already have been written.
 

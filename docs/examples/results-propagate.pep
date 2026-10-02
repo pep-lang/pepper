@@ -19,7 +19,7 @@ digit_value(String c): int {
 }
 
 parse_number(String s): Result<int, ParseError> {
-    if (s.length() == 0) {
+    if (s.length == 0) {
         return Result<int, ParseError>.err(ParseError(s, 0));
     }
     var value = 0;

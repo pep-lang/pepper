@@ -22,7 +22,7 @@ struct Stack<T> {
     }
 
     is_empty(): bool {
-        return items.empty();
+        return items.is_empty;
     }
 }
 

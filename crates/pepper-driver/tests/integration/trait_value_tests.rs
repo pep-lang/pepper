@@ -304,7 +304,7 @@ int read(Getter<int> g) {
 test(): int {
     var b = Box<int>(5);
     Getter<String> s = Box<String>("hi");
-    return read(b) + s.get().length();
+    return read(b) + s.get().length;
 }
 "#);
     assert_eq!(result, 7);

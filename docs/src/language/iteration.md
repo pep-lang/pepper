@@ -49,7 +49,7 @@ includes `b`. Looping over one is how you count:
 ```
 
 - **The bounds give the type.** A range's element type is inferred from its
-  bounds like a generic call's type argument, so `0..names.count()` counts in
+  bounds like a generic call's type argument, so `0..names.count` counts in
   `ulong`. The bounds must be integers; anything else is an error at the
   operator:
 
@@ -68,7 +68,7 @@ includes `b`. Looping over one is how you count:
   its type's largest value (`250..>top` with a `byte` `top` of 255) stops
   there without overflowing.
 - **A range is a value**, a [`Range<T>`](../reference/range.md). It has
-  `contains(x)` and `is_empty()`, and it is an `Iterator<T>`, so it has the
+  `contains(x)` and the `is_empty` property, and it is an `Iterator<T>`, so it has the
   [adapters](#adapters) `map` and `filter`. Looping over one allocates
   nothing; the optimizer turns it into a plain counting loop.
 

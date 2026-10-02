@@ -35,7 +35,7 @@ test(): int {{
     var h = Holder("ab");
     if (!(h.twice().s == "abab")) {{ return 1; }}          # method result
     if (!(make("xy").s == "xy")) {{ return 2; }}           # function result
-    if (make("q").twice().twice().s.size() != 4) {{ return 3; }}
+    if (make("q").twice().twice().s.size != 4) {{ return 3; }}
     var copy = make("kept").s;                            # copied out, then released
     if (!(copy == "kept")) {{ return 4; }}
     if (make("n").nums[1] != 5) {{ return 5; }}           # field then index
@@ -53,14 +53,14 @@ fn temporaries_in_conditions_and_returns() {
     let (result, leaked) = compile_jit_census(&format!(
         r#"{HOLDER}
 size_of(v: String): int {{
-    return make(v).s.size();                               # returned field read
+    return make(v).s.size;                               # returned field read
 }}
 test(): int {{
     var n = 0;
-    while (make("abc").s.size() > n) {{                    # loop condition
+    while (make("abc").s.size > n) {{                    # loop condition
         n = n + 1;
     }}
-    var t = make("ab").s.size() == 2 ? make("c").s.size() : 0;   # ternary arm
+    var t = make("ab").s.size == 2 ? make("c").s.size : 0;   # ternary arm
     return n + t + size_of("xyz") - 7;
 }}"#
     ));

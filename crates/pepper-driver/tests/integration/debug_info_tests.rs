@@ -175,7 +175,7 @@ main(): int {
     Shape shape = Square();
     var node = Node();
     var counts = Array<long>();
-    return shape.area() - 4 + (suit as int) - 5 + pair.0 - 3 + (counts.count() as int);
+    return shape.area() - 4 + (suit as int) - 5 + pair.0 - 3 + (counts.count as int);
 }
 ";
 

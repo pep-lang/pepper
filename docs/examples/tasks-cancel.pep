@@ -20,6 +20,6 @@ main(): int {
             async.sleep(1000000);   # returns at once when cancelled
         });
     });
-    assert(polls.count() > 0, "the poller ran until cancelled");
+    assert(polls.count > 0, "the poller ran until cancelled");
     return 0;
 }

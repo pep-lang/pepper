@@ -705,6 +705,49 @@ survives into later stages. Then, for each struct:
 
 ---
 
+### 2.7 Properties (`builder.rs` `property_members`, `passes/properties.rs`)
+
+A property (`var name: T { get; set; } = init;`, `ast::PropertyDecl`) is
+lowered to ordinary members; nothing after sema knows about it.
+
+- **Parser.** `member_property` (traits, extensions) and
+  `property_declaration` (a struct field followed by `{`) build the
+  `PropertyDecl`. Each `ast::Accessor` carries the method it compiles to as
+  a `FunctionDecl` (`__get_P(): T`, `__set_P(value: T)`; `body` is `None`
+  for `get;` / `set;`), so tools that walk methods, such as the language
+  server, see accessor bodies (`PropertyDecl::accessors`).
+- **Builder.** `property_members` turns each property into the getter
+  method `__get_P`, the setter `__set_P` when there is a `set`, and, when
+  the storage is implied (a default accessor, or `field` in a body), the
+  storage field: named `P` when `get` is default, else `__field_P`. `field`
+  in a body becomes `this.<storage>` (`replace_field`); default bodies read
+  and write the storage. A trait property becomes trait methods; an
+  extension property must be computed. Each property is recorded in
+  `Module::properties` (`PropertyDef`: owner, accessor kinds, storage,
+  `[Shared]`), which the rest of sema reads. `scope_walk::walk_property`
+  binds `field` and `value` for the visibility checks.
+- **Reads and writes** are rewritten by `properties::lower`, which
+  `resolve_implicit_types` calls first on every expression it walks
+  (pre-order), once the receiver's type is known: `x.P` becomes
+  `x.__get_P()`, `x.P = v` becomes `x.__set_P(v)`, and `x.P op= v` / `x.P++`
+  become a read-modify-write whose receiver, when it is not a plain name,
+  is evaluated once through a `WithSubject` (its id comes from the access's
+  `Loc`, so builds are deterministic). A default accessor becomes direct
+  storage access; inside its own accessors `this.P` is the storage
+  (`Site::is_own_storage`). Assigning a get-only property is allowed only in
+  the owning struct's constructors and methods (not its extensions:
+  `Properties::extension_methods`), and assigning a `[Shared]` struct's
+  property only in its constructors. `P()` on a property that is not a
+  function type is an error. Assignments sema synthesizes (`Loc::NONE`:
+  field initializers, `_pep_copy`) are left alone, except a constructor's
+  `this.P` parameter.
+- **Typing.** `type_of_expr` gives `x.P` (and a bare `P` in a method) the
+  getter's return type; `convert_member_refs` treats a property without a
+  same-named field as a member, so a bare name becomes `this.P`.
+- **Traits.** `apply_extensions` meets a trait property with the struct's
+  property, or with a plain field through a synthesized accessor
+  (`field_accessor`), and reports `'S' does not implement property 'P'`.
+
 ## 3. Sema transform passes (`crates/pepper-sema/src/passes/`)
 
 `transform_pass(&mut Module) -> Result<(), Diagnostic>` runs the steps below
@@ -1625,6 +1668,10 @@ diagnostics"). The mechanics:
 ## 8. Language server and VS Code extension
 
 **`tools/lsp/src/main.rs`** (`pepper-lsp`, stdio, tower-lsp):
+
+- **Properties.** Hover and definition find a property by name
+  (`infer::Kind::Property`); its accessor bodies are walked as methods
+  through `PropertyDecl::accessors` (`function_at`, `infer::each`).
 
 - **Crash safety.** `main` serves from a thread with the compiler's 8 MB
   stack (`STACK_SIZE`, also the async runtime's worker stack), which fits

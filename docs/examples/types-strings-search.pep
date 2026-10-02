@@ -9,7 +9,7 @@ main(): int {
 
     # split cuts at every separator; split_once at the first, if any.
     var fields = "name,,age".split(",");
-    assert(fields.count() == 3 && fields[1] == "", "an empty field");
+    assert(fields.count == 3 && fields[1] == "", "an empty field");
     var header = "Content-Type: text/plain".split_once(": ");
     if (header.is_some()) {
         var (name, value) = header.value();

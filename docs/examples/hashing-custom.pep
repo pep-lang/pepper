@@ -38,12 +38,12 @@ main(): int {
     var visits = HashMap<Point, int>();
     visits[Point(1, 2)] = 1;
     visits[Point(1, 2)] = visits[Point(1, 2)] + 1;   # the same key
-    assert(visits.count() == 1, "one entry");
+    assert(visits.count == 1, "one entry");
     assert(visits[Point(1, 2)] == 2, "found by content");
     assert(Point(1, 2) != Point(2, 1), "!= is the negation of ==");
 
     HashSet<Person> people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
-    assert(people.count() == 1, "equal people are one member");
+    assert(people.count == 1, "equal people are one member");
     assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
     assert(!people.contains(Person("Ada", 2)), "a different id");
     return 0;

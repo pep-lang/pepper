@@ -414,6 +414,71 @@ pub struct VariableDecl {
     pub is_exported: bool,
 }
 
+/// A property: a member read and written like a field whose `get` and `set`
+/// accessors may run code (`var name: T { get; set { ... } } = init;`).
+/// See `docs/src/language/properties.md`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PropertyDecl {
+    /// Attributes preceding the declaration.
+    pub attributes: Vec<Attribute>,
+    pub name: String,
+    /// Span of the declared name token.
+    pub name_span: Span,
+    pub type_name: TypeName,
+    /// The initializer after the accessor block: it initializes the
+    /// property's implied storage.
+    pub default_value: Option<Expression>,
+    /// The `get` accessor; `None` only for a set-only property, which is an
+    /// error the builder reports.
+    pub get: Option<Accessor>,
+    /// The `set` accessor; `None` for a read-only property.
+    pub set: Option<Accessor>,
+    /// Span from the declaration's first token to its last.
+    pub span: Span,
+}
+
+/// One accessor of a [`PropertyDecl`]: `get;` / `set;` (the default body) or
+/// `get { ... }` / `set { ... }`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Accessor {
+    /// Span of the `get` or `set` keyword.
+    pub span: Span,
+    /// The accessor as the method it compiles to: `__get_P(): T` or
+    /// `__set_P(value: T)`, whose `body` is `None` for the default body.
+    /// Tools that look at methods (the language server) see accessor bodies
+    /// through it.
+    pub function: FunctionDecl,
+}
+
+impl Accessor {
+    /// The written body; `None` for `get;` / `set;`.
+    pub fn body(&self) -> Option<&Block> {
+        self.function.body.as_ref()
+    }
+}
+
+impl PropertyDecl {
+    /// The property's accessors as methods: `get`, then `set`.
+    pub fn accessors(&self) -> impl Iterator<Item = &FunctionDecl> {
+        self.get.iter().chain(&self.set).map(|a| &a.function)
+    }
+}
+
+/// The name of the method a property's `get` accessor compiles to.
+pub fn property_getter_name(name: &str) -> String {
+    format!("__get_{}", name)
+}
+
+/// The name of the method a property's `set` accessor compiles to.
+pub fn property_setter_name(name: &str) -> String {
+    format!("__set_{}", name)
+}
+
+/// Inside a property accessor, the property's implied storage.
+pub const PROPERTY_FIELD: &str = "field";
+/// Inside a `set` accessor, the new value.
+pub const PROPERTY_VALUE: &str = "value";
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionDecl {
     pub name: String,
@@ -464,6 +529,9 @@ pub struct StructDecl {
     pub name_span: Span,
     pub generic_params: Vec<GenericParam>,
     pub fields: Vec<VariableDecl>,
+    /// Properties (`var name: T { get; set; }`), in declaration order.
+    #[serde(default)]
+    pub properties: Vec<PropertyDecl>,
     pub methods: Vec<FunctionDecl>,
     /// `construct(...)` constructors, in declaration order; several
     /// overload one another
@@ -518,6 +586,9 @@ pub struct TraitDecl {
     pub name_span: Span,
     pub generic_params: Vec<GenericParam>,
     pub methods: Vec<FunctionDecl>,
+    /// Properties the trait requires (`var area: double { get; }`).
+    #[serde(default)]
+    pub properties: Vec<PropertyDecl>,
     pub span: Span,
     /// `export` modifier: visible outside the declaring file.
     pub is_exported: bool,
@@ -553,6 +624,9 @@ pub struct ExtendDecl {
     /// Traits implemented by the extension (after `with`)
     pub traits: Vec<TypeName>,
     pub methods: Vec<FunctionDecl>,
+    /// Computed properties the extension adds.
+    #[serde(default)]
+    pub properties: Vec<PropertyDecl>,
     pub span: Span,
     /// `export` modifier: the extension's methods are usable outside the
     /// declaring file.
@@ -1244,6 +1318,9 @@ impl Display for StructDecl {
         for field in &self.fields {
             write!(f, "\n    {}", field)?;
         }
+        for property in &self.properties {
+            write!(f, "\n    {}", property)?;
+        }
         for constructor in &self.constructors {
             let body = constructor.body.as_ref().expect("constructor has a body");
             write!(f, "\n    ")?;
@@ -1261,6 +1338,7 @@ impl Display for StructDecl {
         }
         let has_members = self.enumeration.as_ref().is_some_and(|e| !e.cases.is_empty())
             || !self.fields.is_empty()
+            || !self.properties.is_empty()
             || !self.constructors.is_empty()
             || self.destructor.is_some()
             || !self.methods.is_empty();
@@ -1283,13 +1361,36 @@ impl Display for TraitDecl {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
         }
         write!(f, " {{")?;
+        for property in &self.properties {
+            write!(f, "\n    {}", property)?;
+        }
         for method in &self.methods {
             write!(f, "\n    {}", method)?;
         }
-        if !self.methods.is_empty() {
+        if !self.methods.is_empty() || !self.properties.is_empty() {
             write!(f, "\n")?;
         }
         write!(f, "}}")
+    }
+}
+
+impl Display for PropertyDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
+        write!(f, "var {}: {} {{", self.name, self.type_name)?;
+        for (keyword, accessor) in [("get", &self.get), ("set", &self.set)] {
+            if let Some(accessor) = accessor {
+                match &accessor.function.body {
+                    Some(body) => write!(f, " {} {}", keyword, body)?,
+                    None => write!(f, " {};", keyword)?,
+                }
+            }
+        }
+        write!(f, " }}")?;
+        if let Some(v) = &self.default_value {
+            write!(f, " = {};", v)?;
+        }
+        Ok(())
     }
 }
 
@@ -1313,15 +1414,18 @@ impl Display for ExtendDecl {
         }
         if !self.traits.is_empty() {
             write!(f, " with {}", join(&self.traits, ", "))?;
-            if self.methods.is_empty() {
+            if self.methods.is_empty() && self.properties.is_empty() {
                 return write!(f, ";");
             }
         }
         write!(f, " {{")?;
+        for property in &self.properties {
+            write!(f, "\n    {}", property)?;
+        }
         for method in &self.methods {
             write!(f, "\n    {}", method)?;
         }
-        if !self.methods.is_empty() {
+        if !self.methods.is_empty() || !self.properties.is_empty() {
             write!(f, "\n")?;
         }
         write!(f, "}}")

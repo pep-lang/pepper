@@ -268,6 +268,8 @@ pub fn each<'a>(module: &'a ast::Module, visit: impl FnMut(Item<'a>)) {
             ast::Declaration::Struct(s) => {
                 roots.extend(s.fields.iter().map(Node::Variable));
                 roots.extend(s.constructors.iter().chain(&s.methods).map(Node::Function));
+                roots.extend(s.properties.iter().flat_map(|p| p.accessors()).map(Node::Function));
+                roots.extend(s.properties.iter().filter_map(|p| p.default_value.as_ref()).map(Node::Expression));
                 roots.extend(s.destructor.iter().map(Node::Block));
                 for case in s.enumeration.iter().flat_map(|e| &e.cases) {
                     roots.extend(case.payload.iter().flatten().map(Node::Variable));
@@ -275,7 +277,9 @@ pub fn each<'a>(module: &'a ast::Module, visit: impl FnMut(Item<'a>)) {
                 }
             }
             ast::Declaration::Trait(t) => roots.extend(t.methods.iter().map(Node::Function)),
-            ast::Declaration::Extend(e) => roots.extend(e.methods.iter().map(Node::Function)),
+            ast::Declaration::Extend(e) => {
+                roots.extend(e.methods.iter().chain(e.properties.iter().flat_map(|p| p.accessors())).map(Node::Function))
+            }
             ast::Declaration::TypeAlias(_) => {}
         }
     }
@@ -418,6 +422,7 @@ fn contains(span: Span, offset: usize) -> bool {
 #[derive(Clone)]
 pub enum Kind<'a> {
     Field(&'a ast::VariableDecl),
+    Property(&'a ast::PropertyDecl),
     Method(&'a ast::FunctionDecl),
     Case(&'a ast::EnumCase),
     /// A method every enum of plain values has (`name`, `from_value`): no
@@ -446,6 +451,7 @@ impl Found<'_> {
     pub fn name_span(&self) -> Option<Span> {
         Some(match &self.kind {
             Kind::Field(v) => v.name_span,
+            Kind::Property(p) => p.name_span,
             Kind::Method(f) => f.name_span,
             Kind::Case(c) => c.name_span,
             Kind::EnumMethod(s, _) => s.name_span,
@@ -458,6 +464,7 @@ impl Found<'_> {
     pub fn describe(&self) -> String {
         match &self.kind {
             Kind::Field(v) => Ty::from_ast(&v.type_name).substitute(&self.bindings).to_string(),
+            Kind::Property(p) => Ty::from_ast(&p.type_name).substitute(&self.bindings).to_string(),
             Kind::Method(f) => {
                 let parameters: Vec<String> = f
                     .parameters
@@ -627,6 +634,9 @@ impl<'a> Typer<'a> {
                     if let Some(v) = s.fields.iter().find(|v| v.name == name) {
                         return found(file, Kind::Field(v), &s.name, bindings);
                     }
+                    if let Some(p) = s.properties.iter().find(|p| p.name == name) {
+                        return found(file, Kind::Property(p), &s.name, bindings);
+                    }
                     if let Some(c) = s.enumeration.iter().flat_map(|e| &e.cases).find(|c| c.name == name) {
                         return found(file, Kind::Case(c), &s.name, bindings);
                     }
@@ -641,6 +651,9 @@ impl<'a> Typer<'a> {
                     }
                 }
                 ast::Declaration::Trait(t) if same_type(&t.name, &owner.name) => {
+                    if let Some(p) = t.properties.iter().find(|p| p.name == name) {
+                        return found(file, Kind::Property(p), &t.name, bind(&t.generic_params, &owner.args));
+                    }
                     if let Some(m) = t.methods.iter().find(|m| demangle_name(&m.name) == name) {
                         return found(file, Kind::Method(m), &t.name, bind(&t.generic_params, &owner.args));
                     }
@@ -649,6 +662,9 @@ impl<'a> Typer<'a> {
                     // `extend Box<T>` names its parameters in the target.
                     let bindings: Vec<(String, Ty)> =
                         e.target.generic_types.iter().zip(&owner.args).map(|(p, a)| (p.name.clone(), a.clone())).collect();
+                    if let Some(p) = e.properties.iter().find(|p| p.name == name) {
+                        return found(file, Kind::Property(p), &e.target.name, bindings);
+                    }
                     if let Some(m) = e.methods.iter().find(|m| demangle_name(&m.name) == name) {
                         return found(file, Kind::Method(m), &e.target.name, bindings);
                     }
@@ -664,6 +680,7 @@ impl<'a> Typer<'a> {
     fn member_value(found: &Found, owner: &Ty) -> Option<Ty> {
         match &found.kind {
             Kind::Field(v) => Some(Ty::from_ast(&v.type_name).substitute(&found.bindings)),
+            Kind::Property(p) => Some(Ty::from_ast(&p.type_name).substitute(&found.bindings)),
             Kind::Element(_, ty) => Some(ty.clone()),
             Kind::Case(_) => Some(owner.clone()),
             Kind::Method(_) | Kind::EnumMethod(..) => None,
@@ -1096,7 +1113,7 @@ impl<'a> Typer<'a> {
                     Kind::EnumMethod(s, "from_value") => Some(Ty::of("Result", vec![Ty::named(&plain(&s.name))])),
                     Kind::EnumMethod(..) => Some(Ty::named("String")),
                     Kind::Case(_) => Some(self.resolve(owner)),
-                    Kind::Field(_) | Kind::Element(..) => result(Self::member_value(&found, &owner)?),
+                    Kind::Field(_) | Kind::Property(_) | Kind::Element(..) => result(Self::member_value(&found, &owner)?),
                 }
             }
             _ => None,

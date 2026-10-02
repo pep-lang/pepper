@@ -158,7 +158,7 @@ struct Parser {
 
     _peek_at(offset: ulong): Token {
         ulong index = _position + offset;
-        if (index >= _tokens.count()) {
+        if (index >= _tokens.count) {
             return _tokens.last();
         }
         return _tokens[index];
@@ -240,7 +240,7 @@ struct Parser {
             return;
         }
         var last = _tokens[_position - 1];
-        _error = Optional<SyntaxError>.some(SyntaxError("expected ';'", last.offset + last.text.size()));
+        _error = Optional<SyntaxError>.some(SyntaxError("expected ';'", last.offset + last.text.size));
         _missing_semicolon = true;
         _failed = true;
     }
@@ -284,7 +284,7 @@ struct Parser {
         merged.newlines_after_comments = first.newlines_after_comments;
         merged.space_before = first.space_before;
         merged.leading_comments = first.leading_comments;
-        ulong count = text.size();
+        ulong count = text.size;
         ulong i = 0;
         var last = first;
         while (i < count) {
@@ -366,7 +366,7 @@ struct Parser {
         var after = _peek_at(2);
         return after.kind == TokenKind.End
             or after.newlines_before > 0
-            or !next.trailing_comment.empty()
+            or !next.trailing_comment.is_empty
             or after.is(";")
             or after.is("}")
             or after.is("=");
@@ -644,7 +644,7 @@ struct Parser {
         }
         while (true) {
             var op = _binary_operator(level);
-            if (op.empty()) {
+            if (op.is_empty) {
                 break;
             }
             var node = Node(NodeKind.Binary);
@@ -858,7 +858,7 @@ struct Parser {
                 node.add(item);
                 return node;
             }
-            if (node.count() == 1 and _at(":")) {
+            if (node.count == 1 and _at(":")) {
                 node.kind = NodeKind.Map;
             }
             if (node.kind == NodeKind.Map) {
@@ -1769,7 +1769,7 @@ struct Parser {
         var name = _advance();
         first.add_token(name);
         _qualified_tail(first, name.text);
-        bool qualified = first.count() > 1;
+        bool qualified = first.count > 1;
         if (_at("(") or _at("<")) {
             if (qualified) {
                 _fail("expected function name");
@@ -1840,7 +1840,7 @@ struct Parser {
             _take(node);
         }
         ulong position = _position;
-        ulong children = node.count();
+        ulong children = node.count;
 
         # Pepper-style indexer or operator method: `[](params)[: Type] { }`,
         # `==(params)[: Type] { }`.
@@ -1972,6 +1972,21 @@ struct Parser {
             if (_failed) {
                 return node;
             }
+            if (kind != NodeKind.Struct and _at_word("var")) {
+                var variable = _variable_declaration(attributes);
+                if (_failed) {
+                    return node;
+                }
+                if (!_at("{")) {
+                    _fail("expected '{'");
+                    return node;
+                }
+                node.add(_property(variable));
+                if (_failed) {
+                    return node;
+                }
+                continue;
+            }
             if (kind != NodeKind.Struct) {
                 node.add(_method(attributes, kind == NodeKind.Trait));
                 if (_failed) {
@@ -2027,6 +2042,13 @@ struct Parser {
             if (_failed) {
                 return node;
             }
+            if (_at("{")) {
+                node.add(_property(field));
+                if (_failed) {
+                    return node;
+                }
+                continue;
+            }
             if (!_declaration_boundary()) {
                 _fail("expected ';'");
                 return node;
@@ -2035,6 +2057,45 @@ struct Parser {
             node.add(field);
         }
         _expect(node, "}");
+        return node;
+    }
+
+    # The rest of a property after `var name: Type` (parsed as `variable`):
+    # its accessors, then `[= value ;]`.
+    _property(variable: Node): Node {
+        var node = Node(NodeKind.Property);
+        for (var child in variable.children) {
+            node.add(child);
+        }
+        var accessors = Node(NodeKind.Accessors);
+        node.add(accessors);
+        _take(accessors);
+        while (!_at("}")) {
+            if (_at_end() or !(_at_word("get") or _at_word("set"))) {
+                _fail("expected 'get' or 'set'");
+                return node;
+            }
+            var accessor = Node(NodeKind.Accessor);
+            _take(accessor);
+            if (_at(";")) {
+                _take(accessor);
+            } else {
+                accessor.add(_block(Array<Node>()));
+                if (_failed) {
+                    return node;
+                }
+            }
+            accessors.add(accessor);
+        }
+        _take(accessors);
+        if (_at("=")) {
+            _take(node);
+            node.add(_expression());
+            if (_failed) {
+                return node;
+            }
+            _finish_statement(node);
+        }
         return node;
     }
 
@@ -2097,7 +2158,7 @@ struct Parser {
                 break;
             }
             ulong position = _position;
-            ulong children = members.count();
+            ulong children = members.count;
             var item = Node(NodeKind.EnumCase);
             for (var attribute in _attributes()) {
                 item.add(attribute);
@@ -2286,7 +2347,7 @@ struct Parser {
             var symbols = Node(NodeKind.ImportList);
             _take(symbols);
             while (true) {
-                if (_at("]") and symbols.count() == 1) {
+                if (_at("]") and symbols.count == 1) {
                     break;
                 }
                 var symbol = Node(NodeKind.ImportSymbol);

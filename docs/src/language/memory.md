@@ -257,7 +257,7 @@ the compiler checks every call:
 
   ```text
   main.pep:8:12: error: 'a' is used after its value was moved
-      8 |     return a.count();
+      8 |     return a.count;
         |            ^
   main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
       7 |     names.replace(move(a));

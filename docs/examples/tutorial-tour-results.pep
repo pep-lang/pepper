@@ -1,6 +1,6 @@
 # Converts a string of decimal digits to an int, or explains why it cannot.
 parse_number(text: String): Result<int> {
-    if text.empty() {
+    if text.is_empty {
         return Result<int>.err(Error("expected a number, found nothing"));
     }
     var value = 0;

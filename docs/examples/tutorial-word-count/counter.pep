@@ -11,7 +11,7 @@ export struct WordCounter {
     }
 
     add(word: String) {
-        if !word.empty() {
+        if !word.is_empty {
             if !this.counts.contains(word) {
                 this.order.append(word);
             }

@@ -5,7 +5,7 @@ export struct Length {
 
 export parse(text: String): Length {
     var length = Length();
-    length.feet = (text.length() as double) * 3.0;
+    length.feet = (text.length as double) * 3.0;
     return length;
 }
 

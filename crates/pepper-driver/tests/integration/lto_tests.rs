@@ -18,7 +18,7 @@ fn project(name: &str) -> PathBuf {
     std::fs::write(dir.join("lib.pep"), "export twice(x: int): int { return x + x; }\n").unwrap();
     std::fs::write(
         dir.join("main.pep"),
-        "import \"lib\";\nmain(): int {\n    var words = Array<String>();\n    words.append(\"lto\");\n    return twice(21) - 42 + (words.count() as int) - 1;\n}\n",
+        "import \"lib\";\nmain(): int {\n    var words = Array<String>();\n    words.append(\"lto\");\n    return twice(21) - 42 + (words.count as int) - 1;\n}\n",
     )
     .unwrap();
     dir

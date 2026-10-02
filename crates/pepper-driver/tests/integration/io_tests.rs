@@ -146,13 +146,13 @@ main(): int {
 
     # components
     var c = io.Path("/usr//lib/./x/").components();
-    assert(c.count() == 4, "components count");
+    assert(c.count == 4, "components count");
     assert(c[0] == "/" && c[1] == "usr" && c[2] == "lib" && c[3] == "x", "components");
     var d = io.Path("./a/b").components();
-    assert(d.count() == 3 && d[0] == "." && d[1] == "a" && d[2] == "b", "leading . kept");
+    assert(d.count == 3 && d[0] == "." && d[1] == "a" && d[2] == "b", "leading . kept");
     var e = io.Path("a/../b").components();
-    assert(e.count() == 3 && e[1] == "..", ".. kept");
-    assert(io.Path("").components().count() == 0, "no components");
+    assert(e.count == 3 && e[1] == "..", ".. kept");
+    assert(io.Path("").components().count == 0, "no components");
 
     # normalize: rebuilt with the platform separator.
     assert(io.Path("a/./b/../c").normalize().to_string() == w("a/c"), "normalize");
@@ -166,7 +166,7 @@ main(): int {
     # relative / empty / equality
     assert(!io.Path("x").is_absolute() && io.Path("x").is_relative(), "relative");
     assert(!io.Path("").is_absolute(), "empty is not absolute");
-    assert(io.Path("").is_empty() && !io.Path("a").is_empty(), "is_empty");
+    assert(io.Path("").is_empty && !io.Path("a").is_empty, "is_empty");
     assert(io.Path.separator() == w("/"), "separator");
     assert(io.Path("a/b") == io.Path("a/b"), "==");
     assert(io.Path("a/b") != io.Path("a/c"), "!=");
@@ -192,7 +192,7 @@ main(): int {
         assert(io.Path("C:/x").parent().value().to_string() == "C:/", "parent of a top-level name keeps the root");
         assert(io.Path("C:/").parent().is_none(), "parent of a drive root");
         var wc = io.Path(w("C:/a/b")).components();
-        assert(wc.count() == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
+        assert(wc.count == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
         assert(io.Path("a").join("C:/x").to_string() == "C:/x", "join a drive path replaces");
         assert(io.Path(w("C:/a")).join("b").to_string() == w("C:/a/b"), "join under a drive");
     }
@@ -222,7 +222,7 @@ bytes_of(s: String): u8[] {
     var out = Array<u8>();
     var p = s.c_str() as __ptr<u8>;
     ulong i = 0;
-    while (i < s.size()) {
+    while (i < s.size) {
         out.append(p[i]);
         i = i + 1;
     }
@@ -231,7 +231,7 @@ bytes_of(s: String): u8[] {
 
 has_entry(list: DirEntry[], name: String): bool {
     ulong i = 0;
-    while (i < list.count()) {
+    while (i < list.count) {
         if (list[i].name == name) {
             return true;
         }
@@ -242,7 +242,7 @@ has_entry(list: DirEntry[], name: String): bool {
 
 entry(list: DirEntry[], name: String): DirEntry {
     ulong i = 0;
-    while (i < list.count()) {
+    while (i < list.count) {
         if (list[i].name == name) {
             return list[i];
         }
@@ -263,7 +263,7 @@ files_and_text(base: Path) {
     assert(File.write_bytes(bin, data).is_ok(), "write_bytes");
     var back = File.read_bytes(bin);
     assert(back.is_ok(), "read_bytes");
-    assert(back.value().count() == 256, "read_bytes size");
+    assert(back.value().count == 256, "read_bytes size");
     assert(back.value() == data, "read_bytes content");
 
     # Text round trip, including non-ASCII.
@@ -293,7 +293,7 @@ files_and_text(base: Path) {
     var cn = OpenOptions().write(true).create_new(true).open(t);
     assert(cn.is_err(), "create_new on existing");
     assert(cn.error().is_already_exists(), "create_new on existing");
-    assert(cn.error().message.size() > 0, "error message");
+    assert(cn.error().message.size > 0, "error message");
     var fresh = base.join("fresh.txt");
     var cn2 = OpenOptions().write(true).create_new(true).open(fresh);
     assert(cn2.is_ok(), "create_new on missing");
@@ -335,10 +335,10 @@ seeking(base: Path) {
     assert(f.seek_start(3).value() == 3, "seek_start");
     var buf = Array<u8>();
     assert(f.read(buf, 2).value() == 2, "read 2");
-    assert(buf.count() == 2 && buf[0] == 51 && buf[1] == 52, "read at 3");
+    assert(buf.count == 2 && buf[0] == 51 && buf[1] == 52, "read at 3");
     assert(f.seek_current(2).value() == 7, "seek_current");
     assert(f.read(buf, 10).value() == 3, "read to end");
-    assert(buf.count() == 5 && buf[2] == 55 && buf[4] == 57, "read appends");
+    assert(buf.count == 5 && buf[2] == 55 && buf[4] == 57, "read appends");
     assert(f.read(buf, 10).value() == 0, "EOF");
     assert(f.seek_current(-4).value() == 6, "seek back");
     var before_start = f.seek_current(-100);
@@ -355,7 +355,7 @@ seeking(base: Path) {
     assert(f.set_length(8).is_ok(), "set_length grow");
     assert(f.seek_current(0).value() == 2, "position kept");
     var all = File.read_bytes(p).value();
-    assert(all.count() == 8 && all[3] == 51 && all[4] == 0 && all[7] == 0, "zero-extended");
+    assert(all.count == 8 && all[3] == 51 && all[4] == 0 && all[7] == 0, "zero-extended");
 
     # Metadata of an open file.
     var md = f.metadata().value();
@@ -379,7 +379,7 @@ seeking(base: Path) {
     assert(ap.value().write_all("Z").is_ok(), "append");
     assert(ap.value().sync().is_ok(), "sync in append mode");
     assert(ap.value().close().is_ok(), "close append");
-    assert(File.read_bytes(p).value().count() == 9, "appended");
+    assert(File.read_bytes(p).value().count == 9, "appended");
 
     # A directory opens read-only but cannot be read.
     var dr = File.open(base);
@@ -413,7 +413,7 @@ directories(base: Path) {
     assert(blank.entries().error().is_not_found(), "list an empty path");
     var empty_dir = base.join("empty");
     assert(Directory.create(empty_dir).is_ok(), "create empty");
-    assert(Directory.open(empty_dir).value().entries().value().count() == 0, "list an empty directory");
+    assert(Directory.open(empty_dir).value().entries().value().count == 0, "list an empty directory");
     assert(Directory.remove(empty_dir).is_ok(), "remove empty");
 
     var opened = Directory.open(d);
@@ -421,7 +421,7 @@ directories(base: Path) {
     var entries = opened.value().entries();
     assert(entries.is_ok(), "entries");
     var list = entries.value();
-    assert(list.count() == 3, "three entries");
+    assert(list.count == 3, "three entries");
     assert(has_entry(list, "a.txt") && has_entry(list, "b.txt") && has_entry(list, "sub"), "entry names");
     var sub = entry(list, "sub");
     assert(sub.is_directory && !sub.is_file, "sub is a directory");
@@ -712,7 +712,7 @@ main(): int {
 "##;
 
 const IMPORT_NAMES_PROGRAM: &str =
-    "import [Path as P] from io;\nmain(): int { return P(\"ab\").to_string().size() as int - 2; }";
+    "import [Path as P] from io;\nmain(): int { return P(\"ab\").to_string().size as int - 2; }";
 
 #[test]
 fn stdout_is_a_file() {
@@ -757,7 +757,7 @@ struct Collector {
 
     write(data: u8[]): io.IoResult<ulong> {
         write_all(data);
-        return io.IoResult<ulong>.ok(data.count());
+        return io.IoResult<ulong>.ok(data.count);
     }
 
     write_all(data: u8[]): io.IoResult<void> {
@@ -819,7 +819,7 @@ struct Pieces {
 
     read(buffer: u8[], max: ulong): io.IoResult<ulong> {
         ulong count = 0;
-        while (count < max && count < 2 && position < data.count()) {
+        while (count < max && count < 2 && position < data.count) {
             buffer.append(data[position]);
             position += 1;
             count += 1;
@@ -843,8 +843,8 @@ joined(source: io.Reader): String {
 total<R: io.Reader>(source: R, size: ulong): ulong {
     ulong count = 0;
     for (var chunk in source.chunks(size)) {
-        assert(chunk.value().count() <= size, "a chunk is at most size bytes");
-        count += chunk.value().count();
+        assert(chunk.value().count <= size, "a chunk is at most size bytes");
+        count += chunk.value().count;
     }
     return count;
 }
@@ -893,7 +893,7 @@ fn file_closes_on_last_release() {
 fn io_is_a_module_not_prelude() {
     std::env::set_current_dir(repo_root()).unwrap();
     // Without an import, io is not loaded at all: Path is unknown.
-    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.to_string().size() as int; }")
+    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.to_string().size as int; }")
         .expect_err("Path visible without importing io");
     assert!(err.contains("Path"), "unexpected error: {err}");
     let _ = std::fs::remove_dir_all(source_dir("no_import"));
@@ -970,13 +970,13 @@ exercise(base: Path) {
         }
     }
     assert(seen == 1 && !it.next(), "sub once, then ended");
-    assert(dir.entries().value().count() == 3, "entries agrees");
+    assert(dir.entries().value().count == 3, "entries agrees");
 
     # Leaving early closes the listing: thousands of early exits do not run
     # out of handles.
     int i = 0;
     while (i < 3000) {
-        assert(first_name(dir).size() > 0, "first name");
+        assert(first_name(dir).size > 0, "first name");
         i += 1;
     }
 
@@ -991,19 +991,19 @@ exercise(base: Path) {
     # Lines: endings stripped, \r\n too, no empty line after a final ending.
     var p = base.join("lines.txt");
     var lines = lines_of("one\r\ntwo\n\nlast", p);
-    assert(lines.count() == 4, "four lines");
+    assert(lines.count == 4, "four lines");
     assert(lines[0] == "one" && lines[1] == "two" && lines[2] == "" && lines[3] == "last", "line text");
-    assert(lines_of("a\nb\n", p).count() == 2, "final newline");
-    assert(lines_of("", p).count() == 0, "empty file");
+    assert(lines_of("a\nb\n", p).count == 2, "final newline");
+    assert(lines_of("", p).count == 0, "empty file");
     var big = "";
-    while (big.size() < 200000) {
+    while (big.size < 200000) {
         big += "0123456789abcdef\n";
     }
-    assert(lines_of(big, p).count() == big.size() / 17, "lines across chunks");
+    assert(lines_of(big, p).count == big.size / 17, "lines across chunks");
     assert(File.write_bytes(p, [104 as u8, 255 as u8, 10 as u8]).is_ok(), "bad utf-8");
     var f = File.open(p).value();
     var bad = f.lines().to_array();
-    assert(bad.count() == 1 && bad[0].is_err() && bad[0].error().is_invalid_input(), "invalid UTF-8 ends the lines");
+    assert(bad.count == 1 && bad[0].is_err() && bad[0].error().is_invalid_input(), "invalid UTF-8 ends the lines");
 
 }
 

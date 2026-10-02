@@ -13,12 +13,12 @@ struct TemperatureLog {
     }
 
     average(): int {
-        return _is_empty() ? 0 : _total / (_readings.count() as int);
+        return _is_empty() ? 0 : _total / (_readings.count as int);
     }
 
     # A private method starts with `_` too.
     _is_empty(): bool {
-        return _readings.count() == 0;
+        return _readings.count == 0;
     }
 }
 

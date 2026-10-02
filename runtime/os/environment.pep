@@ -29,7 +29,7 @@ import "sys_windows";
 ##         return 0;
 ##     }
 export environment(name: String): String? {
-    if (name.empty()) {
+    if (name.is_empty) {
         return Optional<String>.none();
     }
     return _os_sys_environment(name);
@@ -60,10 +60,10 @@ export environment_variables(): HashMap<String, String> {
         # Search the bytes, not with `find`: a POSIX value need not be valid
         # UTF-8. The search starts at 1, past a Windows name's leading '='.
         ulong at = 1;
-        while (at < entry.size() && entry.byte_at(at) != '=') {
+        while (at < entry.size && entry.byte_at(at) != '=') {
             at = at + 1;
         }
-        if (at >= entry.size()) {
+        if (at >= entry.size) {
             continue;
         }
         __ptr<char> data = entry.c_str();

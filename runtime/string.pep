@@ -21,9 +21,9 @@ extern int snprintf(char* buffer, ulong size, char* format, ...);
 ##
 ## Two measures describe a String, and each API says which one it uses:
 ##
-## - **Code points** (Unicode characters): `length()`, `empty()`,
+## - **Code points** (Unicode characters): `length`, `is_empty`,
 ##   the indexer `s[i]`, `substr`, and iteration.
-## - **Bytes** of UTF-8: `size()`, `find`, `starts_with`, and
+## - **Bytes** of UTF-8: `size`, `find`, `starts_with`, and
 ##   `ends_with`. The byte size is the authoritative length, so the data may
 ##   contain NUL bytes. It is never derived from a terminator.
 ##
@@ -43,8 +43,8 @@ extern int snprintf(char* buffer, ulong size, char* format, ...);
 ##
 ## @example
 ##     var s = "héllo";
-##     assert(s.length() == 5, "5 code points");
-##     assert(s.size() == 6, "6 bytes: 'é' is 2");
+##     assert(s.length == 5, "5 code points");
+##     assert(s.size == 6, "6 bytes: 'é' is 2");
 ##     s.append(" world");
 ##     assert(s.find("world") == 7, "find returns a byte offset");
 ##     assert(s[1] == "é", "the indexer counts code points");
@@ -88,7 +88,7 @@ export struct String {
     ## @example
     ##     var empty = String();
     ##     var s = "abc";
-    ##     var copy = String(s.c_str(), s.size(), s.length());
+    ##     var copy = String(s.c_str(), s.size, s.length);
     construct(data: __ptr<char> = __null, size: ulong = 0, length: ulong = 0) {
         _size = size;
         _length = length;
@@ -134,7 +134,7 @@ export struct String {
     # does not start a valid sequence becoming U+FFFD: `text.Utf8.decode_lossy`,
     # here so prelude files (uri.pep) can use it without importing `text`.
     static _from_bytes(data: u8[]): String {
-        var size = data.count();
+        var size = data.count;
         if (size == 0) {
             return "";
         }
@@ -215,12 +215,12 @@ export struct String {
     }
 
     ## Returns a new array holding the String's UTF-8 bytes, without a
-    ## terminating NUL. Runs in O(size()).
+    ## terminating NUL. Runs in O(size).
     ##
-    ## @returns a new array of `size()` bytes
+    ## @returns a new array of `size` bytes
     ## @example
     ##     var data = "hi".bytes();
-    ##     assert(data.count() == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
+    ##     assert(data.count == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
     bytes(): u8[] {
         var result = Array<u8>(_size);
         ulong index = 0;
@@ -231,18 +231,19 @@ export struct String {
         return result;
     }
 
-    ## Returns the number of Unicode code points. O(1).
+    ## The number of Unicode code points. O(1).
     ##
-    ## @returns the length in code points, not bytes
     ## @see size
-    length(): ulong {
-        return _length;
+    var length: ulong {
+        get {
+            return _length;
+        }
     }
 
     ## Extends the byte buffer to `new_size` bytes and fills the new bytes
-    ## with zeros. Does nothing when `new_size` is not greater than `size()`.
+    ## with zeros. Does nothing when `new_size` is not greater than `size`.
     ##
-    ## A low-level primitive for `append`. It updates `size()` but not `length()`,
+    ## A low-level primitive for `append`. It updates `size` but not `length`,
     ## so the zero bytes it adds are not counted as code points until the
     ## caller overwrites them and fixes the length. When it grows the buffer,
     ## it invalidates running iterators and may reallocate the buffer, which invalidates
@@ -258,12 +259,12 @@ export struct String {
         }
     }
 
-    ## Appends the content of `rhs` to this String in place, updating `size()`
-    ## and `length()`.
+    ## Appends the content of `rhs` to this String in place, updating `size`
+    ## and `length`.
     ##
     ## Always invalidates running iterators, even when `rhs` is empty, so
     ## appending during iteration panics. It may reallocate the buffer. Every reference to
-    ## this String sees the change. Runs in O(size() + rhs.size()).
+    ## this String sees the change. Runs in O(size + rhs.size).
     ##
     ## @param rhs the String to append; it is not modified
     ## @example
@@ -286,14 +287,14 @@ export struct String {
     ## one-code-point String.
     ##
     ## A negative `idx` counts from the end (`s[-1]` is the last code point).
-    ## `length()` is added until the index is non-negative, so any negative
+    ## `length` is added until the index is non-negative, so any negative
     ## index wraps, and `s[-7]` of a 3-code-point String is `s[2]`. Runs in
     ## O(idx) because it walks the UTF-8 bytes. Use `for (var c in s)` to
     ## visit every code point in O(size).
     ##
     ## @param idx the code-point index; negative counts from the end
     ## @returns a new String that holds the one code point
-    ## @panics if `idx` is not less than `length()` after the negative index is
+    ## @panics if `idx` is not less than `length` after the negative index is
     ##   normalized, which includes any index into an empty String
     ## @example
     ##     var s = "TEST";
@@ -314,8 +315,8 @@ export struct String {
     }
 
     ## Returns whether this String and `rhs` have the same content, compared
-    ## byte by byte. Strings with different `length()` are unequal without
-    ## comparing bytes. Runs in O(size()).
+    ## byte by byte. Strings with different `length` are unequal without
+    ## comparing bytes. Runs in O(size).
     ##
     ## @param rhs the String to compare with
     ## @returns true when both hold the same bytes
@@ -344,13 +345,14 @@ export struct String {
         return this;
     }
 
-    ## Returns the number of bytes of UTF-8, not counting the NUL
+    ## The number of bytes of UTF-8, not counting the NUL
     ## terminator. O(1).
     ##
-    ## @returns the length in bytes, not code points
     ## @see length
-    size(): ulong {
-        return _size;
+    var size: ulong {
+        get {
+            return _size;
+        }
     }
 
     ## Returns an iterator over the String's code points, which makes String
@@ -374,11 +376,11 @@ export struct String {
         return it;
     }
 
-    ## Returns whether the String has no code points. O(1).
-    ##
-    ## @returns true when `length()` is 0
-    empty(): bool {
-        return _length == 0;
+    ## Whether the String has no code points. O(1).
+    var is_empty: bool {
+        get {
+            return _length == 0;
+        }
     }
 
     ## Returns the String's buffer as a NUL-terminated C string.
@@ -394,7 +396,7 @@ export struct String {
     }
 
     ## Returns a new String with the same content and its own buffer, so
-    ## later changes to either String do not affect the other. Runs in O(size()).
+    ## later changes to either String do not affect the other. Runs in O(size).
     ##
     ## This is also how `copy(value)` copies a String (the `Copyable<String>`
     ## implementation), which passes `copies`.
@@ -425,7 +427,7 @@ export struct String {
     ## `substr`, convert it with `String.length_of(s.c_str(), offset)`.
     ## An empty `needle` is found at 0 unless this String is empty, in which
     ## case the result is -1. The result is also -1 when either String is not
-    ## valid UTF-8. Runs in O(size() * needle.size()).
+    ## valid UTF-8. Runs in O(size * needle.size).
     ##
     ## With `from`, the search starts at that byte offset, which must be a
     ## code point boundary (an offset `find` returned, plus a match's size,
@@ -454,7 +456,7 @@ export struct String {
 
     ## Returns the byte offset of the last place `needle` occurs in this
     ## String, or -1 when it does not occur. An empty `needle` is found at
-    ## `size()`. Runs in O(size() * needle.size()).
+    ## `size`. Runs in O(size * needle.size).
     ##
     ## @param needle the text to search for
     ## @returns the byte offset of the last match, or -1 when there is none
@@ -483,14 +485,14 @@ export struct String {
     ## piece, and so does a separator at either end: `"a,,b".split(",")` is
     ## `["a", "", "b"]` and `",a".split(",")` is `["", "a"]`. A String
     ## without `separator`, the empty String included, gives one piece: the
-    ## whole String. Runs in O(size() * separator.size()).
+    ## whole String. Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
     ## @returns a new Array with one new String per piece
     ## @panics if `separator` is empty
     ## @example
     ##     var parts = "a,b,,c".split(",");
-    ##     assert(parts.count() == 4, "four pieces");
+    ##     assert(parts.count == 4, "four pieces");
     ##     assert(parts[2] == "", "an empty piece");
     split(separator: String): String[] {
         assert(separator._size > 0, "String.split: the separator is empty");
@@ -510,7 +512,7 @@ export struct String {
 
     ## Splits the String at the first occurrence of `separator`: the text
     ## before it and the text after it, or none when it does not occur.
-    ## Runs in O(size() * separator.size()).
+    ## Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
     ## @returns the pieces before and after the first `separator`, or none
@@ -545,7 +547,7 @@ export struct String {
     join(parts: String[]): String {
         var out = StringBuilder();
         ulong index = 0;
-        var count = parts.count();
+        var count = parts.count;
         while (index < count) {
             if (index > 0) {
                 out.append(this);
@@ -558,7 +560,7 @@ export struct String {
 
     ## Returns a copy of this String with every occurrence of `from` replaced
     ## by `to`, scanning left to right without overlaps: `"aaa".replace("aa",
-    ## "b")` is `"ba"`. Runs in O(size() * from.size()) plus the result's
+    ## "b")` is `"ba"`. Runs in O(size * from.size) plus the result's
     ## size.
     ##
     ## @param from the text to replace
@@ -586,7 +588,7 @@ export struct String {
 
     ## Returns whether `needle` occurs in this String (`find(needle) >= 0`).
     ## Because of that, an empty String contains nothing, not even `""`.
-    ## Runs in O(size() * needle.size()).
+    ## Runs in O(size * needle.size).
     ##
     ## @param needle the text to search for
     ## @returns true when `needle` occurs
@@ -595,10 +597,10 @@ export struct String {
     }
 
     ## Returns whether this String begins with the bytes of `prefix`. An
-    ## empty `prefix` always matches. Runs in O(prefix.size()).
+    ## empty `prefix` always matches. Runs in O(prefix.size).
     ##
     ## @param prefix the text to test for
-    ## @returns true when the first `prefix.size()` bytes equal `prefix`
+    ## @returns true when the first `prefix.size` bytes equal `prefix`
     starts_with(prefix: String): bool {
         if (prefix._size > _size) {
             return false;
@@ -610,10 +612,10 @@ export struct String {
     }
 
     ## Returns whether this String ends with the bytes of `suffix`. An empty
-    ## `suffix` always matches. Runs in O(suffix.size()).
+    ## `suffix` always matches. Runs in O(suffix.size).
     ##
     ## @param suffix the text to test for
-    ## @returns true when the last `suffix.size()` bytes equal `suffix`
+    ## @returns true when the last `suffix.size` bytes equal `suffix`
     ends_with(suffix: String): bool {
         if (suffix._size > _size) {
             return false;
@@ -628,7 +630,7 @@ export struct String {
     ## code-point index `start`. Both arguments count code points, not bytes.
     ##
     ## `count` is clamped to the code points that remain. When `start` is at
-    ## or past `length()`, the result is an empty String. Runs in O(size()).
+    ## or past `length`, the result is an empty String. Runs in O(size).
     ##
     ## @param start the code-point index of the first code point to copy
     ## @param count the maximum number of code points to copy
@@ -657,7 +659,7 @@ export struct String {
     }
 
     ## Returns whether this String and `rhs` differ in content, the negation
-    ## of `==`. Runs in O(size()).
+    ## of `==`. Runs in O(size).
     ##
     ## @param rhs the String to compare with
     ## @returns true when the contents differ
@@ -666,7 +668,7 @@ export struct String {
     }
 
     ## Returns a new String that holds this String followed by `rhs`. Neither
-    ## operand is modified. Runs in O(size() + rhs.size()).
+    ## operand is modified. Runs in O(size + rhs.size).
     ##
     ## @param rhs the String to append to the copy
     ## @returns a new concatenated String
@@ -693,9 +695,9 @@ export struct String {
     ## multi-byte code point is returned as it is. Compare the result with a
     ## character literal (`s.byte_at(0) == '#'`).
     ##
-    ## @param index the byte offset, less than `size()`
+    ## @param index the byte offset, less than `size`
     ## @returns the byte at `index`
-    ## @panics if `index` is not less than `size()` ("String byte_at index out of bounds")
+    ## @panics if `index` is not less than `size` ("String byte_at index out of bounds")
     ## @example
     ##     var s = "a=b";
     ##     assert(s.byte_at(1) == '=', "second byte");
@@ -711,14 +713,14 @@ export struct String {
     ## @param start the byte offset of the first byte to copy
     ## @param size the number of bytes to copy
     ## @returns a new String that holds those bytes
-    ## @panics if `start + size` is greater than `size()` ("String substr_bytes range out of bounds")
+    ## @panics if `start + size` is greater than `size` ("String substr_bytes range out of bounds")
     ## @panics if `start` or `start + size` falls inside a multi-byte code point
     ##   ("String substr_bytes splits a code point")
     ## @example
     ##     var s = "key=value";
     ##     var eq = s.find("=") as ulong;
     ##     assert(s.substr_bytes(0, eq) == "key", "before '='");
-    ##     assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+    ##     assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
     substr_bytes(start: ulong, size: ulong): String {
         assert(start <= _size && size <= _size - start, "String substr_bytes range out of bounds");
         assert(_is_boundary(start) && _is_boundary(start + size), "String substr_bytes splits a code point");
@@ -740,7 +742,7 @@ export struct String {
 
     ## Compares this String with `other` byte by byte, for sorting. For
     ## valid UTF-8 this is code-point order; a String that is a prefix of the
-    ## other orders first. Runs in O(min(size(), other.size())).
+    ## other orders first. Runs in O(min(size, other.size)).
     ##
     ## @param other the String to compare with
     ## @returns a negative number when this String orders before `other`, 0
@@ -806,7 +808,7 @@ export struct String {
 
     ## Returns a new String without the whitespace at the end: spaces, tabs,
     ## carriage returns, line feeds, vertical tabs and form feeds (ASCII
-    ## only). Runs in O(size()).
+    ## only). Runs in O(size).
     ##
     ## @returns a new String with the trailing whitespace removed
     ## @example
@@ -822,7 +824,7 @@ export struct String {
 
     ## Returns a new String without the whitespace at the start: spaces,
     ## tabs, carriage returns, line feeds, vertical tabs and form feeds
-    ## (ASCII only). Runs in O(size()).
+    ## (ASCII only). Runs in O(size).
     ##
     ## @returns a new String with the leading whitespace removed
     ## @example
@@ -836,7 +838,7 @@ export struct String {
     }
 
     ## Returns a new String without the whitespace at either end, as
-    ## `trim_start` and `trim_end` do. Runs in O(size()).
+    ## `trim_start` and `trim_end` do. Runs in O(size).
     ##
     ## @returns a new String with the leading and trailing whitespace removed
     ## @example
@@ -848,7 +850,7 @@ export struct String {
     ## Returns a new String with the ASCII letters `A` to `Z` changed to `a`
     ## to `z`. Every other character, including non-ASCII letters, is kept
     ## as it is, so the result is valid UTF-8 of the same size. Runs in
-    ## O(size()).
+    ## O(size).
     ##
     ## @returns a new String in lowercase
     ## @example
@@ -861,7 +863,7 @@ export struct String {
     ## Returns a new String with the ASCII letters `a` to `z` changed to `A`
     ## to `Z`. Every other character, including non-ASCII letters, is kept
     ## as it is, so the result is valid UTF-8 of the same size. Runs in
-    ## O(size()).
+    ## O(size).
     ##
     ## @returns a new String in uppercase
     ## @example
@@ -896,12 +898,12 @@ export struct String {
     ## endings. A line ends at `"\n"` or `"\r\n"`. A final line with no
     ## ending is included, but the end of the String after a final line
     ## ending does not start another line, so `"a\nb\n"` and `"a\nb"` both
-    ## give `["a", "b"]`, and `""` gives no lines. Runs in O(size()).
+    ## give `["a", "b"]`, and `""` gives no lines. Runs in O(size).
     ##
     ## @returns a new Array with one new String per line
     ## @example
     ##     var lines = "first\r\nsecond\n\nfourth".lines();
-    ##     assert(lines.count() == 4, "four lines");
+    ##     assert(lines.count == 4, "four lines");
     ##     assert(lines[1] == "second", "\\r\\n removed");
     ##     assert(lines[2] == "", "an empty line");
     lines(): String[] {
@@ -927,10 +929,10 @@ export struct String {
 
     ## Returns a new String that holds this String `count` times in a row.
     ## `count` 0, or an empty String, gives an empty String. Runs in
-    ## O(size() * count).
+    ## O(size * count).
     ##
     ## @param count how many copies to join
-    ## @returns a new String of `size() * count` bytes
+    ## @returns a new String of `size * count` bytes
     ## @example
     ##     assert("ab".repeat(3) == "ababab", "three copies");
     ##     var indent = " ".repeat(8);   # eight spaces
@@ -1116,7 +1118,7 @@ _float_text(value: double, single: bool): String {
         exponent = 0 - exponent;
     }
     var text = digits.to_string();
-    var count = text.size();
+    var count = text.size;
     while (count > 1 && text.byte_at(count - 1) == '0') {
         count = count - 1;
     }
@@ -1437,7 +1439,7 @@ const _ALIGN_RIGHT = 3;
 # (`_ALIGN_LEFT`, `_ALIGN_CENTER` or `_ALIGN_RIGHT`); centered text leans
 # left. With `zero`, pads with `0` after any leading sign instead.
 _pep_pad(text: String, fill: String, align: int, width: ulong, zero: bool): String {
-    var length = text.length();
+    var length = text.length;
     if (length >= width) {
         return text;
     }
@@ -1445,7 +1447,7 @@ _pep_pad(text: String, fill: String, align: int, width: ulong, zero: bool): Stri
     if (zero) {
         var sign = text.starts_with("-") || text.starts_with("+");
         if (sign) {
-            return text.substr_bytes(0, 1) + "0".repeat(missing) + text.substr_bytes(1, text.size() - 1);
+            return text.substr_bytes(0, 1) + "0".repeat(missing) + text.substr_bytes(1, text.size - 1);
         }
         return "0".repeat(missing) + text;
     }
@@ -1699,7 +1701,7 @@ export struct StringBuilder {
     }
 
     ## Appends the text of `text` and returns this builder, so calls can be
-    ## chained. Runs in amortized O(text.size()).
+    ## chained. Runs in amortized O(text.size).
     ##
     ## @param text the String to append; it is not modified
     ## @returns this StringBuilder
@@ -1727,26 +1729,26 @@ export struct StringBuilder {
         return this;
     }
 
-    ## Returns the number of bytes of UTF-8 appended so far. O(1).
-    ##
-    ## @returns the size in bytes
-    size(): ulong {
-        return _size;
+    ## The number of bytes of UTF-8 appended so far. O(1).
+    var size: ulong {
+        get {
+            return _size;
+        }
     }
 
-    ## Returns the number of code points appended so far. O(1).
-    ##
-    ## @returns the length in code points
-    length(): ulong {
-        return _length;
+    ## The number of code points appended so far. O(1).
+    var length: ulong {
+        get {
+            return _length;
+        }
     }
 
-    ## Returns whether nothing has been appended since the builder was
+    ## Whether nothing has been appended since the builder was
     ## created or last cleared. O(1).
-    ##
-    ## @returns true when `size()` is 0
-    empty(): bool {
-        return _size == 0;
+    var is_empty: bool {
+        get {
+            return _size == 0;
+        }
     }
 
     ## Removes all the text and keeps the buffer for reuse. O(1).
@@ -1756,7 +1758,7 @@ export struct StringBuilder {
     }
 
     ## Returns a new String holding the text appended so far. The builder
-    ## is unchanged. Runs in O(size()).
+    ## is unchanged. Runs in O(size).
     ##
     ## @returns a new String
     to_string(): String {

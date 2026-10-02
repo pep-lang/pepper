@@ -362,7 +362,7 @@ test(): int {
     var count = 0;
     var copy = "";
     for (var c in s) {
-        if (c.length() != 1) {
+        if (c.length != 1) {
             return 100;
         }
         copy.append(c);
@@ -477,7 +477,7 @@ test(): int {
     nums.append(2);
     for (var x in nums) {
     }
-    return nums.count() - 2;
+    return nums.count - 2;
 }
 "#,
     );
@@ -513,11 +513,11 @@ fn range_type_follows_its_bounds() {
 test(): int {
     var nums = [10, 20, 30];
     var total = 0;
-    for (var i in 0..nums.count()) {   # Range<ulong>
+    for (var i in 0..nums.count) {   # Range<ulong>
         total += nums[i];
     }
     ulong last = 0;
-    for (var i in 0..nums.count()) {
+    for (var i in 0..nums.count) {
         last = i;
     }
     byte count = 0;
@@ -539,7 +539,7 @@ test(): int {
     if (!r.contains(2) || !r.contains(4) || r.contains(5) || r.contains(1)) {
         return 1;
     }
-    if (!(2..>5).contains(5) || r.is_empty() || !(3..3).is_empty()) {
+    if (!(2..>5).contains(5) || r.is_empty || !(3..3).is_empty) {
         return 2;
     }
     r.next();                  # the loop below resumes where this left off

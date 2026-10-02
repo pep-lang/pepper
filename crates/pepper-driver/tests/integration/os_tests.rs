@@ -138,12 +138,12 @@ test(): int {
     var name = os.system_name();
     if (name != "linux" && name != "macos" && name != "windows") { return 1; }
     if (os.architecture() != "x64" && os.architecture() != "aarch64") { return 2; }
-    if (os.hostname().empty()) { return 3; }
+    if (os.hostname().is_empty) { return 3; }
     if (os.logical_cpus() < 1 || os.physical_cpus() < 1 || os.physical_cpus() > os.logical_cpus()) { return 4; }
     if (os.total_memory() < 16777216) { return 5; }
     var page = os.page_size();
     if (page < 4096 || (page & (page - 1)) != 0) { return 6; }
-    if (os.system_version().empty()) { return 7; }
+    if (os.system_version().is_empty) { return 7; }
     if (os.user_name().is_none()) { return 8; }
     if (os.home_directory().is_none()) { return 9; }
     if (os.temp_directory().to_string() != io.Directory.temp().to_string()) { return 10; }
@@ -174,7 +174,7 @@ import os;
 
 main(): int {
     var home = os.environment("HOME");
-    var count = os.environment_variables().count();
+    var count = os.environment_variables().count;
     var start = os.Instant.now();
     var now = os.SystemTime.now();
     print($"{os.system_name()} {os.system_os().name()} {os.system_version()} {os.architecture()} {os.hostname()}");

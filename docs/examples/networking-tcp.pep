@@ -19,7 +19,7 @@ main(): int {
     var request = Array<u8>();
     while (server.read(request, 4096).value() > 0) {
     }
-    assert(request.count() == 4, "the whole request arrived");
+    assert(request.count == 4, "the whole request arrived");
 
     # It answers, and the client reads exactly the bytes it expects.
     server.write_all("pong");

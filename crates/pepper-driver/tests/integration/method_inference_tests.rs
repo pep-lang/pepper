@@ -22,7 +22,7 @@ struct Walker {
         var list = Array<Node>();        # a generic constructor
         list.append(c);
         list.append(fresh);
-        return list[0].name.size() * 10 + list[1].name.size();
+        return list[0].name.size * 10 + list[1].name.size;
     }
 }
 test(): int {
@@ -42,7 +42,7 @@ struct Box {
     String pick() { return s; }
     int size_of_pick() {
         var v = pick();                  # Box.pick, a String, not ::pick
-        return v.size();
+        return v.size;
     }
 }
 test(): int {

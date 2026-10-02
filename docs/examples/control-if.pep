@@ -36,7 +36,7 @@ main(): int {
     # count check guards the index.
     var readings = Array<int>();
     var starts_high = false;
-    if (readings.count() > 0 && readings[0] > 100) {
+    if (readings.count > 0 && readings[0] > 100) {
         starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");

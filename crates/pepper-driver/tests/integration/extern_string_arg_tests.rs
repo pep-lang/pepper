@@ -35,7 +35,7 @@ test(): int {
 fn literal_to_pepper_function_is_still_a_string() {
     let (result, leaked) = compile_jit_census(
         r#"
-size_of(s: String): int { return s.size(); }
+size_of(s: String): int { return s.size; }
 test(): int {
     return size_of("four") - 4;
 }
@@ -59,20 +59,20 @@ struct Holder {
 int test() {
     # The String constructor takes the literal's bytes.
     var s = String("hello");
-    if (s.size() != 5) { return 1; }
-    if (s.length() != 5) { return 2; }
+    if (s.size != 5) { return 1; }
+    if (s.length != 5) { return 2; }
     if (s != "hello") { return 3; }
     # Variable initializer and assignment.
     __ptr<char> p = "abc";
     if (String(p) != "abc") { return 4; }
     p = "wxyz";
-    if (String(p).size() != 4) { return 5; }
+    if (String(p).size != 4) { return 5; }
     # Field through a constructor, return, and each arm of a ternary.
     var h = Holder("held");
     if (String(h.P) != "held") { return 6; }
     if (String(h.pick(true)) != "yes") { return 7; }
     if (String(h.pick(false)) != "no") { return 8; }
-    if (String(s.size() == 0 ? "t" : "f") != "f") { return 9; }
+    if (String(s.size == 0 ? "t" : "f") != "f") { return 9; }
     return 0;
 }
 "#,

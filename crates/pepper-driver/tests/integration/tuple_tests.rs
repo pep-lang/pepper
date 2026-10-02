@@ -392,7 +392,7 @@ test(): int {
         var names = 0;
         for (var (name, age) in ages) {
             total += age;
-            names += name.size() as int;
+            names += name.size as int;
         }
         if (total != 121 || names != 8) { return 1; }
         var seen = HashSet<String>();
@@ -400,7 +400,7 @@ test(): int {
         seen.insert("yy");
         var size = 0;
         for (var s in seen) {
-            size += s.size() as int;
+            size += s.size as int;
         }
         if (size != 3) { return 2; }
         for (var entry in ages) {
@@ -468,7 +468,7 @@ test(): int {
         a.append(("x", (n, 2)));
         a.append(("y", (n, 3)));
         var b = copy(a);
-        if (b.count() != 2 || b[1].0 != "y" || b[1].1.1 != 3) { return 1; }
+        if (b.count != 2 || b[1].0 != "y" || b[1].1.1 != 3) { return 1; }
         if (b[0].1.0 === n) { return 2; }
         if (b[0].1.0 !== b[1].1.0) { return 3; }
         b[0].1.0.value = 9;
@@ -561,13 +561,13 @@ describe(a: Shape, b: Shape): int {
             return 1;
         }
         (Circle, other) => {
-            return 10 + other.name().length();
+            return 10 + other.name().length;
         }
         (_, Line) => {
             return 3;
         }
         (x, _) => {
-            return 20 + x.name().length();
+            return 20 + x.name().length;
         }
     }
 }
@@ -584,7 +584,7 @@ classify(n: int, flag: bool): String {
 docs(a: Doc, n: int): int {
     match ((a, n)) {
         (Text(t), 0) => {
-            return t.length();
+            return t.length;
         }
         (Pair(l, r), k) => {
             return l + r + k;
@@ -601,7 +601,7 @@ docs(a: Doc, n: int): int {
 nested(p: (int, (bool, String))): int {
     match (p) {
         (1, (true, s)) => {
-            return s.length();
+            return s.length;
         }
         (_, (flag, "x")) => {
             return 7;

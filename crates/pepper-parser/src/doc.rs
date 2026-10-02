@@ -29,7 +29,7 @@
 //! member of one carries a doc comment that describes it and tags every
 //! parameter, generic parameter, and returned value.
 
-use crate::ast::{Declaration, FunctionDecl, GenericParam, Module, Span, VariableDecl};
+use crate::ast::{Declaration, FunctionDecl, GenericParam, Module, PropertyDecl, Span, VariableDecl};
 use crate::diagnostic::{Diagnostic, FileId, Loc};
 
 /// One tag of a doc comment: `@param count how many` is kind `param`, name
@@ -342,6 +342,7 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
                 for field in s.fields.iter().filter(|f| is_public(&f.name)) {
                     checker.field(field, &format!("{}.{}", s.name, field.name));
                 }
+                checker.properties(&s.name, &s.properties);
                 for c in &s.constructors {
                     let doc = checker.member_doc(c);
                     checker.function(c, &format!("{}.{}", s.name, c.name), doc, &[]);
@@ -352,9 +353,13 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
                 if checker.described(doc.as_ref(), &t.name, t.name_span) {
                     checker.generics(doc.as_ref().unwrap(), &t.name, &t.generic_params, t.name_span);
                 }
+                checker.properties(&t.name, &t.properties);
                 checker.methods(&t.name, &t.methods);
             }
-            Declaration::Extend(e) => checker.methods(&e.target.name, &e.methods),
+            Declaration::Extend(e) => {
+                checker.properties(&e.target.name, &e.properties);
+                checker.methods(&e.target.name, &e.methods);
+            }
             Declaration::TypeAlias(t) if is_public(&t.name) => {
                 if checker.described(doc.as_ref(), &t.name, t.name_span) {
                     checker.generics(doc.as_ref().unwrap(), &t.name, &t.generic_params, t.name_span);
@@ -408,6 +413,13 @@ impl Checker<'_> {
         for m in methods.iter().filter(|m| is_public_member(m)) {
             let doc = self.member_doc(m);
             self.function(m, &format!("{}.{}", owner, member_name(m)), doc, &m.generic_params);
+        }
+    }
+
+    fn properties(&mut self, owner: &str, properties: &[PropertyDecl]) {
+        for p in properties.iter().filter(|p| is_public(&p.name)) {
+            let doc = doc_comment_before(self.source, p.span.start);
+            self.described(doc.as_ref(), &format!("{}.{}", owner, p.name), p.name_span);
         }
     }
 

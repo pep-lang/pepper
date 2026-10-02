@@ -11,7 +11,7 @@ work() {
         with (var queue = jobs.lock()) {
             # Waits while the predicate holds; spurious wakeups are handled.
             # The predicate is given the locked value: it cannot capture it.
-            changed.wait_while((waiting: Array<long>): bool => waiting.count() == 0);
+            changed.wait_while((waiting: Array<long>): bool => waiting.count == 0);
             done.fetch_add(queue.remove_at(0));
             taken = taken + 1;
         }
@@ -33,7 +33,7 @@ main(): int {
 
     with (var queue = jobs.lock()) {
         # Gives up after 10 milliseconds: nothing is queued.
-        var ready = changed.wait_while_for(10, (waiting: Array<long>): bool => waiting.count() == 0);
+        var ready = changed.wait_while_for(10, (waiting: Array<long>): bool => waiting.count == 0);
         assert(!ready, "the time ran out");
     }
     return 0;

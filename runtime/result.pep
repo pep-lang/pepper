@@ -7,7 +7,7 @@ import "internals";
 ##
 ## @example
 ##     var r = Result<int>.err(Error("boom"));
-##     var n = r.error().message.length();   # 4
+##     var n = r.error().message.length;   # 4
 export struct Error {
     ## The description of what went wrong; empty when none was given.
     String message;
@@ -48,7 +48,7 @@ export struct Error {
 ##         if (a.value() != 42) { return 1; }
 ##         var b = Result<int>.err(Error("boom"));
 ##         if (!b.is_err()) { return 2; }
-##         var n = match (b) { Ok(v) => v, Err(e) => e.message.length() };   # 4
+##         var n = match (b) { Ok(v) => v, Err(e) => e.message.length };   # 4
 ##         return b.ok_or(0);   # 0
 ##     }
 [Value]

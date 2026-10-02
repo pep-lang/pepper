@@ -4,7 +4,7 @@ import process;
 # Runs a copy of this program as a child, so the example needs no other
 # program on any system: the child's first argument says what to do.
 main(args: String[]): int {
-    if (args.count() > 1) {
+    if (args.count > 1) {
         io.File.stdout().write_all("hello from " + args[1]);
         io.File.stderr().write_all("a warning");
         return 3;

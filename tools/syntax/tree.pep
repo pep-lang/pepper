@@ -56,6 +56,13 @@ export enum NodeKind {
     ## then `[;]`. A line break may stand in for the `;`, as for every simple
     ## statement.
     Variable,
+    ## A property of a struct, trait or extension: `[attribute]... var name
+    ## : TYPE ACCESSORS [= expression ;]`.
+    Property,
+    ## `{ ACCESSOR... }`: a property's accessors.
+    Accessors,
+    ## `(get | set) (; | BLOCK)`: one accessor of a property.
+    Accessor,
     ## `( PARAMETER, ... )`
     Parameters,
     ## One parameter: `name : TYPE [= expression]`, `TYPE name [= expression]`,
@@ -189,18 +196,18 @@ export struct Node {
         children.append(Node.of_token(token));
     }
 
-    ## Returns the number of children.
-    ##
-    ## @returns the number of tokens and nodes directly under this node
-    count(): ulong {
-        return children.count();
+    ## The number of children.
+    var count: ulong {
+        get {
+            return children.count;
+        }
     }
 
     ## Returns the child at `index`.
     ##
     ## @param index the position of the child, from 0
     ## @returns the child
-    ## @panics if `index` is not less than `count()`
+    ## @panics if `index` is not less than `count`
     child(index: ulong): Node {
         return children[index];
     }
@@ -233,7 +240,7 @@ export struct Node {
         if (kind == NodeKind.Token) {
             return leaf;
         }
-        return children[children.count() - 1].last_token();
+        return children[children.count - 1].last_token();
     }
 
     ## Returns whether any token under this node carries a comment.
