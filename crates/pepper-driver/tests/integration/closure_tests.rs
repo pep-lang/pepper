@@ -478,3 +478,90 @@ test(): int {
     // 18 + 27 + 10 + 12 + 14 = 81; 40.
     assert_eq!(run(src), (850, 0));
 }
+
+// #460: a closure in generic code calling another generic function, with
+// and without the type argument written out. The call is specialized with
+// the closure (`store<int>`), and the local holding the closure is typed in
+// each specialization even though the generic base cannot type it.
+#[test]
+fn closure_in_a_generic_function_calls_a_generic_function() {
+    let src = r#"
+store<T>(v: T): T { return v; }
+
+inferred<T>(v: T): T {
+    var f = () => store(v);
+    return f();
+}
+
+written<T>(v: T): T {
+    var f = () => store<T>(v);
+    return f();
+}
+
+statement<T>(v: T) {
+    var f = () => { store(v); };
+    f();
+}
+
+test(): int {
+    statement(1);
+    return inferred(40) + written(2);
+}
+"#;
+    assert_eq!(run(src), (42, 0));
+}
+
+#[test]
+fn closure_in_a_generic_method_calls_a_generic_function() {
+    let src = r#"
+store<T>(v: T): int { return 1; }
+
+struct Box {
+    var fs = Array<() => int>();
+    inferred<T>(v: T) { fs.append(() => store(v)); }
+    written<T>(v: T) { fs.append(() => store<T>(v)); }
+    local<T>(v: T): int {
+        var f = () => store(v);
+        return f();
+    }
+}
+
+test(): int {
+    var b = Box();
+    b.inferred(2);
+    b.written("s");
+    var sum = b.local(3.5);
+    for (var f in b.fs) {
+        sum += f();
+    }
+    return sum;
+}
+"#;
+    assert_eq!(run(src), (3, 0));
+}
+
+// A generic struct first specialized inside a generic function is
+// specialized late (in the fixpoint loop); its methods still type a bare
+// field (`v`), so a generic call on it is inferred.
+#[test]
+fn late_specialized_struct_calls_a_generic_function_with_a_field() {
+    let src = r#"
+store<T>(v: T): T { return v; }
+
+struct Holder<T> {
+    var v: T;
+    construct(v: T) { this.v = v; }
+    get(): T { return store(v); }
+    later(): () => T { return () => store(v); }
+}
+
+make<T>(v: T): T {
+    var h = Holder<T>(v);
+    var f = h.later();
+    return h.get() + f();
+}
+
+test(): int { return make(21); }
+"#;
+    assert_eq!(run(src), (42, 0));
+}

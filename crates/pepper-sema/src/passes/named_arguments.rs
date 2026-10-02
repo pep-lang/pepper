@@ -591,7 +591,7 @@ pub fn report_function_value(ty: &TypeName, args: &[Expression]) {
 
 /// Every name declared in `function`: its parameters and locals. A call by
 /// one of them goes through a value, not a function.
-fn declared_names(function: &FunctionDef) -> HashSet<String> {
+pub(crate) fn declared_names(function: &FunctionDef) -> HashSet<String> {
     let mut names: HashSet<String> = function.parameters.iter().map(|p| p.name.clone()).collect();
     fn block(b: &Block, names: &mut HashSet<String>) {
         for item in &b.items {

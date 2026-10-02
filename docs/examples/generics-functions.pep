@@ -32,6 +32,12 @@ fresh<T>(): Array<T> {
     return items;
 }
 
+# A closure in generic code is compiled with each use too: for `T = int`
+# it calls `larger<int>`.
+larger_later<T>(a: T, b: T): () => T {
+    return () => larger(a, b);
+}
+
 main(): int {
     # Type arguments come from the arguments, or can be written out.
     assert(larger(3, 9) == 9, "ints");
@@ -46,5 +52,7 @@ main(): int {
     squares.append(Square());
     assert(total_area<Square>(squares) == 4, "squares");
     assert(total_area(fresh<Circle>()) == 3, "a constructed Circle");
+    var pick = larger_later(4, 7);
+    assert(pick() == 7, "a closure calling a generic function");
     return 0;
 }

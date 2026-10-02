@@ -190,11 +190,14 @@ impl<'t> Scopes<'t> {
         self.symbol(name).cloned()
     }
 
+    /// A local declared in the code being walked (not a global).
+    fn local(&self, name: &str) -> Option<&TypeName> {
+        self.symbols[1..].iter().rev().find_map(|scope| scope.iter().find(|(sym, _)| sym == name).map(|(_, ty)| ty))
+    }
+
     fn symbol(&self, name: &str) -> Option<&TypeName> {
-        for scope in self.symbols[1..].iter().rev() {
-            if let Some((_, ty)) = scope.iter().find(|(sym, _)| sym == name) {
-                return Some(ty);
-            }
+        if let Some(ty) = self.local(name) {
+            return Some(ty);
         }
         if let Some(ty) = self.tables.globals.get(name) {
             return Some(ty);
@@ -389,6 +392,18 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // Parameters shadow globals (C++ scoping): a function's own
             // `s` is not the module-global `var s`.
             if let Some(ty) = scopes.find_param(id) {
+                return ty;
+            }
+            if let Some(ty) = scopes.local(id) {
+                return ty.clone();
+            }
+            // A bare field in its struct's methods, before
+            // `convert_member_refs` makes it `this.f` (a struct specialized
+            // inside the fixpoint loop, such as a generic function's
+            // closure, is converted only after it). Fields shadow globals.
+            if let Some(st) = current_struct
+                && let Some(ty) = scopes.field_type(st, id)
+            {
                 return ty;
             }
             if let Some(ty) = scopes.find_symbol(id) {

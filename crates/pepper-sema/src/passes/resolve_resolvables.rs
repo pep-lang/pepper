@@ -91,8 +91,14 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
 
     // Functions: resolve call targets in bodies.
     for function in &mut module.functions {
-        // `T()` in a generic base is a constructor its specializations name.
-        let type_params: Vec<String> = function.generic_params.iter().map(|p| p.name.clone()).collect();
+        // `T()` in a generic base is a constructor its specializations name,
+        // and `f()` on a local or parameter whose type depends on `T` (a
+        // closure calling a generic function) is a call through a value
+        // its specializations type.
+        let mut type_params: Vec<String> = function.generic_params.iter().map(|p| p.name.clone()).collect();
+        if function.is_generic_func {
+            type_params.extend(crate::passes::named_arguments::declared_names(function));
+        }
         if let Some(body) = &mut function.body {
             resolve_block(body, &view, report_missing, &type_params);
         }

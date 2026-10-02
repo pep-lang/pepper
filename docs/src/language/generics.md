@@ -69,6 +69,11 @@ Inference works through closures in both directions. In
 f: (T) => U)`, `words` gives `T`, which types the closure's parameter `w`, and
 the closure's result gives `U`.
 
+A closure inside a generic function or method is compiled with each use of
+it, so the generic calls in its body take their type arguments from that
+use: in `larger_later<T>(a: T, b: T)` above, `() => larger(a, b)` calls
+`larger<int>` when `T` is `int`.
+
 Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. `total_area<T>`
 calls `shape.area()`, so it works with any `T` that has an `area()` method
