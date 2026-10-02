@@ -18,6 +18,7 @@ use std::process::Command;
 
 use crate::support;
 use crate::support::repo_root;
+use crate::support::scratch_name;
 
 pub(crate) fn source_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pepper_io_{}_{}", name, std::process::id()))
@@ -74,11 +75,6 @@ pub(crate) fn assert_runs(name: &str, source: &str) -> String {
     // Keep a failing program's directory for inspection; drop a passing one.
     let _ = std::fs::remove_dir_all(source_dir(name));
     stdout
-}
-
-/// A scratch directory name for one test program, unique per test run.
-fn scratch_name(test: &str) -> String {
-    format!("pepper_io_scratch_{}_{}", test, std::process::id())
 }
 
 const PATH_PROGRAM: &str = r##"

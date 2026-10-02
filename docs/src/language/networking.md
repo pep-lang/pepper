@@ -82,6 +82,11 @@ A `File`, a `TcpStream`, a `UnixStream` and a `tls.TlsStream` have the
   `to_string` makes of any value, as the global `print` does on standard
   output; `print_line` adds a `\n`. Both return an `IoResult<void>`, like
   `write_all`.
+- `io.ByteReader(bytes)` reads an array of bytes as a stream, and
+  `io.ByteWriter()` collects what is written in its `bytes` array, for
+  code that takes a stream when the data is in memory.
+- `compress.DecompressReader` and `compress.CompressWriter` wrap another
+  stream (see [Compression and archives](compression.md)).
 - Another type gets them by providing those methods and declaring
   `extend MyStream with io.Reader;` or `extend MyStream with io.Writer;`.
 - `io.Print`, which gave only `print` and `print_line`, is deprecated: use

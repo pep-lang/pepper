@@ -9,6 +9,8 @@
 //!
 //! Run one module with a filter: `cargo test --test integration io_tests::`.
 
+mod archive_tests;
+mod compress_tests;
 mod support;
 
 mod arithmetic_c_semantics_tests;

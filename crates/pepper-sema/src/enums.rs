@@ -513,7 +513,11 @@ pub fn resolve_enum_cases(module: &mut Module) {
         crate::passes::walk_block(block, &mut resolve)
     };
     for_each_body(module, &mut in_block);
-    for st in &mut module.structs {
+    // A checked runtime's defaults were resolved when it was checked, and
+    // the cases they hold are located casts now, which the walk would
+    // report as written by the user.
+    let checked = &module.checked;
+    for st in module.structs.iter_mut().filter(|st| !checked.has_struct(&st.name)) {
         for field in &mut st.field_members {
             if let Some(default) = &mut field.default {
                 crate::passes::walk_expression(default, &mut resolve);
@@ -527,7 +531,7 @@ pub fn resolve_enum_cases(module: &mut Module) {
             }
         }
     }
-    for function in &mut module.functions {
+    for function in module.functions.iter_mut().filter(|f| !checked.has_function(&f.name)) {
         for p in &mut function.parameters {
             if let Some(default) = &mut p.default {
                 crate::passes::walk_expression(default, &mut resolve);

@@ -14,6 +14,7 @@
 ## - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 ## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
 ## - [Streams](io-stream.md): the `Reader` and `Writer` traits, `lines()` and `chunks()`
+## - [Streams in memory](io-memory.md): `ByteReader` and `ByteWriter`
 ## - [Print](io-print.md): deprecated; use `Writer`
 ## - [Errors and platform types](io-types.md): `IoError`, `ErrorKind`, `IoResult`, and handle types
 ##
@@ -35,6 +36,7 @@
 import "address";
 import "directory";
 import "file";
+import "memory";
 import "path";
 import "print";
 import "socket";
@@ -69,6 +71,8 @@ export Reader;
 export Writer;
 export Lines;
 export Chunks;
+export ByteReader;
+export ByteWriter;
 
 export DirEntry;
 export DirectoryIterator;
@@ -111,6 +115,9 @@ export _io_socket_send_all;
 export _io_sys_code_write_zero;
 export _io_in_task;
 export _io_text_copy;
+
+# For the compress and archive modules only: the code of invalid data.
+export _io_sys_code_invalid_input;
 
 # For the process module only: error text and Windows UTF-16 conversion.
 export _io_sys_error_message;
