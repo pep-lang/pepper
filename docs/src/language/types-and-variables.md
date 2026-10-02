@@ -492,15 +492,23 @@ Unary operators nest: `-~x` is `-(~x)`, and `!!x` is `!(!x)`, which turns a
 number into a `bool`. A struct can define its own operators, the truth test
 `!!` included (see [Operators](structs.md#operators)).
 
-`**` raises an integer to an integer power, and is right-associative:
-`2 ** 3 ** 2` is `2 ** 9`. The exponent can be any integer expression. A negative
-exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
-of -1, and 0 otherwise (`2 ** -1` is 0).
+`**` raises a number to a power, and is right-associative: `2 ** 3 ** 2` is
+`2 ** 9`. On two integers the result is an integer, and the exponent can be
+any integer expression. A negative exponent gives the truncated real result: 1
+for a base of 1, 1 or -1 for a base of -1, and 0 otherwise (`2 ** -1` is 0).
 
-Some operators have limits today:
+When either operand is a `float` or `double`, the result is floating point, by
+the usual conversions above: `2.0 ** 0.5` is the square root of 2, `2.0 ** -2`
+is 0.25, and `4 ** 0.5` is the `double` 2.0. An integer exponent of at most 32
+bits computes by repeated multiplication (LLVM's `powi`), which is fast but may
+differ from C's `pow` in the last bit; any other exponent calls `pow` itself.
+`**` on anything but numbers or a struct that defines it is an error:
 
-- **`**` works only on integers.** A floating-point operand is a compile error
-  (`unsupported op Pow`).
+```text
+main.pep:3:15: error: invalid operands to binary expression ('__ptr<int>' and 'int')
+    3 |     var q = p ** 2;
+      |               ^~
+```
 
 Operators bind in this order, tightest first:
 

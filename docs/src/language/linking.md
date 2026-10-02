@@ -16,7 +16,8 @@ the first `clang` on your `PATH`.
 
 Every program is linked with:
 
-- **Linux:** the C library, which clang adds.
+- **Linux:** the C library, which clang adds, and the math library (`m`),
+  which the Pepper compiler adds (a floating-point `**` calls its `pow`).
 - **macOS:** `libSystem`, which contains the C library, plus the SDK and
   platform-version flags. clang adds all of these, using the Xcode Command
   Line Tools.
@@ -27,8 +28,8 @@ Every program is linked with:
 
 Any library file named `lib<name>.a` in the runtime directory is linked too.
 
-Anything else must be linked explicitly. On Linux, that includes the math
-library (`m`) for functions such as `pow`, and `pthread` on older systems.
+Anything else must be linked explicitly. On Linux, that includes `pthread`
+on older systems.
 
 ## Linking a library from the source: `[Link]`
 

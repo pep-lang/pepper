@@ -90,7 +90,7 @@ driver::objects: Program::units, cache::unit_key, then per unit, on parallel thr
   cache::Cache::object            same bitcode → reuse the object, else emit + store
   → <build>/<name>.units/<unit>.o, plus the program module → <build>/<name>.o
 link_libraries (from [Link]) + -l + runtime/*.a
-linker::link → clang -o <out> <objs> -L… -l… (+ kernel32 user32 shell32 on Windows)
+linker::link → clang -o <out> <objs> -L… -l… (+ kernel32 user32 shell32 on Windows, m on Linux)
 ```
 
 The CLI produces an executable and never runs it. Tests usually stop after
@@ -1362,7 +1362,7 @@ libraries in this order: `-l` flags, then `runtime/*.a` (as
 deduplicated. `linker::link` invokes **clang as the link driver**,
 preferring `$LLVM_SYS_<NN>1_PREFIX/bin/clang` so the linker matches the
 LLVM the compiler was built against, and falling back to `clang` on PATH.
-`default_system_libraries` adds `kernel32 user32 shell32` on Windows. Link
+`default_system_libraries` adds `kernel32 user32 shell32` on Windows and `m` on Linux (float `**` calls `pow`). Link
 warnings are forwarded. Failures include both stdout and stderr, because
 MSVC's link.exe writes unresolved symbols to stdout.
 

@@ -9,6 +9,9 @@ main(): int {
     # Exponentiation is right-associative: 2 ** 3 ** 2 is 2 ** 9.
     assert(2 ** 10 == 1024, "power");
     assert(2 ** 3 ** 2 == 512, "right-associative");
+    # With a floating-point operand, the result is floating point.
+    assert(2.0 ** -2 == 0.25, "float power");
+    assert(9 ** 0.5 == 3.0, "square root");
 
     # Comparison yields a bool.
     var small = 3 < 5;

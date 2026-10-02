@@ -6111,9 +6111,26 @@ impl<'ctx> CodeGenerator<'ctx> {
         let ptr_elem_name = self
             .value_sema_type(lhs)
             .and_then(|ty| ty.strip_suffix('*').map(str::to_string));
-        let result = match self.checked_operands(*op, lhs_c, rhs_c, &result_ty, loc)? {
-            Some(result) => result,
-            None => apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem, ptr_elem_name.as_deref())?,
+        let result = if *op == BinaryOp::Pow && llvm_ops::is_float_type(&result_ty) {
+            self.float_pow(lhs_c, rhs_val, &rhs_name, &result_ty)?
+        } else {
+            match self.checked_operands(*op, lhs_c, rhs_c, &result_ty, loc)? {
+                Some(result) => result,
+                None => {
+                    let result = apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem, ptr_elem_name.as_deref())
+                        .map_err(|e| {
+                            if e.starts_with("unsupported op") {
+                                let display = |name: &str| pepper_sema::casts::spelled(&pepper_sema::type_name::TypeName::new(name));
+                                format!("invalid operands to binary expression ('{}' and '{}')", display(&lhs_name), display(&rhs_name))
+                            } else {
+                                e
+                            }
+                        });
+                    // At the operator, not the right operand.
+                    self.locate(&result, loc);
+                    result?
+                }
+            }
         };
         // Owned-rvalue operands are temporaries: released once the op has
         // consumed them.
@@ -6124,6 +6141,54 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.release_temp(&ty, rhs_val)?;
         }
         Ok(result)
+    }
+
+    /// `base ** exponent` with a floating-point result, through LLVM's
+    /// `llvm.powi` when the exponent is an integer of at most 32 bits and
+    /// `llvm.pow` otherwise (a float exponent, or a `long` that `powi`'s
+    /// `i32` could not hold). `base` is already converted to `result_ty`;
+    /// `exponent` is the unconverted right operand, typed `exponent_ty`.
+    fn float_pow(
+        &mut self,
+        base: BasicValueEnum<'ctx>,
+        exponent: BasicValueEnum<'ctx>,
+        exponent_ty: &str,
+        result_ty: &str,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let base = base.into_float_value();
+        let float_ty = base.get_type();
+        let (name, exponent) = match exponent {
+            BasicValueEnum::IntValue(i) if i.get_type().get_bit_width() <= 32 => {
+                let i32_ty = self.context.i32_type();
+                let widened = if i.get_type().get_bit_width() == 32 {
+                    i
+                } else if i.get_type().get_bit_width() == 1 || llvm_ops::is_unsigned_int_type(exponent_ty) {
+                    self.builder.build_int_z_extend(i, i32_ty, "powi_exp").map_err(|e| e.to_string())?
+                } else {
+                    self.builder.build_int_s_extend(i, i32_ty, "powi_exp").map_err(|e| e.to_string())?
+                };
+                // A `uint` above `i32::MAX` would turn negative in `powi`.
+                if llvm_ops::is_unsigned_int_type(exponent_ty) && i.get_type().get_bit_width() == 32 {
+                    let converted = llvm_ops::coerce(self.context, &self.builder, exponent, exponent_ty, result_ty);
+                    ("llvm.pow", converted)
+                } else {
+                    ("llvm.powi", widened.into())
+                }
+            }
+            _ => ("llvm.pow", llvm_ops::coerce(self.context, &self.builder, exponent, exponent_ty, result_ty)),
+        };
+        let intrinsic = inkwell::intrinsics::Intrinsic::find(name).ok_or_else(|| format!("no {}", name))?;
+        let mut overloaded: Vec<BasicTypeEnum<'ctx>> = vec![float_ty.into()];
+        if name == "llvm.powi" {
+            overloaded.push(self.context.i32_type().into());
+        }
+        let declaration = intrinsic.get_declaration(&self.module, &overloaded).ok_or_else(|| format!("no {}", name))?;
+        self.builder
+            .build_call(declaration, &[base.into(), exponent.into()], "pow")
+            .map_err(|e| e.to_string())?
+            .try_as_basic_value()
+            .basic()
+            .ok_or_else(|| format!("no {} result", name))
     }
 
     /// Resolve an lvalue expression to an Address (assignment target).

@@ -56,6 +56,10 @@ fn default_system_libraries() -> &'static [&'static str] {
     if cfg!(windows) {
         // Pepper's documented Windows defaults (docs/src/language/linking.md).
         &["kernel32", "user32", "shell32"]
+    } else if cfg!(target_os = "linux") {
+        // A floating-point `**` calls `pow`, which glibc keeps in libm
+        // (macOS has it in libSystem, Windows in the UCRT).
+        &["m"]
     } else {
         &[]
     }

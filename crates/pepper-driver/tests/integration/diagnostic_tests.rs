@@ -4671,3 +4671,13 @@ fn propagation_after_a_call() {
          \x20     |                                   ^~~~~"
     );
 }
+
+#[test]
+fn power_of_a_pointer_names_the_operand_types() {
+    assert_eq!(
+        error_of("power_pointer", "main(): int {\n    var p: __ptr<int> = __null;\n    var q = p ** 2;\n    return 0;\n}\n"),
+        "main.pep:3:15: error: invalid operands to binary expression ('__ptr<int>' and 'int')\n\
+         \x20   3 |     var q = p ** 2;\n\
+         \x20     |               ^~"
+    );
+}

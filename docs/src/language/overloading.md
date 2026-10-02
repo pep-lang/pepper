@@ -200,6 +200,9 @@ coexist:
 {{#include ../../examples/overloading-methods.pep}}
 ```
 
+- **Unary and binary operators of one symbol** are one set: a unary
+  `-()` and a binary `-(other: Money)` are told apart by their number of
+  parameters (see [Unary operators](structs.md#unary-operators)).
 - **A static method and an instance method may not share a name**, since a
   bare `of(x)` inside a method could mean either:
 
@@ -305,7 +308,6 @@ An expected type that matches no member is `address of overloaded function
 
 ## What is not supported yet
 
-- **Unary operators** cannot be declared at all yet.
 - **`extern` functions** do not overload.
 - **Overloads across modules** do not merge: two modules' sets of one name
   are ambiguous where both are imported, and a file's own functions of a
