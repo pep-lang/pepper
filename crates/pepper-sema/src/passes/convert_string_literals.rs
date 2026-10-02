@@ -3,7 +3,7 @@
 //! raw literal (kept as a `char*` global) that the ctor copies from; the
 //! second is the byte size, the third the character count.
 
-use crate::model::{Expression, Module, VariableDef};
+use crate::model::{Expression, Loc, Module, VariableDef};
 
 pub(crate) fn convert(expr: &mut Expression) {
     if let Expression::StringLiteral { value, is_raw, loc } = expr {
@@ -28,6 +28,15 @@ pub(crate) fn convert(expr: &mut Expression) {
             loc: *loc,
         };
     }
+}
+
+/// Whether the call `function(args)` at `loc` is one [`convert`] made from a
+/// string literal: it gives the call its literal's location, while a
+/// `String(...)` the user wrote has its own. Such a call always constructs
+/// the `String` type, even where a method or enum case named `String` is in
+/// scope.
+pub fn is_converted_literal(function: &str, args: &[Expression], loc: Loc) -> bool {
+    function == "String" && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, loc: literal, .. }) if *literal == loc)
 }
 
 fn walk_body(body: &mut crate::model::Block) {

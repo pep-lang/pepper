@@ -183,11 +183,7 @@ impl<'a> Checker<'a> {
         // global (`strlen("hi")`).
         let literal = match value {
             Expression::StringLiteral { is_raw: true, .. } => true,
-            // `convert_string_literals` gives the call its literal's location;
-            // a `String(...)` the user wrote has its own.
-            Expression::FunctionCall { function, args, loc } => {
-                function == "String" && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, loc: literal, .. }) if literal == loc)
-            }
+            Expression::FunctionCall { function, args, loc } => crate::passes::convert_string_literals::is_converted_literal(function, args, *loc),
             _ => false,
         };
         let actual = if literal && (matches!(value, Expression::StringLiteral { .. }) || matches!(self.kind_of(expected), Some(Kind::Pointer))) {

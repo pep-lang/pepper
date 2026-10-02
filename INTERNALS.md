@@ -979,7 +979,9 @@ time. `TypeName::is_auto` tests for `auto` without building a string.
    `module.globals` (see `Program::initialization_order`).
 3. **Codegen.** `codegen_struct` (patched ctor plus methods, mangled as
    `Struct.method` with an implicit `this` parameter 0; static methods have
-   no `this`) and `codegen_function`. Then `module.verify()`.
+   no `this`) and `codegen_function`. Then `module.verify()`. IR it
+   rejects is a type check sema missed; `verification_error` locates the
+   error at the first function the verifier rejects, and names it.
 
 How the language lowers:
 

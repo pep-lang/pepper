@@ -287,9 +287,12 @@ impl<'a> Lifter<'a> {
                 }
                 return;
             }
-            Expression::FunctionCall { function, loc, .. } => {
+            Expression::FunctionCall { function, args, loc } => {
                 let loc = *loc;
-                if let Some(v) = self.resolve(function) {
+                if crate::passes::convert_string_literals::is_converted_literal(function, args, loc) {
+                    // A converted string literal constructs the `String`
+                    // type, whatever the enclosing struct names `String`.
+                } else if let Some(v) = self.resolve(function) {
                     // A call through a local of function type.
                     self.use_var(v, loc);
                 } else if inside

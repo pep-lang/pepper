@@ -454,9 +454,29 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             debug.finish(&self.module);
         }
-        self.module
-            .verify()
-            .map_err(|e| format!("Module verification failed: {}", e.to_string()))
+        self.module.verify().map_err(|e| self.verification_error(module, &e.to_string()))
+    }
+
+    /// The error for a module LLVM rejected with `message`: located at the
+    /// first function the verifier rejects, and naming it. Such IR means a
+    /// type check sema missed; this keeps it from reaching the user without
+    /// a location.
+    fn verification_error(&mut self, module: &SemaModule, message: &str) -> String {
+        let first = message.lines().next().unwrap_or("").trim_end_matches(['!', '.']).to_string();
+        let mut declared: Vec<(String, Loc)> = vec![];
+        for st in &module.structs {
+            let fallback = |loc: Loc| if loc.is_none() { st.loc } else { loc };
+            declared.extend(st.constructors.iter().map(|c| (c.name.clone(), fallback(c.loc))));
+            declared.extend(st.method_members.iter().map(|m| (format!("{}.{}", st.name, m.name), fallback(m.loc))));
+        }
+        declared.extend(module.functions.iter().map(|f| (f.name.clone(), f.loc)));
+        let rejected = declared.into_iter().find(|(name, _)| self.functions.get(name).is_some_and(|f| !f.verify(false)));
+        let Some((name, loc)) = rejected else {
+            return format!("LLVM rejected the generated code: {}", first);
+        };
+        let error = format!("LLVM rejected the code generated for '{}': {}", pepper_parser::namespace::demangle_name(&name), first);
+        self.locate(&Err::<(), _>(error.clone()), loc);
+        error
     }
 
     /// The codegen pass for one unit: the bodies the unit owns, then every
@@ -6758,4 +6778,35 @@ fn statement_loc(stmt: &Statement) -> Loc {
 fn standard_counts(st: &StructDef) -> bool {
     let immortal_cases = st.enum_cases.as_ref().is_some_and(|cases| cases.iter().any(|c| c.payload.is_empty()));
     st.release.body.is_some() && !st.ty.is_weak() && !st.ty.is_function_type() && !immortal_cases
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// IR the verifier rejects is reported at the function it is in, by
+    /// name, not as an unlocated module failure (#408).
+    #[test]
+    fn a_verifier_failure_is_located_at_its_function() {
+        let source = "f(): int {\n    return 1;\n}\n";
+        let ast = pepper_parser::parser::parse_source("main.pep", source).expect("parse");
+        let mut module = pepper_sema::builder::build(&ast).expect("build");
+        pepper_sema::struct_body::apply(&mut module).expect("sema");
+        pepper_sema::passes::transform_pass(&mut module).expect("sema");
+        let context = Context::create();
+        let mut generator = CodeGenerator::new(&context, "test");
+        generator.generate(&module).expect("codegen");
+        // Break `f`: a block returning nothing from a function returning `int`.
+        let f = generator.functions["f"];
+        let block = context.append_basic_block(f, "broken");
+        generator.builder.position_at_end(block);
+        generator.builder.build_return(None).unwrap();
+        let message = generator.module.verify().unwrap_err().to_string();
+
+        let error = generator.verification_error(&module, &message);
+        assert!(error.starts_with("LLVM rejected the code generated for 'f': "), "{error}");
+        let declared = module.functions.iter().find(|function| function.name == "f").unwrap().loc;
+        assert!(!declared.is_none());
+        assert_eq!(generator.error_loc, Some((error, declared)));
+    }
 }

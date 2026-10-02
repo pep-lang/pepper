@@ -21,7 +21,9 @@ There are two kinds:
 
 `enum Name { ... }` lists the cases, separated by commas; a comma after the
 last case is optional. Case names are `PascalCase`, like types (see
-[naming conventions](naming.md)).
+[naming conventions](naming.md)). A case may share a type's name
+(`String(value: String)`); a string literal in the enum's methods is still
+a `String`, and `String(...)` there calls the case.
 
 Each case is an integer. The first case is 0 and each case after it is one
 more than the one before. A case can give its own value with `= value`, and

@@ -93,8 +93,10 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 // Convert function calls that are actually method calls. A
                 // static method is called on the struct, so a static
                 // method can call another by its bare name (there is no
-                // `this` there).
-                if methods.contains(function) {
+                // `this` there). A converted string literal constructs the
+                // `String` type even beside a method (or enum case) named
+                // `String`.
+                if methods.contains(function) && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) {
                     let method = function.clone();
                     let call_args = args.clone();
                     // A sibling static is called on the struct's name; any

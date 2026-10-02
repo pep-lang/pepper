@@ -1040,6 +1040,94 @@ test(): int {
 }
 
 #[test]
+fn a_chain_of_overloaded_indexers_lowers_every_index() {
+    // #408: `root["a"]["b"][3]` left its last index unlowered when the
+    // indexers were overloaded, and LLVM rejected the call on it.
+    let src = r#"
+enum Tree {
+    Leaf(value: int),
+    Branch(children: Array<Tree>),
+
+    [](index: ulong): Tree {
+        if (this is Branch(children)) {
+            return children[index];
+        }
+        return Tree.Leaf(-1);
+    }
+
+    [](name: String): Tree {
+        return Tree.Leaf(-2);
+    }
+
+    number(): int {
+        if (this is Leaf(value)) {
+            return value;
+        }
+        return -9;
+    }
+}
+
+test(): int {
+    var inner = Array<Tree>();
+    inner.append(Tree.Leaf(7));
+    var outer = Array<Tree>();
+    outer.append(Tree.Branch(inner));
+    var root = Tree.Branch(outer);
+    if (root["a"]["b"][3].number() != -1) { return 1; }
+    if (root[0]["x"][0].number() != -1) { return 2; }
+    return root[0][0].number();
+}
+"#;
+    assert_eq!(run(src), 7);
+}
+
+#[test]
+fn a_case_may_be_named_string() {
+    // #409: the case `String` must not take over the `String(...)` calls the
+    // compiler makes from string literals, in the enum's own methods (the
+    // built-in `name()` included) and closures.
+    let src = r#"
+enum Json {
+    Null,
+    Number(value: int),
+    String(value: String),
+    Array(items: Array<Json>),
+
+    describe(): String {
+        match (this) {
+            Null => { return "null"; }
+            Number(n) => { return $"number {n}"; }
+            String(s) => { return "<" + s + ">"; }
+            Array(items) => {
+                var count = (x: ulong): String => $"count {x}";
+                return count(items.count);
+            }
+        }
+        return "";
+    }
+
+    static text(s: String): Json {
+        return String(s);
+    }
+}
+
+test(): int {
+    var items = Array<Json>();
+    items.append(Json.Null);
+    var parts = Array<String>();
+    parts.append(Json.String("x").describe());
+    parts.append(Json.text("y").describe());
+    parts.append(Json.Number(4).describe());
+    parts.append(Json.Array(items).describe());
+    parts.append(Json.String("z").name());
+    var all = parts[0] + parts[1] + parts[2] + parts[3] + parts[4];
+    return all == "<x><y>number 4count 1String" ? 1 : 0;
+}
+"#;
+    assert_eq!(run(src), 1);
+}
+
+#[test]
 fn is_bindings_are_scoped_to_the_block() {
     let err = error_of(&format!("{}{}", SHAPE, "test(): int { var ok = Shape.Empty is Circle(r); return 0; }"));
     assert!(err.contains("cannot bind 'r' here: 'is' binds names only as the whole condition of an 'if' or 'while'"), "{err}");

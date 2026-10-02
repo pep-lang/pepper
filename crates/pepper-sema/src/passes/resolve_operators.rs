@@ -84,24 +84,72 @@ fn resolve_body(
     INDEX_TEMPORARIES.with(|c| c.set(next_index_temporary(body)));
     dispatch_operators(body, table, current);
     let mut targets = vec![];
-    // An overloaded operator names its set (`+`); pick the member. Nested
-    // calls type from the inside out, so repeat while that settles more.
-    if !overloads.is_empty() {
-        for _ in 0..4 {
-            let mut changed = false;
-            crate::passes::walk_block(body, &mut |expr: &mut Expression| {
-                if let Expression::MethodCall { method, .. } = expr {
-                    let before = method.clone();
-                    targets.extend(crate::passes::overloads::resolve_method_call(expr, overloads, table, current));
-                    changed |= matches!(expr, Expression::MethodCall { method, .. } if *method != before);
+    // The walk visits an index before its receiver, so `a[x][y]` lowers
+    // only `a[x]`; once that call has a type (its overload picked), the
+    // outer index can lower too. Repeat while an index lowers.
+    loop {
+        // An overloaded operator names its set (`+`); pick the member.
+        // Nested calls type from the inside out, so repeat while that
+        // settles more.
+        if !overloads.is_empty() {
+            for _ in 0..4 {
+                let mut changed = false;
+                crate::passes::walk_block(body, &mut |expr: &mut Expression| {
+                    if let Expression::MethodCall { method, .. } = expr {
+                        let before = method.clone();
+                        targets.extend(crate::passes::overloads::resolve_method_call(expr, overloads, table, current));
+                        changed |= matches!(expr, Expression::MethodCall { method, .. } if *method != before);
+                    }
+                });
+                if !changed {
+                    break;
                 }
-            });
-            if !changed {
-                break;
             }
+        }
+        let mut lowered = false;
+        crate::passes::walk_block(body, &mut |expr: &mut Expression| lowered |= lower_index(expr, table, current));
+        if !lowered {
+            break;
         }
     }
     targets
+}
+
+/// Lower the index `expr` (`x[i]`) to its receiver's `__index_get` call, or
+/// to raw `ArrayIndex` on a pointer; true when it changed. A receiver whose
+/// type is not known yet is left for a later try.
+fn lower_index(expr: &mut Expression, table: &StructTable, current: Option<&TypeName>) -> bool {
+    let Expression::Index { lhs, rhs, loc } = expr else {
+        return false;
+    };
+    let info = lhs_struct(lhs, table, current);
+    if info.is_some_and(|i| i.methods.contains("__index_get")) && !is_raw_buffer_field(lhs, table, current) {
+        // Replace the index op with a call to the index method.
+        let lhs = (**lhs).clone();
+        let rhs = (**rhs).clone();
+        *expr = Expression::MethodCall {
+            this: Box::new(lhs),
+            method: "__index_get".to_string(),
+            args: vec![rhs],
+            loc: *loc,
+        };
+    } else if info.is_none() && static_type::of(lhs, table, current).is_some_and(|t| t.is_pointer()) {
+        // A raw pointer receiver: Array indexing (element type
+        // resolved at codegen). Any other receiver is left alone
+        // for a later run: a `with` binding can still be typed as
+        // its scope's generic parameter (`T`) here, and becomes the
+        // struct whose indexer applies once specialization is done.
+        // Codegen handles a remaining `Index` like `ArrayIndex`.
+        let lhs = (**lhs).clone();
+        let rhs = (**rhs).clone();
+        *expr = Expression::ArrayIndex {
+            ty: TypeName::auto(),
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+            loc: *loc,
+        };
+    }
+    !matches!(expr, Expression::Index { .. })
 }
 
 fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
@@ -151,34 +199,8 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
                 };
             }
         }
-        Expression::Index { lhs, rhs, loc } => {
-            let info = lhs_struct(lhs, table, current);
-            if info.is_some_and(|i| i.methods.contains("__index_get")) && !is_raw_buffer_field(lhs, table, current) {
-                // Replace the index op with a call to the index method.
-                let lhs = (**lhs).clone();
-                let rhs = (**rhs).clone();
-                *expr = Expression::MethodCall {
-                    this: Box::new(lhs),
-                    method: "__index_get".to_string(),
-                    args: vec![rhs],
-                    loc: *loc,
-                };
-            } else if info.is_none() && static_type::of(lhs, table, current).is_some_and(|t| t.is_pointer()) {
-                // A raw pointer receiver: Array indexing (element type
-                // resolved at codegen). Any other receiver is left alone
-                // for a later run: a `with` binding can still be typed as
-                // its scope's generic parameter (`T`) here, and becomes the
-                // struct whose indexer applies once specialization is done.
-                // Codegen handles a remaining `Index` like `ArrayIndex`.
-                let lhs = (**lhs).clone();
-                let rhs = (**rhs).clone();
-                *expr = Expression::ArrayIndex {
-                    ty: TypeName::auto(),
-                    lhs: Box::new(lhs),
-                    rhs: Box::new(rhs),
-                    loc: *loc,
-                };
-            }
+        Expression::Index { .. } => {
+            lower_index(expr, table, current);
         }
         Expression::Binary { op, lhs, rhs, loc } => {
             // Resolve overloads on lhs: x + y → x.operator+(y). Only when
