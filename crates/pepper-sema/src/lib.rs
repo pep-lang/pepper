@@ -4,6 +4,7 @@ pub mod casts;
 pub mod checked;
 pub mod deprecation;
 pub mod enums;
+pub mod equatable;
 pub mod pass_timer;
 pub mod value_structs;
 pub mod value_types;

@@ -372,6 +372,9 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
+    // `[Equatable]` structs get their `==` and `__hash` first, so every
+    // later step treats them as declared.
+    crate::equatable::derive(module)?;
     // Checked declarations' bodies stay out of the passes.
     crate::checked::stash_bodies(module);
     // Enum names are integer types from here on (closure lifting asks).

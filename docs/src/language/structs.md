@@ -350,7 +350,10 @@ treated the same way: it is a condition only when its trait declares `!!`.
 Without an `==` method, `a == b` on two structs compares identity: it is true
 only when both refer to the same object, exactly like `a === b`. The same goes
 for `!=`. Define `==` when two distinct objects with the same contents should
-count as equal, as `String` and `Array` do; `!=` then follows from it. `===` and
+count as equal, as `String` and `Array` do; `!=` then follows from it. To
+compare field by field, mark the struct
+[`[Equatable]`](hashing.md#deriving-both-with-equatable), which derives `==`
+and `hash` together. `===` and
 `!==` always compare identity, whatever methods the struct declares, so
 `"a" + "b" == "ab"` is true while `"a" + "b" === "ab"` is false.
 

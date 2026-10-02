@@ -12,6 +12,7 @@ in order, see [Maps and sets](maps.md).
 | `String` | the content | the content |
 | A tuple | element by element | the elements' hashes, combined |
 | A [value struct](value-structs.md) | field by field | the fields' hashes, combined |
+| An [`[Equatable]`](#deriving-both-with-equatable) struct or enum | field by field | the fields' hashes, combined |
 | Any other struct | identity (`===`) | the object's address |
 
 ## Struct keys use identity by default
@@ -28,9 +29,37 @@ Identity is right for objects that stand for one thing: a connection, a
 node in a graph, a task. It is wrong for a struct that describes a value,
 such as a point or a record looked up by its fields.
 
+## Deriving both with `[Equatable]`
+
+Mark the struct `[Equatable]`, and the compiler writes both halves from its
+fields, so they cannot drift apart. It compares and hashes like a tuple of
+its fields: a field of a struct type uses that struct's `==` and `hash`, a
+`String` its content, and a null field equals only null. Mark a field
+`[NotCompared]` to leave it out of both:
+
+```pepper
+{{#include ../../examples/hashing-equatable.pep}}
+```
+
+- An [enum whose cases carry values](enums.md#cases-that-carry-values) can
+  be `[Equatable]` too: two values are equal when they hold the same case
+  and its values are equal.
+- A generic struct derives both for each specialization, from the fields
+  its type arguments give it.
+- An `[Equatable]` struct cannot also declare `==` or override `hash<T>`;
+  either is an error. To compare some other way, drop the attribute and
+  declare both by hand (below).
+- An `Array` field compares by its elements but hashes by its address, so
+  it adds nothing to the hash. Equal keys still hash equally; keys that
+  differ only in such a field share a hash, which costs speed. The same goes
+  for an `Array` in a tuple.
+- `[Equatable]` does not apply to a [value struct](value-structs.md) or an
+  enum whose cases carry nothing: they already compare and hash by content.
+
 ## Keying a struct by its content
 
-Give the struct both halves of the pair:
+To decide yourself what counts as equal, give the struct both halves of the
+pair:
 
 - an `==` [operator](structs.md#operators) that says when two keys are the
   same, and
@@ -63,7 +92,7 @@ Keep these rules in mind:
   main.pep:5:5: error: 'Point' declares '==' but no 'hash<Point>', so as a HashMap or HashSet key, equal values will not find each other
       5 |     ==(other: Point): bool {
         |     ^~
-  note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares
+  note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
   ```
 
   The runtime's own structs are not checked. An `Array` key's `==` compares

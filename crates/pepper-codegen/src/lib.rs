@@ -36,7 +36,7 @@ pub(crate) const HEAD_COUNT_NAME: &str = "head_count";
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
 use pepper_sema::model::{CastKind, Diagnostic, Loc};
 use pepper_sema::type_name::TypeName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// One codegen'd struct: LLVM struct type + size + method map (port of
 /// `source/Sema/Struct.cpp` layout + `Struct.h:99-103` method keys).
@@ -114,6 +114,10 @@ pub struct CodeGenerator<'ctx> {
     /// value struct is held by value like a tuple, and its layout has no
     /// header (see `pepper_sema::value_structs`).
     values: HashMap<String, Vec<String>>,
+    /// The program's own `hash<T>` overrides (`hash<String>`, `hash<Point>`),
+    /// by name; the generic `hash<T>`'s specializations, which hash by
+    /// identity, are not among them.
+    hash_overrides: HashSet<String>,
     /// A unit's value struct `__acquire`/`__release` thunks, declared but
     /// not yet defined: `codegen_unit` defines the ones its code calls, so
     /// the program's other instantiations do not reach the unit's code.
@@ -236,6 +240,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             tuples: HashMap::new(),
             tuple_order: Vec::new(),
             values: HashMap::new(),
+            hash_overrides: HashSet::new(),
             pending_value_thunks: Vec::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
@@ -305,6 +310,12 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
         self.index_check_files(&module.sources);
+        self.hash_overrides = module
+            .functions
+            .iter()
+            .filter(|f| f.name.starts_with("hash<") && f.generic_params.is_empty())
+            .map(|f| f.name.clone())
+            .collect();
         if self.debug_info {
             let unit_name = self.debug_unit_name(module);
             let optimized = self.opt_level != target::OptLevel::O0;
@@ -1657,9 +1668,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .builder
                 .build_extract_value(value.into_struct_value(), index as u32, "element")
                 .map_err(|e| e.to_string())?;
-            let own_hash = self.functions.contains_key(&format!("hash<{}>", element));
+            let own_hash = self.hash_overrides.contains(&format!("hash<{}>", element));
+            let derived = format!("{}.{}", element, pepper_sema::equatable::HASH_METHOD);
             let element_hash = if self.tuples.contains_key(element) || (self.values.contains_key(element) && !own_hash) {
                 self.tuple_hash(element, item)?
+            } else if self.functions.contains_key(&derived) {
+                // An `[Equatable]` struct hashes its fields; null as 0.
+                let pointer = self.object_pointer(item)?;
+                let zero = self.context.i64_type().const_zero();
+                self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&derived, vec![item])?.into_int_value()))?
+            } else if !own_hash && self.functions.contains_key(&format!("{}.==", element)) && matches!(item, BasicValueEnum::PointerValue(_)) {
+                // An object compared by its `==` but hashed by identity
+                // (an `Array`): equal elements would hash apart, so it
+                // adds nothing to the hash.
+                continue;
             } else if own_hash {
                 // A null reference hashes as 0, without the call.
                 let function = format!("hash<{}>", element);
@@ -4417,6 +4439,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let lowered = self.types.get(&ty.to_string());
                 let is_reference = lowered.is_some_and(|t| types::is_object(&t))
                     || self.is_trait_name(&ty.to_string());
+                let derived = format!("{}.{}", ty, pepper_sema::equatable::HASH_METHOD);
+                if self.functions.contains_key(&derived) {
+                    // An `[Equatable]` struct hashes its fields; null
+                    // hashes to the seed, as for any reference.
+                    let arg_temp = self.owned_temp_type(arg);
+                    let val = self.codegen_expr(arg)?;
+                    let pointer = self.object_pointer(val)?;
+                    let h = self.unless_null(&[pointer], seed, |this| Ok(this.call_function(&derived, vec![val])?.into_int_value()))?;
+                    if let Some(ty) = arg_temp {
+                        self.release_temp(&ty, val)?;
+                    }
+                    return Ok(h.into());
+                }
                 if self.tuples.contains_key(&ty.to_string()) || self.values.contains_key(&ty.to_string()) {
                     let arg_temp = self.owned_temp_type(arg);
                     let val = self.codegen_expr(arg)?;

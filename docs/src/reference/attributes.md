@@ -175,6 +175,26 @@ Why the struct cannot be copied.
 Makes a struct a value: stored inline and copied on assignment, with no
 reference count.
 
+## Equatable
+
+```pepper
+[Attribute] struct Equatable
+```
+
+Makes a struct, or an enum whose cases carry values, compare and hash
+by its fields, like a tuple of them, instead of by identity: the
+compiler derives its `==` and its `hash`, so equal values find each
+other as `HashMap` and `HashSet` keys.
+
+## NotCompared
+
+```pepper
+[Attribute] struct NotCompared
+```
+
+Leaves a field of an `[Equatable]` struct out of its derived `==` and
+`hash`.
+
 ## Shared
 
 ```pepper

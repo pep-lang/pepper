@@ -667,3 +667,165 @@ test(): int {
     assert_eq!(result, 0, "test() returned {}", result);
     assert_eq!(leaked, 0, "{} allocations leaked", leaked);
 }
+
+#[test]
+fn equatable_struct_keys_match_by_their_compared_fields() {
+    // `[Equatable]` derives `==` and the hash from the fields, leaving out a
+    // `[NotCompared]` one: the same paths as a hand-written pair, with no
+    // leaked references.
+    let (result, leaked) = jit_census(
+        r#"
+[Equatable]
+struct Person {
+    String name;
+    int id;
+    [NotCompared]
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+}
+
+test(): int {
+    var ages = HashMap<Person, int>();
+    var i = 0;
+    while (i < 100) {
+        ages[Person($"p{i}", i)] = i;
+        i = i + 1;
+    }
+    if (ages.count != 100) { return -1; }
+    if (ages[Person("p42", 42, "nick")] != 42) { return -2; }
+    if (ages.insert(Person("p7", 7), 70)) { return -3; }
+    if (ages[Person("p7", 7)] != 70 || ages.count != 100) { return -4; }
+    if (ages.contains(Person("p7", 8))) { return -5; }
+    if (!ages.remove(Person("p7", 7)) || ages.contains(Person("p7", 7))) { return -6; }
+    var people = HashSet<Person>();
+    people.insert(Person("Ada", 1, "A"));
+    if (people.insert(Person("Ada", 1, "Countess"))) { return -7; }
+    if (people[Person("Ada", 1)].nickname != "A") { return -8; }
+    if (Person("Ada", 1) != Person("Ada", 1, "B")) { return -9; }
+    if (Person("Ada", 1) == Person("Ada", 2)) { return -10; }
+    if (hash(Person("Ada", 1, "x")) != hash(Person("Ada", 1, "y"))) { return -11; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0, "test() returned {}", result);
+    assert_eq!(leaked, 0, "{} allocations leaked", leaked);
+}
+
+#[test]
+fn equatable_fields_that_are_null_arrays_or_structs_compare_consistently() {
+    // A null field equals only null; an `Array` field compares by its
+    // elements and, since its hash is its address, adds nothing to the hash;
+    // a field that is itself `[Equatable]` compares and hashes by content; a
+    // generic struct derives per specialization.
+    let (result, leaked) = jit_census(
+        r#"
+[Equatable]
+struct Inner {
+    String text;
+}
+
+[Equatable]
+struct Outer {
+    String label;
+    int[] values;
+    Inner inner;
+}
+
+[Equatable]
+struct Box<T> {
+    T value;
+}
+
+make(label: String, text: String): Outer {
+    var outer = Outer();
+    outer.label = label;
+    outer.values = [1, 2, 3];
+    outer.inner = Inner();
+    outer.inner.text = text;
+    return outer;
+}
+
+test(): int {
+    if (Outer() != Outer()) { return -1; }
+    if (Outer() == make("a", "b")) { return -2; }
+    if (make("a", "b") != make("a", "b")) { return -3; }
+    if (make("a", "b") == make("a", "c")) { return -4; }
+    if (hash(make("a", "b")) != hash(make("a", "b"))) { return -5; }
+    var other = make("a", "b");
+    other.values.append(4);
+    if (other == make("a", "b")) { return -6; }
+    var set = HashSet<Outer>();
+    set.insert(make("a", "b"));
+    if (!set.contains(make("a", "b"))) { return -7; }
+    var x = Box<String>();
+    x.value = "q";
+    var y = Box<String>();
+    y.value = "q";
+    if (x != y || hash(x) != hash(y)) { return -8; }
+    var boxes = HashSet<Box<int>>();
+    var z = Box<int>();
+    z.value = 3;
+    boxes.insert(z);
+    var w = Box<int>();
+    w.value = 3;
+    if (!boxes.contains(w)) { return -9; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0, "test() returned {}", result);
+    assert_eq!(leaked, 0, "{} allocations leaked", leaked);
+}
+
+#[test]
+fn equatable_enum_keys_match_by_case_and_values() {
+    let (result, leaked) = jit_census(
+        r#"
+[Equatable]
+enum Token {
+    Word(text: String),
+    Number(value: int),
+    End,
+}
+
+test(): int {
+    if (Token.Word("a") != Token.Word("a")) { return -1; }
+    if (Token.Word("a") == Token.Word("b")) { return -2; }
+    if (Token.Number(0) == Token.End) { return -3; }
+    if (Token.End != Token.End) { return -4; }
+    var counts = HashMap<Token, int>();
+    counts[Token.Word("x")] = 1;
+    counts[Token.Number(2)] = 2;
+    counts[Token.End] = 3;
+    if (counts[Token.Word("x")] != 1 || counts[Token.Number(2)] != 2 || counts[Token.End] != 3) { return -5; }
+    if (counts.contains(Token.Number(3))) { return -6; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(result, 0, "test() returned {}", result);
+    assert_eq!(leaked, 0, "{} allocations leaked", leaked);
+}
+
+#[test]
+fn tuple_keys_holding_arrays_find_equal_arrays() {
+    // An `Array` compares by its elements but hashes by its address, so a
+    // tuple's hash leaves it out: equal tuples hash equally.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var a: int[] = [1, 2];
+    var b: int[] = [1, 2];
+    if (hash((a, 5)) != hash((b, 5))) { return -1; }
+    var set = HashSet<(int[], int)>();
+    set.insert((a, 5));
+    if (!set.contains((b, 5))) { return -2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

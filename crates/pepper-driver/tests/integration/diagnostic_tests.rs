@@ -4316,7 +4316,7 @@ fn hash_key_with_equality_but_no_hash_is_an_error_at_the_operator() {
         "main.pep:3:5: error: 'Point' declares '==' but no 'hash<Point>', so as a HashMap or HashSet key, equal values will not find each other\n\
          \x20   3 |     ==(other: Point): bool { return x == other.x; }\n\
          \x20     |     ^~\n\
-         note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares"
+         note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both"
     );
 }
 
@@ -4330,7 +4330,7 @@ fn hash_key_with_hash_but_no_equality_is_an_error_at_the_override() {
         "main.pep:4:1: error: 'hash<Node>' is overridden but 'Node' declares no '==', so HashMap and HashSet keys still compare by identity\n\
          \x20   4 | hash<Node>(value: Node): u64 { return hash<int>(value.id); }\n\
          \x20     | ^~~~\n\
-         main.pep:1:8: note: declare '==(other: Node): bool' comparing the fields the hash uses\n\
+         main.pep:1:8: note: declare '==(other: Node): bool' comparing the fields the hash uses, or remove the override and mark 'Node' '[Equatable]' to derive both\n\
          \x20   1 | struct Node {\n\
          \x20     |        ^~~~"
     );
@@ -4344,6 +4344,68 @@ fn hash_keys_with_both_halves_or_neither_compile_cleanly() {
                   [Value]\nstruct Cell {\n    int row;\n}\n\
                   test(): int {\n    var a = HashSet<Point>();\n    var b = HashSet<Node>();\n    var c = HashSet<Cell>();\n    return a.count + b.count + c.count;\n}\n";
     assert_eq!(warnings_of(source), "");
+}
+
+// ── [Equatable] (`docs/src/language/hashing.md`) ────────────────────────────
+
+#[test]
+fn equatable_struct_declaring_its_own_equality_is_an_error_at_the_operator() {
+    let source = "[Equatable]\nstruct Point {\n    int x;\n    ==(other: Point): bool { return true; }\n}\n";
+    assert_eq!(
+        error_of("equatable_own_equality", source),
+        "main.pep:4:5: error: 'Point' is '[Equatable]', so its '==' is derived and cannot be declared\n\
+         \x20   4 |     ==(other: Point): bool { return true; }\n\
+         \x20     |     ^~\n\
+         note: remove this '==', or remove '[Equatable]' to declare both '==' and 'hash' by hand\n\
+         main.pep:1:1: note: '[Equatable]' is here\n\
+         \x20   1 | [Equatable]\n\
+         \x20     | ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn equatable_struct_overriding_its_hash_is_an_error_at_the_override() {
+    let source = "[Equatable]\nstruct Point {\n    int x;\n}\nhash<Point>(value: Point): u64 { return 1; }\n";
+    assert_eq!(
+        error_of("equatable_own_hash", source),
+        "main.pep:5:1: error: 'Point' is '[Equatable]', so its hash is derived and 'hash<Point>' cannot be overridden\n\
+         \x20   5 | hash<Point>(value: Point): u64 { return 1; }\n\
+         \x20     | ^~~~\n\
+         note: remove this override, or remove '[Equatable]' to declare both '==' and 'hash' by hand\n\
+         main.pep:2:8: note: 'Point' declared here\n\
+         \x20   2 | struct Point {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn not_compared_outside_an_equatable_struct_is_an_error_at_the_attribute() {
+    let source = "struct Point {\n    [NotCompared]\n    int x;\n}\n";
+    assert_eq!(
+        error_of("not_compared_alone", source),
+        "main.pep:2:5: error: '[NotCompared]' applies only to a field of an '[Equatable]' struct\n\
+         \x20   2 |     [NotCompared]\n\
+         \x20     |     ^~~~~~~~~~~~~\n\
+         main.pep:1:8: note: mark 'Point' '[Equatable]' to derive '==' and 'hash' from its fields\n\
+         \x20   1 | struct Point {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn equatable_on_a_value_or_a_plain_enum_is_an_error_at_the_attribute() {
+    assert_eq!(
+        error_of("equatable_value", "[Value]\n[Equatable]\nstruct Cell {\n    int row;\n}\n"),
+        "main.pep:2:1: error: '[Equatable]' does not apply to value type 'Cell': a value already compares and hashes by its fields\n\
+         \x20   2 | [Equatable]\n\
+         \x20     | ^~~~~~~~~~~"
+    );
+    assert_eq!(
+        error_of("equatable_enum", "[Equatable]\nenum Color { Red, Green }\n"),
+        "main.pep:1:1: error: '[Equatable]' does not apply to enum 'Color': its cases carry no values, so it already compares and hashes by case\n\
+         \x20   1 | [Equatable]\n\
+         \x20     | ^~~~~~~~~~~"
+    );
 }
 
 // Properties (`docs/src/language/properties.md`).

@@ -751,7 +751,19 @@ cross-compilation.
 
 ### 2.6 Struct bodies (`struct_body.rs`)
 
-`struct_body::apply` first runs `passes::closures::lift_closures`, which
+`struct_body::apply` first runs `equatable::derive`, which gives each
+`[Equatable]` struct (or reference enum) a synthesized `==(other: T): bool`
+comparing the tuples of its fields (`(this.a, this.b) == (other.a,
+other.b)`, a lone field paired with `true`) and `__hash(): u64` returning
+`hash` of the same tuple, leaving out `[NotCompared]` fields; codegen's
+`__address<T>` and `tuple_hash` call `T.__hash` for a non-null `T`, and
+`tuple_hash` leaves out an object element whose `==` is declared but whose
+hash would be its address (an `Array`), since equal elements would hash
+apart (codegen's `hash_overrides` tells a program's `hash<T>` override from
+the generic's specialization). It reports `[Equatable]` on a value type or
+a payload-free enum, an `[Equatable]` struct's own `==`, and a stray
+`[NotCompared]`.
+Then it runs `passes::closures::lift_closures`, which
 turns every closure literal into a synthesized struct
 `__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
 over the enclosing code's type parameters, and a `MakeClosure` creation
@@ -997,7 +1009,7 @@ several passes run more than once on purpose.
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 | final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (a guarded arm's patterns handle nothing, but one after an unguarded arm for its case is still handled twice) (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `module.warnings`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`check_arm_types`). `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). Over a trait value (`trait_arm`, §4.2) each pattern's `ty` must name a struct that declares the trait or another trait (`trait_target`), each type is handled once, a binding becomes `FromTrait`, and a `match` expression needs an `else`. A case pattern's values (`enum_test`) are tested on their payload fields after the tag (`element_test` over `case_field`, typed by `case_payload_types`), and the `CaseValue`s the builder left in nested tests are lowered to fields (`lower_case_values`, `typed_path`). A pattern nested in a case's values handles part of the case: it is a row of the match's `spaces`, and `check_exhaustive` counts a case no pattern handles whole as handled when those rows cover it, else names the value they miss. A `match` over a tuple (`lower_tuple_arm`) tests each element on its path (`element_test`, `&&` over the elements), resolves each bare element name to a case or a binding and drops the local of one that is a case (reporting one that binds where it may not), and checks coverage with the usefulness algorithm (`useful` over `Space`s, a case with the spaces of its values, with each enum's and `bool`'s cases and their value types as `Domains`): a pattern the earlier ones cover is an error, a value no arm covers is reported with an example (`does not handle '(Line, _)'`), and an `else` after full coverage is a warning. |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
-| final | `check_hash_keys` | Errors: for each key type of a `_HashTable<K, V>` specialization (every `HashMap` and `HashSet` key), a struct that declares `==(other: K)` but no `hash<K>` override (a function of that name with no type parameters; the generic's own specialization keeps them), and a reference struct with the override but no `==`. Each is reported (`errors::report`) at the declaration to complete. Structs declared in the runtime (`passes::RuntimeDirectory`, shared with `check_confinement`) are skipped. |
+| final | `check_hash_keys` | Errors: for each key type of a `_HashTable<K, V>` specialization (every `HashMap` and `HashSet` key), a struct that declares `==(other: K)` but no `hash<K>` override (a function of that name with no type parameters; the generic's own specialization keeps them), and a reference struct with the override but no `==`. Each is reported (`errors::report`) at the declaration to complete. Structs declared in the runtime (`passes::RuntimeDirectory`, shared with `check_confinement`) are skipped, and so are `[Equatable]` structs, whose hash is derived; overriding `hash<T>` for one is an error at the override. |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `walk_expression`, `walk_function`, `walk_global`, and
@@ -2339,6 +2351,8 @@ To give one meaning, read it where it applies:
 - `[NotCopyable("why")]` → `passes/copies.rs`
 - `[Implicit]` → `StructDef::implicit_from`, checked in `builder.rs` and
   applied by `convert_to_traits`
+- `[Equatable]` (structs, reference enums) and `[NotCompared]` (their
+  fields) → `equatable.rs` (§2.6), checked again by `check_hash_keys`
 
 An attribute's arguments may be named, as in a call (`[Link(name =
 "sym")]`): `ast::Attribute::name()` and `arguments()` read them. Validate the

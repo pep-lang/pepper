@@ -27,6 +27,29 @@ pub fn check_hash_keys(module: &mut Module) {
         .collect();
     let runtime = super::RuntimeDirectory::default();
     let mut errors = vec![];
+    // An `[Equatable]` struct's hash is derived with its `==`; an override
+    // would replace one half.
+    for st in module.structs.iter().filter(|st| is_derived(st)) {
+        let hash_name = format!("hash<{}>", st.name);
+        if let Some(hash) = module.functions.iter().find(|f| f.name == hash_name && f.generic_params.is_empty()) {
+            errors.push(
+                Diagnostic::error(format!(
+                    "'{}' is '[{}]', so its hash is derived and '{hash_name}' cannot be overridden",
+                    st.name,
+                    crate::equatable::EQUATABLE_ATTRIBUTE
+                ))
+                .at(hash.loc)
+                .with_note(
+                    format!(
+                        "remove this override, or remove '[{}]' to declare both '==' and 'hash' by hand",
+                        crate::equatable::EQUATABLE_ATTRIBUTE
+                    ),
+                    None,
+                )
+                .with_note(format!("'{}' declared here", st.name), Some(st.loc)),
+            );
+        }
+    }
     let mut sorted: Vec<&String> = keys.iter().collect();
     sorted.sort();
     for key in sorted {
@@ -45,6 +68,9 @@ pub fn check_hash_keys(module: &mut Module) {
         // own specialization for `key` has the same name but keeps them.
         let hash = module.functions.iter().find(|f| f.name == hash_name && f.generic_params.is_empty());
         let is_value = st.is_value();
+        if is_derived(st) {
+            continue;
+        }
         match (equality, hash) {
             (Some(equality), None) => errors.push(
                 Diagnostic::error(format!(
@@ -52,7 +78,10 @@ pub fn check_hash_keys(module: &mut Module) {
                 ))
                 .at(equality.loc)
                 .with_note(
-                    format!("declare '{hash_name}(value: {key}): u64' hashing the fields '==' compares"),
+                    format!(
+                        "declare '{hash_name}(value: {key}): u64' hashing the fields '==' compares, or remove '==' and mark '{key}' '[{}]' to derive both",
+                        crate::equatable::EQUATABLE_ATTRIBUTE
+                    ),
                     None,
                 ),
             ),
@@ -61,7 +90,13 @@ pub fn check_hash_keys(module: &mut Module) {
                     "'{hash_name}' is overridden but '{key}' declares no '==', so HashMap and HashSet keys still compare by identity"
                 ))
                 .at(hash.loc)
-                .with_note(format!("declare '==(other: {key}): bool' comparing the fields the hash uses"), Some(st.loc)),
+                .with_note(
+                    format!(
+                        "declare '==(other: {key}): bool' comparing the fields the hash uses, or remove the override and mark '{key}' '[{}]' to derive both",
+                        crate::equatable::EQUATABLE_ATTRIBUTE
+                    ),
+                    Some(st.loc),
+                ),
             ),
             _ => {}
         }
@@ -69,4 +104,9 @@ pub fn check_hash_keys(module: &mut Module) {
     for error in errors {
         crate::errors::report(error);
     }
+}
+
+/// Whether `st` is `[Equatable]`: its `==` and hash are derived together.
+fn is_derived(st: &StructDef) -> bool {
+    st.method_members.iter().any(|m| m.name == crate::equatable::HASH_METHOD)
 }

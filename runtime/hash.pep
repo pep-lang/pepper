@@ -20,7 +20,8 @@ import "internals";
 ## - `String` hashes by content through the concrete `hash<String>`
 ##   override, so equal strings at different addresses collide.
 ##
-## A struct whose keys should match by content instead declares an `==`
+## A struct whose keys should match by content is marked `[Equatable]`,
+## which derives its `==` and its hash from its fields, or declares an `==`
 ## operator and overrides this function for itself, hashing the fields `==`
 ## compares: `hash<Point>(value: Point): u64`. Keys that are `==` must hash
 ## equally (see the "Hashing and equality" chapter of the book).

@@ -92,7 +92,12 @@ reference counted like a [struct](structs.md).
 - Each case that carries nothing is a single object that every use shares.
   It is never freed and costs no allocation, however often it is used.
 - A slot of the enum type that is not given a value holds null, as a struct
-  slot does. `===` and `!==` compare identity.
+  slot does. `===` and `!==` compare identity, and so does `==`, unless the
+  enum is `[Equatable]`.
+- Mark the enum [`[Equatable]`](hashing.md#deriving-both-with-equatable) to
+  derive `==` and `hash` from its cases: two values are equal when they hold
+  the same case with equal values, so they work as `HashMap` and `HashSet`
+  keys.
 - An enum can have type parameters (`enum List<T>`), and its cases can hold
   the enum itself, directly or through other types, so lists and trees are
   enums.
