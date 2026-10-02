@@ -148,9 +148,10 @@ A number converts to an integer type when it has no fraction and fits
 the type, and to `float` or `double` always. `null` converts only to an
 `Optional` (as none) and to `JsonValue`.
 
-An error names where in the document it is, as a path from the root `$`,
-and has no line or column: `$.server.port: expected a number, found a
-string`.
+An error names where in the document it is, as a path from the root `$`
+in its `value_path` and at the start of its message, and has no line or
+column, since there is no text: `$.server.port: expected a number, found
+a string`.
 
 **Type parameters**
 - `T` — the type to convert to
@@ -197,7 +198,7 @@ Parses JSON text and converts it to a `T`: `parse`, then `from_json`.
 - `path` — the name of the text (a file name, say), which the error's `to_string()` puts first
 
 **Returns**
-- the value, or the first error: a syntax error with its line and column, or a conversion error with its path in the document
+- the value, or the first error: a syntax error, or a conversion error with its path in the document; either has its line and column
 
 **Example**
 ```pepper
@@ -218,7 +219,7 @@ Parses JSON text and converts it to a `T`: `parse`, then `from_json`.
         assert(config.value().timeout.is_none(), "a missing optional");
 
         var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
-        assert(bad.error().to_string() == "server.json: error: $.port: expected a number, found a string", "a path");
+        assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
         return 0;
     }
 ```

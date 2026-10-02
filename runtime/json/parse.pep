@@ -15,15 +15,18 @@ export struct JsonError {
     ## The path given to `parse`, which names the text in `to_string()`;
     ## empty when none was given.
     var path: String;
-    ## The line of the error, from 1; 0 for an error from `decode` or
-    ## `from_json` that is about a value rather than the text, whose
-    ## `message` starts with the value's path (`$.server.port: ...`).
+    ## The line of the error, from 1; 0 for an error from `from_json`, which
+    ## has no text to point into.
     var line: ulong;
     ## The column of the error, from 1, counting bytes as clang does; 0
     ## when `line` is.
     var column: ulong;
     ## The byte offset of the error in the text, from 0.
     var offset: ulong;
+    ## Where in the document the value an error is about is, as a path from
+    ## the root `$` (`$.server.port`); empty for an error in the text's
+    ## syntax. `decode` and `from_json` set it, and start `message` with it.
+    var value_path: String;
 
     ## Creates an error.
     ##
@@ -95,6 +98,35 @@ export parse(
     return parser.run();
 }
 
+# The byte offset in `text`, which must parse, of the value at `value_path`
+# (`$.server.port`, as `_json_path_key` writes it), or none when it is not
+# there. Parses the text again, so it is only for errors.
+export _json_locate(text: String, comments: bool, value_path: String): ulong? {
+    var parser = _JsonParser(text, comments, "", 1000000);
+    parser._find = value_path;
+    parser.run();
+    if (parser._found >= 0) {
+        return Optional<ulong>.some(parser._found as ulong);
+    }
+    return Optional<ulong>.none();
+}
+
+# `path.key`, or `path["key"]` when the key is not an identifier: how a
+# value's path in a document is written.
+export _json_path_key(path: String, key: String): String {
+    var plain = !key.is_empty;
+    for (var b in key.bytes()) {
+        var letter = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_';
+        if (!letter && !(b >= '0' && b <= '9')) {
+            plain = false;
+        }
+    }
+    if (plain) {
+        return $"{path}.{key}";
+    }
+    return $"{path}[{JsonValue.String(key).to_string()}]";
+}
+
 # Reads one value from `_text`. Each method that can fail returns false
 # after recording the first error in `_error`.
 struct _JsonParser {
@@ -114,6 +146,10 @@ struct _JsonParser {
     String _false;
     String _null;
     String _no_key;
+    # With `_json_locate`: the path of the value to find, and its offset
+    # once found (-1 until then).
+    String _find;
+    long _found;
 
     construct(text: String, comments: bool, path: String, max_depth: ulong) {
         _text = text;
@@ -125,6 +161,8 @@ struct _JsonParser {
         _false = "false";
         _null = "null";
         _no_key = "";
+        _find = "";
+        _found = -1;
     }
 
     run(): Result<JsonValue, JsonError> {
@@ -149,10 +187,27 @@ struct _JsonParser {
         var none = Optional<JsonValue>.none();
         var containers = Array<JsonValue>();
         var keys = Array<String>();
+        # With `_find`: each open container's path, and each array's index.
+        var paths = Array<String>();
+        var indexes = Array<ulong>();
+        var here = "$";
         while (true) {
             # Read a value, or open a container.
             if (!_skip_space()) {
                 return none;
+            }
+            if (!_find.is_empty) {
+                if (containers.is_empty) {
+                    here = "$";
+                } else if (containers.last() is Array) {
+                    here = $"{paths.last()}[{indexes.last()}]";
+                } else {
+                    here = _json_path_key(paths.last(), keys.last());
+                }
+                if (here == _find) {
+                    _found = _position as long;
+                    return none;
+                }
             }
             var value = JsonValue.Null;
             var b = _peek();
@@ -171,6 +226,10 @@ struct _JsonParser {
                     value = opened;
                 } else {
                     containers.append(opened);
+                    if (!_find.is_empty) {
+                        paths.append(here);
+                        indexes.append(0);
+                    }
                     if (b == '{') {
                         if (!_key()) {
                             return none;
@@ -204,6 +263,9 @@ struct _JsonParser {
                 var is_array = top is Array;
                 if (top is Array(items)) {
                     items.append(value);
+                    if (!_find.is_empty) {
+                        indexes[indexes.count - 1] = indexes.last() + 1;
+                    }
                 } else if (top is Object(members)) {
                     members[keys.last()] = value;
                 }
@@ -241,6 +303,10 @@ struct _JsonParser {
                 _position = _position + 1;
                 value = containers.pop();
                 keys.pop();
+                if (!_find.is_empty) {
+                    paths.pop();
+                    indexes.pop();
+                }
             }
         }
         return none;
@@ -578,16 +644,24 @@ struct _JsonParser {
     # Records the error `message` at byte `offset`, working out its line and
     # column.
     _fail_at(message: String, offset: ulong) {
-        ulong line = 1;
-        ulong line_start = 0;
-        ulong index = 0;
-        while (index < offset and index < _size) {
-            if (_text.byte_at(index) == '\n') {
-                line = line + 1;
-                line_start = index + 1;
-            }
-            index = index + 1;
-        }
-        _error = JsonError(message, _path, line, offset - line_start + 1, offset);
+        _error = JsonError(message, _path);
+        _json_place(_error, _text, offset);
     }
+}
+
+# Sets `error`'s offset, and the line and column of that offset in `text`.
+export _json_place(error: JsonError, text: String, offset: ulong) {
+    ulong line = 1;
+    ulong line_start = 0;
+    ulong index = 0;
+    while (index < offset and index < text.size) {
+        if (text.byte_at(index) == '\n') {
+            line = line + 1;
+            line_start = index + 1;
+        }
+        index = index + 1;
+    }
+    error.line = line;
+    error.column = offset - line_start + 1;
+    error.offset = offset;
 }

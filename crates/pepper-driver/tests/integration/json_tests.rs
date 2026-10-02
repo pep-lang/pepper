@@ -418,20 +418,20 @@ reject(text: String): String {
 }
 
 test(): int {
-    if (error_of("{\"port\": \"80\"}") != "s.json: error: $.port: expected a number, found a string") { return -1; }
-    if (error_of("{}") != "s.json: error: $: missing required key 'port'") { return -2; }
-    if (error_of("{\"port\": 1, \"tls\": {\"cert\": 3}}") != "s.json: error: $.tls.cert: expected a string, found a number") { return -3; }
-    if (error_of("{\"port\": 1, \"max-connections\": 70000}") != "s.json: error: $[\"max-connections\"]: 70000 does not fit in 'u16'") { return -4; }
-    if (error_of("{\"port\": 1.5}") != "s.json: error: $.port: expected an integer, found 1.5") { return -5; }
-    if (error_of("{\"port\": 1, \"mode\": \"Slow\"}") != "s.json: error: $.mode: 'Slow' is not a case of 'Mode'") { return -6; }
-    if (error_of("{\"port\": 1, \"tags\": [\"a\", null, 3]}") != "s.json: error: $.tags[2]: expected a string, found a number") { return -7; }
-    if (error_of("{\"port\": 1, \"limits\": {\"a b\": true}}") != "s.json: error: $.limits[\"a b\"]: expected a number, found a boolean") { return -8; }
-    if (error_of("{\"port\": 1, \"debug\": null}") != "s.json: error: $.debug: expected a boolean, found null") { return -9; }
-    if (error_of("[]") != "s.json: error: $: expected an object, found an array") { return -10; }
+    if (error_of("{\"port\": \"80\"}") != "s.json:1:10: error: $.port: expected a number, found a string") { return -1; }
+    if (error_of("{}") != "s.json:1:1: error: $: missing required key 'port'") { return -2; }
+    if (error_of("{\"port\": 1, \"tls\": {\"cert\": 3}}") != "s.json:1:29: error: $.tls.cert: expected a string, found a number") { return -3; }
+    if (error_of("{\"port\": 1, \"max-connections\": 70000}") != "s.json:1:32: error: $[\"max-connections\"]: 70000 does not fit in 'u16'") { return -4; }
+    if (error_of("{\"port\": 1.5}") != "s.json:1:10: error: $.port: expected an integer, found 1.5") { return -5; }
+    if (error_of("{\"port\": 1, \"mode\": \"Slow\"}") != "s.json:1:21: error: $.mode: 'Slow' is not a case of 'Mode'") { return -6; }
+    if (error_of("{\"port\": 1, \"tags\": [\"a\", null, 3]}") != "s.json:1:33: error: $.tags[2]: expected a string, found a number") { return -7; }
+    if (error_of("{\"port\": 1, \"limits\": {\"a b\": true}}") != "s.json:1:31: error: $.limits[\"a b\"]: expected a number, found a boolean") { return -8; }
+    if (error_of("{\"port\": 1, \"debug\": null}") != "s.json:1:22: error: $.debug: expected a boolean, found null") { return -9; }
+    if (error_of("[]") != "s.json:1:1: error: $: expected an object, found an array") { return -10; }
     if (error_of("{\"port\": 1,}") != "s.json:1:11: error: trailing comma is not allowed; parse with 'comments = true' to accept JSONC") { return -11; }
     if (error_of("{\"port\": 1, \"unknown\": 2}") != "ok") { return -12; }
-    if (reject("{\"port\": 1, \"unknown\": 2}") != "error: $.unknown: unknown key 'unknown'") { return -13; }
-    if (reject("{\"port\": 1, \"started_at\": 2}") != "error: $.started_at: unknown key 'started_at'") { return -14; }
+    if (reject("{\"port\": 1, \"unknown\": 2}") != "1:24: error: $.unknown: unknown key 'unknown'") { return -13; }
+    if (reject("{\"port\": 1, \"started_at\": 2}") != "1:27: error: $.started_at: unknown key 'started_at'") { return -14; }
     return 0;
 }
 "##
@@ -510,14 +510,14 @@ test(): int {
     if (empty != "{\"shapes\":null,\"tree\":null,\"sizes\":null}") { print(empty); return -5; }
     if (json.decode<Drawing>(empty).value().tree !== __null) { return -6; }
 
-    if (error_of("{\"Circle\": {\"radius\": \"x\"}}") != "error: $.Circle.radius: expected a number, found a string") { return -7; }
-    if (error_of("{\"Circle\": {}}") != "error: $.Circle: missing value 'radius'") { return -8; }
-    if (error_of("\"Circle\"") != "error: $: case 'Circle' carries values; write it as {\"Circle\": {...}}") { return -9; }
-    if (error_of("{\"Point\": {}}") != "error: $: case 'Point' carries no values; write it as the string \"Point\"") { return -10; }
-    if (error_of("\"Hex\"") != "error: $: 'Hex' is not a case of 'Shape'") { return -11; }
-    if (error_of("3") != "error: $: expected a string or an object with one key, found a number") { return -12; }
-    if (error_of("{\"Circle\": {\"radius\": 1, \"z\": 2}}") != "error: $.Circle.z: unknown key 'z'") { return -13; }
-    if (error_of("{\"Circle\": 1}") != "error: $.Circle: expected an object, found a number") { return -14; }
+    if (error_of("{\"Circle\": {\"radius\": \"x\"}}") != "1:23: error: $.Circle.radius: expected a number, found a string") { return -7; }
+    if (error_of("{\"Circle\": {}}") != "1:12: error: $.Circle: missing value 'radius'") { return -8; }
+    if (error_of("\"Circle\"") != "1:1: error: $: case 'Circle' carries values; write it as {\"Circle\": {...}}") { return -9; }
+    if (error_of("{\"Point\": {}}") != "1:1: error: $: case 'Point' carries no values; write it as the string \"Point\"") { return -10; }
+    if (error_of("\"Hex\"") != "1:1: error: $: 'Hex' is not a case of 'Shape'") { return -11; }
+    if (error_of("3") != "1:1: error: $: expected a string or an object with one key, found a number") { return -12; }
+    if (error_of("{\"Circle\": {\"radius\": 1, \"z\": 2}}") != "1:31: error: $.Circle.z: unknown key 'z'") { return -13; }
+    if (error_of("{\"Circle\": 1}") != "1:12: error: $.Circle: expected an object, found a number") { return -14; }
     return 0;
 }
 "##),

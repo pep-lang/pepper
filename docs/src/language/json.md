@@ -174,19 +174,22 @@ optional arguments, usually passed by name:
 | `comments` | `false` | Accept JSONC, as `parse` does. |
 | `path` | `""` | The name of the text, which the error's `to_string()` puts first. |
 
-A syntax error has a line and column as in [Errors](#errors). An error in
-converting a value has none (its `line` is 0); its message starts with
-where in the document the value is, as a path from the root `$`:
+An error has a line and column as in [Errors](#errors). One in
+converting a value also has its `value_path`, where in the document the
+value is as a path from the root `$`, and its message starts with that
+path. The line and column are the value's, or the enclosing object's for a
+missing key:
 
 ```text
-server.json: error: $.server.port: expected a number, found a string
-server.json: error: $.tags[2]: expected a string, found null
-server.json: error: $["max-connections"]: 70000 does not fit in 'u16'
-server.json: error: $: missing required key 'port'
+server.json:3:13: error: $.server.port: expected a number, found a string
+server.json:7:21: error: $.tags[2]: expected a string, found null
+server.json:4:24: error: $["max-connections"]: 70000 does not fit in 'u16'
+server.json:1:1: error: $: missing required key 'port'
 ```
 
 `json.to_json(value)` and `json.from_json<T>(value)` do the same
-conversions to and from a `JsonValue` rather than text, and
+conversions to and from a `JsonValue` rather than text (with no text, a
+`from_json` error has no line: `error: $.port: ...`), and
 `json.encode(value, indent = 2)` writes indented text.
 
 ### Types it cannot convert
@@ -197,7 +200,7 @@ error naming the property. Notes follow the conversion back to the call
 that asked for it:
 
 ```text
-runtime/json/convert.pep:310:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
+runtime/json/convert.pep:315:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
 ...
 main.pep:10:16: note: 'encode<Job>' is used by 'main' here
    10 |     var text = json.encode(job);

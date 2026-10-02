@@ -44,9 +44,8 @@ empty when none was given.
 var line: ulong
 ```
 
-The line of the error, from 1; 0 for an error from `decode` or
-`from_json` that is about a value rather than the text, whose
-`message` starts with the value's path (`$.server.port: ...`).
+The line of the error, from 1; 0 for an error from `from_json`, which
+has no text to point into.
 
 #### column
 
@@ -64,6 +63,16 @@ var offset: ulong
 ```
 
 The byte offset of the error in the text, from 0.
+
+#### value_path
+
+```pepper
+var value_path: String
+```
+
+Where in the document the value an error is about is, as a path from
+the root `$` (`$.server.port`); empty for an error in the text's
+syntax. `decode` and `from_json` set it, and start `message` with it.
 
 ### Constructor
 

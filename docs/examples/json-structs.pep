@@ -49,10 +49,10 @@ main(): int {
     assert(back.tls.value().cert == "site.pem", "a nested struct");
     assert(back.mode == Mode.Fast, "a missing key keeps its default");
 
-    # An error names where in the document it is.
+    # An error names where in the document it is, by path, line and column.
     var bad = json.decode<ServerConfig>("{\"port\": 443, \"mode\": \"Slow\"}", path = "server.json");
-    assert(bad.error().to_string() == "server.json: error: $.mode: 'Slow' is not a case of 'Mode'", "a path");
+    assert(bad.error().to_string() == "server.json:1:23: error: $.mode: 'Slow' is not a case of 'Mode'", "a path");
     var missing = json.decode<ServerConfig>("{}");
-    assert(missing.error().to_string() == "error: $: missing required key 'port'", "[Required]");
+    assert(missing.error().to_string() == "1:1: error: $: missing required key 'port'", "[Required]");
     return 0;
 }

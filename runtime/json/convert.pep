@@ -106,9 +106,10 @@ export encode<T>(value: T, indent: int = 0, ascii_only: bool = false): String {
 ## the type, and to `float` or `double` always. `null` converts only to an
 ## `Optional` (as none) and to `JsonValue`.
 ##
-## An error names where in the document it is, as a path from the root `$`,
-## and has no line or column: `$.server.port: expected a number, found a
-## string`.
+## An error names where in the document it is, as a path from the root `$`
+## in its `value_path` and at the start of its message, and has no line or
+## column, since there is no text: `$.server.port: expected a number, found
+## a string`.
 ##
 ## @typeParam T the type to convert to
 ## @param value the JSON value
@@ -141,8 +142,8 @@ export from_json<T>(value: JsonValue, unknown_keys: UnknownKeys = UnknownKeys.Ig
 ## @param comments whether to accept JSONC: comments and trailing commas
 ## @param path the name of the text (a file name, say), which the error's
 ##   `to_string()` puts first
-## @returns the value, or the first error: a syntax error with its line and
-##   column, or a conversion error with its path in the document
+## @returns the value, or the first error: a syntax error, or a conversion
+##   error with its path in the document; either has its line and column
 ## @example
 ##     import json;
 ##
@@ -161,7 +162,7 @@ export from_json<T>(value: JsonValue, unknown_keys: UnknownKeys = UnknownKeys.Ig
 ##         assert(config.value().timeout.is_none(), "a missing optional");
 ##
 ##         var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
-##         assert(bad.error().to_string() == "server.json: error: $.port: expected a number, found a string", "a path");
+##         assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
 ##         return 0;
 ##     }
 export decode<T>(
@@ -176,6 +177,10 @@ export decode<T>(
     if (result.is_err()) {
         var error = result.error();
         error.path = path;
+        var offset = _json_locate(text, comments, error.value_path);
+        if (offset.is_some()) {
+            _json_place(error, text, offset.value());
+        }
         return Result<T, JsonError>.err(error);
     }
     return result;
@@ -784,7 +789,9 @@ _json_member(value: JsonValue, key: String): JsonValue {
 }
 
 _json_error(path: String, message: String): JsonError {
-    return JsonError($"{path}: {message}", line = 0, column = 0);
+    var error = JsonError($"{path}: {message}", line = 0, column = 0);
+    error.value_path = path;
+    return error;
 }
 
 _json_mismatch(path: String, expected: String, found: JsonValue): JsonError {
@@ -803,19 +810,4 @@ _json_kind(value: JsonValue): String {
         Object(members) => { return "an object"; }
     }
     return "";
-}
-
-# `path.key`, or `path["key"]` when the key is not an identifier.
-_json_path_key(path: String, key: String): String {
-    var plain = !key.is_empty;
-    for (var b in key.bytes()) {
-        var letter = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_';
-        if (!letter && !(b >= '0' && b <= '9')) {
-            plain = false;
-        }
-    }
-    if (plain) {
-        return $"{path}.{key}";
-    }
-    return $"{path}[{JsonValue.String(key).to_string()}]";
 }
