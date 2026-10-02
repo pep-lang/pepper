@@ -115,11 +115,6 @@ error.
 
 ## Current limits
 
-- An optional is checked as a condition (or with `is_some()` or
-  `is_none()`) and read with `value()` or `value_or`; `match` does not work
-  on it yet. `Optional` will become an [enum](enums.md) with `None` and
-  `Some(value)` cases, as enum cases can now carry values; its methods stay
-  the same.
 - Some runtime APIs still use null references, default values or sentinels
   for "missing": a `HashMap` returns the default value for a missing key,
   and `String.find` returns `-1`, for example.

@@ -20,18 +20,12 @@ export struct WordCounter {
         }
     }
 
-    # Splits `text` into words at spaces and counts each one.
+    # Splits `text` into words at spaces and counts each one. `add` skips
+    # the empty pieces that runs of spaces leave.
     add_text(text: String) {
-        var word = String();
-        for (var c in text) {
-            if c == " " {
-                this.add(word);
-                word = String();
-            } else {
-                word += c;
-            }
+        for (var word in text.split(" ")) {
+            this.add(word);
         }
-        this.add(word);
     }
 
     count(word: String): int {

@@ -131,17 +131,14 @@ pepper main.pep -o word-count
 ./word-count
 ```
 
-It prints each word followed by its count, one value per line, and then the
-error message for the missing file (its exact text comes from the operating
+It prints each word with its count, one word per line, and then the error
+message for the missing file (its exact text comes from the operating
 system):
 
 ```text
-the
-3
-cat
-1
-sat
-2
+the: 3
+cat: 1
+sat: 2
 ...
 No such file or directory
 ```
@@ -163,9 +160,9 @@ What is new here:
   error is an [`IoError`](../reference/io-types.md), so reading a missing file
   is an ordinary error value, not a crash. `count_file` turns it into its own
   `Result<WordCounter>`.
-- **Strings character by character.** `add_text` walks the text one character
-  at a time and builds each word with `+=`, since the `String` type has no
-  `split` method yet.
+- **Splitting strings.** `add_text` breaks the text into words with
+  `split(" ")`, which returns an `Array<String>` of the pieces between the
+  spaces (see [`String`](../reference/string.md)).
 
 ## Where to go next
 
