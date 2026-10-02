@@ -265,7 +265,10 @@ main(): int {
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 4, "{stdout}");
     assert_eq!(lines[0], lines[1], "the shell runs as the same process");
-    assert_eq!(&lines[2..], ["set", "/tmp"]);
+    // `pwd` prints the physical directory, and on macOS `/tmp` is a link
+    // to `/private/tmp`.
+    let temporary = std::fs::canonicalize("/tmp").unwrap();
+    assert_eq!(&lines[2..], ["set", temporary.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(9));
 }
 
