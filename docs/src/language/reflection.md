@@ -141,6 +141,7 @@ the compiler writes it as a literal.
 | `reflect.cases<E>()` | an enum's cases, in order |
 | `reflect.functions_with<A>()` | every function in the program that carries attribute `A` |
 | `reflect.is_struct<T>()`, `is_enum<T>()`, `is_trait<T>()` | what kind of type `T` is |
+| `reflect.is_reference<T>()` | whether `T` is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is `[Value]` |
 | `reflect.is_same<A, B>()` | whether `A` and `B` are the same type (`int` and `i32` are) |
 | `reflect.has_attribute<T, A>()`, `reflect.attribute<T, A>()` | attribute `A` on struct or enum `T` |
 | `reflect.print(value)` | writes `value` as a note while compiling |
@@ -159,14 +160,24 @@ A **member** (from `properties` or `fields`) has:
 - `name`, `index`, `is_last`, `is_const`, `is_property`
 - `type_name`: its type as a string; `field.Type` is the type itself, usable
   wherever a type is written: `var copy: field.Type = ...`,
-  `reflect.is_same<field.Type, String>()`, `parse<field.Type>(text)`
+  `reflect.is_same<field.Type, String>()`, `parse<field.Type>(text)`. This
+  works for a compile-time `var` holding a member too
+  (`var first = case.values[0];` gives `first.Type`).
 - `has_attribute<A>()` and `attribute<A>()`
 - `get(value)` and `set(value, x)`, which emit `value.name` and
   `value.name = x`
 
-A **case** (from `cases`) has `name`, `value` (its integer value), `index`,
-`is_last`, `has_attribute<A>()`, `attribute<A>()`, and `get()`, which
-emits the case itself, for an enum whose cases carry no values.
+A **case** (from `cases`) has:
+
+- `name`, `value` (its integer value, or the tag of a case that can carry
+  values), `index`, `is_last`, `has_attribute<A>()`, `attribute<A>()`
+- `values`: the values the case carries, as members, in order; empty for a
+  case that carries none. A value's `get(v)` reads it from `v`, which must
+  hold this case; `set` is an error, since a case's values are fixed.
+- `matches(v)`, which emits a test of whether `v` holds this case
+- `get(values...)`, which emits the case made with those values:
+  `case.get()` for a case that carries none, `case.get(r)` for
+  `Circle(radius: int)`
 
 A **function** (from `functions_with`) has `name`, `has_attribute<A>()`,
 `attribute<A>()`, and `call(arguments...)`, which emits a direct call.
@@ -177,6 +188,10 @@ A **function** (from `functions_with`) has `name`, `has_attribute<A>()`,
 
 ```pepper
 {{#include ../../examples/reflection-fields.pep}}
+```
+
+```pepper
+{{#include ../../examples/reflection-cases.pep}}
 ```
 
 ## Attributes
@@ -224,7 +239,6 @@ methods, constructors, parameters and module-scope variables.
 
 - Calling functions other than the `reflect` functions at compile time.
 - Reflecting methods and constructors (`reflect.methods<T>()`).
-- `get()` on a case of an enum whose cases carry values.
 - Limiting where an attribute may be used (`[AttributeTargets(...)]`).
 - Showing the code a block expands to, and tracing the blocks the compiler
   runs.

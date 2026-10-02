@@ -138,16 +138,17 @@ same rules apply at the top level (`json.decode<Array<int>>("[1, 2]")`):
 | `float`, `double` | a number |
 | `bool` | `true`, `false` |
 | `String` | a string |
-| an enum whose cases carry no values | the case's name, as a string (`"Safe"`) |
+| an enum | a case that carries no values as its name (`"Safe"`); one that carries values as an object with the case's name as its one key, holding the values by name (`{"Circle": {"radius": 2}}`) |
 | `T?` | the value, or `null` when none; a missing key reads as none |
 | `Array<T>` | an array |
 | `HashMap<String, V>`, `OrderedMap<String, V>`, `Map<String, V>` | an object |
 | a struct | an object, recursively |
 | `json.JsonValue` | itself, for parts of a document with no fixed shape |
 
-A struct reference that holds nothing (a `String`, array or struct field
-never assigned) is written as `null`, and `null` reads back as one, so a
-value round-trips. `null` for a number, `bool` or enum is an error.
+A struct reference that holds nothing (a `String`, array, struct or
+reference enum field never assigned) is written as `null`, and `null` reads
+back as one, so a value round-trips. Reading a case's value whose key is
+missing is an error: `$.shapes[0].Circle: missing value 'radius'`. `null` for a number, `bool` or enum is an error.
 
 ### Attributes
 
@@ -196,7 +197,7 @@ error naming the property. Notes follow the conversion back to the call
 that asked for it:
 
 ```text
-runtime/json/convert.pep:293:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
+runtime/json/convert.pep:310:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
 ...
 main.pep:10:16: note: 'encode<Job>' is used by 'main' here
    10 |     var text = json.encode(job);
@@ -207,8 +208,9 @@ main.pep:10:16: note: 'encode<Job>' is used by 'main' here
 
 - Comments are skipped when parsing JSONC; they are not kept in the value
   or written back yet.
-- Enums whose cases carry values cannot be converted yet, since
-  reflection cannot read or make such a case.
+- An enum always takes the external form above; an internal tag
+  (`{"kind": "circle", ...}`) or no tag, chosen with attributes, is not
+  supported yet.
 - A struct's own conversion cannot be customized yet: a type converts as
   its properties do.
 - Map keys must be `String`s.

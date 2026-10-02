@@ -3190,6 +3190,11 @@ fn statement(input: &mut &str) -> Result<Statement> {
             // A real declaration must end at a boundary; otherwise what looked like
             // `type name` was really an expression such as `arr[idx] = 1`.
             if decl_boundary(input) {
+                // In a static block, a `var` may hold a member or a case
+                // (`var first = case.values[0];`): `first.Type` is a type.
+                if STATIC_DEPTH.with(|d| d.get()) > 0 {
+                    QUALIFIERS.with(|q| q.borrow_mut().insert(v.name.clone()));
+                }
                 return Ok(Statement::Declaration(Declaration::Variable(v)));
             }
             if missing_decl_semicolon(input) {

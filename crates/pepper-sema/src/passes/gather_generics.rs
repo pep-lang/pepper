@@ -286,7 +286,10 @@ pub(crate) fn concrete_overrides(module: &mut Module) {
 /// list). Concrete uses are re-discovered from specialized bodies in the
 /// second gather round.
 fn contains_param(ty: &TypeName, params: &[TypeName]) -> bool {
-    if params.iter().any(|p| p.name == ty.name) {
+    // `field.Type` in a static block names a member's type, known only when
+    // the block expands in a specialization (linking leaves only these
+    // qualified by a value).
+    if params.iter().any(|p| p.name == ty.name) || ty.name.ends_with(".Type") {
         return true;
     }
     ty.sub_types.iter().any(|s| contains_param(s, params))

@@ -839,6 +839,14 @@ language side.
   entry back to the non-generic code that asked for it
   (`Expander::with_requests`), so an error inside `json`'s converters ends
   at the user's `json.encode(job)`.
+- **Cases.** A case of a reference or `[Value]` enum lists its `values` as
+  members whose `field` is the payload field (`Circle.radius`), so `get`
+  reads it; `case.matches(v)` emits a `__tag` comparison (a comparison with
+  the value for an integer enum), and `case.get(args)` the case's static
+  method `Shape.Circle(args)`. A compile-time `var` in a static block is a
+  parser qualifier like a `for` variable, so `first.Type` parses, and
+  `gather_generics::contains_param` leaves any `x.Type` to the
+  specialization that expands the block.
 - **Reflection.** `reflect.properties<T>()` lists the public fields and the
   properties of a struct, in source order; `fields<T>()` every field but
   synthesized ones, only in `T`'s file. A member's attributes are its

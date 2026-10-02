@@ -460,3 +460,84 @@ test(): int {
 "#;
     assert_eq!(jit_census(source), (0, 0));
 }
+
+#[test]
+fn cases_that_carry_values() {
+    // `case.values` lists a case's values, `case.matches(v)` tests for the
+    // case, `value.get(v)` reads one, and `case.get(...)` makes the case.
+    let source = r##"
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+[Value]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
+
+zero<T>(): T {
+    var x: T;
+    return x;
+}
+
+describe<E>(value: E): String {
+    var out = "";
+    static (out, value) {
+        for (var case in reflect.cases<E>()) {
+            if (case.matches(value)) {
+                out = case.name;
+                for (var item in case.values) {
+                    out = out + $" {item.name}={item.get(value)}";
+                }
+            }
+        }
+    }
+    return out;
+}
+
+# Makes the case named `name`, each value one more than its type's zero:
+# a compile-time `var` holding a value gives its `.Type` too.
+make<E>(name: String): E {
+    var out: E;
+    static (out, name) {
+        for (var case in reflect.cases<E>()) {
+            if (name == case.name) {
+                if (case.values.count == 0) {
+                    out = case.get();
+                } else if (case.values.count == 1) {
+                    var first = case.values[0];
+                    out = case.get(zero<first.Type>() + 1);
+                } else {
+                    var first = case.values[0];
+                    var second = case.values[1];
+                    out = case.get(zero<first.Type>() + 1, zero<second.Type>() + 2);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+test(): int {
+    if (describe(Shape.Circle(2)) != "Circle radius=2") { return -1; }
+    if (describe(Shape.Rect(3, 4)) != "Rect width=3 height=4") { return -2; }
+    if (describe(Shape.Point) != "Point") { return -3; }
+    if (describe(make<Shape>("Rect")) != "Rect width=1 height=2") { return -4; }
+    if (describe(make<Size>("Fixed")) != "Fixed px=1") { return -5; }
+    if (describe(Optional<int>.some(3)) != "Value value=3") { return -6; }
+    var kinds = 0;
+    static (kinds) {
+        if (reflect.is_reference<Shape>()) { kinds += 1; }
+        if (reflect.is_reference<String>()) { kinds += 10; }
+        if (!reflect.is_reference<Size>() && !reflect.is_reference<int>()) { kinds += 100; }
+    }
+    return kinds == 111 ? 0 : -7;
+}
+"##;
+    assert_eq!(jit_census(source), (0, 0));
+    let error = compile_error("enum Shape {\n    Circle(radius: int),\n}\n\ntest(): int {\n    var s = Shape.Circle(1);\n    static (s) {\n        for (var case in reflect.cases<Shape>()) {\n            for (var item in case.values) {\n                item.set(s, 2);\n            }\n            s = case.get();\n        }\n    }\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:10:22: error: 'set' cannot change value 'radius': a case's values are fixed once made"), "{}", error);
+}

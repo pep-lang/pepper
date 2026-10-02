@@ -42,9 +42,9 @@ to_json<T>(value: T): JsonValue
 
 Converts `value` to a `JsonValue`.
 
-`T` may be a number type, `bool`, `String`, an enum whose cases carry no
-values (written as the case's name), `Optional<U>` (the value, or
-`null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
+`T` may be a number type, `bool`, `String`, an enum (a case that carries
+no values as its name, `"Point"`; one that carries values as
+`{"Circle": {"radius": 2}}`), `Optional<U>` (the value, or `null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
 `Map`) as an object, `JsonValue` itself, or a struct, whose public
 properties become an object's members in declaration order. Element and
 property types follow the same rules, so structs nest.

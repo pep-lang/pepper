@@ -23,8 +23,8 @@ pub(crate) const REFLECT: &str = "reflect";
 /// The function an interpolated string (`$"{x}"`) calls on each value.
 pub(crate) const INTERPOLATE: &str = "_pep_interpolate";
 
-/// The methods of a reflected member or function that emit code.
-pub(crate) const EMITTING_METHODS: [&str; 3] = ["get", "set", "call"];
+/// The methods of a reflected member, case or function that emit code.
+pub(crate) const EMITTING_METHODS: [&str; 4] = ["get", "set", "call", "matches"];
 
 thread_local! {
     /// The compile-time names visible where an emitted statement is being

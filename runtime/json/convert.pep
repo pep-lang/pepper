@@ -16,9 +16,9 @@ export enum UnknownKeys {
 
 ## Converts `value` to a `JsonValue`.
 ##
-## `T` may be a number type, `bool`, `String`, an enum whose cases carry no
-## values (written as the case's name), `Optional<U>` (the value, or
-## `null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
+## `T` may be a number type, `bool`, `String`, an enum (a case that carries
+## no values as its name, `"Point"`; one that carries values as
+## `{"Circle": {"radius": 2}}`), `Optional<U>` (the value, or `null`), `Array<U>`, a map with `String` keys (`HashMap`, `OrderedMap` or
 ## `Map`) as an object, `JsonValue` itself, or a struct, whose public
 ## properties become an object's members in declaration order. Element and
 ## property types follow the same rules, so structs nest.
@@ -249,7 +249,8 @@ _json_object_of<TMap>(map: TMap): JsonValue {
 
 _to_json<T>(value: T): JsonValue {
     var out = JsonValue.Null;
-    static (out, value) {
+    var present = true;
+    static (out, value, present) {
         if (reflect.is_same<T, i8>()
             || reflect.is_same<T, i16>()
             || reflect.is_same<T, i32>()
@@ -263,9 +264,25 @@ _to_json<T>(value: T): JsonValue {
         } else if (reflect.is_same<T, float>() || reflect.is_same<T, double>()) {
             out = JsonValue.Number(value as double);
         } else if (reflect.is_enum<T>()) {
+            reflect.assert(
+                !reflect.name<T>().starts_with("Result<"), $"'encode' cannot convert type '{reflect.name<T>()}' to JSON"
+            );
+            # A case that carries nothing is its name; one that carries
+            # values is `{"Case": {"value": ...}}`. A reference enum's slot
+            # may hold no value, written as `null`.
+            if (reflect.is_reference<T>()) {
+                present = !_json_object_or_null(value).is_null();
+            }
             for (var case in reflect.cases<T>()) {
-                if (value == case.get()) {
-                    out = JsonValue.String(case.name);
+                if (present && case.matches(value)) {
+                    if (case.values.is_empty) {
+                        out = JsonValue.String(case.name);
+                    } else {
+                        out = _json_case_object(case.name);
+                        for (var item in case.values) {
+                            _json_put(_json_member(out, case.name), item.name, _to_json(item.get(value)));
+                        }
+                    }
                 }
             }
         } else if (reflect.is_struct<T>()) {
@@ -443,6 +460,7 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
     # would make compile-time values.
     var known = Array<String>();
     var found = false;
+    var failures = Array<JsonError>();
     static (value, path, unknown_keys, error, out) {
         if (reflect.is_same<T, i8>()) {
             error = _json_integer(value, path, -128, 127, reflect.name<T>());
@@ -465,8 +483,12 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 error = Optional<JsonError>.some(_json_mismatch(path, "a number", value));
             }
         } else if (reflect.is_enum<T>()) {
-            if (value.as_string().is_none()) {
-                error = Optional<JsonError>.some(_json_mismatch(path, "a string", value));
+            reflect.assert(
+                !reflect.name<T>().starts_with("Result<"),
+                $"'decode' cannot convert type '{reflect.name<T>()}' from JSON"
+            );
+            if (_json_case_name(value).is_empty && !(reflect.is_reference<T>() && value.is_null())) {
+                error = Optional<JsonError>.some(_json_mismatch(path, "a string or an object with one key", value));
             }
         } else if (reflect.is_struct<T>()) {
             if (value.as_object().is_none() && !value.is_null()) {
@@ -479,7 +501,7 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
     if (error.is_some()) {
         return Result<T, JsonError>.err(error.value());
     }
-    static (value, path, unknown_keys, error, out, known, found) {
+    static (value, path, unknown_keys, error, out, known, found, failures) {
         if (reflect.is_same<T, i8>()
             || reflect.is_same<T, i16>()
             || reflect.is_same<T, i32>()
@@ -492,11 +514,115 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
         } else if (reflect.is_same<T, float>() || reflect.is_same<T, double>()) {
             out = value.as_double().value() as T;
         } else if (reflect.is_enum<T>()) {
-            var name = value.as_string().value();
+            if (reflect.is_reference<T>()) {
+                if (value.is_null()) {
+                    out = _json_null(out);
+                    found = true;
+                }
+            }
+            var name = _json_case_name(value);
+            var payload = _json_member(value, name);
+            var case_path = _json_path_key(path, name);
             for (var case in reflect.cases<T>()) {
                 if (name == case.name) {
-                    out = case.get();
                     found = true;
+                    if (case.values.is_empty) {
+                        if (value.as_string().is_none()) {
+                            error = Optional<JsonError>.some(
+                                _json_error(
+                                    path,
+                                    $"case '{case.name}' carries no values; write it as the string \"{case.name}\""
+                                )
+                            );
+                        } else {
+                            out = case.get();
+                        }
+                    } else if (value.as_string().is_some()) {
+                        error = Optional<JsonError>.some(
+                            _json_error(
+                                path, $"case '{case.name}' carries values; write it as {{\"{case.name}\": {{...}}}}"
+                            )
+                        );
+                    } else if (payload.as_object().is_none()) {
+                        error = Optional<JsonError>.some(_json_mismatch(case_path, "an object", payload));
+                    } else {
+                        # `case.get(...)` takes every value at once, so each
+                        # count has its own call; a failed value records its
+                        # error in `failures` and gives a default.
+                        if (case.values.count == 1) {
+                            var a = case.values[0];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures)
+                            );
+                        } else if (case.values.count == 2) {
+                            var a = case.values[0];
+                            var b = case.values[1];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures)
+                            );
+                        } else if (case.values.count == 3) {
+                            var a = case.values[0];
+                            var b = case.values[1];
+                            var c = case.values[2];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures)
+                            );
+                        } else if (case.values.count == 4) {
+                            var a = case.values[0];
+                            var b = case.values[1];
+                            var c = case.values[2];
+                            var d = case.values[3];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures)
+                            );
+                        } else if (case.values.count == 5) {
+                            var a = case.values[0];
+                            var b = case.values[1];
+                            var c = case.values[2];
+                            var d = case.values[3];
+                            var e = case.values[4];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures),
+                                _json_case_value < e.Type > (payload, e.name, case_path, unknown_keys, failures)
+                            );
+                        } else if (case.values.count == 6) {
+                            var a = case.values[0];
+                            var b = case.values[1];
+                            var c = case.values[2];
+                            var d = case.values[3];
+                            var e = case.values[4];
+                            var f = case.values[5];
+                            out = case.get(
+                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures),
+                                _json_case_value < e.Type > (payload, e.name, case_path, unknown_keys, failures),
+                                _json_case_value < f.Type > (payload, f.name, case_path, unknown_keys, failures)
+                            );
+                        } else {
+                            reflect.error(
+                                $"'decode' cannot convert case '{case.name}' of '{reflect.name<T>()}': it carries more than 6 values"
+                            );
+                        }
+                        for (var item in case.values) {
+                            known.append(item.name);
+                        }
+                        if (failures.count > 0) {
+                            error = Optional<JsonError>.some(failures[0]);
+                        } else if (unknown_keys == UnknownKeys.Reject) {
+                            error = _json_unknown_key(payload, known, case_path);
+                        }
+                    }
                 }
             }
             if (!found) {
@@ -568,6 +694,11 @@ _json_new<T>(witness: T, is_null: bool): T {
     return T();
 }
 
+# A null reference of `witness`'s type, for JSON's `null`.
+_json_null<T>(witness: T): T {
+    return __null;
+}
+
 # Empty when `value` is an integer in [low, high], else the error.
 _json_integer(value: JsonValue, path: String, low: long, high: long, type_name: String): JsonError? {
     var number = value.as_int();
@@ -592,6 +723,50 @@ _json_unknown_key(value: JsonValue, known: Array<String>, path: String): JsonErr
         }
     }
     return Optional<JsonError>.none();
+}
+
+# `{"name": {}}`, the form of a case that carries values.
+_json_case_object(name: String): JsonValue {
+    var object = JsonValue.object();
+    object[name] = JsonValue.object();
+    return object;
+}
+
+# The case `value` names: a string, or the one key of an object; empty for
+# anything else.
+_json_case_name(value: JsonValue): String {
+    if (value is String(text)) {
+        return text;
+    }
+    var members = value.as_object();
+    if (members.is_some() && members.value().count == 1) {
+        for (var (key, member) in members.value()) {
+            return key;
+        }
+    }
+    return "";
+}
+
+# Value `key` of a case, read from `payload` as a `T`, or a default `T`
+# when it or an earlier value failed, which goes in `failures`. A missing
+# key reads as `null`.
+_json_case_value<T>(
+    payload: JsonValue, key: String, path: String, unknown_keys: UnknownKeys, failures: Array<JsonError>
+): T {
+    var witness: T;
+    if (failures.count > 0) {
+        return witness;
+    }
+    var result = _from_json(_json_member(payload, key), witness, _json_path_key(path, key), unknown_keys);
+    if (result.is_err()) {
+        if (payload.contains(key)) {
+            failures.append(result.error());
+        } else {
+            failures.append(_json_error(path, $"missing value '{key}'"));
+        }
+        return witness;
+    }
+    return result.value();
 }
 
 # Sets member `key` of `object`, when it is an object (a struct reference

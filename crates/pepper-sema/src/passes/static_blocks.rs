@@ -271,6 +271,9 @@ enum Value {
 #[derive(Debug)]
 struct Member {
     name: String,
+    /// The field `get` reads, when it is not `name`: a case's value is
+    /// stored in `Case.value` ([`payload_field`]).
+    field: Option<String>,
     ty: TypeName,
     index: usize,
     count: usize,
@@ -292,6 +295,8 @@ struct Case {
     count: usize,
     /// A case of an enum with no values, which emitted code can name.
     is_value: bool,
+    /// The values the case carries, as members whose `get` reads them.
+    values: Vec<Value>,
     attributes: Vec<ast::Attribute>,
     file: FileId,
 }
@@ -662,7 +667,10 @@ impl Expander<'_> {
                 *expr = match (&receiver, method.as_str()) {
                     (Value::Member(m), "get") => {
                         arity(self, 1)?;
-                        Expression::MemberRef { lhs: Box::new(args.remove(0)), name: m.name.clone(), loc }
+                        Expression::MemberRef { lhs: Box::new(args.remove(0)), name: m.field.clone().unwrap_or_else(|| m.name.clone()), loc }
+                    }
+                    (Value::Member(m), "set") if m.field.is_some() => {
+                        return Err(self.error(format!("'set' cannot change value '{}': a case's values are fixed once made", m.name), span));
                     }
                     (Value::Member(m), "set") => {
                         arity(self, 2)?;
@@ -675,11 +683,27 @@ impl Expander<'_> {
                         arity(self, 0)?;
                         Expression::Cast { expr: Box::new(Expression::IntLiteral(case.value)), ty: case.enumeration.clone(), loc: Loc::NONE, kind: CastKind::Synthesized }
                     }
+                    (Value::Case(case), "matches") => {
+                        arity(self, 1)?;
+                        let subject = args.remove(0);
+                        let test = if case.is_value {
+                            Expression::Cast { expr: Box::new(Expression::IntLiteral(case.value)), ty: case.enumeration.clone(), loc: Loc::NONE, kind: CastKind::Synthesized }
+                        } else {
+                            Expression::IntLiteral(case.value)
+                        };
+                        let lhs = if case.is_value { subject } else { Expression::MemberRef { lhs: Box::new(subject), name: TAG_FIELD.to_string(), loc } };
+                        Expression::Binary { op: BinaryOp::Equal, lhs: Box::new(lhs), rhs: Box::new(test), loc }
+                    }
+                    // `Shape.Circle(r)`: the case's static method makes it.
                     (Value::Case(case), "get") => {
-                        return Err(self.error(
-                            format!("'get' of case '{}' is not supported yet: '{}' is an enum whose cases carry values", case.name, demangle(&case.enumeration.display())),
-                            span,
-                        ))
+                        if args.len() != case.values.len() {
+                            return Err(self.error(
+                                format!("'get' of case '{}' takes {} value{}, have {}", case.name, case.values.len(), if case.values.len() == 1 { "" } else { "s" }, args.len()),
+                                span,
+                            ));
+                        }
+                        let this = Expression::SymbolRef { id: case.enumeration.to_string(), ty: case.enumeration.clone(), loc };
+                        Expression::MethodCall { this: Box::new(this), method: case.name.clone(), args, loc }
                     }
                     _ => {
                         let _ = member;
@@ -905,6 +929,7 @@ impl Expander<'_> {
             (Value::Case(c), "value") => Some(Value::Int(c.value)),
             (Value::Case(c), "index") => Some(Value::Int(c.index as i64)),
             (Value::Case(c), "is_last") => Some(Value::Bool(c.index + 1 == c.count)),
+            (Value::Case(c), "values") => Some(Value::List(Rc::new(c.values.clone()))),
             (Value::Function(f), "name") => Some(Value::String(demangle_name(&f.symbol).to_string())),
             (Value::List(items), "count") => Some(Value::Int(items.len() as i64)),
             (Value::List(items), "is_empty") => Some(Value::Bool(items.is_empty())),
@@ -1060,6 +1085,11 @@ impl Expander<'_> {
                     _ => self.module.traits.iter().any(|t| t.name == ty.name),
                 }))
             }
+            "is_reference" => {
+                let [ty] = self.expect_types(name, type_args, 1, span)? else { unreachable!() };
+                self.expect_arguments(name, arguments, 0, span)?;
+                Ok(Value::Bool(self.find_struct(ty).is_some_and(|(st, _)| !st.is_value())))
+            }
             "is_same" => {
                 let [a, b] = self.expect_types(name, type_args, 2, span)? else { unreachable!() };
                 self.expect_arguments(name, arguments, 0, span)?;
@@ -1209,7 +1239,7 @@ impl Expander<'_> {
                 .into_iter()
                 .enumerate()
                 .map(|(index, (loc, name, ty, is_const, is_property, attributes))| {
-                    Value::Member(Rc::new(Member { name, ty, index, count, is_const, is_property, attributes, file: loc.file }))
+                    Value::Member(Rc::new(Member { name, field: None, ty, index, count, is_const, is_property, attributes, file: loc.file }))
                 })
                 .collect(),
         )))
@@ -1219,10 +1249,33 @@ impl Expander<'_> {
         if let Some(def) = self.find_enum(&ty.name) {
             return Ok(Value::List(Rc::new((0..def.cases.len()).map(|i| Value::Case(Rc::new(case_of(def, i)))).collect())));
         }
-        if let Some((st, _)) = self.find_struct(ty)
+        if let Some((st, map)) = self.find_struct(ty)
             && let Some(cases) = &st.enum_cases
         {
             let count = cases.len();
+            let values = |case: &EnumCaseDef| -> Vec<Value> {
+                let count = case.payload.len();
+                case.payload
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (name, loc))| {
+                        let field = payload_field(&case.name, name);
+                        let mut ty = st.field_members.iter().find(|f| f.name == field).map_or_else(TypeName::auto, |f| f.ty.clone());
+                        crate::type_name::replace_map(&mut ty, &map);
+                        Value::Member(Rc::new(Member {
+                            name: name.clone(),
+                            field: Some(field),
+                            ty,
+                            index,
+                            count,
+                            is_const: true,
+                            is_property: false,
+                            attributes: vec![],
+                            file: loc.file,
+                        }))
+                    })
+                    .collect()
+            };
             return Ok(Value::List(Rc::new(
                 cases
                     .iter()
@@ -1235,6 +1288,7 @@ impl Expander<'_> {
                             index,
                             count,
                             is_value: false,
+                            values: values(case),
                             attributes: case.attributes.clone(),
                             file: case.loc.file,
                         }))
@@ -1336,6 +1390,7 @@ fn case_of(def: &EnumDef, index: usize) -> Case {
         index,
         count: def.cases.len(),
         is_value: true,
+        values: vec![],
         attributes: case.attributes.clone(),
         file: case.loc.file,
     }

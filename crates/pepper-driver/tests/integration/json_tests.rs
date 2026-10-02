@@ -454,3 +454,73 @@ fn rejects_types_it_cannot_convert() {
     assert!(error.contains("note: '_from_json<Inner>' is used by '_from_json<Job>' here"), "{}", error);
     assert!(error.contains("test.pep:12:15: note: 'decode<Job>' is used by 'test' here"), "{}", error);
 }
+
+#[test]
+fn converts_enums_whose_cases_carry_values() {
+    assert_eq!(
+        run(r##"
+import json;
+
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: double),
+    Point,
+}
+
+enum Tree {
+    Leaf(value: int),
+    Node(left: Tree, right: Tree),
+}
+
+[Value]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
+
+struct Drawing {
+    var shapes: Array<Shape>;
+    var tree: Tree;
+    var sizes: Array<Size>;
+}
+
+error_of(text: String): String {
+    return json.decode<Shape>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
+}
+
+test(): int {
+    var drawing = Drawing();
+    drawing.shapes = [Shape.Circle(2), Shape.Rect(3, 4.5), Shape.Point];
+    drawing.tree = Tree.Node(Tree.Leaf(1), Tree.Node(Tree.Leaf(2), Tree.Leaf(3)));
+    drawing.sizes = [Size.Fixed(8), Size.Auto];
+    var text = json.encode(drawing);
+    var expected = "{\"shapes\":[{\"Circle\":{\"radius\":2}},{\"Rect\":{\"width\":3,\"height\":4.5}},\"Point\"],\"tree\":{\"Node\":{\"left\":{\"Leaf\":{\"value\":1}},\"right\":{\"Node\":{\"left\":{\"Leaf\":{\"value\":2}},\"right\":{\"Leaf\":{\"value\":3}}}}}},\"sizes\":[{\"Fixed\":{\"px\":8}},\"Auto\"]}";
+    if (text != expected) { print(text); return -1; }
+    var decoded = json.decode<Drawing>(text);
+    if (decoded.is_err()) { print(decoded.error().to_string()); return -2; }
+    if (json.encode(decoded.value()) != text) { return -3; }
+    if (decoded.value().shapes[1] is Rect(w, h)) {
+        if (w != 3 or h != 4.5) { return -4; }
+    } else {
+        return -4;
+    }
+
+    # A reference enum's empty slot is null, both ways.
+    var empty = json.encode(Drawing());
+    if (empty != "{\"shapes\":null,\"tree\":null,\"sizes\":null}") { print(empty); return -5; }
+    if (json.decode<Drawing>(empty).value().tree !== __null) { return -6; }
+
+    if (error_of("{\"Circle\": {\"radius\": \"x\"}}") != "error: $.Circle.radius: expected a number, found a string") { return -7; }
+    if (error_of("{\"Circle\": {}}") != "error: $.Circle: missing value 'radius'") { return -8; }
+    if (error_of("\"Circle\"") != "error: $: case 'Circle' carries values; write it as {\"Circle\": {...}}") { return -9; }
+    if (error_of("{\"Point\": {}}") != "error: $: case 'Point' carries no values; write it as the string \"Point\"") { return -10; }
+    if (error_of("\"Hex\"") != "error: $: 'Hex' is not a case of 'Shape'") { return -11; }
+    if (error_of("3") != "error: $: expected a string or an object with one key, found a number") { return -12; }
+    if (error_of("{\"Circle\": {\"radius\": 1, \"z\": 2}}") != "error: $.Circle.z: unknown key 'z'") { return -13; }
+    if (error_of("{\"Circle\": 1}") != "error: $.Circle: expected an object, found a number") { return -14; }
+    return 0;
+}
+"##),
+        0
+    );
+}
