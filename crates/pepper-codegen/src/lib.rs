@@ -8,6 +8,7 @@ pub mod context;
 pub mod debug;
 mod debug_types;
 pub mod facts;
+mod intrinsics;
 #[cfg(windows)]
 mod jit_memory;
 pub mod ops;
@@ -1152,6 +1153,20 @@ impl<'ctx> CodeGenerator<'ctx> {
         // `[Link(name = "sym")]` binds the declared name to a different C symbol.
         let symbol = ext.link_name();
         let symbol = symbol.as_str();
+        // `[Link(name = "llvm.ctpop")]` declares an LLVM intrinsic, whose
+        // `void` is a true `void` (intrinsics.rs).
+        if intrinsics::is_intrinsic_symbol(symbol) {
+            let fn_type = if is_void(&ext.ty) {
+                let params: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = param_types.iter().map(|p| (*p).into()).collect();
+                self.context.void_type().fn_type(&params, ext.is_variadic)
+            } else {
+                fn_type
+            };
+            let fn_value = self.declare_intrinsic(&ext.name, symbol, fn_type)?;
+            self.functions.insert(ext.name.clone(), fn_value);
+            self.fn_returns.insert(ext.name.clone(), ext.ty.to_string());
+            return Ok(());
+        }
         let fn_value = match self.module.get_function(symbol) {
             Some(f) => f,
             None => {
@@ -5206,6 +5221,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             let v = self.codegen_expr(arg)?;
             let index = arg_names.len();
+            if is_extern {
+                let checked = self.check_intrinsic_argument(&target, index, v);
+                self.locate(&checked, arg.loc());
+                checked?;
+            }
             self.pass_argument(&target, index, arg, v, &mut owned_arg_temps)?;
             arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);

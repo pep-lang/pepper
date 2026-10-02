@@ -97,6 +97,10 @@ Some that you will meet quickly:
 - Integer arithmetic that overflows panics instead of wrapping, at every
   optimization level; `wrapping_add` and its siblings wrap on purpose (see
   [integer overflow](language/types-and-variables.md#integer-overflow)).
+  Bit counting, rotation, byte swapping and the floating-point functions
+  are methods that compile to LLVM's intrinsics, and any other intrinsic
+  can be declared as an extern (see
+  [LLVM intrinsics](language/c-interop.md#llvm-intrinsics)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.

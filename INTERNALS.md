@@ -29,7 +29,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
-| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
+| `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
@@ -1154,6 +1154,17 @@ How the language lowers:
   lowers to the LLVM intrinsic (`build_memory_intrinsic`), since a `void`
   extern is declared returning `i32` and LLVM would not recognize the
   builtin; so a constant-size copy optimizes to loads and stores.
+  An extern whose symbol starts with `llvm.` (`[Link(name = "llvm.ctpop")]`)
+  is an LLVM intrinsic (`intrinsics.rs`, #344): `instantiate_extern` declares
+  it with the prototype as its signature (a `void` return is `void`), picking
+  an overloaded intrinsic's mangled name from the prototype (return type,
+  first parameter, or both) and checking each candidate by calling it in a
+  scratch module and running the verifier, so a mismatch is an error at the
+  extern. `codegen_call` checks each argument the intrinsic marks `immarg`
+  is a constant (`check_intrinsic_argument`), located at the argument.
+  `partition::finish` leaves `llvm.*` symbols alone. The runtime's integer
+  bit methods, float functions (`runtime/number.pep`) and the `hint` module
+  are written with these.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `__caller_location()` is handled in
   `codegen_expr` (#354): a constant C string `file:line:col`

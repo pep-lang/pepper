@@ -469,6 +469,42 @@ on and the compiler warns
 up, `-g` included. The setting is part of the build cache's key, like the
 optimization level.
 
+## Bit operations and math functions
+
+Each integer type has methods that compile to a single instruction on most
+CPUs, through LLVM's intrinsics, for code that would otherwise loop over
+bits:
+
+| Method | Returns |
+|---|---|
+| `leading_zeros()`, `trailing_zeros()` | The zero bits above the highest set bit, or below the lowest; the type's width for zero. |
+| `count_ones()`, `count_zeros()` | How many bits are set, or clear. |
+| `swap_bytes()` | The value with its bytes reversed, to convert between little and big endian. |
+| `reverse_bits()` | The value with its bits reversed. |
+| `rotate_left(n)`, `rotate_right(n)` | The bits rotated by `n`, modulo the width. |
+| `min(x)`, `max(x)` | The smaller or the larger value. |
+| `abs()` | The value without its sign (signed types). Panics for the lowest value, whose negation does not fit. |
+
+Like the overflow methods, they work at their type's own width:
+`byte 1.leading_zeros()` is 7.
+
+```pepper
+{{#include ../../examples/types-bits.pep}}
+```
+
+`float` and `double` have `square_root()`, `floor()`, `ceiling()`,
+`truncate()`, `round()` (halfway cases away from zero), `abs()`,
+`copy_sign(sign)`, `multiply_add(factor, addend)` (`this * factor + addend`
+rounded once) and `min(x)` and `max(x)` (which ignore a NaN argument):
+
+```pepper
+{{#include ../../examples/types-float-functions.pep}}
+```
+
+Hints for the optimizer (`likely`, `unlikely`, `prefetch_read`) are in the
+[`hint` module](hints.md). Any other LLVM intrinsic can be declared as an
+extern; see [LLVM intrinsics](c-interop.md#llvm-intrinsics).
+
 ## Operators
 
 ```pepper

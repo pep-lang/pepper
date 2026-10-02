@@ -4920,3 +4920,42 @@ fn optional_old_method_names_warn_and_still_run() {
     let ctx = inkwell::context::Context::create();
     assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 0);
 }
+
+#[test]
+fn unknown_llvm_intrinsic() {
+    assert_eq!(
+        error_of(
+            "unknown_llvm_intrinsic",
+            "[Link(name = \"llvm.nonsense\")]\nextern int nope(int value);\nmain(): int {\n    return nope(1);\n}\n"
+        ),
+        "main.pep:2:12: error: unknown LLVM intrinsic 'llvm.nonsense'\n\
+         \x20   2 | extern int nope(int value);\n\
+         \x20     |            ^~~~"
+    );
+}
+
+#[test]
+fn llvm_intrinsic_signature_mismatch() {
+    assert_eq!(
+        error_of(
+            "llvm_intrinsic_signature_mismatch",
+            "[Link(name = \"llvm.ctpop\")]\nextern long popcount(int value);\nmain(): int {\n    return popcount(1) as int;\n}\n"
+        ),
+        "main.pep:2:13: error: 'popcount' does not match the signature of LLVM intrinsic 'llvm.ctpop': intrinsic has incorrect argument type\n\
+         \x20   2 | extern long popcount(int value);\n\
+         \x20     |             ^~~~~~~~"
+    );
+}
+
+#[test]
+fn llvm_intrinsic_argument_must_be_constant() {
+    assert_eq!(
+        error_of(
+            "llvm_intrinsic_argument_must_be_constant",
+            "[Link(name = \"llvm.ctlz\")]\nextern int leading_zeros(int value, bool is_zero_poison);\nmain(): int {\n    var zero_poison = false;\n    return leading_zeros(1, zero_poison);\n}\n"
+        ),
+        "main.pep:5:29: error: argument 2 to 'leading_zeros' must be a constant\n\
+         \x20   5 |     return leading_zeros(1, zero_poison);\n\
+         \x20     |                             ^~~~~~~~~~~"
+    );
+}

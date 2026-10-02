@@ -322,6 +322,50 @@ main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib' or 'name'
 The earlier `[LinkName("symbol")]` was removed; it is an error that suggests
 the `[Link(name = "symbol")]` that replaces it.
 
+## LLVM intrinsics
+
+An extern whose `[Link(name = ...)]` symbol starts with `llvm.` is not a C
+function but an [LLVM intrinsic](https://llvm.org/docs/LangRef.html#intrinsic-functions):
+a call to it compiles to the operation itself, usually one instruction, and
+nothing is linked. The runtime's bit and math methods
+([Bit operations](types-and-variables.md#bit-operations-and-math-functions))
+are written this way; declare one yourself for an intrinsic they do not
+cover, such as a CPU-specific one:
+
+```pepper
+{{#include ../../examples/c-llvm-intrinsic.pep}}
+```
+
+- The extern's prototype is the intrinsic's signature, in the types Pepper
+  maps to LLVM's: `byte` and `char` are `i8`, `ushort` and `short` `i16`,
+  `uint` and `int` `i32`, `ulong` and `long` `i64`, `bool` `i1`, `float` and
+  `double` themselves, any pointer `ptr`, and a `void` return is `void`.
+  Intrinsics that take or return vectors or structs cannot be declared yet.
+- Name an overloaded intrinsic by its base name (`llvm.ctpop`): the
+  overload is picked from the prototype (`llvm.ctpop.i32` for a `uint`).
+  The mangled name works too.
+- A prototype that matches no overload is an error at the extern, with
+  LLVM's reason:
+
+  ```text
+  main.pep:2:13: error: 'popcount' does not match the signature of LLVM intrinsic 'llvm.ctpop': intrinsic has incorrect argument type
+      2 | extern long popcount(int value);
+        |             ^~~~~~~~
+  ```
+
+- Some arguments must be constants, such as `llvm.ctlz`'s
+  `is_zero_poison`; passing a variable is an error at the argument:
+
+  ```text
+  main.pep:5:19: error: argument 2 to 'leading_zeros' must be a constant
+      5 |     return leading_zeros(1, zero_poison);
+        |                             ^~~~~~~~~~~
+  ```
+
+An unknown name (`llvm.nonsense`) is an error too. A target-specific
+intrinsic (`llvm.x86.*`, `llvm.aarch64.*`) only exists on its architecture,
+so pair it with [`[Target(Arch(...))]`](platform-selection.md).
+
 ## Linking the library
 
 A C function is only callable if the library that defines it is linked into

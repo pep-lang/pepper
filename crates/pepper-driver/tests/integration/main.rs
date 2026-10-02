@@ -43,6 +43,7 @@ mod hash_tests;
 mod http_tests;
 mod implicit_conversion_tests;
 mod interpolation_tests;
+mod intrinsic_tests;
 mod int16_tests;
 mod io_tests;
 mod json_tests;
