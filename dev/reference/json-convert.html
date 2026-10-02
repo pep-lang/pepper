@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b64bb7eb.js";
+            window.path_to_searchindex_js = "../searchindex-2de0a4c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -206,7 +206,7 @@ struct it is read into.</p>
 <p>Converts <code>value</code> to a <code>JsonValue</code>.</p>
 <p><code>T</code> may be a number type, <code>bool</code>, <code>String</code>, an enum (a case that carries
 no values as its name, <code>"Point"</code>; one that carries values as
-<code>{"Circle": {"radius": 2}}</code>), <code>Optional&lt;U&gt;</code> (the value, or <code>null</code>), <code>Array&lt;U&gt;</code>, a map with <code>String</code> keys (<code>HashMap</code>, <code>OrderedMap</code> or
+<code>{"Circle": {"radius": 2}}</code>; <code>[Tag]</code> and <code>[Untagged]</code> choose other forms), <code>Optional&lt;U&gt;</code> (the value, or <code>null</code>), <code>Array&lt;U&gt;</code>, a map with <code>String</code> keys (<code>HashMap</code>, <code>OrderedMap</code> or
 <code>Map</code>) as an object, <code>JsonValue</code> itself, or a struct, whose public
 properties become an object’s members in declaration order. Element and
 property types follow the same rules, so structs nest.</p>

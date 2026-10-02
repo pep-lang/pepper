@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b64bb7eb.js";
+            window.path_to_searchindex_js = "../searchindex-2de0a4c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -474,7 +474,7 @@ same rules apply at the top level (<code>json.decode&lt;Array&lt;int&gt;&gt;("[1
 <tr><td><code>float</code>, <code>double</code></td><td>a number</td></tr>
 <tr><td><code>bool</code></td><td><code>true</code>, <code>false</code></td></tr>
 <tr><td><code>String</code></td><td>a string</td></tr>
-<tr><td>an enum</td><td>a case that carries no values as its name (<code>"Safe"</code>); one that carries values as an object with the case’s name as its one key, holding the values by name (<code>{"Circle": {"radius": 2}}</code>)</td></tr>
+<tr><td>an enum</td><td>a case that carries no values as its name (<code>"Safe"</code>); one that carries values as an object with the case’s name as its one key, holding the values by name (<code>{"Circle": {"radius": 2}}</code>); <a href="#attributes">attributes</a> choose other forms</td></tr>
 <tr><td><code>T?</code></td><td>the value, or <code>null</code> when none; a missing key reads as none</td></tr>
 <tr><td><code>Array&lt;T&gt;</code></td><td>an array</td></tr>
 <tr><td><code>HashMap&lt;String, V&gt;</code>, <code>OrderedMap&lt;String, V&gt;</code>, <code>Map&lt;String, V&gt;</code></td><td>an object</td></tr>
@@ -502,6 +502,72 @@ import of their own), change how a property is converted:</p>
 </tbody>
 </table>
 </div>
+<p>On an enum and its cases, they choose how a case is written:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[Name("key")]</code> on a case</td><td>writes and reads the case under <code>key</code> instead of its own name</td></tr>
+<tr><td><code>[Tag("kind")]</code> on an enum</td><td>writes each case as an object naming it under <code>kind</code>, with its values beside the tag: <code>{"kind": "Circle", "radius": 2}</code>, <code>{"kind": "Point"}</code></td></tr>
+<tr><td><code>[Tag("kind", content = "data")]</code> on an enum</td><td>puts the values in an object under <code>data</code> instead: <code>{"kind": "Circle", "data": {"radius": 2}}</code></td></tr>
+<tr><td><code>[Untagged]</code> on an enum</td><td>writes no tag: a case’s values as an object (<code>{"radius": 2}</code>), and a case that carries none as its name (<code>"Point"</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># JSON: choose how an enum's cases are written with attributes.
+import json;
+
+# A tag beside the values: {"kind": "circle", "radius": 2}.
+[Tag("kind")]
+enum Shape {
+    [Name("circle")]
+    Circle(radius: int),
+    Point,
+}
+
+# The values under their own key: {"type": "Click", "data": {"x": 1, "y": 2}}.
+[Tag("type", content = "data")]
+enum Event {
+    Click(x: int, y: int),
+    Close,
+}
+
+# No tag; reading takes the first case that fits.
+[Untagged]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
+
+main(): int {
+    assert(json.encode(Shape.Circle(2)) == "{\"kind\":\"circle\",\"radius\":2}", "internally tagged");
+    assert(json.encode(Shape.Point) == "{\"kind\":\"Point\"}", "a case with no values");
+    assert(json.encode(Event.Click(1, 2)) == "{\"type\":\"Click\",\"data\":{\"x\":1,\"y\":2}}", "adjacently tagged");
+    assert(json.encode(Size.Fixed(8)) == "{\"px\":8}", "untagged");
+    assert(json.encode(Size.Auto) == "\"Auto\"", "untagged, no values");
+
+    var shape = json.decode&lt;Shape&gt;("{\"kind\": \"circle\", \"radius\": 5}");
+    if (shape.value() is Circle(radius)) {
+        assert(radius == 5, "read back");
+    } else {
+        return 1;
+    }
+    var size = json.decode&lt;Size&gt;("\"Auto\"");
+    assert(size.value() is Auto, "the first case that fits");
+    var bad = json.decode&lt;Shape&gt;("{\"radius\": 5}");
+    assert(bad.error().to_string() == "1:1: error: $: missing tag 'kind'", "a missing tag");
+    return 0;
+}
+</code></pre>
+<p>Reading an <code>[Untagged]</code> enum tries each case in order and takes the first
+that reads without an error (with <code>UnknownKeys.Reject</code>, an extra key is
+an error too), so a case whose values include another’s goes first. When
+none reads, the error says so: <code>$: found an object, which matches no case of 'Size'</code>. A <code>[Tag]</code> enum’s errors name its tag: <code>$: missing tag 'kind'</code>,
+<code>$.kind: 'Hex' is not a case of 'Shape'</code>. A tag with the name of one of a
+case’s values is a compile error, since both would be written under one
+key.</p>
 <h3 id="reading"><a class="header" href="#reading">Reading</a></h3>
 <p><code>decode</code> makes a struct with its constructor that takes no arguments, then
 reads in each property it finds a key for. A missing key leaves its
@@ -548,9 +614,6 @@ main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
 <ul>
 <li><code>parse</code> skips comments; only a <code>JsonDocument</code> keeps them, and
 <code>decode</code> never does. A document is always written indented.</li>
-<li>An enum always takes the external form above; an internal tag
-(<code>{"kind": "circle", ...}</code>) or no tag, chosen with attributes, is not
-supported yet.</li>
 <li>A struct’s own conversion cannot be customized yet: a type converts as
 its properties do.</li>
 <li>Map keys must be <code>String</code>s.</li>

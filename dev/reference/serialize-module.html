@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b64bb7eb.js";
+            window.path_to_searchindex_js = "../searchindex-2de0a4c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -188,7 +188,8 @@ read from text formats.</p>
 <p><code>json</code> reads these attributes when it converts a struct (<code>json.encode</code>,
 <code>json.decode</code>), and other formats will share them, so one set of
 attributes describes a type for every format. Write them above a
-property; <code>import serialize</code> brings them in, and <code>import json</code> alone is
+property (or an enum or one of its cases: <code>Tag</code>, <code>Untagged</code>, <code>Name</code>);
+<code>import serialize</code> brings them in, and <code>import json</code> alone is
 enough too, since <code>json</code> exports them.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import json;
@@ -207,7 +208,8 @@ enough too, since <code>json</code> exports them.</p>
 <h2 id="name"><a class="header" href="#name">Name</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Name
 </code></pre>
-<p>Writes a property under <code>value</code> rather than under its own name.</p>
+<p>Writes a property, or an enum case, under <code>value</code> rather than under its
+own name.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import json;
 
@@ -220,7 +222,8 @@ enough too, since <code>json</code> exports them.</p>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
-<p>The key the property is written under.</p>
+<p>The key the property is written under, or the name the case is
+written as.</p>
 <h2 id="ignore"><a class="header" href="#ignore">Ignore</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Ignore
 </code></pre>
@@ -231,6 +234,53 @@ was.</p>
 </code></pre>
 <p>Makes a missing key an error when reading. Without it, a missing key
 leaves the property at its default.</p>
+<h2 id="tag"><a class="header" href="#tag">Tag</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Tag
+</code></pre>
+<p>Writes an enum’s cases as objects that name their case under <code>key</code>,
+rather than as <code>{"Case": {...}}</code>.</p>
+<p>Without <code>content</code>, a case’s values sit beside the tag:
+<code>{"kind": "Circle", "radius": 2}</code>. With <code>content</code>, they go in an object
+under that key: <code>{"kind": "Circle", "data": {"radius": 2}}</code>. A case that
+carries no values is <code>{"kind": "Point"}</code> either way. Write it above an
+enum.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    [Tag("kind")]
+    enum Shape {
+        Circle(radius: int),
+        Point,
+    }
+</code></pre>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="key"><a class="header" href="#key">key</a></h4>
+<pre><code class="language-pepper">const key: String
+</code></pre>
+<p>The key that holds the case’s name.</p>
+<h4 id="content"><a class="header" href="#content">content</a></h4>
+<pre><code class="language-pepper">const content: String = ""
+</code></pre>
+<p>The key that holds the case’s values, or empty to put them beside
+the tag.</p>
+<h2 id="untagged"><a class="header" href="#untagged">Untagged</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Untagged
+</code></pre>
+<p>Writes an enum’s cases with no tag at all: a case that carries values as
+the object of its values (<code>{"radius": 2}</code>), and one that carries none as
+its name (<code>"Point"</code>).</p>
+<p>Reading tries each case in order and takes the first that reads without
+an error, so list a case whose values are a superset of another’s first.
+Write it above an enum.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    [Untagged]
+    enum Size {
+        Fixed(px: int),
+        Auto,
+    }
+</code></pre>
 
                     </main>
 

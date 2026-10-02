@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b64bb7eb.js";
+            window.path_to_searchindex_js = "searchindex-2de0a4c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-bea1f4dd.js"></script>
@@ -2516,7 +2516,7 @@ same rules apply at the top level (<code>json.decode&lt;Array&lt;int&gt;&gt;("[1
 <tr><td><code>float</code>, <code>double</code></td><td>a number</td></tr>
 <tr><td><code>bool</code></td><td><code>true</code>, <code>false</code></td></tr>
 <tr><td><code>String</code></td><td>a string</td></tr>
-<tr><td>an enum</td><td>a case that carries no values as its name (<code>"Safe"</code>); one that carries values as an object with the case’s name as its one key, holding the values by name (<code>{"Circle": {"radius": 2}}</code>)</td></tr>
+<tr><td>an enum</td><td>a case that carries no values as its name (<code>"Safe"</code>); one that carries values as an object with the case’s name as its one key, holding the values by name (<code>{"Circle": {"radius": 2}}</code>); <a href="#attributes">attributes</a> choose other forms</td></tr>
 <tr><td><code>T?</code></td><td>the value, or <code>null</code> when none; a missing key reads as none</td></tr>
 <tr><td><code>Array&lt;T&gt;</code></td><td>an array</td></tr>
 <tr><td><code>HashMap&lt;String, V&gt;</code>, <code>OrderedMap&lt;String, V&gt;</code>, <code>Map&lt;String, V&gt;</code></td><td>an object</td></tr>
@@ -2544,6 +2544,72 @@ import of their own), change how a property is converted:</p>
 </tbody>
 </table>
 </div>
+<p>On an enum and its cases, they choose how a case is written:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[Name("key")]</code> on a case</td><td>writes and reads the case under <code>key</code> instead of its own name</td></tr>
+<tr><td><code>[Tag("kind")]</code> on an enum</td><td>writes each case as an object naming it under <code>kind</code>, with its values beside the tag: <code>{"kind": "Circle", "radius": 2}</code>, <code>{"kind": "Point"}</code></td></tr>
+<tr><td><code>[Tag("kind", content = "data")]</code> on an enum</td><td>puts the values in an object under <code>data</code> instead: <code>{"kind": "Circle", "data": {"radius": 2}}</code></td></tr>
+<tr><td><code>[Untagged]</code> on an enum</td><td>writes no tag: a case’s values as an object (<code>{"radius": 2}</code>), and a case that carries none as its name (<code>"Point"</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># JSON: choose how an enum's cases are written with attributes.
+import json;
+
+# A tag beside the values: {"kind": "circle", "radius": 2}.
+[Tag("kind")]
+enum Shape {
+    [Name("circle")]
+    Circle(radius: int),
+    Point,
+}
+
+# The values under their own key: {"type": "Click", "data": {"x": 1, "y": 2}}.
+[Tag("type", content = "data")]
+enum Event {
+    Click(x: int, y: int),
+    Close,
+}
+
+# No tag; reading takes the first case that fits.
+[Untagged]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
+
+main(): int {
+    assert(json.encode(Shape.Circle(2)) == "{\"kind\":\"circle\",\"radius\":2}", "internally tagged");
+    assert(json.encode(Shape.Point) == "{\"kind\":\"Point\"}", "a case with no values");
+    assert(json.encode(Event.Click(1, 2)) == "{\"type\":\"Click\",\"data\":{\"x\":1,\"y\":2}}", "adjacently tagged");
+    assert(json.encode(Size.Fixed(8)) == "{\"px\":8}", "untagged");
+    assert(json.encode(Size.Auto) == "\"Auto\"", "untagged, no values");
+
+    var shape = json.decode&lt;Shape&gt;("{\"kind\": \"circle\", \"radius\": 5}");
+    if (shape.value() is Circle(radius)) {
+        assert(radius == 5, "read back");
+    } else {
+        return 1;
+    }
+    var size = json.decode&lt;Size&gt;("\"Auto\"");
+    assert(size.value() is Auto, "the first case that fits");
+    var bad = json.decode&lt;Shape&gt;("{\"radius\": 5}");
+    assert(bad.error().to_string() == "1:1: error: $: missing tag 'kind'", "a missing tag");
+    return 0;
+}
+</code></pre>
+<p>Reading an <code>[Untagged]</code> enum tries each case in order and takes the first
+that reads without an error (with <code>UnknownKeys.Reject</code>, an extra key is
+an error too), so a case whose values include another’s goes first. When
+none reads, the error says so: <code>$: found an object, which matches no case of 'Size'</code>. A <code>[Tag]</code> enum’s errors name its tag: <code>$: missing tag 'kind'</code>,
+<code>$.kind: 'Hex' is not a case of 'Shape'</code>. A tag with the name of one of a
+case’s values is a compile error, since both would be written under one
+key.</p>
 <h3 id="reading"><a class="header" href="#reading">Reading</a></h3>
 <p><code>decode</code> makes a struct with its constructor that takes no arguments, then
 reads in each property it finds a key for. A missing key leaves its
@@ -2590,9 +2656,6 @@ main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
 <ul>
 <li><code>parse</code> skips comments; only a <code>JsonDocument</code> keeps them, and
 <code>decode</code> never does. A document is always written indented.</li>
-<li>An enum always takes the external form above; an internal tag
-(<code>{"kind": "circle", ...}</code>) or no tag, chosen with attributes, is not
-supported yet.</li>
 <li>A struct’s own conversion cannot be customized yet: a type converts as
 its properties do.</li>
 <li>Map keys must be <code>String</code>s.</li>
@@ -29429,7 +29492,7 @@ struct it is read into.</p>
 <p>Converts <code>value</code> to a <code>JsonValue</code>.</p>
 <p><code>T</code> may be a number type, <code>bool</code>, <code>String</code>, an enum (a case that carries
 no values as its name, <code>"Point"</code>; one that carries values as
-<code>{"Circle": {"radius": 2}}</code>), <code>Optional&lt;U&gt;</code> (the value, or <code>null</code>), <code>Array&lt;U&gt;</code>, a map with <code>String</code> keys (<code>HashMap</code>, <code>OrderedMap</code> or
+<code>{"Circle": {"radius": 2}}</code>; <code>[Tag]</code> and <code>[Untagged]</code> choose other forms), <code>Optional&lt;U&gt;</code> (the value, or <code>null</code>), <code>Array&lt;U&gt;</code>, a map with <code>String</code> keys (<code>HashMap</code>, <code>OrderedMap</code> or
 <code>Map</code>) as an object, <code>JsonValue</code> itself, or a struct, whose public
 properties become an object’s members in declaration order. Element and
 property types follow the same rules, so structs nest.</p>
@@ -29601,7 +29664,8 @@ read from text formats.</p>
 <p><code>json</code> reads these attributes when it converts a struct (<code>json.encode</code>,
 <code>json.decode</code>), and other formats will share them, so one set of
 attributes describes a type for every format. Write them above a
-property; <code>import serialize</code> brings them in, and <code>import json</code> alone is
+property (or an enum or one of its cases: <code>Tag</code>, <code>Untagged</code>, <code>Name</code>);
+<code>import serialize</code> brings them in, and <code>import json</code> alone is
 enough too, since <code>json</code> exports them.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import json;
@@ -29620,7 +29684,8 @@ enough too, since <code>json</code> exports them.</p>
 <h2 id="name-3"><a class="header" href="#name-3">Name</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Name
 </code></pre>
-<p>Writes a property under <code>value</code> rather than under its own name.</p>
+<p>Writes a property, or an enum case, under <code>value</code> rather than under its
+own name.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import json;
 
@@ -29633,7 +29698,8 @@ enough too, since <code>json</code> exports them.</p>
 <h4 id="value-4"><a class="header" href="#value-4">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
-<p>The key the property is written under.</p>
+<p>The key the property is written under, or the name the case is
+written as.</p>
 <h2 id="ignore-1"><a class="header" href="#ignore-1">Ignore</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Ignore
 </code></pre>
@@ -29644,6 +29710,53 @@ was.</p>
 </code></pre>
 <p>Makes a missing key an error when reading. Without it, a missing key
 leaves the property at its default.</p>
+<h2 id="tag"><a class="header" href="#tag">Tag</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Tag
+</code></pre>
+<p>Writes an enum’s cases as objects that name their case under <code>key</code>,
+rather than as <code>{"Case": {...}}</code>.</p>
+<p>Without <code>content</code>, a case’s values sit beside the tag:
+<code>{"kind": "Circle", "radius": 2}</code>. With <code>content</code>, they go in an object
+under that key: <code>{"kind": "Circle", "data": {"radius": 2}}</code>. A case that
+carries no values is <code>{"kind": "Point"}</code> either way. Write it above an
+enum.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    [Tag("kind")]
+    enum Shape {
+        Circle(radius: int),
+        Point,
+    }
+</code></pre>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h4 id="key"><a class="header" href="#key">key</a></h4>
+<pre><code class="language-pepper">const key: String
+</code></pre>
+<p>The key that holds the case’s name.</p>
+<h4 id="content"><a class="header" href="#content">content</a></h4>
+<pre><code class="language-pepper">const content: String = ""
+</code></pre>
+<p>The key that holds the case’s values, or empty to put them beside
+the tag.</p>
+<h2 id="untagged"><a class="header" href="#untagged">Untagged</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Untagged
+</code></pre>
+<p>Writes an enum’s cases with no tag at all: a case that carries values as
+the object of its values (<code>{"radius": 2}</code>), and one that carries none as
+its name (<code>"Point"</code>).</p>
+<p>Reading tries each case in order and takes the first that reads without
+an error, so list a case whose values are a superset of another’s first.
+Write it above an enum.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import json;
+
+    [Untagged]
+    enum Size {
+        Fixed(px: int),
+        Auto,
+    }
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -30685,7 +30798,7 @@ there is none.</p>
 </code></pre>
 <p>Gives a parameter a second permanent name that a call may use:
 <code>[Alias("size", "count")]</code> lets a call name <code>count</code> as <code>size</code>.</p>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="alias-1"><a class="header" href="#alias-1">alias</a></h4>
 <pre><code class="language-pepper">const alias: String
 </code></pre>
@@ -31383,7 +31496,7 @@ server adds <code>Content-Length</code> itself.</p>
         return response;
     }
 </code></pre>
-<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
+<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
 <h4 id="status-1"><a class="header" href="#status-1">status</a></h4>
 <pre><code class="language-pepper">var status: int
 </code></pre>
