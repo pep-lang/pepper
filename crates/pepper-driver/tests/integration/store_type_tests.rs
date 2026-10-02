@@ -97,3 +97,13 @@ fn a_store_of_the_wrong_llvm_type_is_an_internal_error() {
     assert_eq!(error, "internal error: storing a value of LLVM type 'ptr' into '_value' ('int', LLVM type 'i32')");
     assert!(check_store_type(i32_type.into(), i32_type.const_zero().into(), "_value", "int").is_ok());
 }
+
+#[test]
+fn a_store_into_an_uninferred_var_says_to_write_its_type() {
+    // A `var` that inference never typed reaches codegen as `__auto` (an
+    // `i32` slot); report it as something the user can fix (#471).
+    let ctx = inkwell::context::Context::create();
+    let null = ctx.ptr_type(inkwell::AddressSpace::default()).const_null();
+    let error = check_store_type(ctx.i32_type().into(), null.into(), "n", "__auto").unwrap_err();
+    assert_eq!(error, "cannot infer the type of 'n'; write its type in place of 'var'");
+}

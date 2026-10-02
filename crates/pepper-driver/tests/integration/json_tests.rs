@@ -685,3 +685,31 @@ test(): int {
         error
     );
 }
+
+#[test]
+fn indexes_the_json_of_a_decoded_value_held_in_a_var() {
+    // `p`, and so `t`, are typed only once `from_json<P>`'s `Result` is
+    // specialized; `t["name"]` then picks `JsonValue`'s string indexer and
+    // `n` is an `Optional<String>` (#471).
+    assert_eq!(
+        run(r##"
+import json;
+
+struct P {
+    var name: String;
+}
+
+test(): int {
+    var decoded = json.from_json<P>(json.parse("{\"name\": \"pepper\"}").value());
+    var p = decoded.value();
+    var t = json.to_json(p);
+    var n = t["name"].as_string();
+    if (!n.is_value()) { return -1; }
+    if (n.value() != "pepper") { return -2; }
+    if ($"{n.is_value()}" != "true") { return -3; }
+    return 0;
+}
+"##),
+        0
+    );
+}

@@ -685,12 +685,20 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 return element;
             }
             // A struct receiver whose `[]` operator `resolve_operators` has
-            // not lowered yet (its type was not known then): the indexer's
-            // return type.
-            for methods in scopes.method_tables(&lhs_type.to_string()) {
-                if let Some((_, ret)) = methods.iter().find(|(m, _)| m == "__index_get") {
-                    return ret.clone();
-                }
+            // not lowered yet (its type was not known then): typed as the
+            // `x.__index_get(i)` call it becomes, so an overloaded indexer
+            // (`[](key: String)` and `[](index: ulong)`) picks its member.
+            if let Expression::Index { rhs, loc, .. } = expr
+                && !lhs_type.is_empty()
+                && !lhs_type.is_auto()
+            {
+                let call = Expression::MethodCall {
+                    this: lhs.clone(),
+                    method: "__index_get".to_string(),
+                    args: vec![(**rhs).clone()],
+                    loc: *loc,
+                };
+                return type_of_expr(&call, scopes, current_struct);
             }
             TypeName::auto()
         }

@@ -78,6 +78,12 @@ pub fn check_store_type<'ctx>(
     if value_ty == slot_ty {
         return Ok(());
     }
+    // A `var` whose type inference never resolved reaches codegen as
+    // `__auto`: a gap in sema's inference (#471), but one the user can work
+    // around, so say how rather than report a compiler bug.
+    if pepper_ty == pepper_sema::type_name::AUTO {
+        return Err(format!("cannot infer the type of '{name}'; write its type in place of 'var'"));
+    }
     Err(format!(
         "internal error: storing a value of LLVM type '{}' into '{}' ('{}', LLVM type '{}')",
         value_ty.print_to_string().to_string(),

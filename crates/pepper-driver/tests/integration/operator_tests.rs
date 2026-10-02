@@ -84,3 +84,42 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn an_overloaded_indexer_types_a_var_whose_receiver_is_typed_late() {
+    // `t`'s type is known only once the specialization loop types `p`
+    // (`b.value()` on a `Box<P>` the loop specializes), after
+    // `resolve_operators` has run, so `t["k"]` is still an index when
+    // `n` is inferred. `J`'s `[]` is overloaded, and `n` used to stay
+    // `__auto` with no error until codegen (#471).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"struct P { var name: int; }
+struct Box<T> {
+    var v: T;
+    construct(v: T) { this.v = v; }
+    value(): T { return v; }
+}
+struct J {
+    var key: int;
+    construct(key: int) { this.key = key; }
+    [](k: String): J { return J(k.length); }
+    [](i: ulong): J { return J(i as int + 100); }
+    flag(): Optional<int> { return Optional<int>.Value(key); }
+}
+make<T>(): Box<T> { var w: T; return Box<T>(w); }
+convert<T>(x: T): J { return J(0); }
+test(): int {
+    var b = make<P>();
+    var p = b.value();
+    var t = convert(p);
+    var n = t["key"].flag();
+    var m = t[2 as ulong].flag();
+    if (n.value() != 3) { return 1; }
+    if (m.value() != 102) { return 2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
