@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -647,20 +647,16 @@ capacity equals this Array’s <code>count</code>.</p>
     b.append(7);   # a is unchanged
 </code></pre>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Array&lt;T&gt;
+<pre><code class="language-pepper">copy(): Array&lt;T&gt;
 </code></pre>
 <p>Returns a deep copy: a new Array holding a copy of each element, made
-with <code>copies.copy</code>. This is how <code>copy(value)</code> copies an Array (the
+with <code>copy</code>. This is how <code>copy(value)</code> copies an Array (the
 <code>Copyable&lt;Array&lt;T&gt;&gt;</code> implementation); call <code>copy(array)</code> rather than
 this method.</p>
 <p>Unlike <code>clone()</code>, which shares struct elements, the result shares no
 element that is not thread-safe with this Array. An element that
 appears twice is copied once. Runs in O(count) plus the cost of
 copying the elements.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>

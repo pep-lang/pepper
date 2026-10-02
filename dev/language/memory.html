@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -513,11 +513,76 @@ reference to an object outside the copied value becomes null.</li>
 <p>A struct with a destructor or a raw pointer (<code>__ptr&lt;T&gt;</code>) field is not
 <strong>trivially copyable</strong>: copying its fields would share what it owns, such as
 a buffer it frees. Such a struct says how to copy itself by implementing
-<code>Copyable&lt;T&gt;</code>, with a <code>copy(Copies copies)</code> method that builds the copy and
-copies each value it holds with <code>copies.copy(value)</code>. <code>String</code>, <code>Array</code>,
-<code>HashMap</code> and <code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
+<code>Copyable&lt;T&gt;</code>, with a <code>copy(): T</code> method that builds the copy and copies each
+value it holds with <code>copy(value)</code>. <code>String</code>, <code>Array</code>, <code>HashMap</code> and
+<code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
 String; it replaces the deprecated <code>clone()</code>. <code>Array.clone()</code> is unchanged: it
 copies the Array but shares its elements.</p>
+<pre><code class="language-pepper"># A struct with a destructor is not trivially copyable, so it implements
+# `Copyable&lt;T&gt;` to say how `copy` copies it.
+struct Buffer {
+    __ptr&lt;u8&gt; data;
+    ulong size;
+    String label;
+
+    construct(size: ulong) {
+        data = _pep_malloc(size);
+        this.size = size;
+        label = "buffer";
+    }
+
+    destruct {
+        _pep_free(data);
+    }
+
+    copy(): Buffer {
+        var made = Buffer(size);
+        var i: ulong = 0;
+        while (i &lt; size) {
+            made.data[i] = data[i];
+            i = i + 1;
+        }
+        # The free function `copy`: it continues the running copy.
+        made.label = copy(label);
+        return made;
+    }
+}
+
+extend Buffer with Copyable&lt;Buffer&gt;;
+
+struct Message {
+    Buffer body;
+    Buffer again;
+}
+
+main(): int {
+    var message = Message();
+    message.body = Buffer(4);
+    message.body.data[0] = 9;
+    message.again = message.body;
+
+    var copied = copy(message);
+    copied.body.data[0] = 1;
+    copied.body.label.append(" (copy)");
+    assert(message.body.data[0] == 9, "the original buffer is unchanged");
+    assert(message.body.label == "buffer", "the original label is unchanged");
+    # The buffer appears twice, so its copy is one object.
+    assert(copied.again === copied.body, "one copy of the shared buffer");
+    return 0;
+}
+</code></pre>
+<p>Inside <code>copy()</code>, the call <code>copy(label)</code> is the free function, not the
+method: a bare call in a method names the struct’s own method only when one
+by that name takes those arguments. While a copy runs, <code>copy(value)</code>
+continues it rather than starting another, so an object the outer copy
+already made is reused and sharing is kept. That is why a <code>Copyable</code> value
+is copied with <code>copy(x)</code>: calling <code>x.copy()</code> directly still works, but each
+<code>copy(value)</code> inside it is then a copy of its own. A value whose contents can
+lead back to it calls <code>register_copy(this, made)</code> before copying them, so
+the cycle finds the copy being built.</p>
+<p>The <code>copy(copies: Copies): T</code> form of <code>Copyable&lt;T&gt;</code>, which took the copy’s
+context as an argument and copied with <code>copies.copy(value)</code>, still works in
+this release, with a warning at <code>Copies</code>.</p>
 <p>Copying a value that reaches a struct that is not trivially copyable and does
 not implement <code>Copyable&lt;T&gt;</code> is an error at the <code>copy</code> call. It names the
 struct, shows each field on the way to it, says why it cannot be copied, and
@@ -533,8 +598,8 @@ main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would relea
       |        ^~~~~~
 note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
     extend Handle with Copyable&lt;Handle&gt; {
-        Handle copy(Copies copies) {
-            # Build the copy; copy each struct field with copies.copy(field).
+        copy(): Handle {
+            # Build the copy; copy each struct field with copy(field).
             panic("copying 'Handle' is not implemented");
             return this;
         }

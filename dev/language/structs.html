@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -558,6 +558,10 @@ nothing. The C-style form, <code>bool is_zero() { ... }</code>, works too.</li>
 directly (<code>x</code>, <code>length_squared()</code>), or through <code>this</code> (<code>this.x</code>). A
 parameter or local with the same name as a field hides the field; use
 <code>this.</code> to reach the field.</li>
+<li>A bare call names the struct’s own method before a top-level function of
+the same name, unless no method by that name takes those arguments: then
+it calls the function. So a <code>copy(): Buffer</code> method can call the free
+function <code>copy(label)</code>.</li>
 <li>A method can change the fields of its object. Because struct values are
 references, the caller sees the change.</li>
 <li>Calling a method does not copy the object or add a reference to it. The

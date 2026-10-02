@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -422,16 +422,12 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <li>the String’s NUL-terminated byte buffer, or <code>__null</code></li>
 </ul>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies = __null): String
+<pre><code class="language-pepper">copy(): String
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size).</p>
 <p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
-implementation), which passes <code>copies</code>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far, when <code>copy(value)</code> calls it; a String holds no other objects, so it is not used</li>
-</ul>
+implementation).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent copy of this String</li>

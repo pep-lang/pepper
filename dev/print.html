@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-bea1f4dd.js"></script>
@@ -5318,6 +5318,10 @@ nothing. The C-style form, <code>bool is_zero() { ... }</code>, works too.</li>
 directly (<code>x</code>, <code>length_squared()</code>), or through <code>this</code> (<code>this.x</code>). A
 parameter or local with the same name as a field hides the field; use
 <code>this.</code> to reach the field.</li>
+<li>A bare call names the struct’s own method before a top-level function of
+the same name, unless no method by that name takes those arguments: then
+it calls the function. So a <code>copy(): Buffer</code> method can call the free
+function <code>copy(label)</code>.</li>
 <li>A method can change the fields of its object. Because struct values are
 references, the caller sees the change.</li>
 <li>Calling a method does not copy the object or add a reference to it. The
@@ -7628,11 +7632,76 @@ reference to an object outside the copied value becomes null.</li>
 <p>A struct with a destructor or a raw pointer (<code>__ptr&lt;T&gt;</code>) field is not
 <strong>trivially copyable</strong>: copying its fields would share what it owns, such as
 a buffer it frees. Such a struct says how to copy itself by implementing
-<code>Copyable&lt;T&gt;</code>, with a <code>copy(Copies copies)</code> method that builds the copy and
-copies each value it holds with <code>copies.copy(value)</code>. <code>String</code>, <code>Array</code>,
-<code>HashMap</code> and <code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
+<code>Copyable&lt;T&gt;</code>, with a <code>copy(): T</code> method that builds the copy and copies each
+value it holds with <code>copy(value)</code>. <code>String</code>, <code>Array</code>, <code>HashMap</code> and
+<code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
 String; it replaces the deprecated <code>clone()</code>. <code>Array.clone()</code> is unchanged: it
 copies the Array but shares its elements.</p>
+<pre><code class="language-pepper"># A struct with a destructor is not trivially copyable, so it implements
+# `Copyable&lt;T&gt;` to say how `copy` copies it.
+struct Buffer {
+    __ptr&lt;u8&gt; data;
+    ulong size;
+    String label;
+
+    construct(size: ulong) {
+        data = _pep_malloc(size);
+        this.size = size;
+        label = "buffer";
+    }
+
+    destruct {
+        _pep_free(data);
+    }
+
+    copy(): Buffer {
+        var made = Buffer(size);
+        var i: ulong = 0;
+        while (i &lt; size) {
+            made.data[i] = data[i];
+            i = i + 1;
+        }
+        # The free function `copy`: it continues the running copy.
+        made.label = copy(label);
+        return made;
+    }
+}
+
+extend Buffer with Copyable&lt;Buffer&gt;;
+
+struct Message {
+    Buffer body;
+    Buffer again;
+}
+
+main(): int {
+    var message = Message();
+    message.body = Buffer(4);
+    message.body.data[0] = 9;
+    message.again = message.body;
+
+    var copied = copy(message);
+    copied.body.data[0] = 1;
+    copied.body.label.append(" (copy)");
+    assert(message.body.data[0] == 9, "the original buffer is unchanged");
+    assert(message.body.label == "buffer", "the original label is unchanged");
+    # The buffer appears twice, so its copy is one object.
+    assert(copied.again === copied.body, "one copy of the shared buffer");
+    return 0;
+}
+</code></pre>
+<p>Inside <code>copy()</code>, the call <code>copy(label)</code> is the free function, not the
+method: a bare call in a method names the struct’s own method only when one
+by that name takes those arguments. While a copy runs, <code>copy(value)</code>
+continues it rather than starting another, so an object the outer copy
+already made is reused and sharing is kept. That is why a <code>Copyable</code> value
+is copied with <code>copy(x)</code>: calling <code>x.copy()</code> directly still works, but each
+<code>copy(value)</code> inside it is then a copy of its own. A value whose contents can
+lead back to it calls <code>register_copy(this, made)</code> before copying them, so
+the cycle finds the copy being built.</p>
+<p>The <code>copy(copies: Copies): T</code> form of <code>Copyable&lt;T&gt;</code>, which took the copy’s
+context as an argument and copied with <code>copies.copy(value)</code>, still works in
+this release, with a warning at <code>Copies</code>.</p>
 <p>Copying a value that reaches a struct that is not trivially copyable and does
 not implement <code>Copyable&lt;T&gt;</code> is an error at the <code>copy</code> call. It names the
 struct, shows each field on the way to it, says why it cannot be copied, and
@@ -7648,8 +7717,8 @@ main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would relea
       |        ^~~~~~
 note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
     extend Handle with Copyable&lt;Handle&gt; {
-        Handle copy(Copies copies) {
-            # Build the copy; copy each struct field with copies.copy(field).
+        copy(): Handle {
+            # Build the copy; copy each struct field with copy(field).
             panic("copying 'Handle' is not implemented");
             return this;
         }
@@ -15712,6 +15781,7 @@ the code it replaces:</p>
 <tr><td><code>Optional.is_some()</code>, <code>Optional.is_none()</code></td><td><code>is_value()</code>, <code>is_empty()</code></td></tr>
 <tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
 <tr><td>A parameter’s former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="#other-names-for-a-parameter">named arguments</a>)</td></tr>
+<tr><td><code>Copyable&lt;T&gt;</code> implemented as <code>copy(copies: Copies): T</code>, with <code>copies.copy(x)</code> and <code>copies.register(original, made)</code></td><td><code>copy(): T</code>, with <code>copy(x)</code> and <code>register_copy(original, made)</code> (see <a href="#memory-and-reference-counting">copying</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -16997,16 +17067,12 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <li>the String’s NUL-terminated byte buffer, or <code>__null</code></li>
 </ul>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies = __null): String
+<pre><code class="language-pepper">copy(): String
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size).</p>
 <p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
-implementation), which passes <code>copies</code>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far, when <code>copy(value)</code> calls it; a String holds no other objects, so it is not used</li>
-</ul>
+implementation).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent copy of this String</li>
@@ -18490,20 +18556,16 @@ capacity equals this Array’s <code>count</code>.</p>
     b.append(7);   # a is unchanged
 </code></pre>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Array&lt;T&gt;
+<pre><code class="language-pepper">copy(): Array&lt;T&gt;
 </code></pre>
 <p>Returns a deep copy: a new Array holding a copy of each element, made
-with <code>copies.copy</code>. This is how <code>copy(value)</code> copies an Array (the
+with <code>copy</code>. This is how <code>copy(value)</code> copies an Array (the
 <code>Copyable&lt;Array&lt;T&gt;&gt;</code> implementation); call <code>copy(array)</code> rather than
 this method.</p>
 <p>Unlike <code>clone()</code>, which shares struct elements, the result shares no
 element that is not thread-safe with this Array. An element that
 appears twice is copied once. Runs in O(count) plus the cost of
 copying the elements.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -18791,19 +18853,15 @@ the table.</p>
 <p>Removes every entry and releases the map’s references to their keys
 and values. The table keeps its capacity. Runs in O(capacity).</p>
 <h4 id="copy-2"><a class="header" href="#copy-2">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): HashMap&lt;K, V&gt;
+<pre><code class="language-pepper">copy(): HashMap&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
-made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashMap
+made with <code>copy</code>. This is how <code>copy(value)</code> copies a HashMap
 (the <code>Copyable&lt;HashMap&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code>
 rather than this method.</p>
 <p>The copied keys are hashed again, so a map keyed by struct identity
 finds its entries under the copied keys. Runs in O(capacity) plus the
 cost of copying the entries.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -19135,19 +19193,15 @@ while iterating makes the iterator’s next <code>next()</code> or <code>current
     }
 </code></pre>
 <h4 id="copy-1-1"><a class="header" href="#copy-1-1">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): HashSet&lt;K&gt;
+<pre><code class="language-pepper">copy(): HashSet&lt;K&gt;
 </code></pre>
 <p>Returns a deep copy: a new set holding a copy of each element, made
-with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashSet (the
+with <code>copy</code>. This is how <code>copy(value)</code> copies a HashSet (the
 <code>Copyable&lt;HashSet&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than
 this method.</p>
 <p>The copied elements are hashed again, so a set of structs compared by
 identity finds the copied elements. Runs in O(capacity) plus the cost
 of copying the elements.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -19561,16 +19615,12 @@ and less than <code>to</code>, in ascending key order, under the same rules as
     }
 </code></pre>
 <h4 id="copy-3"><a class="header" href="#copy-3">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Map&lt;K, V&gt;
+<pre><code class="language-pepper">copy(): Map&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
-made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Map (the
+made with <code>copy</code>. This is how <code>copy(value)</code> copies a Map (the
 <code>Copyable&lt;Map&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code> rather than
 this method. O(count log count) plus the cost of copying the entries.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -19803,16 +19853,12 @@ It is empty when <code>from</code> is not less than <code>to</code>.</p>
 <li>an iterator positioned before the first member in the range</li>
 </ul>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Set&lt;K&gt;
+<pre><code class="language-pepper">copy(): Set&lt;K&gt;
 </code></pre>
 <p>Returns a deep copy: a new set holding a copy of each member, made
-with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Set (the
+with <code>copy</code>. This is how <code>copy(value)</code> copies a Set (the
 <code>Copyable&lt;Set&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than this
 method.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -20041,16 +20087,12 @@ entry makes the iterator’s next <code>next()</code> or <code>current()</code> 
 <li>an iterator positioned before the first entry</li>
 </ul>
 <h4 id="copy-4"><a class="header" href="#copy-4">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): OrderedMap&lt;K, V&gt;
+<pre><code class="language-pepper">copy(): OrderedMap&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
-in the same order, made with <code>copies.copy</code>. This is how <code>copy(value)</code>
+in the same order, made with <code>copy</code>. This is how <code>copy(value)</code>
 copies an OrderedMap (the <code>Copyable&lt;OrderedMap&lt;K, V&gt;&gt;</code>
 implementation); call <code>copy(map)</code> rather than this method.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -30743,6 +30785,9 @@ pointer field must implement <code>Copyable&lt;T&gt;</code> to be copied, since 
 its fields would share what it owns; <code>String</code>, <code>Array</code>, <code>HashMap</code> and
 <code>HashSet</code> do. Copying such a struct that does not, or a plain function
 value, is a compile error.</p>
+<p>Called inside a <code>Copyable&lt;T&gt;.copy()</code> implementation while a copy is
+running, <code>copy</code> continues that copy: an object it already copied is not
+copied again.</p>
 <p>A trait value is copied by copying the struct behind it, which is known
 only at run time: when that struct cannot be copied, <code>copy</code> panics.</p>
 <p>Runs in O(size of the value) and allocates each copied object.</p>
@@ -30767,6 +30812,30 @@ only at run time: when that struct cannot be copied, <code>copy</code> panics.</
     names.append("ada");
     var copied = copy(names);
     copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<h2 id="register_copy"><a class="header" href="#register_copy">register_copy</a></h2>
+<pre><code class="language-pepper">register_copy&lt;T&gt;(original: T, made: T)
+</code></pre>
+<p>Records <code>made</code> as the copy of <code>original</code> in the running copy, so that
+copying <code>original</code> again returns <code>made</code>. A <code>Copyable&lt;T&gt;.copy()</code>
+implementation calls it before copying the values it holds when one of
+them may lead back to it; outside a copy it does nothing.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value, a struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>original</code> — the object being copied</li>
+<li><code>made</code> — its copy</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    copy(): Node {
+        var made = Node(value);
+        register_copy(this, made);   # a cycle back to this finds made
+        made.next = copy(next);
+        return made;
+    }
 </code></pre>
 <h2 id="move-1"><a class="header" href="#move-1">move</a></h2>
 <pre><code class="language-pepper">move&lt;T&gt;([MoveSource] value: T): T
@@ -30803,9 +30872,10 @@ or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
 copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.</p>
 <p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt;;</code> and give the
-struct a <code>copy(Copies copies)</code> method. The method builds the copy and
-copies each value it holds with <code>copies.copy(value)</code>, which reuses a copy
-already made, so objects referenced twice stay shared.</p>
+struct a <code>copy(): Buffer</code> method. The method builds the copy and copies
+each struct value it holds with <code>copy(value)</code>, which, called while a copy
+is running, reuses a copy already made, so objects referenced twice stay
+shared.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the implementing type</li>
@@ -30824,7 +30894,7 @@ already made, so objects referenced twice stay shared.</p>
             _pep_free(data);
         }
 
-        Buffer copy(Copies copies) {
+        copy(): Buffer {
             var made = Buffer(size);
             var i: ulong = 0;
             while (i &lt; size) {
@@ -30839,72 +30909,26 @@ already made, so objects referenced twice stay shared.</p>
 </code></pre>
 <h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): T
+<pre><code class="language-pepper">copy(): T
 </code></pre>
 <p>Returns a copy of this value, for <code>copy</code>.</p>
-<p>Copy each struct value this one holds with <code>copies.copy(value)</code>. A
-value that can hold a reference back to itself calls
-<code>copies.register(this, made)</code> before copying what it holds, so the
-cycle leads back to the copy.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
+<p>Copy each struct value this one holds with <code>copy(value)</code>. A value
+that can hold a reference back to itself calls
+<code>register_copy(this, made)</code> before copying what it holds, so the
+cycle leads back to the copy. Call <code>copy(x)</code>, not <code>x.copy()</code>, to copy
+a <code>Copyable</code> value: <code>copy(x)</code> keeps objects shared inside one copy.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
 </ul>
 <h2 id="copies-1"><a class="header" href="#copies-1">Copies</a></h2>
-<pre><code class="language-pepper">struct Copies
+<pre><code class="language-pepper">[Deprecated("implement 'Copyable&lt;T&gt;' as 'copy(): T', which copies what it holds with 'copy(value)'")] type Copies = _Copies
 </code></pre>
-<p>The objects one <code>copy</code> call has copied so far, so each is copied once:
-objects referenced twice stay shared inside the copy, and cycles end.</p>
-<p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
-implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
-<h4 id="copies-1-1"><a class="header" href="#copies-1-1">Copies()</a></h4>
-<pre><code class="language-pepper">construct()
-</code></pre>
-<p>Creates an empty set of copies.</p>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
-<h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
-<pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
-</code></pre>
-<p>Returns the copy of <code>value</code>: <code>value</code> itself when <code>T</code> is thread-safe,
-the copy already made when the same object was copied before, and a
-new copy otherwise.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type of the value</li>
-</ul>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — the value to copy</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the copy</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    Pair copy(Copies copies) {
-        return Pair(copies.copy(first), copies.copy(second));
-    }
-</code></pre>
-<h4 id="register"><a class="header" href="#register">register</a></h4>
-<pre><code class="language-pepper">register&lt;T&gt;(original: T, made: T)
-</code></pre>
-<p>Records <code>made</code> as the copy of <code>original</code>, so that copying <code>original</code>
-again returns <code>made</code>. A <code>Copyable&lt;T&gt;</code> implementation calls it before
-copying the values it holds when one of them may lead back to it.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type of the value, a struct</li>
-</ul>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>original</code> — the object being copied</li>
-<li><code>made</code> — its copy</li>
-</ul>
+<p>Deprecated: implement <code>Copyable&lt;T&gt;</code> as <code>copy(): T</code>, which copies what it
+holds with <code>copy(value)</code> and <code>register_copy(original, made)</code>.</p>
+<p>The context of a running copy, which a <code>Copyable&lt;T&gt;</code> implementation once
+took as <code>copy(copies: Copies): T</code>. Such an implementation still works
+for this release.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/handle.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="handlepep"><a class="header" href="#handlepep">handle.pep</a></h1>
 <p><code>Handle&lt;T&gt;</code>: owns a resource that Pepper’s reference counting does not
@@ -30945,7 +30969,7 @@ holding it in the closure keeps it alive until the release runs).</p>
 </code></pre>
 <p>The resource. It stays readable after the handle is released or
 detached, but it no longer refers to anything the handle owns.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="handle-1"><a class="header" href="#handle-1">Handle()</a></h4>
 <pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
 </code></pre>
@@ -31091,7 +31115,7 @@ have no defined order, as HTTP allows.</p>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -31232,7 +31256,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -31467,7 +31491,7 @@ when it will close). A request the server cannot parse gets <code>400 Bad Reques
         return 0;
     }
 </code></pre>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="server-1-1"><a class="header" href="#server-1-1">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -31656,7 +31680,7 @@ of a value (the text <code>$"{value}"</code> would hold).</p>
         return 0;
     }
 </code></pre>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -31740,7 +31764,7 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
         var line = it.current();
     }
 </code></pre>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -31852,7 +31876,7 @@ on Windows).</p>
         stream.write_all("hello");
     }
 </code></pre>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -31962,7 +31986,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -32425,7 +32449,7 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 </code></pre>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="wrapping_add-1"><a class="header" href="#wrapping_add-1">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: byte): byte
 </code></pre>
@@ -33790,7 +33814,7 @@ advances that variable.</p>
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="range-1-1"><a class="header" href="#range-1-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -34130,7 +34154,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -34142,7 +34166,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -34640,7 +34664,7 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
     var stream = connector.connect_host("localhost", 8443).value();
     stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -34752,7 +34776,7 @@ one.</p>
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -34973,7 +34997,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="uri-1-1"><a class="header" href="#uri-1-1">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>

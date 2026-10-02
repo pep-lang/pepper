@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -204,6 +204,9 @@ pointer field must implement <code>Copyable&lt;T&gt;</code> to be copied, since 
 its fields would share what it owns; <code>String</code>, <code>Array</code>, <code>HashMap</code> and
 <code>HashSet</code> do. Copying such a struct that does not, or a plain function
 value, is a compile error.</p>
+<p>Called inside a <code>Copyable&lt;T&gt;.copy()</code> implementation while a copy is
+running, <code>copy</code> continues that copy: an object it already copied is not
+copied again.</p>
 <p>A trait value is copied by copying the struct behind it, which is known
 only at run time: when that struct cannot be copied, <code>copy</code> panics.</p>
 <p>Runs in O(size of the value) and allocates each copied object.</p>
@@ -228,6 +231,30 @@ only at run time: when that struct cannot be copied, <code>copy</code> panics.</
     names.append("ada");
     var copied = copy(names);
     copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<h2 id="register_copy"><a class="header" href="#register_copy">register_copy</a></h2>
+<pre><code class="language-pepper">register_copy&lt;T&gt;(original: T, made: T)
+</code></pre>
+<p>Records <code>made</code> as the copy of <code>original</code> in the running copy, so that
+copying <code>original</code> again returns <code>made</code>. A <code>Copyable&lt;T&gt;.copy()</code>
+implementation calls it before copying the values it holds when one of
+them may lead back to it; outside a copy it does nothing.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value, a struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>original</code> — the object being copied</li>
+<li><code>made</code> — its copy</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    copy(): Node {
+        var made = Node(value);
+        register_copy(this, made);   # a cycle back to this finds made
+        made.next = copy(next);
+        return made;
+    }
 </code></pre>
 <h2 id="move"><a class="header" href="#move">move</a></h2>
 <pre><code class="language-pepper">move&lt;T&gt;([MoveSource] value: T): T
@@ -264,9 +291,10 @@ or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
 copy field by field: one with a destructor or a raw pointer field, such as
 a container that owns a buffer.</p>
 <p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt;;</code> and give the
-struct a <code>copy(Copies copies)</code> method. The method builds the copy and
-copies each value it holds with <code>copies.copy(value)</code>, which reuses a copy
-already made, so objects referenced twice stay shared.</p>
+struct a <code>copy(): Buffer</code> method. The method builds the copy and copies
+each struct value it holds with <code>copy(value)</code>, which, called while a copy
+is running, reuses a copy already made, so objects referenced twice stay
+shared.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the implementing type</li>
@@ -285,7 +313,7 @@ already made, so objects referenced twice stay shared.</p>
             _pep_free(data);
         }
 
-        Buffer copy(Copies copies) {
+        copy(): Buffer {
             var made = Buffer(size);
             var i: ulong = 0;
             while (i &lt; size) {
@@ -300,72 +328,26 @@ already made, so objects referenced twice stay shared.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): T
+<pre><code class="language-pepper">copy(): T
 </code></pre>
 <p>Returns a copy of this value, for <code>copy</code>.</p>
-<p>Copy each struct value this one holds with <code>copies.copy(value)</code>. A
-value that can hold a reference back to itself calls
-<code>copies.register(this, made)</code> before copying what it holds, so the
-cycle leads back to the copy.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
+<p>Copy each struct value this one holds with <code>copy(value)</code>. A value
+that can hold a reference back to itself calls
+<code>register_copy(this, made)</code> before copying what it holds, so the
+cycle leads back to the copy. Call <code>copy(x)</code>, not <code>x.copy()</code>, to copy
+a <code>Copyable</code> value: <code>copy(x)</code> keeps objects shared inside one copy.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
 </ul>
 <h2 id="copies"><a class="header" href="#copies">Copies</a></h2>
-<pre><code class="language-pepper">struct Copies
+<pre><code class="language-pepper">[Deprecated("implement 'Copyable&lt;T&gt;' as 'copy(): T', which copies what it holds with 'copy(value)'")] type Copies = _Copies
 </code></pre>
-<p>The objects one <code>copy</code> call has copied so far, so each is copied once:
-objects referenced twice stay shared inside the copy, and cycles end.</p>
-<p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
-implementation it calls; programs do not create their own.</p>
-<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
-<h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
-<pre><code class="language-pepper">construct()
-</code></pre>
-<p>Creates an empty set of copies.</p>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="copy-2"><a class="header" href="#copy-2">copy</a></h4>
-<pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
-</code></pre>
-<p>Returns the copy of <code>value</code>: <code>value</code> itself when <code>T</code> is thread-safe,
-the copy already made when the same object was copied before, and a
-new copy otherwise.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type of the value</li>
-</ul>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — the value to copy</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the copy</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    Pair copy(Copies copies) {
-        return Pair(copies.copy(first), copies.copy(second));
-    }
-</code></pre>
-<h4 id="register"><a class="header" href="#register">register</a></h4>
-<pre><code class="language-pepper">register&lt;T&gt;(original: T, made: T)
-</code></pre>
-<p>Records <code>made</code> as the copy of <code>original</code>, so that copying <code>original</code>
-again returns <code>made</code>. A <code>Copyable&lt;T&gt;</code> implementation calls it before
-copying the values it holds when one of them may lead back to it.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type of the value, a struct</li>
-</ul>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>original</code> — the object being copied</li>
-<li><code>made</code> — its copy</li>
-</ul>
+<p>Deprecated: implement <code>Copyable&lt;T&gt;</code> as <code>copy(): T</code>, which copies what it
+holds with <code>copy(value)</code> and <code>register_copy(original, made)</code>.</p>
+<p>The context of a running copy, which a <code>Copyable&lt;T&gt;</code> implementation once
+took as <code>copy(copies: Copies): T</code>. Such an implementation still works
+for this release.</p>
 
                     </main>
 

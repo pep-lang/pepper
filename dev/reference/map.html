@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -486,16 +486,12 @@ and less than <code>to</code>, in ascending key order, under the same rules as
     }
 </code></pre>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Map&lt;K, V&gt;
+<pre><code class="language-pepper">copy(): Map&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
-made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Map (the
+made with <code>copy</code>. This is how <code>copy(value)</code> copies a Map (the
 <code>Copyable&lt;Map&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code> rather than
 this method. O(count log count) plus the cost of copying the entries.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
@@ -728,16 +724,12 @@ It is empty when <code>from</code> is not less than <code>to</code>.</p>
 <li>an iterator positioned before the first member in the range</li>
 </ul>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): Set&lt;K&gt;
+<pre><code class="language-pepper">copy(): Set&lt;K&gt;
 </code></pre>
 <p>Returns a deep copy: a new set holding a copy of each member, made
-with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a Set (the
+with <code>copy</code>. This is how <code>copy(value)</code> copies a Set (the
 <code>Copyable&lt;Set&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than this
 method.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>

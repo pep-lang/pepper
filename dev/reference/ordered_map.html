@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a7a4374.js";
+            window.path_to_searchindex_js = "../searchindex-e9b04715.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-bea1f4dd.js"></script>
@@ -349,16 +349,12 @@ entry makes the iterator’s next <code>next()</code> or <code>current()</code> 
 <li>an iterator positioned before the first entry</li>
 </ul>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">copy(copies: Copies): OrderedMap&lt;K, V&gt;
+<pre><code class="language-pepper">copy(): OrderedMap&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
-in the same order, made with <code>copies.copy</code>. This is how <code>copy(value)</code>
+in the same order, made with <code>copy</code>. This is how <code>copy(value)</code>
 copies an OrderedMap (the <code>Copyable&lt;OrderedMap&lt;K, V&gt;&gt;</code>
 implementation); call <code>copy(map)</code> rather than this method.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>copies</code> — the objects copied so far</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
