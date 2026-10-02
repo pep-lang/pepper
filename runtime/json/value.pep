@@ -95,7 +95,7 @@ export enum JsonValue {
     [](key: String): JsonValue {
         if (this is Object(members)) {
             var found = members.try_get(key);
-            if (found.is_some()) {
+            if (found.is_value()) {
                 return found.value();
             }
         }
@@ -198,9 +198,9 @@ export enum JsonValue {
     ## @returns the value of a `Bool`, or none
     as_bool(): bool? {
         if (this is Bool(value)) {
-            return Optional<bool>.some(value);
+            return Optional<bool>.Value(value);
         }
-        return Optional<bool>.none();
+        return Optional<bool>.Empty;
     }
 
     ## Returns the number as an integer, when it is one: an `Integer`, or a
@@ -211,22 +211,22 @@ export enum JsonValue {
     ##     import json;
     ##
     ##     assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
-    ##     assert(json.parse("1.5").value().as_int().is_none(), "a fraction");
+    ##     assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
     as_int(): long? {
         match (this) {
-            Integer(value) => { return Optional<long>.some(value); }
+            Integer(value) => { return Optional<long>.Value(value); }
             Number(value) => {
                 # 2^63 is the first double past the end of a long.
                 if (value >= -9223372036854775808.0 and value < 9223372036854775808.0) {
                     var whole = value as long;
                     if ((whole as double) == value) {
-                        return Optional<long>.some(whole);
+                        return Optional<long>.Value(whole);
                     }
                 }
             }
             else => {}
         }
-        return Optional<long>.none();
+        return Optional<long>.Empty;
     }
 
     ## Returns the number as a `double`, when this is an `Integer` or a
@@ -235,11 +235,11 @@ export enum JsonValue {
     ## @returns the number, or none
     as_double(): double? {
         match (this) {
-            Integer(value) => { return Optional<double>.some(value as double); }
-            Number(value) => { return Optional<double>.some(value); }
+            Integer(value) => { return Optional<double>.Value(value as double); }
+            Number(value) => { return Optional<double>.Value(value); }
             else => {}
         }
-        return Optional<double>.none();
+        return Optional<double>.Empty;
     }
 
     ## Returns the string, when this is one.
@@ -247,9 +247,9 @@ export enum JsonValue {
     ## @returns the text of a `String`, or none
     as_string(): String? {
         if (this is String(value)) {
-            return Optional<String>.some(value);
+            return Optional<String>.Value(value);
         }
-        return Optional<String>.none();
+        return Optional<String>.Empty;
     }
 
     ## Returns the elements, when this is an array. The array is the one
@@ -258,9 +258,9 @@ export enum JsonValue {
     ## @returns the elements of an `Array`, or none
     as_array(): Array<JsonValue>? {
         if (this is Array(items)) {
-            return Optional<Array<JsonValue>>.some(items);
+            return Optional<Array<JsonValue>>.Value(items);
         }
-        return Optional<Array<JsonValue>>.none();
+        return Optional<Array<JsonValue>>.Empty;
     }
 
     ## Returns the members, when this is an object. The map is the one this
@@ -269,9 +269,9 @@ export enum JsonValue {
     ## @returns the members of an `Object`, or none
     as_object(): OrderedMap<String, JsonValue>? {
         if (this is Object(members)) {
-            return Optional<OrderedMap<String, JsonValue>>.some(members);
+            return Optional<OrderedMap<String, JsonValue>>.Value(members);
         }
-        return Optional<OrderedMap<String, JsonValue>>.none();
+        return Optional<OrderedMap<String, JsonValue>>.Empty;
     }
 
     ## Returns the value as compact JSON text, with no spaces or line
@@ -349,7 +349,7 @@ _json_write(root: JsonValue, layout: int, ascii_only: bool): String {
 # where its path says. `layout` is as for `_json_write`, and not 0.
 export _json_write_commented(root: JsonValue, notes: _JsonComments, layout: int, ascii_only: bool): String {
     var writer = _JsonWriter(layout, ascii_only);
-    writer._notes = Optional<_JsonComments>.some(notes);
+    writer._notes = Optional<_JsonComments>.Value(notes);
     writer.write(root);
     return writer.out.to_string();
 }
@@ -377,7 +377,7 @@ export struct _JsonComments {
             return;
         }
         var filed = kind.try_get(path);
-        if (filed.is_some()) {
+        if (filed.is_value()) {
             for (var comment in comments) {
                 filed.value().append(comment);
             }
@@ -453,7 +453,7 @@ struct _JsonWriter {
         _open_object = "{";
         _close_object = "}";
         _empty_object = "{}";
-        _notes = Optional<_JsonComments>.none();
+        _notes = Optional<_JsonComments>.Empty;
         _space = " ";
         _comma = ",";
         _no_path = "";
@@ -463,7 +463,7 @@ struct _JsonWriter {
     # the indentation at `depth` (`before`), or each after a space.
     _comments(kind: HashMap<String, Array<String>>, path: String, depth: ulong, leading: bool) {
         var filed = kind.try_get(path);
-        if (filed.is_none()) {
+        if (filed.is_empty()) {
             return;
         }
         for (var comment in filed.value()) {
@@ -480,14 +480,14 @@ struct _JsonWriter {
     # Whether a container at `path` has comments before its closing
     # bracket, so it is not written as `[]` or `{}`.
     _has_end(path: String): bool {
-        return _notes.is_some() && _notes.value().end.contains(path);
+        return _notes.is_value() && _notes.value().end.contains(path);
     }
 
     # Writes the comments before the closing bracket of the container at
     # `path`, each on its own line at `depth`.
     _end_comments(path: String, depth: ulong) {
         var filed = _notes.value().end.try_get(path);
-        if (filed.is_none()) {
+        if (filed.is_empty()) {
             return;
         }
         _reach(depth);
@@ -510,7 +510,7 @@ struct _JsonWriter {
     # explicit stack rather than the call stack: each container pushes its
     # closing bracket, then its elements in reverse.
     write(root: JsonValue) {
-        var keeping = _notes.is_some();
+        var keeping = _notes.is_value();
         var root_path = keeping ? "$" : _no_path;
         var steps = Array<_JsonStep>();
         steps.append(_JsonStep.Write(root, 0, root_path, true));

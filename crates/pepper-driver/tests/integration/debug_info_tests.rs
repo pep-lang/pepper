@@ -178,8 +178,8 @@ struct Leaf {
 }
 
 main(): int {
-    var leaf = Optional<Leaf>.none();
-    var found = Optional<int>.some(7);
+    var leaf = Optional<Leaf>.Empty;
+    var found = Optional<int>.Value(7);
     var suit = Suit.Hearts;
     var pair = (3, Square());
     Shape shape = Square();

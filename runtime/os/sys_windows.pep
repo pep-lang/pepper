@@ -41,7 +41,7 @@ extern int GetUserNameW(ushort* buffer, uint* size);
 export _os_sys_environment(name: String): String? {
     var wide_name = io._io_win_wide(name);
     uint capacity = 256;
-    var found = Optional<String>.none();
+    var found = Optional<String>.Empty;
     while (true) {
         __ptr<u16> buffer = _pep_malloc((capacity as ulong) * 2);
         # An empty value also returns 0, without setting an error.
@@ -49,13 +49,13 @@ export _os_sys_environment(name: String): String? {
         var length = GetEnvironmentVariableW(wide_name, buffer, capacity);
         if (length == 0) {
             if (GetLastError() != 203) {  # ERROR_ENVVAR_NOT_FOUND
-                found = Optional<String>.some(String());
+                found = Optional<String>.Value(String());
             }
             _pep_free(buffer);
             break;
         }
         if (length < capacity) {
-            found = Optional<String>.some(io._io_win_narrow(buffer, length as int));
+            found = Optional<String>.Value(io._io_win_narrow(buffer, length as int));
             _pep_free(buffer);
             break;
         }
@@ -183,14 +183,14 @@ export _os_sys_user_name(): String? {
     __ptr<uint> size = _pep_malloc(4);
     size[0] = 257;  # UNLEN + 1
     __ptr<u16> buffer = _pep_malloc(514);
-    var found = Optional<String>.none();
+    var found = Optional<String>.Empty;
     # On success `size` counts the NUL too.
     if (GetUserNameW(buffer, size) != 0 && size[0] > 1) {
-        found = Optional<String>.some(io._io_win_narrow(buffer, (size[0] - 1) as int));
+        found = Optional<String>.Value(io._io_win_narrow(buffer, (size[0] - 1) as int));
     }
     _pep_free(buffer);
     _pep_free(size);
-    if (found.is_some()) {
+    if (found.is_value()) {
         return found;
     }
     return _os_nonempty_environment("USERNAME");

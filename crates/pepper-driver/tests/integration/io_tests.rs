@@ -117,31 +117,31 @@ main(): int {
     # parent
     assert(io.Path("/a/b/c.txt").parent().value().to_string() == "/a/b", "parent");
     assert(io.Path("/a").parent().value().to_string() == "/", "parent of top-level");
-    assert(io.Path("/").parent().is_none(), "parent of root");
-    assert(io.Path("a").parent().is_none(), "parent of bare name");
+    assert(io.Path("/").parent().is_empty(), "parent of root");
+    assert(io.Path("a").parent().is_empty(), "parent of bare name");
     assert(io.Path("a/b/").parent().value().to_string() == "a", "parent ignores trailing separator");
     assert(io.Path("a//b").parent().value().to_string() == "a", "parent collapses separators");
-    assert(io.Path("").parent().is_none(), "parent of empty");
+    assert(io.Path("").parent().is_empty(), "parent of empty");
 
     # file_name / file_stem / extension
     assert(io.Path("/a/b/c.txt").file_name().value() == "c.txt", "file_name");
     assert(io.Path("a/b/").file_name().value() == "b", "file_name trailing separator");
-    assert(io.Path("/").file_name().is_none(), "file_name of root");
-    assert(io.Path("a/..").file_name().is_none(), "file_name of ..");
-    assert(io.Path("").file_name().is_none(), "file_name of empty");
+    assert(io.Path("/").file_name().is_empty(), "file_name of root");
+    assert(io.Path("a/..").file_name().is_empty(), "file_name of ..");
+    assert(io.Path("").file_name().is_empty(), "file_name of empty");
     assert(io.Path("c.tar.gz").file_stem().value() == "c.tar", "file_stem");
     assert(io.Path("c.tar.gz").extension().value() == "gz", "extension");
     assert(io.Path("/x/.bashrc").file_stem().value() == ".bashrc", "dotfile stem");
-    assert(io.Path("/x/.bashrc").extension().is_none(), "dotfile has no extension");
+    assert(io.Path("/x/.bashrc").extension().is_empty(), "dotfile has no extension");
     assert(io.Path("foo.").file_stem().value() == "foo", "trailing dot stem");
     assert(io.Path("foo.").extension().value() == "", "trailing dot: the empty extension");
-    assert(io.Path("a.b/c").extension().is_none(), "dot in a directory name");
+    assert(io.Path("a.b/c").extension().is_empty(), "dot in a directory name");
     assert(io.Path("noext").file_stem().value() == "noext", "no extension stem");
-    assert(io.Path("noext").extension().is_none(), "no extension");
-    assert(io.Path("/").file_stem().is_none(), "file_stem of root");
-    assert(io.Path(".").parent().is_none() && io.Path("..").parent().is_none(), "parent of . and ..");
+    assert(io.Path("noext").extension().is_empty(), "no extension");
+    assert(io.Path("/").file_stem().is_empty(), "file_stem of root");
+    assert(io.Path(".").parent().is_empty() && io.Path("..").parent().is_empty(), "parent of . and ..");
     assert(io.Path.dot_index("c.tar.gz").value() == 5, "dot_index");
-    assert(io.Path.dot_index(".bashrc").is_none() && io.Path.dot_index("").is_none(), "dot_index none");
+    assert(io.Path.dot_index(".bashrc").is_empty() && io.Path.dot_index("").is_empty(), "dot_index none");
 
     # with_extension
     assert(io.Path("a/b.txt").with_extension("md").to_string() == "a/b.md", "replace extension");
@@ -196,7 +196,7 @@ main(): int {
         assert(io.Path(w("a/b/c.txt")).file_name().value() == "c.txt", "file_name with backslashes");
         assert(io.Path("C:/a//./b/").normalize().to_string() == w("C:/a/b"), "normalize keeps the drive");
         assert(io.Path("C:/x").parent().value().to_string() == "C:/", "parent of a top-level name keeps the root");
-        assert(io.Path("C:/").parent().is_none(), "parent of a drive root");
+        assert(io.Path("C:/").parent().is_empty(), "parent of a drive root");
         var wc = io.Path(w("C:/a/b")).components();
         assert(wc.count == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
         assert(io.Path("a").join("C:/x").to_string() == "C:/x", "join a drive path replaces");
@@ -553,7 +553,7 @@ import [File, Directory, DirEntry, Path, IoError, ErrorKind, SeekFrom, FileType,
 # Windows and macOS always report a creation time.
 [Target(!OS(Linux))]
 check_created(m: Metadata) {
-    assert(m.created.is_some(), "created is reported");
+    assert(m.created.is_value(), "created is reported");
     assert(m.created.value() > 0, "created is after 1970");
 }
 
@@ -616,9 +616,9 @@ main(): int {
     var opened = File.open(path).value();
     var om = opened.metadata().value();
     assert(om.file_type == FileType.File, "fstat file type");
-    assert(om.created.is_some() == fm.created.is_some(), "stat and fstat agree on created");
+    assert(om.created.is_value() == fm.created.is_value(), "stat and fstat agree on created");
     opened.close();
-    assert(Metadata().file_type == FileType.Other && Metadata().created.is_none(), "default Metadata");
+    assert(Metadata().file_type == FileType.Other && Metadata().created.is_empty(), "default Metadata");
     assert(DirEntry().file_type == FileType.Other, "default DirEntry");
 
     assert(Directory.create(base.join("sub")).is_ok(), "create sub");

@@ -11,7 +11,7 @@ main(): int {
     var fields = "name,,age".split(",");
     assert(fields.count == 3 && fields[1] == "", "an empty field");
     var header = "Content-Type: text/plain".split_once(": ");
-    if (header.is_some()) {
+    if (header.is_value()) {
         var (name, value) = header.value();
         assert(name == "Content-Type" && value == "text/plain", "both halves");
     }

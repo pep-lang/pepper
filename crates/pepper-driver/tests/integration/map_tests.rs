@@ -52,7 +52,7 @@ fn map_lookups_and_order_queries() {
             r#"
 test(): int {
     var m = Map<int, int>();
-    if (m.first().is_some() || m.last().is_some()) { return -1; }
+    if (m.first().is_value() || m.last().is_value()) { return -1; }
     m[30] = 3;
     m[10] = 1;
     m[20] = 2;
@@ -60,13 +60,13 @@ test(): int {
     if (m.lower_bound(20).value().0 != 20) { return -3; }
     if (m.lower_bound(15).value().1 != 2) { return -4; }
     if (m.upper_bound(20).value().0 != 30) { return -5; }
-    if (m.upper_bound(30).is_some() || m.lower_bound(31).is_some()) { return -6; }
+    if (m.upper_bound(30).is_value() || m.lower_bound(31).is_value()) { return -6; }
     if (m.lower_bound(0).value().0 != 10) { return -7; }
-    if (m.try_get(20).value() != 2 || m.try_get(25).is_some()) { return -8; }
+    if (m.try_get(20).value() != 2 || m.try_get(25).is_value()) { return -8; }
     if (m.get(25) != 0 || m[25] != 0 || m.contains(25)) { return -9; }
     if (!m.remove(20) || m.remove(20) || m.count != 2) { return -10; }
     m.clear();
-    if (!m.is_empty || m.first().is_some()) { return -11; }
+    if (!m.is_empty || m.first().is_value()) { return -11; }
     m[5] = 50;
     if (m[5] != 50) { return -12; }
     return 0;
@@ -170,7 +170,7 @@ test(): int {
     if (order != 35) { return -4; }
     if (primes.first().value() != 2 || primes.last().value() != 7) { return -5; }
     if (primes.lower_bound(4).value() != 5 || primes.upper_bound(5).value() != 7) { return -6; }
-    if (primes.upper_bound(7).is_some()) { return -7; }
+    if (primes.upper_bound(7).is_value()) { return -7; }
     if (primes.insert(3) || !primes.insert(11) || !primes.contains(11)) { return -8; }
     if (!primes.remove(2) || primes.contains(2) || primes.remove(2)) { return -9; }
     var copied = copy(primes);
@@ -263,7 +263,7 @@ test(): int {
         keys = keys + key + ",";
     }
     if (keys != "name,license,version,") { return -5; }
-    if (config.try_get("license").value() != "MIT" || config.try_get("x").is_some()) { return -6; }
+    if (config.try_get("license").value() != "MIT" || config.try_get("x").is_value()) { return -6; }
     if (config.contains("x") || config["name"] != "Pepper") { return -7; }
     var copied = copy(config);
     config.clear();
@@ -329,7 +329,7 @@ test(): int {
     var ages = HashMap<String, int>();
     ages["ada"] = 36;
     if (ages.try_get("ada").value() != 36) { return -1; }
-    if (ages.try_get("alan").is_some()) { return -2; }
+    if (ages.try_get("alan").is_value()) { return -2; }
     return 0;
 }"#
         ),

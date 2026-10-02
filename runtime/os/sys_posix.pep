@@ -33,9 +33,9 @@ export _os_sys_environment(name: String): String? {
     # Safe from any thread: nothing in the runtime calls setenv.
     __ptr<char> value = getenv(name.c_str());
     if (value == __null) {
-        return Optional<String>.none();
+        return Optional<String>.Empty;
     }
-    return Optional<String>.some(String(value));
+    return Optional<String>.Value(String(value));
 }
 
 # The `environ` array: NAME=VALUE strings, null-terminated.
@@ -203,7 +203,7 @@ _os_passwd_field(field: ulong): String? {
     __ptr<__ptr<char>> entry = _pep_malloc(128);  # struct passwd: 48 or 72 bytes
     __ptr<__ptr<char>> result = _pep_malloc(8);
     ulong size = 1024;
-    var found = Optional<String>.none();
+    var found = Optional<String>.Empty;
     while (true) {
         __ptr<char> buffer = _pep_malloc(size);
         result[0] = __null;
@@ -214,7 +214,7 @@ _os_passwd_field(field: ulong): String? {
             continue;
         }
         if (error == 0 && result[0] != __null && entry[field] != __null) {
-            found = Optional<String>.some(String(entry[field]));
+            found = Optional<String>.Value(String(entry[field]));
         }
         _pep_free(buffer);
         break;
@@ -227,7 +227,7 @@ _os_passwd_field(field: ulong): String? {
 [Target(!OS(Windows))]
 export _os_sys_user_name(): String? {
     var name = _os_passwd_field(0);
-    if (name.is_some() && !name.value().is_empty) {
+    if (name.is_value() && !name.value().is_empty) {
         return name;
     }
     return _os_nonempty_environment("USER");
@@ -236,7 +236,7 @@ export _os_sys_user_name(): String? {
 [Target(!OS(Windows))]
 export _os_sys_home_directory(): String? {
     var home = _os_nonempty_environment("HOME");
-    if (home.is_some()) {
+    if (home.is_value()) {
         return home;
     }
     return _os_passwd_field(PASSWD_DIRECTORY_FIELD);

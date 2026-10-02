@@ -316,7 +316,7 @@ Returns the number as an integer, when it is one: an `Integer`, or a
     import json;
 
     assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
-    assert(json.parse("1.5").value().as_int().is_none(), "a fraction");
+    assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
 ```
 
 #### as_double

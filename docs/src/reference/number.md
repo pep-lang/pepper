@@ -20,11 +20,11 @@ overflow), `saturating_add` (clamped to the type's range) and
 **Example**
 ```pepper
     var port = int.parse("8080");
-    assert(port.is_some() && port.value() == 8080, "parsed");
-    assert(byte.parse("256").is_none(), "too big for a byte");
+    assert(port.is_value() && port.value() == 8080, "parsed");
+    assert(byte.parse("256").is_empty(), "too big for a byte");
     int big = 2147483647;
     assert(big.wrapping_add(1) == -2147483648, "wraps around");
-    assert(big.checked_add(1).is_none(), "does not fit");
+    assert(big.checked_add(1).is_empty(), "does not fit");
 ```
 
 Source: `runtime/number.pep`
@@ -926,7 +926,7 @@ prefixes (`0x`) or separators are accepted.
 ```pepper
     assert(int.parse("-42").value() == -42, "decimal");
     assert(int.parse("ff", 16).value() == 255, "hexadecimal");
-    assert(int.parse("12x").is_none(), "not a number");
+    assert(int.parse("12x").is_empty(), "not a number");
 ```
 
 ### Methods
@@ -1359,7 +1359,7 @@ are accepted.
 **Example**
 ```pepper
     assert(long.parse("-9000000000").value() == -9000000000, "decimal");
-    assert(long.parse("9223372036854775808").is_none(), "too big");
+    assert(long.parse("9223372036854775808").is_empty(), "too big");
 ```
 
 ### Methods
@@ -1575,7 +1575,7 @@ accepted.
 
 **Example**
 ```pepper
-    assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
+    assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
 ```
 
 ### Methods
@@ -1789,7 +1789,7 @@ hexadecimal are accepted.
 **Example**
 ```pepper
     assert(float.parse("0.25").value() == 0.25, "decimal");
-    assert(float.parse("1e39").is_none(), "too big");
+    assert(float.parse("1e39").is_empty(), "too big");
 ```
 
 ## extend double
@@ -1821,5 +1821,5 @@ hexadecimal are accepted.
 **Example**
 ```pepper
     assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
-    assert(double.parse("1.5.2").is_none(), "not a number");
+    assert(double.parse("1.5.2").is_empty(), "not a number");
 ```

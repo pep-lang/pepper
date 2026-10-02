@@ -203,7 +203,7 @@ struct Parser {
     _fail(message: String) {
         var offset = _peek().offset;
         if (!_missing_semicolon and (!_error or offset > _error.value().offset)) {
-            _error = Optional<SyntaxError>.some(SyntaxError(message, offset));
+            _error = Optional<SyntaxError>.Value(SyntaxError(message, offset));
         }
         _failed = true;
     }
@@ -240,7 +240,7 @@ struct Parser {
             return;
         }
         var last = _tokens[_position - 1];
-        _error = Optional<SyntaxError>.some(SyntaxError("expected ';'", last.offset + last.text.size));
+        _error = Optional<SyntaxError>.Value(SyntaxError("expected ';'", last.offset + last.text.size));
         _missing_semicolon = true;
         _failed = true;
     }

@@ -7,7 +7,7 @@ main(): int {
     assert(big.wrapping_add(1) == -2147483648, "wraps to the lowest int");
 
     # checked_ returns none on overflow.
-    assert(big.checked_add(1).is_none(), "no int is big + 1");
+    assert(big.checked_add(1).is_empty(), "no int is big + 1");
     assert(big.checked_sub(1).value() == 2147483646, "big - 1 fits");
 
     # saturating_ clamps to the type's range.

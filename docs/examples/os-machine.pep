@@ -7,7 +7,7 @@ main(): int {
 
     var user = os.user_name().value_or("unknown");
     var home = os.home_directory();
-    print($"user {user}, home {home.is_some() ? home.value().to_string() : "unknown"}");
+    print($"user {user}, home {home.is_value() ? home.value().to_string() : "unknown"}");
     print($"temporary files go in {os.temp_directory()}");
 
     var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";

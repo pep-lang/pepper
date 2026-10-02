@@ -28,15 +28,15 @@ fn some_and_none_pod() {
     assert_eq!(
         run(r#"
 test(): int {
-    var a = Optional<int>.some(42);
-    if (!a.is_some() || a.is_none()) { return -1; }
+    var a = Optional<int>.Value(42);
+    if (!a.is_value() || a.is_empty()) { return -1; }
     if (a.value() != 42) { return -2; }
     if (a.value_or(7) != 42) { return -3; }
-    var b = Optional<int>.none();
-    if (b.is_some() || !b.is_none()) { return -4; }
+    var b = Optional<int>.Empty;
+    if (b.is_value() || !b.is_empty()) { return -4; }
     if (b.value_or(7) != 7) { return -5; }
     var c = Optional<int>.Empty;
-    if (!c.is_none()) { return -6; }
+    if (!c.is_empty()) { return -6; }
     return 0;
 }"#),
         0
@@ -48,10 +48,10 @@ fn some_of_a_zero_value_is_still_some() {
     assert_eq!(
         run(r#"
 test(): int {
-    var a = Optional<int>.some(0);
-    if (!a.is_some()) { return -1; }
-    var b = Optional<bool>.some(false);
-    if (!b.is_some() || b.value()) { return -2; }
+    var a = Optional<int>.Value(0);
+    if (!a.is_value()) { return -1; }
+    var b = Optional<bool>.Value(false);
+    if (!b.is_value() || b.value()) { return -2; }
     return 0;
 }"#),
         0
@@ -67,9 +67,9 @@ struct Point {
     construct(int v) { this.x = v; }
 }
 test(): int {
-    var a = Optional<Point>.some(Point(7));
+    var a = Optional<Point>.Value(Point(7));
     if (a.value().x != 7) { return -1; }
-    var b = Optional<Point>.none();
+    var b = Optional<Point>.Empty;
     if (b.value_or(Point(3)).x != 3) { return -2; }
     if (a.value_or(Point(3)).x != 7) { return -3; }
     return 0;
@@ -84,14 +84,14 @@ fn returned_from_a_function() {
         run(r#"
 first_negative(values: Array<int>): Optional<int> {
     for (var v in values) {
-        if (v < 0) { return Optional<int>.some(v); }
+        if (v < 0) { return Optional<int>.Value(v); }
     }
-    return Optional<int>.none();
+    return Optional<int>.Empty;
 }
 test(): int {
     var values = Array<int>();
     values.append(1);
-    if (first_negative(values).is_some()) { return -1; }
+    if (first_negative(values).is_value()) { return -1; }
     values.append(-5);
     if (first_negative(values).value() != -5) { return -2; }
     return 0;
@@ -110,7 +110,7 @@ struct Tracker {
 test(): int {
     var t = Tracker();
     {
-        var a = Optional<Tracker>.some(t);
+        var a = Optional<Tracker>.Value(t);
         if (__refcount<Tracker>(t) != 2) { return -1; }
         var copy = a.value();
         if (__refcount<Tracker>(t) != 3) { return -2; }
@@ -128,7 +128,7 @@ fn value_of_none_panics() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let src = dir.join("main.pep");
-    std::fs::write(&src, "main(): int {\n    var a = Optional<int>.none();\n    return a.value();\n}\n").unwrap();
+    std::fs::write(&src, "main(): int {\n    var a = Optional<int>.Empty;\n    return a.value();\n}\n").unwrap();
     let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
     let options = pepper_driver::Options::parse_from(vec![
         "pepper".to_string(),
@@ -156,9 +156,9 @@ struct Token {
 }
 first_even(values: Array<int>): int? {
     for (var v in values) {
-        if (v % 2 == 0) { return Optional<int>.some(v); }
+        if (v % 2 == 0) { return Optional<int>.Value(v); }
     }
-    return Optional<int>.none();
+    return Optional<int>.Empty;
 }
 text_of(t: Token?): String {
     return t.value_or(Token("none")).text;
@@ -166,15 +166,15 @@ text_of(t: Token?): String {
 test(): int {
     var values = Array<int>();
     values.append(3);
-    if (first_even(values).is_some()) { return -1; }
+    if (first_even(values).is_value()) { return -1; }
     values.append(8);
     if (first_even(values).value() != 8) { return -2; }
-    if (text_of(Optional<Token>.none()) != "none") { return -3; }
-    Token? t = Optional<Token>.some(Token("x"));
+    if (text_of(Optional<Token>.Empty) != "none") { return -3; }
+    Token? t = Optional<Token>.Value(Token("x"));
     if (text_of(t) != "x") { return -4; }
     var all = Array<int?>();
-    all.append(Optional<int>.none());
-    if (!all[0].is_none()) { return -5; }
+    all.append(Optional<int>.Empty);
+    if (!all[0].is_empty()) { return -5; }
     var x = 3;
     var y = x > 2 ? 10 : 20;
     if (y != 10) { return -6; }
@@ -198,14 +198,14 @@ struct Node {
 }
 test(): int {
     var n = Node();
-    if (!n.leaf.is_none()) { return -1; }
-    if (!n.count.is_none()) { return -2; }
+    if (!n.leaf.is_empty()) { return -1; }
+    if (!n.count.is_empty()) { return -2; }
     var local: int?;
-    if (!local.is_none()) { return -3; }
+    if (!local.is_empty()) { return -3; }
     Token? c_style;
-    if (!c_style.is_none()) { return -4; }
-    n.leaf = Optional<Token>.some(Token());
-    if (!n.leaf.is_some()) { return -5; }
+    if (!c_style.is_empty()) { return -4; }
+    n.leaf = Optional<Token>.Value(Token());
+    if (!n.leaf.is_value()) { return -5; }
     return 0;
 }"#),
         0
@@ -232,8 +232,8 @@ test(): int {
     } else {
         return -3;
     }
-    if (some != Optional<String>.some("four")) { return -4; }
-    if (some == Optional<String>.none()) { return -5; }
+    if (some != Optional<String>.Value("four")) { return -4; }
+    if (some == Optional<String>.Empty) { return -5; }
     String? unset;
     if (unset != Optional<String>.Empty) { return -6; }
     return 0;

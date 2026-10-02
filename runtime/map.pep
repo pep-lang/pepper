@@ -578,9 +578,9 @@ export struct Map<K, V> {
     try_get(key: K): V? {
         var node = _tree._find(key);
         if (node != 0) {
-            return Optional<V>.some(_tree._values[node]);
+            return Optional<V>.Value(_tree._values[node]);
         }
-        return Optional<V>.none();
+        return Optional<V>.Empty;
     }
 
     ## Removes the entry for `key`, releasing the map's references to its
@@ -614,9 +614,9 @@ export struct Map<K, V> {
     # The entry at `node` as a tuple, or none for the sentinel.
     _entry(node: ulong): (K, V)? {
         if (node == 0) {
-            return Optional<(K, V)>.none();
+            return Optional<(K, V)>.Empty;
         }
-        return Optional<(K, V)>.some((_tree._keys[node], _tree._values[node]));
+        return Optional<(K, V)>.Value((_tree._keys[node], _tree._values[node]));
     }
 
     ## Returns the entry with the smallest key. O(log count).
@@ -879,9 +879,9 @@ export struct Set<K> {
     # The member at `node`, or none for the sentinel.
     _member(node: ulong): K? {
         if (node == 0) {
-            return Optional<K>.none();
+            return Optional<K>.Empty;
         }
-        return Optional<K>.some(_tree._keys[node]);
+        return Optional<K>.Value(_tree._keys[node]);
     }
 
     ## Returns the smallest member. O(log count).

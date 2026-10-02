@@ -159,7 +159,7 @@ export from_json<T>(value: JsonValue, unknown_keys: UnknownKeys = UnknownKeys.Ig
 ##         var config = json.decode<ServerConfig>("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
 ##         assert(config.value().port == 80, "a number");
 ##         assert(config.value().tags[0] == "x", "an array");
-##         assert(config.value().timeout.is_none(), "a missing optional");
+##         assert(config.value().timeout.is_empty(), "a missing optional");
 ##
 ##         var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
 ##         assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
@@ -178,7 +178,7 @@ export decode<T>(
         var error = result.error();
         error.path = path;
         var offset = _json_locate(text, comments, error.value_path);
-        if (offset.is_some()) {
+        if (offset.is_value()) {
             _json_place(error, text, offset.value());
         }
         return Result<T, JsonError>.err(error);
@@ -211,7 +211,7 @@ _to_json(value: bool): JsonValue {
 }
 
 _to_json<T>(value: T?): JsonValue {
-    if (value.is_some()) {
+    if (value.is_value()) {
         return _to_json(value.value());
     }
     return JsonValue.Null;
@@ -376,14 +376,14 @@ _from_json(value: JsonValue, witness: bool, path: String, unknown_keys: UnknownK
 
 _from_json<T>(value: JsonValue, witness: T?, path: String, unknown_keys: UnknownKeys): Result<T?, JsonError> {
     if (value is Null) {
-        return Result<T?, JsonError>.ok(Optional<T>.none());
+        return Result<T?, JsonError>.ok(Optional<T>.Empty);
     }
     var inner: T;
     var result = _from_json(value, inner, path, unknown_keys);
     if (result.is_err()) {
         return Result<T?, JsonError>.err(result.error());
     }
-    return Result<T?, JsonError>.ok(Optional<T>.some(result.value()));
+    return Result<T?, JsonError>.ok(Optional<T>.Value(result.value()));
 }
 
 _from_json<T>(
@@ -393,7 +393,7 @@ _from_json<T>(
         return Result<Array<T>, JsonError>.ok(__null);
     }
     var array = value.as_array();
-    if (array.is_none()) {
+    if (array.is_empty()) {
         return Result<Array<T>, JsonError>.err(_json_mismatch(path, "an array", value));
     }
     var items = array.value();
@@ -445,7 +445,7 @@ _json_read_members<TMap, V>(
     value: JsonValue, map: TMap, element: V, path: String, unknown_keys: UnknownKeys
 ): Result<TMap, JsonError> {
     var members = value.as_object();
-    if (members.is_none()) {
+    if (members.is_empty()) {
         return Result<TMap, JsonError>.err(_json_mismatch(path, "an object", value));
     }
     for (var (key, member) in members.value()) {
@@ -459,7 +459,7 @@ _json_read_members<TMap, V>(
 }
 
 _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownKeys): Result<T, JsonError> {
-    var error = Optional<JsonError>.none();
+    var error = Optional<JsonError>.Empty;
     var out = witness;
     # Runtime locals of the second static block, which a `var` inside it
     # would make compile-time values.
@@ -484,8 +484,8 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
         } else if (reflect.is_same<T, u64>()) {
             error = _json_integer(value, path, 0, 9223372036854775807, reflect.name<T>());
         } else if (reflect.is_same<T, float>() || reflect.is_same<T, double>()) {
-            if (value.as_double().is_none()) {
-                error = Optional<JsonError>.some(_json_mismatch(path, "a number", value));
+            if (value.as_double().is_empty()) {
+                error = Optional<JsonError>.Value(_json_mismatch(path, "a number", value));
             }
         } else if (reflect.is_enum<T>()) {
             reflect.assert(
@@ -493,17 +493,17 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 $"'decode' cannot convert type '{reflect.name<T>()}' from JSON"
             );
             if (_json_case_name(value).is_empty && !(reflect.is_reference<T>() && value.is_null())) {
-                error = Optional<JsonError>.some(_json_mismatch(path, "a string or an object with one key", value));
+                error = Optional<JsonError>.Value(_json_mismatch(path, "a string or an object with one key", value));
             }
         } else if (reflect.is_struct<T>()) {
-            if (value.as_object().is_none() && !value.is_null()) {
-                error = Optional<JsonError>.some(_json_mismatch(path, "an object", value));
+            if (value.as_object().is_empty() && !value.is_null()) {
+                error = Optional<JsonError>.Value(_json_mismatch(path, "an object", value));
             }
         } else {
             reflect.error($"'decode' cannot convert type '{reflect.name<T>()}' from JSON");
         }
     }
-    if (error.is_some()) {
+    if (error.is_value()) {
         return Result<T, JsonError>.err(error.value());
     }
     static (value, path, unknown_keys, error, out, known, found, failures) {
@@ -532,8 +532,8 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 if (name == case.name) {
                     found = true;
                     if (case.values.is_empty) {
-                        if (value.as_string().is_none()) {
-                            error = Optional<JsonError>.some(
+                        if (value.as_string().is_empty()) {
+                            error = Optional<JsonError>.Value(
                                 _json_error(
                                     path,
                                     $"case '{case.name}' carries no values; write it as the string \"{case.name}\""
@@ -542,14 +542,14 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                         } else {
                             out = case.get();
                         }
-                    } else if (value.as_string().is_some()) {
-                        error = Optional<JsonError>.some(
+                    } else if (value.as_string().is_value()) {
+                        error = Optional<JsonError>.Value(
                             _json_error(
                                 path, $"case '{case.name}' carries values; write it as {{\"{case.name}\": {{...}}}}"
                             )
                         );
-                    } else if (payload.as_object().is_none()) {
-                        error = Optional<JsonError>.some(_json_mismatch(case_path, "an object", payload));
+                    } else if (payload.as_object().is_empty()) {
+                        error = Optional<JsonError>.Value(_json_mismatch(case_path, "an object", payload));
                     } else {
                         # `case.get(...)` takes every value at once, so each
                         # count has its own call; a failed value records its
@@ -623,7 +623,7 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                             known.append(item.name);
                         }
                         if (failures.count > 0) {
-                            error = Optional<JsonError>.some(failures[0]);
+                            error = Optional<JsonError>.Value(failures[0]);
                         } else if (unknown_keys == UnknownKeys.Reject) {
                             error = _json_unknown_key(payload, known, case_path);
                         }
@@ -631,7 +631,9 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 }
             }
             if (!found) {
-                error = Optional<JsonError>.some(_json_error(path, $"'{name}' is not a case of '{reflect.name<T>()}'"));
+                error = Optional<JsonError>.Value(
+                    _json_error(path, $"'{name}' is not a case of '{reflect.name<T>()}'")
+                );
             }
         } else if (reflect.is_struct<T>()) {
             out = _json_new(out, value.is_null());
@@ -663,28 +665,28 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                         key = field.attribute<serialize.Name>().value;
                     }
                     known.append(key);
-                    if (error.is_none() && !value.is_null()) {
+                    if (error.is_empty() && !value.is_null()) {
                         if (value.contains(key)) {
                             var member = _from_json(
                                 _json_member(value, key), field.get(out), _json_path_key(path, key), unknown_keys
                             );
                             if (member.is_err()) {
-                                error = Optional<JsonError>.some(member.error());
+                                error = Optional<JsonError>.Value(member.error());
                             } else {
                                 field.set(out, member.value());
                             }
                         } else if (field.has_attribute<serialize.Required>()) {
-                            error = Optional<JsonError>.some(_json_error(path, $"missing required key '{key}'"));
+                            error = Optional<JsonError>.Value(_json_error(path, $"missing required key '{key}'"));
                         }
                     }
                 }
             }
-            if (error.is_none() && !value.is_null() && unknown_keys == UnknownKeys.Reject) {
+            if (error.is_empty() && !value.is_null() && unknown_keys == UnknownKeys.Reject) {
                 error = _json_unknown_key(value, known, path);
             }
         }
     }
-    if (error.is_some()) {
+    if (error.is_value()) {
         return Result<T, JsonError>.err(error.value());
     }
     return Result<T, JsonError>.ok(out);
@@ -707,27 +709,27 @@ _json_null<T>(witness: T): T {
 # Empty when `value` is an integer in [low, high], else the error.
 _json_integer(value: JsonValue, path: String, low: long, high: long, type_name: String): JsonError? {
     var number = value.as_int();
-    if (number.is_none()) {
-        if (value.as_double().is_some()) {
-            return Optional<JsonError>.some(_json_error(path, $"expected an integer, found {value.to_string()}"));
+    if (number.is_empty()) {
+        if (value.as_double().is_value()) {
+            return Optional<JsonError>.Value(_json_error(path, $"expected an integer, found {value.to_string()}"));
         }
-        return Optional<JsonError>.some(_json_mismatch(path, "a number", value));
+        return Optional<JsonError>.Value(_json_mismatch(path, "a number", value));
     }
     var n = number.value();
     if (n < low || n > high) {
-        return Optional<JsonError>.some(_json_error(path, $"{n} does not fit in '{type_name}'"));
+        return Optional<JsonError>.Value(_json_error(path, $"{n} does not fit in '{type_name}'"));
     }
-    return Optional<JsonError>.none();
+    return Optional<JsonError>.Empty;
 }
 
 # The first key of object `value` that is not in `known`, as an error.
 _json_unknown_key(value: JsonValue, known: Array<String>, path: String): JsonError? {
     for (var (key, member) in value.as_object().value()) {
         if (!known.contains(key)) {
-            return Optional<JsonError>.some(_json_error(_json_path_key(path, key), $"unknown key '{key}'"));
+            return Optional<JsonError>.Value(_json_error(_json_path_key(path, key), $"unknown key '{key}'"));
         }
     }
-    return Optional<JsonError>.none();
+    return Optional<JsonError>.Empty;
 }
 
 # `{"name": {}}`, the form of a case that carries values.
@@ -744,7 +746,7 @@ _json_case_name(value: JsonValue): String {
         return text;
     }
     var members = value.as_object();
-    if (members.is_some() && members.value().count == 1) {
+    if (members.is_value() && members.value().count == 1) {
         for (var (key, member) in members.value()) {
             return key;
         }

@@ -132,7 +132,7 @@ followed by two hexadecimal digits.
 **Example**
 ```pepper
     var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.scheme == "mailto" && mail.host.is_none(), "no authority");
+    assert(mail.scheme == "mailto" && mail.host.is_empty(), "no authority");
     assert(mail.path == "someone@example.com", "the path holds the address");
     assert(Uri.parse("a b").is_err(), "a space must be encoded");
 ```

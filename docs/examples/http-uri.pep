@@ -9,7 +9,7 @@ main(): int {
 
     # Missing parts are Empty: a mailto URI has no authority.
     var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.host.is_none() && mail.path == "someone@example.com", "no authority");
+    assert(mail.host.is_empty() && mail.path == "someone@example.com", "no authority");
 
     # A relative reference has no scheme, like a request target on a server.
     var target = Uri.parse("/items?page=2").value();

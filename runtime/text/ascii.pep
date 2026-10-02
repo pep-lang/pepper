@@ -9,7 +9,7 @@ import "utf8";
 ##     import text;
 ##
 ##     assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
-##     assert(text.Ascii.encode("é").is_none(), "not ASCII");
+##     assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 export struct Ascii {
     ## Returns the ASCII bytes of `value`, or none when it holds a code
     ## point past 127.
@@ -18,9 +18,9 @@ export struct Ascii {
     ## @returns a new array of one byte per code point, or none
     static encode(value: String): u8[]? {
         if (!Ascii.is_ascii(value)) {
-            return Optional<u8[]>.none();
+            return Optional<u8[]>.Empty;
         }
-        return Optional<u8[]>.some(value.bytes());
+        return Optional<u8[]>.Value(value.bytes());
     }
 
     ## Returns the ASCII bytes of `value`, with `?` for each code point past
@@ -69,11 +69,11 @@ export struct Ascii {
         ulong index = 0;
         while (index < bytes.count) {
             if (bytes[index] >= 128) {
-                return Optional<String>.none();
+                return Optional<String>.Empty;
             }
             index = index + 1;
         }
-        return Optional<String>.some(Utf8.decode_lossy(bytes));
+        return Optional<String>.Value(Utf8.decode_lossy(bytes));
     }
 
     ## Decodes ASCII `bytes`, replacing each byte of 128 or more with

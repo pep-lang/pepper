@@ -48,15 +48,15 @@ read_limit(text: String): Result<int, ConfigError> {
 
 first_name(names: Array<String>): String? {
     if (names.is_empty) {
-        return Optional<String>.none();
+        return Optional<String>.Empty;
     }
-    return Optional<String>.some(names[0]);
+    return Optional<String>.Value(names[0]);
 }
 
 # On an Optional, `?` returns an Empty optional from a function that returns
 # one.
 first_length(names: Array<String>): ulong? {
-    return Optional<ulong>.some(first_name(names)?.length);
+    return Optional<ulong>.Value(first_name(names)?.length);
 }
 
 main(): int {
@@ -67,6 +67,6 @@ main(): int {
     assert(read_limit("ten").error().message == "bad number 'ten'", "converted to a ConfigError");
 
     assert(first_length(["Ada", "Grace"]).value() == 3, "Ada");
-    assert(first_length(Array<String>()).is_none(), "no names");
+    assert(first_length(Array<String>()).is_empty(), "no names");
     return 0;
 }

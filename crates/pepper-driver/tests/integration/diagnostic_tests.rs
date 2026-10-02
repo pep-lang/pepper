@@ -114,7 +114,7 @@ fn undeclared_identifier_before_whitespace() {
 fn struct_compared_with_integer() {
     // An `Optional` never equals an integer: comparing would compare the
     // object, so `find(3) == -1` would always be false.
-    let source = "find(x: int): ulong? {\n    return Optional<ulong>.some(1);\n}\nmain(): int {\n    if (find(3) == -1) { return 1; }\n    return 0;\n}\n";
+    let source = "find(x: int): ulong? {\n    return Optional<ulong>.Value(1);\n}\nmain(): int {\n    if (find(3) == -1) { return 1; }\n    return 0;\n}\n";
     assert_eq!(
         error_of("struct_with_integer", source),
         "main.pep:5:17: error: cannot compare 'Optional<ulong>' with an integer\n\
@@ -4779,4 +4779,26 @@ fn extern_overloaded_by_another_extern() {
          \x20   1 | extern int abs(int x);\n\
          \x20     |            ^~~"
     );
+}
+
+#[test]
+fn optional_old_method_names_warn_and_still_run() {
+    let source = "test(): int {\n\
+                  \x20   var a = Optional<int>.some(1);\n\
+                  \x20   var b = Optional<int>.none();\n\
+                  \x20   if (!a.is_some() || !b.is_none()) { return 1; }\n\
+                  \x20   return 0;\n\
+                  }\n";
+    let mut module = compiled(source);
+    let warnings = module.render_warnings();
+    for expected in [
+        "main.pep:2:27: warning: 'some' is deprecated: use the case 'Value' instead [deprecated]",
+        "main.pep:3:27: warning: 'none' is deprecated: use the case 'Optional<T>.Empty' instead [deprecated]",
+        "main.pep:4:12: warning: 'is_some' is deprecated: use 'is_value' instead [deprecated]",
+        "main.pep:4:28: warning: 'is_none' is deprecated: use 'is_empty' instead [deprecated]",
+    ] {
+        assert!(warnings.contains(expected), "missing {expected:?} in:\n{warnings}");
+    }
+    let ctx = inkwell::context::Context::create();
+    assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 0);
 }

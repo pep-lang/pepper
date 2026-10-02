@@ -20,6 +20,6 @@ main(): int {
     if (config.try_get("license") is Value(license)) {
         assert(license == "MIT", "found");
     }
-    assert(config.try_get("author").is_none(), "absent");
+    assert(config.try_get("author").is_empty(), "absent");
     return 0;
 }

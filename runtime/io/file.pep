@@ -641,7 +641,7 @@ export struct File {
             return IoResult<String>.err(r.error());
         }
         var decoded = text.Utf8.decode(r.value());
-        if (decoded.is_none()) {
+        if (decoded.is_empty()) {
             return IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "stream did not contain valid UTF-8"));
         }
         return IoResult<String>.ok(decoded.value());

@@ -24,7 +24,7 @@ main(): int {
     var names = Array<String>();
     while (true) {
         var entry = reader.next_entry().value();
-        if (entry.is_none()) {
+        if (entry.is_empty()) {
             break;
         }
         names.append(entry.value().path);

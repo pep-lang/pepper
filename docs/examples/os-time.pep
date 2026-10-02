@@ -21,6 +21,6 @@ main(): int {
     assert(now.unix_seconds() > 1700000000, "after November 2023");
     var tomorrow = now + os.Duration.from_seconds(86400);
     assert(tomorrow.duration_since(now).value() == os.Duration.from_seconds(86400), "a day later");
-    assert(now.duration_since(tomorrow).is_none(), "no negative durations");
+    assert(now.duration_since(tomorrow).is_empty(), "no negative durations");
     return 0;
 }

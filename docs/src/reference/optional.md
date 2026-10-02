@@ -21,9 +21,8 @@ every type, including those that have no null, such as `int`.
 `T?` is shorthand for `Optional<T>`, and a variable or field of an
 optional type that is not given a value starts as Empty.
 
-Build one with the static `some` or `none` functions, or with its cases
-(`Optional<int>.Value(1)`, `Optional<int>.Empty`). Test it with `is_some()`
-or `is_none()`, as a condition by itself (`if (found)`), or with `match`
+Build one with its cases (`Optional<int>.Value(1)`, `Optional<int>.Empty`).
+Test it with `is_value()` or `is_empty()`, as a condition by itself (`if (found)`), or with `match`
 and `is` on its cases (`if (found is Value(v))`).
 
 An optional is a [value enum](../language/value-structs.md): it is stored
@@ -38,9 +37,9 @@ optionals with `==`, not `===`.
 ```pepper
     find_even(values: Array<int>): int? {
         for (var v in values) {
-            if (v % 2 == 0) { return Optional<int>.some(v); }
+            if (v % 2 == 0) { return Optional<int>.Value(v); }
         }
-        return Optional<int>.none();
+        return Optional<int>.Empty;
     }
 
     main(): int {
@@ -80,12 +79,13 @@ Holds a value.
 #### some
 
 ```pepper
-static some(value: T): Optional<T>
+[Deprecated("use the case 'Value' instead", "Value")] static some(value: T): Optional<T>
 ```
 
-Returns a Value optional holding `value`.
+Deprecated: use the `Value` case, `Optional<T>.Value(value)`,
+instead.
 
-For a struct `T` the optional acquires a reference to `value`.
+Returns a Value optional holding `value`.
 
 **Parameters**
 - `value` — the value to hold
@@ -93,34 +93,62 @@ For a struct `T` the optional acquires a reference to `value`.
 **Returns**
 - a Value optional whose value is `value`
 
-**Example**
-```pepper
-    var answer = Optional<int>.some(42);
-```
-
 #### none
 
 ```pepper
-static none(): Optional<T>
+[Deprecated("use the case 'Optional<T>.Empty' instead")] static none(): Optional<T>
 ```
+
+Deprecated: use the `Empty` case, `Optional<T>.Empty`, instead.
 
 Returns an Empty optional, one holding no value.
 
 **Returns**
 - an Empty optional
 
-**Example**
+### Methods
+
+#### is_value
+
 ```pepper
-    var nothing = Optional<String>.none();
+is_value(): bool
 ```
 
-### Methods
+Reports whether this optional holds a value.
+
+**Returns**
+- true when the optional is Value
+
+**Example**
+```pepper
+    var found = Optional<int>.Value(7);
+    if (found.is_value()) { print(found.value()); }   # prints 7
+```
+
+#### is_empty
+
+```pepper
+is_empty(): bool
+```
+
+Reports whether this optional holds no value.
+
+**Returns**
+- true when the optional is Empty
+
+**Example**
+```pepper
+    var missing = Optional<int>.Empty;
+    if (missing.is_empty()) { print("missing"); }
+```
 
 #### is_some
 
 ```pepper
-is_some(): bool
+[Deprecated("use 'is_value' instead", "is_value")] is_some(): bool
 ```
+
+Deprecated: use `is_value` instead.
 
 Reports whether this optional holds a value.
 
@@ -130,8 +158,10 @@ Reports whether this optional holds a value.
 #### is_none
 
 ```pepper
-is_none(): bool
+[Deprecated("use 'is_empty' instead", "is_empty")] is_none(): bool
 ```
+
+Deprecated: use `is_empty` instead.
 
 Reports whether this optional holds no value.
 
@@ -147,8 +177,8 @@ Reports whether this optional holds no value.
 Reports whether this optional holds a value: the truth test, so an
 optional can stand as a condition by itself.
 
-`if (found)` means `if (found.is_some())`, `!found` means
-`found.is_none()`, and the same holds in `while`, `&&`, `||` and
+`if (found)` means `if (found.is_value())`, `!found` means
+`found.is_empty()`, and the same holds in `while`, `&&`, `||` and
 `?:`.
 
 **Returns**
@@ -156,7 +186,7 @@ optional can stand as a condition by itself.
 
 **Example**
 ```pepper
-    var found = Optional<int>.some(7);
+    var found = Optional<int>.Value(7);
     if (found) { print(found.value()); }   # prints 7
 ```
 
@@ -182,7 +212,7 @@ its reference too.
 
 **Example**
 ```pepper
-    var n = Optional<int>.some(42).value();   # 42
+    var n = Optional<int>.Value(42).value();   # 42
 ```
 
 #### value_or
@@ -204,5 +234,5 @@ is used.
 
 **Example**
 ```pepper
-    var n = Optional<int>.none().value_or(-1);   # -1
+    var n = Optional<int>.Empty.value_or(-1);   # -1
 ```

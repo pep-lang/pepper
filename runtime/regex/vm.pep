@@ -110,7 +110,7 @@ export struct _RegexMatcher {
                 if (op == _REGEX_OP_MATCH) {
                     matched = true;
                     if (earliest) {
-                        return Optional<long[]>.some(best);
+                        return Optional<long[]>.Value(best);
                     }
                     best = _copy_slots(_current, pc);
                     # Lower-priority threads can only give a worse match.
@@ -140,9 +140,9 @@ export struct _RegexMatcher {
             position += width;
         }
         if (!matched) {
-            return Optional<long[]>.none();
+            return Optional<long[]>.Empty;
         }
-        return Optional<long[]>.some(best);
+        return Optional<long[]>.Value(best);
     }
 
     _reset_captures() {

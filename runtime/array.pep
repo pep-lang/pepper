@@ -607,16 +607,16 @@ export struct Array<T> {
     ## @example
     ##     var a = [3, 9, 4];
     ##     var i = a.find(9);         # i.value() == 1
-    ##     var missing = a.find(7);   # missing.is_none() == true
+    ##     var missing = a.find(7);   # missing.is_empty() == true
     find(item: T): ulong? {
         ulong index = 0;
         while (index < _size) {
             if (_data[index] == item) {
-                return Optional<ulong>.some(index);
+                return Optional<ulong>.Value(index);
             }
             index = index + 1;
         }
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
 
     ## Reports whether any element equals `item`, compared as `find` does.
@@ -626,7 +626,7 @@ export struct Array<T> {
     ## @param item the value to look for
     ## @returns true when `find(item)` finds a match
     contains(item: T): bool {
-        return find(item).is_some();
+        return find(item).is_value();
     }
 
     ## Appends every element of `rhs`, in order, to the end of this Array.

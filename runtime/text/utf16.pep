@@ -51,9 +51,9 @@ export struct Utf16 {
     static decode(bytes: u8[], big_endian: bool = false): String? {
         var out = Array<u8>();
         if (!_text_utf16_decode(bytes, big_endian, false, out)) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
-        return Optional<String>.some(Utf8.decode_lossy(out));
+        return Optional<String>.Value(Utf8.decode_lossy(out));
     }
 
     ## Decodes UTF-16 `bytes`, replacing each unpaired surrogate, and a

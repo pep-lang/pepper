@@ -233,11 +233,11 @@ test(): int {
         index = index + 1;
     }
     var optionals = Array<String?>();
-    optionals.append(Optional<String>.some("a"));
-    optionals.append(Optional<String>.none());
-    optionals.append(Optional<String>.some("c"));
+    optionals.append(Optional<String>.Value("a"));
+    optionals.append(Optional<String>.Empty);
+    optionals.append(Optional<String>.Value("c"));
     if (items[39].label != "item 39" || items[39].weight != 78) { return -1; }
-    if (optionals[2].value() != "c" || optionals[1].is_some()) { return -2; }
+    if (optionals[2].value() != "c" || optionals[1].is_value()) { return -2; }
     return 0;
 }
 "#,
@@ -460,7 +460,7 @@ test(): int {
     var spelled: Result<int, Error> = results[0];
     if (!spelled.is_ok()) { return -2; }
     var found = Array<int?>();
-    found.append(Optional<int>.some(1));
+    found.append(Optional<int>.Value(1));
     found.append(Optional<int>.Empty);
     if (found[0].value() != 1 || found[1]) { return -3; }
     return 0;

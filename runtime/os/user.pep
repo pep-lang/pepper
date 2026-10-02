@@ -31,10 +31,10 @@ export user_name(): String? {
 ##     }
 export home_directory(): io.Path? {
     var path = _os_sys_home_directory();
-    if (path.is_none() || path.value().is_empty) {
-        return Optional<io.Path>.none();
+    if (path.is_empty() || path.value().is_empty) {
+        return Optional<io.Path>.Empty;
     }
-    return Optional<io.Path>.some(io.Path(path.value()));
+    return Optional<io.Path>.Value(io.Path(path.value()));
 }
 
 ## Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX,
@@ -48,8 +48,8 @@ export temp_directory(): io.Path {
 # A variable's value when it is set and not empty.
 export _os_nonempty_environment(name: String): String? {
     var value = environment(name);
-    if (value.is_some() && value.value().is_empty) {
-        return Optional<String>.none();
+    if (value.is_value() && value.value().is_empty) {
+        return Optional<String>.Empty;
     }
     return value;
 }

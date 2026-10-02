@@ -169,16 +169,16 @@ export struct _IoUringDriver {
     static open(): _IoUringDriver? {
         var driver = _IoUringDriver();
         if (!_async_io_uring_setup(driver)) {
-            return Optional<_IoUringDriver>.none();
+            return Optional<_IoUringDriver>.Empty;
         }
         driver._bell = _async_io_uring_create_bell();
         if (driver._bell < 0) {
             driver._unmap();
-            return Optional<_IoUringDriver>.none();
+            return Optional<_IoUringDriver>.Empty;
         }
         driver._wait_argument = _pep_malloc(40);
         driver._arm_bell();
-        return Optional<_IoUringDriver>.some(driver);
+        return Optional<_IoUringDriver>.Value(driver);
     }
 
     # Queues a one-shot poll on the doorbell.

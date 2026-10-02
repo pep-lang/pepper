@@ -19,7 +19,7 @@ main(): int {
     var popped = a.pop();
     assert(popped == 3 && a.count == 2, "pop drops the last element");
     assert(a.find(9).value() == 0, "find locates an element");
-    assert(a.find(42).is_none(), "find reports a missing element as none");
+    assert(a.find(42).is_empty(), "find reports a missing element as none");
     assert(a.contains(9), "contains reports membership");
     assert(!a.contains(42), "contains rejects missing elements");
     var b = a.clone();

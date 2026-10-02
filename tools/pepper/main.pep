@@ -71,12 +71,12 @@ main(args: String[]): int {
 # Runs `pep-<command>` with `arguments` and returns its exit status, or
 # reports why it cannot.
 run_command(command: String, arguments: Array<String>): int {
-    var tool = is_command_name(command) ? find_tool(command) : Optional<Path>.none();
-    if (tool.is_none()) {
+    var tool = is_command_name(command) ? find_tool(command) : Optional<Path>.Empty;
+    if (tool.is_empty()) {
         var message = $"pepper: error: '{command}' is not a pepper command";
         var commands = find_commands();
         var best = cli.closest(command, commands);
-        if (best.is_some()) {
+        if (best.is_value()) {
             message = message + $"; did you mean '{best.value()}'?";
         }
         File.stderr().write_all(message + "\n\n" + command_list(commands));
@@ -95,7 +95,7 @@ run_command(command: String, arguments: Array<String>): int {
     }
     var status = ended.value();
     var code = status.code();
-    if (code.is_some()) {
+    if (code.is_value()) {
         return code.value();
     }
     # Killed by a signal: report it the way a POSIX shell does.
@@ -127,10 +127,10 @@ find_tool(command: String): Path? {
     for (var directory in search_directories()) {
         var candidate = directory.join(file_name);
         if (is_executable(candidate)) {
-            return Optional<Path>.some(candidate);
+            return Optional<Path>.Value(candidate);
         }
     }
-    return Optional<Path>.none();
+    return Optional<Path>.Empty;
 }
 
 # Every command a `pep-*` executable in the searched directories provides,
@@ -172,12 +172,12 @@ search_directories(): Array<Path> {
     var executable = process.executable_path();
     if (executable.is_ok()) {
         var parent = executable.value().parent();
-        if (parent.is_some()) {
+        if (parent.is_value()) {
             directories.append(parent.value());
         }
     }
     var path = os.environment("PATH");
-    if (path.is_some()) {
+    if (path.is_value()) {
         var separator = is_windows() ? ";" : ":";
         for (var entry in path.value().split(separator)) {
             if (!entry.is_empty) {

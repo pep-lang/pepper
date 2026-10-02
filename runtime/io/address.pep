@@ -130,13 +130,13 @@ export struct IpAddress {
         var p = unsafe_cast<__ptr<u8>>(text.c_str());
         var n = text.size;
         var v4 = _io_parse_v4(p, n, 0, n);
-        if (v4.is_some()) {
+        if (v4.is_value()) {
             var address = IpAddress();
             address._low = v4.value();
             return IoResult<IpAddress>.ok(address);
         }
         var v6 = _io_parse_v6(p, n, 0, n);
-        if (v6.is_some()) {
+        if (v6.is_value()) {
             var bits: (high: ulong, low: ulong) = v6.value();
             var address = IpAddress();
             address._is_v6 = true;
@@ -362,13 +362,13 @@ export struct SocketAddress {
             }
         }
         var port = _io_parse_port(p, n, colon + 1, n);
-        if (port.is_none()) {
+        if (port.is_empty()) {
             return bad;
         }
         var address = IpAddress();
         if (v6) {
             var groups = _io_parse_v6(p, n, 1, colon - 1);
-            if (groups.is_none()) {
+            if (groups.is_empty()) {
                 return bad;
             }
             var bits: (high: ulong, low: ulong) = groups.value();
@@ -377,7 +377,7 @@ export struct SocketAddress {
             address._low = bits.low;
         } else {
             var value = _io_parse_v4(p, n, 0, colon);
-            if (value.is_none()) {
+            if (value.is_empty()) {
                 return bad;
             }
             address._low = value.value();
@@ -526,38 +526,38 @@ export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
             digits = digits + 1;
             i = i + 1;
             if (digits > 3) {
-                return Optional<ulong>.none();
+                return Optional<ulong>.Empty;
             }
         }
         if (digits == 0 || part > 255) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
         if (digits > 1 && first == '0') {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
         value = (value << 8) | part;
         parts = parts + 1;
         if (parts < 4) {
             if (i >= end) {
-                return Optional<ulong>.none();
+                return Optional<ulong>.Empty;
             }
             if (_io_byte(p, n, i) != '.') {
-                return Optional<ulong>.none();
+                return Optional<ulong>.Empty;
             }
             i = i + 1;
         }
     }
     if (i != end) {
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
-    return Optional<ulong>.some(value);
+    return Optional<ulong>.Value(value);
 }
 
 # RFC 4291 text: up to eight hex groups, at most one `::`, an optional
 # dotted IPv4 tail. Returns the high and low 64 bits, or none when the text
 # is not an IPv6 address.
 export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<(high: ulong, low: ulong)> {
-    var fail = Optional<(high: ulong, low: ulong)>.none();
+    var fail = Optional<(high: ulong, low: ulong)>.Empty;
     if (start >= end) {
         return fail;
     }
@@ -590,7 +590,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<
         if (j < end && _io_byte(p, n, j) == '.') {
             # The last 32 bits as an IPv4 address.
             var v4 = _io_parse_v4(p, n, i, end);
-            if (v4.is_none()) {
+            if (v4.is_empty()) {
                 return fail;
             }
             groups.append(v4.value() >> 16);
@@ -645,27 +645,27 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<
     }
     var high = (all[0] << 48) | (all[1] << 32) | (all[2] << 16) | all[3];
     var low = (all[4] << 48) | (all[5] << 32) | (all[6] << 16) | all[7];
-    return Optional<(high: ulong, low: ulong)>.some((high: high, low: low));
+    return Optional<(high: ulong, low: ulong)>.Value((high: high, low: low));
 }
 
 # A decimal port, 0 to 65535, one to five digits; none when the text is not
 # one.
 export _io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
     if (start >= end || end - start > 5) {
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
     ulong value = 0;
     var i = start;
     while (i < end) {
         var c = _io_byte(p, n, i);
         if (!_io_is_digit(c)) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
         value = value * 10 + (c - '0') as ulong;
         i = i + 1;
     }
     if (value > 65535) {
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
-    return Optional<ulong>.some(value);
+    return Optional<ulong>.Value(value);
 }

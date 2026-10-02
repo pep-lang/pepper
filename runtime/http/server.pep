@@ -151,7 +151,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         _http_refuse(reader, 400);
         return false;
     }
-    if (first.value().is_none()) {
+    if (first.value().is_empty()) {
         return false;  # the client closed between requests
     }
     var line = first.value().value();
@@ -179,7 +179,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     }
     var keep = version == "HTTP/1.1";
     var connection_field = request.headers.get("Connection");
-    if (connection_field.is_some()) {
+    if (connection_field.is_value()) {
         if (_http_contains_token(connection_field.value(), "close")) {
             keep = false;
         } else if (_http_contains_token(connection_field.value(), "keep-alive")) {
@@ -187,7 +187,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         }
     }
     var expect = request.headers.get("Expect");
-    if (expect.is_some()) {
+    if (expect.is_value()) {
         if (expect.value().lower() == "100-continue") {
             var go_on = Array<u8>();
             _http_append(go_on, "HTTP/1.1 100 Continue\r\n\r\n");

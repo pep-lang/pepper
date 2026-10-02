@@ -82,7 +82,7 @@ _tar_error(message: String): io.IoError {
 ##     var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
 ##     while (true) {
 ##         var entry = tar.next_entry().value();
-##         if (entry.is_none()) {
+##         if (entry.is_empty()) {
 ##             break;
 ##         }
 ##         print(entry.value().path);
@@ -173,7 +173,7 @@ export struct TarReader {
     ##   the source's error
     next_entry(): io.IoResult<TarEntry?> {
         if (_ended) {
-            return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.none());
+            return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.Empty);
         }
         var skipped = _skip(_left + _padding);
         if (skipped.is_err()) {
@@ -182,10 +182,10 @@ export struct TarReader {
         _left = 0;
         _padding = 0;
         # Values from pax and GNU headers for the entry they come before.
-        var long_path = Optional<String>.none();
-        var long_link = Optional<String>.none();
-        var long_size = Optional<ulong>.none();
-        var long_modified = Optional<long>.none();
+        var long_path = Optional<String>.Empty;
+        var long_link = Optional<String>.Empty;
+        var long_size = Optional<ulong>.Empty;
+        var long_modified = Optional<long>.Empty;
         while (true) {
             var header = Array<u8>(512);
             var taken = _take(header, 512);
@@ -194,20 +194,20 @@ export struct TarReader {
             }
             if (taken.value() == 0) {
                 _ended = true;
-                return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.none());
+                return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.Empty);
             }
             if (taken.value() != 512) {
                 return io.IoResult<TarEntry?>.err(_tar_error("tar archive is truncated"));
             }
             if (_tar_is_zero(header)) {
                 _ended = true;
-                return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.none());
+                return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.Empty);
             }
             if (!_tar_checksum_ok(header)) {
                 return io.IoResult<TarEntry?>.err(_tar_error("tar header checksum mismatch"));
             }
             var size_field = _tar_number(header, 124, 12);
-            if (size_field.is_none()) {
+            if (size_field.is_empty()) {
                 return io.IoResult<TarEntry?>.err(_tar_error("tar header has an invalid size"));
             }
             var size = size_field.value();
@@ -226,25 +226,25 @@ export struct TarReader {
                     return io.IoResult<TarEntry?>.err(after.error());
                 }
                 if (type_flag == 'L') {
-                    long_path = Optional<String>.some(_tar_string(data.value(), 0, size));
+                    long_path = Optional<String>.Value(_tar_string(data.value(), 0, size));
                 } else if (type_flag == 'K') {
-                    long_link = Optional<String>.some(_tar_string(data.value(), 0, size));
+                    long_link = Optional<String>.Value(_tar_string(data.value(), 0, size));
                 } else if (type_flag == 'x') {
                     var records = _tar_pax_records(data.value());
-                    if (records.is_none()) {
+                    if (records.is_empty()) {
                         return io.IoResult<TarEntry?>.err(_tar_error("tar pax header is invalid"));
                     }
                     for (var (key, value) in records.value()) {
                         if (key == "path") {
-                            long_path = Optional<String>.some(value);
+                            long_path = Optional<String>.Value(value);
                         } else if (key == "linkpath") {
-                            long_link = Optional<String>.some(value);
+                            long_link = Optional<String>.Value(value);
                         } else if (key == "size") {
                             var parsed = ulong.parse(value);
-                            if (parsed.is_none()) {
+                            if (parsed.is_empty()) {
                                 return io.IoResult<TarEntry?>.err(_tar_error("tar pax header has an invalid size"));
                             }
-                            long_size = Optional<ulong>.some(parsed.value());
+                            long_size = Optional<ulong>.Value(parsed.value());
                         } else if (key == "mtime") {
                             var whole = value;
                             var dot = value.find(".");
@@ -252,8 +252,8 @@ export struct TarReader {
                                 whole = value.substr_bytes(0, dot as ulong);
                             }
                             var parsed = long.parse(whole);
-                            if (parsed.is_some()) {
-                                long_modified = Optional<long>.some(parsed.value());
+                            if (parsed.is_value()) {
+                                long_modified = Optional<long>.Value(parsed.value());
                             }
                         }
                     }
@@ -294,17 +294,17 @@ export struct TarReader {
             if (type_flag == 0 && entry.path.ends_with("/")) {
                 entry.kind = EntryKind.Directory;
             }
-            if (long_path.is_some()) {
+            if (long_path.is_value()) {
                 entry.path = long_path.value();
             }
-            if (long_link.is_some()) {
+            if (long_link.is_value()) {
                 entry.link_target = long_link.value();
             }
-            if (long_size.is_some()) {
+            if (long_size.is_value()) {
                 size = long_size.value();
                 padding = (512 - size % 512) % 512;
             }
-            if (long_modified.is_some()) {
+            if (long_modified.is_value()) {
                 entry.modified = long_modified.value();
             }
             if (entry.kind == EntryKind.File) {
@@ -312,9 +312,9 @@ export struct TarReader {
             }
             _left = size;
             _padding = padding;
-            return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.some(entry));
+            return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.Value(entry));
         }
-        return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.none());
+        return io.IoResult<TarEntry?>.ok(Optional<TarEntry>.Empty);
     }
 
     ## Reads up to `max` more bytes of the current entry's contents and
@@ -389,7 +389,7 @@ export struct TarReader {
             if (next.is_err()) {
                 return io.IoResult<void>.err(next.error());
             }
-            if (next.value().is_none()) {
+            if (next.value().is_empty()) {
                 return io.IoResult<void>.ok();
             }
             var entry = next.value().value();
@@ -412,7 +412,7 @@ export struct TarReader {
                 continue;
             }
             var parent = destination.parent();
-            if (parent.is_some()) {
+            if (parent.is_value()) {
                 var made = io.Directory.create_all(parent.value());
                 if (made.is_err()) {
                     return made;
@@ -515,7 +515,7 @@ _tar_is_zero(header: u8[]): bool {
 # field itself counted as spaces.
 _tar_checksum_ok(header: u8[]): bool {
     var stored = _tar_number(header, 148, 8);
-    if (stored.is_none()) {
+    if (stored.is_empty()) {
         return false;
     }
     ulong sum = 0;
@@ -540,12 +540,12 @@ _tar_number(header: u8[], start: ulong, size: ulong): ulong? {
         ulong index = 1;
         while (index < size) {
             if (value >= ((1 as ulong) << 55)) {
-                return Optional<ulong>.none();
+                return Optional<ulong>.Empty;
             }
             value = (value << 8) | (header[start + index] as ulong);
             index += 1;
         }
-        return Optional<ulong>.some(value);
+        return Optional<ulong>.Value(value);
     }
     ulong value = 0;
     ulong index = 0;
@@ -558,12 +558,12 @@ _tar_number(header: u8[], start: ulong, size: ulong): ulong? {
             break;
         }
         if (digit < '0' || digit > '7') {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
         value = value * 8 + ((digit - '0') as ulong);
         index += 1;
     }
-    return Optional<ulong>.some(value);
+    return Optional<ulong>.Value(value);
 }
 
 # The text of the `size`-byte field at `start`, up to its first NUL.
@@ -591,24 +591,24 @@ _tar_pax_records(data: u8[]): Array<(String, String)>? {
         while (at < data.count && data[at] >= '0' && data[at] <= '9') {
             length = length * 10 + ((data[at] - '0') as ulong);
             if (length > data.count) {
-                return Optional<Array<(String, String)>>.none();
+                return Optional<Array<(String, String)>>.Empty;
             }
             at += 1;
         }
         var end = position + length;
         if (at == position || at >= data.count || data[at] != ' ' || end > data.count || data[end - 1] != '\n') {
-            return Optional<Array<(String, String)>>.none();
+            return Optional<Array<(String, String)>>.Empty;
         }
         var record = _tar_string_range(data, at + 1, end - 1);
         var equals = record.find("=");
         if (equals < 0) {
-            return Optional<Array<(String, String)>>.none();
+            return Optional<Array<(String, String)>>.Empty;
         }
         var split = equals as ulong;
         records.append((record.substr_bytes(0, split), record.substr_bytes(split + 1, record.size - split - 1)));
         position = end;
     }
-    return Optional<Array<(String, String)>>.some(records);
+    return Optional<Array<(String, String)>>.Value(records);
 }
 
 # The text of `data[start..end]`, NULs included.
@@ -794,7 +794,7 @@ export struct TarWriter {
         var prefix = "";
         if (path.size > 100) {
             var split = _tar_split_path(path);
-            if (split.is_some()) {
+            if (split.is_value()) {
                 var (head, tail) = split.value();
                 prefix = head;
                 name = tail;
@@ -856,7 +856,7 @@ _tar_zeros(count: ulong): u8[] {
 _tar_split_path(path: String): (String, String)? {
     var size = path.size;
     if (size > 256) {
-        return Optional<(String, String)>.none();
+        return Optional<(String, String)>.Empty;
     }
     var bytes = path.bytes();
     # The latest `/` that leaves a short enough prefix; the name after it
@@ -864,13 +864,13 @@ _tar_split_path(path: String): (String, String)? {
     var index = size - 1;
     while (index > 0) {
         if (bytes[index] == '/' && index <= 155 && size - index - 1 <= 100 && index + 1 < size) {
-            return Optional<(String, String)>.some(
+            return Optional<(String, String)>.Value(
                 (path.substr_bytes(0, index), path.substr_bytes(index + 1, size - index - 1))
             );
         }
         index -= 1;
     }
-    return Optional<(String, String)>.none();
+    return Optional<(String, String)>.Empty;
 }
 
 # The first bytes of `text`, at most `size`, cut at a UTF-8 boundary.

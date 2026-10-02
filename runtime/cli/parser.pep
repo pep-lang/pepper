@@ -477,20 +477,20 @@ export struct Parser {
             } else if (!only_positionals and argument.starts_with("--")) {
                 var body = argument.substr_bytes(2, argument.size - 2);
                 var name = body;
-                var attached = Optional<String>.none();
+                var attached = Optional<String>.Empty;
                 var split = body.split_once("=");
                 if (split) {
                     var (before, after) = split.value();
                     name = before;
-                    attached = Optional<String>.some(after);
+                    attached = Optional<String>.Value(after);
                 }
                 var option = _find_option(name);
                 if (option === __null) {
                     if (name == "help") {
-                        return Result<String?>.ok(Optional<String>.some(help()));
+                        return Result<String?>.ok(Optional<String>.Value(help()));
                     }
                     if (name == "version" and !_version.is_empty) {
-                        return Result<String?>.ok(Optional<String>.some(root._name + " " + _version + "\n"));
+                        return Result<String?>.ok(Optional<String>.Value(root._name + " " + _version + "\n"));
                     }
                     return _fail(root, _unknown_option(name));
                 }
@@ -515,10 +515,10 @@ export struct Parser {
                     var option = _find_short(letter);
                     if (option === __null) {
                         if (letter == "h") {
-                            return Result<String?>.ok(Optional<String>.some(help()));
+                            return Result<String?>.ok(Optional<String>.Value(help()));
                         }
                         if (letter == "V" and !_version.is_empty) {
-                            return Result<String?>.ok(Optional<String>.some(root._name + " " + _version + "\n"));
+                            return Result<String?>.ok(Optional<String>.Value(root._name + " " + _version + "\n"));
                         }
                         return _fail(root, "unknown option '-" + letter + "'");
                     }
@@ -574,7 +574,7 @@ export struct Parser {
         if (!_commands.is_empty) {
             return _fail(root, "missing command: expected " + _command_names());
         }
-        return Result<String?>.ok(Optional<String>.none());
+        return Result<String?>.ok(Optional<String>.Empty);
     }
 
     # An error for each required option left out.
@@ -584,7 +584,7 @@ export struct Parser {
                 return _fail(root, "missing required option '--" + option.name + "'");
             }
         }
-        return Result<String?>.ok(Optional<String>.none());
+        return Result<String?>.ok(Optional<String>.Empty);
     }
 
     # A value for `option`: the last one wins unless it is repeatable.
@@ -634,7 +634,7 @@ export struct Parser {
         }
         names.append("help");
         var best = closest(name, names);
-        return best.is_some() ? message + "; did you mean '--" + best.value() + "'?" : message;
+        return best.is_value() ? message + "; did you mean '--" + best.value() + "'?" : message;
     }
 
     _command_suggestion(name: String): String {
@@ -643,7 +643,7 @@ export struct Parser {
             names.append(command._name);
         }
         var best = closest(name, names);
-        return best.is_some() ? "; did you mean '" + best.value() + "'?" : "";
+        return best.is_value() ? "; did you mean '" + best.value() + "'?" : "";
     }
 
     # The character of `argument` whose UTF-8 sequence starts at byte `at`,
@@ -697,12 +697,12 @@ export struct Parser {
 ##     names.append("fmt");
 ##     var best = cli.closest("buidl", names);   # some("build")
 export closest(name: String, candidates: Array<String>): String? {
-    var best = Optional<String>.none();
+    var best = Optional<String>.Empty;
     var best_distance = 3;
     for (var candidate in candidates) {
         var distance = _cli_edit_distance(name, candidate);
         if (distance < best_distance) {
-            best = Optional<String>.some(candidate);
+            best = Optional<String>.Value(candidate);
             best_distance = distance;
         }
     }

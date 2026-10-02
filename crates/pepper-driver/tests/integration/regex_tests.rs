@@ -22,7 +22,7 @@ import regex;
 # The text of the first match of `pattern` in `text`, or "<none>".
 first(pattern: String, text: String): String {
     var found = regex.Regex(pattern).find(text);
-    if (found.is_none()) {
+    if (found.is_empty()) {
         return "<none>";
     }
     return found.value().text();
@@ -107,8 +107,8 @@ test(): int {
 
     # A group that does not take part is none; an empty one is "".
     var either = regex.Regex("(a)|(b)").find("b").value();
-    if (either.group(1).is_some() || either.group(2).value() != "b") { return -20; }
-    if (either.group_range(1).is_some()) { return -21; }
+    if (either.group(1).is_value() || either.group(2).value() != "b") { return -20; }
+    if (either.group_range(1).is_value()) { return -21; }
     var empty = regex.Regex("x(y*)z").find("xz").value();
     if (empty.group(1).value() != "") { return -22; }
 
@@ -136,7 +136,7 @@ import regex;
 
 first(pattern: String, text: String): String {
     var found = regex.Regex(pattern).find(text);
-    if (found.is_none()) {
+    if (found.is_empty()) {
         return "<none>";
     }
     return found.value().text();
@@ -217,9 +217,9 @@ test(): int {
 
     var after = regex.Regex("\\d").find_at("1a2b3", 1).value();
     if (after.text() != "2" || after.start() != 2) { return -40; }
-    if (regex.Regex("\\d").find_at("1a2", 3).is_some()) { return -41; }
+    if (regex.Regex("\\d").find_at("1a2", 3).is_value()) { return -41; }
     # Assertions see the text before the start.
-    if (regex.Regex("^a").find_at("aa", 1).is_some()) { return -42; }
+    if (regex.Regex("^a").find_at("aa", 1).is_value()) { return -42; }
     return 0;
 }
 "##),

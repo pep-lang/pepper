@@ -125,14 +125,14 @@ export struct _IocpDriver {
     static open(): _IocpDriver? {
         var port = _async_iocp_create();
         if (port == __null) {
-            return Optional<_IocpDriver>.none();
+            return Optional<_IocpDriver>.Empty;
         }
         var afd = _async_iocp_open_afd(port);
         if (afd == __null) {
             _async_iocp_close_handle(port);
-            return Optional<_IocpDriver>.none();
+            return Optional<_IocpDriver>.Empty;
         }
-        return Optional<_IocpDriver>.some(_IocpDriver(port, afd));
+        return Optional<_IocpDriver>.Value(_IocpDriver(port, afd));
     }
 
     # Handles one dequeued request block.

@@ -79,12 +79,12 @@ statement(ok: bool): Result<int> {
 }
 
 plus_one(o: int?): int? {
-    return Optional<int>.some(o? + 1);
+    return Optional<int>.Value(o? + 1);
 }
 
 name_length(names: Array<String>, index: ulong): ulong? {
-    var name = (index < names.count ? Optional<String>.some(names[index]) : Optional<String>.none())?;
-    return Optional<ulong>.some(name.length);
+    var name = (index < names.count ? Optional<String>.Value(names[index]) : Optional<String>.Empty)?;
+    return Optional<ulong>.Value(name.length);
 }
 
 nested(s: String): Result<int, ParseError> {
@@ -174,11 +174,11 @@ test_statement(): int {
 }
 
 test_optional(): int {
-    if (plus_one(Optional<int>.some(1)).value() != 2) { return 1; }
-    if (plus_one(Optional<int>.none()).is_some()) { return 2; }
+    if (plus_one(Optional<int>.Value(1)).value() != 2) { return 1; }
+    if (plus_one(Optional<int>.Empty).is_value()) { return 2; }
     var names = ["ab", "cde"];
     if (name_length(names, 1).value() != 3) { return 3; }
-    if (name_length(names, 2).is_some()) { return 4; }
+    if (name_length(names, 2).is_value()) { return 4; }
     return 0;
 }
 
@@ -250,7 +250,7 @@ fn propagation() {
     );
 }
 
-const HEADER: &str = "struct Other {\n    construct() {}\n}\nparse(): Result<int> {\n    return Result<int>.ok(1);\n}\nmaybe(): int? {\n    return Optional<int>.some(1);\n}\n";
+const HEADER: &str = "struct Other {\n    construct() {}\n}\nparse(): Result<int> {\n    return Result<int>.ok(1);\n}\nmaybe(): int? {\n    return Optional<int>.Value(1);\n}\n";
 
 /// The first line of the error `body` (appended to [`HEADER`]) fails with.
 fn first_line(body: &str) -> String {

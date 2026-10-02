@@ -247,7 +247,7 @@ _http_parse_url(url: String): io.IoResult<_HttpUrl> {
 # parses; the client then takes only http and https.
 _http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
     var parsed = _HttpUrl();
-    if (!uri.is_absolute() || uri.host.is_none()) {
+    if (!uri.is_absolute() || uri.host.is_empty()) {
         return _http_invalid_url(url, "no scheme, such as 'https://'");
     }
     match (uri.scheme) {
@@ -262,14 +262,14 @@ _http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
             return _http_invalid_url(url, $"the scheme '{uri.scheme}' is not supported; use http or https");
         }
     }
-    if (uri.user_info.is_some()) {
+    if (uri.user_info.is_value()) {
         return _http_invalid_url(url, "user information is not supported");
     }
     parsed._host = uri.host.value();
     if (parsed._host.size == 0) {
         return _http_invalid_url(url, "no host");
     }
-    if (uri.port.is_some()) {
+    if (uri.port.is_value()) {
         if (uri.port.value() == 0) {
             return _http_invalid_url(url, "invalid port");
         }

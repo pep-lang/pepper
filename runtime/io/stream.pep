@@ -241,7 +241,7 @@ export struct Lines {
             _line.pop();
         }
         var decoded = text.Utf8.decode(_line);
-        if (decoded.is_none()) {
+        if (decoded.is_empty()) {
             _finished = true;
             return _yield(IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "line is not valid UTF-8")));
         }

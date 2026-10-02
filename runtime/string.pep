@@ -522,18 +522,18 @@ export struct String {
     ## @panics if `separator` is empty
     ## @example
     ##     var header = "Host: example.com".split_once(": ");
-    ##     assert(header.is_some(), "has a colon");
+    ##     assert(header.is_value(), "has a colon");
     ##     var (name, value) = header.value();
     ##     assert(name == "Host" && value == "example.com", "split");
     split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)? {
         assert(separator._size > 0, "String.split_once: the separator is empty", location);
         var found = find(separator);
         if (found < 0) {
-            return Optional<(String, String)>.none();
+            return Optional<(String, String)>.Empty;
         }
         var at = found as ulong;
         var after = at + separator._size;
-        return Optional<(String, String)>.some((substr_bytes(0, at), substr_bytes(after, _size - after)));
+        return Optional<(String, String)>.Value((substr_bytes(0, at), substr_bytes(after, _size - after)));
     }
 
     ## Returns the pieces of `parts` joined into one String, with this String

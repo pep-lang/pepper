@@ -13,8 +13,8 @@ main(): int {
     var set = os.environment("OS_TEST_SET");
     print($"set=[{set.value_or("<none>")}]");
     print($"empty=[{os.environment("OS_TEST_EMPTY").value_or("<none>")}]");
-    print($"missing={os.environment("OS_TEST_MISSING").is_none()}");
-    print($"blank={os.environment("").is_none()}");
+    print($"missing={os.environment("OS_TEST_MISSING").is_empty()}");
+    print($"blank={os.environment("").is_empty()}");
     var count = 0;
     for (var (name, value) in os.environment_variables()) {
         if (name == "OS_TEST_SET" || name == "OS_TEST_EMPTY" || name == "OS_TEST_EQUALS") {
@@ -91,15 +91,15 @@ system_time_counts_from_the_unix_epoch(): int {
     # 2023-11-14 and 2200-01-01.
     if (now.unix_seconds() < 1700000000 || now.unix_seconds() > 7258118400) { return 1; }
     var epoch = os.SystemTime();
-    if (epoch.unix_nanoseconds() != 0 || now.duration_since(epoch).is_none()) { return 2; }
-    if (epoch.duration_since(now).is_some()) { return 3; }
+    if (epoch.unix_nanoseconds() != 0 || now.duration_since(epoch).is_empty()) { return 2; }
+    if (epoch.duration_since(now).is_value()) { return 3; }
     var before = os.SystemTime.from_unix_nanoseconds(-1);
     if (before.unix_seconds() != -1 || before.unix_milliseconds() != -1) { return 4; }
     var ten = os.SystemTime.from_unix_seconds(10);
     if (ten.duration_since(epoch).value() != os.Duration.from_seconds(10)) { return 5; }
     if (ten - os.Duration.from_seconds(10) != epoch || epoch + os.Duration.from_seconds(10) != ten) { return 6; }
     if (!(epoch < ten) || ten.unix_milliseconds() != 10000) { return 7; }
-    if (ten.elapsed().is_none()) { return 8; }
+    if (ten.elapsed().is_empty()) { return 8; }
     return 0;
 }
 
@@ -110,8 +110,8 @@ machine_and_user(): int {
     var page = os.page_size();
     if (page < 4096 || (page & (page - 1)) != 0) { return 6; }
     if (os.system_version().is_empty) { return 7; }
-    if (os.user_name().is_none()) { return 8; }
-    if (os.home_directory().is_none()) { return 9; }
+    if (os.user_name().is_empty()) { return 8; }
+    if (os.home_directory().is_empty()) { return 9; }
     if (os.temp_directory().to_string() != io.Directory.temp().to_string()) { return 10; }
     return 0;
 }

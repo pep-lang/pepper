@@ -14,9 +14,8 @@ import "internals";
 ## `T?` is shorthand for `Optional<T>`, and a variable or field of an
 ## optional type that is not given a value starts as Empty.
 ##
-## Build one with the static `some` or `none` functions, or with its cases
-## (`Optional<int>.Value(1)`, `Optional<int>.Empty`). Test it with `is_some()`
-## or `is_none()`, as a condition by itself (`if (found)`), or with `match`
+## Build one with its cases (`Optional<int>.Value(1)`, `Optional<int>.Empty`).
+## Test it with `is_value()` or `is_empty()`, as a condition by itself (`if (found)`), or with `match`
 ## and `is` on its cases (`if (found is Value(v))`).
 ##
 ## An optional is a [value enum](../language/value-structs.md): it is stored
@@ -28,9 +27,9 @@ import "internals";
 ## @example
 ##     find_even(values: Array<int>): int? {
 ##         for (var v in values) {
-##             if (v % 2 == 0) { return Optional<int>.some(v); }
+##             if (v % 2 == 0) { return Optional<int>.Value(v); }
 ##         }
-##         return Optional<int>.none();
+##         return Optional<int>.Empty;
 ##     }
 ##
 ##     main(): int {
@@ -51,23 +50,24 @@ export enum Optional<T> {
     ## @param value the value held
     Value(value: T),
 
-    ## Returns a Value optional holding `value`.
+    ## Deprecated: use the `Value` case, `Optional<T>.Value(value)`,
+    ## instead.
     ##
-    ## For a struct `T` the optional acquires a reference to `value`.
+    ## Returns a Value optional holding `value`.
     ##
     ## @param value the value to hold
     ## @returns a Value optional whose value is `value`
-    ## @example
-    ##     var answer = Optional<int>.some(42);
+    [Deprecated("use the case 'Value' instead", "Value")]
     static some(value: T): Optional<T> {
         return Optional<T>.Value(value);
     }
 
+    ## Deprecated: use the `Empty` case, `Optional<T>.Empty`, instead.
+    ##
     ## Returns an Empty optional, one holding no value.
     ##
     ## @returns an Empty optional
-    ## @example
-    ##     var nothing = Optional<String>.none();
+    [Deprecated("use the case 'Optional<T>.Empty' instead")]
     static none(): Optional<T> {
         return Optional<T>.Empty;
     }
@@ -75,13 +75,39 @@ export enum Optional<T> {
     ## Reports whether this optional holds a value.
     ##
     ## @returns true when the optional is Value
-    is_some(): bool {
+    ## @example
+    ##     var found = Optional<int>.Value(7);
+    ##     if (found.is_value()) { print(found.value()); }   # prints 7
+    is_value(): bool {
         return this is Value;
     }
 
     ## Reports whether this optional holds no value.
     ##
     ## @returns true when the optional is Empty
+    ## @example
+    ##     var missing = Optional<int>.Empty;
+    ##     if (missing.is_empty()) { print("missing"); }
+    is_empty(): bool {
+        return this is Empty;
+    }
+
+    ## Deprecated: use `is_value` instead.
+    ##
+    ## Reports whether this optional holds a value.
+    ##
+    ## @returns true when the optional is Value
+    [Deprecated("use 'is_value' instead", "is_value")]
+    is_some(): bool {
+        return this is Value;
+    }
+
+    ## Deprecated: use `is_empty` instead.
+    ##
+    ## Reports whether this optional holds no value.
+    ##
+    ## @returns true when the optional is Empty
+    [Deprecated("use 'is_empty' instead", "is_empty")]
     is_none(): bool {
         return this is Empty;
     }
@@ -89,13 +115,13 @@ export enum Optional<T> {
     ## Reports whether this optional holds a value: the truth test, so an
     ## optional can stand as a condition by itself.
     ##
-    ## `if (found)` means `if (found.is_some())`, `!found` means
-    ## `found.is_none()`, and the same holds in `while`, `&&`, `||` and
+    ## `if (found)` means `if (found.is_value())`, `!found` means
+    ## `found.is_empty()`, and the same holds in `while`, `&&`, `||` and
     ## `?:`.
     ##
     ## @returns true when the optional is Value
     ## @example
-    ##     var found = Optional<int>.some(7);
+    ##     var found = Optional<int>.Value(7);
     ##     if (found) { print(found.value()); }   # prints 7
     !!(): bool {
         return this is Value;
@@ -110,7 +136,7 @@ export enum Optional<T> {
     ## @returns the value of a Value optional
     ## @panics if the optional is Empty ("Optional.value on an Empty optional")
     ## @example
-    ##     var n = Optional<int>.some(42).value();   # 42
+    ##     var n = Optional<int>.Value(42).value();   # 42
     value(location: __ptr<char> = __caller_location()): T {
         if (this is Value(value)) {
             return value;
@@ -141,7 +167,7 @@ export enum Optional<T> {
     ## @param fallback the value to return when the optional is Empty
     ## @returns the value when the optional is Value, otherwise `fallback`
     ## @example
-    ##     var n = Optional<int>.none().value_or(-1);   # -1
+    ##     var n = Optional<int>.Empty.value_or(-1);   # -1
     value_or(fallback: T): T {
         if (this is Value(value)) {
             return value;

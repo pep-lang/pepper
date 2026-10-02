@@ -62,7 +62,7 @@ export struct Uri {
     ##   with no `]`, or a port that is not a number from 0 to 65535
     ## @example
     ##     var mail = Uri.parse("mailto:someone@example.com").value();
-    ##     assert(mail.scheme == "mailto" && mail.host.is_none(), "no authority");
+    ##     assert(mail.scheme == "mailto" && mail.host.is_empty(), "no authority");
     ##     assert(mail.path == "someone@example.com", "the path holds the address");
     ##     assert(Uri.parse("a b").is_err(), "a space must be encoded");
     static parse(text: String): Result<Uri> {
@@ -129,11 +129,11 @@ export struct Uri {
             while (end < size && data[end] != '#') {
                 end = end + 1;
             }
-            uri.query = Optional<String>.some(text.substr_bytes(start, end - start));
+            uri.query = Optional<String>.Value(text.substr_bytes(start, end - start));
         }
         if (end < size) {
             start = end + 1;
-            uri.fragment = Optional<String>.some(text.substr_bytes(start, size - start));
+            uri.fragment = Optional<String>.Value(text.substr_bytes(start, size - start));
         }
         return Result<Uri>.ok(uri);
     }
@@ -189,11 +189,11 @@ export struct Uri {
     ## @returns the authority, such as `user@example.com:8443`, or Empty when
     ##   `host` is Empty
     authority(): String? {
-        if (host.is_none()) {
-            return Optional<String>.none();
+        if (host.is_empty()) {
+            return Optional<String>.Empty;
         }
         var text = StringBuilder();
-        if (user_info.is_some()) {
+        if (user_info.is_value()) {
             text.append(user_info.value());
             text.append("@");
         }
@@ -203,11 +203,11 @@ export struct Uri {
         } else {
             text.append(name);
         }
-        if (port.is_some()) {
+        if (port.is_value()) {
             var number = port.value();
             text.append($":{number}");
         }
-        return Optional<String>.some(text.to_string());
+        return Optional<String>.Value(text.to_string());
     }
 
     ## Returns the path and query, as an HTTP request line names its target:
@@ -217,7 +217,7 @@ export struct Uri {
     ## @returns the path and query, such as `/items?page=2`
     path_and_query(): String {
         var text = path.size == 0 ? "/" : path;
-        if (query.is_some()) {
+        if (query.is_value()) {
             return $"{text}?{query.value()}";
         }
         return text;
@@ -235,16 +235,16 @@ export struct Uri {
             text.append(":");
         }
         var named = authority();
-        if (named.is_some()) {
+        if (named.is_value()) {
             text.append("//");
             text.append(named.value());
         }
         text.append(path);
-        if (query.is_some()) {
+        if (query.is_value()) {
             text.append("?");
             text.append(query.value());
         }
-        if (fragment.is_some()) {
+        if (fragment.is_value()) {
             text.append("#");
             text.append(fragment.value());
         }
@@ -284,7 +284,7 @@ _uri_parse_authority(uri: Uri, authority: String): String {
     var rest = authority;
     var at = rest.find("@");
     if (at >= 0) {
-        uri.user_info = Optional<String>.some(rest.substr_bytes(0, at as ulong));
+        uri.user_info = Optional<String>.Value(rest.substr_bytes(0, at as ulong));
         rest = rest.substr_bytes(at as ulong + 1, rest.size - at as ulong - 1);
     }
     var port_text = "";
@@ -294,7 +294,7 @@ _uri_parse_authority(uri: Uri, authority: String): String {
         if (close < 0) {
             return "no ']' after an IPv6 address";
         }
-        uri.host = Optional<String>.some(rest.substr_bytes(1, close as ulong - 1));
+        uri.host = Optional<String>.Value(rest.substr_bytes(1, close as ulong - 1));
         var after = rest.substr_bytes(close as ulong + 1, rest.size - close as ulong - 1);
         if (after.size > 0) {
             if (!after.starts_with(":")) {
@@ -310,7 +310,7 @@ _uri_parse_authority(uri: Uri, authority: String): String {
             port_text = rest.substr_bytes(colon as ulong + 1, rest.size - colon as ulong - 1);
             rest = rest.substr_bytes(0, colon as ulong);
         }
-        uri.host = Optional<String>.some(rest);
+        uri.host = Optional<String>.Value(rest);
     }
     # An empty port ("host:") is allowed and means none.
     if (has_port && port_text.size > 0) {
@@ -330,7 +330,7 @@ _uri_parse_authority(uri: Uri, authority: String): String {
         if (port > 65535) {
             return $"invalid port '{port_text}'";
         }
-        uri.port = Optional<u16>.some(port as u16);
+        uri.port = Optional<u16>.Value(port as u16);
     }
     return "";
 }

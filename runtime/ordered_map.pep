@@ -137,9 +137,9 @@ export struct OrderedMap<K, V> {
     try_get(key: K): V? {
         long slot = _positions._find_slot(key);
         if (slot >= 0) {
-            return Optional<V>.some(_values[_positions._values._data[slot]]);
+            return Optional<V>.Value(_values[_positions._values._data[slot]]);
         }
-        return Optional<V>.none();
+        return Optional<V>.Empty;
     }
 
     ## Removes the entry for `key`, releasing the map's references to its

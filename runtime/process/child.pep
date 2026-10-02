@@ -47,9 +47,9 @@ export struct ExitStatus {
     ## @returns the exit code, or none when a signal ended the process
     code(): int? {
         if (_signal != 0) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(_code);
+        return Optional<int>.Value(_code);
     }
 
     ## Returns the signal that ended the process (POSIX only; a Windows
@@ -59,9 +59,9 @@ export struct ExitStatus {
     ##   process exited
     signal(): int? {
         if (_signal == 0) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(_signal);
+        return Optional<int>.Value(_signal);
     }
 
     ## Returns how the process ended as text.
@@ -172,7 +172,7 @@ export struct Child {
     ##
     ## @returns the exit status, or an error from the system
     wait(): io.IoResult<ExitStatus> {
-        if (_status.is_some()) {
+        if (_status.is_value()) {
             return io.IoResult<ExitStatus>.ok(_status.value());
         }
         if (_id == 0) {
@@ -198,7 +198,7 @@ export struct Child {
     ## @returns the exit status, or none while the child runs; or an error
     ##   from the system
     try_wait(): io.IoResult<ExitStatus?> {
-        if (_status.is_some()) {
+        if (_status.is_value()) {
             return io.IoResult<ExitStatus?>.ok(_status);
         }
         if (_id == 0) {
@@ -217,7 +217,7 @@ export struct Child {
     ##
     ## @returns Ok, or an error from the system
     kill(): io.IoResult<void> {
-        if (_status.is_some()) {
+        if (_status.is_value()) {
             return io.IoResult<void>.ok();
         }
         if (_id == 0) {
@@ -235,10 +235,10 @@ export struct Child {
         var error_data = async.Atomic<__ptr<void>>(__null);
         var error_size = async.Atomic<ulong>(0);
         var error_code = async.Atomic<long>(0);
-        var reader = Optional<async.Thread>.none();
+        var reader = Optional<async.Thread>.Empty;
         if (_stderr.is_open()) {
             var handle = _stderr._handle;
-            reader = Optional<async.Thread>.some(async.Thread.spawn(() => {
+            reader = Optional<async.Thread>.Value(async.Thread.spawn(() => {
                 var file = _process_sys_borrowed_file(handle);
                 var bytes = file.read_all();
                 if (bytes.is_err()) {
@@ -253,18 +253,18 @@ export struct Child {
             }));
         }
         var stdout = "";
-        var failure = Optional<io.IoError>.none();
+        var failure = Optional<io.IoError>.Empty;
         if (_stdout.is_open()) {
             var bytes = _stdout.read_all();
             if (bytes.is_err()) {
-                failure = Optional<io.IoError>.some(bytes.error());
+                failure = Optional<io.IoError>.Value(bytes.error());
             } else {
                 stdout = String._from_bytes(bytes.value());
             }
             _stdout.close();
         }
         var stderr = "";
-        if (reader.is_some()) {
+        if (reader.is_value()) {
             reader.value().join();
             _stderr.close();
             __ptr<u8> data = error_data.load();
@@ -278,12 +278,12 @@ export struct Child {
                 _pep_free(data);
                 stderr = String._from_bytes(bytes);
             }
-            if (error_code.load() != 0 && failure.is_none()) {
+            if (error_code.load() != 0 && failure.is_empty()) {
                 var code = error_code.load() as io.ErrorCode;
-                failure = Optional<io.IoError>.some(io.IoError(code, _process_sys_error_message(code)));
+                failure = Optional<io.IoError>.Value(io.IoError(code, _process_sys_error_message(code)));
             }
         }
-        if (failure.is_some()) {
+        if (failure.is_value()) {
             return io.IoResult<Output>.err(failure.value());
         }
         return io.IoResult<Output>.ok(Output(ExitStatus(), stdout, stderr));
@@ -301,7 +301,7 @@ _process_no_process(): io.IoError {
 # signal in the next 8.
 _process_status_from_raw(raw: long): io.IoResult<ExitStatus?> {
     if (raw == -1) {
-        return io.IoResult<ExitStatus?>.ok(Optional<ExitStatus>.none());
+        return io.IoResult<ExitStatus?>.ok(Optional<ExitStatus>.Empty);
     }
     if (raw < -1) {
         var code = (-2 - raw) as io.ErrorCode;
@@ -310,5 +310,5 @@ _process_status_from_raw(raw: long): io.IoResult<ExitStatus?> {
     var low = (raw & 4294967295) as uint;
     var exit_code = low as int;
     var signal = ((raw >> 32) & 255) as int;
-    return io.IoResult<ExitStatus?>.ok(Optional<ExitStatus>.some(ExitStatus(exit_code, signal)));
+    return io.IoResult<ExitStatus?>.ok(Optional<ExitStatus>.Value(ExitStatus(exit_code, signal)));
 }

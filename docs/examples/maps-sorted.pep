@@ -14,7 +14,7 @@ main(): int {
     # Order queries return an optional (key, value) tuple.
     assert(scores.first().value().0 == "alice", "smallest key");
     assert(scores.lower_bound("b").value().0 == "bob", "first key >= b");
-    assert(scores.upper_bound("carol").is_none(), "nothing after carol");
+    assert(scores.upper_bound("carol").is_empty(), "nothing after carol");
 
     # A key range: from "a" up to, not including, "c".
     var in_range = 0;

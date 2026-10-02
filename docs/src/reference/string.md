@@ -455,7 +455,7 @@ Runs in O(size * separator.size).
 **Example**
 ```pepper
     var header = "Host: example.com".split_once(": ");
-    assert(header.is_some(), "has a colon");
+    assert(header.is_value(), "has a colon");
     var (name, value) = header.value();
     assert(name == "Host" && value == "example.com", "split");
 ```

@@ -124,7 +124,7 @@ test(): int {
     assert(big.wrapping_add(1) == -2147483648, "int wrapping_add");
     assert(big.wrapping_mul(2) == -2, "int wrapping_mul");
     assert((-2147483647 - 1).wrapping_sub(1) == big, "int wrapping_sub");
-    assert(big.checked_add(1).is_none() && big.checked_add(0).value() == big, "int checked_add");
+    assert(big.checked_add(1).is_empty() && big.checked_add(0).value() == big, "int checked_add");
     assert(big.checked_mul(-1).value() == -big, "int checked_mul");
     assert(big.saturating_add(1) == big && (-big).saturating_sub(5) == -2147483648, "int saturating");
     assert((-3).saturating_mul(big) == -2147483648 && (-3).saturating_mul(-big) == big, "int saturating_mul");
@@ -135,18 +135,18 @@ test(): int {
 
     byte b = 200;
     assert(b.wrapping_add(100) == 44 && b.wrapping_mul(2) == 144, "byte wrapping");
-    assert(b.checked_add(100).is_none() && b.checked_add(55).value() == 255, "byte checked at its own width");
+    assert(b.checked_add(100).is_empty() && b.checked_add(55).value() == 255, "byte checked at its own width");
     assert(b.saturating_add(100) == 255 && b.saturating_sub(201) == 0, "byte saturating");
     char c = -128;
-    assert(c.wrapping_sub(1) == 127 && c.checked_sub(1).is_none(), "char");
+    assert(c.wrapping_sub(1) == 127 && c.checked_sub(1).is_empty(), "char");
     short s = 32767;
     assert(s.saturating_add(1) == 32767 && s.overflowing_add(1).1, "short");
     ushort us = 0;
     assert(us.wrapping_sub(1) == 65535 && us.saturating_sub(1) == 0, "ushort");
     uint u = 0;
-    assert(u.wrapping_sub(1) == 4294967295 && u.checked_sub(1).is_none(), "uint");
+    assert(u.wrapping_sub(1) == 4294967295 && u.checked_sub(1).is_empty(), "uint");
     long l = -9223372036854775807 - 1;
-    assert(l.checked_sub(1).is_none() && l.saturating_sub(1) == l && l.wrapping_sub(1) == 9223372036854775807, "long");
+    assert(l.checked_sub(1).is_empty() && l.saturating_sub(1) == l && l.wrapping_sub(1) == 9223372036854775807, "long");
     ulong ul = 0xFFFFFFFFFFFFFFFF;
     assert(ul.wrapping_add(2) == 1 && ul.saturating_mul(2) == ul && ul.checked_add(0).value() == ul, "ulong");
     return 7;

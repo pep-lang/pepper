@@ -414,7 +414,7 @@ export _io_win_metadata(
     m.size = (_io_win_u32(buf, size_high) << 32) | _io_win_u32(buf, size_low);
     var born = _io_win_time(buf, created);
     if (born != 0) {
-        m.created = Optional<long>.some(born);
+        m.created = Optional<long>.Value(born);
     }
     m.accessed = _io_win_time(buf, accessed);
     m.modified = _io_win_time(buf, written);

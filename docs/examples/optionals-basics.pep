@@ -8,43 +8,43 @@ struct Person {
 
 find_adult(people: Array<Person>): Optional<Person> {
     for (var p in people) {
-        if (p.age >= 18) { return Optional<Person>.some(p); }
+        if (p.age >= 18) { return Optional<Person>.Value(p); }
     }
-    return Optional<Person>.none();
+    return Optional<Person>.Empty;
 }
 
 # `ulong?` is shorthand for `Optional<ulong>`.
 index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
     while (i < text.length) {
-        if (text[i] == wanted) { return Optional<ulong>.some(i); }
+        if (text[i] == wanted) { return Optional<ulong>.Value(i); }
         i = i + 1;
     }
-    return Optional<ulong>.none();
+    return Optional<ulong>.Empty;
 }
 
 main(): int {
     var people = Array<Person>();
     people.append(Person("ada", 12));
-    assert(find_adult(people).is_none(), "no adult yet");
+    assert(find_adult(people).is_empty(), "no adult yet");
 
     people.append(Person("grace", 45));
     var adult = find_adult(people);
-    assert(adult.is_some(), "grace is an adult");
+    assert(adult.is_value(), "grace is an adult");
     # An optional is a condition by itself: `if (adult)` tests is_some().
     if (!adult) { return 1; }
     assert(adult.value().name == "grace", "value() returns the Person");
 
     # Works for types that have no null, too.
     assert(index_of("pepper", "e").value() == 1, "first 'e' is at 1");
-    assert(index_of("pepper", "z").is_none(), "no 'z'");
+    assert(index_of("pepper", "z").is_empty(), "no 'z'");
 
     # value_or supplies a fallback instead of panicking.
     assert(index_of("pepper", "z").value_or(99) == 99, "fallback for Empty");
 
     # Optional is an enum with the cases Empty and Value(value).
     var nothing = Optional<int>.Empty;
-    assert(nothing.is_none(), "the Empty case is empty");
+    assert(nothing.is_empty(), "the Empty case is empty");
     var first_p = match (index_of("pepper", "p")) {
         Empty => -1,
         Value(at) => at as int,
@@ -53,6 +53,6 @@ main(): int {
 
     # An optional slot that is not given a value starts as Empty.
     var later: String?;
-    assert(later.is_none(), "unassigned optionals are Empty");
+    assert(later.is_empty(), "unassigned optionals are Empty");
     return 0;
 }

@@ -81,7 +81,7 @@ export struct Doc {
     ## @returns true when the document cannot be printed on one line
     is_hard(): bool {
         if (!_hard) {
-            _hard = Optional<bool>.some(_find_hard());
+            _hard = Optional<bool>.Value(_find_hard());
         }
         return _hard.value();
     }

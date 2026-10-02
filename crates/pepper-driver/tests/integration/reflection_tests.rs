@@ -527,7 +527,7 @@ test(): int {
     if (describe(Shape.Point) != "Point") { return -3; }
     if (describe(make<Shape>("Rect")) != "Rect width=1 height=2") { return -4; }
     if (describe(make<Size>("Fixed")) != "Fixed px=1") { return -5; }
-    if (describe(Optional<int>.some(3)) != "Value value=3") { return -6; }
+    if (describe(Optional<int>.Value(3)) != "Value value=3") { return -6; }
     var kinds = 0;
     static (kinds) {
         if (reflect.is_reference<Shape>()) { kinds += 1; }

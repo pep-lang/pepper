@@ -52,8 +52,8 @@ writes_and_reads_back(): int {
     var streamed = reader.next_entry().value().value();
     if (streamed.size != 1000 || streamed.modified != 1700000000) { return -9; }
     if (reader.read_all().value() != body) { return -10; }
-    if (reader.next_entry().value().is_some()) { return -11; }
-    if (reader.next_entry().value().is_some()) { return -12; }
+    if (reader.next_entry().value().is_value()) { return -11; }
+    if (reader.next_entry().value().is_value()) { return -12; }
     return 0;
 }
 
@@ -67,7 +67,7 @@ reads_archives_from_other_tools(): int {
     while (true) {
         var next = reader.next_entry();
         if (next.is_err()) { return -1; }
-        if (next.value().is_none()) { break; }
+        if (next.value().is_empty()) { break; }
         var entry = next.value().value();
         paths.append(entry.path);
         kinds.append(entry.kind);
@@ -162,7 +162,7 @@ reports_damaged_archives(): int {
     if (header.is_ok() || !header.error().message.contains("truncated")) { return -3; }
 
     # An empty stream is an empty archive.
-    if (archive.TarReader(io.ByteReader(Array<u8>())).next_entry().value().is_some()) { return -4; }
+    if (archive.TarReader(io.ByteReader(Array<u8>())).next_entry().value().is_value()) { return -4; }
     return 0;
 }
 "##;

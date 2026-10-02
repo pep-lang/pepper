@@ -53,14 +53,14 @@ export struct _HttpConnection {
 
     construct(tcp: io.TcpStream) {
         this._tcp = tcp;
-        this._tls = Optional<tls.TlsStream>.none();
+        this._tls = Optional<tls.TlsStream>.Empty;
         this._reader = tcp;
         this._writer = tcp;
     }
 
     # Reads and writes through `stream`, a TLS session over `_tcp`.
     _use_tls(stream: tls.TlsStream) {
-        this._tls = Optional<tls.TlsStream>.some(stream);
+        this._tls = Optional<tls.TlsStream>.Value(stream);
         this._reader = stream;
         this._writer = stream;
     }
@@ -75,7 +75,7 @@ export struct _HttpConnection {
 
     # Ends the connection: close_notify over TLS, then the socket.
     _close() {
-        if (this._tls.is_some()) {
+        if (this._tls.is_value()) {
             this._tls.value().shutdown();
             this._tls.value().close();
         }
@@ -127,7 +127,7 @@ export struct _HttpReader {
                     }
                     var line = _http_line_text(p + this._start, end);
                     this._start = this._start + scanned + 1;
-                    return io.IoResult<String?>.ok(Optional<String>.some(line));
+                    return io.IoResult<String?>.ok(Optional<String>.Value(line));
                 }
                 scanned = scanned + 1;
             }
@@ -140,12 +140,12 @@ export struct _HttpReader {
             }
             if (got.value() == 0) {
                 if (this._available() == 0) {
-                    return io.IoResult<String?>.ok(Optional<String>.none());
+                    return io.IoResult<String?>.ok(Optional<String>.Empty);
                 }
                 return io.IoResult<String?>.err(_http_error("the connection closed in the middle of a line"));
             }
         }
-        return io.IoResult<String?>.ok(Optional<String>.none());
+        return io.IoResult<String?>.ok(Optional<String>.Empty);
     }
 
     # A line that must be there.
@@ -154,7 +154,7 @@ export struct _HttpReader {
         if (line.is_err()) {
             return io.IoResult<String>.err(line.error());
         }
-        if (line.value().is_none()) {
+        if (line.value().is_empty()) {
             return io.IoResult<String>.err(_http_error("the connection closed early"));
         }
         return io.IoResult<String>.ok(line.value().value());
@@ -240,13 +240,13 @@ export _http_read_body(
     reader: _HttpReader, headers: Headers, into: u8[], to_end: bool, limit: ulong
 ): io.IoResult<void> {
     var encoding = headers.get("Transfer-Encoding");
-    if (encoding.is_some()) {
+    if (encoding.is_value()) {
         if (_http_contains_token(encoding.value(), "chunked")) {
             return _http_read_chunked(reader, into, limit);
         }
     }
     var length = headers.get("Content-Length");
-    if (length.is_some()) {
+    if (length.is_value()) {
         var n = _http_parse_decimal(length.value());
         if (n < 0) {
             return io.IoResult<void>.err(_http_error($"invalid Content-Length: '{length.value()}'"));

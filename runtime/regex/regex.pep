@@ -140,7 +140,7 @@ export struct Regex {
     ##
     ##     assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
     is_match(text: String): bool {
-        return _RegexMatcher(_program).search(text, 0, true).is_some();
+        return _RegexMatcher(_program).search(text, 0, true).is_value();
     }
 
     ## Returns the leftmost match in `text`, or none. Among matches that
@@ -165,10 +165,10 @@ export struct Regex {
     find_at(text: String, start: ulong): Match? {
         assert(start <= text.size, "Regex.find_at: start is past the end of the text");
         var slots = _RegexMatcher(_program).search(text, start, false);
-        if (slots.is_none()) {
-            return Optional<Match>.none();
+        if (slots.is_empty()) {
+            return Optional<Match>.Empty;
         }
-        return Optional<Match>.some(Match(text, slots.value(), _program));
+        return Optional<Match>.Value(Match(text, slots.value(), _program));
     }
 
     ## Returns an iterator over the matches in `text`, left to right and
@@ -335,10 +335,10 @@ export struct Match {
         assert(index <= group_count(), "Match.group: no such group");
         var begin = _slots[index * 2];
         if (begin < 0) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
         var finish = _slots[index * 2 + 1] as ulong;
-        return Optional<String>.some(_text.substr_bytes(begin as ulong, finish - (begin as ulong)));
+        return Optional<String>.Value(_text.substr_bytes(begin as ulong, finish - (begin as ulong)));
     }
 
     ## Returns the text that the group named `name` (`(?<name>...)` or
@@ -361,9 +361,9 @@ export struct Match {
         assert(index <= group_count(), "Match.group_range: no such group");
         var begin = _slots[index * 2];
         if (begin < 0) {
-            return Optional<(ulong, ulong)>.none();
+            return Optional<(ulong, ulong)>.Empty;
         }
-        return Optional<(ulong, ulong)>.some((begin as ulong, _slots[index * 2 + 1] as ulong));
+        return Optional<(ulong, ulong)>.Value((begin as ulong, _slots[index * 2 + 1] as ulong));
     }
 
     _group_index(name: String): ulong {
@@ -412,7 +412,7 @@ export struct Match {
             }
             out.append(replacement.substr_bytes(last, index - last));
             var number = ulong.parse(name);
-            if (number.is_some()) {
+            if (number.is_value()) {
                 out.append(group(number.value()).value_or(""));
             } else {
                 out.append(group(name).value_or(""));
@@ -455,7 +455,7 @@ export struct Matches {
         _text = text;
         _position = 0;
         _last_end = -1;
-        _current = Optional<Match>.none();
+        _current = Optional<Match>.Empty;
         _done = false;
     }
 
@@ -466,7 +466,7 @@ export struct Matches {
         var size = _text.size;
         while (!_done && _position <= size) {
             var slots = _matcher.search(_text, _position, false);
-            if (slots.is_none()) {
+            if (slots.is_empty()) {
                 break;
             }
             var found = slots.value();
@@ -482,13 +482,13 @@ export struct Matches {
                 _position = (start as ulong) + width;
                 continue;
             }
-            _current = Optional<Match>.some(Match(_text, found, _matcher.program));
+            _current = Optional<Match>.Value(Match(_text, found, _matcher.program));
             _last_end = end;
             _position = end as ulong;
             return true;
         }
         _done = true;
-        _current = Optional<Match>.none();
+        _current = Optional<Match>.Empty;
         return false;
     }
 
@@ -497,7 +497,7 @@ export struct Matches {
     ## @returns the current match
     ## @panics if `next()` has not returned true
     current(): Match {
-        assert(_current.is_some(), "Matches.current() without a current match");
+        assert(_current.is_value(), "Matches.current() without a current match");
         return _current.value();
     }
 }

@@ -76,7 +76,7 @@ Decodes `bytes` as UTF-8, or gives none when they are not valid UTF-8
 
     var bad = Array<u8>();
     bad.append(255);
-    assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
 ```
 
 #### decode_lossy
@@ -127,7 +127,7 @@ from C memory may not be.
 ```pepper
     import text;
 
-    assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+    assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
 ```
 
 #### code_point_at

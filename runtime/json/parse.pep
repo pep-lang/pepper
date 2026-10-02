@@ -104,7 +104,7 @@ export _json_parse_commented(
     text: String, notes: _JsonComments, path: String, max_depth: ulong
 ): Result<JsonValue, JsonError> {
     var parser = _JsonParser(text, true, path, max_depth);
-    parser._notes = Optional<_JsonComments>.some(notes);
+    parser._notes = Optional<_JsonComments>.Value(notes);
     return parser.run();
 }
 
@@ -116,9 +116,9 @@ export _json_locate(text: String, comments: bool, value_path: String): ulong? {
     parser._find = value_path;
     parser.run();
     if (parser._found >= 0) {
-        return Optional<ulong>.some(parser._found as ulong);
+        return Optional<ulong>.Value(parser._found as ulong);
     }
-    return Optional<ulong>.none();
+    return Optional<ulong>.Empty;
 }
 
 # Reads one value from `_text`. Each method that can fail returns false
@@ -164,7 +164,7 @@ struct _JsonParser {
         _no_key = "";
         _find = "";
         _found = -1;
-        _notes = Optional<_JsonComments>.none();
+        _notes = Optional<_JsonComments>.Empty;
         _pending = Array<String>();
         _inline = Array<bool>();
         _newline = false;
@@ -197,12 +197,12 @@ struct _JsonParser {
             _position = 3;
         }
         var invalid = text.Utf8.find_invalid(_text);
-        if (invalid.is_some()) {
+        if (invalid.is_value()) {
             _fail_at("invalid UTF-8", invalid.value());
             return Result<JsonValue, JsonError>.err(_error);
         }
         var value = _parse();
-        if (value.is_none()) {
+        if (value.is_empty()) {
             return Result<JsonValue, JsonError>.err(_error);
         }
         return Result<JsonValue, JsonError>.ok(value.value());
@@ -211,12 +211,12 @@ struct _JsonParser {
     # The parse loop. Each container still open is on `containers`, with
     # the key of the member being read on `keys` ("" for an array).
     _parse(): JsonValue? {
-        var none = Optional<JsonValue>.none();
+        var none = Optional<JsonValue>.Empty;
         var containers = Array<JsonValue>();
         var keys = Array<String>();
         # With `_find` or `_notes`: each open container's path, and each
         # array's index.
-        var keeping = _notes.is_some();
+        var keeping = _notes.is_value();
         var tracking = keeping || !_find.is_empty;
         var paths = Array<String>();
         var indexes = Array<ulong>();
@@ -298,7 +298,7 @@ struct _JsonParser {
                         _file(_notes.value().after, "$", true);
                         _file(_notes.value().end, "", false);
                     }
-                    return Optional<JsonValue>.some(value);
+                    return Optional<JsonValue>.Value(value);
                 }
                 var top = containers.last();
                 var is_array = top is Array;
@@ -406,7 +406,7 @@ struct _JsonParser {
                     }
                     _position = (end as ulong) + 2;
                 }
-                if (_notes.is_some()) {
+                if (_notes.is_value()) {
                     var size = _position - start;
                     if (_text.byte_at(_position - 1) == '\r') {
                         size = size - 1;
@@ -538,13 +538,13 @@ struct _JsonParser {
         if (whole) {
             # 2^53 - 1, the largest integer every JSON reader agrees on.
             var parsed = long.parse(spelled);
-            if (parsed.is_some() and parsed.value() <= 9007199254740991 and parsed.value() >= -9007199254740991) {
+            if (parsed.is_value() and parsed.value() <= 9007199254740991 and parsed.value() >= -9007199254740991) {
                 _scalar_value = JsonValue.Integer(parsed.value());
                 return true;
             }
         }
         var number = double.parse(spelled);
-        if (number.is_none()) {
+        if (number.is_empty()) {
             _fail_at("number is too large for a double", start);
             return false;
         }

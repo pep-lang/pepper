@@ -343,7 +343,7 @@ export struct Formatter {
         var first = items[index].first_token();
         long off = directive_index(first, "off", 0);
         if (off < 0) {
-            return Optional<Region>.none();
+            return Optional<Region>.Empty;
         }
         var start = first.leading_comments[off as ulong].offset;
         var layout = _leading_part(first, off as ulong);
@@ -371,7 +371,7 @@ export struct Formatter {
             }
         }
         layout.add(text(source_text(_source, start, end)));
-        return Optional<Region>.some(Region(layout, next));
+        return Optional<Region>.Value(Region(layout, next));
     }
 
     # The first `count` comments above `token`, each on its own line, with
@@ -814,7 +814,7 @@ export struct Formatter {
             }
             syntax.Node? parameters;
             if (j < item.count and item.child(j).kind == syntax.NodeKind.Parameters) {
-                parameters = Optional<syntax.Node>.some(item.child(j));
+                parameters = Optional<syntax.Node>.Value(item.child(j));
                 j += 1;
             }
             bool annotated = j < item.count and item.child(j).is_token(":");

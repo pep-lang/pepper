@@ -273,9 +273,9 @@ test(): int {
     var handles = Array<Optional<Handle>>();
     var h = Handle();
     h.id = 3;
-    handles.append(Optional<Handle>.some(h));
-    handles.append(Optional<Handle>.none());
-    if (handles.count != 2 || handles[0].value().id != 3 || handles[1].is_some()) { return 1; }
+    handles.append(Optional<Handle>.Value(h));
+    handles.append(Optional<Handle>.Empty);
+    if (handles.count != 2 || handles[0].value().id != 3 || handles[1].is_value()) { return 1; }
     return 0;
 }"#,
     );

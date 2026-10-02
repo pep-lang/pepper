@@ -530,7 +530,7 @@ export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
     m.accessed = _io_stat_time(buf, _io_stat_atime_offset());
     m.modified = _io_stat_time(buf, _io_stat_mtime_offset());
     if (_io_stat_has_btime(buf)) {
-        m.created = Optional<long>.some(_io_stat_time(buf, _io_stat_btime_offset()));
+        m.created = Optional<long>.Value(_io_stat_time(buf, _io_stat_btime_offset()));
     }
     return m;
 }

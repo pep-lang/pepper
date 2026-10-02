@@ -227,7 +227,7 @@ test(): int {
     if (destroyed.load() != 0) { return 5; }
     shapes[0] = Square(4);
     if (destroyed.load() != 1) { return 6; }
-    if (shapes.find(removed).is_some()) { return 7; }
+    if (shapes.find(removed).is_value()) { return 7; }
     shapes.clear();
     if (destroyed.load() != 12) { return 8; }
     return 0;

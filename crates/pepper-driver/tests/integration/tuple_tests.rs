@@ -498,16 +498,16 @@ fn optional_tuples() {
     let src = r#"
 find(ok: bool): (int, String)? {
     if (ok) {
-        return Optional<(int, String)>.some((1, "a"));
+        return Optional<(int, String)>.Value((1, "a"));
     }
-    return Optional<(int, String)>.none();
+    return Optional<(int, String)>.Empty;
 }
 
 test(): int {
     var r = find(true);
     var labeled: (line: int, name: String)? = r;
-    if (!r.is_some() || r.value().1 != "a" || labeled.value().0 != 1) { return 1; }
-    if (find(false).is_some()) { return 2; }
+    if (!r.is_value() || r.value().1 != "a" || labeled.value().0 != 1) { return 1; }
+    if (find(false).is_value()) { return 2; }
     return 0;
 }
 "#;
@@ -648,14 +648,14 @@ struct Box {
 }
 
 pair(): (int, Optional<Box>) {
-    return (1, Optional<Box>.some(Box(4)));
+    return (1, Optional<Box>.Value(Box(4)));
 }
 
 test(): int {
     var t = pair();
     var u = t;
     var r = (2, Result<int, String>.ok(5));
-    var nested = Result<Box?, String>.ok(Optional<Box>.some(Box(6)));
+    var nested = Result<Box?, String>.ok(Optional<Box>.Value(Box(6)));
     return t.0 + u.1.value().v + r.1.value() + nested.value().value().v;
 }
 "#;

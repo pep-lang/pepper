@@ -15,7 +15,7 @@ const PANICS: &[(&str, &str, &str)] = &[
     ("index_write", "main(): int {\n    var a = Array<int>();\n    a[0] = 1;\n    return 0;\n}\n", "3:10: panic: Array index write out of bounds"),
     ("pop", "main(): int {\n    var a = Array<int>();\n    return a.pop();\n}\n", "3:14: panic: Array pop on empty Array"),
     ("string_index", "main(): int {\n    var s = \"ab\";\n    print(s[2]);\n    return 0;\n}\n", "3:11: panic: String[] idx must be < length"),
-    ("optional", "main(): int {\n    var o = Optional<int>.none();\n    return o.value();\n}\n", "3:14: panic: Optional.value on an Empty optional"),
+    ("optional", "main(): int {\n    var o = Optional<int>.Empty;\n    return o.value();\n}\n", "3:14: panic: Optional.value on an Empty optional"),
     ("overflow", "main(): int {\n    var x = 2147483647;\n    var n = x / x;\n    x = x + n;\n    return 0;\n}\n", "4:11: panic: integer overflow in 'int' addition"),
     (
         "forwarded",

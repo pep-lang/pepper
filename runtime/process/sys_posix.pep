@@ -234,7 +234,7 @@ export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stder
         ends[5] = -1;
     }
     var directory = "";
-    if (code == 0 && command._working_directory.is_some()) {
+    if (code == 0 && command._working_directory.is_value()) {
         directory = command._working_directory.value().to_string();
         code = posix_spawn_file_actions_addchdir_np(actions, directory.c_str());
     }

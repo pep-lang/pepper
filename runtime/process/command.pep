@@ -138,7 +138,7 @@ export struct Command {
     ## @returns this Command
     environment(name: String, value: String): Command {
         _environment_names.append(name);
-        _environment_values.append(Optional<String>.some(value));
+        _environment_values.append(Optional<String>.Value(value));
         return this;
     }
 
@@ -149,7 +149,7 @@ export struct Command {
     ## @returns this Command
     remove_environment(name: String): Command {
         _environment_names.append(name);
-        _environment_values.append(Optional<String>.none());
+        _environment_values.append(Optional<String>.Empty);
         return this;
     }
 
@@ -172,7 +172,7 @@ export struct Command {
     ## @param path the child's current directory
     ## @returns this Command
     working_directory(path: io.Path): Command {
-        _working_directory = Optional<io.Path>.some(path);
+        _working_directory = Optional<io.Path>.Value(path);
         return this;
     }
 
@@ -181,7 +181,7 @@ export struct Command {
     ## @param stream `Stream.Inherit`, `Stream.Pipe` or `Stream.Null`
     ## @returns this Command
     stdin(stream: Stream): Command {
-        _stdin = Optional<Stream>.some(stream);
+        _stdin = Optional<Stream>.Value(stream);
         return this;
     }
 
@@ -190,7 +190,7 @@ export struct Command {
     ## @param stream `Stream.Inherit`, `Stream.Pipe` or `Stream.Null`
     ## @returns this Command
     stdout(stream: Stream): Command {
-        _stdout = Optional<Stream>.some(stream);
+        _stdout = Optional<Stream>.Value(stream);
         return this;
     }
 
@@ -199,7 +199,7 @@ export struct Command {
     ## @param stream `Stream.Inherit`, `Stream.Pipe` or `Stream.Null`
     ## @returns this Command
     stderr(stream: Stream): Command {
-        _stderr = Optional<Stream>.some(stream);
+        _stderr = Optional<Stream>.Value(stream);
         return this;
     }
 
@@ -240,9 +240,9 @@ export struct Command {
     ##     assert(output.status.success(), "echo succeeds");
     ##     assert(output.stdout == "hello\n", "and prints its argument");
     run(): io.IoResult<Output> {
-        var stdin = _stdin.is_some() ? _stdin.value() : Stream.Null;
-        var stdout = _stdout.is_some() ? _stdout.value() : Stream.Pipe;
-        var stderr = _stderr.is_some() ? _stderr.value() : Stream.Pipe;
+        var stdin = _stdin.is_value() ? _stdin.value() : Stream.Null;
+        var stdout = _stdout.is_value() ? _stdout.value() : Stream.Pipe;
+        var stderr = _stderr.is_value() ? _stderr.value() : Stream.Pipe;
         var spawned = _process_sys_spawn(this, stdin, stdout, stderr);
         if (spawned.is_err()) {
             return io.IoResult<Output>.err(spawned.error());
@@ -278,7 +278,7 @@ export struct Command {
                 }
             }
             var value = _environment_values[index];
-            if (value.is_some()) {
+            if (value.is_value()) {
                 kept.append(name + "=" + value.value());
             }
             entries = kept;
@@ -295,7 +295,7 @@ export struct Command {
 
 # `stream`, or `Stream.Inherit` when it was not set.
 _stream_or(stream: Stream?): Stream {
-    if (stream.is_some()) {
+    if (stream.is_value()) {
         return stream.value();
     }
     return Stream.Inherit;

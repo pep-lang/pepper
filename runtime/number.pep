@@ -15,11 +15,11 @@
 ##
 ## @example
 ##     var port = int.parse("8080");
-##     assert(port.is_some() && port.value() == 8080, "parsed");
-##     assert(byte.parse("256").is_none(), "too big for a byte");
+##     assert(port.is_value() && port.value() == 8080, "parsed");
+##     assert(byte.parse("256").is_empty(), "too big for a byte");
 ##     int big = 2147483647;
 ##     assert(big.wrapping_add(1) == -2147483648, "wraps around");
-##     assert(big.checked_add(1).is_none(), "does not fit");
+##     assert(big.checked_add(1).is_empty(), "does not fit");
 
 extern double strtod(char* text, char** end);
 extern float strtof(char* text, char** end);
@@ -148,9 +148,9 @@ export extend char {
     static parse(text: String, base: int = 10): char? {
         var (ok, value) = _parse_signed(text, base, 128, 127);
         if (!ok) {
-            return Optional<char>.none();
+            return Optional<char>.Empty;
         }
-        return Optional<char>.some(value as char);
+        return Optional<char>.Value(value as char);
     }
 
     ## Returns `this + other` modulo 2^8: on overflow the result wraps
@@ -170,9 +170,9 @@ export extend char {
     ## @returns the sum, or none on overflow
     checked_add(other: char): char? {
         if (__add_overflows(this, other)) {
-            return Optional<char>.none();
+            return Optional<char>.Empty;
         }
-        return Optional<char>.some(__wrapping_add(this, other) as char);
+        return Optional<char>.Value(__wrapping_add(this, other) as char);
     }
 
     ## Returns `this + other`, clamped to the highest or lowest `char` on overflow.
@@ -212,9 +212,9 @@ export extend char {
     ## @returns the difference, or none on overflow
     checked_sub(other: char): char? {
         if (__sub_overflows(this, other)) {
-            return Optional<char>.none();
+            return Optional<char>.Empty;
         }
-        return Optional<char>.some(__wrapping_sub(this, other) as char);
+        return Optional<char>.Value(__wrapping_sub(this, other) as char);
     }
 
     ## Returns `this - other`, clamped to the highest or lowest `char` on overflow.
@@ -254,9 +254,9 @@ export extend char {
     ## @returns the product, or none on overflow
     checked_mul(other: char): char? {
         if (__mul_overflows(this, other)) {
-            return Optional<char>.none();
+            return Optional<char>.Empty;
         }
-        return Optional<char>.some(__wrapping_mul(this, other) as char);
+        return Optional<char>.Value(__wrapping_mul(this, other) as char);
     }
 
     ## Returns `this * other`, clamped to the highest or lowest `char` on overflow.
@@ -297,9 +297,9 @@ export extend byte {
     static parse(text: String, base: int = 10): byte? {
         var (ok, value) = _parse_unsigned(text, base, 255);
         if (!ok) {
-            return Optional<byte>.none();
+            return Optional<byte>.Empty;
         }
-        return Optional<byte>.some(value as byte);
+        return Optional<byte>.Value(value as byte);
     }
 
     ## Returns `this + other` modulo 2^8: on overflow the result wraps
@@ -319,9 +319,9 @@ export extend byte {
     ## @returns the sum, or none on overflow
     checked_add(other: byte): byte? {
         if (__add_overflows(this, other)) {
-            return Optional<byte>.none();
+            return Optional<byte>.Empty;
         }
-        return Optional<byte>.some(__wrapping_add(this, other) as byte);
+        return Optional<byte>.Value(__wrapping_add(this, other) as byte);
     }
 
     ## Returns `this + other`, clamped to the highest `byte` on overflow.
@@ -361,9 +361,9 @@ export extend byte {
     ## @returns the difference, or none on overflow
     checked_sub(other: byte): byte? {
         if (__sub_overflows(this, other)) {
-            return Optional<byte>.none();
+            return Optional<byte>.Empty;
         }
-        return Optional<byte>.some(__wrapping_sub(this, other) as byte);
+        return Optional<byte>.Value(__wrapping_sub(this, other) as byte);
     }
 
     ## Returns `this - other`, clamped to 0 on overflow.
@@ -403,9 +403,9 @@ export extend byte {
     ## @returns the product, or none on overflow
     checked_mul(other: byte): byte? {
         if (__mul_overflows(this, other)) {
-            return Optional<byte>.none();
+            return Optional<byte>.Empty;
         }
-        return Optional<byte>.some(__wrapping_mul(this, other) as byte);
+        return Optional<byte>.Value(__wrapping_mul(this, other) as byte);
     }
 
     ## Returns `this * other`, clamped to the highest `byte` on overflow.
@@ -446,9 +446,9 @@ export extend short {
     static parse(text: String, base: int = 10): short? {
         var (ok, value) = _parse_signed(text, base, 32768, 32767);
         if (!ok) {
-            return Optional<short>.none();
+            return Optional<short>.Empty;
         }
-        return Optional<short>.some(value as short);
+        return Optional<short>.Value(value as short);
     }
 
     ## Returns `this + other` modulo 2^16: on overflow the result wraps
@@ -468,9 +468,9 @@ export extend short {
     ## @returns the sum, or none on overflow
     checked_add(other: short): short? {
         if (__add_overflows(this, other)) {
-            return Optional<short>.none();
+            return Optional<short>.Empty;
         }
-        return Optional<short>.some(__wrapping_add(this, other) as short);
+        return Optional<short>.Value(__wrapping_add(this, other) as short);
     }
 
     ## Returns `this + other`, clamped to the highest or lowest `short` on overflow.
@@ -510,9 +510,9 @@ export extend short {
     ## @returns the difference, or none on overflow
     checked_sub(other: short): short? {
         if (__sub_overflows(this, other)) {
-            return Optional<short>.none();
+            return Optional<short>.Empty;
         }
-        return Optional<short>.some(__wrapping_sub(this, other) as short);
+        return Optional<short>.Value(__wrapping_sub(this, other) as short);
     }
 
     ## Returns `this - other`, clamped to the highest or lowest `short` on overflow.
@@ -552,9 +552,9 @@ export extend short {
     ## @returns the product, or none on overflow
     checked_mul(other: short): short? {
         if (__mul_overflows(this, other)) {
-            return Optional<short>.none();
+            return Optional<short>.Empty;
         }
-        return Optional<short>.some(__wrapping_mul(this, other) as short);
+        return Optional<short>.Value(__wrapping_mul(this, other) as short);
     }
 
     ## Returns `this * other`, clamped to the highest or lowest `short` on overflow.
@@ -595,9 +595,9 @@ export extend ushort {
     static parse(text: String, base: int = 10): ushort? {
         var (ok, value) = _parse_unsigned(text, base, 65535);
         if (!ok) {
-            return Optional<ushort>.none();
+            return Optional<ushort>.Empty;
         }
-        return Optional<ushort>.some(value as ushort);
+        return Optional<ushort>.Value(value as ushort);
     }
 
     ## Returns `this + other` modulo 2^16: on overflow the result wraps
@@ -617,9 +617,9 @@ export extend ushort {
     ## @returns the sum, or none on overflow
     checked_add(other: ushort): ushort? {
         if (__add_overflows(this, other)) {
-            return Optional<ushort>.none();
+            return Optional<ushort>.Empty;
         }
-        return Optional<ushort>.some(__wrapping_add(this, other) as ushort);
+        return Optional<ushort>.Value(__wrapping_add(this, other) as ushort);
     }
 
     ## Returns `this + other`, clamped to the highest `ushort` on overflow.
@@ -659,9 +659,9 @@ export extend ushort {
     ## @returns the difference, or none on overflow
     checked_sub(other: ushort): ushort? {
         if (__sub_overflows(this, other)) {
-            return Optional<ushort>.none();
+            return Optional<ushort>.Empty;
         }
-        return Optional<ushort>.some(__wrapping_sub(this, other) as ushort);
+        return Optional<ushort>.Value(__wrapping_sub(this, other) as ushort);
     }
 
     ## Returns `this - other`, clamped to 0 on overflow.
@@ -701,9 +701,9 @@ export extend ushort {
     ## @returns the product, or none on overflow
     checked_mul(other: ushort): ushort? {
         if (__mul_overflows(this, other)) {
-            return Optional<ushort>.none();
+            return Optional<ushort>.Empty;
         }
-        return Optional<ushort>.some(__wrapping_mul(this, other) as ushort);
+        return Optional<ushort>.Value(__wrapping_mul(this, other) as ushort);
     }
 
     ## Returns `this * other`, clamped to the highest `ushort` on overflow.
@@ -742,13 +742,13 @@ export extend int {
     ## @example
     ##     assert(int.parse("-42").value() == -42, "decimal");
     ##     assert(int.parse("ff", 16).value() == 255, "hexadecimal");
-    ##     assert(int.parse("12x").is_none(), "not a number");
+    ##     assert(int.parse("12x").is_empty(), "not a number");
     static parse(text: String, base: int = 10): int? {
         var (ok, value) = _parse_signed(text, base, 2147483648, 2147483647);
         if (!ok) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(value as int);
+        return Optional<int>.Value(value as int);
     }
 
     ## Returns `this + other` modulo 2^32: on overflow the result wraps
@@ -768,9 +768,9 @@ export extend int {
     ## @returns the sum, or none on overflow
     checked_add(other: int): int? {
         if (__add_overflows(this, other)) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(__wrapping_add(this, other) as int);
+        return Optional<int>.Value(__wrapping_add(this, other) as int);
     }
 
     ## Returns `this + other`, clamped to the highest or lowest `int` on overflow.
@@ -810,9 +810,9 @@ export extend int {
     ## @returns the difference, or none on overflow
     checked_sub(other: int): int? {
         if (__sub_overflows(this, other)) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(__wrapping_sub(this, other) as int);
+        return Optional<int>.Value(__wrapping_sub(this, other) as int);
     }
 
     ## Returns `this - other`, clamped to the highest or lowest `int` on overflow.
@@ -852,9 +852,9 @@ export extend int {
     ## @returns the product, or none on overflow
     checked_mul(other: int): int? {
         if (__mul_overflows(this, other)) {
-            return Optional<int>.none();
+            return Optional<int>.Empty;
         }
-        return Optional<int>.some(__wrapping_mul(this, other) as int);
+        return Optional<int>.Value(__wrapping_mul(this, other) as int);
     }
 
     ## Returns `this * other`, clamped to the highest or lowest `int` on overflow.
@@ -895,9 +895,9 @@ export extend uint {
     static parse(text: String, base: int = 10): uint? {
         var (ok, value) = _parse_unsigned(text, base, 4294967295);
         if (!ok) {
-            return Optional<uint>.none();
+            return Optional<uint>.Empty;
         }
-        return Optional<uint>.some(value as uint);
+        return Optional<uint>.Value(value as uint);
     }
 
     ## Returns `this + other` modulo 2^32: on overflow the result wraps
@@ -917,9 +917,9 @@ export extend uint {
     ## @returns the sum, or none on overflow
     checked_add(other: uint): uint? {
         if (__add_overflows(this, other)) {
-            return Optional<uint>.none();
+            return Optional<uint>.Empty;
         }
-        return Optional<uint>.some(__wrapping_add(this, other) as uint);
+        return Optional<uint>.Value(__wrapping_add(this, other) as uint);
     }
 
     ## Returns `this + other`, clamped to the highest `uint` on overflow.
@@ -959,9 +959,9 @@ export extend uint {
     ## @returns the difference, or none on overflow
     checked_sub(other: uint): uint? {
         if (__sub_overflows(this, other)) {
-            return Optional<uint>.none();
+            return Optional<uint>.Empty;
         }
-        return Optional<uint>.some(__wrapping_sub(this, other) as uint);
+        return Optional<uint>.Value(__wrapping_sub(this, other) as uint);
     }
 
     ## Returns `this - other`, clamped to 0 on overflow.
@@ -1001,9 +1001,9 @@ export extend uint {
     ## @returns the product, or none on overflow
     checked_mul(other: uint): uint? {
         if (__mul_overflows(this, other)) {
-            return Optional<uint>.none();
+            return Optional<uint>.Empty;
         }
-        return Optional<uint>.some(__wrapping_mul(this, other) as uint);
+        return Optional<uint>.Value(__wrapping_mul(this, other) as uint);
     }
 
     ## Returns `this * other`, clamped to the highest `uint` on overflow.
@@ -1041,13 +1041,13 @@ export extend long {
     ## @panics if `base` is less than 2 or greater than 36
     ## @example
     ##     assert(long.parse("-9000000000").value() == -9000000000, "decimal");
-    ##     assert(long.parse("9223372036854775808").is_none(), "too big");
+    ##     assert(long.parse("9223372036854775808").is_empty(), "too big");
     static parse(text: String, base: int = 10): long? {
         var (ok, value) = _parse_signed(text, base, 0x8000000000000000, 9223372036854775807);
         if (!ok) {
-            return Optional<long>.none();
+            return Optional<long>.Empty;
         }
-        return Optional<long>.some(value);
+        return Optional<long>.Value(value);
     }
 
     ## Returns `this + other` modulo 2^64: on overflow the result wraps
@@ -1067,9 +1067,9 @@ export extend long {
     ## @returns the sum, or none on overflow
     checked_add(other: long): long? {
         if (__add_overflows(this, other)) {
-            return Optional<long>.none();
+            return Optional<long>.Empty;
         }
-        return Optional<long>.some(__wrapping_add(this, other) as long);
+        return Optional<long>.Value(__wrapping_add(this, other) as long);
     }
 
     ## Returns `this + other`, clamped to the highest or lowest `long` on overflow.
@@ -1109,9 +1109,9 @@ export extend long {
     ## @returns the difference, or none on overflow
     checked_sub(other: long): long? {
         if (__sub_overflows(this, other)) {
-            return Optional<long>.none();
+            return Optional<long>.Empty;
         }
-        return Optional<long>.some(__wrapping_sub(this, other) as long);
+        return Optional<long>.Value(__wrapping_sub(this, other) as long);
     }
 
     ## Returns `this - other`, clamped to the highest or lowest `long` on overflow.
@@ -1151,9 +1151,9 @@ export extend long {
     ## @returns the product, or none on overflow
     checked_mul(other: long): long? {
         if (__mul_overflows(this, other)) {
-            return Optional<long>.none();
+            return Optional<long>.Empty;
         }
-        return Optional<long>.some(__wrapping_mul(this, other) as long);
+        return Optional<long>.Value(__wrapping_mul(this, other) as long);
     }
 
     ## Returns `this * other`, clamped to the highest or lowest `long` on overflow.
@@ -1190,13 +1190,13 @@ export extend ulong {
     ##   the value does not fit a `ulong` (a `-` sign is never accepted)
     ## @panics if `base` is less than 2 or greater than 36
     ## @example
-    ##     assert(ulong.parse("ffffffffffffffff", 16).is_some(), "the highest");
+    ##     assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
     static parse(text: String, base: int = 10): ulong? {
         var (ok, value) = _parse_unsigned(text, base, 0xFFFFFFFFFFFFFFFF);
         if (!ok) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
-        return Optional<ulong>.some(value);
+        return Optional<ulong>.Value(value);
     }
 
     ## Returns `this + other` modulo 2^64: on overflow the result wraps
@@ -1216,9 +1216,9 @@ export extend ulong {
     ## @returns the sum, or none on overflow
     checked_add(other: ulong): ulong? {
         if (__add_overflows(this, other)) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
-        return Optional<ulong>.some(__wrapping_add(this, other) as ulong);
+        return Optional<ulong>.Value(__wrapping_add(this, other) as ulong);
     }
 
     ## Returns `this + other`, clamped to the highest `ulong` on overflow.
@@ -1258,9 +1258,9 @@ export extend ulong {
     ## @returns the difference, or none on overflow
     checked_sub(other: ulong): ulong? {
         if (__sub_overflows(this, other)) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
-        return Optional<ulong>.some(__wrapping_sub(this, other) as ulong);
+        return Optional<ulong>.Value(__wrapping_sub(this, other) as ulong);
     }
 
     ## Returns `this - other`, clamped to 0 on overflow.
@@ -1300,9 +1300,9 @@ export extend ulong {
     ## @returns the product, or none on overflow
     checked_mul(other: ulong): ulong? {
         if (__mul_overflows(this, other)) {
-            return Optional<ulong>.none();
+            return Optional<ulong>.Empty;
         }
-        return Optional<ulong>.some(__wrapping_mul(this, other) as ulong);
+        return Optional<ulong>.Value(__wrapping_mul(this, other) as ulong);
     }
 
     ## Returns `this * other`, clamped to the highest `ulong` on overflow.
@@ -1338,17 +1338,17 @@ export extend float {
     ##   value is too large for a `float` (one too small rounds to zero)
     ## @example
     ##     assert(float.parse("0.25").value() == 0.25, "decimal");
-    ##     assert(float.parse("1e39").is_none(), "too big");
+    ##     assert(float.parse("1e39").is_empty(), "too big");
     static parse(text: String): float? {
         if (!_is_decimal(text)) {
-            return Optional<float>.none();
+            return Optional<float>.Empty;
         }
         var value = strtof(text.c_str(), __null);
         # An infinity minus itself is NaN, not zero: the value overflowed.
         if (value - value != 0) {
-            return Optional<float>.none();
+            return Optional<float>.Empty;
         }
-        return Optional<float>.some(value);
+        return Optional<float>.Value(value);
     }
 }
 
@@ -1364,16 +1364,16 @@ export extend double {
     ##   value is too large for a `double` (one too small rounds to zero)
     ## @example
     ##     assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
-    ##     assert(double.parse("1.5.2").is_none(), "not a number");
+    ##     assert(double.parse("1.5.2").is_empty(), "not a number");
     static parse(text: String): double? {
         if (!_is_decimal(text)) {
-            return Optional<double>.none();
+            return Optional<double>.Empty;
         }
         var value = strtod(text.c_str(), __null);
         # An infinity minus itself is NaN, not zero: the value overflowed.
         if (value - value != 0) {
-            return Optional<double>.none();
+            return Optional<double>.Empty;
         }
-        return Optional<double>.some(value);
+        return Optional<double>.Value(value);
     }
 }

@@ -259,7 +259,7 @@ _process_stream(which: int, stream: Stream, parent_end: __ptr<__ptr<void>>): __p
 export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
     var line = io._io_win_wide(_process_command_line(command));
     __ptr<u16> directory = __null;
-    if (command._working_directory.is_some()) {
+    if (command._working_directory.is_value()) {
         directory = io._io_win_wide(command._working_directory.value().to_string());
     }
     __ptr<u16> environment = __null;

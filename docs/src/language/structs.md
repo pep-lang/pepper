@@ -357,7 +357,7 @@ count as equal, as `String` and `Array` do; `!=` then follows from it. `===` and
 A struct never equals a number: unless the struct declares an `==` (or `!=`)
 taking one, comparing a struct value such as an `Optional` with an integer is
 an error (`cannot compare 'Optional<ulong>' with an integer`), since it could
-only ever compare the object itself. Test an optional with `is_none()` (or
+only ever compare the object itself. Test an optional with `is_empty()` (or
 `if (found)`) and read its value with `value()`.
 
 ### Indexers

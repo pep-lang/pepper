@@ -184,7 +184,7 @@ main(args: String[]): int {
     print(moved.stdout);
 
     var sleeper = process.Command(self).argument("sleep").spawn().value();
-    print($"{sleeper.try_wait().value().is_none()}");
+    print($"{sleeper.try_wait().value().is_empty()}");
     sleeper.kill();
     var killed = sleeper.wait().value();
     print($"killed {killed.success()}");

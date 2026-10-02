@@ -178,25 +178,25 @@ export _async_open_driver(requested: Backend): (_Driver, Backend) {
     match (backend) {
         Epoll => {
             var epoll = _EpollDriver.open();
-            if (epoll.is_some()) {
+            if (epoll.is_value()) {
                 return (epoll.value(), backend);
             }
         }
         IoUring => {
             var io_uring = _IoUringDriver.open();
-            if (io_uring.is_some()) {
+            if (io_uring.is_value()) {
                 return (io_uring.value(), backend);
             }
         }
         Kqueue => {
             var kqueue = _KqueueDriver.open();
-            if (kqueue.is_some()) {
+            if (kqueue.is_value()) {
                 return (kqueue.value(), backend);
             }
         }
         Iocp => {
             var iocp = _IocpDriver.open();
-            if (iocp.is_some()) {
+            if (iocp.is_value()) {
                 return (iocp.value(), backend);
             }
         }

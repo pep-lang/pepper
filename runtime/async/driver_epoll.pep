@@ -73,14 +73,14 @@ export struct _EpollDriver {
     static open(): _EpollDriver? {
         var epoll = _async_epoll_create();
         if (epoll < 0) {
-            return Optional<_EpollDriver>.none();
+            return Optional<_EpollDriver>.Empty;
         }
         var bell = _async_epoll_create_bell(epoll);
         if (bell < 0) {
             _async_epoll_close(epoll);
-            return Optional<_EpollDriver>.none();
+            return Optional<_EpollDriver>.Empty;
         }
-        return Optional<_EpollDriver>.some(_EpollDriver(epoll, bell));
+        return Optional<_EpollDriver>.Value(_EpollDriver(epoll, bell));
     }
 }
 

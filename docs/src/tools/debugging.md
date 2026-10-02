@@ -87,7 +87,7 @@ field, rather than the active case and its payload alone.
 
 The runtime ships formatters for each debugger in `runtime/debuggers/`.
 The sessions below stop in a program holding `var name = "pepper";`, an
-`Array<int>` `values` of 3 and 4, and `var found = Optional<int>.some(7);`.
+`Array<int>` `values` of 3 and 4, and `var found = Optional<int>.Value(7);`.
 
 - **gdb.** On Linux a `-g` program carries `gdb_printers.py` in its
   `.debug_gdb_scripts` section. gdb loads it from directories on its

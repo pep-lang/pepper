@@ -30,7 +30,7 @@ import "sys_windows";
 ##     }
 export environment(name: String): String? {
     if (name.is_empty) {
-        return Optional<String>.none();
+        return Optional<String>.Empty;
     }
     return _os_sys_environment(name);
 }

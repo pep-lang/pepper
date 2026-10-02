@@ -12,7 +12,7 @@ main(): int {
 
     # The arguments as `main(args: String[])` would receive them.
     var parsed = parser.try_parse(["pkg", "-v", "add", "--dev", "yaml"]);
-    assert(parsed.is_ok() && parsed.value().is_none(), "parsed, no help asked for");
+    assert(parsed.is_ok() && parsed.value().is_empty(), "parsed, no help asked for");
     assert(add.is_selected && !update.is_selected, "the add command");
     assert(verbose.is_set && dev.is_set && name.value() == "yaml", "its values");
 

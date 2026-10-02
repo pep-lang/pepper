@@ -42,8 +42,8 @@ test(): int {
     if ($"{u}" != u.to_string()) { return -12; }
 
     var mail = Uri.parse("mailto:someone@example.com").value();
-    if (mail.scheme != "mailto" || mail.host.is_some()) { return -20; }
-    if (mail.path != "someone@example.com" || mail.query.is_some()) { return -21; }
+    if (mail.scheme != "mailto" || mail.host.is_value()) { return -20; }
+    if (mail.path != "someone@example.com" || mail.query.is_value()) { return -21; }
 
     var file = Uri.parse("file:///tmp/x").value();
     if (file.host.value_or("?") != "" || file.path != "/tmp/x") { return -30; }
@@ -54,10 +54,10 @@ test(): int {
     if (v6.authority().value_or("") != "[::1]:8080" || v6.path_and_query() != "/") { return -41; }
 
     var empty = Uri.parse("git+ssh://h/?#").value();
-    if (empty.scheme != "git+ssh" || empty.port.is_some()) { return -50; }
+    if (empty.scheme != "git+ssh" || empty.port.is_value()) { return -50; }
     if (empty.query.value_or("x") != "" || empty.fragment.value_or("x") != "") { return -51; }
     var no_port = Uri.parse("http://h:/").value();
-    if (no_port.port.is_some() || no_port.host.value_or("") != "h") { return -52; }
+    if (no_port.port.is_value() || no_port.host.value_or("") != "h") { return -52; }
     return 0;
 }
 "##),
@@ -71,7 +71,7 @@ fn parses_relative_references() {
         run(r##"
 test(): int {
     var target = Uri.parse("/items?page=2").value();
-    if (target.is_absolute() || target.host.is_some()) { return -1; }
+    if (target.is_absolute() || target.host.is_value()) { return -1; }
     if (target.path != "/items" || target.query.value_or("") != "page=2") { return -2; }
     var net = Uri.parse("//cdn.example.com/lib.js").value();
     if (net.scheme != "" || net.host.value_or("") != "cdn.example.com") { return -3; }

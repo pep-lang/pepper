@@ -82,9 +82,9 @@ export struct Headers {
     get(name: String): String? {
         var found = this._fields.get(name.lower());
         if (found === __null) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
-        return Optional<String>.some(found[0]);
+        return Optional<String>.Value(found[0]);
     }
 
     ## Reports whether a field is named `name`.

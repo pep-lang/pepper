@@ -48,7 +48,7 @@ export struct _KqueueDriver {
     static open(): _KqueueDriver? {
         var queue = _async_kqueue_create();
         if (queue < 0) {
-            return Optional<_KqueueDriver>.none();
+            return Optional<_KqueueDriver>.Empty;
         }
         __ptr<u8> bell = _pep_malloc(32);
         _async_kqueue_change(bell, 0, 0, _KQUEUE_FILTER_USER);
@@ -56,9 +56,9 @@ export struct _KqueueDriver {
         _pep_free(bell);
         if (!added) {
             _async_kqueue_close(queue);
-            return Optional<_KqueueDriver>.none();
+            return Optional<_KqueueDriver>.Empty;
         }
-        return Optional<_KqueueDriver>.some(_KqueueDriver(queue));
+        return Optional<_KqueueDriver>.Value(_KqueueDriver(queue));
     }
 }
 

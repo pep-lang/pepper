@@ -345,21 +345,21 @@ export struct Path {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
-            return Optional<Path>.none();
+            return Optional<Path>.Empty;
         }
         var start = _io_path_name_start(_value, e);
         if (start <= root) {
             if (root == 0) {
-                return Optional<Path>.none();
+                return Optional<Path>.Empty;
             }
-            return Optional<Path>.some(Path(_io_slice(_value, 0, root)));
+            return Optional<Path>.Value(Path(_io_slice(_value, 0, root)));
         }
         var p = unsafe_cast<__ptr<u8>>(_value.c_str());
         var j = start;
         while (j > root && _io_path_is_sep(_io_byte(p, _value.size, j - 1))) {
             j = j - 1;
         }
-        return Optional<Path>.some(Path(_io_slice(_value, 0, j)));
+        return Optional<Path>.Value(Path(_io_slice(_value, 0, j)));
     }
 
     ## Returns the last component of the path, ignoring trailing separators
@@ -379,13 +379,13 @@ export struct Path {
         var root = _io_path_root_end(_value);
         var e = _io_path_trimmed_end(_value);
         if (e <= root) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
         var name = _io_slice(_value, _io_path_name_start(_value, e), e);
         if (name == "." || name == "..") {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
-        return Optional<String>.some(name);
+        return Optional<String>.Value(name);
     }
 
     ## Returns the byte offset of the dot that starts the extension in the
@@ -402,9 +402,9 @@ export struct Path {
         # A dot at 0 starts a hidden file's name, not an extension.
         var dot = name.rfind(".");
         if (dot > 0) {
-            return Optional<ulong>.some(dot as ulong);
+            return Optional<ulong>.Value(dot as ulong);
         }
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
 
     ## Returns the file name without its extension: everything before the
@@ -419,11 +419,11 @@ export struct Path {
     file_stem(): String? {
         var name = file_name();
         if (!name) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
         var text = name.value();
         var dot = Path.dot_index(text).value_or(text.size);
-        return Optional<String>.some(_io_slice(text, 0, dot));
+        return Optional<String>.Value(_io_slice(text, 0, dot));
     }
 
     ## Returns the file name's extension, without its dot: the text after
@@ -440,14 +440,14 @@ export struct Path {
     extension(): String? {
         var name = file_name();
         if (!name) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
         var text = name.value();
         var dot = Path.dot_index(text);
         if (!dot) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
-        return Optional<String>.some(_io_slice(text, dot.value() + 1, text.size));
+        return Optional<String>.Value(_io_slice(text, dot.value() + 1, text.size));
     }
 
     ## Returns this path with its file name's extension replaced by `ext`,

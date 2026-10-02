@@ -374,7 +374,7 @@ import text;
 
 test(): int {
     var s = "aé€𝄞";
-    if (!text.Utf8.find_invalid(s).is_none()) { return -1; }
+    if (!text.Utf8.find_invalid(s).is_empty()) { return -1; }
     var bytes = Array<u8>();
     bytes.append(104);
     bytes.append(105);
@@ -412,7 +412,7 @@ test(): int {
     var bad = Array<u8>();
     bad.append(104);
     bad.append(255);
-    if (!(text.Utf8.decode(bad).is_none())) { return -2; }
+    if (!(text.Utf8.decode(bad).is_empty())) { return -2; }
     if (!(text.Utf8.decode_lossy(bad) == "h\u{FFFD}")) { return -3; }
     var le = text.Utf16.encode(s);
     if (!(le.count == 18)) { return -4; }
@@ -423,13 +423,13 @@ test(): int {
     var lone = Array<u8>();
     lone.append(0);
     lone.append(216);
-    if (!(text.Utf16.decode(lone).is_none())) { return -8; }
+    if (!(text.Utf16.decode(lone).is_empty())) { return -8; }
     if (!(text.Utf16.decode_lossy(lone) == "\u{FFFD}")) { return -9; }
     if (!(text.Ascii.encode("ok").value().count == 2)) { return -10; }
-    if (!(text.Ascii.encode(s).is_none())) { return -11; }
+    if (!(text.Ascii.encode(s).is_empty())) { return -11; }
     var q = text.Ascii.encode_lossy("aé€");
     if (!(q.count == 3 && q[1] == 63)) { return -12; }
-    if (!(text.Ascii.decode(bad).is_none())) { return -13; }
+    if (!(text.Ascii.decode(bad).is_empty())) { return -13; }
     if (!(text.Ascii.decode_lossy(bad) == "h\u{FFFD}")) { return -14; }
     var before = _pep_live_allocs();
     {
@@ -464,10 +464,10 @@ test(): int {
         if (",a,".split(",").count != 3) { return -11; }
         if ("a--b".split("--").count != 2) { return -12; }
         var once = "Host: x: y".split_once(": ");
-        if (!once.is_some()) { return -13; }
+        if (!once.is_value()) { return -13; }
         var (name, value) = once.value();
         if (!(name == "Host") || !(value == "x: y")) { return -14; }
-        if ("abc".split_once(":").is_some()) { return -15; }
+        if ("abc".split_once(":").is_value()) { return -15; }
         if (!(", ".join(parts) == "a, b, , c")) { return -16; }
         if (!(", ".join(Array<String>()) == "")) { return -17; }
         if (!("aaa".replace("aa", "b") == "ba")) { return -18; }
@@ -495,16 +495,16 @@ test(): int {
     if (long.parse("FF", 16).value() != 255) { return -4; }
     if (long.parse("101", 2).value() != 5) { return -5; }
     if (long.parse("z", 36).value() != 35) { return -6; }
-    if (long.parse("12x").is_some()) { return -7; }
-    if (long.parse("").is_some()) { return -8; }
-    if (long.parse("-").is_some()) { return -9; }
-    if (long.parse(" 1").is_some()) { return -10; }
-    if (long.parse("2", 2).is_some()) { return -11; }
+    if (long.parse("12x").is_value()) { return -7; }
+    if (long.parse("").is_value()) { return -8; }
+    if (long.parse("-").is_value()) { return -9; }
+    if (long.parse(" 1").is_value()) { return -10; }
+    if (long.parse("2", 2).is_value()) { return -11; }
     if (long.parse("9223372036854775807").value() != 9223372036854775807) { return -12; }
-    if (long.parse("9223372036854775808").is_some()) { return -13; }
+    if (long.parse("9223372036854775808").is_value()) { return -13; }
     if (long.parse("-9223372036854775808").value() != -9223372036854775807 - 1) { return -14; }
-    if (long.parse("-9223372036854775809").is_some()) { return -15; }
-    if (long.parse("99999999999999999999999").is_some()) { return -16; }
+    if (long.parse("-9223372036854775809").is_value()) { return -15; }
+    if (long.parse("99999999999999999999999").is_value()) { return -16; }
     return 0;
 }"#
         ),
@@ -521,7 +521,7 @@ import math;
 
 test(): int {
     if (math.parse_int("ff", 16).value() != 255) { return -1; }
-    if (math.parse_int("12x").is_some()) { return -2; }
+    if (math.parse_int("12x").is_value()) { return -2; }
     return 0;
 }"#
         ),

@@ -216,7 +216,7 @@ Parses JSON text and converts it to a `T`: `parse`, then `from_json`.
         var config = json.decode<ServerConfig>("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
         assert(config.value().port == 80, "a number");
         assert(config.value().tags[0] == "x", "an array");
-        assert(config.value().timeout.is_none(), "a missing optional");
+        assert(config.value().timeout.is_empty(), "a missing optional");
 
         var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
         assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");

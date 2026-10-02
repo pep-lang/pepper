@@ -517,7 +517,7 @@ as a condition) and read the index with `value()`.
 ```pepper
     var a = [3, 9, 4];
     var i = a.find(9);         # i.value() == 1
-    var missing = a.find(7);   # missing.is_none() == true
+    var missing = a.find(7);   # missing.is_empty() == true
 ```
 
 #### contains

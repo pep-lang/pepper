@@ -20,7 +20,7 @@ points below 128 have an ASCII byte.
     import text;
 
     assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
-    assert(text.Ascii.encode("é").is_none(), "not ASCII");
+    assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 ```
 
 ### Static methods

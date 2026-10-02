@@ -35,7 +35,7 @@ test(): int {
     if (!root["missing"]["deeper"][3].is_null() or root.contains("missing")) { return -10; }
     if (!root["list"][3].is_null() or !root["name"]["x"].is_null()) { return -11; }
     # The as_ methods give none for another kind.
-    if (root["name"].as_int().is_some() or root["list"].as_object().is_some()) { return -12; }
+    if (root["name"].as_int().is_value() or root["list"].as_object().is_value()) { return -12; }
     if (root["list"].as_array().value().count != 3) { return -13; }
     if (root.as_object().value().count != 6) { return -14; }
     # Keys keep the order the text wrote them in.
@@ -79,8 +79,8 @@ test(): int {
     if (kind("0") != "Integer" or kind("-0") != "Integer") { return -6; }
     if (kind("1.0") != "Number" or kind("1e2") != "Number" or kind("1E-2") != "Number") { return -7; }
     if (json.parse("1e2").value().as_int().value() != 100) { return -8; }
-    if (json.parse("2.5").value().as_int().is_some()) { return -9; }
-    if (json.parse("1e300").value().as_int().is_some()) { return -10; }
+    if (json.parse("2.5").value().as_int().is_value()) { return -9; }
+    if (json.parse("1e300").value().as_int().is_value()) { return -10; }
     if (json.parse("-12").value().as_double().value() != -12.0) { return -11; }
     if (json.parse("0.125e1").value().as_double().value() != 1.25) { return -12; }
     if (json.parse("[9007199254740993]").value().to_string() != "[9007199254740992.0]") { return -13; }
@@ -395,7 +395,7 @@ test(): int {
     config.started_at = 99;
     var tls = Tls();
     tls.cert = "a.pem";
-    config.tls = Optional<Tls>.some(tls);
+    config.tls = Optional<Tls>.Value(tls);
     config.mode = Mode.Safe;
     config.ratio = 0.5;
     config.tags = ["a", "b"];
@@ -410,7 +410,7 @@ test(): int {
     if (decoded.is_err()) { print(decoded.error().to_string()); return -2; }
     var back = decoded.value();
     if (back.port != 8080 or back.max_connections != 16 or back.started_at != 0) { return -3; }
-    if (back.tls.value().cert != "a.pem" or back.timeout.is_some()) { return -4; }
+    if (back.tls.value().cert != "a.pem" or back.timeout.is_value()) { return -4; }
     if (back.mode != Mode.Safe or back.tags.count != 2 or back.headers["x"] != "1") { return -5; }
     if (back.limits !== __null) { return -6; }
     if (json.encode(back) != text) { return -7; }

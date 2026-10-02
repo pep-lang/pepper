@@ -440,10 +440,10 @@ export struct SystemTime {
     ## @returns the time between them, or none when `earlier` is later
     duration_since(earlier: SystemTime): Duration? {
         if (earlier._nanoseconds > _nanoseconds) {
-            return Optional<Duration>.none();
+            return Optional<Duration>.Empty;
         }
         var span = (_nanoseconds - earlier._nanoseconds) as ulong;
-        return Optional<Duration>.some(Duration.from_nanoseconds(span));
+        return Optional<Duration>.Value(Duration.from_nanoseconds(span));
     }
 
     ## Returns how long ago this time was on the wall clock, or none when it

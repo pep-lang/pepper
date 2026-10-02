@@ -166,7 +166,7 @@ Wrap the source in a `compress.DecompressReader` to read a `.tar.gz`.
     var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
     while (true) {
         var entry = tar.next_entry().value();
-        if (entry.is_none()) {
+        if (entry.is_empty()) {
             break;
         }
         print(entry.value().path);

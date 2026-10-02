@@ -46,12 +46,12 @@ export struct Utf8 {
     ##
     ##     var bad = Array<u8>();
     ##     bad.append(255);
-    ##     assert(text.Utf8.decode(bad).is_none(), "0xFF is never UTF-8");
+    ##     assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
     static decode(bytes: u8[]): String? {
         if (!Utf8.is_valid(bytes)) {
-            return Optional<String>.none();
+            return Optional<String>.Empty;
         }
-        return Optional<String>.some(Utf8.decode_lossy(bytes));
+        return Optional<String>.Value(Utf8.decode_lossy(bytes));
     }
 
     ## Decodes `bytes` as UTF-8, replacing each byte that does not start a
@@ -82,7 +82,7 @@ export struct Utf8 {
     ## @example
     ##     import text;
     ##
-    ##     assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+    ##     assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
     static find_invalid(value: String): ulong? {
         __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
         var size = value.size;
@@ -90,11 +90,11 @@ export struct Utf8 {
         while (index < size) {
             var run = String._utf8_sequence(data, index, size);
             if (run == 0) {
-                return Optional<ulong>.some(index);
+                return Optional<ulong>.Value(index);
             }
             index = index + run;
         }
-        return Optional<ulong>.none();
+        return Optional<ulong>.Empty;
     }
 
     ## Decodes the code point whose UTF-8 sequence starts at byte `offset`

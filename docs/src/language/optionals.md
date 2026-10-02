@@ -35,9 +35,9 @@ with an error for [`Result`](results.md#propagating-errors-with-):
 middle_name(person: Person): String? {
     var names = person.full_name?.split(" ");
     if (names.count < 3) {
-        return Optional<String>.none();
+        return Optional<String>.Empty;
     }
-    return Optional<String>.some(names[1]);
+    return Optional<String>.Value(names[1]);
 }
 ```
 
@@ -60,17 +60,16 @@ var count: int?;   # Empty
 
 | Member | What it does |
 |---|---|
-| `Optional<T>.some(value)` | Creates a Value optional holding `value`. |
-| `Optional<T>.none()`, `Optional<T>.Empty` | Create an Empty optional. |
-| `Optional<T>.Value(value)` | The case itself: the same as `some(value)`. |
-| `is_some()`, `is_none()` | Report which kind the optional is. |
-| `!!` (truth test) | An optional is a condition by itself: `if (found)` is `if (found.is_some())`, and `!found` is `found.is_none()`. |
+| `Optional<T>.Value(value)` | Creates a Value optional holding `value`. |
+| `Optional<T>.Empty` | An Empty optional. |
+| `is_value()`, `is_empty()` | Report which case the optional is. |
+| `!!` (truth test) | An optional is a condition by itself: `if (found)` is `if (found.is_value())`, and `!found` is `found.is_empty()`. |
 | `value()` | Returns the value; panics with `Optional.value on an Empty optional` if the optional is Empty. |
 | `value_or(fallback)` | Returns the value, or `fallback` if the optional is Empty. Never panics. |
 
 Use `value()` when an Empty optional would be a bug in your program, since it stops the
 program. When a missing value is an expected outcome, test it first (`if
-(found)`, `is_some()` or `is_none()`), or supply a fallback with `value_or`.
+(found)`, `is_value()` or `is_empty()`), or supply a fallback with `value_or`.
 Testing the optional itself works because `Optional` declares the truth-test
 operator `!!` (see [Truth tests](structs.md#truth-tests-and-conditions)).
 
@@ -120,8 +119,8 @@ than a sentinel value:
 "not found", and the `Path` methods above returned an empty `Path` or
 `String` (or `name.size` for `dot_index`). Code written against the old
 API must test the optional instead: `a.find(x) >= 0` becomes
-`a.find(x).is_some()`, `p.parent().is_empty` becomes
-`p.parent().is_none()`, and a value is read with `value()` or `value_or`.
+`a.find(x).is_value()`, `p.parent().is_empty` becomes
+`p.parent().is_empty()`, and a value is read with `value()` or `value_or`.
 A comparison such as `a.find(x) == -1` still compiles but compares the
 optional object rather than an index, so search for these and rewrite them.
 `String.find` is unchanged and still returns `-1`.

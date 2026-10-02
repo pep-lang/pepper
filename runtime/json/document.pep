@@ -53,7 +53,7 @@ export struct JsonDocument {
     comments(path: String): Array<String> {
         var filed = _notes.before.try_get(path);
         var copy = Array<String>();
-        if (filed.is_some()) {
+        if (filed.is_value()) {
             for (var comment in filed.value()) {
                 copy.append(comment);
             }

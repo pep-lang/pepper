@@ -397,7 +397,7 @@ struct _Worker {
         var core = this._spawn(() => {
             shared._body();
         });
-        core._shared = Optional<_SharedTask>.some(shared);
+        core._shared = Optional<_SharedTask>.Value(shared);
         core._shared_cancelled = shared._cancelled;
         this._remote.insert(core._id, core);
         shared._runner_id.store(core._id);
@@ -663,7 +663,7 @@ struct _Worker {
             this._idle.append(core._fiber);
             core._fiber = __null;
             this._retire(core);
-            if (core._shared.is_some()) {
+            if (core._shared.is_value()) {
                 this._finish_shared(core);
             }
         }
@@ -684,7 +684,7 @@ struct _Worker {
     _run(first: _TaskCore?) {
         while (true) {
             if (!this._stopping) {
-                if (first.is_some() && first.value()._finished) {
+                if (first.is_value() && first.value()._finished) {
                     this._runtime._stop();
                 }
                 if (this._runtime._stopping.load() != 0) {
@@ -1253,9 +1253,9 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
     _async_fiber_key_set(_async_worker_key, slot);
     io._io_set_waiter(worker);
     runtime._join(index, worker._inbox);
-    var first = Optional<_TaskCore>.none();
+    var first = Optional<_TaskCore>.Empty;
     if (index == 0) {
-        first = Optional<_TaskCore>.some(worker._spawn(body));
+        first = Optional<_TaskCore>.Value(worker._spawn(body));
     }
     worker._run(first);
     runtime._leave(worker._inbox);
@@ -1331,7 +1331,7 @@ export spawn<T: Shared>(body: shared () => T): Task<T> {
 # index is `worker_plus_one - 1`.
 _async_push(worker: _Worker, proxy: _TaskCore, run: shared () => void, worker_plus_one: ulong) {
     var shared = _SharedTask(run, worker._index, proxy._id);
-    proxy._shared = Optional<_SharedTask>.some(shared);
+    proxy._shared = Optional<_SharedTask>.Value(shared);
     proxy._shared_cancelled = shared._cancelled;
     if (worker_plus_one == 0) {
         worker._runtime._push(shared);

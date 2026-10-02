@@ -226,7 +226,7 @@ test(): int {
     a.append(2);
     a.append(3);
     if (a.find(2).value() != 1) { return -1; }
-    if (a.find(99).is_some()) { return -2; }
+    if (a.find(99).is_value()) { return -2; }
     if (!a.contains(3)) { return -3; }
     if (a.contains(99)) { return -4; }
     return 0;
@@ -647,7 +647,7 @@ test(): int {
     var e = Array<int>();
     if (!e.is_empty) { return -1; }
     if (e.count != 0) { return -2; }
-    if (e.find(1).is_some()) { return -3; }
+    if (e.find(1).is_value()) { return -3; }
     if (e.contains(1)) { return -4; }
     var f = Array<int>();
     if (!(e == f)) { return -5; }
