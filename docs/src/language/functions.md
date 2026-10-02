@@ -229,9 +229,10 @@ main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()
       |           ^
 ```
 
-`print` buffers its output. Writing to standard output through
-`io.File.stdout()` flushes that buffer first, so text from the two comes out
-in the order the program wrote it, even when standard output is a pipe.
+`print` writes each line out as it prints it, like Rust's `println!`, so the
+output appears as the program runs even when standard output is a pipe or a
+file. Text from `print` and from `io.File.stdout()` comes out in the order
+the program wrote it.
 
 A `float` or `double` prints its shortest exact text (`print(0.5)` prints
 `0.5`), and a tuple its elements in parentheses (`(1, two)`).

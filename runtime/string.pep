@@ -3,6 +3,7 @@ import "internals";
 extern void memcpy(void* dest, void* src, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
 extern int puts(char* text);
+extern int fflush(void* stream);
 extern double strtod(char* text, char** end);
 
 # `snprintf` for one floating-point argument. The UCRT defines `snprintf`
@@ -1304,6 +1305,10 @@ export to_string<A, B, C, D, E, F, G, H>(value: (A, B, C, D, E, F, G, H)): Strin
 ## A string with no arguments after it is printed as written, braces
 ## included.
 ##
+## Each line is flushed as it is printed, as Rust's `println!` does, so the
+## output appears as the program runs even when standard output is a pipe
+## or a file (where C would buffer it until the program exits).
+##
 ## @param text the text to print
 ## @example
 ##     print("hello");
@@ -1312,6 +1317,9 @@ export to_string<A, B, C, D, E, F, G, H>(value: (A, B, C, D, E, F, G, H)): Strin
 ##     print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
 export print(text: String) {
     puts(text.c_str());
+    # C stdio fully buffers a pipe or file; flush so a reader such as the
+    # `pepper` launcher's caller sees each line now (#465).
+    fflush(__null);
 }
 
 ## Writes the text of `value` and a line break to standard output: what

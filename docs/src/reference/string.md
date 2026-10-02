@@ -1268,6 +1268,10 @@ prints what `String.format` makes of them (`print("{0} of {1}", a, b)`).
 A string with no arguments after it is printed as written, braces
 included.
 
+Each line is flushed as it is printed, as Rust's `println!` does, so the
+output appears as the program runs even when standard output is a pipe
+or a file (where C would buffer it until the program exits).
+
 **Parameters**
 - `text` — the text to print
 
