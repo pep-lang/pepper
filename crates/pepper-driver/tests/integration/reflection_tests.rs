@@ -258,6 +258,23 @@ fn print_writes_a_note() {
 }
 
 #[test]
+fn qualified_attribute_names() {
+    // `[serialize.Ignore]` and `[serialize.Name("k")]` name an attribute
+    // through its module, with or without arguments.
+    let source = "import serialize;\n\nstruct U {\n    [serialize.Name(\"k\")]\n    var a: int;\n    [serialize.Ignore]\n    var b: int;\n}\n\ntest(): int {\n    var n = 0;\n    static (n) {\n        for (var f in reflect.properties<U>()) {\n            if (f.has_attribute<serialize.Ignore>()) {\n                n += 10;\n            }\n            if (f.has_attribute<serialize.Name>()) {\n                n += f.attribute<serialize.Name>().value.length;\n            }\n        }\n    }\n    return n;\n}\n";
+    assert_eq!(jit_census(source), (11, 0));
+    assert_eq!(
+        compile_error("import serialize;\n\n[serialize.Nmae]\ntest(): int {\n    return 0;\n}\n"),
+        "test.pep:3:2: error: unknown attribute 'serialize.Nmae'\n\
+         \x20   3 | [serialize.Nmae]\n\
+         \x20     |  ^~~~~~~~~~~~~~"
+    );
+    // The module must be the one that declares it.
+    let error = compile_error("import serialize;\n\n[nope.Ignore]\ntest(): int {\n    return 0;\n}\n");
+    assert!(error.starts_with("test.pep:3:2: error: unknown attribute 'nope.Ignore'"), "{}", error);
+}
+
+#[test]
 fn unknown_attribute() {
     assert_eq!(
         compile_error("[Optoin]\ntest(): int {\n    return 0;\n}\n"),

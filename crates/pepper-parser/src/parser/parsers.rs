@@ -2427,11 +2427,18 @@ fn attribute(input: &mut &str) -> Result<Attribute> {
 /// has no context outside `Target(...)`'s argument.
 fn is_predicate_body(e: &Expression) -> bool {
     match e {
-        Expression::SymbolRef { .. } => true,
         // A `Name(arg, ...)` parses as a plain function call.
-        Expression::FunctionCall { function, .. } => {
-            matches!(function.as_ref(), Expression::SymbolRef { .. })
-        }
+        Expression::FunctionCall { function, .. } => is_attribute_name(function),
+        name => is_attribute_name(name),
+    }
+}
+
+/// An attribute's name: `Name`, or qualified by its module, `serialize.Name`.
+fn is_attribute_name(e: &Expression) -> bool {
+    match e {
+        Expression::SymbolRef { .. } => true,
+        Expression::MemberAccess { lhs, .. } => is_attribute_name(lhs),
+        Expression::TypeLiteral(ty) => ty.generic_types.is_empty(),
         _ => false,
     }
 }

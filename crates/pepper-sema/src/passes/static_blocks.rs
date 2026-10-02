@@ -1381,9 +1381,14 @@ fn find_attribute_struct<'m>(module: &'m Module, name: &str, file: FileId) -> Op
     if let Some(st) = module.structs.iter().filter(is_attribute).find(|st| st.name == name) {
         return Some(st);
     }
-    // `json.Name`: the module's export, whatever file declares it.
-    let base = name.rsplit('.').next().unwrap_or(name);
-    prefer_file(module.structs.iter().filter(is_attribute).filter(|st| demangle_name(&st.name) == base), |st| st.loc.file, file)
+    // `serialize.Name`: the module's export, whatever file of the module
+    // declares it (`Name@serialize/module`).
+    let (module_name, base) = name.rsplit_once('.').map_or((None, name), |(m, b)| (Some(m), b));
+    let in_module = |st: &&StructDef| match module_name {
+        None => true,
+        Some(m) => st.name.split_once(pepper_parser::namespace::SEPARATOR).is_some_and(|(_, ns)| ns == m || ns.split('/').next() == Some(m)),
+    };
+    prefer_file(module.structs.iter().filter(is_attribute).filter(|st| demangle_name(&st.name) == base).filter(in_module), |st| st.loc.file, file)
 }
 
 /// The value of a literal in the model: a parameter's default or a field's

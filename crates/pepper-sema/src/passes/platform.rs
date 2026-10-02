@@ -44,6 +44,8 @@ fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
             // Non-predicate attribute call (`[Export("x")]`) — ignore.
             _ => Ok(true),
         },
+        // A qualified attribute (`[serialize.Ignore]`) is never a predicate.
+        Expression::MemberAccess { .. } | Expression::TypeLiteral(_) => Ok(true),
         // Top-level `!` / `&&` / `||` is rejected by the parser; defensive.
         _ => Err(bad_body(attr)),
     }

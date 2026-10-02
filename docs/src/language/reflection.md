@@ -198,6 +198,8 @@ declaration records a compile-time value of that struct, which
   with an initializer may be left out. A constructor may take `this.field`
   parameters, or parameters its body assigns to fields
   (`this.long_name = long_name;`), which is all its body may do.
+- An attribute from another module can be named through it, with or
+  without arguments: `[serialize.Ignore]`, `[serialize.Name("key")]`.
 - An attribute that names neither a built-in attribute nor an `[Attribute]`
   struct is an error, at its name: `unknown attribute 'Optoin'`.
 - Built-in attributes (`Target`, `Shared`, `Deprecated`, ...) are
