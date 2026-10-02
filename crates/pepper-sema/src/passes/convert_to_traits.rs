@@ -608,7 +608,7 @@ impl Converter {
             }
             Expression::Invoke { callee, args } => {
                 if let Some(fn_ty) =
-                    static_type::of(callee, &self.table, current).filter(|t| t.is_function_type())
+                    static_type::of(callee, &self.table, current).filter(|t| t.is_callable())
                 {
                     let params = fn_ty.function_params().to_vec();
                     let loc = callee.loc();
