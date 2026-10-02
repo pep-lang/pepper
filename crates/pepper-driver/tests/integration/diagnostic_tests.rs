@@ -4694,3 +4694,33 @@ fn power_of_a_pointer_names_the_operand_types() {
          \x20     |               ^~"
     );
 }
+
+#[test]
+fn number_extension_operator_must_not_take_a_number() {
+    assert_eq!(
+        error_of("number_operator_number", "extend int {\n    +(other: int): int { return 0; }\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:14: error: operator '+' of 'int' cannot take an operand of type 'int': the built-in operator applies\n\
+         \x20   2 |     +(other: int): int { return 0; }\n\
+         \x20     |              ^~~"
+    );
+}
+
+#[test]
+fn number_extension_operator_takes_one_operand() {
+    assert_eq!(
+        error_of("number_operator_unary", "extend double {\n    -(): double { return 0.0; }\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:5: error: operator '-' in an extension of 'double' must take one operand: the 'double' is the left operand\n\
+         \x20   2 |     -(): double { return 0.0; }\n\
+         \x20     |     ^"
+    );
+}
+
+#[test]
+fn number_on_the_left_without_an_extension_operator() {
+    assert_eq!(
+        error_of("number_operator_missing", "struct V {\n    var x: int = 0;\n}\nmain(): int {\n    var w = 2 * V();\n    return 0;\n}\n"),
+        "main.pep:5:15: error: invalid operands to binary expression ('int' and 'V')\n\
+         \x20   5 |     var w = 2 * V();\n\
+         \x20     |               ^"
+    );
+}

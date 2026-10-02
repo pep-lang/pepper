@@ -218,7 +218,18 @@ pub const BUILT_IN_METHODS: [&str; 2] = ["name", "from_value"];
 /// `Color::name`. An instance method takes the value as its first
 /// parameter, `this` ([`this_parameter`]).
 pub fn method_name(enum_name: &str, method: &str) -> String {
-    format!("{}::{}", enum_name, method)
+    format!("{}::{}", enum_name, spelled_in_name(method))
+}
+
+/// `method` as the part of a function name after `::`: an operator's `<` and
+/// `>` become `{` and `}`, since a `<` in a function name reads as type
+/// arguments (`f64::<` is the operator `<` of `double`, not a generic).
+fn spelled_in_name(method: &str) -> std::borrow::Cow<'_, str> {
+    if method.contains(['<', '>']) {
+        method.replace('<', "{").replace('>', "}").into()
+    } else {
+        method.into()
+    }
 }
 
 /// The enum (or other value type, see `value_types`) and method a function
@@ -247,7 +258,7 @@ pub fn this_parameter(enum_name: &str) -> VariableDef {
 /// Whether enum `enum_name` has a method `method`, and if so whether it is
 /// static.
 pub fn method_is_static(enum_name: &str, method: &str) -> Option<bool> {
-    METHODS.with(|m| m.borrow().get(&(enum_name.to_string(), method.to_string())).copied())
+    METHODS.with(|m| m.borrow().get(&(enum_name.to_string(), spelled_in_name(method).into_owned())).copied())
 }
 
 /// A call of method `method` on a value of enum `enum_name`, as a call of

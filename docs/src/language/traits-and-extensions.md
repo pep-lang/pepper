@@ -175,7 +175,9 @@ the value:
   ```
 
 - An extension of a number type may also add methods without a trait
-  (`extend int { ... }`). An enum declares its methods inside the enum, so
+  (`extend int { ... }`), and operators for a number on the left of another
+  type (`extend double { *(v: Vector): Vector { ... } }` makes `2.0 * v`
+  work; see [A number on the left](structs.md#a-number-on-the-left)). An enum declares its methods inside the enum, so
   an extension of one must name a trait.
 - The spellings of one type are one type: `extend int` is also `extend i32`.
 

@@ -44,6 +44,9 @@ pub fn key(name: &str) -> Option<String> {
     Some(canonical.to_string())
 }
 
+/// The keys of the number types and `bool` (see [`key`]).
+pub const NUMBER_KEYS: [&str; 11] = ["i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool"];
+
 /// Whether `ty` is a value type an extension may target: a number type,
 /// `char`, `bool`, or an enum whose cases carry no values.
 pub fn is_value_type(ty: &TypeName) -> bool {
@@ -70,6 +73,12 @@ pub fn lower_extensions(module: &mut Module) {
                 ))
                 .at(ext.loc),
             );
+            return;
+        }
+        if !crate::enums::is_enum(&ext.target.name)
+            && let Some(error) = ext.methods.iter().find_map(|m| number_operator_error(m, &shown))
+        {
+            report(error);
             return;
         }
         let mut functions: Vec<FunctionDef> = ext.methods.iter().map(|m| as_function(m, &key)).collect();
@@ -140,6 +149,41 @@ pub fn lower_extensions(module: &mut Module) {
         ext.resolved = Some(key);
     }
     module.functions.extend(added);
+}
+
+/// Why operator `m` cannot be declared in an extension of number type
+/// `shown`, or `None` when it can (or is not an operator). Such an operator
+/// is for a number on the left of a type that has no built-in operator
+/// (`2.0 * v`), so it takes exactly one operand, and not a number, `bool`,
+/// enum or pointer, for which the built-in operator applies.
+fn number_operator_error(m: &FunctionDef, shown: &str) -> Option<Diagnostic> {
+    let name = set_name(&m.name);
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_punctuation()) {
+        return None;
+    }
+    if m.is_static || m.parameters.len() != 1 {
+        return Some(
+            Diagnostic::error(format!(
+                "operator '{}' in an extension of '{}' must take one operand: the '{}' is the left operand",
+                name, shown, shown
+            ))
+            .at(m.loc),
+        );
+    }
+    let operand = &m.parameters[0];
+    if operand.ty.is_pointer() || is_value_type(&operand.ty) || crate::enums::is_enum(&operand.ty.to_string()) {
+        let at = if operand.type_loc.is_none() { m.loc } else { operand.type_loc };
+        return Some(
+            Diagnostic::error(format!(
+                "operator '{}' of '{}' cannot take an operand of type '{}': the built-in operator applies",
+                name,
+                shown,
+                crate::casts::spelled(&operand.ty)
+            ))
+            .at(at),
+        );
+    }
+    None
 }
 
 /// Method `m` of value type `key` as its function `key::m`: an instance

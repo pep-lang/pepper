@@ -286,6 +286,57 @@ impl<'t> Scopes<'t> {
     }
 }
 
+/// The function a binary operator with a number on the left calls, when the
+/// number type's extension declares that operator (`extend double {
+/// *(v: V): V }` makes `2.0 * v` call `f64::*(2.0, v)`), and whether its
+/// result is negated (`!=` through `==`). `None` when the right operand is a
+/// number, `bool`, enum or pointer, or its type is not known yet: the
+/// built-in operator applies then, as it does without an extension.
+///
+/// `lhs_type` is the left operand's type when the caller has it. Typing is
+/// skipped unless some number type declares the operator, since a chain
+/// `a + b + c + ...` types its left operands again at every level.
+fn number_operator(
+    op: BinaryOp,
+    lhs: &Expression,
+    lhs_type: Option<&TypeName>,
+    rhs: &Expression,
+    scopes: &Scopes,
+    current: Option<&TypeName>,
+) -> Option<(String, bool)> {
+    let name = op.op_name();
+    if op.is_assignment() || name.is_empty() {
+        return None;
+    }
+    let declares = |key: &str, method: &str| crate::enums::method_is_static(key, method) == Some(false);
+    let wanted = |key: &str| declares(key, &name) || (op == BinaryOp::NotEqual && declares(key, "=="));
+    if !crate::value_types::NUMBER_KEYS.iter().any(|key| wanted(key)) {
+        return None;
+    }
+    let lhs_type = match lhs_type {
+        Some(ty) => ty.to_string(),
+        None => type_of_expr(lhs, scopes, current).to_string(),
+    };
+    if crate::enums::is_enum(&lhs_type) {
+        return None;
+    }
+    let key = crate::value_types::key(&lhs_type)?;
+    if !wanted(&key) {
+        return None;
+    }
+    let declares = |method: &str| declares(&key, method);
+    let rhs_type = type_of_expr(rhs, scopes, current);
+    if rhs_type.is_empty()
+        || rhs_type.is_auto()
+        || rhs_type.is_pointer()
+        || crate::value_types::is_value_type(&rhs_type)
+        || crate::enums::is_enum(&rhs_type.to_string())
+    {
+        return None;
+    }
+    Some(if declares(&name) { (crate::enums::method_name(&key, &name), false) } else { (crate::enums::method_name(&key, "=="), true) })
+}
+
 /// Best-effort type of an expression (port of `typeOfExpr`).
 fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&TypeName>) -> TypeName {
     match expr {
@@ -450,6 +501,9 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 let lhs_ty = type_of_expr(lhs, scopes, current_struct);
                 if lhs_ty.is_empty() || lhs_ty.is_auto() {
                     TypeName::auto()
+                } else if let Some((function, _)) = number_operator(*op, lhs, Some(&lhs_ty), rhs, scopes, current_struct) {
+                    let call = Expression::FunctionCall { function, args: vec![(**lhs).clone(), (**rhs).clone()], loc: *loc };
+                    type_of_expr(&call, scopes, current_struct)
                 } else if scopes.overloads.is_method_set(&lhs_ty, &op.op_name()) {
                     // An overloaded operator (`-(Instant)` and `-(Duration)`)
                     // has the type of the member `rhs` selects, once it does.
@@ -1191,6 +1245,18 @@ fn resolve_each(expr: &mut Expression, scopes: &mut Scopes, current_struct: &Opt
             if let Err(d) = crate::enums::case_value_type(value, &subject, field) {
                 crate::errors::report(d);
             }
+            return;
+        }
+        // `2.0 * v`: an operator on a number with an extension operator for
+        // the right operand calls it (see `number_operator`).
+        if let Expression::Binary { op, lhs, rhs, loc } = e
+            && let Some((function, negated)) = number_operator(*op, lhs, None, rhs, scopes, current)
+        {
+            let lhs = std::mem::replace(lhs.as_mut(), Expression::ThisRef);
+            let rhs = std::mem::replace(rhs.as_mut(), Expression::ThisRef);
+            let loc = *loc;
+            let call = Expression::FunctionCall { function, args: vec![lhs, rhs], loc };
+            *e = if negated { Expression::Unary { op: UnaryOp::LogicalNot, operand: Box::new(call), loc } } else { call };
             return;
         }
         // `c.name()` on an enum value calls the function `Color::name(c)`,

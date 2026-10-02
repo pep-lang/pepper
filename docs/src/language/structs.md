@@ -250,15 +250,46 @@ Keep these rules in mind:
   operators should return `bool` too. Arithmetic, bitwise and compound
   assignment operators usually return the struct's own type; a compound
   assignment usually changes `this` and returns it.
-- The left operand decides: `a + b` uses the method on `a`'s type. An
-  expression with a number on the left and a struct on the right, such as
-  `2 * v`, is not supported.
+- The left operand decides: `a + b` uses the method on `a`'s type. For a
+  number on the left, such as `2 * v`, see
+  [A number on the left](#a-number-on-the-left).
 - Operators that start with `<` (`<`, `<=`, `<<`, `<<=`) can only be declared
   in the `name: Type` form, `<(other: V): bool`: in the C-style form the
   parser reads `bool <` as the start of generic arguments.
 
 The result of an operator has the type its method returns, so with
 `-(other: V): int`, `var r = a - b;` is an `int`.
+
+### A number on the left
+
+`2.0 * v` uses the operator of the left operand's type, `double`, which a
+struct cannot change. Declare it in an
+[extension](traits-and-extensions.md#numbers-bool-and-enums) of the
+number type instead, where `this` is the number:
+
+```pepper
+{{#include ../../examples/structs-operators-left.pep}}
+```
+
+- The number type is the left operand's own: `2` is an `int` and `2.0` a
+  `double`, so each needs its own extension (`extend int`, `extend double`).
+  Without one, `2 * v` is `invalid operands to binary expression ('int' and
+  'Vector')`.
+- The operator takes one operand, which may be any type except a number,
+  `bool`, enum or pointer: numbers on both sides always use the built-in
+  operator.
+
+  ```text
+  main.pep:2:14: error: operator '+' of 'int' cannot take an operand of type 'int': the built-in operator applies
+      2 |     +(other: int): int { return 0; }
+        |              ^~~
+  ```
+
+- Comparisons work the same way, and `2.0 != v` means `!(2.0 == v)` when
+  the extension declares only `==`. Compound assignments (`n *= v`) do not
+  apply, since the number cannot hold the result.
+- The extension is visible like any other: where its file is imported, if it
+  is exported.
 
 ### Unary operators
 
