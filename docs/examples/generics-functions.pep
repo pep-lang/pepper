@@ -25,6 +25,13 @@ total_area<T>(shapes: Array<T>): int {
     return sum;
 }
 
+# `T()` calls the type argument's constructor.
+fresh<T>(): Array<T> {
+    var items = Array<T>();
+    items.append(T());
+    return items;
+}
+
 main(): int {
     # Type arguments come from the arguments, or can be written out.
     assert(larger(3, 9) == 9, "ints");
@@ -38,5 +45,6 @@ main(): int {
     var squares = Array<Square>();
     squares.append(Square());
     assert(total_area<Square>(squares) == 4, "squares");
+    assert(total_area(fresh<Circle>()) == 3, "a constructed Circle");
     return 0;
 }

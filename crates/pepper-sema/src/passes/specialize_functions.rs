@@ -76,6 +76,13 @@ pub(crate) fn rewrite_static_calls(function: &mut FunctionDef, type_map: &[(Stri
         return;
     }
     crate::passes::walk_block(body, &mut |e: &mut Expression| {
+        // A constructor through a type parameter: `T()` is `Point()`.
+        if let Expression::FunctionCall { function, .. } = e
+            && let Some((_, ty)) = map.iter().find(|(p, _)| p == function)
+        {
+            *function = ty.to_string();
+            return;
+        }
         // A value type's static method is its function `X::m`.
         if let Expression::MethodCall { this, method, args, loc } = e
             && let Expression::SymbolRef { id, .. } = this.as_ref()

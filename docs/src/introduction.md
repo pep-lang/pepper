@@ -58,7 +58,7 @@ closures, modules (with `export * from` re-exports), `Result`-based error handli
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing `JsonValue`s), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, and the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing `JsonValue`s, and converting structs with `json.encode` and `json.decode`), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, and the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information). That is enough to write real
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, and
 [`pepper`](tools/pepper.md), the entry point that runs every tool, are
 themselves written in Pepper.

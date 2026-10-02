@@ -15,9 +15,12 @@ export struct JsonError {
     ## The path given to `parse`, which names the text in `to_string()`;
     ## empty when none was given.
     var path: String;
-    ## The line of the error, from 1.
+    ## The line of the error, from 1; 0 for an error from `decode` or
+    ## `from_json` that is about a value rather than the text, whose
+    ## `message` starts with the value's path (`$.server.port: ...`).
     var line: ulong;
-    ## The column of the error, from 1, counting bytes as clang does.
+    ## The column of the error, from 1, counting bytes as clang does; 0
+    ## when `line` is.
     var column: ulong;
     ## The byte offset of the error in the text, from 0.
     var offset: ulong;
@@ -39,10 +42,16 @@ export struct JsonError {
 
     ## Returns the error as a compiler prints one:
     ## `path:line:column: error: message`, without the `path:` when there
-    ## is no path.
+    ## is no path and without `line:column:` when `line` is 0.
     ##
     ## @returns the rendered error
     to_string(): String {
+        if (line == 0) {
+            if (path.is_empty) {
+                return $"error: {message}";
+            }
+            return $"{path}: error: {message}";
+        }
         if (path.is_empty) {
             return $"{line}:{column}: error: {message}";
         }

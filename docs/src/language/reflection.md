@@ -78,7 +78,9 @@ when its type arguments are known: `describe<Point>` and `describe<Line>`
 each get their own expansion. Code the block emits can call other generic
 functions, such as `describe(field.get(value))` for a field that is itself a
 struct, and those are specialized in turn. A mistake in a block is reported
-when some specialization uses it, with the pass it happened in:
+when some specialization uses it, with the pass it happened in and, when a
+generic asked for that specialization, a note at each use that led to it
+(`'dump<Point>' is used by 'main' here`):
 
 ```text
 main.pep:14:13: error: 'print' cannot be called at compile time

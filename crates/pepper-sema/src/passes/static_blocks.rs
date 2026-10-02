@@ -148,7 +148,7 @@ pub fn expand_module_blocks(module: &mut Module) {
     let mut values = vec![];
     let mut notes = vec![];
     for block in &blocks {
-        let context = Context { name: String::new(), loc: block.block.loc, runtime: HashSet::new() };
+        let context = Context { name: String::new(), symbol: String::new(), loc: block.block.loc, runtime: HashSet::new() };
         let mut expander =
             Expander { module, lowered: false, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None };
         if let Err(error) = expander.expand(&block.block) {
@@ -213,6 +213,8 @@ pub fn remove_from_generic_code(module: &mut Module) {
 struct Context {
     /// Its name as the user wrote it (`to_json<Point>`).
     name: String,
+    /// Its name in the model, which [`Module::spec_requests`] is keyed by.
+    symbol: String,
     loc: Loc,
     /// Its parameters and locals: runtime values a block must capture.
     runtime: HashSet<String>,
@@ -223,7 +225,7 @@ impl Context {
         let mut runtime: HashSet<String> = function.parameters.iter().map(|p| p.name.trim_start_matches("this.").to_string()).collect();
         runtime.insert("this".to_string());
         collect_locals(body, &mut runtime);
-        Context { name: demangle(&function.name).into_owned(), loc: function.loc, runtime }
+        Context { name: demangle(&function.name).into_owned(), symbol: function.name.clone(), loc: function.loc, runtime }
     }
 }
 
@@ -443,10 +445,28 @@ impl Expander<'_> {
             let mut error = error;
             if !self.context.name.is_empty() {
                 error = error.with_note(format!("in the static block of '{}'", self.context.name), Some(self.context.loc));
+                error = self.with_requests(error);
             }
             error
         })?;
         Ok(block_of(items))
+    }
+
+    /// `error` with a note for each specialization that led to the one
+    /// being expanded, back to the code that is not generic: where the user
+    /// called `json.encode(job)`, for an error in `_to_json<Job>`.
+    fn with_requests(&self, mut error: Diagnostic) -> Diagnostic {
+        let mut name = crate::passes::gather_generics::parse_type_string(&self.context.symbol).to_string();
+        let mut shown: Vec<String> = vec![];
+        while let Some(request) = self.module.spec_requests.get(&name) {
+            if shown.contains(&request.by) || shown.len() >= crate::passes::gather_generics::MAX_SPECIALIZATION_DEPTH {
+                break;
+            }
+            shown.push(request.by.clone());
+            error = error.with_note(format!("'{}' is used by '{}' here", demangle(&name), demangle(&request.by)), Some(request.loc));
+            name = request.by.clone();
+        }
+        error
     }
 
     fn at(&self, span: ast::Span) -> Loc {

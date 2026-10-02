@@ -312,3 +312,145 @@ test(): int {
         0
     );
 }
+
+const CONFIG: &str = r##"
+import json;
+
+enum Mode {
+    Fast,
+    Safe,
+}
+
+struct Tls {
+    var cert: String;
+}
+
+struct ServerConfig {
+    var host: String;
+    [Required]
+    var port: int;
+    [Name("max-connections")]
+    var max_connections: u16;
+    [Ignore]
+    var started_at: long;
+    var tls: Tls?;
+    var timeout: double?;
+    var mode: Mode;
+    var ratio: double;
+    var debug: bool;
+    var tags: Array<String>;
+    var limits: HashMap<String, int>;
+    var headers: OrderedMap<String, String>;
+    var extra: json.JsonValue;
+}
+"##;
+
+#[test]
+fn encodes_and_decodes_structs() {
+    assert_eq!(
+        run(&format!(
+            "{}{}",
+            CONFIG,
+            r##"
+test(): int {
+    var config = ServerConfig();
+    config.host = "localhost";
+    config.port = 8080;
+    config.max_connections = 16;
+    config.started_at = 99;
+    var tls = Tls();
+    tls.cert = "a.pem";
+    config.tls = Optional<Tls>.some(tls);
+    config.mode = Mode.Safe;
+    config.ratio = 0.5;
+    config.tags = ["a", "b"];
+    config.headers = OrderedMap<String, String>();
+    config.headers["x"] = "1";
+    config.extra = json.parse("[1, {\"k\": null}]").value();
+    var text = json.encode(config);
+    var expected = "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16,\"tls\":{\"cert\":\"a.pem\"},\"timeout\":null,\"mode\":\"Safe\",\"ratio\":0.5,\"debug\":false,\"tags\":[\"a\",\"b\"],\"limits\":null,\"headers\":{\"x\":\"1\"},\"extra\":[1,{\"k\":null}]}";
+    if (text != expected) { print(text); return -1; }
+
+    var decoded = json.decode<ServerConfig>(text);
+    if (decoded.is_err()) { print(decoded.error().to_string()); return -2; }
+    var back = decoded.value();
+    if (back.port != 8080 or back.max_connections != 16 or back.started_at != 0) { return -3; }
+    if (back.tls.value().cert != "a.pem" or back.timeout.is_some()) { return -4; }
+    if (back.mode != Mode.Safe or back.tags.count != 2 or back.headers["x"] != "1") { return -5; }
+    if (back.limits !== __null) { return -6; }
+    if (json.encode(back) != text) { return -7; }
+
+    # Missing keys keep their defaults; JSONC and maps.
+    var small = json.decode<ServerConfig>("{\"port\": 1, // a comment\n \"limits\": {\"a\": 2,},}", comments = true);
+    if (small.is_err()) { print(small.error().to_string()); return -8; }
+    if (small.value().host !== __null or small.value().limits["a"] != 2) { return -9; }
+
+    # Other top-level types, and to_json / from_json.
+    if (json.encode([1, 2, 3]) != "[1,2,3]") { return -10; }
+    if (json.decode<Array<int>>("[4, 5]").value()[1] != 5) { return -11; }
+    if (json.decode<u64>("9007199254740991").value() != 9007199254740991) { return -12; }
+    if (json.to_json(Mode.Fast).as_string().value() != "Fast") { return -13; }
+    if (json.from_json<Mode>(json.JsonValue.String("Safe")).value() != Mode.Safe) { return -14; }
+    if (!json.encode(config, indent = 2).contains("\n  \"port\": 8080,")) { return -15; }
+    return 0;
+}
+"##
+        )),
+        0
+    );
+}
+
+#[test]
+fn reports_decode_errors_with_their_path() {
+    assert_eq!(
+        run(&format!(
+            "{}{}",
+            CONFIG,
+            r##"
+error_of(text: String): String {
+    var decoded = json.decode<ServerConfig>(text, path = "s.json");
+    if (decoded.is_ok()) { return "ok"; }
+    return decoded.error().to_string();
+}
+
+reject(text: String): String {
+    return json.decode<ServerConfig>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
+}
+
+test(): int {
+    if (error_of("{\"port\": \"80\"}") != "s.json: error: $.port: expected a number, found a string") { return -1; }
+    if (error_of("{}") != "s.json: error: $: missing required key 'port'") { return -2; }
+    if (error_of("{\"port\": 1, \"tls\": {\"cert\": 3}}") != "s.json: error: $.tls.cert: expected a string, found a number") { return -3; }
+    if (error_of("{\"port\": 1, \"max-connections\": 70000}") != "s.json: error: $[\"max-connections\"]: 70000 does not fit in 'u16'") { return -4; }
+    if (error_of("{\"port\": 1.5}") != "s.json: error: $.port: expected an integer, found 1.5") { return -5; }
+    if (error_of("{\"port\": 1, \"mode\": \"Slow\"}") != "s.json: error: $.mode: 'Slow' is not a case of 'Mode'") { return -6; }
+    if (error_of("{\"port\": 1, \"tags\": [\"a\", null, 3]}") != "s.json: error: $.tags[2]: expected a string, found a number") { return -7; }
+    if (error_of("{\"port\": 1, \"limits\": {\"a b\": true}}") != "s.json: error: $.limits[\"a b\"]: expected a number, found a boolean") { return -8; }
+    if (error_of("{\"port\": 1, \"debug\": null}") != "s.json: error: $.debug: expected a boolean, found null") { return -9; }
+    if (error_of("[]") != "s.json: error: $: expected an object, found an array") { return -10; }
+    if (error_of("{\"port\": 1,}") != "s.json:1:11: error: trailing comma is not allowed; parse with 'comments = true' to accept JSONC") { return -11; }
+    if (error_of("{\"port\": 1, \"unknown\": 2}") != "ok") { return -12; }
+    if (reject("{\"port\": 1, \"unknown\": 2}") != "error: $.unknown: unknown key 'unknown'") { return -13; }
+    if (reject("{\"port\": 1, \"started_at\": 2}") != "error: $.started_at: unknown key 'started_at'") { return -14; }
+    return 0;
+}
+"##
+        )),
+        0
+    );
+}
+
+#[test]
+fn rejects_types_it_cannot_convert() {
+    let error = crate::support::compile_error(
+        "import json;\n\nstruct Job {\n    var name: String;\n    var outcome: Result<int>;\n}\n\ntest(): int {\n    var text = json.encode(Job());\n    return 0;\n}\n",
+    );
+    assert!(error.contains("error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON"), "{}", error);
+    assert!(error.contains("test.pep:9:16: note: 'encode<Job>' is used by 'test' here"), "{}", error);
+    let error = crate::support::compile_error(
+        "import json;\n\nstruct Inner {\n    var handle: __ptr<void>;\n}\n\nstruct Job {\n    var inner: Inner;\n}\n\ntest(): int {\n    var job = json.decode<Job>(\"{}\");\n    return 0;\n}\n",
+    );
+    assert!(error.contains("error: 'decode' cannot convert property 'handle' of type"), "{}", error);
+    assert!(error.contains("note: '_from_json<Inner>' is used by '_from_json<Job>' here"), "{}", error);
+    assert!(error.contains("test.pep:12:15: note: 'decode<Job>' is used by 'test' here"), "{}", error);
+}

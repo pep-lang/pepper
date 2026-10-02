@@ -73,6 +73,11 @@ error inside `total_area`. To state the requirement up front, and have the
 compiler report it where the function is used, give `T` a
 [constraint](#constraints).
 
+That includes constructing one: `T()` (or `T(args)`) calls the type
+argument's constructor, so `fresh<Circle>()` above makes a `Circle`. In a
+[constrained](#inside-a-constrained-generic) generic, which offers only what
+its constraints declare, it is an error.
+
 ## Generic methods
 
 A method can have type parameters of its own, in a struct, a generic struct,

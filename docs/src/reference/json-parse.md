@@ -44,7 +44,9 @@ empty when none was given.
 var line: ulong
 ```
 
-The line of the error, from 1.
+The line of the error, from 1; 0 for an error from `decode` or
+`from_json` that is about a value rather than the text, whose
+`message` starts with the value's path (`$.server.port: ...`).
 
 #### column
 
@@ -52,7 +54,8 @@ The line of the error, from 1.
 var column: ulong
 ```
 
-The column of the error, from 1, counting bytes as clang does.
+The column of the error, from 1, counting bytes as clang does; 0
+when `line` is.
 
 #### offset
 
@@ -89,7 +92,7 @@ to_string(): String
 
 Returns the error as a compiler prints one:
 `path:line:column: error: message`, without the `path:` when there
-is no path.
+is no path and without `line:column:` when `line` is 0.
 
 **Returns**
 - the rendered error

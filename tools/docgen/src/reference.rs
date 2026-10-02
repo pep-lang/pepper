@@ -67,6 +67,8 @@ const PAGES: &[(&str, &str)] = &[
     ("json/module.pep", "The json module"),
     ("json/value.pep", "JsonValue"),
     ("json/parse.pep", "Parsing"),
+    ("json/convert.pep", "Struct conversion"),
+    ("serialize/module.pep", "The serialize module"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

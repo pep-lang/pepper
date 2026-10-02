@@ -8,10 +8,13 @@ write them back as compact or indented text.
 Bring it in with `import json`. Parsing follows RFC 8259 strictly, and
 accepts JSONC (comments and trailing commas) on request. Objects keep
 their keys in the order they were written, so a document round-trips
-unchanged.
+unchanged. `encode` and `decode` convert structs to JSON text and back.
 
 - [JsonValue](json-value.md): `JsonValue`
 - [Parsing](json-parse.md): `parse`, `JsonError`
+- [Struct conversion](json-convert.md): `encode`, `decode`, `to_json`,
+  `from_json`, `UnknownKeys`, with the attributes of the
+  [serialize](serialize-module.md) module
 
 **Example**
 ```pepper

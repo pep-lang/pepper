@@ -91,15 +91,17 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
 
     // Functions: resolve call targets in bodies.
     for function in &mut module.functions {
+        // `T()` in a generic base is a constructor its specializations name.
+        let type_params: Vec<String> = function.generic_params.iter().map(|p| p.name.clone()).collect();
         if let Some(body) = &mut function.body {
-            resolve_block(body, &view, report_missing);
+            resolve_block(body, &view, report_missing, &type_params);
         }
     }
 
     // Global initializers: same call-target resolution as function bodies.
     for var in &mut module.globals {
         if let Some(default) = &mut var.default {
-            resolve_expression(default, &view, report_missing);
+            resolve_expression(default, &view, report_missing, &[]);
         }
     }
 
@@ -111,48 +113,48 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
         }
         let st = &mut module.structs[st_idx];
         for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
-            resolve_block(body, &view, report_missing);
+            resolve_block(body, &view, report_missing, &[]);
         }
         for method in &mut st.method_members {
             if let Some(body) = &mut method.body {
-                resolve_block(body, &view, report_missing);
+                resolve_block(body, &view, report_missing, &[]);
             }
         }
     }
 }
 
-fn resolve_block(block: &mut Block, view: &ResolvedModuleView, report_missing: bool) {
+fn resolve_block(block: &mut Block, view: &ResolvedModuleView, report_missing: bool, type_params: &[String]) {
     for stmt in &mut block.items {
-        resolve_statement(stmt, view, report_missing);
+        resolve_statement(stmt, view, report_missing, type_params);
     }
 }
 
-fn resolve_statement(stmt: &mut Statement, view: &ResolvedModuleView, report_missing: bool) {
+fn resolve_statement(stmt: &mut Statement, view: &ResolvedModuleView, report_missing: bool, type_params: &[String]) {
     match stmt {
-        Statement::Expression(expr) => resolve_expression(expr, view, report_missing),
-        Statement::Block(inner) => resolve_block(inner, view, report_missing),
+        Statement::Expression(expr) => resolve_expression(expr, view, report_missing, type_params),
+        Statement::Block(inner) => resolve_block(inner, view, report_missing, type_params),
         Statement::Declaration(_) => {}
         Statement::Branch(branch) => {
-            resolve_expression(&mut branch.condition, view, report_missing);
-            resolve_block(&mut branch.if_block, view, report_missing);
+            resolve_expression(&mut branch.condition, view, report_missing, type_params);
+            resolve_block(&mut branch.if_block, view, report_missing, type_params);
             if let Some(else_block) = &mut branch.else_block {
-                resolve_block(else_block, view, report_missing);
+                resolve_block(else_block, view, report_missing, type_params);
             }
         }
         Statement::While(wh) => {
-            resolve_expression(&mut wh.condition, view, report_missing);
-            resolve_block(&mut wh.block, view, report_missing);
+            resolve_expression(&mut wh.condition, view, report_missing, type_params);
+            resolve_block(&mut wh.block, view, report_missing, type_params);
         }
         Statement::Return(ret) => {
             if let Some(expr) = &mut ret.expr {
-                resolve_expression(expr, view, report_missing);
+                resolve_expression(expr, view, report_missing, type_params);
             }
         }
         Statement::LoopBreak(_) | Statement::Static(_) => {}
     }
 }
 
-fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_missing: bool) {
+fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_missing: bool, type_params: &[String]) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         if let Expression::FunctionCall { function, loc, .. } = e {
             let known_function = view.functions.iter().any(|(name, _)| name == function);
@@ -173,7 +175,8 @@ fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_m
                 let builtin = function.starts_with("_pep_")
                     || function.starts_with("trace_")
                     || function == "String"
-                    || function.contains('<');
+                    || function.contains('<')
+                    || type_params.contains(function);
                 if !builtin && report_missing {
                     crate::errors::report(
                         Diagnostic::error(format!("call to undeclared function '{}'", function)).at(*loc),

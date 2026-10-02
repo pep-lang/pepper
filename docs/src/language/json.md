@@ -1,7 +1,8 @@
 # JSON
 
 The `json` module reads JSON text into a `JsonValue`, lets you look values
-up and change them, and writes them back as compact or indented text.
+up and change them, and writes them back as compact or indented text. It
+also converts [structs](#structs) to JSON and back.
 
 ```pepper
 {{#include ../../examples/json-basics.pep}}
@@ -116,11 +117,100 @@ Without a `path`, it starts at the line: `3:3: error: expected ',' or '}'`.
 - Objects keep their keys in insertion order, so parsing a document and
   writing it back keeps its order.
 
+## Structs
+
+`json.encode(value)` writes a struct as JSON text, and
+`json.decode<T>(text)` reads one back. There is no code to write per type:
+both walk the struct's properties with [reflection](reflection.md) while
+compiling, so the conversion costs what hand-written code would.
+
+```pepper
+{{#include ../../examples/json-structs.pep}}
+```
+
+A struct's public [properties](properties.md) become an object's members,
+in declaration order. Each property's type converts as follows, and the
+same rules apply at the top level (`json.decode<Array<int>>("[1, 2]")`):
+
+| Pepper | JSON |
+|--------|------|
+| an integer type (`int`, `u8`, `long`, ...) | a number; reading one checks that it has no fraction and fits the type |
+| `float`, `double` | a number |
+| `bool` | `true`, `false` |
+| `String` | a string |
+| an enum whose cases carry no values | the case's name, as a string (`"Safe"`) |
+| `T?` | the value, or `null` when none; a missing key reads as none |
+| `Array<T>` | an array |
+| `HashMap<String, V>`, `OrderedMap<String, V>`, `Map<String, V>` | an object |
+| a struct | an object, recursively |
+| `json.JsonValue` | itself, for parts of a document with no fixed shape |
+
+A struct reference that holds nothing (a `String`, array or struct field
+never assigned) is written as `null`, and `null` reads back as one, so a
+value round-trips. `null` for a number, `bool` or enum is an error.
+
+### Attributes
+
+The `serialize` module's attributes, which `json` uses (they need no
+import of their own), change how a property is converted:
+
+| Attribute | Effect |
+|-----------|--------|
+| `[Name("key")]` | writes and reads the property under `key` |
+| `[Ignore]` | leaves the property out of both |
+| `[Required]` | makes a missing key an error when reading |
+
+### Reading
+
+`decode` makes a struct with its constructor that takes no arguments, then
+reads in each property it finds a key for. A missing key leaves its
+property at its default, unless the property is `[Required]`. It takes
+optional arguments, usually passed by name:
+
+| Argument | Default | Meaning |
+|----------|---------|---------|
+| `unknown_keys` | `UnknownKeys.Ignore` | What to do with a key that names no property: skip it, or with `UnknownKeys.Reject`, fail naming it. |
+| `comments` | `false` | Accept JSONC, as `parse` does. |
+| `path` | `""` | The name of the text, which the error's `to_string()` puts first. |
+
+A syntax error has a line and column as in [Errors](#errors). An error in
+converting a value has none (its `line` is 0); its message starts with
+where in the document the value is, as a path from the root `$`:
+
+```text
+server.json: error: $.server.port: expected a number, found a string
+server.json: error: $.tags[2]: expected a string, found null
+server.json: error: $["max-connections"]: 70000 does not fit in 'u16'
+server.json: error: $: missing required key 'port'
+```
+
+`json.to_json(value)` and `json.from_json<T>(value)` do the same
+conversions to and from a `JsonValue` rather than text, and
+`json.encode(value, indent = 2)` writes indented text.
+
+### Types it cannot convert
+
+A property whose type has no JSON form, such as a pointer, a function, or
+a `Result` (a result is not a value to send over the wire), is a compile
+error naming the property. Notes follow the conversion back to the call
+that asked for it:
+
+```text
+runtime/json/convert.pep:293:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
+...
+main.pep:10:16: note: 'encode<Job>' is used by 'main' here
+   10 |     var text = json.encode(job);
+      |                ^~~~~~~~~~~
+```
+
 ## Current limits
 
 - Comments are skipped when parsing JSONC; they are not kept in the value
   or written back yet.
-- Converting between JSON and structs (`json.encode`, `json.decode<T>`)
-  is not supported yet.
+- Enums whose cases carry values cannot be converted yet, since
+  reflection cannot read or make such a case.
+- A struct's own conversion cannot be customized yet: a type converts as
+  its properties do.
+- Map keys must be `String`s.
 
 The [reference](../reference/json-module.md) lists every function.
