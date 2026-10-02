@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-779cff09.js";
+            window.path_to_searchindex_js = "../searchindex-10bbf1d9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -380,6 +380,12 @@ to the same object rather than a copy, so a change made with <code>append</code>
 through both names. <a href="memory.html">Memory and reference counting</a> explains how
 references work, and the <a href="../reference/string.html"><code>String</code></a> reference lists every
 method.</p>
+<p>Every place a literal is stored (a variable, a field, an array element, a
+function’s result) gets a new <code>String</code>, so changing it never changes the
+literal: after <code>var s = "a"; s.append("b");</code> the next <code>"a"</code> is still <code>"a"</code>.
+Where a literal is only read, passed to a parameter that the function
+neither keeps nor changes (<code>builder.append("x")</code>, <code>name == "x"</code>), every
+evaluation shares one constant object and allocates nothing.</p>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
 <code>find</code> returns), <code>compare</code> and <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code> order strings byte by byte
