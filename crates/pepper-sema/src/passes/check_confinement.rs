@@ -170,6 +170,8 @@ impl Summary {
 
     /// A summary [`Summary::encode`] wrote, for a function in `file`.
     fn decode(text: &str, file: pepper_parser::diagnostic::FileId) -> Option<Summary> {
+        // What follows `|` is other passes' (`static_strings`).
+        let text = text.split('|').next().unwrap_or(text);
         let mut fields = text.split(';');
         let numbers = |field: &str| -> Option<Vec<usize>> {
             if field.is_empty() { Some(vec![]) } else { field.split(',').map(|n| n.parse().ok()).collect() }
@@ -191,10 +193,15 @@ impl Summary {
 /// which only places a note: what the build cache's interface hash of the
 /// function's file takes (see `crate::interface`).
 pub(crate) fn summary_without_position(text: &str) -> String {
+    // Facts other passes append after `|` (`static_strings`) stay.
+    let (text, facts) = match text.find('|') {
+        Some(at) => text.split_at(at),
+        None => (text, ""),
+    };
     match text.rsplit_once(';') {
-        Some((rest, "-")) => format!("{};-", rest),
-        Some((rest, _)) => format!("{};blamed", rest),
-        None => text.to_string(),
+        Some((rest, "-")) => format!("{};-{}", rest, facts),
+        Some((rest, _)) => format!("{};blamed{}", rest, facts),
+        None => format!("{}{}", text, facts),
     }
 }
 
@@ -882,8 +889,10 @@ impl<'p, 'a> Walk<'p, 'a> {
                 self.regions[region].untracked = true;
                 Some(region)
             }
-            // An immortal payload-free case: no fields to reach.
+            // An immortal payload-free case or shared literal: no fields
+            // to reach.
             Expression::StaticCase { .. }
+            | Expression::StaticString { .. }
             | Expression::NoMatch
             | Expression::DefaultArgument { .. }
             | Expression::BoolLiteral(_)

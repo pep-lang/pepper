@@ -124,6 +124,13 @@ through both names. [Memory and reference counting](memory.md) explains how
 references work, and the [`String`](../reference/string.md) reference lists every
 method.
 
+Every place a literal is stored (a variable, a field, an array element, a
+function's result) gets a new `String`, so changing it never changes the
+literal: after `var s = "a"; s.append("b");` the next `"a"` is still `"a"`.
+Where a literal is only read, passed to a parameter that the function
+neither keeps nor changes (`builder.append("x")`, `name == "x"`), every
+evaluation shares one constant object and allocates nothing.
+
 `to_string` turns any integer into its decimal text. For parsing and
 generating text, `byte_at` and `substr_bytes` work in bytes (the offsets
 `find` returns), `compare` and `<`, `<=`, `>`, `>=` order strings byte by byte

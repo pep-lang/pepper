@@ -475,6 +475,12 @@ pub enum Expression {
     /// so it is never freed and needs no allocation. The case's static
     /// method returns it.
     StaticCase { ty: TypeName, tag: i64 },
+    /// A string literal as one immortal `String` object in constant
+    /// storage, which every evaluation shares: a literal no use keeps or
+    /// changes, passed only where the caller makes the parameter's copy
+    /// (see `passes::static_strings`), so no count step reaches it.
+    /// Codegen's `static_string` emits it.
+    StaticString { value: String, loc: Loc },
     /// Evaluate `subject` once, then `body`, in which [`Expression::Subject`]
     /// with the same `id` reads the value. A `match` expression is one
     /// around an `?:` chain of [`Expression::MatchArm`] tests, an `is` test
@@ -573,7 +579,8 @@ impl Expression {
             | Expression::FromTrait { loc, .. }
             | Expression::Destructure { loc, .. }
             | Expression::Move { loc, .. }
-            | Expression::StringLiteral { loc, .. } => *loc,
+            | Expression::StringLiteral { loc, .. }
+            | Expression::StaticString { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
             Expression::StaticValue(v) => v.loc,
             Expression::StaticMember(m) => m.loc,
@@ -1632,6 +1639,12 @@ pub struct Module {
     pub record_summaries: bool,
     /// The summaries worth recording (see `record_summaries`), by location.
     pub summaries_to_record: Vec<(Loc, String)>,
+    /// Per function or method (by its codegen name: `f`, `Point.length`),
+    /// per parameter: the caller makes and drops the parameter's copy
+    /// around the call, as the C++ ABI does, so a shared literal passes
+    /// with no count step (see `passes::static_strings`). Every other
+    /// parameter's copy is made at the callee's entry.
+    pub caller_copies: std::collections::HashMap<String, Vec<bool>>,
     /// Every summary `record_summaries` found that does not depend on the
     /// rest of the program, by summary key, with a location in the file
     /// its locations point into: what a checked runtime keeps (`Checked::summaries`).

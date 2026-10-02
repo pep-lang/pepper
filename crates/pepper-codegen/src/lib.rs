@@ -144,6 +144,18 @@ pub struct CodeGenerator<'ctx> {
     sending_params: HashMap<String, Vec<bool>>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
+    /// The immortal `String` object of each shared literal
+    /// (`Expression::StaticString`), by value.
+    static_strings: HashMap<String, PointerValue<'ctx>>,
+    /// Per function, per parameter: the caller makes the parameter's copy
+    /// (`Module::caller_copies`).
+    caller_copies: HashMap<String, Vec<bool>>,
+    /// The parameters of the function being generated whose copy its
+    /// caller made: they may hold a shared string literal.
+    copied_params: std::collections::HashSet<String>,
+    /// Argument copies of such parameters, made for a call with a guarded
+    /// step: released after the call with one too.
+    guarded_temps: Vec<BasicValueEnum<'ctx>>,
     /// File-scope globals: name → Address (frame locals miss falls back here).
     global_addrs: HashMap<String, Address<'ctx>>,
     frame: Frame<'ctx>,
@@ -250,6 +262,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             fn_param_types: HashMap::new(),
             sending_params: HashMap::new(),
             global_strings: HashMap::new(),
+            static_strings: HashMap::new(),
+            caller_copies: HashMap::new(),
+            copied_params: std::collections::HashSet::new(),
+            guarded_temps: vec![],
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
             scopes: Vec::new(),
@@ -311,6 +327,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn generate_module(&mut self, module: &SemaModule) -> Result<(), String> {
         self.index_check_files(&module.sources);
+        self.caller_copies = module.caller_copies.clone();
         self.hash_overrides = module
             .functions
             .iter()
@@ -2439,6 +2456,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.locals.clear();
         self.frame.exited = false;
         self.frame.loop_base_depth = None;
+        self.copied_params.clear();
         // Fresh scope stack for this function: the body is one scope.
         self.scopes.clear();
         self.scopes.push(Vec::new());
@@ -2502,7 +2520,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             // the function's scope owns it until exit. `this` is never copied.
             // A `[Move]` parameter's reference is handed over by the
             // caller, so it arrives owned.
-            if name != "this" && self.is_reference_name(ty_name) {
+            // A parameter whose copy the caller made and drops
+            // (`Module::caller_copies`) is not this function's to release.
+            let copied = name != "this"
+                && function.parameters.iter().position(|p| p.name == *name).is_some_and(|index| self.copied_param(&function.name, index));
+            if copied {
+                self.copied_params.insert(name.clone());
+            } else if name != "this" && self.is_reference_name(ty_name) {
                 let sending = function.parameters.iter().any(|p| {
                     p.name == *name && pepper_sema::passes::check_confinement::takes_over(&p.attributes)
                 });
@@ -3296,6 +3320,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .get(method)
                     .cloned()
             }
+            Expression::StaticString { .. } => Some("String".to_string()),
             Expression::ToTrait { to, .. } => Some(to.to_string()),
             Expression::FromTrait { test: true, .. } => Some("bool".to_string()),
             Expression::FromTrait { to, .. } => Some(to.to_string()),
@@ -3523,7 +3548,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn acquire_ref_from(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, live: bool) -> Result<(), String> {
         match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
-            Some(atomic) => self.inline_count_step(ty_name, val, true, atomic, live),
+            Some(atomic) => self.inline_count_step(ty_name, val, true, atomic, live, false),
             None => self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![val]).map(|_| ()),
         }
     }
@@ -3549,12 +3574,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
+    /// Acquire (`increment`) or release a copy of a parameter the caller
+    /// copied ([`Self::copied_param`]), which may be a shared string
+    /// literal: a step that leaves an immortal count alone.
+    fn guarded_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool) -> Result<(), String> {
+        match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
+            Some(atomic) => self.inline_count_step(ty_name, val, increment, atomic, false, true),
+            None => Err(format!("internal error: a caller-copied parameter of type '{}' without inline counts", ty_name)),
+        }
+    }
+
     /// Release a reference to `val`, of type `ty_name`: `T.__release(v)`, or
     /// inlined like [`Self::acquire_ref`], with only the last release (the
     /// destructor and freeing) a call, to `T.__last_release`.
     fn release_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
         match self.structs.get(ty_name).and_then(|desc| desc.inline_counts) {
-            Some(atomic) => self.inline_count_step(ty_name, val, false, atomic, false),
+            Some(atomic) => self.inline_count_step(ty_name, val, false, atomic, false, false),
             None => self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val]).map(|_| ()),
         }
     }
@@ -3562,7 +3597,9 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// The inlined body of a standard `__acquire` (`increment`) or
     /// `__release`, as `struct_body` synthesizes them. `live`: another slot
     /// owns a reference to the object (see [`Self::count_step`]).
-    fn inline_count_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool, atomic: bool, live: bool) -> Result<(), String> {
+    /// `guarded`: the object may be a shared string literal, whose count
+    /// (at or above `STATIC_REFCOUNT`) is left alone.
+    fn inline_count_step(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>, increment: bool, atomic: bool, live: bool, guarded: bool) -> Result<(), String> {
         let object = val.into_pointer_value();
         // The insert point's function: a thunk is emitted while another
         // function is being compiled.
@@ -3574,7 +3611,27 @@ impl<'ctx> CodeGenerator<'ctx> {
         let step = self.context.append_basic_block(function, if increment { "acquire" } else { "release" });
         let done = self.context.append_basic_block(function, "counted");
         let is_null = self.builder.build_is_null(object, "is_null").map_err(|e| e.to_string())?;
-        self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
+        if guarded {
+            // An immortal static object's count is never written.
+            let check = self.context.append_basic_block(function, "check_static");
+            self.builder.build_conditional_branch(is_null, done, check).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(check);
+            let i32_type = self.context.i32_type();
+            let count = self.head_count_ptr(object, sema::CountField::Strong)?;
+            let load = self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?;
+            if atomic {
+                let instruction = inkwell::values::BasicValue::as_instruction_value(&load).ok_or_else(|| "count load".to_string())?;
+                instruction.set_atomic_ordering(inkwell::AtomicOrdering::Monotonic).map_err(|e| e.to_string())?;
+            }
+            let limit = i32_type.const_int(pepper_sema::passes::function_types::STATIC_REFCOUNT as u64, false);
+            let is_static = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::UGE, load.into_int_value(), limit, "is_static")
+                .map_err(|e| e.to_string())?;
+            self.builder.build_conditional_branch(is_static, done, step).map_err(|e| e.to_string())?;
+        } else {
+            self.builder.build_conditional_branch(is_null, done, step).map_err(|e| e.to_string())?;
+        }
         self.builder.position_at_end(step);
         let after = self.count_step(object, sema::CountField::Strong, increment, atomic, live)?;
         if increment {
@@ -3703,6 +3760,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn release_temp(&mut self, ty: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
+        if let Some(at) = self.guarded_temps.iter().position(|v| *v == val) {
+            self.guarded_temps.swap_remove(at);
+            return self.guarded_step(ty, val, false);
+        }
         if !ty.is_empty() {
             self.release_ref(ty, val)?;
         }
@@ -4779,6 +4840,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MatchArm(_) => Err("internal error: unlowered 'match' arm".to_string()),
             Expression::CaseValue(_) => Err("internal error: unlowered 'match' binding".to_string()),
             Expression::StaticCase { ty, tag } => self.static_case(ty, *tag),
+            Expression::StaticString { value, .. } => self.static_string(value),
             Expression::WithSubject(with) => self.with_subject(with),
             Expression::Subject { id, .. } => {
                 self.subjects.get(id).copied().ok_or_else(|| "internal error: 'match' value read outside its 'match'".to_string())
@@ -4899,11 +4961,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     // A default argument is evaluated at the call, so an owned
                     // default (`String name = ""`) is a temporary like any other.
-                    for extra in self.missing_args(&mangled, args.len())? {
+                    for (offset, extra) in self.missing_args(&mangled, args.len())?.into_iter().enumerate() {
                         let v = self.codegen_default(&extra)?;
-                        if let Some(ty) = self.owned_temp_type(&extra) {
-                            owned_arg_temps.push((v, ty));
-                        }
+                        self.default_temp(&mangled, args.len() + offset, &extra, v, &mut owned_arg_temps)?;
                         arg_names.push(self.numeric_source_name(&extra, &v));
                         arg_vals.push(v);
                     }
@@ -4989,11 +5049,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 // A default argument is evaluated at the call, so an owned
                 // default (`String name = ""`) is a temporary like any other.
-                for extra in self.missing_args(&mangled, args.len())? {
+                for (offset, extra) in self.missing_args(&mangled, args.len())?.into_iter().enumerate() {
                     let v = self.codegen_default(&extra)?;
-                    if let Some(ty) = self.owned_temp_type(&extra) {
-                        owned_arg_temps.push((v, ty));
-                    }
+                    self.default_temp(&mangled, args.len() + offset, &extra, v, &mut owned_arg_temps)?;
                     arg_names.push(self.numeric_source_name(&extra, &v));
                     arg_vals.push(v);
                 }
@@ -5232,11 +5290,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         // A default argument is evaluated at the call, so an owned
         // default (`String name = ""`) is a temporary like any other.
-        for extra in self.missing_args(&target, args.len())? {
+        for (offset, extra) in self.missing_args(&target, args.len())?.into_iter().enumerate() {
             let v = self.codegen_default(&extra)?;
-            if let Some(ty) = self.owned_temp_type(&extra) {
-                owned_arg_temps.push((v, ty));
-            }
+            self.default_temp(&target, args.len() + offset, &extra, v, &mut owned_arg_temps)?;
             arg_names.push(self.numeric_source_name(&extra, &v));
             arg_vals.push(v);
         }
@@ -5354,6 +5410,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         value: BasicValueEnum<'ctx>,
         owned_arg_temps: &mut Vec<(BasicValueEnum<'ctx>, String)>,
     ) -> Result<(), String> {
+        if self.copied_param(callee, index) {
+            return self.copy_argument(arg, value, owned_arg_temps);
+        }
         let sending = self.sending_params.get(callee).and_then(|s| s.get(index)).copied().unwrap_or(false);
         match self.owned_temp_type(arg) {
             Some(ty) if !sending => owned_arg_temps.push((value, ty)),
@@ -5365,6 +5424,42 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             None => {}
         }
+        Ok(())
+    }
+
+    /// Whether the caller makes the copy of parameter `index` of `callee`
+    /// (`Module::caller_copies`).
+    fn copied_param(&self, callee: &str, index: usize) -> bool {
+        self.caller_copies.get(callee).and_then(|c| c.get(index)).copied().unwrap_or(false)
+    }
+
+    /// The caller's copy of `arg` (`value`) for a parameter whose copy the
+    /// caller makes, dropped after the call (`owned_arg_temps`): none for a
+    /// shared literal, whose count nothing steps, and none for an owned
+    /// temporary, which is that copy. A parameter of this function's own
+    /// that the caller copied, or a `String` method's `this`, may hold a
+    /// shared literal, so its copy steps with a guard.
+    fn copy_argument(&mut self, arg: &Expression, value: BasicValueEnum<'ctx>, owned_arg_temps: &mut Vec<(BasicValueEnum<'ctx>, String)>) -> Result<(), String> {
+        if matches!(arg, Expression::StaticString { .. }) {
+            return Ok(());
+        }
+        if let Some(ty) = self.owned_temp_type(arg) {
+            owned_arg_temps.push((value, ty));
+            return Ok(());
+        }
+        let Some(ty) = self.value_sema_type(arg).filter(|t| self.is_reference_name(t)) else { return Ok(()) };
+        let maybe_shared = match arg {
+            Expression::SymbolRef { id, .. } => self.copied_params.contains(id),
+            Expression::ThisRef => ty == "String",
+            _ => false,
+        };
+        if maybe_shared {
+            self.guarded_step(&ty, value, true)?;
+            self.guarded_temps.push(value);
+        } else {
+            self.acquire_copy(&ty, value, arg)?;
+        }
+        owned_arg_temps.push((value, ty));
         Ok(())
     }
 
@@ -5648,6 +5743,46 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(object.as_pointer_value().into())
     }
 
+    /// The immortal `String` of a shared literal (`Expression::StaticString`):
+    /// one constant global holding the object, whose counts start at
+    /// `STATIC_REFCOUNT` and 1, followed by its NUL-terminated bytes, which
+    /// `_data` points to. `String.__acquire` and `__release` leave such a
+    /// count alone, so nothing writes it. Private to the unit, and named
+    /// like the other string constants so `partition::finish` orders it by
+    /// first use.
+    fn static_string(&mut self, value: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        if let Some(existing) = self.static_strings.get(value) {
+            return Ok((*existing).into());
+        }
+        let desc = self.structs.get("String").ok_or_else(|| "unknown type name 'String'".to_string())?;
+        let string_type = desc.llvm_type;
+        let names: Vec<String> = desc.fields.iter().map(|(n, _)| n.clone()).collect();
+        let bytes = self.context.const_string(value.as_bytes(), true);
+        let object_type = self.context.struct_type(&[string_type.into(), bytes.get_type().into()], false);
+        let object = self.module.add_global(object_type, None, "str.object");
+        let i32_type = self.context.i32_type();
+        let data = unsafe { object.as_pointer_value().const_gep(object_type, &[i32_type.const_zero(), i32_type.const_int(1, false), i32_type.const_zero()]) };
+        let mut values: Vec<BasicValueEnum<'ctx>> = vec![];
+        for (i, field_type) in string_type.get_field_types().into_iter().enumerate() {
+            let int = |n: u64| -> Result<BasicValueEnum<'ctx>, String> { Ok(field_type.into_int_type().const_int(n, false).into()) };
+            let value = match names.get(i).map(String::as_str) {
+                Some("__refcount") => int(pepper_sema::passes::function_types::STATIC_REFCOUNT as u64)?,
+                Some("__weakcount") => int(1)?,
+                Some("_data") => data.into(),
+                Some("_size") => int(value.len() as u64)?,
+                Some("_length") => int(value.chars().count() as u64)?,
+                _ => field_type.const_zero(),
+            };
+            values.push(value);
+        }
+        object.set_initializer(&object_type.const_named_struct(&[string_type.const_named_struct(&values).into(), bytes.into()]));
+        object.set_constant(true);
+        object.set_linkage(inkwell::module::Linkage::Private);
+        let pointer = object.as_pointer_value();
+        self.static_strings.insert(value.to_string(), pointer);
+        Ok(pointer.into())
+    }
+
     /// A `match` expression or `is` test: evaluate the subject once, check a
     /// reference enum is not null, then the body, which reads the subject
     /// through `Expression::Subject`. An owned subject is a temporary of the
@@ -5825,10 +5960,28 @@ impl<'ctx> CodeGenerator<'ctx> {
             .and_then(|defaults| defaults.get(index).cloned().flatten())
             .ok_or_else(|| format!("internal error: parameter {} of '{}' has no default", index + 1, target))?;
         let v = self.codegen_default(&default)?;
-        if let Some(ty) = self.owned_temp_type(&default) {
-            owned_arg_temps.push((v, ty));
-        }
+        self.default_temp(target, index, &default, v, owned_arg_temps)?;
         Ok((v, self.numeric_source_name(&default, &v)))
+    }
+
+    /// The temporary a default argument `default` (`value`) for parameter
+    /// `index` of `target` leaves: an owned one, or the caller's copy when
+    /// the caller makes it ([`Self::copy_argument`]).
+    fn default_temp(
+        &mut self,
+        target: &str,
+        index: usize,
+        default: &Expression,
+        value: BasicValueEnum<'ctx>,
+        owned_arg_temps: &mut Vec<(BasicValueEnum<'ctx>, String)>,
+    ) -> Result<(), String> {
+        if self.copied_param(target, index) {
+            return self.copy_argument(default, value, owned_arg_temps);
+        }
+        if let Some(ty) = self.owned_temp_type(default) {
+            owned_arg_temps.push((value, ty));
+        }
+        Ok(())
     }
 
     /// A default argument of the call being generated: a

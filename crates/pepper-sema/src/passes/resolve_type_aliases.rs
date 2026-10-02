@@ -255,6 +255,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::FloatLiteral(_)
         | Expression::IntLiteral(_)
         | Expression::StringLiteral { .. }
+        | Expression::StaticString { .. }
         | Expression::StaticValue(_)
         | Expression::PointerLiteral => {}
         Expression::StaticMember(member) => {

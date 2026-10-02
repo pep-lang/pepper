@@ -162,6 +162,11 @@ The whole model, as a construct mapping:
   a no-op, as in C++.
 - By-value parameter ≡ pass by value: acquire at entry, release at function
   exit — exactly like a shared_ptr local going out of scope.
+  The one exception is where the copy is made, never whether: for a
+  `String` parameter the function neither keeps nor changes
+  (`passes::static_strings`), the caller makes the copy before the call
+  and drops it after, as the Itanium C++ ABI does, so a shared string
+  literal passes with no count step.
 - `x.m()` ≡ `x->m()`: the receiver is accessed as `this`, a reference — no
   copy, no refcount work on the receiver. The call result is a temporary
   owning one reference: the return site acquires when it copies `this`, a

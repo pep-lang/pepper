@@ -41,6 +41,7 @@ pub mod resolve_type_aliases;
 pub mod overloads;
 pub mod ranges;
 pub mod convert_string_literals;
+pub mod static_strings;
 pub mod gather_generics;
 pub mod constraints;
 pub mod check_bounds;
@@ -282,6 +283,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Struct keys whose `==` and `hash<T>` disagree.
     step!(check_hash_keys::check_hash_keys(module));
     crate::checked::restore_bodies(module);
+    // Last, over every body (a checked runtime's are back): which literals
+    // can be shared reads the callees' bodies.
+    step!(static_strings::share_string_literals(module));
     Ok(())
 }
 
@@ -376,7 +380,7 @@ fn walk_static_items(items: &mut [StaticItem], f: &mut impl FnMut(&mut Expressio
 pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression)) {
     f(expr);
     match expr {
-        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } => {}
+        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } | Expression::StaticString { .. } => {}
         Expression::MemberRef { lhs, .. } => walk_expression(lhs, f),
         Expression::BoolLiteral(_)
         | Expression::IntLiteral(_)
@@ -530,7 +534,7 @@ fn visit_static_items<'e>(items: &'e [StaticItem], f: &mut impl FnMut(&'e Expres
 pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Expression)) {
     f(expr);
     match expr {
-        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } => {}
+        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } | Expression::StaticString { .. } => {}
         Expression::MemberRef { lhs, .. } => visit_expression(lhs, f),
         Expression::BoolLiteral(_)
         | Expression::IntLiteral(_)
@@ -686,6 +690,7 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
         | Expression::IsPod(_)
         | Expression::Default(_)
         | Expression::StaticCase { .. }
+        | Expression::StaticString { .. }
         | Expression::Subject { .. }
         | Expression::NoMatch
         | Expression::DefaultArgument { .. }
@@ -753,6 +758,7 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         | Expression::CountStep { .. }
         | Expression::FunctionPointer { .. }
         | Expression::StaticCase { .. }
+        | Expression::StaticString { .. }
         | Expression::Subject { .. }
         | Expression::NoMatch
         | Expression::DefaultArgument { .. }
