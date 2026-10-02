@@ -1014,6 +1014,10 @@ How the language lowers:
   promotions. Narrow integer arguments get `signext`/`zeroext`.
   `[Link(name = "sym")]` changes the symbol (`ExternDef::link_name`). A string
   literal passed to an extern is passed as its raw NUL-terminated global.
+  A call to an extern whose C symbol is `memcpy`, `memmove` or `memset`
+  lowers to the LLVM intrinsic (`build_memory_intrinsic`), since a `void`
+  extern is declared returning `i32` and LLVM would not recognize the
+  builtin; so a constant-size copy optimizes to loads and stores.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.

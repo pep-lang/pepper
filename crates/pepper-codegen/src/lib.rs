@@ -5593,6 +5593,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let param_names = self.fn_param_types.get(name).cloned().unwrap_or_default();
         let coerced = self.coerce_args(fn_value.get_type(), &args, arg_names, &param_names);
+        if self.extern_names.contains(name) {
+            if let Some(result) = self.build_memory_intrinsic(fn_value, &coerced)? {
+                return Ok(result);
+            }
+        }
         let meta_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
             coerced.iter().map(|a| (*a).into()).collect();
         let call = self
@@ -5603,6 +5608,48 @@ impl<'ctx> CodeGenerator<'ctx> {
             .try_as_basic_value()
             .basic()
             .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
+    /// Lowers a call to the C library's `memcpy`, `memmove` or `memset` to
+    /// the LLVM intrinsic, so LLVM inlines a constant-size copy (#340).
+    /// A call to the extern itself would not do: Pepper declares a `void`
+    /// extern with an `i32` return, which does not match the C signature,
+    /// so LLVM never recognizes it as the builtin. Returns `None` for any
+    /// other function, or when the arguments are not (pointer, pointer or
+    /// integer, integer), and the caller emits a plain call.
+    fn build_memory_intrinsic(
+        &self,
+        fn_value: FunctionValue<'ctx>,
+        args: &[BasicValueEnum<'ctx>],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        let symbol = fn_value.get_name().to_string_lossy();
+        let [BasicValueEnum::PointerValue(dest), second, BasicValueEnum::IntValue(size)] = args else {
+            return Ok(None);
+        };
+        match (symbol.as_ref(), second) {
+            ("memcpy", BasicValueEnum::PointerValue(source)) => {
+                self.builder.build_memcpy(*dest, 1, *source, 1, *size).map_err(|e| e.to_string())?;
+            }
+            ("memmove", BasicValueEnum::PointerValue(source)) => {
+                self.builder.build_memmove(*dest, 1, *source, 1, *size).map_err(|e| e.to_string())?;
+            }
+            ("memset", BasicValueEnum::IntValue(value)) => {
+                // C converts the fill value to unsigned char.
+                let byte = self
+                    .builder
+                    .build_int_truncate_or_bit_cast(*value, self.context.i8_type(), "fill")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_memset(*dest, 1, byte, *size).map_err(|e| e.to_string())?;
+            }
+            _ => return Ok(None),
+        }
+        // C returns `dest`; an extern declared `void` reads as `i32` zero,
+        // as a plain call's missing result does.
+        Ok(Some(match fn_value.get_type().get_return_type() {
+            Some(BasicTypeEnum::PointerType(_)) => (*dest).into(),
+            Some(BasicTypeEnum::IntType(it)) => it.const_zero().into(),
+            _ => self.context.i32_type().const_zero().into(),
+        }))
     }
 
     /// Coerce call arguments to the parameter types of `fn_type` (e.g. i32

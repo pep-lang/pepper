@@ -98,3 +98,28 @@ fn every_function_carries_the_cpu() {
         assert_eq!(attribute("target-features").as_deref(), Some(chosen.features.as_str()));
     }
 }
+
+/// The C library's `memcpy`, `memmove` and `memset` lower to LLVM's
+/// intrinsics, so a constant-size copy optimizes to loads and stores
+/// rather than a call (#340).
+#[test]
+fn memory_externs_inline_at_o2() {
+    let source = "extern void memcpy(void* destination, void* source, ulong size);\n\
+extern void memmove(void* destination, void* source, ulong size);\n\
+extern void memset(void* pointer, int value, ulong size);\n\
+export copy_one(a: __ptr<u8>, b: __ptr<u8>) { memcpy(a, b, sizeof<long>()); }\n\
+export move_one(a: __ptr<u8>, b: __ptr<u8>) { memmove(a, b, 4); }\n\
+export fill_one(a: __ptr<u8>) { memset(a, 7, 2); }\n\
+test(): int { return 0; }\n";
+    let module = sema(source).unwrap();
+    let context = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&context, "memory");
+    generator.generate(&module).unwrap();
+    pepper_codegen::target::optimize(&generator.module, pepper_codegen::target::OptLevel::O2).unwrap();
+    for name in ["copy_one", "move_one", "fill_one"] {
+        let function = generator.module.get_function(name).unwrap_or_else(|| panic!("no '{}'", name));
+        let ir = function.print_to_string().to_string();
+        assert!(!ir.contains("call "), "'{}' still calls out:\n{}", name, ir);
+        assert!(ir.contains("store "), "'{}' stores nothing:\n{}", name, ir);
+    }
+}
