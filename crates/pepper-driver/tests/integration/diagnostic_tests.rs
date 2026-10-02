@@ -4618,3 +4618,33 @@ fn constant_division_by_zero_is_an_error_at_the_operator() {
          \x20     |       ^~"
     );
 }
+
+#[test]
+fn propagation_needs_a_result_function() {
+    // At the `?`, with a note at the function that does not return a Result.
+    let source = "parse(): Result<int> {\n    return Result<int>.ok(1);\n}\nmain(): int {\n    return parse()?;\n}\n";
+    assert_eq!(
+        error_of("propagation_function", source),
+        "main.pep:5:19: error: '?' requires the enclosing function to return a Result\n\
+         \x20   5 |     return parse()?;\n\
+         \x20     |                   ^\n\
+         main.pep:4:1: note: 'main' returns 'int'\n\
+         \x20   4 | main(): int {\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
+fn propagation_after_a_call() {
+    // The `?` would run before the call to its left, which the note shows.
+    let source = "parse(): Result<int> {\n    return Result<int>.ok(1);\n}\nf(): Result<int> {\n    return Result<int>.ok(parse().value() + parse()?);\n}\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("propagation_order", source),
+        "main.pep:5:52: error: '?' cannot follow a call in the same statement\n\
+         \x20   5 |     return Result<int>.ok(parse().value() + parse()?);\n\
+         \x20     |                                                    ^\n\
+         main.pep:5:35: note: the '?' would run before this call; call it in a statement of its own\n\
+         \x20   5 |     return Result<int>.ok(parse().value() + parse()?);\n\
+         \x20     |                                   ^~~~~"
+    );
+}

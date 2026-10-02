@@ -118,6 +118,21 @@ export enum Optional<T> {
         panic("Optional.value on an Empty optional", location);
     }
 
+    # What `e?` lowers to (the builder's `lift_tries`): it returns early when
+    # `_propagates()`, with the enclosing function's
+    # `_from_residual(e._residual())`, an Empty optional.
+    _propagates(): bool {
+        return this is Empty;
+    }
+
+    _residual(): bool {
+        return false;
+    }
+
+    static _from_residual(empty: bool): Optional<T> {
+        return Optional<T>.Empty;
+    }
+
     ## Returns the value, or `fallback` if this optional is Empty.
     ##
     ## Never panics. `fallback` is evaluated by the caller whether or not it

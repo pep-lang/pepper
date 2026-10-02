@@ -140,6 +140,22 @@ export enum Result<TValue, TError=Error> {
         panic("Result.error on an Ok value", location);
     }
 
+    # What `e?` lowers to (the builder's `lift_tries`): it returns early when
+    # `_propagates()`, with the enclosing function's
+    # `_from_residual(e._residual())`. An error of another type converts to
+    # this `TError` as the argument, through an `[Implicit]` constructor.
+    _propagates(): bool {
+        return this is Err;
+    }
+
+    _residual(): TError {
+        return this.error();
+    }
+
+    static _from_residual(error: TError): Result<TValue, TError> {
+        return Result<TValue, TError>.Err(error);
+    }
+
     ## Returns the success value, or `fallback` if this result is Err.
     ##
     ## Never panics. `fallback` is evaluated by the caller whether or not it

@@ -767,7 +767,7 @@ struct Parser {
                 operand = node;
                 continue;
             }
-            if (_at("++") or _at("--")) {
+            if (_at("++") or _at("--") or (_at("?") and _propagates())) {
                 var node = Node(NodeKind.Postfix);
                 node.add(operand);
                 _take(node);
@@ -777,6 +777,49 @@ struct Parser {
             break;
         }
         return operand;
+    }
+
+    # Whether the `?` at the current token is the postfix propagation
+    # operator (`f()?`) rather than the start of a ternary's branches: the
+    # compiler's `propagates`. It is when what follows cannot start an
+    # expression, not when an operand follows, and, when the next token
+    # could do either (`-`, `*`, `(`, ...), unless an expression and a `:`
+    # follow.
+    _propagates(): bool {
+        var next = _peek_at(1);
+        if (next.kind == TokenKind.End) {
+            return true;
+        }
+        if (next.kind == TokenKind.Identifier) {
+            return next.is_word("and") or next.is_word("or") or next.is_word("is") or next.is_word("as");
+        }
+        if (next.kind != TokenKind.Punctuation) {
+            return false;
+        }
+        var text = next.text;
+        if (text == "&&" or text == "!=") {
+            return true;
+        }
+        if (!(text.starts_with("-")
+            or text.starts_with("+")
+            or text.starts_with("*")
+            or text.starts_with("&")
+            or text.starts_with("!")
+            or text == "("
+            or text == "[")) {
+            return true;
+        }
+        # Probe for `? expression :`, leaving no error behind.
+        ulong position = _position;
+        var error = _error;
+        var missing_semicolon = _missing_semicolon;
+        _advance();
+        _expression();
+        bool ternary = !_failed and _at(":");
+        _restore(position);
+        _error = error;
+        _missing_semicolon = missing_semicolon;
+        return !ternary;
     }
 
     _arguments(): Node {

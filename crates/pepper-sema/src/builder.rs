@@ -7,7 +7,9 @@ use pepper_parser::ast;
 use pepper_parser::diagnostic::{Diagnostic, FileId};
 
 mod static_items;
+mod tries;
 pub(crate) use static_items::{INTERPOLATE, REFLECT};
+pub(crate) use tries::TRY_LOCAL;
 
 thread_local! {
     /// The file being built, whose id every location built carries. Set by
@@ -351,6 +353,11 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             loc: loc(ty.span),
         }),
         ast::Expression::SizeOf(ty) => Ok(Expression::SizeOf(type_name_from(ty))),
+        // A `?` that `tries::lift` left: not in a statement of a function body.
+        ast::Expression::Unary { op, prefix: false, span, .. } if op == "?" => {
+            Err(Diagnostic::error("'?' can be used only in a statement of a function body")
+                .at(loc(ast::Span { start: span.end - 1, end: span.end })))
+        }
         ast::Expression::Unary { op, prefix, operand, span } => Ok(Expression::Unary {
             op: unary_op(op, *prefix)
                 .ok_or_else(|| Diagnostic::error(format!("unsupported unary operator '{}'", op)).at(loc(*span)))?,
@@ -673,6 +680,11 @@ fn block(block: &ast::Block) -> Result<Block, Diagnostic> {
 fn block_in_context(block: &ast::Block) -> Result<Block, Diagnostic> {
     let mut items = vec![];
     for stmt in &block.statements {
+        // A statement using `?` lowers to several, its hidden locals first.
+        if let Some(lowered) = tries::lift(stmt)? {
+            items.extend(lowered);
+            continue;
+        }
         match stmt {
             // A destructuring declaration's locals belong to the enclosing
             // block, so it lowers to several statements in place.
@@ -889,19 +901,26 @@ thread_local! {
 
 /// Restart hidden-local numbering (see `crate::reset_program_counters`).
 pub(crate) fn reset_counters() {
-    set_counters([0; 4]);
+    set_counters([0; 5]);
 }
 
 /// The hidden-local counters, in the order `set_counters` takes them.
-fn counters() -> [usize; 4] {
-    [FOR_LOOPS.with(|c| c.get()), WITH_BLOCKS.with(|c| c.get()), TUPLES.with(|c| c.get()), MATCHES.with(|c| c.get())]
+fn counters() -> [usize; 5] {
+    [
+        FOR_LOOPS.with(|c| c.get()),
+        WITH_BLOCKS.with(|c| c.get()),
+        TUPLES.with(|c| c.get()),
+        MATCHES.with(|c| c.get()),
+        tries::TRIES.with(|c| c.get()),
+    ]
 }
 
-fn set_counters([for_loops, with_blocks, tuples, matches]: [usize; 4]) {
+fn set_counters([for_loops, with_blocks, tuples, matches, tries]: [usize; 5]) {
     FOR_LOOPS.with(|c| c.set(for_loops));
     WITH_BLOCKS.with(|c| c.set(with_blocks));
     TUPLES.with(|c| c.set(tuples));
     MATCHES.with(|c| c.set(matches));
+    tries::TRIES.with(|c| c.set(tries));
 }
 
 /// Lower `for (var x in source) body` to
@@ -2389,7 +2408,7 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     // Hidden locals are numbered per file, so a file's code (and its build
     // cache unit's bitcode) does not depend on the files built before it.
     let previous_counters = counters();
-    set_counters([0; 4]);
+    set_counters([0; 5]);
     let built = build_module(module);
     let (uses, contexts) = TYPE_USES.with(|u| u.replace(previous_uses));
     let literals = LITERAL_ARGS.with(|l| l.replace(previous_literals));

@@ -2086,10 +2086,56 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             expr = Expression::Unary { op: op.to_string(), prefix: false, operand: Box::new(expr), span: Span { start, end: pos(input) } };
             continue;
         }
+        if input.starts_with('?') && propagates(&input[1..]) {
+            height += 1;
+            reach_height(pos(input), height)?;
+            *input = &input[1..];
+            let start = expr.span().start;
+            expr = Expression::Unary { op: "?".to_string(), prefix: false, operand: Box::new(expr), span: Span { start, end: pos(input) } };
+            continue;
+        }
         *input = before;
         break;
     }
     Ok(expr)
+}
+
+/// Whether the `?` just before `after` is the postfix propagation operator
+/// (`f()?`) rather than the start of a ternary's branches (`c ? a : b`). It
+/// is postfix when what follows cannot start an expression (`;`, `)`, `.`,
+/// `:`, a comparison, ...), a ternary when an operand follows (a name, a
+/// literal), and, when the next token could do either (`-`, `*`, `(`, `[`,
+/// ...), a ternary only if an expression and a `:` follow.
+fn propagates(after: &str) -> bool {
+    let mut rest: &str = after;
+    if ws(&mut rest).is_err() {
+        return false;
+    }
+    let keyword = |word: &str| {
+        rest.starts_with(word) && !rest[word.len()..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+    };
+    if rest.is_empty()
+        || rest.starts_with([';', ')', ']', '}', ',', '.', ':', '?', '=', '<', '>', '/', '%', '|', '^'])
+        || rest.starts_with("&&")
+        || rest.starts_with("!=")
+        || ["and", "or", "is", "as"].iter().any(|w| keyword(w))
+    {
+        return true;
+    }
+    if !rest.starts_with(['-', '+', '*', '&', '!', '(', '[']) {
+        return false;
+    }
+    // Probe for `expression :` without leaving a trace in the error
+    // reporting: a failed probe must not become the furthest expectation.
+    let expectation = EXPECTATION.with(|e| e.borrow().clone());
+    let max = MAX_POS.with(|m| m.get());
+    let error = ERROR.with(|e| e.borrow().clone());
+    let mut probe = rest;
+    let ternary = expression(&mut probe).is_ok() && ws(&mut probe).is_ok() && probe.starts_with(':');
+    EXPECTATION.with(|e| *e.borrow_mut() = expectation);
+    MAX_POS.with(|m| m.set(max));
+    ERROR.with(|e| *e.borrow_mut() = error);
+    !ternary
 }
 
 /// `**` — right-associative, operand is postfix (function-call level)
@@ -5750,6 +5796,35 @@ mod tests {
             Expression::Ternary { .. } => {}
             other => panic!("expected ternary, got {:?}", other),
         }
+    }
+
+    // ── Propagation `?` ──
+
+    #[test]
+    fn propagation_versus_ternary() {
+        // Displayed with every binary operation and ternary parenthesized.
+        let cases = [
+            ("f()?", "f()?"),
+            ("f()?.g()?", "f()?.g()?"),
+            ("f()? + 1", "(f()? + 1)"),
+            ("f()? - 1", "(f()? - 1)"),
+            ("f()? * 2", "(f()? * 2)"),
+            ("f()? == 2", "(f()? == 2)"),
+            ("f()? && ok", "(f()? && ok)"),
+            ("f()?[0]", "f()?[0]"),
+            ("f()? ? a : b", "(f()? ? a : b)"),
+            ("c ? f()? : b", "(c ? f()? : b)"),
+            ("c ? -1 : 1", "(c ? -1 : 1)"),
+            ("c ? (x) : y", "(c ? x : y)"),
+            ("c ? [1] : [2]", "(c ? [1] : [2])"),
+            ("c ? x : y", "(c ? x : y)"),
+            ("f(a?, b?)", "f(a?, b?)"),
+        ];
+        for (source, expected) in cases {
+            assert_eq!(parse_expr(source).to_string(), expected, "{source}");
+        }
+        let Expression::Unary { op, prefix, span, .. } = parse_expr("f()?") else { panic!("expected a unary '?'") };
+        assert_eq!((op.as_str(), prefix, span), ("?", false, Span { start: 0, end: 4 }));
     }
 
     // ── Member access & indexing ──

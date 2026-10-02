@@ -52,7 +52,7 @@ structs with constructors, destructors, methods and [properties](language/proper
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum), `Optional` values, iteration (with `map` and
+closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with `map` and
 `filter` adapters),
 `with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a `StringBuilder`,
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash

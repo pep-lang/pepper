@@ -1032,6 +1032,8 @@ impl<'a> Typer<'a> {
             ast::Expression::SizeOf(_) => Some(Ty::named("ulong")),
             ast::Expression::Unary { op, operand, .. } => match op.as_str() {
                 "!" => Some(Ty::named("bool")),
+                // `r?`: the value a `Result` or an `Optional` holds.
+                "?" => self.resolve(self.type_at(operand, at, depth)?).args.into_iter().next(),
                 _ => self.type_at(operand, at, depth),
             },
             ast::Expression::Cast { ty, .. } => Some(Ty::from_ast(ty)),

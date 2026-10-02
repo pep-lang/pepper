@@ -25,6 +25,25 @@ A C-style declaration inside a function body, such as `Node? n = m;`, is read
 as a declaration only when a name follows the `?` and then `=`, `;` or the end
 of the line; `a ? b : c` stays a conditional expression.
 
+## Returning early with `?`
+
+In a function that returns an optional, `?` after an optional is its value,
+or, when it is Empty, returns Empty from the function at once, as `?` does
+with an error for [`Result`](results.md#propagating-errors-with-):
+
+```pepper
+middle_name(person: Person): String? {
+    var names = person.full_name?.split(" ");
+    if (names.count < 3) {
+        return Optional<String>.none();
+    }
+    return Optional<String>.some(names[1]);
+}
+```
+
+Using `?` on an optional in a function that does not return an optional is
+an error (`'?' requires the enclosing function to return an Optional`).
+
 ## Optional slots start as Empty
 
 A variable or field of an optional type that is not given a value starts as

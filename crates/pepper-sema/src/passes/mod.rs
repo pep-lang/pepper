@@ -45,6 +45,7 @@ pub mod gather_generics;
 pub mod constraints;
 pub mod check_bounds;
 pub mod check_shared_types;
+pub mod check_tries;
 pub mod resolve_implicit_types;
 pub mod resolve_resolvables;
 pub mod apply_extensions;
@@ -135,6 +136,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(convert_string_literals(module));
     step!(gather_generics(module));
     step!(resolve_implicit_types(module));
+    // Each `?`'s operand and function, before its lowered calls resolve.
+    step!(check_tries::check_tries(module));
     step!(resolve_resolvables(module, false)); // resolve as much as possible
     step!(apply_extensions(module, false)); // apply generic/concrete extensions
     apply_extensions::check_parameter_names(module);
@@ -238,6 +241,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(function_references::reference_functions(module));
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
+    step!(check_tries::check_tries(module));
     step!(named_arguments::check_unbound(module));
     named_arguments::record_argument_names(module);
     step!(type_arguments::check_type_arguments(module));

@@ -89,9 +89,51 @@ build a new error from the old one:
 {{#include ../../examples/results-propagate.pep}}
 ```
 
-Pepper does not yet have a shorthand for propagation (such as Rust's `?`
-operator), so each fallible call is checked with `if`, `is` or `match` as
-shown above.
+The `?` operator, below, writes each of these checks in one character.
+
+## Propagating errors with `?`
+
+`?` after a `Result` passes its error up, like Rust's `?`: on an Ok result
+it is the value, and on an Err result it returns that error from the
+enclosing function at once. `var x = parse(s)?;` does what the `if
+(x.is_err()) { return ...err(x.error()); }` checks above do:
+
+```pepper
+{{#include ../../examples/results-question.pep}}
+```
+
+The rules:
+
+- The enclosing function must declare that it returns a `Result`, or the
+  compiler reports `'?' requires the enclosing function to return a
+  Result`. A closure that uses `?` writes its return type out:
+  `(s: String): Result<int> => Result<int>.ok(parse(s)? + 1)`.
+- The error type must be the function's error type, or convert to it
+  through an `[Implicit]` constructor (see [Implicit
+  conversions](structs.md#implicit-conversions)), as `ConfigError` does above, like
+  Rust's `From`. Otherwise the error is `cannot convert error type
+  'ParseError' to 'ConfigError'`.
+- On a `Result<void>`, `?` yields nothing, so it stands as a statement:
+  `remove(path)?;`.
+- On an `Optional`, `?` works the same way in a function that returns an
+  optional: an Empty optional returns Empty (see [Optional
+  values](optionals.md#returning-early-with-)).
+- The early return is an ordinary `return`: locals are released and
+  `with` blocks are exited as for any other.
+
+Each `?` in a statement runs before the rest of the statement, so two
+placements are errors:
+
+- After a call in the same statement, as in `f() + g()?`, where `g()`
+  would run before `f()`: `'?' cannot follow a call in the same
+  statement`. Call `f()` in a statement of its own first. Reading
+  variables and fields before a `?` is fine, and several `?`s run in the
+  order written: `add(parse(a)?, parse(b)?)`.
+- Where it might not run: the right operand of `&&` or `||`, a branch of
+  `?:`, or a `match` arm. Use an `if` or `match` statement there.
+
+A `?` in a `while` condition runs on every iteration, before the condition
+is tested.
 
 ## Results from the io module
 

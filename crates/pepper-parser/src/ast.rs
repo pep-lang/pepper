@@ -232,7 +232,8 @@ pub enum Expression {
     /// A generic type reference in expression position, e.g. the `Array<int>` in `Array<int>()`.
     TypeLiteral(TypeName),
     SizeOf(TypeName),
-    /// `op operand`  (prefix)  or  `operand op`  (postfix)
+    /// `op operand`  (prefix)  or  `operand op`  (postfix: `++`, `--`, and
+    /// `?`, which propagates a `Result`'s error or an empty `Optional`)
     Unary {
         op: String,
         prefix: bool,
