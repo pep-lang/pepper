@@ -54,7 +54,7 @@ impl UnitFilter {
 /// program (`owners`, or a definition in this module) gets its linker
 /// spelling.
 pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>) -> Result<(), String> {
-    let machine = crate::target::host_machine()?;
+    let machine = crate::target::target_machine()?;
     let comdats = !machine.get_triple().as_str().to_string_lossy().contains("apple");
     let mut defined: HashSet<String> = owners.keys().cloned().collect();
     let mut values: Vec<GlobalValue<'_>> = module.get_functions().map(|f| f.as_global_value()).collect();

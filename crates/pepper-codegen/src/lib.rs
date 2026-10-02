@@ -235,10 +235,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
         let module = context.create_module(module_name);
         let builder = context.create_builder();
-        // The host's data layout drives alignment inference for atomic
+        // The target's data layout drives alignment inference for atomic
         // instructions; without it 8-byte atomics get `align 4` and lower to
         // compiler-rt helpers MCJIT cannot resolve.
-        let machine = crate::target::host_machine().expect("host target machine");
+        let machine = crate::target::target_machine().expect("target machine");
         module.set_data_layout(&machine.get_target_data().get_data_layout());
         // CodeView names the CPU from the module's triple.
         module.set_triple(&machine.get_triple());
@@ -456,7 +456,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // ABI sizes are only correct once every body is set (a field may
         // name a struct declared later, e.g. `Holder { Array<int> items; }`),
         // so measure after the whole registration pass.
-        let machine = crate::target::host_machine()?;
+        let machine = crate::target::target_machine()?;
         let target_data = machine.get_target_data();
         for desc in self.structs.values_mut() {
             desc.size = target_data.get_abi_size(&desc.llvm_type);
@@ -2125,7 +2125,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// has acquired what a copy needs.
     fn box_value(&mut self, name: &str, value: BasicValueEnum<'ctx>) -> Result<PointerValue<'ctx>, String> {
         let box_type = self.box_type(name)?;
-        let size = crate::target::host_machine()?.get_target_data().get_abi_size(&box_type.as_any_type_enum());
+        let size = crate::target::target_machine()?.get_target_data().get_abi_size(&box_type.as_any_type_enum());
         let size = self.context.i64_type().const_int(size, false);
         let object = self.call_function("_pep_malloc", vec![size.into()])?.into_pointer_value();
         let one = self.context.i32_type().const_int(1, false);
@@ -4410,7 +4410,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // scalars); the TargetData measure is authoritative, as
                     // in `instantiate_struct`.
                     let any = ty.as_any_type_enum();
-                    let machine = crate::target::host_machine()?;
+                    let machine = crate::target::target_machine()?;
                     let size = machine.get_target_data().get_abi_size(&any);
                     Ok(BasicValueEnum::IntValue(
                         self.context.i64_type().const_int(size, false),

@@ -198,7 +198,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|((field, ty), loc)| (field.clone(), ty.clone(), *loc))
             .collect();
         let display = pepper_parser::namespace::demangle_name(name).to_string();
-        let target = crate::target::host_machine().expect("host target machine").get_target_data();
+        let target = crate::target::target_machine().expect("target machine").get_target_data();
         let mut members = vec![];
         for (index, (field, ty, field_loc)) in fields.iter().enumerate() {
             // A field's struct is built already, or is being built: never
@@ -244,7 +244,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let size = if self.values.contains_key(name) {
             Some(self.structs[name].size * 8)
         } else if self.tuples.contains_key(name) {
-            let target = crate::target::host_machine().expect("host target machine").get_target_data();
+            let target = crate::target::target_machine().expect("target machine").get_target_data();
             self.types.get(name).map(|ty| target.get_abi_size(&ty) * 8)
         } else {
             None
@@ -289,7 +289,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let elements = self.tuples.get(name)?.clone();
         let llvm_type = self.types.get(name)?.into_struct_type();
         self.debug.as_mut()?.building.insert(name.to_string());
-        let target = crate::target::host_machine().expect("host target machine").get_target_data();
+        let target = crate::target::target_machine().expect("target machine").get_target_data();
         let mut members = vec![];
         for (index, element) in elements.iter().enumerate() {
             let Some(element_type) = self.debug_type(element) else { continue };

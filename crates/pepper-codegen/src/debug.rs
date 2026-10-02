@@ -102,7 +102,9 @@ impl<'ctx> DebugInfo<'ctx> {
             FlagBehavior::Warning,
             int.const_int(inkwell::debug_info::debug_metadata_version() as u64, false),
         );
-        if cfg!(windows) {
+        // The object format follows the triple, which a simulated host
+        // (`with_simulated_host`) leaves as this machine's.
+        if crate::target::triple_name().contains("-windows") {
             module.add_basic_value_flag("CodeView", FlagBehavior::Warning, int.const_int(1, false));
         } else {
             // DWARF 4, as Rust emits: LLVM's DWARF 5 adds a `.debug_names`
@@ -284,7 +286,8 @@ impl<'ctx> DebugInfo<'ctx> {
     /// the section means nothing to Mach-O or COFF debuggers). The
     /// program's module carries it, kept by `llvm.used`.
     pub fn embed_gdb_printers(&self, module: &Module<'ctx>) {
-        if cfg!(windows) || cfg!(target_vendor = "apple") {
+        let triple = crate::target::triple_name();
+        if triple.contains("-windows") || triple.contains("-apple-") {
             return;
         }
         const PRINTERS: &str = include_str!("../../../runtime/debuggers/gdb_printers.py");

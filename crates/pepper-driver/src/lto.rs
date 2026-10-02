@@ -37,9 +37,8 @@ pub fn optimize(bitcode: &[PathBuf], object: &Path, build: &Build) -> Result<(),
     internalize(&program);
     pepper_codegen::target::optimize_with(&program, build.opt_level, Pipeline::Link, &build.cpu)?;
     program.verify().map_err(|e| format!("the linked program does not verify: {}", e.to_string()))?;
-    pepper_codegen::target::machine(build.opt_level, &build.cpu)?
-        .write_to_file(&program, inkwell::targets::FileType::Object, object)
-        .map_err(|e| format!("cannot write {}: {}", object.display(), e))
+    let machine = pepper_codegen::target::machine(build.opt_level, &build.cpu)?;
+    pepper_codegen::target::write_object(&machine, &program, object)
 }
 
 /// Make every definition but `main` internal: nothing outside the program

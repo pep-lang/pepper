@@ -124,7 +124,7 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// The cache under `root` for the host target, created if missing, for
+    /// The cache under `root` for the target, created if missing, for
     /// units compiled as `build` says.
     pub fn open(root: &Path, build: Build) -> Result<Cache, String> {
         let machine = crate::default_target_machine()?;
@@ -592,9 +592,8 @@ pub fn emit(module: &Module<'_>, path: &Path, build: &Build) -> Result<(), Strin
         };
     }
     pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::Default, &build.cpu)?;
-    pepper_codegen::target::machine(build.opt_level, &build.cpu)?
-        .write_to_file(module, inkwell::targets::FileType::Object, path)
-        .map_err(|e| format!("obj emission failed: {}", e))
+    let machine = pepper_codegen::target::machine(build.opt_level, &build.cpu)?;
+    pepper_codegen::target::write_object(&machine, module, path).map_err(|e| format!("obj emission failed: {}", e))
 }
 
 /// Make `to` a link to (or, across file systems, a copy of) `from`.

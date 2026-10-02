@@ -1,7 +1,8 @@
 //! Platform selection: evaluates `Target(...)` attribute predicates against the
-//! host (the compile target) and drops top-level declarations and attributed
-//! blocks that do not match. Runs before `struct_body::apply` so filtered-out
-//! code never reaches synthesis or codegen.
+//! compile target (the host, or the one `--target` names; see [`Target`]) and
+//! drops top-level declarations and attributed blocks that do not match. Runs
+//! before `struct_body::apply` so filtered-out code never reaches synthesis or
+//! codegen.
 //!
 //! The only platform-selection attribute is `Target(...)`, which takes exactly
 //! one argument: a boolean expression built from `OS(v)` / `Arch(v)` calls,
@@ -16,12 +17,12 @@ use pepper_parser::parser::parsers::{
 };
 use std::env::consts;
 
-/// Evaluate one attribute body against the host platform.
+/// Evaluate one attribute body against the target platform.
 ///
 /// - Bare symbols that are not predicates (`[Export]`, `[Inline]`) are ignored (true).
 /// - A bare `Target` without a call is an error.
 /// - `Target(expr)`: `expr` must be a single boolean predicate over `OS(v)` /
-///   `Arch(v)`; the declaration is kept iff it evaluates true on this host.
+///   `Arch(v)`; the declaration is kept iff it evaluates true on the target.
 /// - Calls with other names (`[Align(8)]`) are ignored (true).
 fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
     match body {
@@ -102,46 +103,137 @@ fn bad_body(attr: &ast::Attribute) -> String {
     format!("invalid platform predicate in {attr}")
 }
 
-thread_local! {
-    /// `(std::env::consts::OS, std::env::consts::ARCH)` values that replace the
-    /// real host's while `with_simulated_host` runs.
-    static SIMULATED_HOST: std::cell::RefCell<Option<(String, String)>> =
-        const { std::cell::RefCell::new(None) };
+/// The platform a program is compiled for: what `Target(...)` predicates
+/// evaluate against and what codegen emits for. The host unless the
+/// compiler was given `--target <triple>`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Target {
+    /// The OS, as `std::env::consts::OS` spells it (`"windows"`, `"macos"`,
+    /// `"linux"`).
+    pub os: String,
+    /// The architecture, as `std::env::consts::ARCH` spells it (`"x86_64"`,
+    /// `"aarch64"`).
+    pub arch: String,
+    /// The LLVM target triple, or `None` for the host's own (LLVM's default
+    /// triple, which also carries the host OS version on macOS).
+    pub triple: Option<String>,
 }
 
-/// Evaluate `Target(...)` predicates inside `f` as if the host were `os` /
-/// `arch` (spelled as `std::env::consts` spells them: `"windows"`,
-/// `"macos"`, `"linux"`; `"x86_64"`, `"aarch64"`). For tests that push
-/// another platform's code through the platform filter, sema and codegen on
-/// this host, to check it compiles; the result can be neither linked nor
-/// run here. Thread-local, so concurrent tests do not see each other's host.
-pub fn with_simulated_host<R>(os: &str, arch: &str, f: impl FnOnce() -> R) -> R {
-    let previous = SIMULATED_HOST.with(|h| h.replace(Some((os.to_string(), arch.to_string()))));
-    // Restore on unwind too, so a failing test does not leak its host.
-    struct Restore(Option<(String, String)>);
+/// The triples `--target` accepts: each supported OS on each supported
+/// architecture, as clang spells them.
+pub const SUPPORTED_TRIPLES: &[&str] = &[
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+];
+
+impl Target {
+    /// The machine the compiler runs on.
+    pub fn host() -> Target {
+        Target { os: consts::OS.to_string(), arch: consts::ARCH.to_string(), triple: None }
+    }
+
+    /// The target `triple` names (`aarch64-apple-darwin`,
+    /// `x86_64-pc-windows-msvc`). Accepts clang's spellings of the supported
+    /// architectures (`x86_64`, `amd64`; `aarch64`, `arm64`) and operating
+    /// systems (`linux-gnu`, `darwin` or `macosx`, `windows-msvc`), with any
+    /// vendor and an OS version (`arm64-apple-macosx14.0`).
+    pub fn parse(triple: &str) -> Result<Target, String> {
+        let unsupported = || {
+            format!(
+                "unsupported target '{}'; expected one of: {}",
+                triple,
+                SUPPORTED_TRIPLES.join(", ")
+            )
+        };
+        let parts: Vec<&str> = triple.split('-').collect();
+        if parts.len() < 3 || parts.iter().any(|p| p.is_empty()) {
+            return Err(unsupported());
+        }
+        let arch = match parts[0] {
+            "x86_64" | "amd64" => "x86_64",
+            "aarch64" | "arm64" => "aarch64",
+            _ => return Err(unsupported()),
+        };
+        // The OS and environment follow the vendor (`x86_64-pc-windows-msvc`),
+        // or stand in for it (`x86_64-linux-gnu`).
+        let system = &parts[1..];
+        let names = |prefix: &str| system.iter().any(|p| p.starts_with(prefix));
+        let os = if names("linux") && !names("android") && system.iter().any(|p| p.starts_with("gnu")) {
+            "linux"
+        } else if names("darwin") || names("macos") {
+            "macos"
+        } else if names("windows") && system.last() == Some(&"msvc") {
+            "windows"
+        } else {
+            return Err(unsupported());
+        };
+        Ok(Target { os: os.to_string(), arch: arch.to_string(), triple: Some(triple.to_string()) })
+    }
+
+    /// Whether this is the machine the compiler runs on: the code it
+    /// produces can run here.
+    pub fn is_host(&self) -> bool {
+        self.os == consts::OS && self.arch == consts::ARCH
+    }
+}
+
+thread_local! {
+    /// The target that replaces the host while `with_target` runs.
+    static TARGET: std::cell::RefCell<Option<Target>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` compiling for `target`: `Target(...)` predicates, the checked
+/// runtime and codegen all see it. Thread-local, so concurrent compiles do
+/// not see each other's target; a thread that compiles on behalf of another
+/// takes its target with `current_target` and sets it again.
+pub fn with_target<R>(target: Target, f: impl FnOnce() -> R) -> R {
+    let previous = TARGET.with(|t| t.replace(Some(target)));
+    // Restore on unwind too, so a failing test does not leak its target.
+    struct Restore(Option<Target>);
     impl Drop for Restore {
         fn drop(&mut self) {
             let previous = self.0.take();
-            SIMULATED_HOST.with(|h| *h.borrow_mut() = previous);
+            TARGET.with(|t| *t.borrow_mut() = previous);
         }
     }
     let _restore = Restore(previous);
     f()
 }
 
-/// The OS `Target(...)` predicates evaluate against: the real host's, or
-/// the simulated one inside `with_simulated_host`.
-pub fn host_os() -> String {
-    SIMULATED_HOST
-        .with(|h| h.borrow().as_ref().map(|(os, _)| os.clone()))
+/// The target this thread compiles for: the one `with_target` set, else the
+/// host.
+pub fn current_target() -> Target {
+    TARGET.with(|t| t.borrow().clone()).unwrap_or_else(Target::host)
+}
+
+/// Evaluate `Target(...)` predicates inside `f` as if the host were `os` /
+/// `arch` (spelled as `std::env::consts` spells them: `"windows"`,
+/// `"macos"`, `"linux"`; `"x86_64"`, `"aarch64"`), while codegen keeps the
+/// host's triple. For tests that push another platform's code through the
+/// platform filter, sema and codegen on this host, to check it compiles, or
+/// to JIT-run its portable parts here (`path_functions_on_every_platform`);
+/// `with_target` compiles for the other platform's triple instead.
+pub fn with_simulated_host<R>(os: &str, arch: &str, f: impl FnOnce() -> R) -> R {
+    with_target(Target { os: os.to_string(), arch: arch.to_string(), triple: None }, f)
+}
+
+/// The OS `Target(...)` predicates evaluate against: the target's (see
+/// `current_target`).
+pub fn target_os() -> String {
+    TARGET
+        .with(|t| t.borrow().as_ref().map(|t| t.os.clone()))
         .unwrap_or_else(|| consts::OS.to_string())
 }
 
 /// The architecture `Target(...)` predicates evaluate against (see
-/// `host_os`).
-pub fn host_arch() -> String {
-    SIMULATED_HOST
-        .with(|h| h.borrow().as_ref().map(|(_, arch)| arch.clone()))
+/// `target_os`).
+pub fn target_arch() -> String {
+    TARGET
+        .with(|t| t.borrow().as_ref().map(|t| t.arch.clone()))
         .unwrap_or_else(|| consts::ARCH.to_string())
 }
 
@@ -154,17 +246,17 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
             "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux) in {attr}"
         ));
     };
-    let host = match host_os().as_str() {
+    let host = match target_os().as_str() {
         "windows" => Some("windows"),
         "macos" => Some("macos"),
         "linux" => Some("linux"),
         _ => None,
     };
     match host {
-        // Supported host: validate the value (unknown values are a hard
+        // Supported target: validate the value (unknown values are a hard
         // error) and compare.
         Some(h) => matches_os_value(id, h, attr),
-        // Unsupported host: no OS predicate can match.
+        // Unsupported target: no OS predicate can match.
         None => Ok(false),
     }
 }
@@ -189,13 +281,13 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
             "Arch predicate value must be a symbol (x64, aarch64) in {attr}"
         ));
     };
-    let host = match host_arch().as_str() {
+    let host = match target_arch().as_str() {
         "x86_64" => Some("x64"),
         "aarch64" => Some("aarch64"),
         _ => None,
     };
     match host {
-        // Supported host: validate the value (unknown values are a hard
+        // Supported target: validate the value (unknown values are a hard
         // error) and compare.
         Some(h) => {
             let v = id.to_ascii_lowercase();
@@ -209,7 +301,7 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
                 ))
             }
         }
-        // Unsupported host: no Arch predicate can match.
+        // Unsupported target: no Arch predicate can match.
         None => Ok(false),
     }
 }
@@ -238,7 +330,7 @@ fn validate(attributes: &[ast::Attribute], file: FileId) -> Result<(), Diagnosti
     Ok(())
 }
 
-/// Drop attributed blocks that do not match the host, recursing into nested
+/// Drop attributed blocks that do not match the target, recursing into nested
 /// blocks, branches, and loops.
 fn filter_block(block: &mut Block, file: FileId) -> Result<(), Diagnostic> {
     let mut i = 0;

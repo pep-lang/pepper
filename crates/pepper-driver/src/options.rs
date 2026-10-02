@@ -45,6 +45,20 @@ pub struct Options {
     #[arg(long = "lto", value_name = "MODE", value_parser = ["full", "off"])]
     pub lto: Option<String>,
 
+    /// The platform to compile for, as an LLVM target triple
+    /// (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`,
+    /// `x86_64-unknown-linux-gnu`). The default is the machine the compiler
+    /// runs on. `[Target(...)]` selects code for it, and linking another
+    /// platform's executable needs its system libraries (`--sysroot`).
+    #[arg(long = "target", value_name = "TRIPLE")]
+    pub target: Option<String>,
+
+    /// The directory holding the target's system headers and libraries,
+    /// passed to the link driver. Without it, `$PEPPER_SYSROOT_<TRIPLE>`
+    /// (the triple upper-cased, with `_` for `-`) when set.
+    #[arg(long = "sysroot", value_name = "DIR")]
+    pub sysroot: Option<PathBuf>,
+
     /// The CPU to generate code for, with clang's names and meanings:
     /// `-march=<cpu>` (x86: `x86-64-v3`, `native`), `-mcpu=<cpu>` (AArch64:
     /// `apple-m2`, `native`), `-march=<arch>` (AArch64: `armv8.2-a+crypto`),
@@ -121,6 +135,13 @@ pub struct Options {
     pub msvc: bool,
 }
 
+/// The environment variable naming `triple`'s system root:
+/// `PEPPER_SYSROOT_AARCH64_APPLE_DARWIN` for `aarch64-apple-darwin`.
+pub fn sysroot_variable(triple: &str) -> String {
+    let name: String = triple.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
+    format!("PEPPER_SYSROOT_{}", name)
+}
+
 /// The checks `--no-runtime-checks=<list>` leaves on.
 fn parse_runtime_checks(list: &str) -> Result<pepper_codegen::checks::RuntimeChecks, String> {
     pepper_codegen::checks::RuntimeChecks::without(list)
@@ -174,11 +195,29 @@ impl Options {
         ignored.then(|| "warning: '--no-runtime-checks' has no effect at -O0".to_string())
     }
 
+    /// The platform to compile for: `--target`'s, else the host.
+    pub fn effective_target(&self) -> Result<pepper_sema::Target, String> {
+        match &self.target {
+            Some(triple) => pepper_sema::Target::parse(triple),
+            None => Ok(pepper_sema::Target::host()),
+        }
+    }
+
     /// The CPU `-march`, `-mcpu`, `-mtune` and `-m<feature>` choose for the
-    /// host triple, else clang's default for it.
+    /// target triple, else clang's default for it.
     pub fn effective_cpu(&self) -> Result<pepper_codegen::target::Cpu, String> {
-        let triple = inkwell::targets::TargetMachine::get_default_triple();
-        pepper_codegen::target::Cpu::from_options(&triple.as_str().to_string_lossy(), &self.machine)
+        let triple = pepper_sema::with_target(self.effective_target()?, pepper_codegen::target::triple_name);
+        pepper_codegen::target::Cpu::from_options(&triple, &self.machine)
+    }
+
+    /// The target's system root: `--sysroot`, else
+    /// `$PEPPER_SYSROOT_<TRIPLE>` for a `--target` triple.
+    pub fn effective_sysroot(&self) -> Option<PathBuf> {
+        if let Some(dir) = &self.sysroot {
+            return Some(dir.clone());
+        }
+        let triple = self.target.as_deref()?;
+        std::env::var_os(sysroot_variable(triple)).filter(|dir| !dir.is_empty()).map(PathBuf::from)
     }
 
     /// Port of `Options::defaults`: build dir = $CWD/.pep/build, forced
@@ -261,5 +300,28 @@ mod tests {
         assert_eq!(parse(&["pepper", "main.pep", "-O3"]).effective_opt_level(), Ok(OptLevel::O3));
         assert_eq!(parse(&["pepper", "main.pep", "-O0"]).effective_opt_level(), Ok(OptLevel::O0));
         assert!(Options::try_parse_from(["pepper", "main.pep", "-O4"]).is_err());
+    }
+
+    #[test]
+    fn targets() {
+        assert_eq!(parse(&["pepper", "main.pep"]).effective_target(), Ok(pepper_sema::Target::host()));
+        let target = parse(&["pepper", "--target", "arm64-apple-macosx14.0", "main.pep"]).effective_target().unwrap();
+        assert_eq!((target.os.as_str(), target.arch.as_str()), ("macos", "aarch64"));
+        assert_eq!(target.triple.as_deref(), Some("arm64-apple-macosx14.0"));
+        let error = parse(&["pepper", "--target", "riscv64-unknown-linux-gnu", "main.pep"]).effective_target().unwrap_err();
+        assert!(error.starts_with("unsupported target 'riscv64-unknown-linux-gnu'; expected one of: x86_64-unknown-linux-gnu"), "{error}");
+        // `-m` options are checked against the target's architecture.
+        let options = parse(&["pepper", "--target", "aarch64-unknown-linux-gnu", "-march=x86-64-v3", "main.pep"]);
+        assert!(options.effective_cpu().unwrap_err().contains("invalid arch name"));
+        let options = parse(&["pepper", "--target", "x86_64-pc-windows-msvc", "-mcpu=generic", "main.pep"]);
+        assert!(options.effective_cpu().unwrap_err().contains("for target 'x86_64-pc-windows-msvc'"));
+    }
+
+    #[test]
+    fn sysroot_variables() {
+        assert_eq!(sysroot_variable("aarch64-apple-darwin"), "PEPPER_SYSROOT_AARCH64_APPLE_DARWIN");
+        assert_eq!(sysroot_variable("arm64-apple-macosx14.0"), "PEPPER_SYSROOT_ARM64_APPLE_MACOSX14_0");
+        let options = parse(&["pepper", "--sysroot", "/sdk", "main.pep"]);
+        assert_eq!(options.effective_sysroot(), Some(PathBuf::from("/sdk")));
     }
 }

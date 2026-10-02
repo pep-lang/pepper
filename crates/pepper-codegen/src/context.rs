@@ -138,8 +138,8 @@ impl<'ctx> crate::CodeGenerator<'ctx> {
                 continue;
             }
             let assembly = match (
-                pepper_sema::passes::platform::host_os().as_str(),
-                pepper_sema::passes::platform::host_arch().as_str(),
+                pepper_sema::passes::platform::target_os().as_str(),
+                pepper_sema::passes::platform::target_arch().as_str(),
                 name,
             ) {
                 ("windows", _, _) => {

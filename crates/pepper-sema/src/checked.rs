@@ -204,7 +204,7 @@ fn empty(program: &Program) -> Module {
 /// process, else from `store`.
 pub fn checked_runtime(program: &Program, in_runtime: &[bool], store: Option<&dyn RuntimeStore>) -> Result<Arc<CheckedRuntime>, Diagnostic> {
     let files = program.files.iter().enumerate().filter(|(i, _)| in_runtime[*i]).map(|(i, f)| (i, f.name.clone(), f.namespace.clone(), f.source.clone()));
-    let key: RuntimeKey = ((crate::passes::platform::host_os(), crate::passes::platform::host_arch()), files.collect());
+    let key: RuntimeKey = ((crate::passes::platform::target_os(), crate::passes::platform::target_arch()), files.collect());
     // With a store (the CLI), the store is the cache: a process checks one
     // program.
     if store.is_none()

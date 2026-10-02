@@ -75,16 +75,14 @@ fn compile_and_run(name: &str, entry: &Path) -> Result<std::process::ExitStatus,
     // Fix linkage and linker spellings as every driver build does (a plain
     // Pepper name such as `exit` must not reach the linker as C's symbol).
     pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
-    let machine = pepper_codegen::target::host_machine().unwrap();
-    machine
-        .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
-        .unwrap();
+    let machine = pepper_codegen::target::target_machine().unwrap();
+    pepper_codegen::target::write_object(&machine, &generator.module, &obj_path).unwrap();
 
     // Link through the driver's own linker so this test exercises the real
     // link path instead of a hand-rolled duplicate of it. `[Link("name")]`
     // attributes on surviving externs add their libraries, same as the CLI.
     let libraries = pepper_driver::link_libraries(&merged);
-    pepper_driver::linker::link(&[obj_path], &out_path, &libraries, &[], false, None)?;
+    pepper_driver::linker::link(&[obj_path], &out_path, &libraries, &[], false, None, None)?;
 
     std::process::Command::new(&out_path)
         .status()

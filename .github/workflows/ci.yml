@@ -282,7 +282,7 @@ jobs:
     runs-on: pepper-linux
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    timeout-minutes: 20
+    timeout-minutes: 25
     # build_cache_tests verify the cache (`--verify-cache`) on every
     # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
     # the other tests make too, which doubles the cost of each warm build.
@@ -311,6 +311,29 @@ jobs:
         run: |
           set -o pipefail
           cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      # Cross-compiling (`--target`): build a few examples for Linux arm64,
+      # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
+      # check they print what the host build prints. Other operating systems'
+      # targets need their SDKs, which no runner has, so cross_compile_tests
+      # checks only their objects.
+      - name: Cross-compile for Linux arm64
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get install -y --no-install-recommends lld-20 qemu-user libc6-dev-arm64-cross libgcc-13-dev-arm64-cross
+          cargo build --locked
+          compiler="$CARGO_TARGET_DIR/debug/pep-build"
+          out="$RUNNER_TEMP/cross"
+          rm -rf "$out"
+          mkdir -p "$out"
+          for example in hello interpolation-format maps-sorted json-structs threads-basics; do
+            "$compiler" "docs/examples/$example.pep" -o "$out/$example-host" --build "$out/build"
+            "$compiler" --target aarch64-unknown-linux-gnu "docs/examples/$example.pep" -o "$out/$example-arm64" --build "$out/build"
+            "$out/$example-host" > "$out/$example-host.txt"
+            qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/$example-arm64" > "$out/$example-arm64.txt"
+            diff "$out/$example-host.txt" "$out/$example-arm64.txt"
+          done
 
       # Every verification failure's message starts with "build cache:". Put
       # each one in the run's summary and as an annotation, and keep the log,

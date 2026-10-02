@@ -68,8 +68,15 @@ impl StageTimer {
 }
 
 /// Run the compile pipeline and act per the options: `--emit-ast` dumps the
-/// AST, `--emit-llvm` writes IR, otherwise emit obj and link.
+/// AST, `--emit-llvm` writes IR, otherwise emit obj and link. Everything
+/// compiles for `--target`'s platform (see `pepper_sema::with_target`).
 pub fn run(options: Options) -> Result<i32, String> {
+    let target = options.effective_target()?;
+    pepper_sema::with_target(target, || run_for_target(options))
+}
+
+/// [`run`] on the thread that compiles, with the target set.
+fn run_for_target(options: Options) -> Result<i32, String> {
     let module_name = options.module_name()?;
 
     if options.emit_ast {
@@ -190,14 +197,16 @@ pub fn run(options: Options) -> Result<i32, String> {
     libraries.extend(link_libraries);
 
     // With `-g` on Windows, the runtime's visualizers go into the `.pdb`.
-    let natvis = runtime_dirs.first().map(|dir| dir.join("debuggers").join("pepper.natvis")).filter(|path| options.emit_debug && cfg!(windows) && path.is_file());
+    let windows = pepper_sema::current_target().os == "windows";
+    let natvis = runtime_dirs.first().map(|dir| dir.join("debuggers").join("pepper.natvis")).filter(|path| options.emit_debug && windows && path.is_file());
     // An unchanged program linked into an unchanged file needs no link.
     let link = link_key(&objects, &out_path, &libraries, &library_dirs);
     let unchanged = program_key.as_ref().is_some_and(|record| {
         !record.output.is_empty() && record.link == link && output_hash(&out_path).is_some_and(|h| h == record.output)
     });
     if !unchanged {
-        linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref())?;
+        let sysroot = options.effective_sysroot();
+        linker::link(&objects, &out_path, &libraries, &library_dirs, options.emit_debug, natvis.as_deref(), sysroot.as_deref())?;
         if let (Some(cache), Some(record), Some(output)) = (&cache, &program_key, output_hash(&out_path)) {
             cache.record_link(&program_name, &record.key, &link, &output)?;
         }
@@ -478,9 +487,11 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
 }
 
 /// `f` over `items` on up to one thread per CPU, results in item order; the
-/// first error in item order wins.
+/// first error in item order wins. Each thread compiles for the caller's
+/// target.
 fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Result<R, String> + Sync) -> Result<Vec<R>, String> {
     use std::sync::atomic::{AtomicUsize, Ordering};
+    let target = pepper_sema::current_target();
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, items.len().max(1));
     let next = AtomicUsize::new(0);
     let mut results: Vec<(usize, Result<R, String>)> = std::thread::scope(|scope| {
@@ -489,13 +500,15 @@ fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Result<R, String> +
                 std::thread::Builder::new()
                     .stack_size(STACK_SIZE)
                     .spawn_scoped(scope, || {
-                        let mut done = vec![];
-                        loop {
-                            let i = next.fetch_add(1, Ordering::Relaxed);
-                            let Some(item) = items.get(i) else { break };
-                            done.push((i, f(item)));
-                        }
-                        done
+                        pepper_sema::with_target(target.clone(), || {
+                            let mut done = vec![];
+                            loop {
+                                let i = next.fetch_add(1, Ordering::Relaxed);
+                                let Some(item) = items.get(i) else { break };
+                                done.push((i, f(item)));
+                            }
+                            done
+                        })
                     })
                     .expect("spawn a codegen thread")
             })
@@ -538,11 +551,11 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
 }
 
 
-/// Machine for object emission: the host, with clang's default CPU.
+/// Machine for object emission: the target, with clang's default CPU.
 ///
 /// Delegated to `pepper_codegen::target` so the backend registration lives in
 /// one place; registering only x86 here is what left the CLI unable to compile
 /// anything on Apple silicon while the suite stayed green.
 pub(crate) fn default_target_machine() -> Result<inkwell::targets::TargetMachine, String> {
-    pepper_codegen::target::host_machine()
+    pepper_codegen::target::target_machine()
 }

@@ -743,17 +743,24 @@ with no extension, and `module_name()` is the output's stem.
 ### 2.5 Platform filters (`passes/platform.rs`)
 
 `apply_platform_filters` evaluates every `[Target(<bool expr>)]` against the
-**host**. The grammar is `OS(Windows|Mac|MacOS|Linux)`, `Arch(x64|aarch64)`,
+**target**: the host, or the platform `--target <triple>` names. The grammar is `OS(Windows|Mac|MacOS|Linux)`, `Arch(x64|aarch64)`,
 `!`, `&&`/`and`, and `||`/`or`. The pass drops top-level declarations,
 struct/trait/extension members, and attributed blocks whose predicate is
 false. Every predicate is validated before anything is dropped, so a typo in
 code that another platform would compile is still reported. Attributes other
 than `Target` are ignored here. `keep(&attrs)` is the reusable evaluator;
 the loader, linking, and visibility all call it.
-`with_simulated_host(os, arch, f)` runs `f` with a different host
-(thread-local) so tests can compile another platform's code. The emitted
-target triple is always the host's (`target::host_machine`); there is no
-cross-compilation.
+The target is a `platform::Target` (`os`, `arch`, and the LLVM triple, or
+`None` for the host's own): `Target::parse` reads a `--target` triple (the
+supported ones are `SUPPORTED_TRIPLES`), and `with_target(target, f)` runs
+`f` compiling for it (thread-local; `current_target`, `target_os` and
+`target_arch` read it). The driver's `run` sets it from `--target`, and its
+`parallel` passes it to each codegen thread. Codegen's `target::triple`
+reads it, so the machine, data layout, struct sizes, debug-info format
+(CodeView for Windows) and the context-switch assembly all follow the
+target. `with_simulated_host(os, arch, f)` is `with_target` with the
+host's triple kept, for tests that compile another platform's code (and
+JIT-run its portable parts) on this machine.
 
 ### 2.6 Struct bodies (`struct_body.rs`)
 
@@ -1294,10 +1301,12 @@ How the language lowers:
   process ("requires an ordered section layout") when LLVM's default
   manager scatters the sections more than 4 GB apart, as it did under
   parallel test load.
-- **Target** (`target.rs`): `initialize_host` and `host_machine` register
-  only the host's backend (x86 or aarch64, chosen by
-  `cfg(target_arch)` in `Cargo.toml`). Four call sites share this one
-  function. Read that file's header before touching backend registration.
+- **Target** (`target.rs`): `initialize_targets` registers the x86 and
+  AArch64 backends (inkwell's `target-x86` and `target-aarch64`, on every
+  host, so `--target` can name either), and `target_machine` makes the
+  machine for the target's triple (`triple`: `--target`'s, else LLVM's
+  default). Every call site shares these. Read that file's header before
+  touching backend registration.
 
 ### 4.2 Traits used as types (`sema/src/traits.rs`, `passes/convert_to_traits.rs`)
 
@@ -1406,7 +1415,23 @@ reference held per reference element.
 
 `run` emits one object per compilation unit through `objects` (see
 [4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), plus the
-program object `<build>/<module>.o`, with the host `TargetMachine`.
+program object `<build>/<module>.o`, with the target's `TargetMachine`
+(the host's, or `--target`'s; see 2.5). Objects are written by
+`target::write_object`, which for an ELF target first moves
+`llvm.global_ctors` into an `.init_array` section (`use_init_array`): a
+machine made through the C API emits `.ctors`, which GNU ld folds into
+`.init_array` but lld, which cross-linking uses, ignores.
+
+**Linking** (`linker.rs`). `link` runs clang as the link driver. For
+another platform it adds `--target=<triple>`, LLVM's linker
+(`--ld-path=` when `find_lld` finds `ld.lld`/`ld64.lld`, plain or as
+`ld.lld-<major>`, beside clang, in the LLVM prefix or on the PATH; else
+`-fuse-ld=lld`), and the
+target's system root (`--sysroot`, else `PEPPER_SYSROOT_<TRIPLE>`; passed as
+`--sysroot` for ELF and Mach-O, and as lld-link's `/winsysroot` for
+Windows), and a failed link ends with a note naming what is missing
+(`cross_link_note`). The default system libraries and the debug options
+follow the target's OS. The JIT stays host-only.
 
 **Optimization** (`codegen/src/target.rs`). `OptLevel` is `-O0` through
 `-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (`main.rs` spells a bare

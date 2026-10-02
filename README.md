@@ -249,6 +249,7 @@ cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default 
 cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
+cargo run -- tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries
 cargo run -- tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
 cargo run -- tests/hello.pep -T passes     # print each sema pass's time
@@ -405,12 +406,18 @@ Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
 - **macOS arm64** works end to end: the suite passes against Homebrew LLVM 18
   through 22, and `cargo run -- tests/hello.pep -o hello && ./hello` produces
   a `Mach-O 64-bit executable arm64` that prints `Hello world!`. Codegen
-  registers the host's own LLVM backend
-  (`crates/pepper-codegen/src/target.rs`); registering x86 unconditionally, as
-  it used to, broke every CLI invocation with *"No available targets are
-  compatible with triple arm64-apple-darwin"* while the suite stayed green,
-  because inkwell's JIT registers the host backend as a side effect and
-  whichever test did that first masked the problem for the others.
+  registers both the x86 and AArch64 LLVM backends on every host
+  (`crates/pepper-codegen/src/target.rs`), so the LLVM it builds against
+  needs both (apt's, Homebrew's and the official Windows archive all have
+  them). Registering only x86, as it once did, broke every CLI invocation on
+  Apple silicon with *"No available targets are compatible with triple
+  arm64-apple-darwin"* while the suite stayed green, because inkwell's JIT
+  registers the host backend as a side effect and whichever test did that
+  first masked the problem for the others.
+- **Cross-compiling** (`--target`): Linux x64 to Linux arm64 links with
+  `lld` and Ubuntu's `libc6-dev-arm64-cross` and runs under `qemu-aarch64`.
+  Every other pair emits its objects; linking them needs that platform's
+  sysroot (`--sysroot`), which is untested so far.
 - **macOS x86_64** is untested. Homebrew serves it, which is the path that
   works on macOS anyway; of the supported majors only LLVM 19 publishes a
   `macOS-X64` archive, and the fallback reports that the version has no build

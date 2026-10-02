@@ -6,8 +6,8 @@ The `[Target(...)]` attribute keeps a declaration or a block only when you
 compile for a matching platform, so one source file can hold every platform's
 version side by side.
 
-The target is always the platform you compile on: Pepper does not
-cross-compile yet.
+The target is the platform you compile on, unless you name another with
+`--target` (see [Cross-compiling](#cross-compiling) below).
 
 ## Writing a condition
 
@@ -103,3 +103,57 @@ Other mistakes the compiler reports:
   `[Target(OS(Windows)) && Export]` are parse errors.
 - Struct fields cannot carry `[Target(...)]`. Select the whole struct instead,
   as `Cpu` does in the first example.
+
+## Cross-compiling
+
+`--target <triple>` compiles for another platform: `[Target(...)]` selects
+that platform's code, and the compiler emits that platform's machine code
+and object format. The supported targets are each OS on each architecture:
+
+| Triple                      | OS      | Arch      |
+|-----------------------------|---------|-----------|
+| `x86_64-unknown-linux-gnu`  | Linux   | `x64`     |
+| `aarch64-unknown-linux-gnu` | Linux   | `aarch64` |
+| `x86_64-apple-darwin`       | macOS   | `x64`     |
+| `aarch64-apple-darwin`      | macOS   | `aarch64` |
+| `x86_64-pc-windows-msvc`    | Windows | `x64`     |
+| `aarch64-pc-windows-msvc`   | Windows | `aarch64` |
+
+clang's other spellings work too: `arm64` for `aarch64`, `amd64` for
+`x86_64`, any vendor, and an OS version (`arm64-apple-macosx14.0`). Any
+other triple is an error that lists these.
+
+```sh
+pep-build --target aarch64-unknown-linux-gnu main.pep -o main
+```
+
+Linking an executable for another platform needs that platform's system
+libraries and LLVM's linker, `lld`: the compiler looks for it beside clang,
+in its LLVM install and on the `PATH`, also under the versioned name
+Ubuntu's `lld-20` package uses (`ld.lld-20`). Name
+the directory that holds the libraries (the sysroot) with `--sysroot <dir>`,
+or set `PEPPER_SYSROOT_<TRIPLE>`, the triple in capitals with `_` for each
+`-` (`PEPPER_SYSROOT_AARCH64_APPLE_DARWIN`):
+
+- **Linux:** a directory with the target's glibc and GCC runtime
+  (`/usr/aarch64-linux-gnu` from Debian's or Ubuntu's
+  `libc6-dev-arm64-cross` and `libgcc-13-dev-arm64-cross`, which clang
+  also finds without `--sysroot`).
+- **macOS:** a macOS SDK (`MacOSX.sdk`).
+- **Windows:** a directory laid out like a Visual Studio install, with the
+  MSVC libraries and the Windows SDK, as
+  [xwin](https://github.com/Jake-Shadle/xwin) `splat --use-winsysroot-style`
+  writes it.
+
+When the link fails, the error ends with a note naming what is missing:
+
+```text
+note: linking for 'x86_64-pc-windows-msvc' needs that platform's system libraries and LLVM's linker (lld): pass '--sysroot <dir>' or set PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC
+```
+
+The `-m` options are read for the target: `-mcpu` is an AArch64 option
+and `-march=x86-64-v3` an x86 one, and `native`, which names the CPU of the
+machine you compile on, is an error for a target of another architecture.
+
+The compiler only builds for the target; copy the executable to a machine
+of that platform to run it.

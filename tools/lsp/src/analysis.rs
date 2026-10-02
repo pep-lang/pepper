@@ -63,8 +63,8 @@ static PARSED: LazyLock<Parsed> = LazyLock::new(|| Parsed(Mutex::new(HashMap::ne
 /// `f()` with `Target(...)` evaluated for `os` (and the build target's
 /// architecture).
 fn as_target<R>(os: &str, f: impl FnOnce() -> R) -> R {
-    use pepper_sema::passes::platform::{host_arch, host_os, with_simulated_host};
-    if os == host_os() { f() } else { with_simulated_host(os, &host_arch(), f) }
+    use pepper_sema::passes::platform;
+    if os == platform::target_os() { f() } else { platform::with_simulated_host(os, &platform::target_arch(), f) }
 }
 
 /// The OS to analyze `text` for: the build target's, unless its build
@@ -73,10 +73,10 @@ fn as_target<R>(os: &str, f: impl FnOnce() -> R) -> R {
 /// whose build leaves out the least of it. A mostly portable file stays on
 /// the build target, so the errors its build would report still show.
 fn target_os(text: &str) -> String {
-    use pepper_sema::passes::platform::{host_arch, host_os, with_simulated_host};
-    let host = host_os();
+    use pepper_sema::passes::platform;
+    let host = platform::target_os();
     let Ok(module) = pepper_parser::parser::parse_source("document", text) else { return host };
-    let left_out = |os: &str| with_simulated_host(os, &host_arch(), || crate::platforms::inactive_regions(text, &module));
+    let left_out = |os: &str| platform::with_simulated_host(os, &platform::target_arch(), || crate::platforms::inactive_regions(text, &module));
     let at_host = left_out(&host);
     if at_host.is_empty() {
         return host;

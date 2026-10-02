@@ -29,7 +29,7 @@ fn optimized_test(source: &str) -> String {
     let context = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&context, "optimizer");
     generator.generate(&module).unwrap();
-    let machine = pepper_codegen::target::host_machine().unwrap();
+    let machine = pepper_codegen::target::target_machine().unwrap();
     generator.module.run_passes("default<O2>", &machine, inkwell::passes::PassBuilderOptions::create()).unwrap();
     generator.module.get_function("test").expect("test").print_to_string().to_string()
 }

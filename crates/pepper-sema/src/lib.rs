@@ -29,7 +29,7 @@ mod model_tests;
 pub use builder::build;
 pub use model::Module;
 pub use passes::transform_pass;
-pub use passes::platform::{apply_platform_filters, with_simulated_host};
+pub use passes::platform::{apply_platform_filters, current_target, with_simulated_host, with_target, Target};
 pub use type_name::TypeName;
 pub use visibility::{check_visibility, SourceFile, VisibilityError, VisibilityErrorKind};
 pub use modules::{FileScope, ModuleError, ProgramFile};

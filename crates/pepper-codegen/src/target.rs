@@ -1,15 +1,16 @@
-//! Host target registration and the machine everything emits for.
+//! Backend registration and the machine everything emits for: the host, or
+//! the target `--target` names (`pepper_sema::current_target`).
 //!
 //! LLVM will not resolve a triple until its backend is registered, and only
 //! the backends you ask for are linked in: `inkwell`'s default `target-all`
 //! feature wants initializers for every LLVM target, including ones a given
 //! LLVM build omits, which fails at link time with unresolved
-//! `LLVMInitialize<Target>*`. So each crate asks for exactly the backend its
-//! host needs (see the arch-gated `inkwell` entries in Cargo.toml) and this
-//! registers that one.
+//! `LLVMInitialize<Target>*`. So each crate asks for exactly the backends
+//! `--target` can name (x86 and AArch64; see Cargo.toml) and this registers
+//! them.
 //!
-//! Registering only x86 is what made the compiler unusable on Apple silicon:
-//! the CLI failed on every input with
+//! Registering only x86 is what once made the compiler unusable on Apple
+//! silicon: the CLI failed on every input with
 //!
 //!   error: No available targets are compatible with triple
 //!   "arm64-apple-darwin25.6.0"
@@ -21,46 +22,49 @@
 //! `Target::initialize_native` (inkwell/src/module.rs), registering the host
 //! backend process-wide, so whichever JIT test ran first masked the wrong
 //! explicit registration for everything after it. Order-dependent masking,
-//! not absence of resolution; the unit test below asks directly instead.
+//! not absence of resolution; the unit tests below ask directly instead.
 //!
 //! This lives in one place because four call sites had their own copy, and
 //! three of them would have had to be found again for any new architecture.
 
-use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
+use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple};
 use inkwell::OptimizationLevel;
 
-/// Register the host's LLVM backend.
+/// Register every LLVM backend `--target` can name: x86 and AArch64.
 ///
 /// Safe to call repeatedly: `TargetRegistry::RegisterTarget` returns early
 /// once a target of that name is registered, and the MC/TargetMachine
 /// registrations re-assign the same function pointers. That is a
 /// check-then-set rather than a `call_once`, so it is idempotent but does not
 /// serialize two threads racing the very first call.
-pub fn initialize_host() {
+pub fn initialize_targets() {
     let config = InitializationConfig::default();
-
-    // `initialize_x86` / inkwell's `target-x86` is LLVM's X86 backend, which
-    // serves x86-64 as well as i386 -- there is no separate "x86_64" target
-    // to register. 32-bit output is never selected, because the triple is
-    // always the host's, and a 32-bit *host* trips the compile_error below.
-    #[cfg(target_arch = "x86_64")]
+    // LLVM's X86 backend serves x86-64 as well as i386 -- there is no
+    // separate "x86_64" target to register.
     Target::initialize_x86(&config);
-
-    #[cfg(target_arch = "aarch64")]
     Target::initialize_aarch64(&config);
-
-    // Silences "unused variable" on an architecture with no arm above, which
-    // cannot happen while the compile_error below stands, but would be the
-    // first thing to break when it is relaxed.
-    let _ = &config;
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 compile_error!(
-    "pepper supports x86_64 and aarch64 hosts: add the matching \
-     Target::initialize_* call in crates/pepper-codegen/src/target.rs and the \
-     inkwell target-* feature in the arch-gated dependency tables"
+    "pepper runs on x86_64 and aarch64 hosts: add the host's backend to \
+     initialize_targets in crates/pepper-codegen/src/target.rs and its inkwell \
+     target-* feature in Cargo.toml"
 );
+
+/// The triple code is generated for: `--target`'s, else the host's own
+/// (LLVM's default triple).
+pub fn triple() -> TargetTriple {
+    match pepper_sema::current_target().triple {
+        Some(triple) => TargetTriple::create(&triple),
+        None => TargetMachine::get_default_triple(),
+    }
+}
+
+/// [`triple`] as a string.
+pub fn triple_name() -> String {
+    triple().as_str().to_string_lossy().into_owned()
+}
 
 /// How much LLVM optimizes the code it is given: `-O0` through `-O3`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
@@ -144,7 +148,7 @@ pub enum Pipeline {
 
 /// The CPU to generate code for, and the features to add to or remove
 /// from it: what clang's `-march`, `-mcpu`, `-mtune` and `-m<feature>`
-/// choose. The default is clang's for the host triple.
+/// choose. The default is clang's for the target triple.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Cpu {
     /// LLVM's name for the CPU (`x86-64`, `x86-64-v3`, `apple-m1`).
@@ -158,10 +162,9 @@ pub struct Cpu {
 }
 
 impl Default for Cpu {
-    /// Clang's default for the host triple.
+    /// Clang's default for the target triple.
     fn default() -> Cpu {
-        let triple = TargetMachine::get_default_triple();
-        Cpu::default_for(&triple.as_str().to_string_lossy())
+        Cpu::default_for(&triple_name())
     }
 }
 
@@ -199,10 +202,14 @@ impl Cpu {
     pub fn from_options(triple: &str, machine: &[String]) -> Result<Cpu, String> {
         let mut cpu = Cpu::default_for(triple);
         let x86 = is_x86(triple);
+        let cross = x86 != cfg!(target_arch = "x86_64");
         let host = || TargetMachine::get_host_cpu_name().to_string();
         let (mut arch, mut mcpu, mut tune) = (None, None, None);
         let mut extra = vec![];
         for option in machine {
+            if option.ends_with("=native") && cross {
+                return Err(format!("'-m{}' names this machine's CPU, which target '{}' cannot run on", option, triple));
+            }
             if let Some(value) = option.strip_prefix("arch=") {
                 arch = Some(value);
             } else if let Some(value) = option.strip_prefix("cpu=") {
@@ -357,23 +364,24 @@ pub fn optimize_with(module: &inkwell::module::Module<'_>, level: OptLevel, pipe
         .map_err(|e| format!("cannot optimize '{}': {}", module.get_name().to_string_lossy(), e.to_string()))
 }
 
-/// The machine to emit for, unoptimized: the host, with clang's default CPU.
-pub fn host_machine() -> Result<TargetMachine, String> {
-    host_machine_at(OptLevel::O0)
+/// The machine to emit for, unoptimized: the target, with clang's default
+/// CPU.
+pub fn target_machine() -> Result<TargetMachine, String> {
+    target_machine_at(OptLevel::O0)
 }
 
-/// The machine to emit for at `level`: the host, with clang's default CPU.
-pub fn host_machine_at(level: OptLevel) -> Result<TargetMachine, String> {
+/// The machine to emit for at `level`: the target, with clang's default CPU.
+pub fn target_machine_at(level: OptLevel) -> Result<TargetMachine, String> {
     machine(level, &Cpu::default())
 }
 
-/// The machine to emit for at `level`: the host triple, generating code for
-/// `cpu`. Without `-march` or `-mcpu` that is clang's default for the
-/// triple, never the build machine's own CPU, so a program runs on any
-/// machine its triple names.
+/// The machine to emit for at `level`: the target triple (see [`triple`]),
+/// generating code for `cpu`. Without `-march` or `-mcpu` that is clang's
+/// default for the triple, never the build machine's own CPU, so a program
+/// runs on any machine its triple names.
 pub fn machine(level: OptLevel, cpu: &Cpu) -> Result<TargetMachine, String> {
-    initialize_host();
-    let triple = TargetMachine::get_default_triple();
+    initialize_targets();
+    let triple = triple();
     let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
     target
         .create_target_machine(
@@ -397,6 +405,61 @@ pub fn machine(level: OptLevel, cpu: &Cpu) -> Result<TargetMachine, String> {
         })
 }
 
+/// Write `module` to `path` as an object file for the target, generated by
+/// `machine`.
+///
+/// For an ELF target, the static constructors move from
+/// `llvm.global_ctors` into `.init_array` first (see [`use_init_array`]).
+pub fn write_object(machine: &TargetMachine, module: &inkwell::module::Module<'_>, path: &std::path::Path) -> Result<(), String> {
+    let triple = triple_name();
+    if !triple.contains("-windows") && !triple.contains("-apple-") {
+        use_init_array(module);
+    }
+    machine
+        .write_to_file(module, inkwell::targets::FileType::Object, path)
+        .map_err(|e| format!("cannot write {}: {}", path.display(), e))
+}
+
+/// Move `module`'s static constructors from `llvm.global_ctors` into an
+/// `.init_array` section, as clang emits them.
+///
+/// A machine made through LLVM's C API keeps `TargetOptions::UseInitArray`
+/// at its default, false, so on ELF the constructors land in `.ctors`. GNU
+/// ld folds `.ctors` into `.init_array`, which is why that went unnoticed
+/// on the host; LLVM's linker (lld, which cross-linking uses) does not, and
+/// a program whose globals are never initialized crashes at its first
+/// allocation. The entries keep their order; Pepper registers one
+/// constructor, at the default priority, so priorities need no sorting.
+/// The JIT is unaffected: it runs `llvm.global_ctors` itself and never
+/// comes here.
+pub fn use_init_array(module: &inkwell::module::Module<'_>) {
+    use inkwell::llvm_sys::core::{LLVMDeleteGlobal, LLVMGetNumOperands, LLVMGetOperand};
+    use inkwell::values::{AsValueRef, BasicValueEnum, PointerValue};
+    let Some(constructors) = module.get_global("llvm.global_ctors") else {
+        return;
+    };
+    let Some(BasicValueEnum::ArrayValue(entries)) = constructors.get_initializer() else {
+        return;
+    };
+    let entries = entries.as_value_ref();
+    // Each entry is `{ i32 priority, ptr function, ptr data }`.
+    let functions: Vec<PointerValue<'_>> = unsafe {
+        (0..LLVMGetNumOperands(entries) as u32)
+            .map(|i| PointerValue::new(LLVMGetOperand(LLVMGetOperand(entries, i), 1)))
+            .collect()
+    };
+    unsafe { LLVMDeleteGlobal(constructors.as_value_ref()) };
+    if functions.is_empty() {
+        return;
+    }
+    let pointer = module.get_context().ptr_type(inkwell::AddressSpace::default());
+    let array = module.add_global(pointer.array_type(functions.len() as u32), None, "__pep_init_array");
+    array.set_initializer(&pointer.const_array(&functions));
+    array.set_linkage(inkwell::module::Linkage::Private);
+    array.set_section(Some(".init_array"));
+    array.set_alignment(8);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,7 +473,7 @@ mod tests {
     fn the_host_triple_resolves_to_a_target_machine() {
         // The `expect` is the assertion: `Target::from_triple` fails here
         // unless this host's backend is registered.
-        let _machine = host_machine().expect("host target machine");
+        let _machine = target_machine().expect("host target machine");
         let triple = TargetMachine::get_default_triple();
         let triple = triple.as_str().to_string_lossy().to_string();
 
@@ -423,11 +486,35 @@ mod tests {
         } else if cfg!(target_arch = "aarch64") {
             &["aarch64", "arm64"]
         } else {
-            unreachable!("add this host's triple names alongside initialize_host")
+            unreachable!("add this host's triple names alongside initialize_targets")
         };
         assert!(
             expected.contains(&arch),
             "host triple {triple} does not name this architecture ({expected:?})"
         );
+    }
+
+    /// Every triple `--target` accepts resolves to a machine on every host,
+    /// for the triple it names: both backends are registered everywhere.
+    #[test]
+    fn every_supported_triple_resolves_to_a_target_machine() {
+        for &name in pepper_sema::passes::platform::SUPPORTED_TRIPLES {
+            let target = pepper_sema::Target::parse(name).expect("a supported triple parses");
+            pepper_sema::with_target(target, || {
+                let machine = target_machine().unwrap_or_else(|e| panic!("{name}: {e}"));
+                assert_eq!(machine.get_triple().as_str().to_string_lossy(), name);
+            });
+        }
+    }
+
+    /// `native` names the build machine's CPU, which another architecture
+    /// cannot run.
+    #[test]
+    fn native_cpu_is_rejected_for_another_architecture() {
+        let other = if cfg!(target_arch = "x86_64") { "aarch64-unknown-linux-gnu" } else { "x86_64-unknown-linux-gnu" };
+        for option in ["arch=native", "cpu=native", "tune=native"] {
+            let error = Cpu::from_options(other, &[option.to_string()]).unwrap_err();
+            assert!(error.contains("cannot run on"), "{option}: {error}");
+        }
     }
 }

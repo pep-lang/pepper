@@ -12,19 +12,12 @@ pepper-sema = { path = "../pepper-sema" }
 pepper-files = { path = "../pepper-files" }
 pepper-codegen = { path = "../pepper-codegen", default-features = false }
 clap.workspace = true
-inkwell = { version = "0.10", default-features = false }
+# The LLVM backends: x86 and AArch64 on every host, for `--target`. See
+# crates/pepper-codegen/Cargo.toml for why it is not `target-all`, and
+# crates/pepper-codegen/src/target.rs for the registration.
+inkwell = { version = "0.10", default-features = false, features = ["target-x86", "target-aarch64"] }
 blake3 = { version = "1.8.7", default-features = false }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
-
-# The LLVM backend, per host architecture. See the same tables in
-# crates/pepper-codegen/Cargo.toml for why it is not `target-all`, why
-# `target-x86` is 64-bit here, and crates/pepper-codegen/src/target.rs for
-# the registration.
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-inkwell = { version = "0.10", default-features = false, features = ["target-x86"] }
-
-[target.'cfg(target_arch = "aarch64")'.dependencies]
-inkwell = { version = "0.10", default-features = false, features = ["target-aarch64"] }
 
 # See crates/pepper-codegen/Cargo.toml + build.rs for why Windows links the DLL.
 [target.'cfg(windows)'.dependencies]

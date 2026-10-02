@@ -5,6 +5,12 @@
 //! it locates the MSVC toolchain and Windows SDK itself, so linking works
 //! without a Developer Command Prompt. The clang from the LLVM install this
 //! compiler links against is preferred so the two always agree on the target.
+//!
+//! For another platform (`--target`), clang links with `--target=<triple>`,
+//! LLVM's own linker (`lld`, since the host's system linker knows only the
+//! host's formats; named with `--ld-path` when `find_lld` finds it), and the
+//! target's system root (`--sysroot`, or `/winsysroot` for a Windows target,
+//! which `lld-link` reads).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,6 +29,19 @@ const LLVM_PREFIX_ENV: &str = "LLVM_SYS_201_PREFIX";
 const LLVM_PREFIX_ENV: &str = "LLVM_SYS_211_PREFIX";
 #[cfg(feature = "llvm22-1")]
 const LLVM_PREFIX_ENV: &str = "LLVM_SYS_221_PREFIX";
+
+/// The LLVM major the compiler links against, for finding a versioned
+/// `ld.lld-<major>` (what Ubuntu's `lld-<major>` puts on the PATH).
+#[cfg(feature = "llvm18-1")]
+const LLVM_MAJOR: &str = "18";
+#[cfg(feature = "llvm19-1")]
+const LLVM_MAJOR: &str = "19";
+#[cfg(feature = "llvm20-1")]
+const LLVM_MAJOR: &str = "20";
+#[cfg(feature = "llvm21-1")]
+const LLVM_MAJOR: &str = "21";
+#[cfg(feature = "llvm22-1")]
+const LLVM_MAJOR: &str = "22";
 
 #[cfg(not(any(
     feature = "llvm18-1",
@@ -48,26 +67,73 @@ pub fn link_driver() -> PathBuf {
     PathBuf::from(exe)
 }
 
-/// System libraries every Pepper executable needs on this platform.
+/// System libraries every Pepper executable needs on the target's OS.
 ///
 /// clang supplies the C runtime and, on macOS, libSystem plus the SDK/platform
 /// flags itself; these are the ones it does not add.
-fn default_system_libraries() -> &'static [&'static str] {
-    if cfg!(windows) {
+fn default_system_libraries(os: &str) -> &'static [&'static str] {
+    match os {
         // Pepper's documented Windows defaults (docs/src/language/linking.md).
-        &["kernel32", "user32", "shell32"]
-    } else if cfg!(target_os = "linux") {
+        "windows" => &["kernel32", "user32", "shell32"],
         // A floating-point `**` calls `pow`, which glibc keeps in libm
         // (macOS has it in libSystem, Windows in the UCRT).
-        &["m"]
-    } else {
-        &[]
+        "linux" => &["m"],
+        _ => &[],
     }
 }
 
-/// Link obj files into an executable; with `debug`, keep their debug info
-/// (on Windows, clang then has the linker write `<output>.pdb`, with the
-/// visualizers in `natvis`).
+/// LLVM's linker for an ELF or Mach-O target (`ld.lld`, `ld64.lld`), when
+/// one is found: beside the link driver, in the LLVM install the compiler
+/// links against, or on the PATH, plain or with this LLVM's major
+/// (`ld.lld-20`). clang finds a plain one beside itself or on the PATH
+/// unaided, but not the versioned name Ubuntu's `lld-20` installs.
+fn find_lld(os: &str, driver: &Path) -> Option<PathBuf> {
+    let name = if os == "macos" { "ld64.lld" } else { "ld.lld" };
+    let versioned = format!("{}-{}", name, LLVM_MAJOR);
+    let mut directories: Vec<PathBuf> = driver.parent().filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf).into_iter().collect();
+    if let Ok(prefix) = std::env::var(LLVM_PREFIX_ENV) {
+        directories.push(Path::new(&prefix).join("bin"));
+    }
+    directories.extend(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()));
+    let exe = |n: &str| if cfg!(windows) { format!("{}.exe", n) } else { n.to_string() };
+    [exe(name), exe(&versioned)]
+        .iter()
+        .flat_map(|n| directories.iter().map(move |d| d.join(n)))
+        .find(|candidate| candidate.is_file())
+}
+
+/// The link driver's options that choose the platform: none for the host;
+/// for another target, its triple, LLVM's linker (`lld`, the one at `lld`
+/// when given), and its system root.
+fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: Option<&Path>) -> Vec<String> {
+    let mut args = vec![];
+    if let Some(triple) = &target.triple {
+        args.push(format!("--target={}", triple));
+    }
+    if !target.is_host() {
+        // clang's MSVC toolchain picks `lld-link` by `-fuse-ld` alone.
+        match lld.filter(|_| target.os != "windows") {
+            Some(path) => args.push(format!("--ld-path={}", path.display())),
+            None => args.push("-fuse-ld=lld".to_string()),
+        }
+    }
+    if let Some(sysroot) = sysroot {
+        if target.os == "windows" {
+            // clang's MSVC toolchain takes the Windows SDK and MSVC
+            // libraries from `/winsysroot` only in clang-cl mode, so hand
+            // it to lld-link, which finds `kernel32.lib` and the CRT there.
+            args.extend(["-Xlinker".to_string(), format!("/winsysroot:{}", sysroot.display())]);
+        } else {
+            args.push(format!("--sysroot={}", sysroot.display()));
+        }
+    }
+    args
+}
+
+/// Link obj files into an executable for the target
+/// (`pepper_sema::current_target`), with its system root `sysroot` when it
+/// is given; with `debug`, keep their debug info (for Windows, clang then has
+/// the linker write `<output>.pdb`, with the visualizers in `natvis`).
 pub fn link(
     objects: &[PathBuf],
     output: &Path,
@@ -75,13 +141,17 @@ pub fn link(
     library_dirs: &[PathBuf],
     debug: bool,
     natvis: Option<&Path>,
+    sysroot: Option<&Path>,
 ) -> Result<(), String> {
     let driver = link_driver();
+    let target = pepper_sema::current_target();
 
     let mut args: Vec<String> = vec!["-o".to_string(), output.to_string_lossy().into_owned()];
+    let lld = if target.is_host() { None } else { find_lld(&target.os, &driver) };
+    args.extend(target_arguments(&target, sysroot, lld.as_deref()));
     if debug {
         args.push("-g".to_string());
-        if cfg!(windows) {
+        if target.os == "windows" {
             // `-g` makes link.exe link incrementally, which announces a full
             // link on every fresh build and leaves a `.ilk` beside the output.
             args.extend(["-Xlinker".to_string(), "/INCREMENTAL:NO".to_string()]);
@@ -103,7 +173,7 @@ pub fn link(
     for lib in libraries {
         args.push(format!("-l{}", lib));
     }
-    for lib in default_system_libraries() {
+    for lib in default_system_libraries(&target.os) {
         args.push(format!("-l{}", lib));
     }
 
@@ -136,10 +206,11 @@ pub fn link(
                 detail.push_str(stderr.trim());
             }
             Err(format!(
-                "Link failed: {} exited with {}\n{}",
+                "Link failed: {} exited with {}\n{}{}",
                 driver.display(),
                 out.status,
-                detail
+                detail,
+                cross_link_note(&target, sysroot)
             ))
         }
         Err(e) => Err(format!(
@@ -147,5 +218,59 @@ pub fn link(
             driver.display(),
             e
         )),
+    }
+}
+
+/// What a failed link for another platform needs, after the linker's own
+/// messages: the target's system root, unless one was given, and LLVM's
+/// linker. Empty for the host.
+fn cross_link_note(target: &pepper_sema::Target, sysroot: Option<&Path>) -> String {
+    if target.is_host() {
+        return String::new();
+    }
+    let triple = target.triple.as_deref().unwrap_or_default();
+    match sysroot {
+        None => format!(
+            "\nnote: linking for '{}' needs that platform's system libraries and LLVM's linker (lld): \
+             pass '--sysroot <dir>' or set {}",
+            triple,
+            crate::options::sysroot_variable(triple)
+        ),
+        Some(sysroot) => format!(
+            "\nnote: linking for '{}' with the system root '{}' needs LLVM's linker (lld) beside clang",
+            triple,
+            sysroot.display()
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_links_with_no_target_options() {
+        assert!(target_arguments(&pepper_sema::Target::host(), None, None).is_empty());
+    }
+
+    #[test]
+    fn another_platform_links_with_its_triple_lld_and_sysroot() {
+        let other = if cfg!(target_os = "linux") { "aarch64-apple-darwin" } else { "x86_64-unknown-linux-gnu" };
+        let target = pepper_sema::Target::parse(other).unwrap();
+        assert_eq!(
+            target_arguments(&target, Some(Path::new("/sdk")), None),
+            [format!("--target={}", other), "-fuse-ld=lld".to_string(), "--sysroot=/sdk".to_string()]
+        );
+        // A found lld is named outright.
+        let args = target_arguments(&target, None, Some(Path::new("/usr/bin/ld.lld-20")));
+        assert_eq!(args[1], "--ld-path=/usr/bin/ld.lld-20");
+        let windows = pepper_sema::Target::parse("x86_64-pc-windows-msvc").unwrap();
+        let args = target_arguments(&windows, Some(Path::new("/xwin")), Some(Path::new("/usr/bin/ld.lld")));
+        if !windows.is_host() {
+            assert!(args.contains(&"-fuse-ld=lld".to_string()), "{args:?}");
+        }
+        assert_eq!(args.last().map(String::as_str), Some("/winsysroot:/xwin"));
+        let note = cross_link_note(&target, None);
+        assert!(note.contains("pass '--sysroot <dir>' or set PEPPER_SYSROOT_"), "{note}");
     }
 }

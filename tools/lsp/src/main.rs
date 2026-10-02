@@ -1705,13 +1705,13 @@ fn merged(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
 /// `module`) its `[Target(...)]` attributes leave out on the build target,
 /// as a diagnostic with the `Unnecessary` tag, which editors show faded.
 fn inactive_hints(text: &str, module: &ast::Module) -> Vec<Diagnostic> {
-    let os = match pepper_sema::passes::platform::host_os().as_str() {
+    let os = match pepper_sema::passes::platform::target_os().as_str() {
         "windows" => "Windows".to_string(),
         "linux" => "Linux".to_string(),
         "macos" => "macOS".to_string(),
         other => other.to_string(),
     };
-    let target = format!("{} {}", os, pepper_sema::passes::platform::host_arch());
+    let target = format!("{} {}", os, pepper_sema::passes::platform::target_arch());
     platforms::inactive_regions(text, module)
         .into_iter()
         .map(|span| Diagnostic {
@@ -3055,7 +3055,7 @@ fn schedule_analysis(client: Client, documents: Arc<Documents>, analysis: Arc<An
         };
         // A file analyzed for another OS than the build target's says so.
         let os = analysis.os();
-        let as_os = if os == pepper_sema::passes::platform::host_os() { String::new() } else { format!(" as {}", os) };
+        let as_os = if os == pepper_sema::passes::platform::target_os() { String::new() } else { format!(" as {}", os) };
         let took = format!("analyzed {}{} ({} files): {} in {} ms", file, as_os, files, outcome, start.elapsed().as_millis());
         client.log_message(MessageType::LOG, took).await;
         // Hints come from the newest passed analysis: have the editor ask
