@@ -348,7 +348,7 @@ fn match_needs_an_enum() {
     assert!(error_of("test(): int { var x = 3.5; match (x) { A => {} } return 0; }")
         .contains("cannot match on a value of 'f64': 'match' needs an enum, an integer, 'char', 'bool' or 'String'"));
     assert!(error_of("test(): int { var x = 3; match (x) { A => {} else => {} } return 0; }")
-        .contains("'A' is not a literal: a 'match' on 'i32' takes literal patterns"));
+        .contains("'A' is not a literal or a constant: a 'match' on 'i32' takes literals, ranges and module-scope constants"));
 }
 
 #[test]

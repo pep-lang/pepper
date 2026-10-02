@@ -441,6 +441,14 @@ fn pep_fmt_formats_guards() {
 }
 
 #[test]
+fn pep_fmt_formats_range_and_constant_patterns() {
+    assert_formats(
+        "f(n:int):int {\n    return match(n){1 .. 9=>1,MIN..> limits.MAX=>2,LIMIT=>3,-5..-1=>4,else=>0};\n}\n",
+        "f(n: int): int {\n    return match (n) {\n        1..9 => 1,\n        MIN..>limits.MAX => 2,\n        LIMIT => 3,\n        -5..-1 => 4,\n        else => 0\n    };\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_spaces_collection_literals() {
     assert_formats(
         "main(): int {\n    var a = [1,2 , 3];\n    var m = [\"a\" :1, \"b\":[2]];\n    HashMap<String, int> e = [ : ];\n    return 0;\n}\n",

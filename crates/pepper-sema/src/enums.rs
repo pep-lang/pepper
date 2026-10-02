@@ -173,7 +173,7 @@ pub fn case_value_type(
         }
         if is_literal_type(subject) {
             return Err(Diagnostic::error(format!(
-                "'{}' is not a literal: a 'match' on '{}' takes literal patterns",
+                "'{}' is not a literal or a constant: a 'match' on '{}' takes literals, ranges and module-scope constants",
                 first.case,
                 shown(subject)
             ))
@@ -741,6 +741,9 @@ struct Coverage {
     /// The `match` is over a type with literal patterns (`int`, `String`).
     literal: bool,
     handled: BTreeMap<String, Loc>,
+    /// For a `match` over an integer type: the values its unguarded literal
+    /// and range patterns cover, as inclusive intervals.
+    intervals: Vec<(i128, i128)>,
     /// For a `match` over a tuple: its type, the case names of each enum
     /// (and `bool`) inside it, and every pattern so far.
     tuple: Option<TupleCoverage>,
@@ -795,6 +798,30 @@ fn is_literal_type(ty: &TypeName) -> bool {
             || (crate::type_name::INTEGRAL_TYPES.contains(ty.name.as_str())
                 && !ty.name.ends_with('*')
                 && !matches!(ty.name.as_str(), "void" | "__auto" | "f32" | "float" | "f64" | "double")))
+}
+
+/// An integer or character type, which literal and range patterns can
+/// cover in full.
+fn is_integer_type(ty: &TypeName) -> bool {
+    is_literal_type(ty) && !matches!(ty.name.as_str(), "String" | "bool")
+}
+
+/// Whether the inclusive `intervals` together cover every integer from
+/// `low` to `high`.
+fn covers(intervals: &[(i128, i128)], low: i128, high: i128) -> bool {
+    let mut sorted = intervals.to_vec();
+    sorted.sort();
+    let mut next = low;
+    for (start, end) in sorted {
+        if start > next {
+            break;
+        }
+        next = next.max(end + 1);
+        if next > high {
+            return true;
+        }
+    }
+    next > high
 }
 
 /// The subject of a lowered `match` or `is` test, typed as `ty`: its hidden
@@ -1197,11 +1224,40 @@ fn lower_arm(
             return None;
         }
         let equal = match (&matched, &p.literal) {
-            (Matched::Literal(_), Some(literal)) => literal.clone(),
+            (Matched::Literal(ty), Some(_)) if p.range && !is_integer_type(ty) => {
+                report(
+                    Diagnostic::error(format!("a range cannot match a value of '{}': ranges match integers and characters", shown(ty)))
+                        .at(p.loc)
+                        .with_note("the value matched is here", Some(subject_loc)),
+                );
+                return None;
+            }
+            (Matched::Literal(ty), Some(literal)) => {
+                if let Some((low, high)) = p.values
+                    && is_integer_type(ty)
+                {
+                    if low > high {
+                        report(Diagnostic::error(format!("range '{}' matches no value", p.case)).at(p.loc));
+                        return None;
+                    }
+                    if covers(&entry.intervals, low, high) {
+                        report(
+                            Diagnostic::error(format!("pattern '{}' is already handled", p.case))
+                                .at(p.loc)
+                                .with_note("the patterns before it match every value it does", None),
+                        );
+                        return None;
+                    }
+                    if !test.guarded {
+                        entry.intervals.push((low, high));
+                    }
+                }
+                literal.clone()
+            }
             (Matched::Literal(ty), None) => {
                 report(
                     Diagnostic::error(format!(
-                        "'{}' is not a literal: a 'match' on '{}' takes literal patterns",
+                        "'{}' is not a literal or a constant: a 'match' on '{}' takes literals, ranges and module-scope constants",
                         p.case,
                         shown(ty)
                     ))
@@ -1210,12 +1266,9 @@ fn lower_arm(
                 return None;
             }
             (_, Some(_)) => {
+                let what = if p.constant { "a constant" } else if p.range { "a range" } else { "a literal" };
                 report(
-                    Diagnostic::error(format!(
-                        "a literal cannot match a value of '{}': name its cases",
-                        matched.name()
-                    ))
-                    .at(p.loc),
+                    Diagnostic::error(format!("{} cannot match a value of '{}': name its cases", what, matched.name())).at(p.loc),
                 );
                 return None;
             }
@@ -1325,11 +1378,16 @@ fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
     }
     if c.literal {
         let every_bool = name == "bool" && c.handled.contains_key("true") && c.handled.contains_key("false");
+        let (min, max) = crate::builder::integer_range(name);
+        let every_integer = is_integer_type(&TypeName::new(name)) && covers(&c.intervals, min, max);
         match site.else_arm {
             Some(else_loc) if every_bool => {
                 return Some(Diagnostic::warning("'else' is unreachable: 'true' and 'false' are both handled").at(else_loc));
             }
-            None if !every_bool => report(
+            Some(else_loc) if every_integer => {
+                return Some(Diagnostic::warning(format!("'else' is unreachable: every value of '{}' is handled", name)).at(else_loc));
+            }
+            None if !every_bool && !every_integer => report(
                 Diagnostic::error(format!("match on '{}' needs an 'else' arm", name))
                     .at(site.keyword)
                     .with_note("literal patterns cannot handle every value", None),
@@ -1693,7 +1751,12 @@ fn element_test(
     let matched = Matched::of(ty, enums);
     if let Some(literal) = &p.literal {
         if !matches!(matched, Some(Matched::Literal(_))) {
-            report(Diagnostic::error(format!("a literal cannot match a value of '{}'", shown(ty))).at(p.loc));
+            let what = if p.constant { "a constant" } else if p.range { "a range" } else { "a literal" };
+            report(Diagnostic::error(format!("{} cannot match a value of '{}'", what, shown(ty))).at(p.loc));
+            return None;
+        }
+        if p.range && !is_integer_type(ty) {
+            report(Diagnostic::error(format!("a range cannot match a value of '{}': ranges match integers and characters", shown(ty))).at(p.loc));
             return None;
         }
         return Some(Some(literal.clone()));

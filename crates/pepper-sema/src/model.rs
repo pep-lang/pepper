@@ -669,6 +669,16 @@ pub struct CasePattern {
     /// then empty. An element's bare name is a case pattern with no
     /// bindings, resolved by the element's type.
     pub elements: Option<Vec<CasePattern>>,
+    /// For a range pattern (`1..9`): `literal` is the test `subject >= start
+    /// && subject < end` (`<=` for `..>`).
+    pub range: bool,
+    /// The pattern names a module-scope constant (`MAX_SIZE`): `literal` is
+    /// the test `subject == MAX_SIZE`.
+    pub constant: bool,
+    /// The integers a literal or range pattern matches, smallest and largest,
+    /// when its bounds are integer or character literals: what an integer
+    /// `match` checks coverage with.
+    pub values: Option<(i128, i128)>,
 }
 
 impl CasePattern {

@@ -2275,3 +2275,32 @@ fn only_functions_join_across_module_files() {
     let err = error("overload_set_spans_module_variable", &files);
     assert!(err.contains("error: 'area' is exported twice by module 'geo'"), "{}", err);
 }
+
+#[test]
+fn patterns_compare_with_imported_and_private_constants() {
+    let limits = r#"
+export const LOW = 1;
+export const HIGH = 9;
+"#;
+    let main = r#"
+import limits;
+import [HIGH] from limits;
+const TOP = 100;
+
+rank(n: int): int {
+    return match (n) {
+        limits.LOW => 1,
+        HIGH => 2,
+        TOP => 3,
+        limits.LOW..HIGH => 4,
+        else => 0,
+    };
+}
+
+test(): int {
+    return rank(1) + rank(9) * 10 + rank(100) * 100 + rank(5) * 1000 + rank(50) * 10000;
+}
+"#;
+    let files = [("limits/module.pep", limits), ("main.pep", main)];
+    assert_eq!(run("pattern_constants", &files), 1 + 20 + 300 + 4000);
+}

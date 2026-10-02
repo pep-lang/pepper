@@ -3286,6 +3286,17 @@ fn guard_needs_a_condition() {
     );
 }
 
+#[test]
+fn range_pattern_already_handled() {
+    assert_eq!(
+        error_of("range_already_handled", "test(): int {\n    return match (3) {\n        1..9 => 1,\n        2..>5 => 2,\n        else => 0,\n    };\n}\n"),
+        "main.pep:4:9: error: pattern '2..>5' is already handled\n\
+         \x20   4 |         2..>5 => 2,\n\
+         \x20     |         ^~~~~\n\
+         note: the patterns before it match every value it does"
+    );
+}
+
 /// Source nested past `MAX_NESTING` fails at the token that crosses the
 /// limit: an opening parenthesis, or the operator of a long chain.
 #[test]

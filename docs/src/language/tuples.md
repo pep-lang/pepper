@@ -124,8 +124,10 @@ double parentheses, `match ((a, b))`, or match a tuple value, `match (at)`.
 ```
 
 - Each element takes a case of its enum (`Rock`, `Word(text)`), a literal
-  (`1`, `"x"`, `true`), another tuple pattern, `_` for any value, or a name.
-- A name binds its element, unless the element is an enum with a case of
+  (`1`, `"x"`, `true`), a [range or a constant](enums.md#ranges-and-constants)
+  (`0..9`, `LIMIT`), another tuple pattern, `_` for any value, or a name.
+- A name binds its element, unless it names a module-scope constant, which
+  the element is compared with, or the element is an enum with a case of
   that name, which it then matches. So in `(Circle, other)` over two shapes,
   `Circle` is a case and `other` holds the second shape.
 - An arm's patterns bind the same names, each at the same element: `(x, 0),
@@ -134,7 +136,8 @@ double parentheses, `match ((a, b))`, or match a tuple value, `match (at)`.
 - The arms must handle every value unless there is an `else`. A missing
   value is named with an example: ``match on '(Shape, int)' does not handle
   '(Line, _)'``. Only enum cases and `true`/`false` can be listed in full;
-  other literals need a pattern with `_` or a name at that element.
+  other literals and ranges need a pattern with `_` or a name at that
+  element.
 - A pattern that the arms before it already cover is an error, and an
   `else` after arms that cover everything is a warning.
 - `value is (4, column)` tests one tuple pattern, and binds its names as

@@ -924,7 +924,23 @@ pub struct Pattern {
     /// The names bound to the case's values; `None` without parentheses. A
     /// binding named `_` skips its value.
     pub bindings: Option<Vec<(String, Span)>>,
+    /// A range pattern (`1..9`, `'a'..>'z'`): `literal` is its start and
+    /// this its end.
+    #[serde(default)]
+    pub range: Option<PatternRange>,
+    /// Set by module linking when this name (`MAX_SIZE`, or `limits.MAX`
+    /// qualified by a module) names a module-scope constant: the constant's
+    /// linked name. The pattern then compares with it, like a literal.
+    #[serde(default)]
+    pub constant: Option<String>,
     pub span: Span,
+}
+
+/// The end of a range pattern: `..end` or, `inclusive`, `..>end`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PatternRange {
+    pub end: Expression,
+    pub inclusive: bool,
 }
 
 impl Pattern {
@@ -932,7 +948,7 @@ impl Pattern {
     /// which binds the element unless the element is an enum with a case of
     /// that name.
     pub fn is_bare_name(&self) -> bool {
-        self.literal.is_none() && self.elements.is_none() && self.qualifier.is_none() && self.bindings.is_none()
+        self.literal.is_none() && self.elements.is_none() && self.qualifier.is_none() && self.bindings.is_none() && self.constant.is_none()
     }
 
     /// This pattern and every pattern nested in it, outermost first.
@@ -1599,7 +1615,10 @@ fn guard_text(guard: &Option<Expression>) -> String {
 impl Display for Pattern {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(literal) = &self.literal {
-            return write!(f, "{}", literal);
+            return match &self.range {
+                Some(r) => write!(f, "{}{}{}", literal, if r.inclusive { "..>" } else { ".." }, r.end),
+                None => write!(f, "{}", literal),
+            };
         }
         if let Some(elements) = &self.elements {
             let shown: Vec<String> = elements.iter().map(|e| e.to_string()).collect();

@@ -1438,6 +1438,8 @@ fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Spa
         case: name,
         case_span: span,
         bindings: None,
+        range: None,
+        constant: None,
         span,
     };
     let mut elements: Vec<Pattern> =
@@ -1458,6 +1460,8 @@ fn format_arguments(input: &mut &str, start: usize, paren: usize, name_span: Spa
             case: String::new(),
             case_span: tuple_span,
             bindings: None,
+            range: None,
+            constant: None,
             span: tuple_span,
         }],
         value: join_parts(parts, span),
@@ -3003,6 +3007,7 @@ fn match_arrow(input: &mut &str) -> Result<()> {
 /// `false`; or a tuple pattern of two or more patterns, `(Case, x, 0)`.
 fn pattern(input: &mut &str) -> Result<Pattern> {
     let start = pos(input);
+    let whole = *input;
     if input.starts_with('(') {
         *input = &input[1..];
         let mut elements = vec![];
@@ -3027,6 +3032,8 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
             case: String::new(),
             case_span: span,
             bindings: None,
+            range: None,
+            constant: None,
             span,
         });
     }
@@ -3037,7 +3044,19 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
     if literal_start {
         let literal = primary_expression(input)?;
         let span = literal.span();
-        return Ok(Pattern { literal: Some(literal), elements: None, qualifier: None, case: String::new(), case_span: span, bindings: None, span });
+        let range = pattern_range(input)?;
+        let span = Span { start: span.start, end: range.as_ref().map_or(span.end, |r| r.end.span().end) };
+        return Ok(Pattern {
+            literal: Some(literal),
+            elements: None,
+            qualifier: None,
+            case: String::new(),
+            case_span: span,
+            bindings: None,
+            range,
+            constant: None,
+            span,
+        });
     }
     let mut segments = vec![];
     loop {
@@ -3049,6 +3068,24 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
             continue;
         }
         break;
+    }
+    // A range from a named constant: `MIN..MAX`, `limits.LOW..>9`.
+    if pattern_range(&mut { *input })?.is_some() {
+        *input = whole;
+        let low = nested(input, unary)?;
+        let range = pattern_range(input)?;
+        let span = Span { start, end: pos(input) };
+        return Ok(Pattern {
+            literal: Some(low),
+            elements: None,
+            qualifier: None,
+            case: String::new(),
+            case_span: span,
+            bindings: None,
+            range,
+            constant: None,
+            span,
+        });
     }
     let (case, case_span) = segments.pop().expect("one segment");
     let qualifier = segments.first().map(|(_, first)| TypeName {
@@ -3080,7 +3117,36 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         *input = &input[1..];
         bindings = Some(names);
     }
-    Ok(Pattern { literal: None, elements: None, qualifier, case, case_span, bindings, span: Span { start, end: pos(input) } })
+    Ok(Pattern {
+        literal: None,
+        elements: None,
+        qualifier,
+        case,
+        case_span,
+        bindings,
+        range: None,
+        constant: None,
+        span: Span { start, end: pos(input) },
+    })
+}
+
+/// The end of a range pattern after its start: `..end` (up to but not
+/// including `end`) or `..>end` (including it). The end is a literal or a
+/// constant (`-1`, `'z'`, `MAX`, `limits.MAX`).
+fn pattern_range(input: &mut &str) -> Result<Option<PatternRange>> {
+    let mut rest = *input;
+    ws(&mut rest)?;
+    let inclusive = if rest.starts_with("..>") {
+        true
+    } else if rest.starts_with("..") && !rest.starts_with("...") {
+        false
+    } else {
+        return Ok(None);
+    };
+    *input = &rest[if inclusive { 3 } else { 2 }..];
+    ws(input)?;
+    let end = nested(input, unary).map_err(|_| cut_expecting(input, "the end of the range"))?;
+    Ok(Some(PatternRange { end, inclusive }))
 }
 
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {

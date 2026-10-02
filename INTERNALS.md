@@ -623,6 +623,16 @@ with no extension, and `module_name()` is the output's stem.
     (`bind_in_expression`; a closure there may not use one). Without an
     `else`, the chain ends in `Expression::NoMatch`. An `is` test anywhere
     else is a `WithSubject` around a single test, and may not bind.
+  - A range pattern (`1..9`, `ast::Pattern::range`) carries the test
+    `subject >= start && subject < end` (`<=` for `..>`) in
+    `CasePattern::literal`, with `range` set. A bare pattern name that module
+    linking resolved to a module-scope variable (`Rewriter::
+    visit_pattern_name`, the scope walk's `visit_pattern_values` hook, sets
+    `ast::Pattern::constant` to its linked name) carries `subject == NAME`.
+    `CasePattern::values` holds the integers a literal or range covers when
+    its bounds are literals; `lower_matches` collects them per `match`
+    (`Coverage::intervals`, `covers`) to report a covered pattern and to
+    accept an integer `match` whose patterns cover its type without `else`.
   - An arm's guard (`Circle(r) if r > 10`) makes its test
     `MatchArm(...) && guard` (`arm_test`), the `MatchArmTest` marked
     `guarded`; the guard reads the arm's names as `CaseValue`s, as a `match`

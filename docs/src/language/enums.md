@@ -227,7 +227,37 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   using `==`. Literals cannot list every value, so such a `match` needs an
   `else` arm, except on a `bool` that handles both `true` and `false`.
   Matching the same literal twice is an error. A match on an enum takes its
-  case names, not literals, and a match on `int` takes literals, not names.
+  case names, not literals, and a match on `int` takes literals, not names
+  (except [constants](#ranges-and-constants)).
+
+## Ranges and constants
+
+A `match` on an integer or a character can compare with a **range** of
+values, and a `match` on an integer, a character or a `bool` with a
+module-scope **constant**:
+
+```pepper
+{{#include ../../examples/enums-ranges.pep}}
+```
+
+- `start..end` matches from `start` up to but not including `end`, and
+  `start..>end` includes `end`, as [ranges](iteration.md) do elsewhere.
+  Each bound is a literal (`-1`, `'z'`) or a constant (`MIN..MAX`).
+  Ranges match integers and characters only, not `bool` or `String`.
+- A name that is a module-scope constant (`const LIMIT = 100;`, declared in
+  the file or imported, or `limits.MAX` through a module) compares the value
+  with it, like a literal. A local variable is not a pattern; compare with
+  it in a [guard](#guards) instead (`n if n == limit`).
+- Inside a [tuple pattern](tuples.md#matching-tuples), a range or a
+  constant compares its element (`(0..LIMIT, _)`), and any other bare name
+  binds it, as before.
+- When every bound is a literal, the compiler knows which values a pattern
+  matches: a pattern whose values the earlier arms already match is an
+  error (`2..>5` after `1..9`), and a `match` whose ranges and literals
+  cover every value of its type (`0..128` and `128..>255` for a `u8`) needs
+  no `else`. A pattern with a constant bound covers nothing for this check.
+- A `match` on an enum takes its cases, not ranges or constants, even a
+  constant holding one of its cases.
 
 ## Guards
 
@@ -263,8 +293,7 @@ the next arm is tried, as if this one had not matched.
 - A case's values bind names only: a pattern cannot nest inside a case
   (`Value(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
   inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).
-  Patterns cannot match ranges (`1..9`) yet. A literal pattern is a
-  literal, not a named constant.
+  A constant is a pattern only when it is declared at module scope.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:
   `c.name` without the call is an error ("'name' is a method of 'Color':

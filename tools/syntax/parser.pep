@@ -1470,6 +1470,7 @@ struct Parser {
             or token.kind == TokenKind.Character
             or (token.is("-") and _peek_at(1).kind == TokenKind.Number and _adjacent(1))) {
             node.add(_primary());
+            _pattern_range(node);
             return node;
         }
         _expect_name(node, "a case name");
@@ -1478,6 +1479,10 @@ struct Parser {
             _take(node);
         }
         if (_failed) {
+            return node;
+        }
+        if (_at("..") or _at("..>")) {
+            _pattern_range(node);
             return node;
         }
         if (!_at("(")) {
@@ -1497,6 +1502,15 @@ struct Parser {
         }
         _expect(node, ")");
         return node;
+    }
+
+    # The end of a range pattern, `..end` or `..>end`, when one follows.
+    _pattern_range(node: Node) {
+        if (_failed or !(_at("..") or _at("..>"))) {
+            return;
+        }
+        _take(node);
+        node.add(_unary());
     }
 
     # Whether a variable node has an `= value`.

@@ -582,15 +582,46 @@ macro_rules! scope_walker {
             }
 
             /// A pattern's qualifier, and its bindings into the innermost scope.
+            /// A bare name in a pattern (`MAX`, or `limits.MAX`) that is not
+            /// bound locally: linking marks it a constant pattern when it
+            /// names a module-scope constant ([`Pattern::constant`]).
+            fn visit_pattern_name(&mut self, _p: &$($m)? Pattern) {}
+
             fn visit_pattern(&mut self, p: &$($m)? Pattern) {
+                self.visit_pattern_values(p);
                 self.visit_pattern_types(p);
                 for (name, _) in p.bound_names() {
                     self.scopes_mut().bind_value(&name, false);
                 }
             }
 
+            /// The values in `p` and its nested patterns: a range's bounds,
+            /// and the names that may be constants.
+            fn visit_pattern_values(&mut self, p: &$($m)? Pattern) {
+                if let Some(elements) = &$($m)? p.elements {
+                    for e in elements {
+                        self.visit_pattern_values(e);
+                    }
+                    return;
+                }
+                if let Some(range) = &$($m)? p.range {
+                    if let Some(start) = &$($m)? p.literal {
+                        self.visit_expression(start);
+                    }
+                    self.visit_expression(&$($m)? range.end);
+                    return;
+                }
+                let single_qualifier = p.qualifier.as_ref().is_none_or(|q| !q.name.contains('.'));
+                if p.literal.is_none() && p.bindings.is_none() && single_qualifier && (p.qualifier.is_some() || !self.is_local(&p.case)) {
+                    self.visit_pattern_name(p);
+                }
+            }
+
             /// The enums named before cases in `p` and its nested patterns.
             fn visit_pattern_types(&mut self, p: &$($m)? Pattern) {
+                if p.constant.is_some() {
+                    return;
+                }
                 if let Some(q) = &$($m)? p.qualifier {
                     self.visit_type_name(q);
                 }

@@ -1239,27 +1239,41 @@ fn case_pattern(p: &ast::Pattern, subject: &Expression) -> Result<CasePattern, D
             bindings: None,
             literal: None,
             elements: Some(elements),
+            range: false,
+            constant: false,
+            values: None,
         });
     }
-    let literal = match &p.literal {
-        Some(l) => Some(Expression::Binary {
-            op: BinaryOp::Equal,
-            lhs: Box::new(subject.clone()),
-            rhs: Box::new(expression(l)?),
-            loc: loc(p.case_span),
-        }),
-        None => None,
+    let at = loc(p.case_span);
+    let compare = |op: BinaryOp, value: Expression| Expression::Binary { op, lhs: Box::new(subject.clone()), rhs: Box::new(value), loc: at };
+    let (literal, values) = match (&p.literal, &p.range, &p.constant) {
+        (Some(start), Some(range), _) => {
+            let low = compare(BinaryOp::GreaterEqual, expression(start)?);
+            let op = if range.inclusive { BinaryOp::LessEqual } else { BinaryOp::Less };
+            let high = compare(op, expression(&range.end)?);
+            let test = Expression::Binary { op: BinaryOp::LogicalAnd, lhs: Box::new(low), rhs: Box::new(high), loc: at };
+            let values = constant_integer(start)
+                .zip(constant_integer(&range.end))
+                .map(|(low, high)| (low, if range.inclusive { high } else { high - 1 }));
+            (Some(test), values)
+        }
+        (Some(l), None, _) => (Some(compare(BinaryOp::Equal, expression(l)?)), constant_integer(l).map(|v| (v, v))),
+        (None, _, Some(linked)) => {
+            let value = Expression::SymbolRef { id: linked.clone(), ty: TypeName::auto(), loc: at };
+            (Some(compare(BinaryOp::Equal, value)), None)
+        }
+        (None, _, None) => (None, None),
     };
     Ok(CasePattern {
-        qualifier: p.qualifier.as_ref().map(type_name_from),
-        case: match &p.literal {
-            Some(l) => l.to_string(),
-            None => p.case.clone(),
-        },
-        loc: loc(p.case_span),
+        qualifier: if p.constant.is_some() { None } else { p.qualifier.as_ref().map(type_name_from) },
+        case: if p.literal.is_some() || p.constant.is_some() { p.to_string() } else { p.case.clone() },
+        loc: if p.range.is_some() { loc(p.span) } else { at },
         bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
         literal,
         elements: None,
+        range: p.range.is_some(),
+        constant: p.constant.is_some(),
+        values,
     })
 }
 
@@ -2381,7 +2395,7 @@ fn enum_method(decl: &ast::StructDecl, m: &ast::FunctionDecl) -> Result<Function
 }
 
 /// The smallest and largest value of an integer type.
-fn integer_range(name: &str) -> (i128, i128) {
+pub(crate) fn integer_range(name: &str) -> (i128, i128) {
     match name {
         "i8" | "char" => (i8::MIN as i128, i8::MAX as i128),
         "u8" | "byte" => (0, u8::MAX as i128),

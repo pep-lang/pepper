@@ -25,7 +25,7 @@
 
 use crate::passes::platform::keep;
 use crate::scope_walk::{ScopeWalkMut, Scopes};
-use pepper_parser::ast::{Declaration, Expression, FunctionDecl, Module, Span, TypeName};
+use pepper_parser::ast::{Declaration, Expression, FunctionDecl, Module, Pattern, Span, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 use pepper_parser::namespace;
 use std::collections::{HashMap, HashSet};
@@ -794,6 +794,17 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             })
         })
         .collect();
+    let linked_constants: HashSet<String> = files
+        .iter()
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let own = &own[i];
+            named_decls(&f.module).filter_map(move |d| match d {
+                Declaration::Variable(v) => Some(own.get(&v.name).unwrap_or(&v.name).clone()),
+                _ => None,
+            })
+        })
+        .collect();
     let mut scopes = vec![];
     for i in 0..n {
         let named = named_bindings(i, files, &own[i], &bindings[i], &exports, &prelude);
@@ -801,6 +812,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             overrides: &overrides,
             override_decls: HashSet::new(),
             structs: &linked_structs,
+            constants: &linked_constants,
             file: i,
             own: &own[i],
             bindings: &bindings[i],
@@ -1288,6 +1300,9 @@ struct Rewriter<'a, 'e> {
     override_decls: HashSet<usize>,
     /// Every struct of the program, by its linked (possibly mangled) name.
     structs: &'a HashSet<String>,
+    /// Every module-scope variable of the program, by its linked name: the
+    /// names a pattern compares with (`MAX_SIZE =>`).
+    constants: &'a HashSet<String>,
     /// Other files whose exported extensions this file may use.
     extensions: &'a HashSet<usize>,
     scopes: Scopes,
@@ -1539,6 +1554,35 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
             }
             *name = ty.to_string();
         }
+    }
+
+    fn visit_pattern_name(&mut self, p: &mut Pattern) {
+        let span = p.case_span;
+        let linked = match &p.qualifier {
+            None => match self.own.get(&p.case) {
+                Some(c) => c.clone(),
+                None => match resolve_imported(&p.case, self.bindings, self.prelude) {
+                    Resolution::Declared(c, _) => c,
+                    _ => return,
+                },
+            },
+            Some(q) => {
+                let Some(target) = self.qualifier(&q.name) else { return };
+                match self.exports[target].get(&p.case) {
+                    Some(c) => c.clone(),
+                    None => return,
+                }
+            }
+        };
+        if !self.constants.contains(&linked) {
+            return;
+        }
+        // Record the reference as any other use of the constant.
+        let renamed = match p.qualifier.clone() {
+            None => self.unqualified(&p.case.clone(), span, true),
+            Some(q) => self.qualified(self.qualifier(&q.name).expect("checked above"), &q.name, &p.case.clone(), span, true),
+        };
+        p.constant = Some(renamed.unwrap_or(linked));
     }
 
     fn visit_symbol(&mut self, id: &mut String, span: Span) {

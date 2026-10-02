@@ -1,5 +1,5 @@
-//! Patterns in `match` beyond a case and its bindings: guards
-//! (docs/src/language/enums.md, "Guards").
+//! Patterns in `match` beyond a case and its bindings: guards, ranges and
+//! constants (docs/src/language/enums.md).
 
 use crate::support::{compile_error, jit_census, sema};
 
@@ -151,4 +151,88 @@ test(): int {
 }
 "#;
     assert_eq!(jit_census(src), (1, 0));
+}
+
+#[test]
+fn ranges_and_constants_match_integers_and_characters() {
+    let src = r#"
+const LIMIT = 10;
+
+size(n: int): int {
+    return match (n) {
+        0 => 0,
+        1..5 => 1,
+        5..>9 => 2,
+        LIMIT => 3,
+        -9..0 => 4,
+        else => 5,
+    };
+}
+
+kind(c: char): int {
+    return match (c) {
+        'a'..>'z', 'A'..>'Z' => 1,
+        '0'..>'9' => 2,
+        else => 3,
+    };
+}
+
+pair(t: (int, bool)): int {
+    return match (t) {
+        (0..LIMIT, true) => 1,
+        (LIMIT, _) => 2,
+        (x, _) => x,
+    };
+}
+
+test(): int {
+    var total = size(0) + size(4) * 10 + size(5) * 100 + size(9) * 1000 + size(10) * 10000;
+    total += size(-1) * 100000 + size(11) * 1000000;
+    total += kind('q') + kind('Q') * 10 + kind('5') * 100 + kind('!') * 1000;
+    total += pair((3, true)) + pair((10, false)) * 10 + pair((42, true));
+    return total;
+}
+"#;
+    let expected = 10 + 200 + 2000 + 30000 + 400000 + 5000000 + 1 + 10 + 200 + 3000 + 1 + 20 + 42;
+    assert_eq!(jit_census(src), (expected, 0));
+}
+
+#[test]
+fn ranges_that_cover_every_value_need_no_else() {
+    let src = r#"
+half(b: u8): int {
+    return match (b) {
+        0..128 => 0,
+        128..>255 => 1,
+    };
+}
+
+test(): int {
+    u8 high = 200;
+    return half(3) + half(high) * 10;
+}
+"#;
+    assert_eq!(jit_census(src), (10, 0));
+    let src = "test(): int { u8 b = 1; return match (b) { 0..>255 => 1, else => 0 }; }";
+    let module = sema(src).unwrap_or_else(|e| panic!("{e}"));
+    assert!(module.warnings.iter().any(|w| w.message == "'else' is unreachable: every value of 'u8' is handled"), "{:?}", module.warnings);
+    let err = compile_error("test(): int { u8 b = 1; return match (b) { 0..255 => 1 }; }");
+    assert!(err.contains("match on 'u8' needs an 'else' arm"), "{err}");
+}
+
+#[test]
+fn range_and_constant_pattern_errors() {
+    let err = compile_error("test(): int { return match (3) { 1..9 => 1, 4 => 2, else => 0 }; }");
+    assert!(err.contains("pattern '4' is already handled"), "{err}");
+    let err = compile_error("test(): int { return match (3) { 1..9 => 1, 2..>5 => 2, else => 0 }; }");
+    assert!(err.contains("pattern '2..>5' is already handled"), "{err}");
+    let err = compile_error("test(): int { return match (3) { 9..1 => 1, else => 0 }; }");
+    assert!(err.contains("range '9..1' matches no value"), "{err}");
+    let err = compile_error("test(): int { return match (\"a\") { \"a\"..\"c\" => 1, else => 0 }; }");
+    assert!(err.contains("a range cannot match a value of 'String'"), "{err}");
+    let err = compile_error("enum Color { Red, Green }\nconst FAVORITE = Color.Red;\ntest(): int { return match (Color.Green) { FAVORITE => 1, else => 0 }; }");
+    assert!(err.contains("a constant cannot match a value of 'Color': name its cases"), "{err}");
+    // A name that is not a module-scope constant is not a pattern of an `int`.
+    let err = compile_error("test(): int { var n = 3; return match (4) { n => 1, else => 0 }; }");
+    assert!(err.contains("'n' is not a literal"), "{err}");
 }
