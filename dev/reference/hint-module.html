@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -183,35 +183,30 @@
                     <main>
                         <!-- Generated from runtime/hint/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="hintmodulepep"><a class="header" href="#hintmodulepep">hint/module.pep</a></h1>
-<p>Hints to the optimizer: which way a branch usually goes, and memory a
-loop will soon read or write.</p>
+<p>Hints to the optimizer about memory a loop will soon read or write.</p>
 <p>Bring it in with <code>import hint</code>. A hint never changes what a program
-computes, only how fast: the optimizer lays out the likely path as the
-straight-line one, and a prefetch starts loading a cache line early. At
-<code>-O0</code>, and where the CPU has no prefetch instruction, they cost little
-and do nothing.</p>
+computes, only how fast: a prefetch starts loading a cache line early.
+Where the CPU has no prefetch instruction it does nothing.</p>
+<p>To say which way a branch usually goes, write <code>[Likely]</code> or
+<code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm; <code>likely</code> and <code>unlikely</code>
+here are deprecated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import hint;
 
     main(): int {
-        var values = [3, 1, 2];
-        var total = 0;
-        for (var value in values) {
-            if (hint.unlikely(value &lt; 0)) {
-                return 1;
-            }
-            total += value;
-        }
-        assert(total == 6, "summed");
+        var text = "a long text that a loop will read";
+        hint.prefetch_read(text.c_str());
+        assert(text.length &gt; 0, "a prefetch changes nothing");
         return 0;
     }
 </code></pre>
 <p>Source: <code>runtime/hint/module.pep</code></p>
 <h2 id="likely"><a class="header" href="#likely">likely</a></h2>
-<pre><code class="language-pepper">likely(condition: bool): bool
+<pre><code class="language-pepper">[Deprecated("write '[Likely]' above the 'if' instead")] likely(condition: bool): bool
 </code></pre>
-<p>Returns <code>condition</code>, telling the optimizer it is usually true, so the
-code for the true case is laid out as the fast path (<code>llvm.expect</code>).</p>
+<p>Deprecated: write <code>[Likely]</code> above the <code>if</code> instead.</p>
+<p>Returns <code>condition</code>, telling the optimizer it is usually true
+(<code>llvm.expect</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition to test</li>
@@ -220,17 +215,12 @@ code for the true case is laid out as the fast path (<code>llvm.expect</code>).<
 <ul>
 <li><code>condition</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (hint.likely(index &lt; count)) {
-        # the common case
-    }
-</code></pre>
 <h2 id="unlikely"><a class="header" href="#unlikely">unlikely</a></h2>
-<pre><code class="language-pepper">unlikely(condition: bool): bool
+<pre><code class="language-pepper">[Deprecated("write '[Unlikely]' above the 'if' instead")] unlikely(condition: bool): bool
 </code></pre>
-<p>Returns <code>condition</code>, telling the optimizer it is usually false, so the
-code for the true case, such as error handling, is moved out of the
-fast path (<code>llvm.expect</code>).</p>
+<p>Deprecated: write <code>[Unlikely]</code> above the <code>if</code> instead.</p>
+<p>Returns <code>condition</code>, telling the optimizer it is usually false
+(<code>llvm.expect</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition to test</li>
@@ -239,11 +229,6 @@ fast path (<code>llvm.expect</code>).</p>
 <ul>
 <li><code>condition</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (hint.unlikely(length &gt; LIMIT)) {
-        return error;
-    }
-</code></pre>
 <h2 id="prefetch_read"><a class="header" href="#prefetch_read">prefetch_read</a></h2>
 <pre><code class="language-pepper">prefetch_read(address: __ptr&lt;void&gt;)
 </code></pre>

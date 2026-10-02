@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -954,8 +954,9 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Hints for the optimizer (<code>likely</code>, <code>unlikely</code>, <code>prefetch_read</code>) are in the
-<a href="hints.html"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
+<p>Hints for the optimizer are <a href="control-flow.html#branch-hints-likely-and-unlikely"><code>[Likely]</code> and
+<code>[Unlikely]</code></a> on a
+branch and the prefetches of the <a href="hints.html"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
 extern; see <a href="c-interop.html#llvm-intrinsics">LLVM intrinsics</a>.</p>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <pre><code class="language-pepper"># Operators on numbers and booleans.

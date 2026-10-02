@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -315,6 +315,7 @@ the code it replaces:</p>
 <tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
 <tr><td>A parameter’s former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="functions.html#other-names-for-a-parameter">named arguments</a>)</td></tr>
 <tr><td><code>Copyable&lt;T&gt;</code> implemented as <code>copy(copies: Copies): T</code>, with <code>copies.copy(x)</code> and <code>copies.register(original, made)</code></td><td><code>copy(): T</code>, with <code>copy(x)</code> and <code>register_copy(original, made)</code> (see <a href="memory.html">copying</a>)</td></tr>
+<tr><td><code>hint.likely(condition)</code>, <code>hint.unlikely(condition)</code></td><td><code>[Likely]</code> or <code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm (see <a href="control-flow.html#branch-hints-likely-and-unlikely">branch hints</a>)</td></tr>
 </tbody>
 </table>
 </div>

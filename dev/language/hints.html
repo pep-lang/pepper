@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -182,53 +182,49 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="optimizer-hints"><a class="header" href="#optimizer-hints">Optimizer hints</a></h1>
-<p>The <code>hint</code> module tells the optimizer what it cannot see in the code:
-which way a branch usually goes, and which memory a loop will soon touch.
-A hint never changes what a program computes, only how fast it runs, so a
-wrong hint costs speed and nothing else.</p>
+<p>Hints tell the optimizer what it cannot see in the code. A hint never
+changes what a program computes, only how fast it runs, so a wrong hint
+costs speed and nothing else.</p>
+<ul>
+<li><strong>Which way a branch goes</strong>: write <code>[Likely]</code> or <code>[Unlikely]</code> above the
+<code>if</code> or <code>match</code> arm (see <a href="control-flow.html#branch-hints-likely-and-unlikely">branch hints</a>).</li>
+<li><strong>Memory a loop will soon touch</strong>: the <code>hint</code> module’s prefetches.</li>
+</ul>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Function</th><th>Tells the optimizer</th></tr>
 </thead>
 <tbody>
-<tr><td><code>hint.likely(condition)</code></td><td><code>condition</code> is usually true: lay out the true case as the straight-line path.</td></tr>
-<tr><td><code>hint.unlikely(condition)</code></td><td><code>condition</code> is usually false: move the true case, such as error handling, out of the way.</td></tr>
 <tr><td><code>hint.prefetch_read(address)</code></td><td><code>address</code> will be read soon: start loading its cache line now.</td></tr>
 <tr><td><code>hint.prefetch_write(address)</code></td><td><code>address</code> will be written soon.</td></tr>
 </tbody>
 </table>
 </div>
-<p><code>likely</code> and <code>unlikely</code> return their argument, so they wrap the condition
-of an <code>if</code> or a loop in place. A prefetch never faults, even for an address
-that is not mapped, and does nothing where the CPU has no prefetch
-instruction.</p>
-<pre><code class="language-pepper"># Optimizer hints: which way a branch usually goes, and memory a loop will
-# soon read.
+<p>A prefetch never faults, even for an address that is not mapped, and does
+nothing where the CPU has no prefetch instruction.</p>
+<pre><code class="language-pepper"># Prefetching: start loading memory a loop will soon read.
 import hint;
 
 main(): int {
-    var values = [3, 1, 2];
-    var total = 0;
-    for (var value in values) {
-        # Negative values are rare: keep the loop's fast path free of them.
-        if (hint.unlikely(value &lt; 0)) {
-            return 1;
-        }
-        total += value;
-    }
-    assert(total == 6, "summed");
-
     var text = "a long text that a loop will read";
     hint.prefetch_read(text.c_str());
-    assert(text.length &gt; 0, "a hint changes nothing the program computes");
+    var spaces = 0;
+    for (var index in 0..text.length) {
+        if (text.byte_at(index) == ' ') {
+            spaces += 1;
+        }
+    }
+    assert(spaces == 7, "a hint changes nothing the program computes");
     return 0;
 }
 </code></pre>
-<p>They are LLVM’s <code>llvm.expect</code> and <code>llvm.prefetch</code> intrinsics (see
-<a href="c-interop.html#llvm-intrinsics">LLVM intrinsics</a>). Hints matter only with
+<p>The prefetches are LLVM’s <code>llvm.prefetch</code> intrinsic (see
+<a href="c-interop.html#llvm-intrinsics">LLVM intrinsics</a>). They matter only with
 optimization (<code>-O2</code> and up, where the runtime’s functions inline into the
 caller); at <code>-O0</code> they cost a call and do nothing.</p>
+<p><code>hint.likely(condition)</code> and <code>hint.unlikely(condition)</code> are deprecated:
+each use warns and suggests the attribute.</p>
 
                     </main>
 

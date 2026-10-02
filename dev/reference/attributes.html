@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -261,6 +261,16 @@ there is none.</p>
 <pre><code class="language-pepper">const condition: String
 </code></pre>
 <p>The condition as written, such as <code>!OS(Windows)</code>.</p>
+<h2 id="likely"><a class="header" href="#likely">Likely</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Likely
+</code></pre>
+<p>Marks the <code>if</code> or <code>match</code> arm below it as the branch usually taken,
+so the optimizer lays it out as the straight-line path.</p>
+<h2 id="unlikely"><a class="header" href="#unlikely">Unlikely</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Unlikely
+</code></pre>
+<p>Marks the <code>if</code> or <code>match</code> arm below it as a branch rarely taken, such
+as error handling, so the optimizer moves it out of the fast path.</p>
 <h2 id="notcopyable"><a class="header" href="#notcopyable">NotCopyable</a></h2>
 <pre><code class="language-pepper">[Attribute] struct NotCopyable
 </code></pre>

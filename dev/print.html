@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4c7b0bab.js"></script>
@@ -1667,8 +1667,9 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Hints for the optimizer (<code>likely</code>, <code>unlikely</code>, <code>prefetch_read</code>) are in the
-<a href="#optimizer-hints"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
+<p>Hints for the optimizer are <a href="#branch-hints-likely-and-unlikely"><code>[Likely]</code> and
+<code>[Unlikely]</code></a> on a
+branch and the prefetches of the <a href="#optimizer-hints"><code>hint</code> module</a>. Any other LLVM intrinsic can be declared as an
 extern; see <a href="#llvm-intrinsics">LLVM intrinsics</a>.</p>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <pre><code class="language-pepper"># Operators on numbers and booleans.
@@ -3104,6 +3105,72 @@ compiler checks that every case is handled:</p>
 }
 </code></pre>
 <p><a href="#match-1">Enums and <code>match</code></a> covers patterns and the <code>else</code> arm.</p>
+<h2 id="branch-hints-likely-and-unlikely"><a class="header" href="#branch-hints-likely-and-unlikely">Branch hints: <code>[Likely]</code> and <code>[Unlikely]</code></a></h2>
+<p><code>[Likely]</code> or <code>[Unlikely]</code> on the line above an <code>if</code>, an <code>else if</code>’s <code>if</code>
+or a <code>match</code> arm (the <code>else</code> arm too) says how often that branch runs. The
+optimizer keeps the likely path as straight-line code and moves the
+unlikely one, such as error handling, out of its way. A hint never changes
+what the program computes; a wrong one costs only speed.</p>
+<pre><code class="language-pepper"># Branch hints: `[Likely]` and `[Unlikely]` say which way a branch usually
+# goes, so the optimizer keeps the common path straight.
+enum Reading {
+    Value(celsius: double),
+    Missing,
+}
+
+parse_digit(c: char): int {
+    [Unlikely]
+    if (c &lt; '0' || c &gt; '9') {
+        return -1;
+    } else [Likely] if (c != '0') {
+        return c - '0';
+    }
+    return 0;
+}
+
+describe(reading: Reading): String {
+    match (reading) {
+        [Likely]
+        Value(celsius) =&gt; {
+            return $"{celsius}";
+        }
+        [Unlikely]
+        Missing =&gt; {
+            return "missing";
+        }
+    }
+}
+
+main(): int {
+    assert(parse_digit('7') == 7, "a digit");
+    assert(parse_digit('x') == -1, "not a digit");
+    assert(describe(Reading.Missing) == "missing", "the rare arm still runs");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><code>[Likely]</code> above an <code>if</code> marks its block, so its <code>else</code> is the unlikely
+side; <code>[Unlikely]</code> marks the block as the rare one. To mark an <code>else</code>,
+mark the <code>if</code> the other way.</p>
+</li>
+<li>
+<p>In an <code>else if</code>, the attribute goes between <code>else</code> and <code>if</code>: <code>} else [Unlikely] if (x) {</code>.</p>
+</li>
+<li>
+<p>A hint is an LLVM branch weight (2000 to 1, as clang gives
+<code>__builtin_expect</code>), so it matters with optimization (<code>-O1</code> and up).</p>
+</li>
+<li>
+<p>Only one of them, with no arguments, can mark a branch, and no other
+attribute can:</p>
+<pre><code class="language-text">main.pep:3:5: error: 'Target' cannot mark an 'if'; only '[Likely]' or '[Unlikely]' can
+    3 |     [Target(OS(Linux))]
+      |     ^~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+</ul>
+<p><code>while</code> loops and the arms of a <code>match</code> expression take no hint yet.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means
@@ -14943,53 +15010,49 @@ when hashing secrets. There is no HMAC yet.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="optimizer-hints"><a class="header" href="#optimizer-hints">Optimizer hints</a></h1>
-<p>The <code>hint</code> module tells the optimizer what it cannot see in the code:
-which way a branch usually goes, and which memory a loop will soon touch.
-A hint never changes what a program computes, only how fast it runs, so a
-wrong hint costs speed and nothing else.</p>
+<p>Hints tell the optimizer what it cannot see in the code. A hint never
+changes what a program computes, only how fast it runs, so a wrong hint
+costs speed and nothing else.</p>
+<ul>
+<li><strong>Which way a branch goes</strong>: write <code>[Likely]</code> or <code>[Unlikely]</code> above the
+<code>if</code> or <code>match</code> arm (see <a href="#branch-hints-likely-and-unlikely">branch hints</a>).</li>
+<li><strong>Memory a loop will soon touch</strong>: the <code>hint</code> module’s prefetches.</li>
+</ul>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Function</th><th>Tells the optimizer</th></tr>
 </thead>
 <tbody>
-<tr><td><code>hint.likely(condition)</code></td><td><code>condition</code> is usually true: lay out the true case as the straight-line path.</td></tr>
-<tr><td><code>hint.unlikely(condition)</code></td><td><code>condition</code> is usually false: move the true case, such as error handling, out of the way.</td></tr>
 <tr><td><code>hint.prefetch_read(address)</code></td><td><code>address</code> will be read soon: start loading its cache line now.</td></tr>
 <tr><td><code>hint.prefetch_write(address)</code></td><td><code>address</code> will be written soon.</td></tr>
 </tbody>
 </table>
 </div>
-<p><code>likely</code> and <code>unlikely</code> return their argument, so they wrap the condition
-of an <code>if</code> or a loop in place. A prefetch never faults, even for an address
-that is not mapped, and does nothing where the CPU has no prefetch
-instruction.</p>
-<pre><code class="language-pepper"># Optimizer hints: which way a branch usually goes, and memory a loop will
-# soon read.
+<p>A prefetch never faults, even for an address that is not mapped, and does
+nothing where the CPU has no prefetch instruction.</p>
+<pre><code class="language-pepper"># Prefetching: start loading memory a loop will soon read.
 import hint;
 
 main(): int {
-    var values = [3, 1, 2];
-    var total = 0;
-    for (var value in values) {
-        # Negative values are rare: keep the loop's fast path free of them.
-        if (hint.unlikely(value &lt; 0)) {
-            return 1;
-        }
-        total += value;
-    }
-    assert(total == 6, "summed");
-
     var text = "a long text that a loop will read";
     hint.prefetch_read(text.c_str());
-    assert(text.length &gt; 0, "a hint changes nothing the program computes");
+    var spaces = 0;
+    for (var index in 0..text.length) {
+        if (text.byte_at(index) == ' ') {
+            spaces += 1;
+        }
+    }
+    assert(spaces == 7, "a hint changes nothing the program computes");
     return 0;
 }
 </code></pre>
-<p>They are LLVM’s <code>llvm.expect</code> and <code>llvm.prefetch</code> intrinsics (see
-<a href="#llvm-intrinsics">LLVM intrinsics</a>). Hints matter only with
+<p>The prefetches are LLVM’s <code>llvm.prefetch</code> intrinsic (see
+<a href="#llvm-intrinsics">LLVM intrinsics</a>). They matter only with
 optimization (<code>-O2</code> and up, where the runtime’s functions inline into the
 caller); at <code>-O0</code> they cost a call and do nothing.</p>
+<p><code>hint.likely(condition)</code> and <code>hint.unlikely(condition)</code> are deprecated:
+each use warns and suggests the attribute.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -16035,6 +16098,7 @@ the code it replaces:</p>
 <tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
 <tr><td>A parameter’s former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="#other-names-for-a-parameter">named arguments</a>)</td></tr>
 <tr><td><code>Copyable&lt;T&gt;</code> implemented as <code>copy(copies: Copies): T</code>, with <code>copies.copy(x)</code> and <code>copies.register(original, made)</code></td><td><code>copy(): T</code>, with <code>copy(x)</code> and <code>register_copy(original, made)</code> (see <a href="#memory-and-reference-counting">copying</a>)</td></tr>
+<tr><td><code>hint.likely(condition)</code>, <code>hint.unlikely(condition)</code></td><td><code>[Likely]</code> or <code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm (see <a href="#branch-hints-likely-and-unlikely">branch hints</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -31035,6 +31099,16 @@ there is none.</p>
 <pre><code class="language-pepper">const condition: String
 </code></pre>
 <p>The condition as written, such as <code>!OS(Windows)</code>.</p>
+<h2 id="likely"><a class="header" href="#likely">Likely</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Likely
+</code></pre>
+<p>Marks the <code>if</code> or <code>match</code> arm below it as the branch usually taken,
+so the optimizer lays it out as the straight-line path.</p>
+<h2 id="unlikely"><a class="header" href="#unlikely">Unlikely</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Unlikely
+</code></pre>
+<p>Marks the <code>if</code> or <code>match</code> arm below it as a branch rarely taken, such
+as error handling, so the optimizer moves it out of the fast path.</p>
 <h2 id="notcopyable"><a class="header" href="#notcopyable">NotCopyable</a></h2>
 <pre><code class="language-pepper">[Attribute] struct NotCopyable
 </code></pre>
@@ -31350,35 +31424,30 @@ then frees itself.</p>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/hint/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="hintmodulepep"><a class="header" href="#hintmodulepep">hint/module.pep</a></h1>
-<p>Hints to the optimizer: which way a branch usually goes, and memory a
-loop will soon read or write.</p>
+<p>Hints to the optimizer about memory a loop will soon read or write.</p>
 <p>Bring it in with <code>import hint</code>. A hint never changes what a program
-computes, only how fast: the optimizer lays out the likely path as the
-straight-line one, and a prefetch starts loading a cache line early. At
-<code>-O0</code>, and where the CPU has no prefetch instruction, they cost little
-and do nothing.</p>
+computes, only how fast: a prefetch starts loading a cache line early.
+Where the CPU has no prefetch instruction it does nothing.</p>
+<p>To say which way a branch usually goes, write <code>[Likely]</code> or
+<code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm; <code>likely</code> and <code>unlikely</code>
+here are deprecated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import hint;
 
     main(): int {
-        var values = [3, 1, 2];
-        var total = 0;
-        for (var value in values) {
-            if (hint.unlikely(value &lt; 0)) {
-                return 1;
-            }
-            total += value;
-        }
-        assert(total == 6, "summed");
+        var text = "a long text that a loop will read";
+        hint.prefetch_read(text.c_str());
+        assert(text.length &gt; 0, "a prefetch changes nothing");
         return 0;
     }
 </code></pre>
 <p>Source: <code>runtime/hint/module.pep</code></p>
-<h2 id="likely"><a class="header" href="#likely">likely</a></h2>
-<pre><code class="language-pepper">likely(condition: bool): bool
+<h2 id="likely-1"><a class="header" href="#likely-1">likely</a></h2>
+<pre><code class="language-pepper">[Deprecated("write '[Likely]' above the 'if' instead")] likely(condition: bool): bool
 </code></pre>
-<p>Returns <code>condition</code>, telling the optimizer it is usually true, so the
-code for the true case is laid out as the fast path (<code>llvm.expect</code>).</p>
+<p>Deprecated: write <code>[Likely]</code> above the <code>if</code> instead.</p>
+<p>Returns <code>condition</code>, telling the optimizer it is usually true
+(<code>llvm.expect</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition to test</li>
@@ -31387,17 +31456,12 @@ code for the true case is laid out as the fast path (<code>llvm.expect</code>).<
 <ul>
 <li><code>condition</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (hint.likely(index &lt; count)) {
-        # the common case
-    }
+<h2 id="unlikely-1"><a class="header" href="#unlikely-1">unlikely</a></h2>
+<pre><code class="language-pepper">[Deprecated("write '[Unlikely]' above the 'if' instead")] unlikely(condition: bool): bool
 </code></pre>
-<h2 id="unlikely"><a class="header" href="#unlikely">unlikely</a></h2>
-<pre><code class="language-pepper">unlikely(condition: bool): bool
-</code></pre>
-<p>Returns <code>condition</code>, telling the optimizer it is usually false, so the
-code for the true case, such as error handling, is moved out of the
-fast path (<code>llvm.expect</code>).</p>
+<p>Deprecated: write <code>[Unlikely]</code> above the <code>if</code> instead.</p>
+<p>Returns <code>condition</code>, telling the optimizer it is usually false
+(<code>llvm.expect</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition to test</li>
@@ -31406,11 +31470,6 @@ fast path (<code>llvm.expect</code>).</p>
 <ul>
 <li><code>condition</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (hint.unlikely(length &gt; LIMIT)) {
-        return error;
-    }
-</code></pre>
 <h2 id="prefetch_read"><a class="header" href="#prefetch_read">prefetch_read</a></h2>
 <pre><code class="language-pepper">prefetch_read(address: __ptr&lt;void&gt;)
 </code></pre>

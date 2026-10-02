@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f995f88c.js";
+            window.path_to_searchindex_js = "../searchindex-ad24beb3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4c7b0bab.js"></script>
@@ -307,6 +307,72 @@ compiler checks that every case is handled:</p>
 }
 </code></pre>
 <p><a href="enums.html#match">Enums and <code>match</code></a> covers patterns and the <code>else</code> arm.</p>
+<h2 id="branch-hints-likely-and-unlikely"><a class="header" href="#branch-hints-likely-and-unlikely">Branch hints: <code>[Likely]</code> and <code>[Unlikely]</code></a></h2>
+<p><code>[Likely]</code> or <code>[Unlikely]</code> on the line above an <code>if</code>, an <code>else if</code>’s <code>if</code>
+or a <code>match</code> arm (the <code>else</code> arm too) says how often that branch runs. The
+optimizer keeps the likely path as straight-line code and moves the
+unlikely one, such as error handling, out of its way. A hint never changes
+what the program computes; a wrong one costs only speed.</p>
+<pre><code class="language-pepper"># Branch hints: `[Likely]` and `[Unlikely]` say which way a branch usually
+# goes, so the optimizer keeps the common path straight.
+enum Reading {
+    Value(celsius: double),
+    Missing,
+}
+
+parse_digit(c: char): int {
+    [Unlikely]
+    if (c &lt; '0' || c &gt; '9') {
+        return -1;
+    } else [Likely] if (c != '0') {
+        return c - '0';
+    }
+    return 0;
+}
+
+describe(reading: Reading): String {
+    match (reading) {
+        [Likely]
+        Value(celsius) =&gt; {
+            return $"{celsius}";
+        }
+        [Unlikely]
+        Missing =&gt; {
+            return "missing";
+        }
+    }
+}
+
+main(): int {
+    assert(parse_digit('7') == 7, "a digit");
+    assert(parse_digit('x') == -1, "not a digit");
+    assert(describe(Reading.Missing) == "missing", "the rare arm still runs");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><code>[Likely]</code> above an <code>if</code> marks its block, so its <code>else</code> is the unlikely
+side; <code>[Unlikely]</code> marks the block as the rare one. To mark an <code>else</code>,
+mark the <code>if</code> the other way.</p>
+</li>
+<li>
+<p>In an <code>else if</code>, the attribute goes between <code>else</code> and <code>if</code>: <code>} else [Unlikely] if (x) {</code>.</p>
+</li>
+<li>
+<p>A hint is an LLVM branch weight (2000 to 1, as clang gives
+<code>__builtin_expect</code>), so it matters with optimization (<code>-O1</code> and up).</p>
+</li>
+<li>
+<p>Only one of them, with no arguments, can mark a branch, and no other
+attribute can:</p>
+<pre><code class="language-text">main.pep:3:5: error: 'Target' cannot mark an 'if'; only '[Likely]' or '[Unlikely]' can
+    3 |     [Target(OS(Linux))]
+      |     ^~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+</ul>
+<p><code>while</code> loops and the arms of a <code>match</code> expression take no hint yet.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means
