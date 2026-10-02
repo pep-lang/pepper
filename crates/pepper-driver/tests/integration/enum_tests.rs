@@ -1178,3 +1178,84 @@ test(): int {
 "#;
     assert_eq!(run(src), 111);
 }
+
+#[test]
+fn a_reference_enum_declares_overloaded_indexers_that_chain_into_match() {
+    let src = r#"
+enum Tree {
+    Leaf(value: int),
+    Branch(children: Array<Tree>),
+
+    [](index: ulong): Tree {
+        if (this is Branch(children)) {
+            return children[index];
+        }
+        return Tree.Leaf(-1);
+    }
+
+    [](name: String): Tree {
+        return Tree.Leaf(-2);
+    }
+
+    number(): int {
+        if (this is Leaf(value)) {
+            return value;
+        }
+        return -9;
+    }
+}
+
+test(): int {
+    var inner = Array<Tree>();
+    inner.append(Tree.Leaf(7));
+    var outer = Array<Tree>();
+    outer.append(Tree.Branch(inner));
+    var root = Tree.Branch(outer);
+    # The overloads all return 'Tree', so a chained lookup has a type
+    # before its indexers are resolved.
+    match (root[0][0]) {
+        Leaf(value) => { if (value != 7) { return -1; } }
+        Branch(_) => { return -2; }
+    }
+    if (root[0][0][0].number() != -1 or root["a"]["b"][0].number() != -1) { return -4; }
+    match (root[0]["x"]) {
+        Leaf(value) => { return value; }
+        Branch(_) => { return -3; }
+    }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), -2);
+}
+
+#[test]
+fn a_string_literal_beside_a_case_named_string_still_types_as_string() {
+    // Where nothing else gives the type, as an argument to an overloaded
+    // function or a `var` without one, a string literal or interpolation
+    // in a method of an enum with a case `String` is a `String`, not the
+    // case's enum.
+    let src = r#"
+enum Json {
+    Null,
+    String(value: String),
+
+    label(): String {
+        var text = "a" + name();
+        return pick($"{text}!");
+    }
+}
+
+pick(value: String): String {
+    return value;
+}
+
+pick(value: int): String {
+    return "int";
+}
+
+test(): int {
+    return Json.Null.label() == "aNull!" ? 1 : 0;
+}
+"#;
+    assert_eq!(run(src), 1);
+}

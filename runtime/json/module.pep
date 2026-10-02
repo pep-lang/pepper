@@ -1,0 +1,36 @@
+## JSON: parse text into a `JsonValue`, look values up and change them, and
+## write them back as compact or indented text.
+##
+## Bring it in with `import json`. Parsing follows RFC 8259 strictly, and
+## accepts JSONC (comments and trailing commas) on request. Objects keep
+## their keys in the order they were written, so a document round-trips
+## unchanged.
+##
+## - [JsonValue](json-value.md): `JsonValue`
+## - [Parsing](json-parse.md): `parse`, `JsonError`
+##
+## @example
+##     import json;
+##
+##     main(): int {
+##         var parsed = json.parse("{\"name\": \"pepper\", \"port\": 8080}");
+##         if (parsed.is_err()) {
+##             print(parsed.error().to_string());
+##             return 1;
+##         }
+##         var root = parsed.value();
+##         assert(root["name"].as_string().value() == "pepper", "a string");
+##         assert(root["port"].as_int().value_or(80) == 8080, "a number");
+##         root["debug"] = json.JsonValue.Bool(true);
+##         assert(root.to_string() == "{\"name\":\"pepper\",\"port\":8080,\"debug\":true}", "compact");
+##         return 0;
+##     }
+
+# This file only gathers the module's public API from its other files.
+
+import "parse";
+import "value";
+
+export JsonValue;
+export JsonError;
+export parse;

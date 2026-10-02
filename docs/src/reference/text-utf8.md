@@ -105,3 +105,80 @@ the same text as `decode`.
     data.append(105);
     assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
 ```
+
+#### find_invalid
+
+```pepper
+static find_invalid(value: String): ulong?
+```
+
+Returns the byte offset of the first byte of `value` that does not
+start a valid UTF-8 sequence (see `is_valid`), or none when all of it
+is valid. A `String` made from checked bytes is always valid; one made
+from C memory may not be.
+
+**Parameters**
+- `value` — the text to check
+
+**Returns**
+- the offset of the first invalid byte, or none
+
+**Example**
+```pepper
+    import text;
+
+    assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+```
+
+#### code_point_at
+
+```pepper
+static code_point_at(value: String, offset: ulong): (uint, ulong)
+```
+
+Decodes the code point whose UTF-8 sequence starts at byte `offset`
+of `value`.
+
+**Parameters**
+- `value` — the text to read
+- `offset` — the byte offset where the sequence starts
+
+**Returns**
+- the code point and the number of bytes its sequence takes, from 1 to 4, so `offset` plus that is where the next one starts
+
+**Panics**
+- if `offset` is not less than `value.size` ("Utf8.code_point_at offset out of bounds")
+- if no valid sequence starts at `offset` ("Utf8.code_point_at found invalid UTF-8")
+
+**Example**
+```pepper
+    import text;
+
+    var (point, run) = text.Utf8.code_point_at("é!", 0);
+    assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+```
+
+#### append_code_point
+
+```pepper
+static append_code_point(out: u8[], code_point: uint)
+```
+
+Appends the UTF-8 encoding of `code_point`, from 1 to 4 bytes, to
+`out`.
+
+**Parameters**
+- `out` — the bytes to append to
+- `code_point` — the code point to encode
+
+**Panics**
+- if `code_point` is a surrogate (U+D800 to U+DFFF) or above U+10FFFF ("Utf8.append_code_point needs a Unicode scalar value")
+
+**Example**
+```pepper
+    import text;
+
+    var out = Array<u8>();
+    text.Utf8.append_code_point(out, 8364);
+    assert(text.Utf8.decode(out).value() == "€", "U+20AC");
+```

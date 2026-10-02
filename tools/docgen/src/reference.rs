@@ -64,6 +64,9 @@ const PAGES: &[(&str, &str)] = &[
     ("digest/sha1.pep", "SHA-1"),
     ("digest/blake3.pep", "BLAKE3"),
     ("digest/hex.pep", "Hexadecimal"),
+    ("json/module.pep", "The json module"),
+    ("json/value.pep", "JsonValue"),
+    ("json/parse.pep", "Parsing"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

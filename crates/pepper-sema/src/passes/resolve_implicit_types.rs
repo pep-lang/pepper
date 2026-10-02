@@ -486,8 +486,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // Inside a method, a bare call naming one of the struct's own
             // methods is that method (convert_member_refs later rewrites it
             // to `this.m(..)`): class scope comes before file scope, so a
-            // method `read` wins over an extern `read`.
-            if let Some(st) = current_struct {
+            // method `read` wins over an extern `read`. A converted string
+            // literal still constructs the `String` type beside an enum
+            // case named `String`.
+            if let Some(st) = current_struct
+                && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc)
+            {
                 let own = st.to_string();
                 if let Some(methods) = scopes.method_tables(&own).next() {
                     if let Some((_, ret)) = methods.iter().find(|(m, _)| m == function) {

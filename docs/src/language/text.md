@@ -10,7 +10,7 @@ libraries that use another one:
 
 | Type | Encoding |
 |------|----------|
-| `text.Utf8` | UTF-8. `encode` copies the String's bytes; `decode` checks them. `is_valid` checks bytes without decoding. |
+| `text.Utf8` | UTF-8. `encode` copies the String's bytes; `decode` checks them. `is_valid` checks bytes without decoding, and `find_invalid` gives the offset of a String's first invalid byte. `code_point_at` reads one code point and `append_code_point` writes one. |
 | `text.Utf16` | UTF-16, two bytes per code unit, little-endian by default (`encode(s, true)` and `decode(bytes, true)` for big-endian). A code point past U+FFFF takes a surrogate pair. |
 | `text.Ascii` | ASCII: code points below 128, one byte each. `is_ascii` checks a String. |
 

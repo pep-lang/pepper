@@ -71,6 +71,77 @@ export struct Utf8 {
     static decode_lossy(bytes: u8[]): String {
         return String._from_bytes(bytes);
     }
+
+    ## Returns the byte offset of the first byte of `value` that does not
+    ## start a valid UTF-8 sequence (see `is_valid`), or none when all of it
+    ## is valid. A `String` made from checked bytes is always valid; one made
+    ## from C memory may not be.
+    ##
+    ## @param value the text to check
+    ## @returns the offset of the first invalid byte, or none
+    ## @example
+    ##     import text;
+    ##
+    ##     assert(text.Utf8.find_invalid("héllo").is_none(), "valid");
+    static find_invalid(value: String): ulong? {
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
+        var size = value.size;
+        ulong index = 0;
+        while (index < size) {
+            var run = String._utf8_sequence(data, index, size);
+            if (run == 0) {
+                return Optional<ulong>.some(index);
+            }
+            index = index + run;
+        }
+        return Optional<ulong>.none();
+    }
+
+    ## Decodes the code point whose UTF-8 sequence starts at byte `offset`
+    ## of `value`.
+    ##
+    ## @param value the text to read
+    ## @param offset the byte offset where the sequence starts
+    ## @returns the code point and the number of bytes its sequence takes,
+    ##   from 1 to 4, so `offset` plus that is where the next one starts
+    ## @panics if `offset` is not less than `value.size`
+    ##   ("Utf8.code_point_at offset out of bounds")
+    ## @panics if no valid sequence starts at `offset`
+    ##   ("Utf8.code_point_at found invalid UTF-8")
+    ## @example
+    ##     import text;
+    ##
+    ##     var (point, run) = text.Utf8.code_point_at("é!", 0);
+    ##     assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+    static code_point_at(value: String, offset: ulong): (uint, ulong) {
+        var size = value.size;
+        assert(offset < size, "Utf8.code_point_at offset out of bounds");
+        __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
+        var run = String._utf8_sequence(data, offset, size);
+        assert(run != 0, "Utf8.code_point_at found invalid UTF-8");
+        return (_text_code_point(data, offset, run), run);
+    }
+
+    ## Appends the UTF-8 encoding of `code_point`, from 1 to 4 bytes, to
+    ## `out`.
+    ##
+    ## @param out the bytes to append to
+    ## @param code_point the code point to encode
+    ## @panics if `code_point` is a surrogate (U+D800 to U+DFFF) or above
+    ##   U+10FFFF ("Utf8.append_code_point needs a Unicode scalar value")
+    ## @example
+    ##     import text;
+    ##
+    ##     var out = Array<u8>();
+    ##     text.Utf8.append_code_point(out, 8364);
+    ##     assert(text.Utf8.decode(out).value() == "€", "U+20AC");
+    static append_code_point(out: u8[], code_point: uint) {
+        assert(
+            code_point <= 1114111 and (code_point < 55296 or code_point > 57343),
+            "Utf8.append_code_point needs a Unicode scalar value"
+        );
+        _text_append_utf8(out, code_point);
+    }
 }
 
 # The code point of the valid UTF-8 sequence of `run` bytes at `index` of

@@ -232,8 +232,9 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
 ## Current limits
 
 - An enum whose cases carry nothing cannot be generic. The methods of any
-  enum cannot be generic yet. An enum cannot declare operators or indexers
-  yet; `==` and `!=` are built in for enums whose cases carry nothing.
+  enum cannot be generic yet. An enum whose cases carry values can declare
+  indexers (`[]`), as a struct does; one whose cases carry nothing cannot
+  declare operators or indexers yet, and has `==` and `!=` built in.
 - A case's values bind names only: a pattern cannot nest inside a case
   (`Some(Text(t))`) or compare its values (`Text("")`) yet. Patterns nest
   inside [tuple patterns](tuples.md#matching-tuples) (`(Text(t), 0)`).

@@ -368,6 +368,39 @@ test(): int {
 }
 
 #[test]
+fn text_utf8_reads_and_appends_code_points() {
+    assert_eq!(compile_jit_with_runtime(r#"
+import text;
+
+test(): int {
+    var s = "aé€𝄞";
+    if (!text.Utf8.find_invalid(s).is_none()) { return -1; }
+    var bytes = Array<u8>();
+    bytes.append(104);
+    bytes.append(105);
+    bytes.append(192);
+    var raw = String(unsafe_cast<__ptr<char>>(bytes._data), 3);
+    if (text.Utf8.find_invalid(raw).value() != 2) { return -2; }
+    var (a, a_run) = text.Utf8.code_point_at(s, 0);
+    if (a != 97 or a_run != 1) { return -3; }
+    var (e, e_run) = text.Utf8.code_point_at(s, 1);
+    if (e != 233 or e_run != 2) { return -4; }
+    var (euro, euro_run) = text.Utf8.code_point_at(s, 3);
+    if (euro != 8364 or euro_run != 3) { return -5; }
+    var (clef, clef_run) = text.Utf8.code_point_at(s, 6);
+    if (clef != 119070 or clef_run != 4) { return -6; }
+    var out = Array<u8>();
+    text.Utf8.append_code_point(out, 97);
+    text.Utf8.append_code_point(out, 233);
+    text.Utf8.append_code_point(out, 8364);
+    text.Utf8.append_code_point(out, 119070);
+    if (text.Utf8.decode(out).value() != s) { return -7; }
+    return 0;
+}
+"#), 0);
+}
+
+#[test]
 fn text_module_encodes_and_decodes() {
     assert_eq!(compile_jit_with_runtime(r#"
 import text;
