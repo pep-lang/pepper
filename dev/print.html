@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ec8e1c85.js";
+            window.path_to_searchindex_js = "searchindex-0f6521c0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-aa7f5379.js"></script>
@@ -5748,7 +5748,9 @@ main(): int {
 <h2 id="declaring-an-enum"><a class="header" href="#declaring-an-enum">Declaring an enum</a></h2>
 <p><code>enum Name { ... }</code> lists the cases, separated by commas; a comma after the
 last case is optional. Case names are <code>PascalCase</code>, like types (see
-<a href="#naming-conventions-1">naming conventions</a>).</p>
+<a href="#naming-conventions-1">naming conventions</a>). A case may share a type’s name
+(<code>String(value: String)</code>); a string literal in the enum’s methods is still
+a <code>String</code>, and <code>String(...)</code> there calls the case.</p>
 <p>Each case is an integer. The first case is 0 and each case after it is one
 more than the one before. A case can give its own value with <code>= value</code>, and
 numbering continues from there:</p>
