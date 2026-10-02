@@ -14,7 +14,8 @@ user_name(): String?
 
 Returns the name of the user the program runs as: on POSIX the login
 name of the effective user id (from the user database, else `USER`),
-and on Windows `GetUserNameW`'s answer (else `USERNAME`).
+on Windows `GetUserNameW`'s answer (else `USERNAME`), and on WASI
+`USER`.
 
 **Returns**
 - the user name, or none when it cannot be found
@@ -27,7 +28,7 @@ home_directory(): io.Path?
 
 Returns the user's home directory: on POSIX `HOME`, or the user
 database's entry when `HOME` is unset or empty; on Windows
-`USERPROFILE`.
+`USERPROFILE`; on WASI `HOME`.
 
 **Returns**
 - the home directory, or none when it cannot be found

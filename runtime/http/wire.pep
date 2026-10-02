@@ -23,6 +23,9 @@ export _http_code_protocol(): io.ErrorCode { return 100; }
 [Target(OS(Windows))]
 export _http_code_protocol(): io.ErrorCode { return 13; }
 
+[Target(OS(Wasi))]
+export _http_code_protocol(): io.ErrorCode { return 65; }
+
 export _http_error(message: String): io.IoError {
     return io.IoError(_http_code_protocol(), message);
 }
@@ -37,6 +40,9 @@ export _http_code_too_large(): io.ErrorCode { return 40; }
 
 [Target(OS(Windows))]
 export _http_code_too_large(): io.ErrorCode { return 10040; }
+
+[Target(OS(Wasi))]
+export _http_code_too_large(): io.ErrorCode { return 35; }
 
 export _http_too_large(message: String): io.IoError {
     return io.IoError(_http_code_too_large(), message);

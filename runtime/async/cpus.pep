@@ -1,6 +1,7 @@
 ## Processor counts.
 
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 ## Returns the number of logical processors the operating system can run

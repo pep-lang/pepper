@@ -17,6 +17,7 @@
 # lock is released.
 
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 ## A variable with a separate value on every thread, like C++

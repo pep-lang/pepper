@@ -15,6 +15,10 @@ extern void* _NSGetArgv();
 extern int* __p___argc();
 [Target(OS(Windows))]
 extern void* __p___argv();
+[Target(OS(Wasi))]
+extern ushort __wasi_args_sizes_get(void* count, void* buffer_size);
+[Target(OS(Wasi))]
+extern ushort __wasi_args_get(void* values, void* buffer);
 extern void _Exit(int status);
 extern int fflush(void* stream);
 
@@ -79,6 +83,30 @@ _arguments(): Array<String> {
     __ptr<void> raw = __p___argv();
     __ptr<__ptr<__ptr<char>>> values = raw;
     return _arguments_from(__p___argc()[0], values[0]);
+}
+
+# WASI hands the arguments to the program through `args_get`, into memory
+# the program provides: a pointer per argument, into a buffer holding them
+# all, each followed by a NUL byte.
+[Target(OS(Wasi))]
+_arguments(): Array<String> {
+    # Two 32-bit `size_t`s: the count and the buffer's size.
+    __ptr<uint> sizes = _pep_malloc(8);
+    if (__wasi_args_sizes_get(sizes, sizes + 1) != 0) {
+        _pep_free(sizes);
+        return Array<String>();
+    }
+    var count = sizes[0];
+    __ptr<__ptr<char>> values = _pep_malloc((count as ulong) * sizeof<__ptr<char>>() + 1);
+    __ptr<char> buffer = _pep_malloc((sizes[1] as ulong) + 1);
+    _pep_free(sizes);
+    var result = Array<String>();
+    if (__wasi_args_get(values, buffer) == 0) {
+        result = _arguments_from(count as int, values);
+    }
+    _pep_free(values);
+    _pep_free(buffer);
+    return result;
 }
 
 # glibc keeps `argv` to itself, so Linux reads the arguments back from

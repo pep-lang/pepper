@@ -43,7 +43,9 @@ generates native code through [LLVM](https://llvm.org), then links an
 executable with the system's C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper's errors as you type.
 
-Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
+Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
+to WebAssembly for WASI (`--target wasm32-wasip1`, see
+[WebAssembly](language/platform-selection.md#webassembly)).
 
 ## Current status
 

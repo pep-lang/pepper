@@ -88,6 +88,17 @@ fn type_id(struct_name: &str) -> u64 {
     struct_name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3))
 }
 
+/// [`type_id`] as the pointer-sized integer a vtable slot holds: folded to
+/// 32 bits on a 32-bit target, where a pointer cannot hold all 64.
+fn type_id_value<'ctx>(context: &'ctx Context, struct_name: &str) -> inkwell::values::IntValue<'ctx> {
+    let id = type_id(struct_name);
+    if crate::target::is_32_bit() {
+        context.i32_type().const_int((id ^ (id >> 32)) & 0xffff_ffff, false)
+    } else {
+        context.i64_type().const_int(id, false)
+    }
+}
+
 /// Result of generation.
 pub struct Generated {
     pub module: Module<'static>,
@@ -180,6 +191,10 @@ pub struct CodeGenerator<'ctx> {
     extern_names: std::collections::HashSet<String>,
     /// Declared parameter types of each extern, by name.
     extern_params: std::collections::HashMap<String, Vec<String>>,
+    /// Externs whose C result is narrower than Pepper's (`ulong` as a
+    /// 32-bit `size_t`; see [`c_abi_type`]), by name: whether the result
+    /// sign-extends back to Pepper's 64 bits.
+    extern_narrow_results: std::collections::HashMap<String, bool>,
     /// The innermost located node an error passed through on its way out,
     /// keyed by the error's text: errors are plain strings inside codegen,
     /// and `generate` attaches this location when it returns one.
@@ -278,6 +293,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             subjects: HashMap::new(),
             extern_names: std::collections::HashSet::new(),
             extern_params: std::collections::HashMap::new(),
+            extern_narrow_results: std::collections::HashMap::new(),
             error_loc: None,
             owners: HashMap::new(),
             exported: HashSet::new(),
@@ -1193,6 +1209,24 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.fn_returns.insert(ext.name.clone(), ext.ty.to_string());
             return Ok(());
         }
+        // On a 32-bit target the C function's own signature differs from
+        // Pepper's (see `c_abi_type`): declare that one, and calls convert.
+        let fn_type = if crate::target::is_32_bit() {
+            let c_params: Vec<BasicTypeEnum<'ctx>> =
+                ext.parameters.iter().zip(&param_types).map(|(p, ty)| c_abi_type(self.context, &p.ty.to_string(), *ty)).collect();
+            let c_return = c_abi_type(self.context, &ext.ty.to_string(), return_type);
+            if c_return != return_type {
+                self.extern_narrow_results.insert(ext.name.clone(), !llvm_ops::is_unsigned_int_type(&ext.ty.to_string()));
+            }
+            let params: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = c_params.iter().map(|p| (*p).into()).collect();
+            if is_void(&ext.ty) {
+                self.context.void_type().fn_type(&params, ext.is_variadic)
+            } else {
+                llvm_fn_type(c_return, &c_params, ext.is_variadic)
+            }
+        } else {
+            fn_type
+        };
         let fn_value = match self.module.get_function(symbol) {
             Some(f) => f,
             None => {
@@ -1892,11 +1926,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.locate(&ty, param.type_loc);
             params.push(ty?);
         }
+        // A trait method declared without a return type (`grow();`) returns
+        // nothing, as its implementations do: WebAssembly traps on a call
+        // whose type differs from the callee's.
+        let returns_nothing = is_void(&method.ty) || method.ty.to_string() == pepper_sema::type_name::AUTO;
         let make_type =
             |this: BasicTypeEnum<'ctx>| -> Result<inkwell::types::FunctionType<'ctx>, String> {
                 let mut all = vec![this];
                 all.extend(params.iter().copied());
-                if is_void(&method.ty) {
+                if returns_nothing {
                     let meta: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
                         all.iter().map(|p| (*p).into()).collect();
                     Ok(self.context.void_type().fn_type(&meta, false))
@@ -2031,7 +2069,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             entries.push(function.as_global_value().as_pointer_value());
         }
-        entries.push(self.context.i64_type().const_int(type_id(from), false).const_to_pointer(ptr_type));
+        entries.push(type_id_value(self.context, from).const_to_pointer(ptr_type));
         let init = ptr_type.const_array(&entries);
         global.set_initializer(&init);
         Ok(global.as_pointer_value())
@@ -2286,7 +2324,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let methods = self.traits.get(&from_name).ok_or_else(|| format!("unknown trait type '{}'", from_name))?.methods.len();
         let pair = self.codegen_expr(value)?.into_array_value();
         let object = self.object_pointer(pair.into())?;
-        let i64_type = self.context.i64_type();
+        let id_type = type_id_value(self.context, "").get_type();
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         if test {
             let function = self.builder.get_insert_block().and_then(|b| b.get_parent()).ok_or("no function")?;
@@ -2297,10 +2335,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.builder.build_conditional_branch(is_null, done, check).map_err(|e| e.to_string())?;
             self.builder.position_at_end(check);
             let id = self.vtable_entry(pair, VTABLE_METHODS + methods as u64)?;
-            let id = self.builder.build_ptr_to_int(id, i64_type, "type_id").map_err(|e| e.to_string())?;
+            let id = self.builder.build_ptr_to_int(id, id_type, "type_id").map_err(|e| e.to_string())?;
             let mut matched = self.context.bool_type().const_zero();
             for candidate in candidates {
-                let expected = i64_type.const_int(type_id(&candidate.to_string()), false);
+                let expected = type_id_value(self.context, &candidate.to_string());
                 let same = self
                     .builder
                     .build_int_compare(inkwell::IntPredicate::EQ, id, expected, "same_type")
@@ -2320,11 +2358,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 _ => return Err(format!("unknown trait type '{}'", to_name)),
             };
             let id = self.vtable_entry(pair, VTABLE_METHODS + methods as u64)?;
-            let id = self.builder.build_ptr_to_int(id, i64_type, "type_id").map_err(|e| e.to_string())?;
+            let id = self.builder.build_ptr_to_int(id, id_type, "type_id").map_err(|e| e.to_string())?;
             let mut vtable: PointerValue<'ctx> = ptr_type.const_null();
             for candidate in candidates.iter().rev() {
                 let candidate = candidate.to_string();
-                let expected = i64_type.const_int(type_id(&candidate), false);
+                let expected = type_id_value(self.context, &candidate);
                 let same = self
                     .builder
                     .build_int_compare(inkwell::IntPredicate::EQ, id, expected, "same_type")
@@ -5365,16 +5403,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                 args.len()
             ));
         }
+        // On a 32-bit target `long` and `ulong` are the C function's
+        // `ssize_t` and `size_t`, as for an extern (see `c_abi_type`).
+        let narrow = crate::target::is_32_bit();
         let mut params: Vec<BasicTypeEnum<'ctx>> = vec![];
         for param in fn_ty.function_params() {
-            params.push(self.abi_type(&param.to_string())?);
+            let ty = self.abi_type(&param.to_string())?;
+            params.push(if narrow { c_abi_type(self.context, &param.to_string(), ty) } else { ty });
         }
         let ret = fn_ty.function_return().ok_or_else(|| format!("not a function type: {}", fn_ty.display()))?;
+        let narrow_result = narrow && matches!(ret.to_string().as_str(), "long" | "ulong");
         let c_type = if is_void(ret) {
             let meta: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = params.iter().map(|p| (*p).into()).collect();
             self.context.void_type().fn_type(&meta, false)
         } else {
-            llvm_fn_type(self.abi_type(&ret.to_string())?, &params, false)
+            let ret_type = self.abi_type(&ret.to_string())?;
+            llvm_fn_type(if narrow { c_abi_type(self.context, &ret.to_string(), ret_type) } else { ret_type }, &params, false)
         };
         let target = self.codegen_expr(callee)?.into_pointer_value();
         // Calling a null C function pointer panics, never jumps through null.
@@ -5396,6 +5440,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             .builder
             .build_indirect_call(c_type, target, &meta, "call")
             .map_err(|e| e.to_string())?;
+        if narrow_result {
+            return self.widen_c_result(call.try_as_basic_value().basic(), ret.to_string() == "long");
+        }
         Ok(call
             .try_as_basic_value()
             .basic()
@@ -5718,7 +5765,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         let coerced = self.coerce_args(target.get_type(), &forwarded, &[], &param_names);
         let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
         let call = self.builder.build_call(target, &meta, "forward").map_err(|e| e.to_string())?;
-        match call.try_as_basic_value().basic() {
+        let mut result = call.try_as_basic_value().basic();
+        if let Some(&signed) = self.extern_narrow_results.get(name) {
+            result = Some(self.widen_c_result(result, signed)?);
+        }
+        match result {
             Some(v) if thunk_type.get_return_type().is_some() => {
                 self.builder.build_return(Some(&v)).map_err(|e| e.to_string())?;
             }
@@ -6105,10 +6156,26 @@ impl<'ctx> CodeGenerator<'ctx> {
             .builder
             .build_call(fn_value, &meta_args, "call")
             .map_err(|e| e.to_string())?;
-        Ok(call
-            .try_as_basic_value()
-            .basic()
-            .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+        let result = call.try_as_basic_value().basic();
+        if let Some(&signed) = self.extern_narrow_results.get(name) {
+            return self.widen_c_result(result, signed);
+        }
+        Ok(result.unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
+    /// A 32-bit C `size_t` or `ssize_t` result (see [`c_abi_type`]) widened
+    /// to Pepper's `ulong` or `long`: sign-extended when `signed`.
+    fn widen_c_result(&self, result: Option<BasicValueEnum<'ctx>>, signed: bool) -> Result<BasicValueEnum<'ctx>, String> {
+        let Some(BasicValueEnum::IntValue(value)) = result else {
+            return Ok(result.unwrap_or_else(|| self.context.i32_type().const_zero().into()));
+        };
+        let wide = self.context.i64_type();
+        let widened = if signed {
+            self.builder.build_int_s_extend(value, wide, "c_result")
+        } else {
+            self.builder.build_int_z_extend(value, wide, "c_result")
+        };
+        widened.map(BasicValueEnum::IntValue).map_err(|e| e.to_string())
     }
 
     /// Lowers a call to the C library's `memcpy`, `memmove` or `memset` to
@@ -7162,6 +7229,20 @@ impl<'ctx> CodeGenerator<'ctx> {
 /// Is the sema return type void?
 fn is_void(ty: &TypeName) -> bool {
     ty.to_string() == "void"
+}
+
+/// The C type an extern's parameter or result of Pepper type `ty` (whose
+/// LLVM type is `llvm`) has in the C function itself, on a 32-bit target
+/// (WebAssembly): `long` and `ulong` are the C library's pointer-sized
+/// `ssize_t` and `size_t`, as they are on every 64-bit target, so they
+/// are 32 bits there; `i64` and `u64` stay 64 bits (`off_t`, `int64_t`).
+/// Everything else is unchanged. WebAssembly checks a call's signature
+/// against the callee's exactly, so a mismatch would not link.
+fn c_abi_type<'ctx>(context: &'ctx inkwell::context::Context, ty: &str, llvm: BasicTypeEnum<'ctx>) -> BasicTypeEnum<'ctx> {
+    match ty {
+        "long" | "ulong" => context.i32_type().into(),
+        _ => llvm,
+    }
 }
 
 /// Build an LLVM FunctionType from a return + params.

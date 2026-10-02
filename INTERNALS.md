@@ -747,7 +747,7 @@ with no extension (with `--lib`, the library's file name for the stem,
 
 `apply_platform_filters` evaluates every `[Target(<bool expr>)]` against the
 **target**: the host, or the platform `--target <triple>` names, with the
-build options `-D` defines (`Target::build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux)`, `Arch(x64|aarch64)`,
+build options `-D` defines (`Target::build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux|Wasi)`, `Arch(x64|aarch64|wasm32)`,
 `BuildOption(NAME)`, a `BuildOption(NAME)` compared with a literal (`compare`:
 the literal's type says how the value is read), `!`, `&&`/`and`, and
 `||`/`or`. `[BuildOption("NAME")]` is `[Target(BuildOption(NAME))]`. Errors
@@ -1318,12 +1318,28 @@ How the language lowers:
   process ("requires an ordered section layout") when LLVM's default
   manager scatters the sections more than 4 GB apart, as it did under
   parallel test load.
-- **Target** (`target.rs`): `initialize_targets` registers the x86 and
-  AArch64 backends (inkwell's `target-x86` and `target-aarch64`, on every
-  host, so `--target` can name either), and `target_machine` makes the
-  machine for the target's triple (`triple`: `--target`'s, else LLVM's
-  default). Every call site shares these. Read that file's header before
-  touching backend registration.
+- **Target** (`target.rs`): `initialize_targets` registers the x86,
+  AArch64 and WebAssembly backends (inkwell's `target-x86`,
+  `target-aarch64` and `target-webassembly`, on every host, so `--target`
+  can name any), and `target_machine` makes the machine for the target's
+  triple (`triple`: `--target`'s, else LLVM's default). Every call site
+  shares these. Read that file's header before touching backend
+  registration. For `wasm32-wasip1`, `write_object` renames `main` to
+  `__main_void` (`use_wasi_main`), which wasi-libc's `_start` calls.
+- **32-bit targets** (`target::is_32_bit`, wasm32): an extern's `long` and
+  `ulong` are declared as C's pointer-sized `i32` (`c_abi_type`) and the
+  result widened back (`widen_c_result`, recorded in
+  `extern_narrow_results`), in direct calls, extern function values and
+  calls through C function pointers; a void extern is declared `void`.
+  WebAssembly traps on any signature mismatch, so every declaration and
+  call must agree exactly. Vtable type ids fold to 32 bits there
+  (`type_id_value`), since a vtable slot is pointer-sized.
+- **Runtime on WASI.** Each platform module (`os`, `io`, `async`,
+  `process`, `tls`) has a `*_wasi.pep` beside its `*_posix.pep`, whose
+  POSIX-only files target `OS(Linux) || OS(Mac)`. `io/sys_posix.pep`
+  stays `!OS(Windows)` and picks wasi-libc's flag values, errno codes and
+  `stat`/`dirent` layouts with `OS(Wasi)` declarations. Threads, fibers,
+  sockets, TLS and processes are stubs that panic or return `ENOTSUP`.
 
 ### 4.2 Traits used as types (`sema/src/traits.rs`, `passes/convert_to_traits.rs`)
 
@@ -1447,7 +1463,11 @@ another platform it adds `--target=<triple>`, LLVM's linker
 target's system root (`--sysroot`, else `PEPPER_SYSROOT_<TRIPLE>`; passed as
 `--sysroot` for ELF and Mach-O, and as lld-link's `/winsysroot` for
 Windows), and a failed link ends with a note naming what is missing
-(`cross_link_note`). The default system libraries and the debug options
+(`cross_link_note`). For `wasm32-wasip1` the linker is `wasm-ld`, passed as
+`-fuse-ld=<path>` (clang's WebAssembly driver ignores `--ld-path`), and the
+root is a wasi-sdk (`WasiSdk::locate`: the SDK or its `share/wasi-sysroot`,
+else `WASI_SDK_PATH`), which also gives `-resource-dir` for clang's wasm32
+builtins; `wasi-emulated-getpid` is a default library there. The default system libraries and the debug options
 follow the target's OS. The JIT stays host-only.
 
 **Optimization** (`codegen/src/target.rs`). `OptLevel` is `-O0` through

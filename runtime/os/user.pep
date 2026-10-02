@@ -3,11 +3,13 @@
 import io;
 import "environment";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 ## Returns the name of the user the program runs as: on POSIX the login
 ## name of the effective user id (from the user database, else `USER`),
-## and on Windows `GetUserNameW`'s answer (else `USERNAME`).
+## on Windows `GetUserNameW`'s answer (else `USERNAME`), and on WASI
+## `USER`.
 ##
 ## @returns the user name, or none when it cannot be found
 export user_name(): String? {
@@ -16,7 +18,7 @@ export user_name(): String? {
 
 ## Returns the user's home directory: on POSIX `HOME`, or the user
 ## database's entry when `HOME` is unset or empty; on Windows
-## `USERPROFILE`.
+## `USERPROFILE`; on WASI `HOME`.
 ##
 ## @returns the home directory, or none when it cannot be found
 ## @example

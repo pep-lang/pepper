@@ -1,6 +1,6 @@
 # The SChannel layer for tls on Windows. Every declaration carries
-# [Target(OS(Windows))]; openssl.pep declares the same `_tls_sys_*`
-# functions for Linux and macOS.
+# [Target(OS(Windows))]; openssl.pep and wasi.pep declare the same
+# `_tls_sys_*` functions for Linux and macOS, and for WASI.
 #
 # SChannel (SSPI) does no I/O: the handshake loop, DecryptMessage and
 # EncryptMessage work on buffers, and this layer moves the bytes with the io

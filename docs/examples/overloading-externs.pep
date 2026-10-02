@@ -3,7 +3,7 @@
 [Link(name = "abs")]
 extern int c_abs(int x);
 [Link(name = "llabs")]
-extern long c_llabs(long x);
+extern i64 c_llabs(i64 x);
 
 magnitude(x: int): int { return c_abs(x); }
 magnitude(x: long): long { return c_llabs(x); }

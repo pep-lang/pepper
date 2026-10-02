@@ -45,6 +45,14 @@ Windows
 
 Windows.
 
+#### Wasi
+
+```pepper
+Wasi
+```
+
+WASI: a WebAssembly runtime such as wasmtime (`--target wasm32-wasip1`).
+
 ## system_os
 
 ```pepper
@@ -74,8 +82,8 @@ system_name(): String
 ```
 
 Returns the name of the operating system the program was built for, in
-lowercase: `"linux"`, `"macos"` or `"windows"`, for printing and for
-file and directory names.
+lowercase: `"linux"`, `"macos"`, `"windows"` or `"wasi"`, for printing
+and for file and directory names.
 
 **Returns**
 - the operating system's name
@@ -92,7 +100,8 @@ system_version(): String
 Returns the operating system's version: the kernel release on Linux
 (`uname -r`, such as `6.8.0-45-generic`), the product version on macOS
 (`sw_vers -productVersion`, such as `14.5`), and the major, minor and
-build numbers on Windows (such as `10.0.22631`).
+build numbers on Windows (such as `10.0.22631`). WASI does not report
+one.
 
 **Returns**
 - the version, or an empty String when the system does not report it
@@ -103,8 +112,8 @@ build numbers on Windows (such as `10.0.22631`).
 [Target(Arch(x64))] architecture(): String
 ```
 
-Returns the processor architecture the program was built for: `"x64"` or
-`"aarch64"`, the names `[Target(Arch(...))]` uses.
+Returns the processor architecture the program was built for: `"x64"`,
+`"aarch64"` or `"wasm32"`, the names `[Target(Arch(...))]` uses.
 
 **Returns**
 - the architecture's name
@@ -115,8 +124,20 @@ Returns the processor architecture the program was built for: `"x64"` or
 [Target(Arch(aarch64))] architecture(): String
 ```
 
-Returns the processor architecture the program was built for: `"x64"` or
-`"aarch64"`, the names `[Target(Arch(...))]` uses.
+Returns the processor architecture the program was built for: `"x64"`,
+`"aarch64"` or `"wasm32"`, the names `[Target(Arch(...))]` uses.
+
+**Returns**
+- the architecture's name
+
+## architecture
+
+```pepper
+[Target(Arch(wasm32))] architecture(): String
+```
+
+Returns the processor architecture the program was built for: `"x64"`,
+`"aarch64"` or `"wasm32"`, the names `[Target(Arch(...))]` uses.
 
 **Returns**
 - the architecture's name
@@ -128,7 +149,7 @@ hostname(): String
 ```
 
 Returns the machine's host name, as `hostname` prints it (on Windows its
-DNS host name).
+DNS host name). WASI does not report one.
 
 **Returns**
 - the host name, or an empty String when the system does not report it
@@ -172,7 +193,7 @@ total_memory(): ulong
 
 Returns the machine's physical memory in bytes. Inside a virtual
 machine this is what the guest sees; a container's memory limit is not
-taken into account.
+taken into account. WASI does not report it.
 
 **Returns**
 - the total physical memory in bytes, or 0 when the system does not report it
@@ -184,7 +205,8 @@ page_size(): ulong
 ```
 
 Returns the size of a page of virtual memory in bytes: the unit the
-operating system maps memory in, usually 4096 (16384 on Apple silicon).
+operating system maps memory in, usually 4096 (16384 on Apple silicon;
+65536, WebAssembly's page, on WASI).
 
 **Returns**
 - the page size in bytes

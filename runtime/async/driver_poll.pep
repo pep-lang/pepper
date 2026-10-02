@@ -15,10 +15,14 @@
 # POSIX (a ring writes a byte to the write end), and on Windows, where
 # WSAPoll takes only sockets, a UDP socket bound to a loopback port that a
 # ring sends one byte to. The wait that sees it readable reads it empty.
+#
+# WASI has no pipe, and no task can run there (see fiber_wasi.pep): making
+# the doorbell panics.
 
 import io;
 import "driver";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 import "task";
 
@@ -28,7 +32,7 @@ extern int poll(void* descriptors, ulong count, int timeout);
 [Link("ws2_32")]
 extern int WSAPoll(void* descriptors, uint count, int timeout);
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pipe(int* descriptors);
 [Target(!OS(Windows))]
 extern long read(int fd, void* buf, ulong n);
@@ -152,7 +156,7 @@ extend _PollDriver with _Driver {
 # Makes a non-blocking self-pipe: stores the read end in `made[0]` and the
 # write end in `made[1]` (both stay -1 on failure). Returns the address a
 # ring sends to: none on POSIX.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _async_poll_create_bell(made: __ptr<long>): __ptr<u8> {
     __ptr<int> ends = _pep_malloc(8);
     if (pipe(ends) == 0) {
@@ -162,6 +166,14 @@ _async_poll_create_bell(made: __ptr<long>): __ptr<u8> {
         made[1] = ends[1] as long;
     }
     _pep_free(ends);
+    return __null;
+}
+
+# The first thing `async.run` makes, so where WASI reports it cannot run
+# tasks.
+[Target(OS(Wasi))]
+_async_poll_create_bell(made: __ptr<long>): __ptr<u8> {
+    panic("async.run: tasks are not supported on WASI, which cannot switch stacks");
     return __null;
 }
 

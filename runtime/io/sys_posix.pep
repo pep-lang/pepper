@@ -1,12 +1,14 @@
-# POSIX (Linux, macOS) platform layer for io. Every declaration carries
-# [Target(!OS(Windows))]; sys_windows.pep declares the same `_io_sys_*`
-# functions with the same signatures for Windows. These are exported to the
-# other io files only: module.pep does not re-export them.
+# POSIX (Linux, macOS, and WASI through wasi-libc) platform layer for io.
+# Every declaration carries [Target(!OS(Windows))] or a narrower target;
+# sys_windows.pep declares the same `_io_sys_*` functions with the same
+# signatures for Windows. These are exported to the other io files only:
+# module.pep does not re-export them.
 #
-# Linux and macOS differ in the errno accessor, O_* flag values, the stat
-# call and layout, and the dirent layout. C structs are read from raw
-# `_pep_malloc` buffers at the byte offsets the small [Target] functions
-# below return.
+# Linux, macOS and WASI differ in the errno accessor and values, O_* flag
+# values, the stat call and layout, and the dirent layout. C structs are
+# read from raw `_pep_malloc` buffers at the byte offsets the small [Target]
+# functions below return. wasi-libc's `long` is 32 bits, so a C `off_t` is
+# declared `i64`, and a `long` field is never read as a Pepper `long`.
 
 import "directory";
 import "file";
@@ -31,9 +33,9 @@ extern long write(int fd, void* buf, ulong n);
 [Target(!OS(Windows))]
 extern int close(int fd);
 [Target(!OS(Windows))]
-extern long lseek(int fd, long offset, int whence);
+extern i64 lseek(int fd, i64 offset, int whence);
 [Target(!OS(Windows))]
-extern int ftruncate(int fd, long size);
+extern int ftruncate(int fd, i64 size);
 [Target(!OS(Windows))]
 extern int fsync(int fd);
 [Target(!OS(Windows))]
@@ -59,7 +61,7 @@ extern int closedir(void* dir);
 
 # Linux: errno through glibc's accessor; statx for stat (one layout on x64
 # and aarch64, and present where glibc < 2.33 has no `stat` symbol).
-[Target(OS(Linux))]
+[Target(OS(Linux) || OS(Wasi))]
 extern int* __errno_location();
 [Target(OS(Linux))]
 extern int statx(int dirfd, char* path, int flags, uint mask, void* buf);
@@ -98,9 +100,21 @@ extern void* opendir(char* path);
 [Target(OS(Mac) && Arch(aarch64))]
 extern void* readdir(void* dir);
 
+# WASI: wasi-libc's own stat and dirent layouts, under the plain names.
+[Target(OS(Wasi))]
+extern int stat(char* path, void* buf);
+[Target(OS(Wasi))]
+extern int lstat(char* path, void* buf);
+[Target(OS(Wasi))]
+extern int fstat(int fd, void* buf);
+[Target(OS(Wasi))]
+extern void* opendir(char* path);
+[Target(OS(Wasi))]
+extern void* readdir(void* dir);
+
 # ── errno ────────────────────────────────────────────────────────────────────
 
-[Target(OS(Linux))]
+[Target(OS(Linux) || OS(Wasi))]
 export _io_errno(): __ptr<int> {
     return __errno_location();
 }
@@ -164,31 +178,89 @@ export _io_sys_error_kind(code: ErrorCode): ErrorKind {
     };
 }
 
+# WASI numbers errno values its own way (wasi/api.h's __WASI_ERRNO_*).
+[Target(OS(Wasi))]
+export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+    return match (code) {
+        44 => ErrorKind.NotFound,                 # ENOENT
+        2, 63 => ErrorKind.PermissionDenied,      # EACCES, EPERM
+        20 => ErrorKind.AlreadyExists,            # EEXIST
+        54 => ErrorKind.NotADirectory,            # ENOTDIR
+        31 => ErrorKind.IsADirectory,             # EISDIR
+        55 => ErrorKind.DirectoryNotEmpty,        # ENOTEMPTY
+        28 => ErrorKind.InvalidInput,             # EINVAL
+        27 => ErrorKind.Interrupted,              # EINTR
+        14 => ErrorKind.ConnectionRefused,        # ECONNREFUSED
+        15, 13, 64 => ErrorKind.ConnectionReset,  # ECONNRESET, ECONNABORTED, EPIPE
+        3 => ErrorKind.AddressInUse,              # EADDRINUSE
+        4 => ErrorKind.AddressNotAvailable,       # EADDRNOTAVAIL
+        73 => ErrorKind.TimedOut,                 # ETIMEDOUT
+        11 => ErrorKind.Cancelled,                # ECANCELED
+        else => ErrorKind.Other,
+    };
+}
+
 # Codes for errors Pepper raises itself.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_sys_code_invalid_input(): ErrorCode {
     return 22;
 }  # EINVAL
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_sys_code_not_a_directory(): ErrorCode {
     return 20;
 }  # ENOTDIR
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_sys_code_not_found(): ErrorCode {
     return 2;
 }  # ENOENT
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_sys_code_bad_handle(): ErrorCode {
     return 9;
 }  # EBADF
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_sys_code_write_zero(): ErrorCode {
     return 5;
 }  # EIO
+
+[Target(OS(Wasi))]
+export _io_sys_code_invalid_input(): ErrorCode {
+    return 28;
+}  # EINVAL
+
+[Target(OS(Wasi))]
+export _io_sys_code_not_a_directory(): ErrorCode {
+    return 54;
+}  # ENOTDIR
+
+[Target(OS(Wasi))]
+export _io_sys_code_not_found(): ErrorCode {
+    return 44;
+}  # ENOENT
+
+[Target(OS(Wasi))]
+export _io_sys_code_bad_handle(): ErrorCode {
+    return 8;
+}  # EBADF
+
+[Target(OS(Wasi))]
+export _io_sys_code_write_zero(): ErrorCode {
+    return 29;
+}  # EIO
+
+# ERANGE: a buffer was too small.
+[Target(OS(Linux) || OS(Mac))]
+export _io_posix_code_range(): ErrorCode {
+    return 34;
+}
+
+[Target(OS(Wasi))]
+export _io_posix_code_range(): ErrorCode {
+    return 68;
+}
 
 [Target(OS(Linux))]
 export _io_sys_code_cancelled(): ErrorCode {
@@ -198,6 +270,11 @@ export _io_sys_code_cancelled(): ErrorCode {
 [Target(OS(Mac))]
 export _io_sys_code_cancelled(): ErrorCode {
     return 89;
+}  # ECANCELED
+
+[Target(OS(Wasi))]
+export _io_sys_code_cancelled(): ErrorCode {
+    return 11;
 }  # ECANCELED
 
 [Target(!OS(Windows))]
@@ -217,7 +294,7 @@ export _io_posix_check(rc: int): IoResult<void> {
 # An empty path names nothing (and an empty String has no C string).
 [Target(!OS(Windows))]
 export _io_posix_empty_path(): IoError {
-    return IoError(2, "empty path");
+    return IoError(_io_sys_code_not_found(), "empty path");
 }
 
 # ── Handles ──────────────────────────────────────────────────────────────────
@@ -243,10 +320,13 @@ export _io_sys_std_handle(stream: StdStream): FileHandle {
 
 # ── O_* flags ────────────────────────────────────────────────────────────────
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
+export _io_o_rdonly(): int { return 0; }
+
+[Target(OS(Linux) || OS(Mac))]
 export _io_o_wronly(): int { return 1; }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _io_o_rdwr(): int { return 2; }
 
 [Target(OS(Linux))]
@@ -299,6 +379,48 @@ export _io_o_cloexec(): int {
     return 16777216;
 }  # 0x1000000
 
+# WASI: the access mode is two rights bits, O_CREAT, O_EXCL and O_TRUNC are
+# WASI's open flags shifted up 12, and there is no exec to close on.
+[Target(OS(Wasi))]
+export _io_o_rdonly(): int {
+    return 67108864;
+}  # 0x4000000
+
+[Target(OS(Wasi))]
+export _io_o_wronly(): int {
+    return 268435456;
+}  # 0x10000000
+
+[Target(OS(Wasi))]
+export _io_o_rdwr(): int {
+    return 335544320;
+}  # 0x14000000
+
+[Target(OS(Wasi))]
+export _io_o_creat(): int {
+    return 4096;
+}  # 0x1000
+
+[Target(OS(Wasi))]
+export _io_o_excl(): int {
+    return 16384;
+}  # 0x4000
+
+[Target(OS(Wasi))]
+export _io_o_trunc(): int {
+    return 32768;
+}  # 0x8000
+
+[Target(OS(Wasi))]
+export _io_o_append(): int {
+    return 1;
+}
+
+[Target(OS(Wasi))]
+export _io_o_cloexec(): int {
+    return 0;
+}
+
 # ── File operations ──────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))]
@@ -307,7 +429,7 @@ export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
         return IoResult<FileHandle>.err(_io_posix_empty_path());
     }
     var writes = options._write || options._append;
-    var flags = 0;  # O_RDONLY
+    var flags = _io_o_rdonly();
     if (writes) {
         flags = _io_o_wronly();
         if (options._read) {
@@ -413,6 +535,9 @@ export _io_sys_sync(h: FileHandle): IoResult<void> {
 # macOS `struct stat` (64-bit inode layout, x64 and aarch64 alike): st_mode
 # u16 @4, timespec {i64 sec; i64 nsec} for atime @32, mtime @48, ctime @64,
 # birthtime @80, st_size i64 @96; 144 bytes in all.
+# wasi-libc `struct stat` (wasm32): st_mode u32 @24, st_size i64 @48,
+# timespec {i64 sec; i32 nsec; pad} for atime @72, mtime @88, ctime @104;
+# 144 bytes in all, and no birth time.
 
 [Target(OS(Linux))]
 export _io_stat_buf_size(): ulong { return 256; }
@@ -450,6 +575,25 @@ export _io_stat_btime_offset(): ulong { return 80; }
 [Target(OS(Mac))]
 export _io_stat_mtime_offset(): ulong { return 48; }
 
+[Target(OS(Wasi))]
+export _io_stat_buf_size(): ulong { return 144; }
+
+[Target(OS(Wasi))]
+export _io_stat_mode_offset(): ulong { return 24; }
+
+[Target(OS(Wasi))]
+export _io_stat_size_offset(): ulong { return 48; }
+
+[Target(OS(Wasi))]
+export _io_stat_atime_offset(): ulong { return 72; }
+
+# Never read: `_io_stat_has_btime` is false.
+[Target(OS(Wasi))]
+export _io_stat_btime_offset(): ulong { return 72; }
+
+[Target(OS(Wasi))]
+export _io_stat_mtime_offset(): ulong { return 88; }
+
 # statx reports a birth time only when the file system has one.
 [Target(OS(Linux))]
 export _io_stat_has_btime(buf: __ptr<void>): bool {
@@ -459,6 +603,23 @@ export _io_stat_has_btime(buf: __ptr<void>): bool {
 [Target(OS(Mac))]
 export _io_stat_has_btime(buf: __ptr<void>): bool {
     return true;
+}
+
+[Target(OS(Wasi))]
+export _io_stat_has_btime(buf: __ptr<void>): bool {
+    return false;
+}
+
+# Whether st_mode carries permission bits: WASI preview 1 has none, and
+# wasi-libc reports only the file type.
+[Target(OS(Linux) || OS(Mac))]
+export _io_stat_has_permissions(): bool {
+    return true;
+}
+
+[Target(OS(Wasi))]
+export _io_stat_has_permissions(): bool {
+    return false;
 }
 
 # AT_FDCWD, AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS | STATX_BTIME.
@@ -471,7 +632,7 @@ export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
     return statx(-100, path, flags, 4095, buf);
 }
 
-[Target(OS(Mac))]
+[Target(OS(Mac) || OS(Wasi))]
 export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
     if (follow) {
         return stat(path, buf);
@@ -485,7 +646,7 @@ export _io_stat_fd(fd: int, buf: __ptr<void>): int {
     return statx(fd, "", 4096, 4095, buf);
 }
 
-[Target(OS(Mac))]
+[Target(OS(Mac) || OS(Wasi))]
 export _io_stat_fd(fd: int, buf: __ptr<void>): int {
     return fstat(fd, buf);
 }
@@ -507,7 +668,7 @@ export _io_read_u32(buf: __ptr<void>, offset: ulong): uint {
 
 # A {seconds, nanoseconds} pair as ns since the epoch. The nanoseconds are
 # read as 32 bits: statx stores a u32, macOS a long whose value (< 10^9) sits
-# in its low half.
+# in its low half, and wasi-libc a 32-bit long.
 [Target(!OS(Windows))]
 export _io_stat_time(buf: __ptr<void>, offset: ulong): long {
     var sec = _io_read_i64(buf, offset);
@@ -524,8 +685,10 @@ export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
     m.is_directory = kind == 16384;  # S_IFDIR 0040000
     m.is_symlink = kind == 40960;    # S_IFLNK 0120000
     m.file_type = _io_file_type(m.is_file, m.is_directory, m.is_symlink);
-    m.permissions = mode & 4095;      # 07777
-    m.read_only = (mode & 146) == 0;  # no 0222 write bit
+    if (_io_stat_has_permissions()) {
+        m.permissions = mode & 4095;      # 07777
+        m.read_only = (mode & 146) == 0;  # no 0222 write bit
+    }
     m.size = _io_read_i64(buf, _io_stat_size_offset()) as ulong;
     m.accessed = _io_stat_time(buf, _io_stat_atime_offset());
     m.modified = _io_stat_time(buf, _io_stat_mtime_offset());
@@ -560,8 +723,10 @@ export _io_posix_stat_result(rc: int, buf: _IoBuffer): IoResult<Metadata> {
 }
 
 # ── Directories ──────────────────────────────────────────────────────────────
-# dirent: d_type u8 and d_name char[] at 18/19 (Linux dirent64) or 20/21
-# (macOS 64-bit inode dirent).
+# dirent: d_type u8 and d_name char[] at 18/19 (Linux dirent64), 20/21
+# (macOS 64-bit inode dirent) or 8/9 (wasi-libc). d_type's values are
+# DT_DIR 4, DT_REG 8 and DT_LNK 10, except on WASI, whose are its file
+# types: 3, 4 and 7.
 
 [Target(OS(Linux))]
 export _io_dirent_type_offset(): ulong { return 18; }
@@ -574,6 +739,30 @@ export _io_dirent_type_offset(): ulong { return 20; }
 
 [Target(OS(Mac))]
 export _io_dirent_name_offset(): ulong { return 21; }
+
+[Target(OS(Wasi))]
+export _io_dirent_type_offset(): ulong { return 8; }
+
+[Target(OS(Wasi))]
+export _io_dirent_name_offset(): ulong { return 9; }
+
+[Target(OS(Linux) || OS(Mac))]
+export _io_dirent_directory(): u8 { return 4; }
+
+[Target(OS(Linux) || OS(Mac))]
+export _io_dirent_file(): u8 { return 8; }
+
+[Target(OS(Linux) || OS(Mac))]
+export _io_dirent_symlink(): u8 { return 10; }
+
+[Target(OS(Wasi))]
+export _io_dirent_directory(): u8 { return 3; }
+
+[Target(OS(Wasi))]
+export _io_dirent_file(): u8 { return 4; }
+
+[Target(OS(Wasi))]
+export _io_dirent_symlink(): u8 { return 7; }
 
 # Opens the listing of `iterator._path` and reads its first entry into
 # `iterator._entry`: false when there is none.
@@ -622,9 +811,9 @@ export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
                 entry.file_type = m.value().file_type;
             }
         } else {
-            entry.is_directory = kind == 4;  # DT_DIR
-            entry.is_file = kind == 8;       # DT_REG
-            entry.is_symlink = kind == 10;   # DT_LNK
+            entry.is_directory = kind == _io_dirent_directory();
+            entry.is_file = kind == _io_dirent_file();
+            entry.is_symlink = kind == _io_dirent_symlink();
             entry.file_type = _io_file_type(entry.is_file, entry.is_directory, entry.is_symlink);
         }
         iterator._entry = entry;
@@ -686,12 +875,12 @@ export _io_sys_getcwd(): IoResult<Path> {
             return IoResult<Path>.ok(Path(_io_string_from_c(r)));
         }
         var e = IoError.last();
-        if (e.code != 34) {  # ERANGE: retry with a bigger buffer
+        if (e.code != _io_posix_code_range()) {  # retry with a bigger buffer
             return IoResult<Path>.err(e);
         }
         size = size * 2;
     }
-    return IoResult<Path>.err(IoError(34, "path too long"));
+    return IoResult<Path>.err(IoError(_io_posix_code_range(), "path too long"));
 }
 
 [Target(!OS(Windows))]
@@ -732,8 +921,8 @@ export _io_sys_temp_dir(): Path {
 
 # ── Thread-local keys ────────────────────────────────────────────────────────
 
-# A new thread-local key (pthread_key_t is 4 bytes on Linux, 8 on macOS; the
-# slot is zeroed first so either reads back whole).
+# A new thread-local key (pthread_key_t is 4 bytes on Linux and WASI, 8 on
+# macOS; the slot is zeroed first so either reads back whole).
 [Target(!OS(Windows))]
 export _io_sys_key_create(): ulong {
     __ptr<ulong> key = _pep_malloc(8);

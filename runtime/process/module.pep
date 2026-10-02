@@ -33,6 +33,7 @@ import "child";
 import "command";
 import "current";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 export Stream;

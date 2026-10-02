@@ -33,6 +33,7 @@
 import "atomic";
 import "sync_wait";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 import "task";
 import "thread";

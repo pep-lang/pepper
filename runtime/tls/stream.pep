@@ -9,6 +9,7 @@
 import io;
 import "openssl";
 import "schannel";
+import "wasi";
 
 ## Opens TLS client connections, checking each server's certificate.
 ##

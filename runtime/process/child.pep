@@ -5,6 +5,7 @@ import async;
 import io;
 import "command";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 extern void memcpy(void* destination, void* source, ulong size);

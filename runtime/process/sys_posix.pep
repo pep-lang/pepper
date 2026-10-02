@@ -1,6 +1,7 @@
 # POSIX (Linux, macOS) platform layer for process. Every declaration carries
-# [Target(!OS(Windows))] or a narrower target; sys_windows.pep declares the
-# same `_process_sys_*` functions with the same signatures for Windows.
+# [Target(OS(Linux) || OS(Mac))] or a narrower target; sys_windows.pep and
+# sys_wasi.pep declare the same `_process_sys_*` functions with the same
+# signatures for Windows and WASI.
 #
 # A child starts with posix_spawnp, which searches the PATH and reports a
 # failed exec as its result. Pipes are made close-on-exec, so a child
@@ -13,25 +14,25 @@ import os;
 import "child";
 import "command";
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawnp(int* pid, char* file, void* actions, void* attributes, void* argv, void* envp);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_init(void* actions);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_destroy(void* actions);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_adddup2(void* actions, int from, int to);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_addopen(void* actions, int descriptor, char* path, int flags, uint mode);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_addchdir_np(void* actions, char* path);
 [Target(OS(Mac))]
 extern int posix_spawn_file_actions_addinherit_np(void* actions, int descriptor);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawnattr_init(void* attributes);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawnattr_destroy(void* attributes);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int posix_spawnattr_setflags(void* attributes, short flags);
 [Target(OS(Linux))]
 extern int execvpe(char* file, void* argv, void* envp);
@@ -41,13 +42,13 @@ extern int pipe2(int* descriptors, int flags);
 extern int pipe(int* descriptors);
 [Target(OS(Mac))]
 extern int fcntl(int descriptor, int command, ...);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int close(int descriptor);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int waitpid(int pid, int* status, int options);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int kill(int pid, int signal);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int getpid();
 [Target(OS(Linux))]
 extern long readlink(char* path, char* buffer, ulong size);
@@ -55,29 +56,29 @@ extern long readlink(char* path, char* buffer, ulong size);
 extern int _NSGetExecutablePath(char* buffer, uint* size);
 [Target(OS(Mac))]
 extern char* realpath(char* path, char* resolved);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern void free(void* pointer);
 
 # A child process: its id.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export type _ProcessHandle = int;
 
 # Bigger than posix_spawn_file_actions_t and posix_spawnattr_t on both
 # systems (80 and 336 bytes on glibc, a pointer on macOS).
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 const _PROCESS_SPAWN_STATE_SIZE: ulong = 512;
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_names_ignore_case(): bool {
     return false;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_error_message(code: io.ErrorCode): String {
     return io._io_sys_error_message(code);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_id(): ulong {
     return getpid() as ulong;
 }
@@ -168,7 +169,7 @@ _process_inherit(actions: __ptr<void>, descriptor: int) {
 # Arranges standard stream `descriptor` of the child per `stream`; for a
 # pipe, stores the parent's end in `parent_end` and the child's in
 # `child_end` (both -1 otherwise). Returns 0 or an errno value.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _process_stream(
     actions: __ptr<void>, descriptor: int, stream: Stream, parent_end: __ptr<int>, child_end: __ptr<int>
 ): int {
@@ -200,7 +201,7 @@ _process_stream(
 
 # A null-terminated array of the C strings of `values`, which must outlive
 # it; free it with `_pep_free`.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _process_c_strings(values: Array<String>): __ptr<__ptr<char>> {
     __ptr<__ptr<char>> array = _pep_malloc((values.count + 1) * 8);
     ulong index = 0;
@@ -212,7 +213,7 @@ _process_c_strings(values: Array<String>): __ptr<__ptr<char>> {
     return array;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
     __ptr<void> actions = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     __ptr<void> attributes = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
@@ -324,7 +325,7 @@ _process_exec_program(program: String, argv: __ptr<__ptr<char>>, envp: __ptr<__p
     return code;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_exec(command: Command): io.IoError {
     # The program starts in the working directory this process has when it
     # execs, so enter the Command's and come back if the exec fails.
@@ -366,7 +367,7 @@ export _process_sys_exec(command: Command): io.IoError {
 }
 
 # A File owning the pipe end `descriptor`, or a closed File for -1.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _process_pipe_file(descriptor: int, name: String): io.File {
     var file = io.File();
     if (descriptor >= 0) {
@@ -376,7 +377,7 @@ _process_pipe_file(descriptor: int, name: String): io.File {
     return file;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
     var file = io.File();
     file._handle = handle;
@@ -384,7 +385,7 @@ export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
     return file;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
     __ptr<int> status = _pep_malloc(4);
     while (true) {
@@ -413,7 +414,7 @@ export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
     return -1;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
     if (kill(handle, 9) != 0) {  # SIGKILL
         return io.IoResult<void>.err(io.IoError.last());
@@ -421,5 +422,5 @@ export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
     return io.IoResult<void>.ok();
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _process_sys_release(handle: _ProcessHandle) {}

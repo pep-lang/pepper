@@ -18,6 +18,7 @@ import "address";
 import "path";
 import "socket";
 import "socket_posix";
+import "socket_wasi";
 import "socket_windows";
 import "sys_posix";
 import "sys_windows";

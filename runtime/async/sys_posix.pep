@@ -1,6 +1,7 @@
 # POSIX (Linux, macOS) platform layer for async. Every declaration carries
-# [Target(!OS(Windows))] or a narrower target; sys_windows.pep declares the
-# same `_async_sys_*` functions with the same signatures for Windows. These
+# [Target(OS(Linux) || OS(Mac))] or a narrower target; sys_windows.pep and
+# sys_wasi.pep declare the same `_async_sys_*` functions with the same
+# signatures for Windows and WASI. These
 # are exported to the other async files only: module.pep does not re-export
 # them.
 #
@@ -12,49 +13,49 @@
 
 import io;
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_create(void* thread, void* attributes, void* start, void* argument);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_join(void* thread, void* result);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_detach(void* thread);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern ulong pthread_self();
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_key_create(void* key, void* destructor);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_key_delete(ulong key);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern void* pthread_getspecific(ulong key);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_setspecific(ulong key, void* value);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int nanosleep(void* request, void* remaining);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern long sysconf(int name);
 [Target(OS(Mac))]
 extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_mutex_init(void* mutex, void* attributes);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_mutex_destroy(void* mutex);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_mutex_lock(void* mutex);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_mutex_trylock(void* mutex);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_mutex_unlock(void* mutex);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_cond_init(void* condition, void* attributes);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_cond_destroy(void* condition);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_cond_wait(void* condition, void* mutex);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_cond_signal(void* condition);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_cond_broadcast(void* condition);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int clock_gettime(int clock, void* time);
 [Target(OS(Linux))]
 extern int pthread_condattr_init(void* attributes);
@@ -70,7 +71,7 @@ extern int pthread_cond_timedwait_relative_np(void* condition, void* mutex, void
 # ── Threads ──────────────────────────────────────────────────────────────────
 
 # Starts a thread running `start(argument)`; its handle, or null on failure.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
     __ptr<__ptr<void>> thread = _pep_malloc(8);
     var result = pthread_create(thread, __null, start, argument);
@@ -82,23 +83,23 @@ export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> 
     return handle;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_join(handle: __ptr<void>) {
     pthread_join(handle, __null);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_detach(handle: __ptr<void>) {
     pthread_detach(handle);
 }
 
 # The operating system's identity of the calling thread.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_os_thread(): ulong {
     return pthread_self();
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_sleep(milliseconds: ulong) {
     # struct timespec { time_t tv_sec; long tv_nsec; }
     __ptr<long> time = _pep_malloc(16);
@@ -115,7 +116,7 @@ export _async_sys_sleep(milliseconds: ulong) {
 
 # A new key whose `destructor(value)` runs on each exiting thread with a
 # non-null value.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_key_create(destructor: __ptr<void>): ulong {
     __ptr<ulong> key = _pep_malloc(8);
     if (pthread_key_create(key, destructor) != 0) {
@@ -126,17 +127,17 @@ export _async_sys_key_create(destructor: __ptr<void>): ulong {
     return created;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_key_delete(key: ulong) {
     pthread_key_delete(key);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_key_get(key: ulong): __ptr<void> {
     return pthread_getspecific(key);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
 }
@@ -150,7 +151,7 @@ export _async_sys_key_set(key: ulong, value: __ptr<void>) {
 # panics on a re-lock before it would deadlock.
 
 # A new, unlocked mutex.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_mutex_create(): __ptr<void> {
     var mutex = _pep_malloc(64);
     if (pthread_mutex_init(mutex, __null) != 0) {
@@ -160,24 +161,24 @@ export _async_sys_mutex_create(): __ptr<void> {
 }
 
 # Destroys an unlocked mutex and frees its block.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_mutex_destroy(mutex: __ptr<void>) {
     pthread_mutex_destroy(mutex);
     _pep_free(mutex);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_mutex_lock(mutex: __ptr<void>) {
     pthread_mutex_lock(mutex);
 }
 
 # Locks `mutex` only if it is free; true if it is now held.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
     return pthread_mutex_trylock(mutex) == 0;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_mutex_unlock(mutex: __ptr<void>) {
     pthread_mutex_unlock(mutex);
 }
@@ -212,7 +213,7 @@ export _async_sys_condition_create(): __ptr<void> {
 }
 
 # Destroys a condition variable no thread waits on and frees its block.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_condition_destroy(condition: __ptr<void>) {
     pthread_cond_destroy(condition);
     _pep_free(condition);
@@ -220,7 +221,7 @@ export _async_sys_condition_destroy(condition: __ptr<void>) {
 
 # Unlocks `mutex` (held by the caller), sleeps until notified (or woken
 # spuriously), and locks it again.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
     pthread_cond_wait(condition, mutex);
 }
@@ -257,12 +258,12 @@ export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>,
     return result == 0;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_condition_notify_one(condition: __ptr<void>) {
     pthread_cond_signal(condition);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _async_sys_condition_notify_all(condition: __ptr<void>) {
     pthread_cond_broadcast(condition);
 }
@@ -279,7 +280,7 @@ export _async_sys_monotonic_milliseconds(): ulong {
     return _async_monotonic_milliseconds(6);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _async_monotonic_milliseconds(clock: int): ulong {
     __ptr<long> time = _pep_malloc(16);
     clock_gettime(clock, time);

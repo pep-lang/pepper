@@ -250,6 +250,7 @@ cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 cargo run -- tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries
+cargo run -- tests/hello.pep --target wasm32-wasip1 --sysroot /opt/wasi-sdk -o hello.wasm  # WebAssembly; run with wasmtime
 cargo run -- tests/hello.pep -D USE_ZLIB -D LOG_LEVEL=2  # define build options for [BuildOption] and [Target(BuildOption(...))]
 cargo run -- tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 cargo run -- tests/hello.pep -T time       # print each compile stage's time
@@ -427,6 +428,11 @@ Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
   `lld` and Ubuntu's `libc6-dev-arm64-cross` and runs under `qemu-aarch64`.
   Every other pair emits its objects; linking them needs that platform's
   sysroot (`--sysroot`), which is untested so far.
+- **WebAssembly** (`--target wasm32-wasip1`): links with `wasm-ld` and
+  wasi-sdk 25 (`--sysroot` or `WASI_SDK_PATH`) and runs under wasmtime.
+  Tested on Linux x64 with LLVM 20: the docs examples pass except those
+  that need threads, tasks, sockets or processes, which WASI preview 1
+  lacks.
 - **macOS x86_64** is untested. Homebrew serves it, which is the path that
   works on macOS anyway; of the supported majors only LLVM 19 publishes a
   `macOS-X64` archive, and the fallback reports that the version has no build

@@ -12,18 +12,19 @@ pepper-parser = { path = "../pepper-parser" }
 
 # `target-all` (inkwell's default) emits initializers for every LLVM target,
 # including ones a given LLVM build omits, which fails at link time with
-# unresolved LLVMInitialize<Target>*. So the backends are named: x86 and
-# AArch64, on every host, so `--target` can emit for either architecture from
-# either one; crates/pepper-codegen/src/target.rs registers them. Every LLVM
-# this builds against (apt's, Homebrew's, the official Windows archive) carries
-# both. `target-x86` is LLVM's X86 backend, which covers i386 and x86-64
-# alike; the code is 64-bit because `--target` accepts only 64-bit triples.
+# unresolved LLVMInitialize<Target>*. So the backends are named: x86,
+# AArch64 and WebAssembly, on every host, so `--target` can emit for any of
+# them from any host; crates/pepper-codegen/src/target.rs registers them.
+# Every LLVM this builds against (apt's, Homebrew's, the official Windows
+# archive) carries all three. `target-x86` is LLVM's X86 backend, which covers
+# i386 and x86-64 alike; the x86 code is 64-bit because `--target` accepts
+# only 64-bit x86 triples. WebAssembly is `wasm32-wasip1` (#374).
 #
 # The LLVM version is a feature, not a fixed dependency: inkwell requires
 # exactly one `llvmNN-1` feature, and which LLVM is cheaply available differs
 # per platform -- apt has 18/19/20, Homebrew has `llvm@18` through `llvm@22`,
 # Windows runner image has no usable LLVM at all. See scripts/setup-llvm.*.
-inkwell = { version = "0.10", default-features = false, features = ["target-x86", "target-aarch64"] }
+inkwell = { version = "0.10", default-features = false, features = ["target-x86", "target-aarch64", "target-webassembly"] }
 
 # Windows links LLVM-C.dll instead of LLVM's static libs -- those are built
 # against the static CRT and mixing CRTs corrupts the heap. `no-llvm-linking`

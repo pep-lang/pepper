@@ -223,6 +223,11 @@ _async_best_backend(): Backend {
     return Backend.Iocp;
 }
 
+[Target(OS(Wasi))]
+_async_best_backend(): Backend {
+    return Backend.Poll;
+}
+
 extern char* getenv(char* name);
 
 # PEPPER_IO_BACKEND as a backend: Automatic when unset.

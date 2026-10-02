@@ -14,6 +14,7 @@
 
 import "atomic";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 import "task";
 import "thread_local";

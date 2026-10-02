@@ -41,6 +41,7 @@ import "path";
 import "print";
 import "socket";
 import "socket_posix";
+import "socket_wasi";
 import "socket_windows";
 import "stream";
 import "sys_posix";

@@ -11,6 +11,12 @@
 //! host's formats; named with `--ld-path` when `find_lld` finds it), and the
 //! target's system root (`--sysroot`, or `/winsysroot` for a Windows target,
 //! which `lld-link` reads).
+//!
+//! WebAssembly (`wasm32-wasip1`) links with `wasm-ld` against wasi-libc, from
+//! a wasi-sdk: `--sysroot` (or `PEPPER_SYSROOT_WASM32_WASIP1`, or the
+//! conventional `WASI_SDK_PATH`) names the SDK or its `share/wasi-sysroot`,
+//! and the SDK's `lib/clang/<version>` supplies the compiler-rt builtins
+//! that LLVM's own clang does not ship for WebAssembly (see [`WasiSdk`]).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -79,17 +85,25 @@ pub fn default_system_libraries(os: &str) -> &'static [&'static str] {
         // A floating-point `**` calls `pow`, which glibc keeps in libm
         // (macOS has it in libSystem, Windows in the UCRT).
         "linux" => &["m"],
+        // wasi-libc keeps `pow` in libc, and `getpid` in an emulation
+        // library of its own.
+        "wasi" => &["wasi-emulated-getpid"],
         _ => &[],
     }
 }
 
-/// LLVM's linker for an ELF or Mach-O target (`ld.lld`, `ld64.lld`), when
-/// one is found: beside the link driver, in the LLVM install the compiler
-/// links against, or on the PATH, plain or with this LLVM's major
-/// (`ld.lld-20`). clang finds a plain one beside itself or on the PATH
-/// unaided, but not the versioned name Ubuntu's `lld-20` installs.
+/// LLVM's linker for an ELF, Mach-O or WebAssembly target (`ld.lld`,
+/// `ld64.lld`, `wasm-ld`), when one is found: beside the link driver, in the
+/// LLVM install the compiler links against, or on the PATH, plain or with
+/// this LLVM's major (`ld.lld-20`). clang finds a plain one beside itself or
+/// on the PATH unaided, but not the versioned name Ubuntu's `lld-20`
+/// installs.
 fn find_lld(os: &str, driver: &Path) -> Option<PathBuf> {
-    let name = if os == "macos" { "ld64.lld" } else { "ld.lld" };
+    let name = match os {
+        "macos" => "ld64.lld",
+        "wasi" => "wasm-ld",
+        _ => "ld.lld",
+    };
     let versioned = format!("{}-{}", name, LLVM_MAJOR);
     let mut directories: Vec<PathBuf> = driver.parent().filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf).into_iter().collect();
     if let Ok(prefix) = std::env::var(LLVM_PREFIX_ENV) {
@@ -103,6 +117,41 @@ fn find_lld(os: &str, driver: &Path) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// A wasi-sdk's two parts the link needs: the wasi-libc system root and
+/// the clang resource directory holding `libclang_rt.builtins-wasm32.a`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WasiSdk {
+    /// `share/wasi-sysroot`: wasi-libc's headers and libraries.
+    pub sysroot: PathBuf,
+    /// `lib/clang/<version>`, when the SDK has one: its compiler-rt builtins
+    /// are for its own clang's version, which any clang links with.
+    pub resource_dir: Option<PathBuf>,
+}
+
+impl WasiSdk {
+    /// The SDK `dir` names: a wasi-sdk (holding `share/wasi-sysroot`), or a
+    /// system root itself (a wasi-sdk's `share/wasi-sysroot`, whose SDK is
+    /// two directories up, or a stand-alone wasi-libc). `None` for no
+    /// directory: then `WASI_SDK_PATH`, wasi-sdk's own variable, names it.
+    pub fn locate(dir: Option<&Path>) -> Option<WasiSdk> {
+        let dir = match dir {
+            Some(dir) => dir.to_path_buf(),
+            None => PathBuf::from(std::env::var_os("WASI_SDK_PATH").filter(|d| !d.is_empty())?),
+        };
+        let (sdk, sysroot) = if dir.join("share").join("wasi-sysroot").is_dir() {
+            (Some(dir.clone()), dir.join("share").join("wasi-sysroot"))
+        } else {
+            (dir.parent().and_then(Path::parent).map(Path::to_path_buf), dir)
+        };
+        let resource_dir = sdk.and_then(|sdk| {
+            let mut versions: Vec<PathBuf> = std::fs::read_dir(sdk.join("lib").join("clang")).ok()?.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_dir()).collect();
+            versions.sort();
+            versions.pop()
+        });
+        Some(WasiSdk { sysroot, resource_dir })
+    }
+}
+
 /// The link driver's options that choose the platform: none for the host;
 /// for another target, its triple, LLVM's linker (`lld`, the one at `lld`
 /// when given), and its system root.
@@ -114,9 +163,21 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
     if !target.is_host() {
         // clang's MSVC toolchain picks `lld-link` by `-fuse-ld` alone.
         match lld.filter(|_| target.os != "windows") {
+            // clang's WebAssembly toolchain reads only `-fuse-ld`, which
+            // takes a path there.
+            Some(path) if target.os == "wasi" => args.push(format!("-fuse-ld={}", path.display())),
             Some(path) => args.push(format!("--ld-path={}", path.display())),
             None => args.push("-fuse-ld=lld".to_string()),
         }
+    }
+    if target.os == "wasi" {
+        if let Some(sdk) = WasiSdk::locate(sysroot) {
+            args.push(format!("--sysroot={}", sdk.sysroot.display()));
+            if let Some(resource_dir) = sdk.resource_dir {
+                args.push(format!("-resource-dir={}", resource_dir.display()));
+            }
+        }
+        return args;
     }
     if let Some(sysroot) = sysroot {
         if target.os == "windows" {
@@ -243,6 +304,21 @@ fn cross_link_note(target: &pepper_sema::Target, sysroot: Option<&Path>) -> Stri
         return String::new();
     }
     let triple = target.triple.as_deref().unwrap_or_default();
+    if target.os == "wasi" {
+        return match WasiSdk::locate(sysroot) {
+            None => format!(
+                "\nnote: linking for '{}' needs a wasi-sdk (https://github.com/WebAssembly/wasi-sdk/releases) and LLVM's wasm-ld: \
+                 pass '--sysroot <wasi-sdk>' or set {} or WASI_SDK_PATH",
+                triple,
+                crate::options::sysroot_variable(triple)
+            ),
+            Some(sdk) => format!(
+                "\nnote: linking for '{}' with the wasi-sdk system root '{}' needs LLVM's wasm-ld (lld) beside clang or on the PATH",
+                triple,
+                sdk.sysroot.display()
+            ),
+        };
+    }
     match sysroot {
         None => format!(
             "\nnote: linking for '{}' needs that platform's system libraries and LLVM's linker (lld): \
@@ -286,5 +362,31 @@ mod tests {
         assert_eq!(args.last().map(String::as_str), Some("/winsysroot:/xwin"));
         let note = cross_link_note(&target, None);
         assert!(note.contains("pass '--sysroot <dir>' or set PEPPER_SYSROOT_"), "{note}");
+    }
+
+    /// A wasi-sdk is found from its own directory or its system root, and
+    /// lends the link its compiler-rt builtins.
+    #[test]
+    fn webassembly_links_with_the_wasi_sdk() {
+        let sdk = std::env::temp_dir().join(format!("pepper-wasi-sdk-{}", std::process::id()));
+        let sysroot = sdk.join("share").join("wasi-sysroot");
+        let resource_dir = sdk.join("lib").join("clang").join("19");
+        std::fs::create_dir_all(&sysroot).unwrap();
+        std::fs::create_dir_all(&resource_dir).unwrap();
+        let expected = WasiSdk { sysroot: sysroot.clone(), resource_dir: Some(resource_dir.clone()) };
+        assert_eq!(WasiSdk::locate(Some(&sdk)), Some(expected.clone()));
+        assert_eq!(WasiSdk::locate(Some(&sysroot)), Some(expected));
+        let target = pepper_sema::Target::parse("wasm32-wasi").unwrap();
+        let args = target_arguments(&target, Some(&sdk), Some(Path::new("/usr/bin/wasm-ld-20")));
+        assert_eq!(
+            args,
+            [
+                "--target=wasm32-wasip1".to_string(),
+                "-fuse-ld=/usr/bin/wasm-ld-20".to_string(),
+                format!("--sysroot={}", sysroot.display()),
+                format!("-resource-dir={}", resource_dir.display()),
+            ]
+        );
+        std::fs::remove_dir_all(&sdk).unwrap();
     }
 }

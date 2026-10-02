@@ -6,6 +6,7 @@
 ## `environment`, `remove_environment` and `clear_environment` instead.
 
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 ## Returns the value of the environment variable `name`, or none when it is

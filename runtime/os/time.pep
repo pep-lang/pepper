@@ -2,6 +2,7 @@
 ## `SystemTime` for the wall clock.
 
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 const NANOSECONDS_PER_MICROSECOND: ulong = 1000;

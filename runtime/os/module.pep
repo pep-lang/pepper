@@ -31,6 +31,7 @@
 import "environment";
 import "machine";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 import "time";
 import "user";

@@ -7,6 +7,7 @@ import io;
 import os;
 import "child";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 extern int fflush(void* stream);

@@ -6,7 +6,7 @@
 //! feature wants initializers for every LLVM target, including ones a given
 //! LLVM build omits, which fails at link time with unresolved
 //! `LLVMInitialize<Target>*`. So each crate asks for exactly the backends
-//! `--target` can name (x86 and AArch64; see Cargo.toml) and this registers
+//! `--target` can name (x86, AArch64 and WebAssembly; see Cargo.toml) and this registers
 //! them.
 //!
 //! Registering only x86 is what once made the compiler unusable on Apple
@@ -30,7 +30,8 @@
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple};
 use inkwell::OptimizationLevel;
 
-/// Register every LLVM backend `--target` can name: x86 and AArch64.
+/// Register every LLVM backend `--target` can name: x86, AArch64 and
+/// WebAssembly.
 ///
 /// Safe to call repeatedly: `TargetRegistry::RegisterTarget` returns early
 /// once a target of that name is registered, and the MC/TargetMachine
@@ -43,6 +44,7 @@ pub fn initialize_targets() {
     // separate "x86_64" target to register.
     Target::initialize_x86(&config);
     Target::initialize_aarch64(&config);
+    Target::initialize_webassembly(&config);
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
@@ -172,7 +174,7 @@ impl Cpu {
     /// Clang's default CPU for `triple`, from its driver
     /// (`clang/lib/Driver/ToolChains/Arch/{X86,AArch64}.cpp`): `x86-64`, or
     /// `penryn` on macOS, tuned for `generic` on x86; `apple-m1` on Apple
-    /// arm64, else `generic` (Armv8-A).
+    /// arm64, else `generic` (Armv8-A, or WebAssembly's default features).
     pub fn default_for(triple: &str) -> Cpu {
         let apple = triple.contains("-apple-");
         if is_x86(triple) {
@@ -194,6 +196,8 @@ impl Cpu {
     /// - On AArch64, `-mcpu` names the CPU and `-march` the architecture
     ///   (`armv8.2-a`), each with `+<extension>` or `+no<extension>` after
     ///   it.
+    /// - On WebAssembly, `-mcpu` names the CPU (`mvp`, `generic`,
+    ///   `bleeding-edge`) and `-march` is not accepted.
     /// - `-mtune` names the CPU to schedule for; `native` is the host's.
     /// - `-m<feature>` adds an LLVM feature and `-mno-<feature>` removes
     ///   it, after the ones the CPU or architecture implies.
@@ -202,7 +206,8 @@ impl Cpu {
     pub fn from_options(triple: &str, machine: &[String]) -> Result<Cpu, String> {
         let mut cpu = Cpu::default_for(triple);
         let x86 = is_x86(triple);
-        let cross = x86 != cfg!(target_arch = "x86_64");
+        let wasm = is_wasm(triple);
+        let cross = wasm || x86 != cfg!(target_arch = "x86_64");
         let host = || TargetMachine::get_host_cpu_name().to_string();
         let (mut arch, mut mcpu, mut tune) = (None, None, None);
         let mut extra = vec![];
@@ -211,6 +216,9 @@ impl Cpu {
                 return Err(format!("'-m{}' names this machine's CPU, which target '{}' cannot run on", option, triple));
             }
             if let Some(value) = option.strip_prefix("arch=") {
+                if wasm {
+                    return Err(format!("unsupported option '-march=' for target '{}'; use '-mcpu'", triple));
+                }
                 arch = Some(value);
             } else if let Some(value) = option.strip_prefix("cpu=") {
                 if x86 {
@@ -328,6 +336,15 @@ fn is_x86(triple: &str) -> bool {
     triple.starts_with("x86_64") || triple.starts_with("amd64")
 }
 
+fn is_wasm(triple: &str) -> bool {
+    triple.starts_with("wasm32")
+}
+
+/// Whether the target's pointers are 32 bits (WebAssembly's `wasm32`).
+pub fn is_32_bit() -> bool {
+    is_wasm(&triple_name())
+}
+
 /// `name+ext+noext` as `name` and the LLVM features `+ext`, `-ext`.
 fn split_extensions(value: &str) -> (&str, Vec<String>) {
     let mut parts = value.split('+');
@@ -410,14 +427,31 @@ pub fn machine(level: OptLevel, cpu: &Cpu) -> Result<TargetMachine, String> {
 ///
 /// For an ELF target, the static constructors move from
 /// `llvm.global_ctors` into `.init_array` first (see [`use_init_array`]).
+/// WebAssembly keeps them: its object format records `llvm.global_ctors`
+/// itself, and `wasm-ld` calls them from `__wasm_call_ctors`. There `main`
+/// is also renamed for WASI's startup code (see [`use_wasi_main`]).
 pub fn write_object(machine: &TargetMachine, module: &inkwell::module::Module<'_>, path: &std::path::Path) -> Result<(), String> {
     let triple = triple_name();
-    if !triple.contains("-windows") && !triple.contains("-apple-") {
+    if is_wasm(&triple) {
+        use_wasi_main(module);
+    } else if !triple.contains("-windows") && !triple.contains("-apple-") {
         use_init_array(module);
     }
     machine
         .write_to_file(module, inkwell::targets::FileType::Object, path)
         .map_err(|e| format!("cannot write {}: {}", path.display(), e))
+}
+
+/// Name `module`'s `main` (Pepper's `int main()`) `__main_void`, as clang
+/// names a C `int main(void)` for WebAssembly: wasi-libc's `_start` calls
+/// `__main_void`. Under its own name LLVM would wrap it in a two-argument
+/// `main` that nothing calls, and the program would trap on entry.
+pub fn use_wasi_main(module: &inkwell::module::Module<'_>) {
+    if let Some(main) = module.get_function("main") {
+        if main.count_basic_blocks() > 0 && main.count_params() == 0 {
+            main.as_global_value().set_name("__main_void");
+        }
+    }
 }
 
 /// Move `module`'s static constructors from `llvm.global_ctors` into an

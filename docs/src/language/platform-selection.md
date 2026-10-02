@@ -14,8 +14,10 @@ The target is the platform you compile on, unless you name another with
 `Target` takes one boolean condition built from these predicates:
 
 - `OS(...)` is true on the named operating system: `Windows`, `Mac` (or
-  `MacOS`), or `Linux`.
-- `Arch(...)` is true on the named processor architecture: `x64` or `aarch64`.
+  `MacOS`), `Linux`, or `Wasi` (WebAssembly, see
+  [below](#webassembly)).
+- `Arch(...)` is true on the named processor architecture: `x64`,
+  `aarch64`, or `wasm32`.
 - `BuildOption(NAME)` is true when the build defines `NAME` with `-D`, and
   can be compared with a literal (`BuildOption(LOG_LEVEL) >= 2`); see
   [Build options](build-options.md).
@@ -89,7 +91,7 @@ never a silent "no match":
 ```
 
 ```text
-main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux) in [Target(OS(Darwin))]
+main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
     1 | [Target(OS(Darwin))] f(): int { return 1; }
       | ^~~~~~~~~~~~~~~~~~~~
 ```
@@ -121,10 +123,12 @@ and object format. The supported targets are each OS on each architecture:
 | `aarch64-apple-darwin`      | macOS   | `aarch64` |
 | `x86_64-pc-windows-msvc`    | Windows | `x64`     |
 | `aarch64-pc-windows-msvc`   | Windows | `aarch64` |
+| `wasm32-wasip1`             | Wasi    | `wasm32`  |
 
 clang's other spellings work too: `arm64` for `aarch64`, `amd64` for
 `x86_64`, any vendor, and an OS version (`arm64-apple-macosx14.0`). Any
-other triple is an error that lists these.
+other triple is an error that lists these. `wasm32-wasi`,
+`wasm32-unknown-wasi` and `wasm32-unknown-wasip1` all mean `wasm32-wasip1`.
 
 ```sh
 pep-build --target aarch64-unknown-linux-gnu main.pep -o main
@@ -160,3 +164,40 @@ machine you compile on, is an error for a target of another architecture.
 
 The compiler only builds for the target; copy the executable to a machine
 of that platform to run it.
+
+## WebAssembly
+
+`--target wasm32-wasip1` compiles to a WebAssembly module for
+[WASI](https://wasi.dev) preview 1, which runtimes such as
+[wasmtime](https://wasmtime.dev) run from the command line:
+
+```sh
+pep-build --target wasm32-wasip1 --sysroot /opt/wasi-sdk main.pep -o main.wasm
+wasmtime run --dir . main.wasm
+```
+
+Linking needs a [wasi-sdk](https://github.com/WebAssembly/wasi-sdk) (its
+sysroot holds wasi-libc and clang's builtins) and LLVM's `wasm-ld`, which the
+compiler finds as it finds `lld` (also as `wasm-ld-20`). Name the SDK
+directory, or its `share/wasi-sysroot`, with `--sysroot`, or set
+`PEPPER_SYSROOT_WASM32_WASIP1` or `WASI_SDK_PATH`. wasi-sdk 25 is the version
+tested. The program needs a runtime's `--dir` to reach a directory and
+`-S inherit-env` (wasmtime) to see the environment.
+
+WASI preview 1 is a small system, and `wasm32` is a 32-bit target, so some
+things work differently:
+
+- `OS(Wasi)` code selects the WASI versions of the runtime's platform layer.
+  Code written for `!OS(Windows)` also compiles for WASI, so check that it
+  only calls what wasi-libc has.
+- There are no threads and no stack switching: `Thread.spawn` panics, and
+  so does starting a task (`async.run`, `Task.spawn`). Mutexes, channels
+  and atomics work within the one thread.
+- Sockets, TLS, HTTP connections and starting processes return an
+  `IoError` saying they are not supported on WASI.
+- Files work through the directories the runtime grants. `Metadata` has no
+  permission bits (`read_only` is false) and no creation time.
+- `os` reports `OperatingSystem.Wasi`, `"wasm32"`, an empty host name and
+  version, and no total memory.
+- Pointers and C's `long` and `size_t` are 32 bits; see
+  [32-bit targets](c-interop.md#32-bit-targets).

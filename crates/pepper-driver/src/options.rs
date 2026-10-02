@@ -254,8 +254,9 @@ impl Options {
         if let Some(dir) = &self.sysroot {
             return Some(dir.clone());
         }
-        let triple = self.target.as_deref()?;
-        std::env::var_os(sysroot_variable(triple)).filter(|dir| !dir.is_empty()).map(PathBuf::from)
+        // The canonical triple: `wasm32-wasi` reads PEPPER_SYSROOT_WASM32_WASIP1.
+        let triple = self.effective_target().ok()?.triple?;
+        std::env::var_os(sysroot_variable(&triple)).filter(|dir| !dir.is_empty()).map(PathBuf::from)
     }
 
     /// Port of `Options::defaults`: build dir = $CWD/.pep/build, forced

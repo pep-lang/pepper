@@ -348,10 +348,10 @@ pub fn undefined_build_option_comparisons(attribute: &ast::Attribute) -> Vec<(St
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Target {
     /// The OS, as `std::env::consts::OS` spells it (`"windows"`, `"macos"`,
-    /// `"linux"`).
+    /// `"linux"`), or `"wasi"` for WebAssembly.
     pub os: String,
     /// The architecture, as `std::env::consts::ARCH` spells it (`"x86_64"`,
-    /// `"aarch64"`).
+    /// `"aarch64"`, `"wasm32"`).
     pub arch: String,
     /// The LLVM target triple, or `None` for the host's own (LLVM's default
     /// triple, which also carries the host OS version on macOS).
@@ -362,7 +362,7 @@ pub struct Target {
 }
 
 /// The triples `--target` accepts: each supported OS on each supported
-/// architecture, as clang spells them.
+/// architecture, as clang spells them, and WebAssembly with WASI preview 1.
 pub const SUPPORTED_TRIPLES: &[&str] = &[
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -370,6 +370,7 @@ pub const SUPPORTED_TRIPLES: &[&str] = &[
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
+    "wasm32-wasip1",
 ];
 
 impl Target {
@@ -383,7 +384,9 @@ impl Target {
     /// `x86_64-pc-windows-msvc`). Accepts clang's spellings of the supported
     /// architectures (`x86_64`, `amd64`; `aarch64`, `arm64`) and operating
     /// systems (`linux-gnu`, `darwin` or `macosx`, `windows-msvc`), with any
-    /// vendor and an OS version (`arm64-apple-macosx14.0`).
+    /// vendor and an OS version (`arm64-apple-macosx14.0`). WebAssembly is
+    /// `wasm32-wasip1`, also spelled `wasm32-wasi` or `wasm32-unknown-wasi`;
+    /// each becomes `wasm32-wasip1`, the name clang and wasi-sdk use now.
     pub fn parse(triple: &str) -> Result<Target, String> {
         let unsupported = || {
             format!(
@@ -392,6 +395,9 @@ impl Target {
                 SUPPORTED_TRIPLES.join(", ")
             )
         };
+        if matches!(triple, "wasm32-wasi" | "wasm32-wasip1" | "wasm32-unknown-wasi" | "wasm32-unknown-wasip1") {
+            return Ok(Target { os: "wasi".to_string(), arch: "wasm32".to_string(), triple: Some("wasm32-wasip1".to_string()), build_options: default_build_options() });
+        }
         let parts: Vec<&str> = triple.split('-').collect();
         if parts.len() < 3 || parts.iter().any(|p| p.is_empty()) {
             return Err(unsupported());
@@ -508,13 +514,14 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
     };
     let Expression::SymbolRef { id, .. } = value else {
         return Err(format!(
-            "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux) in {attr}"
+            "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux, Wasi) in {attr}"
         ));
     };
     let host = match target_os().as_str() {
         "windows" => Some("windows"),
         "macos" => Some("macos"),
         "linux" => Some("linux"),
+        "wasi" => Some("wasi"),
         _ => None,
     };
     match host {
@@ -531,8 +538,9 @@ fn matches_os_value(value: &str, host: &str, attr: &ast::Attribute) -> Result<bo
         "windows" => Ok(host == "windows"),
         "mac" | "macos" => Ok(host == "macos"),
         "linux" => Ok(host == "linux"),
+        "wasi" => Ok(host == "wasi"),
         _ => Err(format!(
-            "unknown OS value `{value}` (expected Windows, Mac, MacOS, Linux) in {attr}"
+            "unknown OS value `{value}` (expected Windows, Mac, MacOS, Linux, Wasi) in {attr}"
         )),
     }
 }
@@ -543,12 +551,13 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
     };
     let Expression::SymbolRef { id, .. } = value else {
         return Err(format!(
-            "Arch predicate value must be a symbol (x64, aarch64) in {attr}"
+            "Arch predicate value must be a symbol (x64, aarch64, wasm32) in {attr}"
         ));
     };
     let host = match target_arch().as_str() {
         "x86_64" => Some("x64"),
         "aarch64" => Some("aarch64"),
+        "wasm32" => Some("wasm32"),
         _ => None,
     };
     match host {
@@ -558,11 +567,11 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
             let v = id.to_ascii_lowercase();
             if v == h {
                 Ok(true)
-            } else if v == "x64" || v == "aarch64" {
+            } else if v == "x64" || v == "aarch64" || v == "wasm32" {
                 Ok(false)
             } else {
                 Err(format!(
-                    "unknown Arch value `{id}` (expected x64, aarch64) in {attr}"
+                    "unknown Arch value `{id}` (expected x64, aarch64, wasm32) in {attr}"
                 ))
             }
         }

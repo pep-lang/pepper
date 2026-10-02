@@ -49,6 +49,7 @@ import "atomic";
 import "channel";
 import "driver";
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 import "task";
 

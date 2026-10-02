@@ -1,34 +1,34 @@
 # POSIX (Linux, macOS) platform layer for os. Every declaration carries
-# [Target(!OS(Windows))] or a narrower target; sys_windows.pep declares the
+# [Target(OS(Linux) || OS(Mac))] or a narrower target; sys_windows.pep declares the
 # same `_os_sys_*` functions with the same signatures for Windows.
 
 import "machine";
 import "user";
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern char* getenv(char* name);
 [Target(OS(Linux))]
 extern void* dlsym(void* handle, char* name);
 [Target(OS(Mac))]
 extern void* _NSGetEnviron();
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int clock_gettime(int clock, void* time);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int gethostname(char* name, ulong size);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int uname(void* name);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern long sysconf(int name);
 [Target(OS(Mac))]
 extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern uint geteuid();
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 extern int getpwuid_r(uint uid, void* entry, char* buffer, ulong size, void* result);
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_environment(name: String): String? {
     # Safe from any thread: nothing in the runtime calls setenv.
     __ptr<char> value = getenv(name.c_str());
@@ -57,7 +57,7 @@ export _os_environ(): __ptr<__ptr<char>> {
     return slot[0];
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_environment_entries(): Array<String> {
     var entries = Array<String>();
     var values = _os_environ();
@@ -86,12 +86,12 @@ export _os_sys_monotonic_nanoseconds(): ulong {
 }
 
 # CLOCK_REALTIME is 0 on both.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_system_nanoseconds(): long {
     return _os_clock_nanoseconds(0);
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _os_clock_nanoseconds(clock: int): long {
     # struct timespec { time_t tv_sec; long tv_nsec; }
     __ptr<long> time = _pep_malloc(16);
@@ -144,7 +144,7 @@ _os_sysctl_string(name: String): String {
     return text;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_hostname(): String {
     # HOST_NAME_MAX is 64 on Linux and 255 on macOS; the last byte stays NUL
     # in case the name was cut short.
@@ -198,7 +198,7 @@ const PASSWD_DIRECTORY_FIELD: ulong = 6;
 
 # The effective user's entry in the user database: field 0 is pw_name, and
 # `field` picks another pointer-sized field. Empty when there is no entry.
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 _os_passwd_field(field: ulong): String? {
     __ptr<__ptr<char>> entry = _pep_malloc(128);  # struct passwd: 48 or 72 bytes
     __ptr<__ptr<char>> result = _pep_malloc(8);
@@ -224,7 +224,7 @@ _os_passwd_field(field: ulong): String? {
     return found;
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_user_name(): String? {
     var name = _os_passwd_field(0);
     if (name.is_value() && !name.value().is_empty) {
@@ -233,7 +233,7 @@ export _os_sys_user_name(): String? {
     return _os_nonempty_environment("USER");
 }
 
-[Target(!OS(Windows))]
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_home_directory(): String? {
     var home = _os_nonempty_environment("HOME");
     if (home.is_value()) {

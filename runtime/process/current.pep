@@ -16,6 +16,7 @@
 
 import io;
 import "sys_posix";
+import "sys_wasi";
 import "sys_windows";
 
 ## Returns the program's command-line arguments.

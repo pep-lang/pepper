@@ -235,6 +235,9 @@ _http_code_invalid_input(): io.ErrorCode { return 22; }
 [Target(OS(Windows))]
 _http_code_invalid_input(): io.ErrorCode { return 87; }
 
+[Target(OS(Wasi))]
+_http_code_invalid_input(): io.ErrorCode { return 28; }
+
 _http_parse_url(url: String): io.IoResult<_HttpUrl> {
     var uri = Uri.parse(url);
     if (uri.is_err()) {

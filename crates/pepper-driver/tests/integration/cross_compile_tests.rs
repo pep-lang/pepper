@@ -22,6 +22,10 @@ const PROGRAM: &str = "main(): int {
     {
         print(\"built for linux\");
     }
+    [Target(OS(Wasi))]
+    {
+        print(\"built for wasi\");
+    }
     var squares = Array<int>();
     for (var i in 0..10) {
         squares.append(i * i);
@@ -60,11 +64,14 @@ fn compile(dir: &Path, triple: &str, extra: &[&str]) -> Result<i32, String> {
 }
 
 /// The object format and architecture `bytes` (an object file's start)
-/// declare, as `"ELF x86_64"`, `"Mach-O aarch64"` or `"COFF x86_64"`.
+/// declare, as `"ELF x86_64"`, `"Mach-O aarch64"`, `"COFF x86_64"` or
+/// `"WebAssembly wasm32"`.
 fn object_kind(bytes: &[u8]) -> String {
     let u16_at = |at: usize| u16::from_le_bytes([bytes[at], bytes[at + 1]]);
     let u32_at = |at: usize| u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
-    if bytes.starts_with(b"\x7fELF") {
+    if bytes.starts_with(b"\0asm") {
+        "WebAssembly wasm32".to_string()
+    } else if bytes.starts_with(b"\x7fELF") {
         let arch = match u16_at(18) {
             62 => "x86_64",
             183 => "aarch64",
@@ -94,6 +101,7 @@ fn expected_kind(triple: &str) -> String {
     let format = match target.os.as_str() {
         "linux" => "ELF",
         "macos" => "Mach-O",
+        "wasi" => "WebAssembly",
         _ => "COFF",
     };
     format!("{} {}", format, target.arch)
@@ -136,6 +144,7 @@ fn target_selection_follows_the_target_not_the_host() {
         ("x86_64-pc-windows-msvc", "built for windows", ["built for macos", "built for linux"]),
         ("aarch64-apple-darwin", "built for macos", ["built for windows", "built for linux"]),
         ("aarch64-unknown-linux-gnu", "built for linux", ["built for windows", "built for macos"]),
+        ("wasm32-wasip1", "built for wasi", ["built for windows", "built for linux"]),
     ] {
         let dir = scratch(&format!("selection_{}", triple));
         compile(&dir, triple, &["--emit-llvm"]).unwrap_or_else(|e| panic!("{}: {}", triple, e));
@@ -171,7 +180,39 @@ fn a_cross_link_without_a_sysroot_names_what_is_missing() {
 #[test]
 fn an_unsupported_target_lists_the_supported_ones() {
     let dir = scratch("unsupported");
-    let error = compile(&dir, "wasm32-unknown-wasi", &[]).expect_err("an unsupported target");
+    let error = compile(&dir, "riscv64-unknown-linux-gnu", &[]).expect_err("an unsupported target");
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(error, format!("unsupported target 'wasm32-unknown-wasi'; expected one of: {}", SUPPORTED_TRIPLES.join(", ")));
+    assert_eq!(error, format!("unsupported target 'riscv64-unknown-linux-gnu'; expected one of: {}", SUPPORTED_TRIPLES.join(", ")));
+}
+
+#[test]
+fn every_wasi_spelling_means_wasm32_wasip1() {
+    for spelling in ["wasm32-wasi", "wasm32-unknown-wasi", "wasm32-wasip1", "wasm32-unknown-wasip1"] {
+        let target = pepper_sema::Target::parse(spelling).unwrap_or_else(|e| panic!("{}: {}", spelling, e));
+        assert_eq!((target.os.as_str(), target.arch.as_str()), ("wasi", "wasm32"), "{}", spelling);
+        assert_eq!(target.triple.as_deref(), Some("wasm32-wasip1"), "{}", spelling);
+    }
+}
+
+/// The wasi-sdk and wasmtime a WebAssembly run needs, from `WASI_SDK_PATH`
+/// and `WASMTIME` (else `wasmtime` on the PATH); `None` when either is
+/// missing, as on most test machines.
+fn wasi_tools() -> Option<(String, String)> {
+    let sdk = std::env::var("WASI_SDK_PATH").ok()?;
+    let wasmtime = std::env::var("WASMTIME").unwrap_or_else(|_| "wasmtime".to_string());
+    std::process::Command::new(&wasmtime).arg("--version").output().ok()?.status.success().then_some((sdk, wasmtime))
+}
+
+#[test]
+fn a_webassembly_program_runs_under_wasmtime() {
+    let Some((sdk, wasmtime)) = wasi_tools() else {
+        eprintln!("skipped: set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it");
+        return;
+    };
+    let dir = scratch("wasmtime");
+    compile(&dir, "wasm32-wasip1", &["--sysroot", &sdk]).unwrap_or_else(|e| panic!("{}", e));
+    let output = std::process::Command::new(&wasmtime).arg("run").arg(dir.join("main")).output().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(output.status.success(), "exit {:?}: {}", output.status, String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "built for wasi\n");
 }

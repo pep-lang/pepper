@@ -39,6 +39,19 @@ Pepper's `long` is always 64 bits. C's `long` is 64 bits on Linux and macOS but
 prototype per platform (see [`[Link(name = ...)]`](#binding-to-a-different-symbol-name)
 below for an example).
 
+### 32-bit targets
+
+On a 32-bit target (`wasm32-wasip1`, see
+[WebAssembly](platform-selection.md#webassembly)), pointers, C's `long` and
+`size_t` are 32 bits. There, an extern's `long` and `ulong` stand for C's
+pointer-sized `long`/`ssize_t` and `unsigned long`/`size_t`: the call passes
+the low 32 bits and widens the result back to 64 (sign-extending a `long`,
+zero-extending a `ulong`), so `extern ulong strlen(char* s);` works
+unchanged. `i64` and `u64` stay 64 bits on every target; use them for C's
+`long long`, `int64_t` and `off_t`. WebAssembly checks every call's
+signature, so a prototype with the wrong width traps instead of returning
+garbage.
+
 Some things to know about `extern` declarations:
 
 - The prototype uses C syntax only. The `name(parameter: type): type` form that

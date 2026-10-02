@@ -63,10 +63,10 @@ be negative.
 
 | Function | Returns |
 |---|---|
-| `system_os()` | the `OperatingSystem` the program was built for: `Linux`, `Mac` or `Windows` |
+| `system_os()` | the `OperatingSystem` the program was built for: `Linux`, `Mac`, `Windows` or `Wasi` |
 | `system_name()` | the same as text: `"linux"`, `"macos"` or `"windows"` |
 | `system_version()` | the kernel release on Linux, the product version on macOS (`14.5`), `major.minor.build` on Windows |
-| `architecture()` | `"x64"` or `"aarch64"`, as `[Target(Arch(...))]` names them |
+| `architecture()` | `"x64"`, `"aarch64"` or `"wasm32"`, as `[Target(Arch(...))]` names them |
 | `hostname()` | the machine's host name |
 | `logical_cpus()`, `physical_cpus()` | processor counts, the same as `async`'s |
 | `total_memory()`, `page_size()` | physical memory and the virtual memory page size, in bytes |

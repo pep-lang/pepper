@@ -4,6 +4,7 @@
 # is written against these names only.
 
 import "socket_posix";
+import "socket_wasi";
 import "socket_windows";
 import "sys_posix";
 import "sys_windows";
