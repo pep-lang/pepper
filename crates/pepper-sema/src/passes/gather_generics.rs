@@ -335,7 +335,9 @@ pub fn parse_type_string(s: &str) -> TypeName {
     if s.ends_with('*') {
         return TypeName::new(s);
     }
-    let Some(open) = s.find('<') else {
+    // An operator's name (`<`, `<=`, `<<`) is not a type and has no
+    // arguments to split.
+    let Some(open) = s.find('<').filter(|&open| open > 0 && s.ends_with('>') && s.len() > open + 1) else {
         return TypeName::new(s);
     };
     let name = &s[..open];

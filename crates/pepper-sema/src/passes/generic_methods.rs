@@ -36,7 +36,8 @@ pub fn specialize_methods(module: &mut Module) -> bool {
                 Expression::MemberRef { lhs, name, loc } => (lhs, name, loc, vec![]),
                 _ => return,
             };
-            if method.contains('<') {
+            // `<`, `<=` and `<<` are operators, not type arguments.
+            if method.contains('<') && method.starts_with(|c: char| c.is_alphabetic() || c == '_') {
                 let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
                 if let Some(owner) = crate::static_type::of(this, statics, current) {
                     if !owner.contains_auto() {

@@ -131,6 +131,28 @@ fn struct_compared_with_integer() {
 }
 
 #[test]
+fn string_ordered_against_char() {
+    // Iterating a String yields String, so `c < '0'` has no matching
+    // operator (#530). The `<` in the operator's name once reached generic
+    // method specialization as if it opened type arguments, and panicked.
+    for op in ["<", "<=", ">", ">="] {
+        let source = format!("f(text: String): bool {{\n    for (var c in text) {{ if (c {op} '0') {{ return false; }} }}\n    return true;\n}}\nmain(): int {{ return f(\"5\") ? 0 : 1; }}\n");
+        let error = error_of(&format!("string_ordered_against_char_{}", op.len()), &source);
+        let head: Vec<&str> = error.lines().take(3).collect();
+        let caret = format!("^{}", "~".repeat(op.len() + 3));
+        assert_eq!(
+            head,
+            [
+                format!("main.pep:2:33: error: no matching function for call to '{op}'").as_str(),
+                format!("    2 |     for (var c in text) {{ if (c {op} '0') {{ return false; }} }}").as_str(),
+                format!("      |                                 {caret}").as_str(),
+            ],
+            "{error}"
+        );
+    }
+}
+
+#[test]
 fn undeclared_function() {
     assert_eq!(
         error_of("undeclared_function", "main(): int {\n    return frob(1);\n}\n"),
