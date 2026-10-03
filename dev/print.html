@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-48f0d31e.js";
+            window.path_to_searchindex_js = "searchindex-a5eb00af.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57b6db41.js"></script>
@@ -9135,6 +9135,10 @@ so a breakpoint on one stops only in the first pass, and stepping over
 the line runs the rest.</p>
 </li>
 <li>
+<p><strong><code>--emit-static</code></strong> writes the program’s source with each block
+replaced by what it emits (see the next section).</p>
+</li>
+<li>
 <p><strong><code>--emit-llvm</code></strong> writes the program’s LLVM IR into the build directory
 (<code>.pep/build/&lt;name&gt;.ll</code>), where the function a block expanded in shows
 exactly what it emitted, one copy per specialization
@@ -9142,6 +9146,63 @@ exactly what it emitted, one copy per specialization
 any block runs, so it does not show the expansion.</p>
 </li>
 </ul>
+<h3 id="seeing-what-a-static-block-emits"><a class="header" href="#seeing-what-a-static-block-emits">Seeing what a static block emits</a></h3>
+<p><code>pepper build main.pep --emit-static</code> writes a copy of the program with
+each <code>static</code> block replaced by the statements it emits, the way a C
+compiler’s <code>-E</code> shows the preprocessed source. Nothing is compiled; the
+copy goes into <code>main.static/</code> (or the folder <code>-o</code> names) and builds into
+the same program. For the <code>describe</code> example at the top of this page, the
+copy keeps <code>describe&lt;T&gt;</code> as written and adds what it is for <code>Point</code>:</p>
+<pre><code class="language-pepper"># 'describe' specialized for T = Point, with its static blocks expanded
+describe&lt;Point&gt;(value: Point): String {
+    var out = StringBuilder();
+    # static (out, value) expanded from reflection-basics.pep:11:5 for T = Point
+    {
+        out.append("Point");
+        out.append("(");
+        {
+            out.append($"x = {value.x}");
+            {
+                out.append(", ");
+            }
+        }
+        {
+            out.append($"y = {value.y}");
+            {
+                out.append(", ");
+            }
+        }
+        {
+            out.append($"label = {value.label}");
+        }
+    }
+    # end static
+    out.append(")");
+    return out.to_string();
+}
+</code></pre>
+<ul>
+<li>Each pass of an unrolled <code>for</code> or <code>while</code> is a block of its own, one
+after another; a compile-time <code>if</code> leaves only the branch it took; the
+compile-time <code>var</code>s and steps are gone.</li>
+<li>Compile-time values are written as literals: <code>field.name</code> becomes
+<code>"x"</code> (inside an interpolated string, its text), <code>field.Type</code> the type,
+<code>field.get(value)</code> <code>value.x</code>, <code>case.matches(v)</code> <code>v is Shape.Circle</code>, and
+<code>function.call()</code> a call by name. A case’s value, <code>item.get(v)</code>, becomes
+a <code>match</code> that reads it.</li>
+<li>Everything else in the file is copied byte for byte, comments included.
+<code>--emit-static=keep</code> also keeps each block as <code>#</code> comments above its
+expansion.</li>
+<li>A block in a generic function expands differently for each type, so the
+copy adds a <a href="#overriding-a-generic-function-for-one-type">concrete override</a>
+per specialization the program uses, as above. A block in a method of a
+generic struct, or in a generic method, stays as written, with each
+specialization’s expansion above it as comments.</li>
+<li>An error in the emitted code shows when the copy is built, at the line
+of the copy that has it.</li>
+</ul>
+<p><a href="#--emit-static---emit-statickeep">pep-build</a> lists
+the details.</p>
 <h2 id="the-reflect-functions"><a class="header" href="#the-reflect-functions">The <code>reflect</code> functions</a></h2>
 <p><code>reflect</code> is built in: a <code>static</code> block uses it without an import. The
 <a href="#the-reflect-module-compile-time">reference</a> has an entry for each function and
@@ -9481,8 +9542,7 @@ main(): int {
 <li>Calling functions other than the <code>reflect</code> functions at compile time.</li>
 <li>Reflecting methods and constructors (<code>reflect.methods&lt;T&gt;()</code>).</li>
 <li>Limiting where an attribute may be used (<code>[AttributeTargets(...)]</code>).</li>
-<li>Showing the code a block expands to, and tracing the blocks the compiler
-runs.</li>
+<li>Tracing the blocks the compiler runs.</li>
 <li>Type information at run time.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -17810,11 +17870,12 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the entry file’s <code>[Test]</code> functions into a test program</td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
+<tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
@@ -17903,6 +17964,7 @@ name for that stem (<code>libmain.a</code>). Building a project with no file, it
 folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
 Windows and the name has no extension. Windows runs only files ending in
 <code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>.</p>
+<p>With <code>--emit-static</code>, it is the folder the expanded source goes into.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C
 header beside it that declares the program’s <code>[Export]</code>ed functions. No
@@ -17940,6 +18002,40 @@ for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops th
 linked and no executable is written.</p>
 <pre><code class="language-bash">pepper build main.pep -O --emit-llvm      # .pep/build/main.ll
 </code></pre>
+<h3 id="--emit-static---emit-statickeep"><a class="header" href="#--emit-static---emit-statickeep"><code>--emit-static</code>, <code>--emit-static=keep</code></a></h3>
+<p>Writes a copy of the program’s source with each <code>static</code> block replaced by
+the code it emits, like a C compiler’s <code>-E</code>, and stops there: nothing is
+compiled to code. Use it to see what a reflection loop, a serializer or a
+library’s block does to the program (see
+<a href="#seeing-what-a-static-block-emits">Seeing what a static block emits</a>).</p>
+<pre><code class="language-bash">pepper build main.pep --emit-static              # main.static/main.pep
+pepper build main.pep --emit-static -o expanded  # expanded/main.pep
+pepper build expanded/main.pep -o main           # the same program
+</code></pre>
+<ul>
+<li>Every file of the program in the entry file’s folder (and the folders
+under it) is written into the output folder at the same relative path,
+so the folder builds as a whole program; files with no block are copied
+unchanged. The runtime and libraries found elsewhere are not copied. The
+originals are never overwritten.</li>
+<li>The folder is <code>-o</code>’s, else <code>&lt;entry stem&gt;.static</code> in the current folder.</li>
+<li>Each expansion is a <code>{ ... }</code> block between
+<code># static (out, value) expanded from main.pep:12:5</code> and <code># end static</code>.
+<code>--emit-static=keep</code> also keeps the block as written, as <code>#</code> comments
+above it; <code>--emit-static=expand</code> is the default, the same as
+<code>--emit-static</code>.</li>
+<li>A block in a generic function expands once per specialization. The
+generic function stays as written, and after it comes a
+<a href="#overriding-a-generic-function-for-one-type">concrete override</a>
+for each type the program uses it with (<code>describe&lt;Point&gt;(value: Point)</code>),
+its blocks expanded, so the copy still builds into the same program. A
+block in a method of a generic struct, or in a generic method, stays,
+with each specialization’s expansion above it as <code>#</code> comments.</li>
+<li>When <code>pep-fmt</code> is next to the compiler or on <code>PATH</code>, it formats the
+copies, wrapping long lines.</li>
+<li>Errors a block reports stop it, as they stop a build. Errors in the code
+a block emits are found when the copy is built, at the copy’s line.</li>
+</ul>
 <h3 id="--emit-ast"><a class="header" href="#--emit-ast"><code>--emit-ast</code></a></h3>
 <p>Parses the entry file only and prints its syntax tree to standard output,
 instead of compiling. Imports are not followed and nothing is checked.</p>

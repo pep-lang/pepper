@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-48f0d31e.js";
+            window.path_to_searchindex_js = "../searchindex-a5eb00af.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -202,11 +202,12 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the entry file’s <code>[Test]</code> functions into a test program</td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
+<tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
@@ -295,6 +296,7 @@ name for that stem (<code>libmain.a</code>). Building a project with no file, it
 folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
 Windows and the name has no extension. Windows runs only files ending in
 <code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>.</p>
+<p>With <code>--emit-static</code>, it is the folder the expanded source goes into.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C
 header beside it that declares the program’s <code>[Export]</code>ed functions. No
@@ -332,6 +334,40 @@ for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops th
 linked and no executable is written.</p>
 <pre><code class="language-bash">pepper build main.pep -O --emit-llvm      # .pep/build/main.ll
 </code></pre>
+<h3 id="--emit-static---emit-statickeep"><a class="header" href="#--emit-static---emit-statickeep"><code>--emit-static</code>, <code>--emit-static=keep</code></a></h3>
+<p>Writes a copy of the program’s source with each <code>static</code> block replaced by
+the code it emits, like a C compiler’s <code>-E</code>, and stops there: nothing is
+compiled to code. Use it to see what a reflection loop, a serializer or a
+library’s block does to the program (see
+<a href="../language/reflection.html#seeing-what-a-static-block-emits">Seeing what a static block emits</a>).</p>
+<pre><code class="language-bash">pepper build main.pep --emit-static              # main.static/main.pep
+pepper build main.pep --emit-static -o expanded  # expanded/main.pep
+pepper build expanded/main.pep -o main           # the same program
+</code></pre>
+<ul>
+<li>Every file of the program in the entry file’s folder (and the folders
+under it) is written into the output folder at the same relative path,
+so the folder builds as a whole program; files with no block are copied
+unchanged. The runtime and libraries found elsewhere are not copied. The
+originals are never overwritten.</li>
+<li>The folder is <code>-o</code>’s, else <code>&lt;entry stem&gt;.static</code> in the current folder.</li>
+<li>Each expansion is a <code>{ ... }</code> block between
+<code># static (out, value) expanded from main.pep:12:5</code> and <code># end static</code>.
+<code>--emit-static=keep</code> also keeps the block as written, as <code>#</code> comments
+above it; <code>--emit-static=expand</code> is the default, the same as
+<code>--emit-static</code>.</li>
+<li>A block in a generic function expands once per specialization. The
+generic function stays as written, and after it comes a
+<a href="../language/generics.html#overriding-a-generic-function-for-one-type">concrete override</a>
+for each type the program uses it with (<code>describe&lt;Point&gt;(value: Point)</code>),
+its blocks expanded, so the copy still builds into the same program. A
+block in a method of a generic struct, or in a generic method, stays,
+with each specialization’s expansion above it as <code>#</code> comments.</li>
+<li>When <code>pep-fmt</code> is next to the compiler or on <code>PATH</code>, it formats the
+copies, wrapping long lines.</li>
+<li>Errors a block reports stop it, as they stop a build. Errors in the code
+a block emits are found when the copy is built, at the copy’s line.</li>
+</ul>
 <h3 id="--emit-ast"><a class="header" href="#--emit-ast"><code>--emit-ast</code></a></h3>
 <p>Parses the entry file only and prints its syntax tree to standard output,
 instead of compiling. Imports are not followed and nothing is checked.</p>
