@@ -55,6 +55,11 @@ fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum
             if name.ends_with('*') || name.starts_with("__extern_function<") {
                 return Some(BasicTypeEnum::PointerType(context.ptr_type(inkwell::AddressSpace::default())));
             }
+            // `__simd<T, N>`: LLVM's `<N x T>` (simd.rs).
+            if let Some((lane, count)) = crate::simd::shape(name) {
+                let lane = scalar_type(context, &lane)?;
+                return crate::simd::vector_type(lane, count).map(BasicTypeEnum::VectorType);
+            }
             return None;
         }
     })

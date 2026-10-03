@@ -5219,3 +5219,62 @@ fn test_on_a_method() {
          \x20     |      ^~~~"
     );
 }
+
+#[test]
+fn vector_lane_count_must_be_a_power_of_two() {
+    assert_eq!(
+        error_of("vector_lane_count", "import simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n"),
+        "main.pep:3:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\n\
+         \x20   3 |     var v = simd.Vector<int, 3>(1);\n\
+         \x20     |                              ^"
+    );
+    let error = error_of("mask_lane_count", "import simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n");
+    assert!(error.starts_with("main.pep:3:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'"), "{}", error);
+}
+
+#[test]
+fn vector_lanes_must_be_numbers() {
+    let error = error_of("vector_lane_type", "import simd;\nmain(): int {\n    var v = simd.Vector<String, 4>(\"a\");\n    return 0;\n}\n");
+    assert!(
+        error.starts_with(
+            "main.pep:3:25: error: 'String' does not conform to trait 'Lane', required by 'T' in 'Vector'\n\
+             \x20   3 |     var v = simd.Vector<String, 4>(\"a\");\n\
+             \x20     |                         ^~~~~~"
+        ),
+        "{}",
+        error
+    );
+}
+
+#[test]
+fn integer_vectors_have_no_square_root() {
+    let error = error_of("vector_withheld", "import simd;\nmain(): int {\n    var v = simd.Vector<int, 4>(4);\n    var r = v.square_root();\n    return 0;\n}\n");
+    assert!(
+        error.starts_with(
+            "main.pep:4:15: error: no member named 'square_root' in 'Vector<int, 4>'\n\
+             \x20   4 |     var r = v.square_root();\n\
+             \x20     |               ^~~~~~~~~~~"
+        ),
+        "{}",
+        error
+    );
+    assert!(error.contains("note: 'square_root' requires 'int' to conform to 'FloatLane'"), "{}", error);
+}
+
+/// An operator a value struct does not declare is an error at the operator,
+/// not a compiler crash (and a float vector has no shifts).
+#[test]
+fn value_struct_without_the_operator() {
+    assert_eq!(
+        error_of("value_struct_operator", "[Value]\nstruct P {\n    var x: int;\n    construct() {}\n}\nmain(): int {\n    var p = P();\n    var r = p << 1;\n    return 0;\n}\n"),
+        "main.pep:8:15: error: invalid operands to binary expression ('P' and 'int')\n\
+         \x20   8 |     var r = p << 1;\n\
+         \x20     |               ^~~~"
+    );
+    assert_eq!(
+        error_of("float_vector_shift", "import simd;\nmain(): int {\n    var v = simd.Vector<float, 4>(1.0);\n    var r = v << 1;\n    return 0;\n}\n"),
+        "main.pep:4:15: error: invalid operands to binary expression ('Vector<float, 4>' and 'int')\n\
+         \x20   4 |     var r = v << 1;\n\
+         \x20     |               ^~~~"
+    );
+}

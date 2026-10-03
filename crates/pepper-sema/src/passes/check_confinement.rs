@@ -965,6 +965,13 @@ impl<'p, 'a> Walk<'p, 'a> {
                 self.eval(b);
                 None
             }
+            // Vectors hold numbers only.
+            Expression::Simd { args, .. } => {
+                for arg in args {
+                    self.eval(arg);
+                }
+                None
+            }
             // Stores like an assignment, so it links the same way.
             Expression::ConstructAt(slot, value) => {
                 let value_region = self.eval(value);

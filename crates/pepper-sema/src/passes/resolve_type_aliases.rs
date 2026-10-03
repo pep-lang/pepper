@@ -380,6 +380,12 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
+        Expression::Simd { ty, args, .. } => {
+            subst(ty, aliases);
+            for arg in args {
+                subst_expr(arg, aliases, values);
+            }
+        }
         Expression::FunctionCall { function, args, .. } => {
             // Type positions are encoded into the call string (static calls
             // like `Result<int>.ok(..)` and explicit generic args `g<I>(..)`).

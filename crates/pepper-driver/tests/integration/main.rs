@@ -88,6 +88,7 @@ mod regex_tests;
 mod result_tests;
 mod runtime_docs_tests;
 mod shared_ptr_semantics_tests;
+mod simd_tests;
 mod socket_tests;
 mod task_tests;
 mod test_harness_tests;

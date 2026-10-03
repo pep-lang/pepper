@@ -670,6 +670,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::AtomicStore(..) | Expression::ConstructAt(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),
+        Expression::Simd { op, ty, .. } => op.result(ty),
         // `p[i]` through a raw pointer reads the pointee (codegen GEPs
         // through it), so `var v = p[i]` on a `__ptr<ulong>` is a `ulong`.
         // Struct receivers become `__index_get` calls in resolve_operators

@@ -340,13 +340,16 @@ jobs:
           out="$RUNNER_TEMP/cross"
           rm -rf "$out"
           mkdir -p "$out"
-          for example in hello interpolation-format maps-sorted json-structs threads-basics; do
+          for example in hello interpolation-format maps-sorted json-structs threads-basics simd-basics; do
             "$compiler" "docs/examples/$example.pep" -o "$out/$example-host" --build "$out/build"
             "$compiler" --target aarch64-unknown-linux-gnu "docs/examples/$example.pep" -o "$out/$example-arm64" --build "$out/build"
             "$out/$example-host" > "$out/$example-host.txt"
             qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/$example-arm64" > "$out/$example-arm64.txt"
             diff "$out/$example-host.txt" "$out/$example-arm64.txt"
           done
+          # Every SIMD vector operation, on NEON.
+          "$compiler" --target aarch64-unknown-linux-gnu tests/Simd.Basic/test.pep -o "$out/simd-arm64" --build "$out/build"
+          test "$(qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/simd-arm64")" = "simd ok"
 
       # Every verification failure's message starts with "build cache:". Put
       # each one in the run's summary and as an annotation, and keep the log,

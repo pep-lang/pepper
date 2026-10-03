@@ -66,8 +66,9 @@ impl ThreadSafeStructs {
 /// thread-safe structs.
 pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<TypeName> {
     let name = ty.to_string();
-    // A C function pointer is a code address, the same on every thread.
-    if crate::type_name::is_integral_name(&name) || ty.is_shared_function_type() || ty.is_extern_function_type() {
+    // A C function pointer is a code address, the same on every thread, and
+    // a vector (`__simd<T, N>`) holds only numbers.
+    if crate::type_name::is_integral_name(&name) || ty.is_simd() || ty.is_shared_function_type() || ty.is_extern_function_type() {
         return None;
     }
     if ty.is_function_type() {

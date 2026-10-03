@@ -456,7 +456,15 @@ struct Parser {
         _restating = false;
         _take(node);
         while (true) {
-            node.add(_type_name());
+            if (_peek_at(0).kind == TokenKind.Number) {
+                # A lane count, `16` in `__simd<byte, 16>`: the compiler's
+                # `type_argument`.
+                var count = Node(NodeKind.Type);
+                _take(count);
+                node.add(count);
+            } else {
+                node.add(_type_name());
+            }
             if (_failed) {
                 return node;
             }

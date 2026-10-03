@@ -548,6 +548,11 @@ impl Converter {
                 self.expression(a, current);
                 self.expression(b, current);
             }
+            Expression::Simd { args, .. } => {
+                for arg in args {
+                    self.expression(arg, current);
+                }
+            }
             Expression::AtomicCmpXchg(_, a, b, c) => {
                 self.expression(a, current);
                 self.expression(b, current);

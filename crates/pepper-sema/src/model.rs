@@ -213,6 +213,161 @@ pub enum AtomicFetchOp {
     Xor,
 }
 
+/// The operation of an `Expression::Simd` intrinsic: `__simd_add<V>(a, b)`
+/// is `SimdOp::Add` over vector type `V` (`__simd<T, N>`, lowered to LLVM's
+/// `<N x T>`). The runtime's `simd.Vector<T, N>` and `simd.Mask<N>` are
+/// written with these (#517).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SimdOp {
+    Splat,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Remainder,
+    And,
+    Or,
+    Xor,
+    ShiftLeft,
+    ShiftRight,
+    Negate,
+    Not,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Select,
+    Minimum,
+    Maximum,
+    Abs,
+    RotateLeft,
+    RotateRight,
+    SquareRoot,
+    Floor,
+    Ceiling,
+    Sum,
+    ReduceMinimum,
+    ReduceMaximum,
+    Any,
+    All,
+    ToBits,
+    Extract,
+    Insert,
+    Shuffle,
+    Reverse,
+    InterleaveLow,
+    InterleaveHigh,
+    Load,
+    LoadAligned,
+    Store,
+    StoreAligned,
+    Convert,
+    Reinterpret,
+    Lanes,
+    LaneBits,
+    IsSigned,
+}
+
+impl SimdOp {
+    /// Every operation, with the name after `__simd_` that calls it.
+    pub const ALL: [(SimdOp, &'static str); 49] = [
+        (SimdOp::Splat, "splat"),
+        (SimdOp::Add, "add"),
+        (SimdOp::Subtract, "subtract"),
+        (SimdOp::Multiply, "multiply"),
+        (SimdOp::Divide, "divide"),
+        (SimdOp::Remainder, "remainder"),
+        (SimdOp::And, "and"),
+        (SimdOp::Or, "or"),
+        (SimdOp::Xor, "xor"),
+        (SimdOp::ShiftLeft, "shift_left"),
+        (SimdOp::ShiftRight, "shift_right"),
+        (SimdOp::Negate, "negate"),
+        (SimdOp::Not, "not"),
+        (SimdOp::Equal, "equal"),
+        (SimdOp::NotEqual, "not_equal"),
+        (SimdOp::Less, "less"),
+        (SimdOp::LessEqual, "less_equal"),
+        (SimdOp::Greater, "greater"),
+        (SimdOp::GreaterEqual, "greater_equal"),
+        (SimdOp::Select, "select"),
+        (SimdOp::Minimum, "minimum"),
+        (SimdOp::Maximum, "maximum"),
+        (SimdOp::Abs, "abs"),
+        (SimdOp::RotateLeft, "rotate_left"),
+        (SimdOp::RotateRight, "rotate_right"),
+        (SimdOp::SquareRoot, "square_root"),
+        (SimdOp::Floor, "floor"),
+        (SimdOp::Ceiling, "ceiling"),
+        (SimdOp::Sum, "sum"),
+        (SimdOp::ReduceMinimum, "reduce_minimum"),
+        (SimdOp::ReduceMaximum, "reduce_maximum"),
+        (SimdOp::Any, "any"),
+        (SimdOp::All, "all"),
+        (SimdOp::ToBits, "to_bits"),
+        (SimdOp::Extract, "extract"),
+        (SimdOp::Insert, "insert"),
+        (SimdOp::Shuffle, "shuffle"),
+        (SimdOp::Reverse, "reverse"),
+        (SimdOp::InterleaveLow, "interleave_low"),
+        (SimdOp::InterleaveHigh, "interleave_high"),
+        (SimdOp::Load, "load"),
+        (SimdOp::LoadAligned, "load_aligned"),
+        (SimdOp::Store, "store"),
+        (SimdOp::StoreAligned, "store_aligned"),
+        (SimdOp::Convert, "convert"),
+        (SimdOp::Reinterpret, "reinterpret"),
+        (SimdOp::Lanes, "lanes"),
+        (SimdOp::LaneBits, "lane_bits"),
+        (SimdOp::IsSigned, "is_signed"),
+    ];
+
+    /// The operation `__simd_<name>` calls.
+    pub fn from_name(name: &str) -> Option<SimdOp> {
+        SimdOp::ALL.iter().find(|(_, n)| *n == name).map(|(op, _)| *op)
+    }
+
+    /// The name after `__simd_`.
+    pub fn name(self) -> &'static str {
+        SimdOp::ALL.iter().find(|(op, _)| *op == self).map(|(_, n)| *n).unwrap_or_default()
+    }
+
+    /// How many arguments the operation takes.
+    pub fn arity(self) -> usize {
+        use SimdOp::*;
+        match self {
+            Lanes | LaneBits | IsSigned => 0,
+            Splat | Negate | Not | Abs | SquareRoot | Floor | Ceiling | Sum | ReduceMinimum | ReduceMaximum | Any | All
+            | ToBits | Reverse | Load | LoadAligned | Convert | Reinterpret => 1,
+            Insert | Select => 3,
+            _ => 2,
+        }
+    }
+
+    /// The type of the node, given the vector type `ty` it works on.
+    pub fn result(self, ty: &TypeName) -> TypeName {
+        use SimdOp::*;
+        let element = || ty.sub_types.first().cloned().unwrap_or_else(|| TypeName::new("int"));
+        match self {
+            Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual => {
+                let mut mask = ty.clone();
+                if let Some(first) = mask.sub_types.first_mut() {
+                    *first = TypeName::bool_();
+                }
+                mask
+            }
+            Extract | Sum | ReduceMinimum | ReduceMaximum => element(),
+            Any | All | IsSigned => TypeName::bool_(),
+            ToBits => TypeName::new("ulong"),
+            Store | StoreAligned => TypeName::new("void"),
+            Lanes | LaneBits => TypeName::new("int"),
+            _ => ty.clone(),
+        }
+    }
+}
+
 /// What wrote an `Expression::Cast`, which decides what it may convert
 /// (`crate::casts::check`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -328,6 +483,15 @@ pub enum Expression {
     /// atomic read-modify-write on the T-sized integer value at pointer `p`;
     /// returns the previous value (the old occupant of the slot).
     AtomicFetch(AtomicFetchOp, TypeName, Box<Expression>, Box<Expression>),
+    /// `__simd_<op><V>(args)`: a lane-wise or horizontal operation on the
+    /// vector type `ty` (`__simd<T, N>`; for `Convert` and `Reinterpret`, the
+    /// result type). See [`SimdOp`].
+    Simd {
+        op: SimdOp,
+        ty: TypeName,
+        args: Vec<Expression>,
+        loc: Loc,
+    },
     /// Weak reference intrinsics over struct `T` (see `passes::weak_types`):
     /// `__weak_from<T>(t)` (a new `__weak<T>` to `t`'s object),
     /// `__weak_upgrade<T>(w)` (a new strong `T`, or null once destroyed) and
@@ -584,7 +748,8 @@ impl Expression {
             | Expression::Destructure { loc, .. }
             | Expression::Move { loc, .. }
             | Expression::StringLiteral { loc, .. }
-            | Expression::StaticString { loc, .. } => *loc,
+            | Expression::StaticString { loc, .. }
+            | Expression::Simd { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
             Expression::StaticValue(v) => v.loc,
             Expression::StaticMember(m) => m.loc,

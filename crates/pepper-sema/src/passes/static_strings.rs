@@ -425,6 +425,11 @@ impl Uses<'_, '_> {
                 self.expression(a, true);
                 self.expression(b, false);
             }
+            Expression::Simd { args, .. } => {
+                for arg in args {
+                    self.expression(arg, false);
+                }
+            }
             Expression::AtomicCmpXchg(_, a, b, c) => {
                 self.expression(a, true);
                 self.expression(b, false);

@@ -395,20 +395,20 @@ export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: 
 
 # The offset of the first byte from `i` up to (not including) `end` at `data`
 # that is not ASCII (has its high bit set), or `end` when there is none.
-# Once `data + i` is 8-byte aligned it tests eight bytes per step.
+# It tests sixteen bytes per step with a vector compare, whose bit mask's
+# `trailing_zeros` is the first such byte (#517). It calls the intrinsics
+# under `simd.Vector` directly: at `-O0` the vector's methods, even inlined,
+# leave the loop several times slower than these few instructions.
 _pep_ascii_end(data: __ptr<void>, i: ulong, end: ulong): ulong {
-    while (i < end && (unsafe_cast<ulong>(data + i) & 7) != 0) {
-        if ((data[i] & 0x80) != 0) {
-            return i;
+    __ptr<byte> bytes = unsafe_cast<__ptr<byte>>(data);
+    var high_bit = __simd_splat<__simd<byte, 16>>(0x80 as byte);
+    while (i + 16 <= end) {
+        var chunk = __simd_load<__simd<byte, 16>>(bytes + i);
+        var high = __simd_to_bits<__simd<bool, 16>>(__simd_greater_equal<__simd<byte, 16>>(chunk, high_bit));
+        if (high != 0) {
+            return i + high.trailing_zeros();
         }
-        i = i + 1;
-    }
-    while (i + 8 <= end) {
-        __ptr<ulong> word = unsafe_cast<__ptr<ulong>>(data + i);
-        if ((word[0] & 0x8080808080808080) != 0) {
-            break;
-        }
-        i = i + 8;
+        i = i + 16;
     }
     while (i < end) {
         if ((data[i] & 0x80) != 0) {
@@ -426,7 +426,7 @@ _pep_ascii_end(data: __ptr<void>, i: ulong, end: ulong): ulong {
 # is `size` (with `chars` at least `size`). Every UTF-8 count and check goes
 # through this one loop, with the decoding written out in it: a call per
 # code point made CJK text about half again slower (#522). A run of eight
-# ASCII bytes or more is handed to `_pep_ascii_end`, which skips it eight
+# ASCII bytes or more is handed to `_pep_ascii_end`, which skips it sixteen
 # bytes at a time; shorter runs stay in the loop.
 export _pep_utf8_scan(data: __ptr<void>, size: ulong, chars: ulong): (ulong, ulong) {
     ulong i = 0;

@@ -112,6 +112,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.debug_base_type("void", 8, UNSIGNED_CHAR)
         } else if let Some((bits, encoding)) = scalar(base) {
             self.debug_base_type(written(base), bits, encoding)
+        } else if let Some((lane, count)) = crate::simd::shape(base) {
+            self.debug_vector(base, &lane, count)?
         } else if self.debug.as_ref()?.enums.contains_key(base) {
             self.debug_enum(base)?
         } else if let Some(BasicTypeEnum::IntType(int)) = self.types.get(base) {
@@ -119,6 +121,25 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             return None;
         })
+    }
+
+    /// A vector, `__simd<T, N>`: an array of its `N` lanes, or, for a mask's
+    /// `bool` lanes (one bit each in memory), an unsigned number of its bits.
+    fn debug_vector(&mut self, name: &str, lane: &str, count: u32) -> Option<DIType<'ctx>> {
+        let Some(BasicTypeEnum::VectorType(vector)) = self.types.get(name) else { return None };
+        let bits = self.simd_size(vector) as u64 * 8;
+        if lane == "bool" {
+            return Some(self.debug_base_type(name, bits, UNSIGNED));
+        }
+        let (lane_bits, encoding) = scalar(lane)?;
+        let lane_type = self.debug_base_type(written(lane), lane_bits, encoding);
+        let debug = self.debug.as_mut()?;
+        if let Some(&ty) = debug.types.get(name) {
+            return Some(ty);
+        }
+        let ty = debug.builder().create_array_type(lane_type, bits, lane_bits as u32, &[0..count as i64]).as_type();
+        debug.types.insert(name.to_string(), ty);
+        Some(ty)
     }
 
     fn debug_base_type(&mut self, name: &str, bits: u64, encoding: u32) -> DIType<'ctx> {

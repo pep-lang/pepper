@@ -23,6 +23,9 @@ compiled for those exact types. There is no runtime cost for using them.
 - Name the type arguments whenever you use the struct: `Stack<int>()`,
   `var s: Stack<String>;`.
 - `Stack<int>` and `Stack<String>` are different types.
+- A type argument is a type. The one exception is a number, which only
+  the lane count of a [SIMD vector](simd.md) accepts (`Vector<int, 4>`); a
+  struct of your own cannot compute with a number parameter.
 - Each type argument makes a separate copy of the struct, so a struct whose
   copy needs a copy with a larger argument never ends: `struct Foo<T>` with
   a field `var inner: Foo<Array<T>>` makes `Foo<int>` need

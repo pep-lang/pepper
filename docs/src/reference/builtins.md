@@ -638,3 +638,874 @@ Whether `lhs * rhs` overflows `lhs`'s type.
 
 **Returns**
 - whether the product overflows
+
+## __simd
+
+```pepper
+struct __simd<T, N>
+```
+
+A vector of `N` lanes of the number type `T`, as LLVM's `<N x T>`: what
+`simd.Vector<T, N>` and `simd.Mask<N>` (with `bool` lanes) hold. The
+`__simd_` functions below compute on it, each lane at once. It is a value,
+with no references inside.
+
+**Type parameters**
+- `T` — the lane type: an integer, floating-point or `bool` type
+- `N` — the lane count, written as a number (`__simd<byte, 16>`)
+
+## __simd_splat
+
+```pepper
+__simd_splat<V>(value: T): V
+```
+
+A vector `V` with every lane `value`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `value` — the value of every lane
+
+**Returns**
+- the vector
+
+## __simd_add
+
+```pepper
+__simd_add<V>(lhs: V, rhs: V): V
+```
+
+Adds lane-wise; integer lanes wrap around.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_subtract
+
+```pepper
+__simd_subtract<V>(lhs: V, rhs: V): V
+```
+
+Subtracts lane-wise; integer lanes wrap around.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_multiply
+
+```pepper
+__simd_multiply<V>(lhs: V, rhs: V): V
+```
+
+Multiplies lane-wise; integer lanes wrap around.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_divide
+
+```pepper
+__simd_divide<V>(lhs: V, rhs: V): V
+```
+
+Divides lane-wise. An integer lane of `rhs` that is 0, or a signed `MIN /
+-1`, is undefined: `simd.Vector` checks first.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_remainder
+
+```pepper
+__simd_remainder<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise remainder, with the same undefined cases as `__simd_divide`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_and
+
+```pepper
+__simd_and<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise bitwise and (integer or `bool` lanes).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_or
+
+```pepper
+__simd_or<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise bitwise or (integer or `bool` lanes).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_xor
+
+```pepper
+__simd_xor<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise bitwise exclusive or (integer or `bool` lanes).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_shift_left
+
+```pepper
+__simd_shift_left<V>(vector: V, count: int): V
+```
+
+Shifts every integer lane left. A count of at least the lane width is
+undefined: `simd.Vector` checks first.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the lanes to shift
+- `count` — the bits to shift by, less than the lane width
+
+**Returns**
+- the shifted lanes
+
+## __simd_shift_right
+
+```pepper
+__simd_shift_right<V>(vector: V, count: int): V
+```
+
+Shifts every integer lane right: arithmetic for signed lanes, logical for
+unsigned. A count of at least the lane width is undefined.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the lanes to shift
+- `count` — the bits to shift by, less than the lane width
+
+**Returns**
+- the shifted lanes
+
+## __simd_negate
+
+```pepper
+__simd_negate<V>(vector: V): V
+```
+
+Negates every lane; integer lanes wrap around.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_not
+
+```pepper
+__simd_not<V>(vector: V): V
+```
+
+Flips every bit of every integer or `bool` lane.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_equal
+
+```pepper
+__simd_equal<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise for equality (ordered for floats).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_not_equal
+
+```pepper
+__simd_not_equal<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise for inequality (true for a NaN lane).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_less
+
+```pepper
+__simd_less<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise, signed or unsigned by the lane type.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_less_equal
+
+```pepper
+__simd_less_equal<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise, signed or unsigned by the lane type.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_greater
+
+```pepper
+__simd_greater<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise, signed or unsigned by the lane type.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_greater_equal
+
+```pepper
+__simd_greater_equal<V>(lhs: V, rhs: V): __simd<bool, N>
+```
+
+Compares lane-wise, signed or unsigned by the lane type.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- a `bool` vector of the results
+
+## __simd_select
+
+```pepper
+__simd_select<V>(mask: __simd<bool, N>, if_true: V, if_false: V): V
+```
+
+Picks each lane from `if_true` or `if_false` by `mask`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `mask` — which lanes to take from `if_true`
+- `if_true` — the lanes where `mask` is true
+- `if_false` — the lanes where `mask` is false
+
+**Returns**
+- the selected lanes
+
+## __simd_minimum
+
+```pepper
+__simd_minimum<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise minimum (`llvm.minnum` for floats: a NaN lane gives the
+other).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_maximum
+
+```pepper
+__simd_maximum<V>(lhs: V, rhs: V): V
+```
+
+The lane-wise maximum (`llvm.maxnum` for floats).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the first operand
+- `rhs` — the second operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_abs
+
+```pepper
+__simd_abs<V>(vector: V): V
+```
+
+The lane-wise absolute value; the lowest signed value stays itself.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_rotate_left
+
+```pepper
+__simd_rotate_left<V>(vector: V, count: int): V
+```
+
+Rotates every integer lane left (`llvm.fshl`).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the lanes to rotate
+- `count` — the bits to rotate by, modulo the lane width
+
+**Returns**
+- the rotated lanes
+
+## __simd_rotate_right
+
+```pepper
+__simd_rotate_right<V>(vector: V, count: int): V
+```
+
+Rotates every integer lane right (`llvm.fshr`).
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the lanes to rotate
+- `count` — the bits to rotate by, modulo the lane width
+
+**Returns**
+- the rotated lanes
+
+## __simd_square_root
+
+```pepper
+__simd_square_root<V>(vector: V): V
+```
+
+The square root of every float lane.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_floor
+
+```pepper
+__simd_floor<V>(vector: V): V
+```
+
+Every float lane rounded down.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_ceiling
+
+```pepper
+__simd_ceiling<V>(vector: V): V
+```
+
+Every float lane rounded up.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_sum
+
+```pepper
+__simd_sum<V>(vector: V): T
+```
+
+The sum of the lanes: wrapping for integers, in lane order for floats.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the sum
+
+## __simd_reduce_minimum
+
+```pepper
+__simd_reduce_minimum<V>(vector: V): T
+```
+
+The smallest lane.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the minimum
+
+## __simd_reduce_maximum
+
+```pepper
+__simd_reduce_maximum<V>(vector: V): T
+```
+
+The largest lane.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the maximum
+
+## __simd_any
+
+```pepper
+__simd_any<V>(mask: V): bool
+```
+
+Whether any lane of a `bool` vector is true.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `mask` — a `bool` vector
+
+**Returns**
+- whether a lane is true
+
+## __simd_all
+
+```pepper
+__simd_all<V>(mask: V): bool
+```
+
+Whether every lane of a `bool` vector is true.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `mask` — a `bool` vector
+
+**Returns**
+- whether every lane is true
+
+## __simd_to_bits
+
+```pepper
+__simd_to_bits<V>(mask: V): ulong
+```
+
+Packs a `bool` vector into bits: bit `i` is lane `i`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `mask` — a `bool` vector of at most 64 lanes
+
+**Returns**
+- the lanes as bits
+
+## __simd_extract
+
+```pepper
+__simd_extract<V>(vector: V, index: ulong): T
+```
+
+Reads one lane. An index of at least `N` gives an undefined value:
+`simd.Vector` checks first.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the vector
+- `index` — the lane, less than `N`
+
+**Returns**
+- the lane's value
+
+## __simd_insert
+
+```pepper
+__simd_insert<V>(vector: V, index: ulong, value: T): V
+```
+
+Replaces one lane. An index of at least `N` is undefined: `simd.Vector`
+checks first.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the vector
+- `index` — the lane, less than `N`
+- `value` — the lane's new value
+
+**Returns**
+- the vector with the lane replaced
+
+## __simd_shuffle
+
+```pepper
+__simd_shuffle<V>(vector: V, indices: __simd<int, N>): V
+```
+
+Picks lanes by index, each taken modulo `N`. Constant indices fold to one
+`shufflevector`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the lanes to pick from
+- `indices` — the lane to pick for each lane, modulo `N`
+
+**Returns**
+- the picked lanes
+
+## __simd_reverse
+
+```pepper
+__simd_reverse<V>(vector: V): V
+```
+
+The lanes in reverse order.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `vector` — the operand
+
+**Returns**
+- the lane-wise results
+
+## __simd_interleave_low
+
+```pepper
+__simd_interleave_low<V>(lhs: V, rhs: V): V
+```
+
+Interleaves the low halves: `lhs[0], rhs[0], lhs[1], ...`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the even lanes' source
+- `rhs` — the odd lanes' source
+
+**Returns**
+- the interleaved lanes
+
+## __simd_interleave_high
+
+```pepper
+__simd_interleave_high<V>(lhs: V, rhs: V): V
+```
+
+Interleaves the high halves: `lhs[N / 2], rhs[N / 2], ...`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `lhs` — the even lanes' source
+- `rhs` — the odd lanes' source
+
+**Returns**
+- the interleaved lanes
+
+## __simd_load
+
+```pepper
+__simd_load<V>(pointer: __ptr<T>): V
+```
+
+Reads `N` values from memory aligned to `T`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `pointer` — the first of `N` values
+
+**Returns**
+- the values
+
+## __simd_load_aligned
+
+```pepper
+__simd_load_aligned<V>(pointer: __ptr<T>): V
+```
+
+Reads `N` values from memory aligned to the vector's size.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `pointer` — the first of `N` values, aligned to the vector's size
+
+**Returns**
+- the values
+
+## __simd_store
+
+```pepper
+__simd_store<V>(pointer: __ptr<T>, vector: V)
+```
+
+Writes the lanes to memory aligned to `T`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `pointer` — the first of `N` values
+- `vector` — the lanes to write
+
+## __simd_store_aligned
+
+```pepper
+__simd_store_aligned<V>(pointer: __ptr<T>, vector: V)
+```
+
+Writes the lanes to memory aligned to the vector's size.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Parameters**
+- `pointer` — the first of `N` values, aligned to the vector's size
+- `vector` — the lanes to write
+
+## __simd_convert
+
+```pepper
+__simd_convert<R>(vector: __simd<U, N>): R
+```
+
+Converts every lane to `R`'s lane type, as `as` does; float to integer
+saturates (`llvm.fptosi.sat`), and NaN gives 0.
+
+**Type parameters**
+- `R` — the vector type, `__simd<T, N>` of the result
+
+**Parameters**
+- `vector` — the lanes to convert
+
+**Returns**
+- the converted lanes
+
+## __simd_reinterpret
+
+```pepper
+__simd_reinterpret<R>(vector: __simd<U, M>): R
+```
+
+Reads a vector's bits as another vector type of the same size.
+
+**Type parameters**
+- `R` — the vector type, `__simd<T, N>` of the result
+
+**Parameters**
+- `vector` — the vector, the same size as `R`
+
+**Returns**
+- the same bits as `R`
+
+## __simd_lanes
+
+```pepper
+__simd_lanes<V>(): int
+```
+
+The lane count of `V`.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Returns**
+- `N`
+
+## __simd_lane_bits
+
+```pepper
+__simd_lane_bits<V>(): int
+```
+
+The width of `V`'s lane type in bits.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Returns**
+- the lane's width in bits
+
+## __simd_is_signed
+
+```pepper
+__simd_is_signed<V>(): bool
+```
+
+Whether `V`'s lanes are a signed integer type.
+
+**Type parameters**
+- `V` — the vector type, `__simd<T, N>`
+
+**Returns**
+- whether the lanes are signed integers

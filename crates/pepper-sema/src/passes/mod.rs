@@ -52,6 +52,7 @@ pub mod resolve_resolvables;
 pub mod apply_extensions;
 pub mod specialize_structs;
 pub mod specialize_functions;
+pub mod check_simd_shapes;
 pub mod convert_intrinsics;
 pub mod convert_member_refs;
 pub mod resolve_operators;
@@ -226,6 +227,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(interpolation::check_interpolations(module));
     // Calls of members a constrained extension withheld.
     step!(constraints::check_withheld(module));
+    // Vector lane counts, now that every specialization exists.
+    step!(check_simd_shapes::check_simd_shapes(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false));
     // Specialized extensions (`extend Box<int>`) of the instances the loop
@@ -433,6 +436,11 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(ptr, f);
             walk_expression(val, f);
         }
+        Expression::Simd { args, .. } => {
+            for arg in args {
+                walk_expression(arg, f);
+            }
+        }
         Expression::FunctionCall { args, .. } => {
             for arg in args {
                 walk_expression(arg, f);
@@ -587,6 +595,11 @@ pub fn visit_expression<'e>(expr: &'e Expression, f: &mut impl FnMut(&'e Express
             visit_expression(ptr, f);
             visit_expression(val, f);
         }
+        Expression::Simd { args, .. } => {
+            for arg in args {
+                visit_expression(arg, f);
+            }
+        }
         Expression::FunctionCall { args, .. } => {
             for arg in args {
                 visit_expression(arg, f);
@@ -736,7 +749,7 @@ pub fn children_mut(expr: &mut Expression) -> Children<'_, &mut Expression, std:
             Children::two(ptr.as_mut(), val.as_mut())
         }
         Expression::AtomicCmpXchg(_, ptr, expected, desired) => Children::three(ptr.as_mut(), expected.as_mut(), desired.as_mut()),
-        Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter_mut()),
+        Expression::FunctionCall { args, .. } | Expression::Simd { args, .. } => Children::Chain(None, args.iter_mut()),
         Expression::MethodCall { this, args, .. } => Children::Chain(Some(this.as_mut()), args.iter_mut()),
         Expression::Invoke { callee, args } => Children::Chain(Some(callee.as_mut()), args.iter_mut()),
         Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer.as_mut()), args.iter_mut()),
@@ -794,7 +807,7 @@ pub fn children(expr: &Expression) -> Children<'_, &Expression, std::slice::Iter
         Expression::Destructure { value, .. } | Expression::Move { value, .. } | Expression::NamedArgument { value, .. } => Children::one(value),
         Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) | Expression::ConstructAt(a, b) => Children::two(a, b),
         Expression::AtomicCmpXchg(_, a, b, c) => Children::three(a, b, c),
-        Expression::FunctionCall { args, .. } => Children::Chain(None, args.iter()),
+        Expression::FunctionCall { args, .. } | Expression::Simd { args, .. } => Children::Chain(None, args.iter()),
         Expression::MethodCall { this, args, .. } => Children::Chain(Some(this), args.iter()),
         Expression::Invoke { callee, args } => Children::Chain(Some(callee), args.iter()),
         Expression::CallPointer { pointer, args } => Children::Chain(Some(pointer), args.iter()),

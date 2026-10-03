@@ -337,3 +337,24 @@ main(): int { return S(5); }
         dumped
     );
 }
+
+/// Each `__simd_*` declaration in `runtime/builtins.pep` takes the arguments
+/// `convert_intrinsics` checks for (`SimdOp::arity`).
+#[test]
+fn simd_builtin_declarations_take_each_operations_arguments() {
+    use pepper_parser::ast::Declaration;
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../runtime/builtins.pep");
+    let ast = parse_source("runtime/builtins.pep", &std::fs::read_to_string(path).unwrap()).expect("parse");
+    for (op, name) in crate::model::SimdOp::ALL {
+        let declared = format!("__simd_{}", name);
+        let parameters = ast
+            .declarations
+            .iter()
+            .find_map(|d| match d {
+                Declaration::Function(f) if f.name == declared => Some(f.parameters.len()),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("runtime/builtins.pep does not declare '{}'", declared));
+        assert_eq!(parameters, op.arity(), "'{}'", declared);
+    }
+}

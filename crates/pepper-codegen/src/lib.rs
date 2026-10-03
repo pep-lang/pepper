@@ -13,6 +13,7 @@ mod intrinsics;
 #[cfg(windows)]
 mod jit_memory;
 pub mod ops;
+pub mod simd;
 pub mod partition;
 pub mod types;
 pub mod target;
@@ -349,6 +350,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             Diagnostic::error(error).at(loc)
         })?;
+        self.inline_vector_methods().map_err(Diagnostic::error)?;
         facts::annotate(&self.module);
         Ok(())
     }
@@ -746,6 +748,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 BasicTypeEnum::ArrayType(at) => global.set_initializer(&at.const_zero()),
                 BasicTypeEnum::StructType(st) => global.set_initializer(&st.const_zero()),
+                BasicTypeEnum::VectorType(vt) => global.set_initializer(&vt.const_zero()),
                 _ => {}
             }
             if let Some(default) = &var.default {
@@ -2509,6 +2512,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicTypeEnum::PointerType(pt) => BasicValueEnum::PointerValue(pt.const_null()),
                 BasicTypeEnum::ArrayType(at) => BasicValueEnum::ArrayValue(at.const_zero()),
                 BasicTypeEnum::StructType(st) => BasicValueEnum::StructValue(st.const_zero()),
+                BasicTypeEnum::VectorType(vt) => BasicValueEnum::VectorValue(vt.const_zero()),
                 other => return Err(format!("unsupported retval type {:?}", other)),
             };
             self.builder
@@ -3076,9 +3080,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ),
                 BasicTypeEnum::StructType(sct) => BasicValueEnum::StructValue(sct.const_zero()),
                 BasicTypeEnum::ArrayType(at) => BasicValueEnum::ArrayValue(at.const_zero()),
-                BasicTypeEnum::VectorType(_) | BasicTypeEnum::ScalableVectorType(_) => {
-                    return Err("unsupported zero init".to_string())
-                }
+                BasicTypeEnum::VectorType(vt) => BasicValueEnum::VectorValue(vt.const_zero()),
+                BasicTypeEnum::ScalableVectorType(_) => return Err("unsupported zero init".to_string()),
             };
             self.builder
                 .build_store(alloca, zero)
@@ -3513,6 +3516,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::AtomicStore(..) | Expression::ConstructAt(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
             Expression::AtomicFetch(_, ty, _, _) => Some(ty.to_string()),
+            Expression::Simd { op, ty, .. } => Some(op.result(ty).to_string()),
             _ => None,
         }
     }
@@ -4554,6 +4558,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .const_null()
                             .into(),
                         BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+                        BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
                         _ => self.context.i32_type().const_zero().into(),
                     };
                     Ok(any)
@@ -4858,6 +4863,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Ok(success.into())
             }
+            Expression::Simd { op, ty, args, .. } => self.codegen_simd(*op, ty, args),
             Expression::AtomicFetch(op, ty, arg_ptr, arg_val) => {
                 // __atomic_fetch_{add,sub,and,or,xor}<T>(p, v): acquire/release
                 // atomic read-modify-write on the T-sized value at pointer p;
@@ -5346,6 +5352,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .const_null()
                         .into(),
                     BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+                    BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
                     _ => self.context.i32_type().const_zero().into(),
                 };
                 return Ok(any);
@@ -6657,17 +6664,23 @@ impl<'ctx> CodeGenerator<'ctx> {
         if let (BasicValueEnum::StructValue(_), Some(tuple)) =
             (lhs_val, self.value_sema_type(lhs).filter(|t| self.is_aggregate(t)))
         {
+            // Only `==` and `!=`, and only with another value of the type:
+            // any other operator (`p << 1` on a value struct without one) is
+            // the user's error.
+            let display = |ty: Option<String>| {
+                pepper_sema::passes::gather_generics::parse_type_string(&ty.unwrap_or_default()).display().to_string()
+            };
+            if !matches!(op, BinaryOp::Equal | BinaryOp::NotEqual) || lhs_val.get_type() != rhs_val.get_type() {
+                return Err(format!(
+                    "invalid operands to binary expression ('{}' and '{}')",
+                    display(Some(tuple.clone())),
+                    display(self.value_sema_type(rhs))
+                ));
+            }
             let same = self.tuple_equal(&tuple, lhs_val, rhs_val)?;
             let result = match op {
                 BinaryOp::Equal => same,
-                BinaryOp::NotEqual => self.builder.build_not(same, "tuple_not_equal").map_err(|e| e.to_string())?,
-                _ => {
-                    return Err(format!(
-                        "invalid operands to binary expression ('{}' and '{}')",
-                        pepper_sema::passes::gather_generics::parse_type_string(&tuple).display(),
-                        pepper_sema::passes::gather_generics::parse_type_string(&tuple).display()
-                    ))
-                }
+                _ => self.builder.build_not(same, "tuple_not_equal").map_err(|e| e.to_string())?,
             };
             if let Some(ty) = lhs_temp {
                 self.release_temp(&ty, lhs_val)?;

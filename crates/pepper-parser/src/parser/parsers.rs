@@ -737,7 +737,7 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
         *input = &rest[1..];
         loop {
             ws(input)?;
-            generic_types.push(type_name(input)?);
+            generic_types.push(type_argument(input)?);
             ws(input)?;
             if input.starts_with(',') {
                 *input = &input[1..];
@@ -753,6 +753,20 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
     }
 
     Ok(TypeName { name, generic_types, span: Span { start, end }, labels: vec![] })
+}
+
+/// One type argument: a type, or a decimal integer for a parameter that
+/// stands for a number (the lane count `16` in `Vector<byte, 16>`), kept as
+/// a type name spelled with its digits.
+fn type_argument(input: &mut &str) -> Result<TypeName> {
+    let digits = input.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return type_name(input);
+    }
+    let start = pos(input);
+    let name = input[..digits].to_string();
+    *input = &input[digits..];
+    Ok(TypeName { name, generic_types: vec![], span: Span { start, end: pos(input) }, labels: vec![] })
 }
 
 fn string_constant(input: &mut &str) -> Result<Literal> {

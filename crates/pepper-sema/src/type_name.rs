@@ -64,6 +64,9 @@ pub const WEAK: &str = "__weak";
 /// its elements (see `passes::tuples`).
 pub const TUPLE: &str = "__tuple";
 
+/// Internal name of the built-in vector type `__simd<T, N>` (#517).
+pub const SIMD: &str = "__simd";
+
 /// Integral-type alias set from `TypeName.cpp:23-45`.
 pub static INTEGRAL_TYPES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     HashSet::from([
@@ -326,7 +329,13 @@ impl TypeName {
     }
 
     pub fn is_struct(&self) -> bool {
-        self.is_scalar() && !self.is_integral()
+        self.is_scalar() && !self.is_integral() && !self.is_simd()
+    }
+
+    /// The built-in vector type `__simd<T, N>` (#517): `N` lanes of number
+    /// `T`, held by value like a number.
+    pub fn is_simd(&self) -> bool {
+        self.name == SIMD
     }
 
     /// `name<sub, sub>` for generics; `name` otherwise (matches `TypeName::to_string`).

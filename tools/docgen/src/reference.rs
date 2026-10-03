@@ -75,6 +75,7 @@ const PAGES: &[(&str, &str)] = &[
     ("math/module.pep", "The math module"),
     ("math/parse.pep", "Parsing integers"),
     ("hint/module.pep", "The hint module"),
+    ("simd/module.pep", "The simd module"),
     ("debug/module.pep", "The debug module"),
     ("debug/backtrace.pep", "Backtraces"),
     ("debug/debugger.pep", "The debugger"),
@@ -682,6 +683,10 @@ mod tests {
         rust_sources(&root.join("crates/pepper-sema/src"), &mut compiler);
         rust_sources(&root.join("crates/pepper-codegen/src"), &mut compiler);
         let intrinsics = std::fs::read_to_string(root.join("crates/pepper-sema/src/passes/convert_intrinsics.rs")).unwrap();
+        let model = std::fs::read_to_string(root.join("crates/pepper-sema/src/model.rs")).unwrap();
+        let table = &model[model.find("pub const ALL: [(SimdOp").unwrap()..];
+        let table = &table[..table.find("];").unwrap()];
+        let simd_ops: Vec<&str> = table.split("\"").skip(1).step_by(2).collect();
         let mut declared = vec![];
         for d in &module.declarations {
             let name = d.built_in_name().unwrap_or_else(|| panic!("runtime/builtins.pep: '{}' is not [__BuiltIn]", d.name()));
@@ -690,8 +695,10 @@ mod tests {
                 continue;
             }
             // `__atomic_fetch_add` is the arm `"add"` under `"__atomic_fetch_"`.
+            // `__simd_add` is `(SimdOp::Add, "add")` in `SimdOp::ALL`.
             let known = compiler.contains(&format!("\"{}\"", name))
-                || name.strip_prefix("__atomic_fetch_").is_some_and(|op| intrinsics.contains(&format!("\"{}\" =>", op)));
+                || name.strip_prefix("__atomic_fetch_").is_some_and(|op| intrinsics.contains(&format!("\"{}\" =>", op)))
+                || name.strip_prefix("__simd_").is_some_and(|op| simd_ops.contains(&op));
             assert!(known, "runtime/builtins.pep declares '{}', which the compiler does not have", name);
             let arity = format!("base == \"{}\" && args.len() == ", name);
             if let Some(at) = intrinsics.find(&arity) {
@@ -703,6 +710,10 @@ mod tests {
         for part in intrinsics.split("base == \"").skip(1) {
             let name = part.split('"').next().unwrap();
             assert!(declared.iter().any(|d| d == name), "runtime/builtins.pep does not declare the intrinsic '{}'; add it", name);
+        }
+        for op in simd_ops {
+            let name = format!("__simd_{}", op);
+            assert!(declared.iter().any(|d| *d == name), "runtime/builtins.pep does not declare the intrinsic '{}'; add it", name);
         }
     }
 

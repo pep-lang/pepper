@@ -100,7 +100,7 @@ pub(crate) fn zero_for(ty: &TypeName) -> Expression {
     }
     // A tuple or a value struct is a value: its zero holds a zero of each
     // element.
-    if ty.is_tuple() || crate::value_structs::is_value(&ty.to_string()) {
+    if ty.is_tuple() || ty.is_simd() || crate::value_structs::is_value(&ty.to_string()) {
         Expression::Default(ty.clone())
     } else if ty.is_pointer() || ty.is_struct() {
         Expression::PointerLiteral

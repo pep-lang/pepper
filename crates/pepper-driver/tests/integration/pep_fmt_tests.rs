@@ -469,3 +469,8 @@ fn pep_fmt_version_is_the_workspace_version() {
     let output = Command::new(pep_fmt()).arg("--version").output().expect("run pep-fmt");
     assert_eq!(support::stdout_of(&output), format!("pep-fmt {}\n", env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn pep_fmt_keeps_a_lane_count_type_argument() {
+    assert_formats("var v = simd.Vector<byte,16>( 1 as byte );\n", "var v = simd.Vector<byte, 16>(1 as byte);\n");
+}

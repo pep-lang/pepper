@@ -2,7 +2,7 @@
 //! `__is_pod`/`__default` calls become intrinsic expressions.
 
 use crate::model::Diagnostic;
-use crate::model::{Block, Declaration, Expression, FunctionDef, Module, Statement};
+use crate::model::{Block, Declaration, Expression, FunctionDef, Module, SimdOp, Statement};
 use crate::type_name::TypeName;
 use std::collections::HashSet;
 
@@ -47,7 +47,8 @@ fn convert_node_types(e: &mut Expression) {
             | Expression::AtomicLoad(ty, _)
             | Expression::AtomicStore(ty, _, _)
             | Expression::AtomicCmpXchg(ty, _, _, _)
-            | Expression::AtomicFetch(_, ty, _, _) => convert_type_string(ty),
+            | Expression::AtomicFetch(_, ty, _, _)
+            | Expression::Simd { ty, .. } => convert_type_string(ty),
             _ => {}
     }
 }
@@ -55,7 +56,7 @@ fn convert_node_types(e: &mut Expression) {
 fn convert_expression(expr: &mut Expression) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         convert_node_types(e);
-        if let Expression::FunctionCall { function, args, .. } = e {
+        if let Expression::FunctionCall { function, args, loc } = e {
             let base = function.split('<').next().unwrap_or(function);
             if base == "__is_pod" || base == "__default" {
                 // Store the inner type (not the full call name) so later
@@ -151,6 +152,24 @@ fn convert_expression(expr: &mut Expression) {
                 let ptr = std::mem::replace(&mut args[0], Expression::PointerLiteral);
                 let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
                 *e = Expression::AtomicFetch(op, ty, Box::new(ptr), Box::new(val));
+            } else if let Some(op) = base.strip_prefix("__simd_").and_then(SimdOp::from_name) {
+                if args.len() != op.arity() {
+                    let which = if args.len() > op.arity() { "many" } else { "few" };
+                    crate::errors::report(
+                        Diagnostic::error(format!(
+                            "too {} arguments to '{}': expected {}, have {}",
+                            which,
+                            base,
+                            op.arity(),
+                            args.len()
+                        ))
+                        .at(*loc),
+                    );
+                    return;
+                }
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let ty = parsed.sub_types.into_iter().next().unwrap_or_else(|| TypeName::new("int"));
+                *e = Expression::Simd { op, ty, args: std::mem::take(args), loc: *loc };
             }
             // The intrinsic node the call became.
             convert_node_types(e);
