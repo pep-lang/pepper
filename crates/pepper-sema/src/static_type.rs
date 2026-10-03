@@ -237,26 +237,11 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::Index { lhs, .. } => {
             let lhs_type = of(lhs, table, current)?;
             // Pointer receiver (`T*`): the element is the pointee, and the
-            // indexing stays RAW (codegen GEPs through the pointer). Even
-            // when the pointee is a struct with its own indexer — dispatching
-            // on it would route `Data[i] = v` inside an Array of arrays to
-            // the element's `__index_set` instead of writing the slot. A
-            // generic pointee such as `Array<int>*` is the exception: its
-            // specialized entry (`Array<int>`) carries a concrete
-            // `__index_get` return, so use it — the base-template lookup
-            // would otherwise yield the unsubstituted template param.
+            // indexing stays raw (codegen GEPs through the pointer), even
+            // when the pointee is a struct with its own indexer: `p[i]` on
+            // an `Array<String>*` is an `Array<String>`, not a `String`.
             if let Some(pointee) = lhs_type.to_string().strip_suffix('*') {
-                let pointee_ty = TypeName::new(pointee);
-                if let Some(info) = table.get(pointee) {
-                    if let Some(ret) = info.returns.get("__index_get") {
-                        return Some(ret.clone());
-                    }
-                } else if let Some(info) = table.lookup(&pointee_ty) {
-                    if let Some(ret) = info.returns.get("__index_get") {
-                        return Some(ret.clone());
-                    }
-                }
-                return Some(pointee_ty);
+                return Some(crate::passes::gather_generics::parse_type_string(pointee));
             }
             if let Some(info) = table.lookup(&lhs_type) {
                 if let Some(ret) = info.returns.get("__index_get") {
@@ -264,6 +249,11 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
                 }
             }
             None
+        }
+        // A raw index `resolve_operators` lowered before its element type was
+        // known (`ty` still auto) is the pointee of its receiver.
+        Expression::ArrayIndex { ty, lhs, .. } if ty.is_auto() => {
+            of(lhs, table, current)?.to_string().strip_suffix('*').map(crate::passes::gather_generics::parse_type_string)
         }
         Expression::ArrayIndex { ty, .. } => Some(ty.clone()),
         Expression::FunctionCall { function, args, .. } if crate::passes::tuples::constructor_labels(function).is_some() => {

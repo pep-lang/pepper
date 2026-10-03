@@ -872,3 +872,54 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn overloaded_equality_keys() {
+    // #504: a key struct whose `==` is overloaded picks the `==(A)` member
+    // inside the specialized map and set, where the key is typed `K`; and a
+    // raw index into an array of arrays (`Array<Array<String>>.find`) is the
+    // inner array, not its element, and indexing that element still works.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+[Value]
+struct A {
+    int v;
+    ==(rhs: int): bool { return v == rhs; }
+    ==(rhs: A): bool { return v == rhs.v; }
+}
+hash<A>(value: A): u64 { return value.v as u64; }
+make(v: int): A {
+    var a = A();
+    a.v = v;
+    return a;
+}
+test(): int {
+    var m = HashMap<A, int>();
+    m[A()] = 3;
+    m[make(7)] = 9;
+    if (m[A()] != 3) { return -1; }
+    if (m[make(7)] != 9) { return -2; }
+    if (!m.contains(make(7)) || m.contains(make(8))) { return -3; }
+    if (!m.remove(make(7)) || m.count != 1) { return -4; }
+    var s = HashSet<A>();
+    s.insert(make(2));
+    if (!s.contains(make(2)) || s.contains(make(3))) { return -5; }
+    var rows = Array<Array<String>>();
+    var row = Array<String>();
+    row.append("x");
+    rows.append(row);
+    if (!rows.find(row).is_value()) { return -6; }
+    var outer = Array<Array<int>>(1);
+    outer._size = 1;
+    var inner = Array<int>();
+    inner.append(10);
+    outer._data[0] = inner;
+    outer._data[0][0] += 5;
+    if (inner[0] != 15 || outer._data[0][0] != 15) { return -7; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

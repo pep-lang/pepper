@@ -129,6 +129,9 @@ fn lower_index(expr: &mut Expression, table: &StructTable, current: Option<&Type
         *expr = crate::enums::operator_call(&ty, "__index_get", vec![(**lhs).clone(), (**rhs).clone()], *loc);
         return true;
     }
+    if is_buffer_element(lhs, table, current) {
+        return false;
+    }
     let info = lhs_struct(lhs, table, current);
     if info.is_some_and(|i| i.methods.contains("__index_get")) && !is_raw_buffer_field(lhs, table, current) {
         // Replace the index op with a call to the index method.
@@ -178,7 +181,10 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
             // would drop the read-modify-write.
             if *op == BinaryOp::Assign {
                 if let Expression::Index { lhs: container, rhs: index, .. } = &**lhs {
-                    if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set")) && !is_raw_buffer_field(container, table, current) {
+                    if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
+                        && !is_raw_buffer_field(container, table, current)
+                        && !is_buffer_element(container, table, current)
+                    {
                         let container = (**container).clone();
                         let index = (**index).clone();
                         let rhs_value = (**rhs).clone();
@@ -319,6 +325,7 @@ fn compound_index_assign(
     };
     if !lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
         || is_raw_buffer_field(container, table, current)
+        || is_buffer_element(container, table, current)
     {
         return None;
     }
@@ -405,6 +412,13 @@ fn index_pointee_declares(lhs: &Expression, table: &StructTable, current: Option
 fn is_raw_buffer_field(expr: &Expression, table: &StructTable, current: Option<&TypeName>) -> bool {
     static_type::of(expr, table, current)
         .is_some_and(|ty| ty.to_string().ends_with('*'))
+}
+
+/// True when `expr` is an element of a raw buffer (`_data[i]`). An index
+/// into it (`_data[i][j]` in an `Array<Array<int>>`) stays an index, which
+/// codegen loads and indexes through the element's own indexer.
+fn is_buffer_element(expr: &Expression, table: &StructTable, current: Option<&TypeName>) -> bool {
+    matches!(expr, Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } if is_raw_buffer_field(lhs, table, current))
 }
 
 thread_local! {

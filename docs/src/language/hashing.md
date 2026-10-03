@@ -82,7 +82,9 @@ value.y))`. A tuple's hash combines its elements' hashes, and each element
 uses its own type's `hash`, so a `String` field contributes its content.
 Unequal keys may share a hash. That costs speed, not correctness.
 
-With `==` declared, `!=` is its negation, as for any struct.
+With `==` declared, `!=` is its negation, as for any struct. The struct may
+also [overload](overloading.md) `==` for other types (`==(rhs: int)`); the map
+and set compare keys with the `==` that takes the struct itself.
 
 Keep these rules in mind:
 

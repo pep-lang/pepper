@@ -429,14 +429,13 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             substitute(&mut parsed, type_map);
             *method = parsed.to_string();
         }
-        // A constructor's `__init_<field>` parameter is typed like its field
-        // (`T`, `(T) => T`) when `finish` synthesizes it, and a symbol of a
-        // compound type naming the parameters (`Seq<T>`, `(T) => U`) must
-        // not keep them. A bare `T` symbol is left for type resolution.
-        if let Expression::SymbolRef { id, ty, .. } = e {
-            if id.starts_with("__init_") || !ty.sub_types.is_empty() {
-                substitute(ty, type_map);
-            }
+        // A symbol keeps no type parameter: a bare `key: K` becomes the
+        // argument too, since `resolve_implicit_types` does not revisit
+        // structs specialized after it, and operator overloads
+        // (`resolve_operators`) and conversions (`convert_to_traits`) pick
+        // by the argument's type.
+        if let Expression::SymbolRef { ty, .. } = e {
+            substitute(ty, type_map);
         }
     });
 }
