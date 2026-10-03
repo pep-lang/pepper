@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc29c4c9.js";
+            window.path_to_searchindex_js = "../searchindex-c1aa7001.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -328,6 +328,21 @@ $1 = {name = 0x55555559073f "x", type_name = 0x555555590a57 "int", index = 0, is
 (gdb) print field.name
 $2 = 0x5555555909ba "y"
 </code></pre>
+<p>To step through the code each pass emits instead, with the compile-time
+values filled in, build with <code>--debug-static=expanded</code>. Beside the program
+it writes <code>debugging-static.static.pep</code>, the source with the block
+expanded as <a href="pep-build.html#--emit-static---emit-statickeep"><code>--emit-static</code></a>
+writes it, and the debugger shows that file for the block’s code:</p>
+<pre><code class="language-text">$ pepper build -g --debug-static=expanded debugging-static.pep -o debugging-static
+$ gdb ./debugging-static
+(gdb) break debugging-static.static.pep:18
+(gdb) run
+Breakpoint 1, total (p=0x55555559c6b0) at debugging-static.static.pep:18
+18	            sum = sum + p.y;
+(gdb) print field.name
+$1 = 0x5555555909ba "y"
+</code></pre>
+<p>The rest of the function, and the program, stays in its own files.</p>
 <p>A breakpoint on a line of the body stops in every pass. A member or case
 shows as a structure of what <code>reflect</code> reads from it (<code>name</code>, <code>index</code>,
 <code>is_last</code>, and so on); a list does not show. The stop on the header is a

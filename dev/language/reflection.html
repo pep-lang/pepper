@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc29c4c9.js";
+            window.path_to_searchindex_js = "../searchindex-c1aa7001.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -494,6 +494,13 @@ generic struct, or in a generic method, stays as written, with each
 specialization’s expansion above it as comments.</li>
 <li>An error in the emitted code shows when the copy is built, at the line
 of the copy that has it.</li>
+<li>To debug the program in the expanded source, build it with
+<code>-g --debug-static=expanded</code>: the copy is written beside the program as
+<code>main.static.pep</code>, and the debugger steps through it (see
+<a href="../tools/debugging.html#stepping-through-a-static-block">Stepping through a <code>static</code> block</a>).
+In a method of a generic struct or a generic method, where the copy
+shows the expansion only as comments, the debugger shows the block as
+written.</li>
 </ul>
 <p><a href="../tools/pep-build.html#--emit-static---emit-statickeep">pep-build</a> lists
 the details.</p>

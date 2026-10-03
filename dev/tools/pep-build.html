@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc29c4c9.js";
+            window.path_to_searchindex_js = "../searchindex-c1aa7001.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -213,6 +213,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
 <tr><td><code>--frame-pointers</code></td><td>Keep every function’s frame pointer, for profilers</td><td>off</td></tr>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target’s system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
@@ -413,6 +414,23 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program’s function names, which is where <a href="../language/debug.html">backtraces</a>
 read them.</p>
+<h3 id="--debug-staticsource---debug-staticexpanded"><a class="header" href="#--debug-staticsource---debug-staticexpanded"><code>--debug-static=source</code>, <code>--debug-static=expanded</code></a></h3>
+<p>With <code>-g</code>, chooses which source the debugger shows for the code a <code>static</code>
+block emits (see
+<a href="debugging.html#stepping-through-a-static-block">Stepping through a <code>static</code> block</a>):</p>
+<ul>
+<li><code>source</code>, the default: the block as written. Stepping stops on a
+compile-time loop’s header once per pass, then on its body.</li>
+<li><code>expanded</code>: a copy of each file with its blocks expanded, as
+<code>--emit-static</code> writes it (unformatted), saved beside the output as
+<code>&lt;name&gt;.static.pep</code> (<code>main.static.pep</code> for <code>main.pep</code>; a file in a folder
+under the entry’s keeps that folder). The debugger steps through the
+expanded statements, <code>sum = sum + p.y;</code>, and a breakpoint on one of its
+lines stops in that pass. The rest of the program stays in its own
+files. A build with it does not use the build cache.</li>
+</ul>
+<pre><code class="language-bash">pepper build -g --debug-static=expanded main.pep -o main   # main, main.static.pep
+</code></pre>
 <h3 id="--frame-pointers"><a class="header" href="#--frame-pointers"><code>--frame-pointers</code></a></h3>
 <p>Keeps the frame pointer in every function, even when optimizing, as clang’s
 <code>-fno-omit-frame-pointer</code> does. A sampling profiler then walks the stack of

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-dc29c4c9.js";
+            window.path_to_searchindex_js = "searchindex-c1aa7001.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57b6db41.js"></script>
@@ -9202,6 +9202,13 @@ generic struct, or in a generic method, stays as written, with each
 specialization’s expansion above it as comments.</li>
 <li>An error in the emitted code shows when the copy is built, at the line
 of the copy that has it.</li>
+<li>To debug the program in the expanded source, build it with
+<code>-g --debug-static=expanded</code>: the copy is written beside the program as
+<code>main.static.pep</code>, and the debugger steps through it (see
+<a href="#stepping-through-a-static-block">Stepping through a <code>static</code> block</a>).
+In a method of a generic struct or a generic method, where the copy
+shows the expansion only as comments, the debugger shows the block as
+written.</li>
 </ul>
 <p><a href="#--emit-static---emit-statickeep">pep-build</a> lists
 the details.</p>
@@ -17883,6 +17890,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
 <tr><td><code>--frame-pointers</code></td><td>Keep every function’s frame pointer, for profilers</td><td>off</td></tr>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target’s system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
@@ -18083,6 +18091,23 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program’s function names, which is where <a href="#backtraces-and-the-debugger">backtraces</a>
 read them.</p>
+<h3 id="--debug-staticsource---debug-staticexpanded"><a class="header" href="#--debug-staticsource---debug-staticexpanded"><code>--debug-static=source</code>, <code>--debug-static=expanded</code></a></h3>
+<p>With <code>-g</code>, chooses which source the debugger shows for the code a <code>static</code>
+block emits (see
+<a href="#stepping-through-a-static-block">Stepping through a <code>static</code> block</a>):</p>
+<ul>
+<li><code>source</code>, the default: the block as written. Stepping stops on a
+compile-time loop’s header once per pass, then on its body.</li>
+<li><code>expanded</code>: a copy of each file with its blocks expanded, as
+<code>--emit-static</code> writes it (unformatted), saved beside the output as
+<code>&lt;name&gt;.static.pep</code> (<code>main.static.pep</code> for <code>main.pep</code>; a file in a folder
+under the entry’s keeps that folder). The debugger steps through the
+expanded statements, <code>sum = sum + p.y;</code>, and a breakpoint on one of its
+lines stops in that pass. The rest of the program stays in its own
+files. A build with it does not use the build cache.</li>
+</ul>
+<pre><code class="language-bash">pepper build -g --debug-static=expanded main.pep -o main   # main, main.static.pep
+</code></pre>
 <h3 id="--frame-pointers"><a class="header" href="#--frame-pointers"><code>--frame-pointers</code></a></h3>
 <p>Keeps the frame pointer in every function, even when optimizing, as clang’s
 <code>-fno-omit-frame-pointer</code> does. A sampling profiler then walks the stack of
@@ -19162,6 +19187,21 @@ $1 = {name = 0x55555559073f "x", type_name = 0x555555590a57 "int", index = 0, is
 (gdb) print field.name
 $2 = 0x5555555909ba "y"
 </code></pre>
+<p>To step through the code each pass emits instead, with the compile-time
+values filled in, build with <code>--debug-static=expanded</code>. Beside the program
+it writes <code>debugging-static.static.pep</code>, the source with the block
+expanded as <a href="#--emit-static---emit-statickeep"><code>--emit-static</code></a>
+writes it, and the debugger shows that file for the block’s code:</p>
+<pre><code class="language-text">$ pepper build -g --debug-static=expanded debugging-static.pep -o debugging-static
+$ gdb ./debugging-static
+(gdb) break debugging-static.static.pep:18
+(gdb) run
+Breakpoint 1, total (p=0x55555559c6b0) at debugging-static.static.pep:18
+18	            sum = sum + p.y;
+(gdb) print field.name
+$1 = 0x5555555909ba "y"
+</code></pre>
+<p>The rest of the function, and the program, stays in its own files.</p>
 <p>A breakpoint on a line of the body stops in every pass. A member or case
 shows as a structure of what <code>reflect</code> reads from it (<code>name</code>, <code>index</code>,
 <code>is_last</code>, and so on); a list does not show. The stop on the header is a
