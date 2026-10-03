@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a4665060.js";
+            window.path_to_searchindex_js = "searchindex-f9884282.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0a7546a5.js"></script>
+        <script src="toc-65765d64.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -234,7 +234,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, and
 <a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every tool, are
 themselves written in Pepper.
@@ -3669,6 +3669,10 @@ literal picks, so a literal message builds nothing when the assertion holds. See
 call and the message to standard error, and aborts:</p>
 <pre><code class="language-text">main.pep:12:5: panic: count must be positive
 </code></pre>
+<p>In a build without <code>-O</code>, a backtrace of the calls that led there follows the
+message. <code>PEPPER_BACKTRACE=1</code> turns it on in an optimized build and
+<code>PEPPER_BACKTRACE=0</code> turns it off (see
+<a href="#backtraces-on-panic">Backtraces and the debugger</a>).</p>
 <p>The checks the compiler adds report the same way, at the expression that
 failed: an <a href="#integer-overflow">overflowing operator</a>, a
 null function value, a <code>match</code> on a null reference enum. So do the runtime’s
@@ -15250,6 +15254,125 @@ caller); at <code>-O0</code> they cost a call and do nothing.</p>
 <p><code>hint.likely(condition)</code> and <code>hint.unlikely(condition)</code> are deprecated:
 each use warns and suggests the attribute.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="backtraces-and-the-debugger"><a class="header" href="#backtraces-and-the-debugger">Backtraces and the debugger</a></h1>
+<p>The <code>debug</code> module walks the call stack and talks to a debugger. Bring it in
+with <code>import debug</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>debug.capture()</code></td><td>Records the call stack as a <code>Backtrace</code>: the return address of each call, innermost first.</td></tr>
+<tr><td><code>trace.frames()</code></td><td>Resolves the addresses to <code>StackFrame</code>s: <code>function</code>, <code>file</code>, <code>line</code>, <code>column</code> and <code>address</code>.</td></tr>
+<tr><td><code>debug.print_backtrace()</code></td><td>Writes the current stack to standard error, as a panic does.</td></tr>
+<tr><td><code>debug.output(text)</code></td><td>Writes to the platform’s debugger channel.</td></tr>
+<tr><td><code>debug.is_debugger_attached()</code></td><td>Whether a debugger is attached.</td></tr>
+<tr><td><code>debug.breakpoint()</code></td><td>Stops in the debugger, as a breakpoint on that line would.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># Capturing the call stack and resolving it to functions and lines.
+import debug;
+
+struct Parser {
+    var depth: int;
+
+    construct() {
+        depth = 0;
+    }
+
+    # Records where it was called from, as an error report might.
+    where(): debug.Backtrace {
+        return debug.capture();
+    }
+}
+
+main(): int {
+    var parser = Parser();
+    var trace = parser.where();
+    var frames = trace.frames();
+    for (var frame in frames) {
+        print(frame.to_string());
+    }
+    # The outermost frame is main. (With -O, `where` is inlined into main
+    # and has no frame of its own; WebAssembly cannot walk its stack, so
+    # there a backtrace is empty.)
+    if (frames.count &gt; 0) {
+        assert(frames[frames.count - 1].function == "main", "the outermost call");
+    }
+    debug.output("done");
+    return 0;
+}
+</code></pre>
+<p>Built with <code>-g</code>, this prints:</p>
+<pre><code class="language-text">Parser.where at debug-backtrace.pep:13:16
+main at debug-backtrace.pep:19:24
+done
+</code></pre>
+<h2 id="capturing-is-cheap-resolving-is-not"><a class="header" href="#capturing-is-cheap-resolving-is-not">Capturing is cheap; resolving is not</a></h2>
+<p><code>capture()</code> only records addresses, so a program can capture a stack
+whenever it might want to report one later, such as when it creates an error
+value. The work happens in <code>frames()</code> and <code>to_string()</code>, which read the
+program’s symbol table and line table each time they are called.</p>
+<p>A function name needs the program’s symbol table, which every build keeps
+unless the executable is stripped. A file, line and column need the debug
+info a <code>-g</code> build carries:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Function names</th><th>Source lines</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>The executable’s ELF symbol table</td><td>Its DWARF line table</td></tr>
+<tr><td>macOS</td><td>The executable’s symbol table</td><td>The <code>.dSYM</code> bundle a <code>-g</code> build writes beside the executable (with <code>dsymutil</code>, from Xcode’s command line tools)</td></tr>
+<tr><td>Windows</td><td>DbgHelp, from the <code>.pdb</code> every build writes beside the executable</td><td>DbgHelp, from the <code>.pdb</code> of a <code>-g</code> build (no columns)</td></tr>
+<tr><td>WASI</td><td>none</td><td>none</td></tr>
+</tbody>
+</table>
+</div>
+<p>A WebAssembly program cannot walk its own stack, so on WASI a backtrace is
+empty. A function the optimizer inlined into its caller has no frame of its
+own: with <code>-O</code>, the caller’s frame shows the inlined code’s line instead.</p>
+<p><code>frames()</code> leaves out the frames of <code>capture</code> itself and of the runtime’s
+panic code at the top of the stack, and the C runtime’s frames below <code>main</code>.</p>
+<h2 id="backtraces-on-panic"><a class="header" href="#backtraces-on-panic">Backtraces on panic</a></h2>
+<p>A <a href="#assertions-and-panics">panic</a> prints the stack after its
+message in a build without <code>-O</code>:</p>
+<pre><code class="language-text">main.pep:3:9: panic: index out of range
+backtrace:
+  0: inner at main.pep:3:9
+  1: main at main.pep:8:12
+</code></pre>
+<p>An optimized build prints the message alone. The <code>PEPPER_BACKTRACE</code>
+environment variable overrides the build: <code>PEPPER_BACKTRACE=1</code> prints a
+backtrace in any build, and <code>PEPPER_BACKTRACE=0</code> never prints one. Without
+<code>-g</code>, each frame shows its function but no file or line.</p>
+<p>Only the first panic in a process prints a backtrace. If a second thread
+panics at the same time, it prints just its message.</p>
+<h2 id="the-debugger-channel"><a class="header" href="#the-debugger-channel">The debugger channel</a></h2>
+<p><code>debug.output(text)</code> writes a line where a debugger shows it:</p>
+<ul>
+<li><strong>Windows:</strong> <code>OutputDebugStringW</code>. Visual Studio’s Output window and
+WinDbg show it, and so does DebugView when no debugger is attached. It
+goes nowhere else.</li>
+<li><strong>Linux, macOS and WASI:</strong> standard error. These systems have no separate
+channel, and debuggers show the program’s own output.</li>
+</ul>
+<p><code>debug.is_debugger_attached()</code> reads <code>TracerPid</code> in <code>/proc/self/status</code> on
+Linux, <code>P_TRACED</code> on macOS, and <code>IsDebuggerPresent</code> on Windows. It is always
+false on WASI.</p>
+<p><code>debug.breakpoint()</code> executes the processor’s debug trap. A debugger stops
+there and can continue the program. With no debugger attached, the trap
+ends the program, so guard it:</p>
+<pre><code class="language-pepper">if (debug.is_debugger_attached()) {
+    debug.breakpoint();
+}
+</code></pre>
+<p><code>break</code> is a keyword, so the function is called <code>breakpoint</code>.</p>
+<p>See <a href="#debugging">Debugging</a> for running a program under gdb,
+lldb or Visual Studio.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -17600,6 +17723,9 @@ or <code>-O3</code>. <code>-O</code> alone is <code>-O2</code>, and it does not 
 level, so <code>pepper build -O main.pep</code> works. Each level runs the pipeline
 clang runs at that level. Without the option, the level is
 <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when that is set and not empty.</p>
+<p>At <code>-O0</code> a panic prints a backtrace after its message; at any other level it
+prints the message alone, unless the program runs with <code>PEPPER_BACKTRACE=1</code>
+(see <a href="#backtraces-on-panic">Backtraces on panic</a>).</p>
 <h3 id="--ltofull---ltooff"><a class="header" href="#--ltofull---ltooff"><code>--lto=full</code>, <code>--lto=off</code></a></h3>
 <p>Link-time optimization. With <code>--lto=full</code>, once every file is compiled the
 whole program is optimized again as one module, so a call into another file
@@ -17625,8 +17751,13 @@ the build cache’s key.</p>
 <h3 id="-g---emit-debug"><a class="header" href="#-g---emit-debug"><code>-g</code>, <code>--emit-debug</code></a></h3>
 <p>Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
 executable on Linux and macOS, and CodeView on Windows, where the linker
-writes <code>&lt;output&gt;.pdb</code> beside the executable. It works with <code>-O</code>. See
+writes <code>&lt;output&gt;.pdb</code> beside the executable. On macOS it also runs
+<code>dsymutil</code> to write <code>&lt;output&gt;.dSYM</code> beside the executable, when the
+program is built for the Mac it runs on. It works with <code>-O</code>. See
 <a href="#debugging">Debugging</a>.</p>
+<p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
+program’s function names, which is where <a href="#backtraces-and-the-debugger">backtraces</a>
+read them.</p>
 <h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
@@ -18044,9 +18175,16 @@ WinDbg. The compiler then describes the program to the debugger, which can:</p>
 <li>show a backtrace with the source line of every Pepper frame;</li>
 <li>print parameters, locals, module-scope variables and struct fields.</li>
 </ul>
-<pre><code class="language-bash">pepper build -g main.pep -o main        # Linux and macOS: DWARF in the executable
+<pre><code class="language-bash">pepper build -g main.pep -o main        # Linux: DWARF in the executable
+pepper build -g main.pep -o main        # macOS: DWARF, and main.dSYM beside it
 pepper build -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
 </code></pre>
+<p>On macOS the linker leaves the DWARF in the object files, so <code>-g</code> also runs
+<code>dsymutil</code> (from Xcode’s command line tools) to gather it into
+<code>main.dSYM</code>. lldb finds the bundle beside the program; so do the program’s
+own <a href="#backtraces-and-the-debugger">backtraces</a>, which read their source lines from
+it. Without <code>dsymutil</code> the program still builds, and its backtraces name
+functions but not lines.</p>
 <p><code>-g</code> and <code>-O</code> work together. Optimized code still steps and shows a
 backtrace, and a call the optimizer inlined still appears as its own frame.
 A variable the optimizer removed shows as optimized out.</p>
@@ -18173,6 +18311,11 @@ their own objects in the build cache, apart from builds without it. With
 <code>-g</code>, editing a file recompiles the files that import it, even when the edit
 only moves a declaration: their code records the line numbers of the
 generics they instantiate from it.</p>
+<h2 id="backtraces-without-a-debugger"><a class="header" href="#backtraces-without-a-debugger">Backtraces without a debugger</a></h2>
+<p>A program can print its own stack: a panic does in a build without <code>-O</code>,
+and the <code>debug</code> module’s <code>capture()</code> and <code>print_backtrace()</code> do on request.
+<code>debug.output</code>, <code>debug.is_debugger_attached</code> and <code>debug.breakpoint</code> talk to
+an attached debugger. See <a href="#backtraces-and-the-debugger">Backtraces and the debugger</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="standard-library-reference"><a class="header" href="#standard-library-reference">Standard library reference</a></h1>
 <p>The standard library is the Pepper runtime: the files under <code>runtime/</code> that
@@ -18258,8 +18401,10 @@ so an assertion that holds builds no <code>String</code>.</p>
 <p>Flushes every C output stream, so output printed so far is not lost,
 then writes <code>location: panic: message</code> and a newline to standard error
 (“Assertion failed with no additional information” when <code>message</code> is
-null), and calls C <code>abort()</code>. No destructors or releases run, and the
-process ends abnormally (SIGABRT on POSIX).</p>
+null), followed in a build without <code>-O</code> by a backtrace of the calls
+that led there (<code>PEPPER_BACKTRACE</code> overrides the build; see the <code>debug</code>
+module’s <code>print_backtrace</code>), and calls C <code>abort()</code>. No destructors or
+releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
 <p>The location is the call’s <code>file:line:col</code>, which the compiler passes
 in a hidden parameter, the way a C++ <code>std::source_location</code> default
 argument works. A function that panics on its caller’s behalf, as the
@@ -36187,6 +36332,275 @@ where the CPU has no prefetch instruction.</p>
 <ul>
 <li><code>address</code> — memory that will be written soon</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/debug/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-debug-module"><a class="header" href="#the-debug-module">The debug module</a></h1>
+<p>Stack walking, panic backtraces, and talking to a debugger.</p>
+<p><code>debug</code> is a module: bring it in with <code>import debug</code> (and write
+<code>debug.capture()</code>).</p>
+<ul>
+<li><a href="#backtraces">Backtraces</a>: <code>capture()</code> records the calls that
+led to the current point, cheaply; <code>Backtrace.frames()</code> resolves each
+return address to its function and, in a <code>-g</code> build, its source line.
+<code>print_backtrace()</code> writes the current stack to standard error.</li>
+<li><a href="#the-debugger">The debugger</a>: <code>output()</code> writes to the platform’s
+debugger channel, <code>is_debugger_attached()</code> asks whether a debugger is
+watching, and <code>breakpoint()</code> stops in it.</li>
+</ul>
+<p>A panic prints a backtrace after its message in a build without <code>-O</code>;
+the <code>PEPPER_BACKTRACE</code> environment variable turns that on (<code>1</code>) or off
+(<code>0</code>) in any build (see <code>print_backtrace</code>).</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    var trace = debug.capture();
+    var frames = trace.frames();
+    assert(frames.count &gt; 0, "main is on the stack");
+    debug.output("captured a backtrace");
+    return 0;
+}
+</code></pre>
+<p>Source: <code>runtime/debug/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/debug/backtrace.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="backtraces"><a class="header" href="#backtraces">Backtraces</a></h1>
+<p>Capturing the call stack (<code>capture</code>, <code>Backtrace</code>) and resolving it to
+functions and source lines (<code>StackFrame</code>).</p>
+<p>Capturing only records return addresses, so it is cheap enough to do
+whenever something might need reporting later. The addresses are
+resolved, from the program’s symbol table and its debug info, only when
+<code>Backtrace.frames()</code> or <code>to_string()</code> asks for them.</p>
+<p>A function name needs the program’s symbol table, which every build
+keeps unless the executable is stripped. A file, line and column need
+the debug info a <code>-g</code> build carries:</p>
+<ul>
+<li><strong>Linux:</strong> the executable’s ELF symbol table and DWARF line table.</li>
+<li><strong>macOS:</strong> the executable’s symbol table, and the DWARF line table of
+the <code>.dSYM</code> bundle a <code>-g</code> build writes beside it.</li>
+<li><strong>Windows:</strong> DbgHelp, which reads the <code>.pdb</code> every build writes beside
+the executable: function names only, or with <code>-g</code> source lines too (no
+columns).</li>
+<li><strong>WASI:</strong> a WebAssembly program cannot walk its stack, so a backtrace
+is empty.</li>
+</ul>
+<p>Frames inside the runtime’s own capture and panic code are left out, and
+so are the C runtime’s frames below <code>main</code>. A function the optimizer
+inlined into its caller has no frame of its own.</p>
+<p>Source: <code>runtime/debug/backtrace.pep</code></p>
+<h2 id="stackframe"><a class="header" href="#stackframe">StackFrame</a></h2>
+<pre><code class="language-pepper">struct StackFrame
+</code></pre>
+<p>One call on the stack: where it returns to, and the function and source
+position that address belongs to.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    var frame = debug.capture().frames()[0];
+    assert(frame.function == "main", "the innermost frame is main");
+    print(frame.to_string());   # main at main.pep:4:21 in a -g build
+    return 0;
+}
+</code></pre>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h4 id="address-1"><a class="header" href="#address-1">address</a></h4>
+<pre><code class="language-pepper">var address: ulong
+</code></pre>
+<p>The return address: the instruction the call returns to.</p>
+<h4 id="function"><a class="header" href="#function">function</a></h4>
+<pre><code class="language-pepper">var function: String
+</code></pre>
+<p>The function’s name, such as <code>main</code> or <code>Point.length</code>; empty when the
+program has no symbol for the address.</p>
+<h4 id="file-4"><a class="header" href="#file-4">file</a></h4>
+<pre><code class="language-pepper">var file: String
+</code></pre>
+<p>The source file, as it was named to the compiler; empty without debug
+info.</p>
+<h4 id="line"><a class="header" href="#line">line</a></h4>
+<pre><code class="language-pepper">var line: int
+</code></pre>
+<p>The 1-based source line of the call; 0 without debug info.</p>
+<h4 id="column"><a class="header" href="#column">column</a></h4>
+<pre><code class="language-pepper">var column: int
+</code></pre>
+<p>The 1-based source column of the call; 0 when unknown.</p>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h4 id="stackframe-1"><a class="header" href="#stackframe-1">StackFrame()</a></h4>
+<pre><code class="language-pepper">construct(address: ulong = 0)
+</code></pre>
+<p>Creates a StackFrame for <code>address</code>, with no function or source
+position yet.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the return address</li>
+</ul>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the frame as text: <code>function at file:line:column</code>, with the
+parts that are unknown left out, and the address in hexadecimal when
+the function is unknown.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the frame as text</li>
+</ul>
+<h2 id="backtrace"><a class="header" href="#backtrace">Backtrace</a></h2>
+<pre><code class="language-pepper">struct Backtrace
+</code></pre>
+<p>The call stack at the point <code>capture()</code> ran, as return addresses,
+innermost first.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    var trace = debug.capture();
+    for (var frame in trace.frames()) {
+        print(frame.to_string());
+    }
+    return 0;
+}
+</code></pre>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h4 id="addresses-1"><a class="header" href="#addresses-1">addresses</a></h4>
+<pre><code class="language-pepper">var addresses: Array&lt;ulong&gt;
+</code></pre>
+<p>The return address of each call, innermost first, as captured: it
+includes the frames of <code>capture</code> itself, which <code>frames()</code> leaves out.</p>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h4 id="backtrace-1"><a class="header" href="#backtrace-1">Backtrace()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty Backtrace. Use <code>capture()</code> to record the stack.</p>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h4 id="frames"><a class="header" href="#frames">frames</a></h4>
+<pre><code class="language-pepper">frames(): Array&lt;StackFrame&gt;
+</code></pre>
+<p>Resolves each return address to its function and source position.
+Runs in time proportional to the program’s symbol and line tables,
+which it reads each call.</p>
+<p>Leaves out the frames of <code>capture</code> and of the runtime’s panic code at
+the top, and the C runtime’s frames below <code>main</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the frames, innermost first</li>
+</ul>
+<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the frames as text, one per line, each numbered and indented
+(<code>  0: main at main.pep:4:5</code>), with a newline after the last.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the frames as text</li>
+</ul>
+<h2 id="capture"><a class="header" href="#capture">capture</a></h2>
+<pre><code class="language-pepper">capture(): Backtrace
+</code></pre>
+<p>Records the call stack: the return address of every call that led here.
+Cheap: the addresses are resolved only when <code>Backtrace.frames()</code> or
+<code>to_string()</code> asks for them.</p>
+<p>Records at most 128 calls, the innermost ones. On WASI the Backtrace is
+empty.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stack, innermost call first</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    var trace = debug.capture();
+    print(trace.to_string());
+    return 0;
+}
+</code></pre>
+<h2 id="print_backtrace"><a class="header" href="#print_backtrace">print_backtrace</a></h2>
+<pre><code class="language-pepper">print_backtrace()
+</code></pre>
+<p>Writes the current call stack to standard error, a line per frame, after
+a <code>backtrace:</code> line: what a panic prints after its message.</p>
+<p>A panic prints it in a build without <code>-O</code>. Set the <code>PEPPER_BACKTRACE</code>
+environment variable to <code>1</code> to print it in an optimized build too, or to
+<code>0</code> to never print it.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    debug.print_backtrace();
+    return 0;
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/debug/debugger.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-debugger"><a class="header" href="#the-debugger">The debugger</a></h1>
+<p>Talking to a debugger: <code>output()</code> writes to the platform’s debugger
+channel, <code>is_debugger_attached()</code> asks whether a debugger is watching,
+and <code>breakpoint()</code> stops in it.</p>
+<p>Source: <code>runtime/debug/debugger.pep</code></p>
+<h2 id="output-3"><a class="header" href="#output-3">output</a></h2>
+<pre><code class="language-pepper">output(text: String)
+</code></pre>
+<p>Writes <code>text</code> to the platform’s debugger channel, followed by a newline
+when it does not end in one.</p>
+<ul>
+<li><strong>Windows:</strong> <code>OutputDebugStringW</code>, which Visual Studio’s Output window
+and WinDbg show (and DebugView, with no debugger attached). Nothing is
+written anywhere else.</li>
+<li><strong>Linux, macOS and WASI:</strong> standard error, which debuggers show; these
+systems have no separate channel.</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to write</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    debug.output("starting");
+    return 0;
+}
+</code></pre>
+<h2 id="is_debugger_attached"><a class="header" href="#is_debugger_attached">is_debugger_attached</a></h2>
+<pre><code class="language-pepper">is_debugger_attached(): bool
+</code></pre>
+<p>Returns whether a debugger is attached to the program: the <code>TracerPid</code>
+of <code>/proc/self/status</code> on Linux, <code>P_TRACED</code> on macOS, and
+<code>IsDebuggerPresent</code> on Windows. Always false on WASI.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true while a debugger is attached</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    if (debug.is_debugger_attached()) {
+        debug.output("hello, debugger");
+    }
+    return 0;
+}
+</code></pre>
+<h2 id="breakpoint"><a class="header" href="#breakpoint">breakpoint</a></h2>
+<pre><code class="language-pepper">breakpoint()
+</code></pre>
+<p>Stops in the debugger, as a breakpoint set on this line would: the
+processor’s debug trap (<code>int3</code> on x64, <code>brk</code> on AArch64), through
+<code>llvm.debugtrap</code>. The debugger can then continue the program.</p>
+<p>With no debugger attached the trap ends the program: SIGTRAP on Linux
+and macOS, a breakpoint exception on Windows. Guard it with
+<code>is_debugger_attached()</code> to stop only under a debugger. Does nothing on
+WASI.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import debug;
+
+main(): int {
+    if (debug.is_debugger_attached()) {
+        debug.breakpoint();
+    }
+    return 0;
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-text-module"><a class="header" href="#the-text-module">The text module</a></h1>
 <p>Converting text to and from bytes in a given encoding.</p>
@@ -36612,7 +37026,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
 assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -36776,7 +37190,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 var parts = regex.Regex(",\\s*").split("a, b,c");
 assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -36792,7 +37206,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -36804,7 +37218,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -36888,7 +37302,7 @@ when it did not take part.</p>
 <ul>
 <li>if <code>index</code> is greater than <code>group_count()</code></li>
 </ul>
-<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<h4 id="to_string-1-3"><a class="header" href="#to_string-1-3">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the matched text.</p>
@@ -36901,7 +37315,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
 <h4 id="matches-1-1"><a class="header" href="#matches-1-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -37090,7 +37504,7 @@ var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
 list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="operator--37"><a class="header" href="#operator--37">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
@@ -37254,7 +37668,7 @@ value holds, not a copy.</p>
 <ul>
 <li>the members of an <code>Object</code>, or none</li>
 </ul>
-<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
+<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as compact JSON text, with no spaces or line
@@ -37266,7 +37680,7 @@ JSON cannot spell) is written as <code>null</code>.</p>
 <ul>
 <li>the JSON text</li>
 </ul>
-<h4 id="to_string-1-3"><a class="header" href="#to_string-1-3">to_string</a></h4>
+<h4 id="to_string-1-4"><a class="header" href="#to_string-1-4">to_string</a></h4>
 <pre><code class="language-pepper">to_string(ascii_only: bool): String
 </code></pre>
 <p>Returns the value as compact JSON text, like <code>to_string()</code>, choosing
@@ -37323,7 +37737,7 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
 <h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
@@ -37333,12 +37747,12 @@ line and column where it is.</p>
 </code></pre>
 <p>The path given to <code>parse</code>, which names the text in <code>to_string()</code>;
 empty when none was given.</p>
-<h4 id="line"><a class="header" href="#line">line</a></h4>
+<h4 id="line-1"><a class="header" href="#line-1">line</a></h4>
 <pre><code class="language-pepper">var line: ulong
 </code></pre>
 <p>The line of the error, from 1; 0 for an error from <code>from_json</code>, which
 has no text to point into.</p>
-<h4 id="column"><a class="header" href="#column">column</a></h4>
+<h4 id="column-1"><a class="header" href="#column-1">column</a></h4>
 <pre><code class="language-pepper">var column: ulong
 </code></pre>
 <p>The column of the error, from 1, counting bytes as clang does; 0
@@ -37353,7 +37767,7 @@ when <code>line</code> is.</p>
 <p>Where in the document the value an error is about is, as a path from
 the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
 syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -37366,8 +37780,8 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
-<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the error as a compiler prints one:
@@ -37443,12 +37857,12 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
 <p>The document’s value.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="jsondocument-1"><a class="header" href="#jsondocument-1">JsonDocument()</a></h4>
 <pre><code class="language-pepper">construct(root: JsonValue = JsonValue.Null)
 </code></pre>
@@ -37457,7 +37871,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <ul>
 <li><code>root</code> — the document’s value</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="comments-1"><a class="header" href="#comments-1">comments</a></h4>
 <pre><code class="language-pepper">comments(path: String): Array&lt;String&gt;
 </code></pre>
@@ -37485,7 +37899,7 @@ must be a whole comment, <code>// ...</code> (one line) or <code>/* ... */</code
 <ul>
 <li>if a comment does not start with <code>//</code> or <code>/*</code> (“a JSONC comment starts with ‘//’ or ‘/*’”)</li>
 </ul>
-<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
+<h4 id="to_string-32"><a class="header" href="#to_string-32">to_string</a></h4>
 <pre><code class="language-pepper">to_string(indent: int = 2, ascii_only: bool = false): String
 </code></pre>
 <p>Returns the document as indented JSONC text with its comments, each
@@ -37748,7 +38162,7 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
@@ -37783,7 +38197,7 @@ enum Shape {
     Point,
 }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">key</a></h4>
 <pre><code class="language-pepper">const key: String
 </code></pre>
@@ -38015,7 +38429,7 @@ for (var line in reader.lines()) {
     print(line.value());
 }
 </code></pre>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="decompressreader-1"><a class="header" href="#decompressreader-1">DecompressReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader, format: Format)
 </code></pre>
@@ -38025,7 +38439,7 @@ for (var line in reader.lines()) {
 <li><code>source</code> — the stream of compressed bytes</li>
 <li><code>format</code> — the framing of the compressed data</li>
 </ul>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -38066,7 +38480,7 @@ writer.print_line("second line");
 writer.finish();
 file.close();
 </code></pre>
-<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
 <h4 id="compresswriter-1"><a class="header" href="#compresswriter-1">CompressWriter()</a></h4>
 <pre><code class="language-pepper">construct(sink: io.Writer, format: Format, level: int = 6)
 </code></pre>
@@ -38081,7 +38495,7 @@ file.close();
 <ul>
 <li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
 <h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -38147,7 +38561,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -38165,7 +38579,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
 <h4 id="update"><a class="header" href="#update">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -38193,7 +38607,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
+<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
 <h4 id="adler32-1"><a class="header" href="#adler32-1">Adler32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -38211,7 +38625,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -38265,7 +38679,7 @@ extracted safely into a directory, or written.</p>
 </code></pre>
 <p>What a tar entry is.</p>
 <h3 id="cases-10"><a class="header" href="#cases-10">Cases</a></h3>
-<h4 id="file-4"><a class="header" href="#file-4">File</a></h4>
+<h4 id="file-5"><a class="header" href="#file-5">File</a></h4>
 <pre><code class="language-pepper">File
 </code></pre>
 <p>A regular file, whose contents follow the entry’s header.</p>
@@ -38295,7 +38709,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -38321,7 +38735,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var link_target: String
 </code></pre>
 <p>The target of a symlink or hard link; empty otherwise.</p>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
 <pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
 </code></pre>
@@ -38358,7 +38772,7 @@ while (true) {
     print(entry.value().path);
 }
 </code></pre>
-<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
+<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
 <h4 id="tarreader-1"><a class="header" href="#tarreader-1">TarReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader)
 </code></pre>
@@ -38367,7 +38781,7 @@ while (true) {
 <ul>
 <li><code>source</code> — the stream of the archive</li>
 </ul>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
 <h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
 <pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
 </code></pre>
@@ -38461,7 +38875,7 @@ assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 <ul>
 <li><code>sink</code> — the stream the archive is written to</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
 <h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
 <pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
 </code></pre>
@@ -38618,12 +39032,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -38725,12 +39139,12 @@ hasher.update("blob 0");
 hasher.update(nul);
 assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
+<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
 <h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -38823,12 +39237,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
+<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -38997,7 +39411,7 @@ main(args: String[]): int {
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -39008,7 +39422,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
+<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
 </code></pre>
@@ -39269,7 +39683,7 @@ var best = cli.closest("buidl", names);   # some("build")
 <pre><code class="language-pepper">var occurrences: int { get; }
 </code></pre>
 <p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
-<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
+<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
 <h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -39300,7 +39714,7 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
@@ -39376,7 +39790,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
+<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -39413,7 +39827,7 @@ struct Options {
     var source: String;
 }
 </code></pre>
-<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
+<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
 <h4 id="help-1-1"><a class="header" href="#help-1-1">help</a></h4>
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
@@ -39483,12 +39897,12 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -39599,7 +40013,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
+<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -39614,7 +40028,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
+<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -39624,7 +40038,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -39710,7 +40124,7 @@ server adds <code>Content-Length</code> itself.</p>
     return response;
 }
 </code></pre>
-<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
+<h3 id="fields-1-8"><a class="header" href="#fields-1-8">Fields</a></h3>
 <h4 id="status-1"><a class="header" href="#status-1">status</a></h4>
 <pre><code class="language-pepper">var status: int
 </code></pre>
@@ -39830,7 +40244,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
+<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
 <h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -39914,7 +40328,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -39952,7 +40366,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
+<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -40043,7 +40457,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
+<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -40061,7 +40475,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
+<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -40131,7 +40545,7 @@ while (true) {
     }
 }
 </code></pre>
-<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
+<h3 id="constructor-1-27"><a class="header" href="#constructor-1-27">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -40155,7 +40569,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
+<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>

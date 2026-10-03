@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a4665060.js";
+            window.path_to_searchindex_js = "../searchindex-f9884282.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a7546a5.js"></script>
+        <script src="../toc-65765d64.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,9 +190,16 @@ WinDbg. The compiler then describes the program to the debugger, which can:</p>
 <li>show a backtrace with the source line of every Pepper frame;</li>
 <li>print parameters, locals, module-scope variables and struct fields.</li>
 </ul>
-<pre><code class="language-bash">pepper build -g main.pep -o main        # Linux and macOS: DWARF in the executable
+<pre><code class="language-bash">pepper build -g main.pep -o main        # Linux: DWARF in the executable
+pepper build -g main.pep -o main        # macOS: DWARF, and main.dSYM beside it
 pepper build -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
 </code></pre>
+<p>On macOS the linker leaves the DWARF in the object files, so <code>-g</code> also runs
+<code>dsymutil</code> (from Xcode’s command line tools) to gather it into
+<code>main.dSYM</code>. lldb finds the bundle beside the program; so do the program’s
+own <a href="../language/debug.html">backtraces</a>, which read their source lines from
+it. Without <code>dsymutil</code> the program still builds, and its backtraces name
+functions but not lines.</p>
 <p><code>-g</code> and <code>-O</code> work together. Optimized code still steps and shows a
 backtrace, and a call the optimizer inlined still appears as its own frame.
 A variable the optimizer removed shows as optimized out.</p>
@@ -319,6 +326,11 @@ their own objects in the build cache, apart from builds without it. With
 <code>-g</code>, editing a file recompiles the files that import it, even when the edit
 only moves a declaration: their code records the line numbers of the
 generics they instantiate from it.</p>
+<h2 id="backtraces-without-a-debugger"><a class="header" href="#backtraces-without-a-debugger">Backtraces without a debugger</a></h2>
+<p>A program can print its own stack: a panic does in a build without <code>-O</code>,
+and the <code>debug</code> module’s <code>capture()</code> and <code>print_backtrace()</code> do on request.
+<code>debug.output</code>, <code>debug.is_debugger_attached</code> and <code>debug.breakpoint</code> talk to
+an attached debugger. See <a href="../language/debug.html">Backtraces and the debugger</a>.</p>
 
                     </main>
 

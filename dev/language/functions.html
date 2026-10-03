@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a4665060.js";
+            window.path_to_searchindex_js = "../searchindex-f9884282.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a7546a5.js"></script>
+        <script src="../toc-65765d64.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -501,6 +501,10 @@ literal picks, so a literal message builds nothing when the assertion holds. See
 call and the message to standard error, and aborts:</p>
 <pre><code class="language-text">main.pep:12:5: panic: count must be positive
 </code></pre>
+<p>In a build without <code>-O</code>, a backtrace of the calls that led there follows the
+message. <code>PEPPER_BACKTRACE=1</code> turns it on in an optimized build and
+<code>PEPPER_BACKTRACE=0</code> turns it off (see
+<a href="debug.html#backtraces-on-panic">Backtraces and the debugger</a>).</p>
 <p>The checks the compiler adds report the same way, at the expression that
 failed: an <a href="types-and-variables.html#integer-overflow">overflowing operator</a>, a
 null function value, a <code>match</code> on a null reference enum. So do the runtime’s

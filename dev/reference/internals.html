@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a4665060.js";
+            window.path_to_searchindex_js = "../searchindex-f9884282.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a7546a5.js"></script>
+        <script src="../toc-65765d64.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -229,8 +229,10 @@ so an assertion that holds builds no <code>String</code>.</p>
 <p>Flushes every C output stream, so output printed so far is not lost,
 then writes <code>location: panic: message</code> and a newline to standard error
 (“Assertion failed with no additional information” when <code>message</code> is
-null), and calls C <code>abort()</code>. No destructors or releases run, and the
-process ends abnormally (SIGABRT on POSIX).</p>
+null), followed in a build without <code>-O</code> by a backtrace of the calls
+that led there (<code>PEPPER_BACKTRACE</code> overrides the build; see the <code>debug</code>
+module’s <code>print_backtrace</code>), and calls C <code>abort()</code>. No destructors or
+releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
 <p>The location is the call’s <code>file:line:col</code>, which the compiler passes
 in a hidden parameter, the way a C++ <code>std::source_location</code> default
 argument works. A function that panics on its caller’s behalf, as the

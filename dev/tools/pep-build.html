@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a4665060.js";
+            window.path_to_searchindex_js = "../searchindex-f9884282.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a7546a5.js"></script>
+        <script src="../toc-65765d64.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -301,6 +301,9 @@ or <code>-O3</code>. <code>-O</code> alone is <code>-O2</code>, and it does not 
 level, so <code>pepper build -O main.pep</code> works. Each level runs the pipeline
 clang runs at that level. Without the option, the level is
 <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when that is set and not empty.</p>
+<p>At <code>-O0</code> a panic prints a backtrace after its message; at any other level it
+prints the message alone, unless the program runs with <code>PEPPER_BACKTRACE=1</code>
+(see <a href="../language/debug.html#backtraces-on-panic">Backtraces on panic</a>).</p>
 <h3 id="--ltofull---ltooff"><a class="header" href="#--ltofull---ltooff"><code>--lto=full</code>, <code>--lto=off</code></a></h3>
 <p>Link-time optimization. With <code>--lto=full</code>, once every file is compiled the
 whole program is optimized again as one module, so a call into another file
@@ -326,8 +329,13 @@ the build cache’s key.</p>
 <h3 id="-g---emit-debug"><a class="header" href="#-g---emit-debug"><code>-g</code>, <code>--emit-debug</code></a></h3>
 <p>Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
 executable on Linux and macOS, and CodeView on Windows, where the linker
-writes <code>&lt;output&gt;.pdb</code> beside the executable. It works with <code>-O</code>. See
+writes <code>&lt;output&gt;.pdb</code> beside the executable. On macOS it also runs
+<code>dsymutil</code> to write <code>&lt;output&gt;.dSYM</code> beside the executable, when the
+program is built for the Mac it runs on. It works with <code>-O</code>. See
 <a href="debugging.html">Debugging</a>.</p>
+<p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
+program’s function names, which is where <a href="../language/debug.html">backtraces</a>
+read them.</p>
 <h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
