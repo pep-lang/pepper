@@ -369,53 +369,74 @@ export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: 
     return a_size >= size && b_size >= size && memcmp(a, b, size) == 0;
 }
 
+# The byte size of the UTF-8 sequence starting at byte `i` of the `size`
+# bytes at `data`, or 0 when the bytes there are not a whole sequence. Each
+# read is guarded by its own `if`, so none reads past `size`.
+_pep_utf8_sequence_size(data: __ptr<void>, i: ulong, size: ulong): ulong {
+    # Byte reads are signed; mask to the unsigned value.
+    var b = data[i] & 0xFF;
+    if (b < 128) {
+        return 1;
+    }
+    ulong n = 0;
+    if (b >= 192 && b < 224) {
+        n = 2;
+    }
+    if (b >= 224 && b < 240) {
+        n = 3;
+    }
+    if (b >= 240 && b < 248) {
+        n = 4;
+    }
+    if (n == 0 || i + n > size) {
+        return 0;
+    }
+    ulong k = 1;
+    while (k < n) {
+        if ((data[i + k] & 0xC0) != 0x80) {
+            return 0;
+        }
+        k = k + 1;
+    }
+    return n;
+}
+
 _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     if (data == __null || size == 0) { return true; }
-    var i = 0;
+    ulong i = 0;
     while (i < size) {
-        # Byte reads are signed; mask to the unsigned value.
-        var b = data[i] & 0xFF;
-        if (b >= 240 && b < 248) {
-            if (i + 4 > size
-                || (data[i + 1] & 0xC0) != 0x80
-                || (data[i + 2] & 0xC0) != 0x80
-                || (data[i + 3] & 0xC0) != 0x80) { return false; }
-            i = i + 4;
-        }
-        if (b >= 224 && b < 240) {
-            if (i + 3 > size || (data[i + 1] & 0xC0) != 0x80 || (data[i + 2] & 0xC0) != 0x80) { return false; }
-            i = i + 3;
-        }
-        if (b >= 192 && b < 224) {
-            if (i + 2 > size || (data[i + 1] & 0xC0) != 0x80) { return false; }
-            i = i + 2;
-        }
-        if (b >= 128 && b < 192) {
+        var n = _pep_utf8_sequence_size(data, i, size);
+        if (n == 0) {
             return false;
         }
-        if (b < 128) {
-            i = i + 1;
-        }
+        i = i + n;
     }
     return true;
 }
 
+# The byte offset of the first `needle` in the haystack, or -1. The needle
+# must be valid UTF-8, and so must the haystack before the match: the bytes
+# are checked as the search passes them, one code point at a time, so a match
+# is found only at a code point boundary, and repeated searches from
+# successive offsets (split, replace) stay linear instead of re-checking all
+# the rest of the haystack on every call (#511).
 export _pep_utf8_find(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): long {
     if (haystack == __null || haystack_size == 0) { return -1; }
     if (needle_size == 0) { return 0; }
     if (needle == __null) { return -1; }
-    # Both spans must be valid UTF-8 (the Rust original returns -1 otherwise).
-    if (!_pep_utf8_valid(haystack, haystack_size)) { return -1; }
     if (!_pep_utf8_valid(needle, needle_size)) { return -1; }
-    var i = 0;
+    var first = needle[0];
+    ulong i = 0;
     while (i + needle_size <= haystack_size) {
-        var j = 0;
-        while (j < needle_size) {
-            if (haystack[i + j] != needle[j]) { break; }
-            j = j + 1;
+        var n = _pep_utf8_sequence_size(haystack, i, haystack_size);
+        if (n == 0) {
+            return -1;
         }
-        if (j == needle_size) { return i; }
-        i = i + 1;
+        # The match is a copy of the valid needle, so it needs no check.
+        if (haystack[i] == first && memcmp(haystack + i, needle, needle_size) == 0) {
+            return i as long;
+        }
+        i = i + n;
     }
     return -1;
 }

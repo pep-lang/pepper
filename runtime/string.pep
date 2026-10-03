@@ -418,8 +418,12 @@ export struct String {
     ## The offset counts bytes, not code points. To use it with `s[i]` or
     ## `substr`, convert it with `String.length_of(s.c_str(), offset)`.
     ## An empty `needle` is found at 0 unless this String is empty, in which
-    ## case the result is -1. The result is also -1 when either String is not
-    ## valid UTF-8. Runs in O(size * needle.size).
+    ## case the result is -1. The result is also -1 when `needle` is not valid
+    ## UTF-8, or when this String holds invalid UTF-8 before the first match.
+    ## Bytes past the match are not checked, so searching on from each match
+    ## (as `split` and `replace` do) reads the String once in all. Runs in
+    ## O(offset * needle.size) at worst, where offset is where the search
+    ## stops.
     ##
     ## With `from`, the search starts at that byte offset, which must be a
     ## code point boundary (an offset `find` returned, plus a match's size,

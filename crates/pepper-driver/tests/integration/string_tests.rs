@@ -483,6 +483,39 @@ test(): int {
     );
 }
 
+// #511: `find` re-checked that the whole rest of the String was valid UTF-8
+// on every call, so `split`, `replace` and a `find(_, from)` loop were
+// quadratic (20 s for these three over 100 KB). Linear, they take
+// milliseconds; quadratic, this 240 KB text takes about two minutes.
+#[test]
+fn find_split_replace_are_linear() {
+    let started = std::time::Instant::now();
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var text = "wörd,".repeat(40000);
+    if (text.split(",").count != 40001) { return -1; }
+    if (text.replace(",", ";").size != text.size) { return -2; }
+    ulong found = 0;
+    var at = text.find(",");
+    while (at >= 0) {
+        found = found + 1;
+        at = text.find(",", (at as ulong) + 1);
+    }
+    if (found != 40000) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(20),
+        "split, replace and find over 240 KB took {elapsed:?}: quadratic again?"
+    );
+}
+
 #[test]
 fn long_parse() {
     assert_eq!(
