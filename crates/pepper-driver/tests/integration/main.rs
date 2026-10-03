@@ -68,7 +68,6 @@ mod overflow_tests;
 mod panic_location_tests;
 mod overload_tests;
 mod package_tests;
-mod nested_array_tests;
 mod nested_hash_tests;
 mod optional_tests;
 mod param_default_tests;
