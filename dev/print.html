@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5eb00af.js";
+            window.path_to_searchindex_js = "searchindex-dc29c4c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57b6db41.js"></script>
@@ -9130,9 +9130,11 @@ specialization it happened in (see <a href="#in-generic-code">In generic code</a
 block emits keeps the source line of the statement it came from, so a
 runtime <code>print</code> it emits shows values as the program runs, and a
 <a href="#debugging">debugger</a> breakpoint on that line (with <code>-g</code>)
-stops there. The passes of an unrolled loop share the lines of its body,
-so a breakpoint on one stops only in the first pass, and stepping over
-the line runs the rest.</p>
+stops there, in every pass. Stepping goes through an unrolled loop pass
+by pass, stopping on the <code>for</code> line and then on the body, and the
+debugger shows the compile-time variables, such as the loop’s <code>field</code>
+(see <a href="#stepping-through-a-static-block">Stepping through a <code>static</code>
+block</a>).</p>
 </li>
 <li>
 <p><strong><code>--emit-static</code></strong> writes the program’s source with each block
@@ -19110,6 +19112,61 @@ reference counts as <code>[ref count]</code> (strong references) and <code>[weak
 </ul>
 <p>Not yet supported: an enum with payloads shows its tag and every payload
 field, rather than the active case and its payload alone.</p>
+<h2 id="stepping-through-a-static-block"><a class="header" href="#stepping-through-a-static-block">Stepping through a <code>static</code> block</a></h2>
+<p>A <a href="#reflection-and-attributes"><code>static</code> block</a> unrolls its compile-time
+loops into one pass per element, and the debugger steps through those
+passes as it would a loop that runs: it stops on the <code>for</code> (or <code>while</code>)
+line at the start of each pass, then on each line of the body. A
+compile-time <code>if</code> stops once on its line, then in the branch it kept. The
+compile-time variables (the loop’s <code>field</code>, a <code>var</code> of the block) are
+locals of each pass, so the debugger shows which pass it is in:</p>
+<pre><code class="language-pepper"># Build with `-g` and step through `total`: each pass of the `static`
+# block's loop stops on the `for` line, then on its body, with `field`
+# holding the pass's member.
+struct Point {
+    var x: int = 1;
+    var y: int = 2;
+    var z: int = 3;
+}
+
+total(p: Point): int {
+    var sum = 0;
+    static (sum, p) {
+        for (var field in reflect.properties&lt;Point&gt;()) {
+            sum = sum + field.get(p);
+        }
+    }
+    return sum;
+}
+
+main(): int {
+    return total(Point()) - 6;
+}
+</code></pre>
+<pre><code class="language-text">$ pepper build -g debugging-static.pep -o debugging-static
+$ gdb ./debugging-static
+(gdb) break total
+(gdb) run
+(gdb) next
+11	    var sum = 0;
+(gdb) next
+13	        for (var field in reflect.properties&lt;Point&gt;()) {
+(gdb) next
+14	            sum = sum + field.get(p);
+(gdb) print field
+$1 = {name = 0x55555559073f "x", type_name = 0x555555590a57 "int", index = 0, is_last = false, is_const = false, is_property = false}
+(gdb) next
+13	        for (var field in reflect.properties&lt;Point&gt;()) {
+(gdb) next
+14	            sum = sum + field.get(p);
+(gdb) print field.name
+$2 = 0x5555555909ba "y"
+</code></pre>
+<p>A breakpoint on a line of the body stops in every pass. A member or case
+shows as a structure of what <code>reflect</code> reads from it (<code>name</code>, <code>index</code>,
+<code>is_last</code>, and so on); a list does not show. The stop on the header is a
+<code>nop</code> the compiler adds only to unoptimized <code>-g</code> builds; optimized code
+steps through the body’s lines without it.</p>
 <h2 id="formatters-for-the-runtimes-types"><a class="header" href="#formatters-for-the-runtimes-types">Formatters for the runtime’s types</a></h2>
 <p>The runtime ships formatters for each debugger in <code>runtime/debuggers/</code>.
 The sessions below stop in a program holding <code>var name = "pepper";</code>, an

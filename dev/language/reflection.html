@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a5eb00af.js";
+            window.path_to_searchindex_js = "../searchindex-dc29c4c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -422,9 +422,11 @@ specialization it happened in (see <a href="#in-generic-code">In generic code</a
 block emits keeps the source line of the statement it came from, so a
 runtime <code>print</code> it emits shows values as the program runs, and a
 <a href="../tools/debugging.html">debugger</a> breakpoint on that line (with <code>-g</code>)
-stops there. The passes of an unrolled loop share the lines of its body,
-so a breakpoint on one stops only in the first pass, and stepping over
-the line runs the rest.</p>
+stops there, in every pass. Stepping goes through an unrolled loop pass
+by pass, stopping on the <code>for</code> line and then on the body, and the
+debugger shows the compile-time variables, such as the loop’s <code>field</code>
+(see <a href="../tools/debugging.html#stepping-through-a-static-block">Stepping through a <code>static</code>
+block</a>).</p>
 </li>
 <li>
 <p><strong><code>--emit-static</code></strong> writes the program’s source with each block
