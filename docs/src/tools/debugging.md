@@ -9,9 +9,17 @@ WinDbg. The compiler then describes the program to the debugger, which can:
 - print parameters, locals, module-scope variables and struct fields.
 
 ```bash
-pepper build -g main.pep -o main        # Linux and macOS: DWARF in the executable
+pepper build -g main.pep -o main        # Linux: DWARF in the executable
+pepper build -g main.pep -o main        # macOS: DWARF, and main.dSYM beside it
 pepper build -g main.pep -o main.exe    # Windows: CodeView, and main.pdb beside it
 ```
+
+On macOS the linker leaves the DWARF in the object files, so `-g` also runs
+`dsymutil` (from Xcode's command line tools) to gather it into
+`main.dSYM`. lldb finds the bundle beside the program; so do the program's
+own [backtraces](../language/debug.md), which read their source lines from
+it. Without `dsymutil` the program still builds, and its backtraces name
+functions but not lines.
 
 `-g` and `-O` work together. Optimized code still steps and shows a
 backtrace, and a call the optimizer inlined still appears as its own frame.
@@ -135,3 +143,10 @@ their own objects in the build cache, apart from builds without it. With
 `-g`, editing a file recompiles the files that import it, even when the edit
 only moves a declaration: their code records the line numbers of the
 generics they instantiate from it.
+
+## Backtraces without a debugger
+
+A program can print its own stack: a panic does in a build without `-O`,
+and the `debug` module's `capture()` and `print_backtrace()` do on request.
+`debug.output`, `debug.is_debugger_attached` and `debug.breakpoint` talk to
+an attached debugger. See [Backtraces and the debugger](../language/debug.md).

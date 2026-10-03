@@ -6,6 +6,9 @@
 //!   function it calls unwinding through Pepper code is undefined, as it is
 //!   for C code clang compiles. Definitions also get `uwtable`, as clang
 //!   gives them, so debuggers and profilers can still walk the stack.
+//!   On Apple targets they also keep the frame pointer
+//!   (`"frame-pointer"="non-leaf"`), as clang does there: macOS's
+//!   `backtrace` and its profilers walk the stack by frame pointers alone.
 //! - **`noreturn` and `cold`** on the functions that end the program
 //!   ([`NO_RETURN`]), so LLVM moves failure paths out of hot code.
 //! - **`noalias`** on the result of the allocators ([`ALLOCATORS`]), so a
@@ -44,6 +47,12 @@ pub fn annotate(module: &Module<'_>) {
     let noreturn = attribute("noreturn", 0);
     let cold = attribute("cold", 0);
     let noalias = attribute("noalias", 0);
+    let frame_pointer = module
+        .get_triple()
+        .as_str()
+        .to_str()
+        .is_ok_and(|triple| triple.contains("-apple-"))
+        .then(|| context.create_string_attribute("frame-pointer", "non-leaf"));
     let tags = tbaa::Tags::new(module);
     for function in module.get_functions() {
         let name = function.get_name().to_string_lossy();
@@ -60,6 +69,9 @@ pub fn annotate(module: &Module<'_>) {
         }
         if function.count_basic_blocks() > 0 {
             function.add_attribute(AttributeLoc::Function, uwtable);
+            if let Some(frame_pointer) = frame_pointer {
+                function.add_attribute(AttributeLoc::Function, frame_pointer);
+            }
             tags.annotate(function);
         }
     }

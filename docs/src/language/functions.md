@@ -254,6 +254,11 @@ call and the message to standard error, and aborts:
 main.pep:12:5: panic: count must be positive
 ```
 
+In a build without `-O`, a backtrace of the calls that led there follows the
+message. `PEPPER_BACKTRACE=1` turns it on in an optimized build and
+`PEPPER_BACKTRACE=0` turns it off (see
+[Backtraces and the debugger](debug.md#backtraces-on-panic)).
+
 The checks the compiler adds report the same way, at the expression that
 failed: an [overflowing operator](types-and-variables.md#integer-overflow), a
 null function value, a `match` on a null reference enum. So do the runtime's

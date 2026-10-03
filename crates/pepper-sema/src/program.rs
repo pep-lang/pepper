@@ -378,6 +378,37 @@ pub trait ParseCache {
     fn put(&self, path: &Path, source: &str, module: &pepper_parser::ast::Module);
 }
 
+/// Check `program` and merge its files, in load order, into one module. The
+/// module's source map holds every file, so `FileId(i)` is `program.files[i]`,
+/// and its warnings start with the program's (`Program::warnings`). Its
+/// globals are in initialization order (see [`Program::initialization_order`]).
+pub fn merge(program: &Program) -> Result<crate::model::Module, String> {
+    program.check()?;
+    let mut module = crate::model::Module {
+        warnings: program.warnings(),
+        linked: true,
+        extension_scopes: program.extension_scopes(),
+        overload_unions: program.overload_unions.clone(),
+        ..crate::model::Module::default()
+    };
+    for file in &program.files {
+        module.sources.add(&file.name, &file.source);
+        module.namespaces.push(file.namespace.clone());
+    }
+    for (i, file) in program.files.iter().enumerate() {
+        let built = crate::builder::build_file(&file.module, pepper_parser::diagnostic::FileId(i as u32)).map_err(|d| module.sources.render(&d))?;
+        module.merge(built);
+    }
+    // Globals are initialized in declaration order: put each file's after
+    // those of the files it depends on, so an initializer may use them.
+    let mut rank = vec![0; program.files.len()];
+    for (position, file) in program.initialization_order().into_iter().enumerate() {
+        rank[file] = position;
+    }
+    module.globals.sort_by_key(|global| rank.get(global.loc.file.0 as usize).copied().unwrap_or(0));
+    Ok(module)
+}
+
 /// Load the program rooted at `root` as the compiler, the language server,
 /// and test harnesses all do: discover the runtime, build the search paths,
 /// resolve forced imports into the prelude, then [`load`].

@@ -23,20 +23,12 @@ fn compile_jit(source: &str) -> i32 {
 /// Like `compile_jit` but with the `runtime/` prelude merged in, so the test
 /// body can call `_pep_*` runtime functions (malloc, …).
 fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = SemaModule::default();
-    let (runtime_sources, _libs, _dirs) = pepper_files::runtime::discover();
-    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
-    for path in runtime_sources {
-        let content = std::fs::read_to_string(&path).expect("read runtime source");
-        let ast = parser::parse_source(&path.to_string_lossy(), &content)
-            .expect("parse runtime source");
-        module.merge(build(&ast).expect("build"));
-    }
-    let ast = parser::parse_source("test.pep", source).expect("parse error");
-    module.merge(build(&ast).expect("build"));
-    pepper_sema::apply_platform_filters(&mut module).expect("platform");
-    struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module).expect("sema");
+    use pepper_sema::program::{self, Root, Setup};
+    // Loaded as the compiler loads it: the prelude imports modules (`debug`).
+    let root = Root { name: "test.pep".to_string(), source: source.to_string(), path: "test.pep".into() };
+    let loaded = program::load_program(root, &Setup::default()).expect("load");
+    let mut module = program::merge(&loaded).expect("merge");
+    pepper_sema::checked::run_passes(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     generator.jit_execute(&mut module, "test").expect("jit")

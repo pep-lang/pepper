@@ -63,8 +63,10 @@ Prints `message` and aborts the program. It never returns.
 Flushes every C output stream, so output printed so far is not lost,
 then writes `location: panic: message` and a newline to standard error
 ("Assertion failed with no additional information" when `message` is
-null), and calls C `abort()`. No destructors or releases run, and the
-process ends abnormally (SIGABRT on POSIX).
+null), followed in a build without `-O` by a backtrace of the calls
+that led there (`PEPPER_BACKTRACE` overrides the build; see the `debug`
+module's `print_backtrace`), and calls C `abort()`. No destructors or
+releases run, and the process ends abnormally (SIGABRT on POSIX).
 
 The location is the call's `file:line:col`, which the compiler passes
 in a hidden parameter, the way a C++ `std::source_location` default

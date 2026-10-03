@@ -18,7 +18,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// once, several such programs together put hundreds of busy threads on the
 /// host, and each one ran about ten times slower than alone. So those run
 /// one at a time; everything else, compiling included, stays parallel.
+///
+/// A panic's backtrace (#500) is turned off, so a test that checks a
+/// panic's message finds it last on standard error, unless the test set
+/// `PEPPER_BACKTRACE` (or removed it, for the build's default) itself.
 pub fn run_program(command: &mut Command, source: &str) -> std::io::Result<Output> {
+    if !command.get_envs().any(|(name, _)| name == "PEPPER_BACKTRACE") {
+        command.env("PEPPER_BACKTRACE", "0");
+    }
     static WIDE: Mutex<()> = Mutex::new(());
     // A test that panicked while holding the lock poisons it; the lock
     // guards no data, so carry on.

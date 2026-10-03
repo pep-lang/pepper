@@ -4,7 +4,6 @@
 
 use crate::options::Options;
 use pepper_parser::diagnostic::FileId;
-use pepper_sema::builder::build_file;
 use pepper_sema::model::Module as SemaModule;
 use pepper_sema::program::{self, Program, Root, Setup};
 use pepper_parser::diagnostic::Loc;
@@ -36,36 +35,7 @@ fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     program::load_program(Root::from_file(entry_source)?, &setup)
 }
 
-/// Check `program` and merge its files, in load order, into one module. The
-/// module's source map holds every file, so `FileId(i)` is `program.files[i]`,
-/// and its warnings start with the program's (`Program::warnings`). Its
-/// globals are in initialization order (see [`Program::initialization_order`]).
-pub fn merge(program: &Program) -> Result<SemaModule, String> {
-    program.check()?;
-    let mut module = SemaModule {
-        warnings: program.warnings(),
-        linked: true,
-        extension_scopes: program.extension_scopes(),
-        overload_unions: program.overload_unions.clone(),
-        ..SemaModule::default()
-    };
-    for file in &program.files {
-        module.sources.add(&file.name, &file.source);
-        module.namespaces.push(file.namespace.clone());
-    }
-    for (i, file) in program.files.iter().enumerate() {
-        let built = build_file(&file.module, FileId(i as u32)).map_err(|d| module.sources.render(&d))?;
-        module.merge(built);
-    }
-    // Globals are initialized in declaration order: put each file's after
-    // those of the files it depends on, so an initializer may use them.
-    let mut rank = vec![0; program.files.len()];
-    for (position, file) in program.initialization_order().into_iter().enumerate() {
-        rank[file] = position;
-    }
-    module.globals.sort_by_key(|global| rank.get(global.loc.file.0 as usize).copied().unwrap_or(0));
-    Ok(module)
-}
+pub use pepper_sema::program::merge;
 
 /// Load and link `source` (named `name`) with the discovered runtime as its
 /// prelude, as `compile` does. For test harnesses that run the rest of the

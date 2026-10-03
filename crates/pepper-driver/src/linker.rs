@@ -238,6 +238,15 @@ pub fn link(
             let natvis = natvis.strip_prefix(r"\?\").unwrap_or(&natvis);
             args.extend(["-Xlinker".to_string(), format!("/NATVIS:{}", natvis)]);
         }
+    } else if target.os == "windows" {
+        // A PE image has no symbol table of its own: the `debug`
+        // module's backtraces name functions through DbgHelp, which reads
+        // them from a `.pdb`. Without `-g` the objects carry no CodeView, so
+        // this `.pdb` holds only the public symbols. `/DEBUG` turns off
+        // `/OPT:REF`, which a release link wants, so ask for it again.
+        for flag in ["/DEBUG", "/INCREMENTAL:NO", "/OPT:REF"] {
+            args.extend(["-Xlinker".to_string(), flag.to_string()]);
+        }
     }
     for obj in objects {
         args.push(obj.to_string_lossy().into_owned());
@@ -267,6 +276,9 @@ pub fn link(
             if !stderr.trim().is_empty() {
                 eprint!("{}", stderr);
             }
+            if debug && target.os == "macos" && target.is_host() {
+                write_dsym(output);
+            }
             Ok(())
         }
         Ok(out) => {
@@ -294,6 +306,16 @@ pub fn link(
             e
         )),
     }
+}
+
+/// Gather a macOS executable's DWARF into `<output>.dSYM` beside it, as
+/// clang does when it compiles and links in one step. The linker leaves
+/// the DWARF in the object files, which the build cache may replace; the
+/// bundle is what lldb and the `debug` module's backtraces read source
+/// lines from. Without `dsymutil` (Xcode's command line tools) the program
+/// still runs and its backtraces name functions, so a failure is ignored.
+fn write_dsym(output: &Path) {
+    let _ = Command::new("dsymutil").arg(output).output();
 }
 
 /// What a failed link for another platform needs, after the linker's own

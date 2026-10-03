@@ -43,6 +43,25 @@ fn functions_do_not_unwind_and_panics_do_not_return() {
 }
 
 #[test]
+fn apple_targets_keep_the_frame_pointer() {
+    // macOS's `backtrace` walks frame pointers, not unwind tables.
+    let frame_pointer = |triple: &str| {
+        let context = inkwell::context::Context::create();
+        let module = context.create_module("frames");
+        module.set_triple(&inkwell::targets::TargetTriple::create(triple));
+        let function = module.add_function("f", context.void_type().fn_type(&[], false), None);
+        context.append_basic_block(function, "entry");
+        pepper_codegen::facts::annotate(&module);
+        function
+            .get_string_attribute(AttributeLoc::Function, "frame-pointer")
+            .map(|a| a.get_string_value().to_string_lossy().into_owned())
+    };
+    assert_eq!(frame_pointer("arm64-apple-macosx14.0.0").as_deref(), Some("non-leaf"));
+    assert_eq!(frame_pointer("x86_64-apple-darwin").as_deref(), Some("non-leaf"));
+    assert_eq!(frame_pointer("x86_64-unknown-linux-gnu"), None);
+}
+
+#[test]
 fn object_fields_and_counts_carry_distinct_tbaa_tags() {
     let context = inkwell::context::Context::create();
     let generator = generated(&context);

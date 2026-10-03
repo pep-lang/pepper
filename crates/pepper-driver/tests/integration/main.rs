@@ -32,6 +32,7 @@ mod copy_tests;
 mod corpus_tests;
 mod cross_compile_tests;
 mod debug_info_tests;
+mod debug_module_tests;
 mod determinism_tests;
 mod diagnostic_tests;
 mod digest_tests;

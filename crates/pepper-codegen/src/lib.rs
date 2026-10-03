@@ -2468,6 +2468,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let entry = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(entry);
+        // A build without `-O` prints a backtrace on panic (`debug` module):
+        // `main` tells the runtime so before anything can panic.
+        if function.name == "main" && self.opt_level == target::OptLevel::O0 && self.functions.contains_key("_pep_set_backtrace_default") {
+            self.call_function("_pep_set_backtrace_default", vec![])?;
+        }
 
         // entry + return block + retval alloca (Function.cpp:61-76).
         // The retval alloca lives in the ENTRY block so it dominates every

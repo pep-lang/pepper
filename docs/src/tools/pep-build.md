@@ -151,6 +151,10 @@ level, so `pepper build -O main.pep` works. Each level runs the pipeline
 clang runs at that level. Without the option, the level is
 `PEPPER_OPT_LEVEL` (`0` to `3`) when that is set and not empty.
 
+At `-O0` a panic prints a backtrace after its message; at any other level it
+prints the message alone, unless the program runs with `PEPPER_BACKTRACE=1`
+(see [Backtraces on panic](../language/debug.md#backtraces-on-panic)).
+
 ### `--lto=full`, `--lto=off`
 
 Link-time optimization. With `--lto=full`, once every file is compiled the
@@ -181,8 +185,14 @@ the build cache's key.
 
 Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
 executable on Linux and macOS, and CodeView on Windows, where the linker
-writes `<output>.pdb` beside the executable. It works with `-O`. See
+writes `<output>.pdb` beside the executable. On macOS it also runs
+`dsymutil` to write `<output>.dSYM` beside the executable, when the
+program is built for the Mac it runs on. It works with `-O`. See
 [Debugging](debugging.md).
+
+A Windows build without `-g` also writes `<output>.pdb`, holding only the
+program's function names, which is where [backtraces](../language/debug.md)
+read them.
 
 ## Targets and cross-compiling
 

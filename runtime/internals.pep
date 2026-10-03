@@ -1,5 +1,8 @@
 ## `assert` and `panic`, which every program can call without an import.
 
+# A panic prints its backtrace through the debug module.
+import debug;
+
 # ── C ABI externs (identical signatures on MSVC CRT and libc) ───────────────
 extern void* malloc(ulong size);
 extern void* calloc(ulong count, ulong size);
@@ -180,8 +183,10 @@ export _pep_live_allocs(): long {
 ## Flushes every C output stream, so output printed so far is not lost,
 ## then writes `location: panic: message` and a newline to standard error
 ## ("Assertion failed with no additional information" when `message` is
-## null), and calls C `abort()`. No destructors or releases run, and the
-## process ends abnormally (SIGABRT on POSIX).
+## null), followed in a build without `-O` by a backtrace of the calls
+## that led there (`PEPPER_BACKTRACE` overrides the build; see the `debug`
+## module's `print_backtrace`), and calls C `abort()`. No destructors or
+## releases run, and the process ends abnormally (SIGABRT on POSIX).
 ##
 ## The location is the call's `file:line:col`, which the compiler passes
 ## in a hidden parameter, the way a C++ `std::source_location` default
@@ -226,12 +231,12 @@ extern ulong strlen(char* s);
 
 # Write the C string `text` to standard error, unbuffered.
 [Target(!OS(Windows))]
-_pep_write_error(text: __ptr<char>) {
+export _pep_write_error(text: __ptr<char>) {
     write(2, text, strlen(text));
 }
 
 [Target(OS(Windows))]
-_pep_write_error(text: __ptr<char>) {
+export _pep_write_error(text: __ptr<char>) {
     _write(2, text, strlen(text) as uint);
 }
 
@@ -253,7 +258,48 @@ export _pep_panic(message: __ptr<char>, location: __ptr<char>) {
         _pep_write_error(message);
     }
     _pep_write_error("\n");
+    debug._debug_panic_backtrace();
     abort();
+}
+
+# The panic backtrace's state: [0] is 1 when the build asks for a backtrace
+# on panic (a build without `-O`: the compiler calls
+# `_pep_set_backtrace_default` first thing in `main`), [1] is 1 once a
+# panic has started printing one.
+const _pep_backtrace_state: __ptr<int> = _pep_new_backtrace_state();
+
+_pep_new_backtrace_state(): __ptr<int> {
+    __ptr<int> state = _pep_malloc(8);
+    state[0] = 0;
+    state[1] = 0;
+    return state;
+}
+
+# Called by the compiler at the start of `main` in a build without `-O`.
+export _pep_set_backtrace_default() {
+    if (_pep_backtrace_state == __null) {
+        return;
+    }
+    __atomic_store<int>(_pep_backtrace_state, 1);
+}
+
+# Whether the build asks for a backtrace on panic when PEPPER_BACKTRACE is
+# not set.
+export _pep_backtrace_default(): bool {
+    # Null when a module-scope initializer panics before this one ran.
+    if (_pep_backtrace_state == __null) {
+        return false;
+    }
+    return __atomic_load<int>(_pep_backtrace_state) == 1;
+}
+
+# Claims the one panic backtrace a process prints: false when another
+# panic (a second thread, or a panic inside the symbolizer) already has.
+export _pep_enter_backtrace(): bool {
+    if (_pep_backtrace_state == __null) {
+        return false;
+    }
+    return __atomic_cmpxchg<int>(_pep_backtrace_state + 1, 0, 1);
 }
 
 # ── Byte hash: 8 bytes per step, then a final avalanche ──────────────────────
