@@ -473,8 +473,10 @@ Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
   first masked the problem for the others.
 - **Cross-compiling** (`--target`): Linux x64 to Linux arm64 links with
   `lld` and Ubuntu's `libc6-dev-arm64-cross` and runs under `qemu-aarch64`.
-  Every other pair emits its objects; linking them needs that platform's
-  sysroot (`--sysroot`), which is untested so far.
+  CI links from each of Linux x64, macOS arm64 and Windows x64 for the
+  other two with `lld` and their system roots (`--sysroot`: a copy of
+  glibc, the macOS SDK, the Windows SDK from `xwin`) and runs the programs
+  on their own OS. Other pairs emit their objects; their links are untested.
 - **WebAssembly** (`--target wasm32-wasip1`): links with `wasm-ld` and
   wasi-sdk 25 (`--sysroot` or `WASI_SDK_PATH`) and runs under wasmtime.
   Tested on Linux x64 with LLVM 20: the docs examples and the corpus pass

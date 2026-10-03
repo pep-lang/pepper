@@ -146,12 +146,27 @@ or set `PEPPER_SYSROOT_<TRIPLE>`, the triple in capitals with `_` for each
 - **Linux:** a directory with the target's glibc and GCC runtime
   (`/usr/aarch64-linux-gnu` from Debian's or Ubuntu's
   `libc6-dev-arm64-cross` and `libgcc-13-dev-arm64-cross`, which clang
-  also finds without `--sysroot`).
-- **macOS:** a macOS SDK (`MacOSX.sdk`).
+  also finds without `--sysroot`). From another OS, copy a Linux machine's
+  at the same paths: the C startup files and `libc`, `libm`, `libgcc_s`
+  and the dynamic loader from `/usr/lib/x86_64-linux-gnu`, and
+  `crtbegin*.o`, `crtend*.o` and `libgcc*` from
+  `/usr/lib/gcc/x86_64-linux-gnu/<version>`.
+- **macOS:** a macOS SDK (`MacOSX.sdk`, `xcrun --show-sdk-path` on a Mac).
+  Linking reads only its `SDKSettings.json` and the library stubs in
+  `usr/lib`.
 - **Windows:** a directory laid out like a Visual Studio install, with the
   MSVC libraries and the Windows SDK, as
-  [xwin](https://github.com/Jake-Shadle/xwin) `splat --use-winsysroot-style`
-  writes it.
+  [xwin](https://github.com/Jake-Shadle/xwin) writes it:
+
+  ```sh
+  xwin --accept-license --arch x86_64 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
+  ```
+
+CI links each of these from the other two (from Linux x64, macOS arm64 and
+Windows x64, for `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and
+`x86_64-pc-windows-msvc`) and runs the programs on their own OS; its scripts,
+`scripts/ci-export-sysroot.sh` and `scripts/ci-provision-cross.sh`, show the
+setup end to end.
 
 When the link fails, the error ends with a note naming what is missing:
 

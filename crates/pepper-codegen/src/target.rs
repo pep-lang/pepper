@@ -466,6 +466,19 @@ pub fn use_wasi_main(module: &inkwell::module::Module<'_>) {
     }
 }
 
+/// Put `global` in the object file section named `name`, exactly.
+///
+/// inkwell's `set_section`, when it runs on a macOS host, prefixes a name
+/// with no `,` with one (a Mach-O "segment,section" with no segment), for
+/// whatever the target: a Linux program cross-compiled on a Mac then had
+/// its constructors in `,.init_array`, a section nothing runs, and crashed
+/// at its first allocation.
+pub fn set_section(global: inkwell::values::GlobalValue<'_>, name: &str) {
+    use inkwell::values::AsValueRef;
+    let name = std::ffi::CString::new(name).expect("a section name has no NUL");
+    unsafe { inkwell::llvm_sys::core::LLVMSetSection(global.as_value_ref(), name.as_ptr()) };
+}
+
 /// Move `module`'s static constructors from `llvm.global_ctors` into an
 /// `.init_array` section, as clang emits them.
 ///
@@ -502,7 +515,7 @@ pub fn use_init_array(module: &inkwell::module::Module<'_>) {
     let array = module.add_global(pointer.array_type(functions.len() as u32), None, "__pep_init_array");
     array.set_initializer(&pointer.const_array(&functions));
     array.set_linkage(inkwell::module::Linkage::Private);
-    array.set_section(Some(".init_array"));
+    set_section(array, ".init_array");
     array.set_alignment(8);
 }
 
@@ -551,6 +564,18 @@ mod tests {
                 assert_eq!(machine.get_triple().as_str().to_string_lossy(), name);
             });
         }
+    }
+
+    /// A section keeps exactly the name it is given, on every host: the
+    /// constructors of a Linux program built on a Mac have to land in
+    /// `.init_array`, not `,.init_array`.
+    #[test]
+    fn set_section_keeps_the_name_exactly() {
+        let context = inkwell::context::Context::create();
+        let module = context.create_module("sections");
+        let global = module.add_global(context.i32_type(), None, "value");
+        set_section(global, ".init_array");
+        assert_eq!(global.get_section().map(|name| name.to_string_lossy().into_owned()), Some(".init_array".to_string()));
     }
 
     /// `native` names the build machine's CPU, which another architecture

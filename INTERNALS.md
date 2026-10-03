@@ -45,7 +45,7 @@ names and the pass order come from that implementation.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), and `install-vscode-extension.ps1`. |
+| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -1536,13 +1536,17 @@ program object `<build>/<module>.o`, with the target's `TargetMachine`
 `target::write_object`, which for an ELF target first moves
 `llvm.global_ctors` into an `.init_array` section (`use_init_array`): a
 machine made through the C API emits `.ctors`, which GNU ld folds into
-`.init_array` but lld, which cross-linking uses, ignores.
+`.init_array` but lld, which cross-linking uses, ignores. Sections are named
+through `target::set_section`, not inkwell's, which on a macOS host
+prefixes `,` to a name with no comma (`,.init_array`) whatever the target.
 
 **Linking** (`linker.rs`). `link` runs clang as the link driver. For
 another platform it adds `--target=<triple>`, LLVM's linker
-(`--ld-path=` when `find_lld` finds `ld.lld`/`ld64.lld`, plain or as
-`ld.lld-<major>`, beside clang, in the LLVM prefix or on the PATH; else
-`-fuse-ld=lld`), and the
+(`-fuse-ld=lld`, plus `--ld-path=` when `find_lld` finds
+`ld.lld`/`ld64.lld`, plain or as `ld.lld-<major>`, beside clang, in the
+LLVM prefix or on the PATH; clang needs `-fuse-ld=lld` even then to give
+ld64.lld the `-platform_version` it requires, and its MSVC driver ignores
+`--ld-path` and runs the `lld-link` beside it or on the PATH), and the
 target's system root (`--sysroot`, else `PEPPER_SYSROOT_<TRIPLE>`; passed as
 `--sysroot` for ELF and Mach-O, and as lld-link's `/winsysroot` for
 Windows), and a failed link ends with a note naming what is missing
@@ -2728,6 +2732,16 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     `test-linux` is required,
     through `test`; `test-macos` is not for now (it takes about twice as
     long and held up the merge queue), so `test` does not wait for it.
+  - `cross-sysroots`, `cross-link` and `cross-run` (#485, not required)
+    cross-link from each runner for the other two operating systems and
+    run the result on its own runner. `cross-sysroots` packs the Linux
+    runner's glibc and the Mac's SDK stubs (`scripts/ci-export-sysroot.sh`)
+    as artifacts; `cross-link` installs lld and, on Linux and macOS, the
+    Windows SDK and CRT through `xwin` (`scripts/ci-provision-cross.sh`,
+    kept in the runner's `cross-cache`), then builds a few docs examples
+    natively and for the other two targets (`scripts/ci-cross-link.sh
+    build`); `cross-run` runs what the others built for its OS and diffs
+    the output with its native build's (`ci-cross-link.sh run`).
   - `changes` runs first. It asks the API whether the PR is a draft now (the
     event payload can be stale when a push races "ready for review"), and
     diffs the PR against its base. A draft, or a PR that changed only prose

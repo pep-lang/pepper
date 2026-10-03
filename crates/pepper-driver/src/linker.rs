@@ -152,6 +152,51 @@ impl WasiSdk {
     }
 }
 
+/// The folders of a Windows system root (`--sysroot` for a Windows target)
+/// that hold the MSVC CRT, the Windows SDK's `um` libraries and the
+/// Universal CRT for `arch`: laid out like a Visual Studio install
+/// (`VC/Tools/MSVC/<version>/lib/x64`, `Windows Kits/10/Lib/<version>/um/x64`,
+/// as `xwin splat --use-winsysroot-style` writes it), or as `xwin splat`
+/// writes it by default (`crt/lib/x86_64`, `sdk/lib/um/x86_64`). Each name
+/// matches without regard to case, and the highest version wins.
+fn windows_library_dirs(sysroot: &Path, arch: &str) -> Vec<PathBuf> {
+    // The folder in `dir` named `name` in any case.
+    fn child(dir: &Path, name: &str) -> Option<PathBuf> {
+        let exact = dir.join(name);
+        if exact.is_dir() {
+            return Some(exact);
+        }
+        std::fs::read_dir(dir).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).find(|p| p.is_dir() && p.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(name)))
+    }
+    // The folder in `dir` with the highest dotted version number.
+    fn highest_version(dir: &Path) -> Option<PathBuf> {
+        let version = |p: &Path| -> Option<Vec<u64>> { p.file_name()?.to_str()?.split('.').map(|part| part.parse().ok()).collect() };
+        std::fs::read_dir(dir).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()).filter_map(|p| version(&p).map(|v| (v, p))).max().map(|(_, p)| p)
+    }
+    fn walk(start: Option<PathBuf>, names: &[&str]) -> Option<PathBuf> {
+        names.iter().try_fold(start?, |dir, name| child(&dir, name))
+    }
+    let arches: &[&str] = match arch {
+        "aarch64" => &["arm64", "aarch64"],
+        _ => &["x64", "x86_64"],
+    };
+    let vc = walk(Some(sysroot.to_path_buf()), &["VC", "Tools", "MSVC"]).and_then(|d| highest_version(&d));
+    let kits = walk(Some(sysroot.to_path_buf()), &["Windows Kits", "10", "Lib"]).and_then(|d| highest_version(&d));
+    let mut dirs = vec![];
+    for arch in arches {
+        let candidates = [
+            walk(vc.clone(), &["lib", arch]),
+            walk(kits.clone(), &["um", arch]),
+            walk(kits.clone(), &["ucrt", arch]),
+            walk(Some(sysroot.to_path_buf()), &["crt", "lib", arch]),
+            walk(Some(sysroot.to_path_buf()), &["sdk", "lib", "um", arch]),
+            walk(Some(sysroot.to_path_buf()), &["sdk", "lib", "ucrt", arch]),
+        ];
+        dirs.extend(candidates.into_iter().flatten());
+    }
+    dirs
+}
+
 /// The link driver's options that choose the platform: none for the host;
 /// for another target, its triple, LLVM's linker (`lld`, the one at `lld`
 /// when given), and its system root.
@@ -161,12 +206,16 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
         args.push(format!("--target={}", triple));
     }
     if !target.is_host() {
-        // clang's MSVC toolchain picks `lld-link` by `-fuse-ld` alone.
-        match lld.filter(|_| target.os != "windows") {
+        match lld {
             // clang's WebAssembly toolchain reads only `-fuse-ld`, which
             // takes a path there.
             Some(path) if target.os == "wasi" => args.push(format!("-fuse-ld={}", path.display())),
-            Some(path) => args.push(format!("--ld-path={}", path.display())),
+            // `-fuse-ld=lld` even with `--ld-path`: it is how clang knows
+            // the linker is lld, and for Mach-O, lld then gets the
+            // `-platform_version` it requires instead of old ld64's flags.
+            // clang's MSVC toolchain reads neither path: it runs the
+            // `lld-link` beside it or on the PATH (`find_lld` finds none).
+            Some(path) => args.extend(["-fuse-ld=lld".to_string(), format!("--ld-path={}", path.display())]),
             None => args.push("-fuse-ld=lld".to_string()),
         }
     }
@@ -183,8 +232,14 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
         if target.os == "windows" {
             // clang's MSVC toolchain takes the Windows SDK and MSVC
             // libraries from `/winsysroot` only in clang-cl mode, so hand
-            // it to lld-link, which finds `kernel32.lib` and the CRT there.
+            // it to lld-link, which finds `kernel32.lib` and the CRT there
+            // when the layout is exactly Visual Studio's. Name the library
+            // folders too, found without regard to case, for a root that
+            // differs (xwin's own layout, or a lowercase `include`).
             args.extend(["-Xlinker".to_string(), format!("/winsysroot:{}", sysroot.display())]);
+            for dir in windows_library_dirs(sysroot, &target.arch) {
+                args.push(format!("-L{}", dir.display()));
+            }
         } else {
             args.push(format!("--sysroot={}", sysroot.display()));
         }
@@ -222,7 +277,7 @@ pub fn link(
             args.push(format!("-Wl,-soname,{}", name));
         }
     }
-    let lld = if target.is_host() { None } else { find_lld(&target.os, &driver) };
+    let lld = if target.is_host() || target.os == "windows" { None } else { find_lld(&target.os, &driver) };
     args.extend(target_arguments(&target, sysroot, lld.as_deref()));
     if debug {
         args.push("-g".to_string());
@@ -373,17 +428,39 @@ mod tests {
             target_arguments(&target, Some(Path::new("/sdk")), None),
             [format!("--target={}", other), "-fuse-ld=lld".to_string(), "--sysroot=/sdk".to_string()]
         );
-        // A found lld is named outright.
+        // A found lld is named outright, and still announced as lld.
         let args = target_arguments(&target, None, Some(Path::new("/usr/bin/ld.lld-20")));
-        assert_eq!(args[1], "--ld-path=/usr/bin/ld.lld-20");
+        assert_eq!(args[1..], ["-fuse-ld=lld".to_string(), "--ld-path=/usr/bin/ld.lld-20".to_string()]);
         let windows = pepper_sema::Target::parse("x86_64-pc-windows-msvc").unwrap();
-        let args = target_arguments(&windows, Some(Path::new("/xwin")), Some(Path::new("/usr/bin/ld.lld")));
+        let args = target_arguments(&windows, Some(Path::new("/xwin")), None);
         if !windows.is_host() {
             assert!(args.contains(&"-fuse-ld=lld".to_string()), "{args:?}");
         }
-        assert_eq!(args.last().map(String::as_str), Some("/winsysroot:/xwin"));
+        assert!(args.contains(&"/winsysroot:/xwin".to_string()), "{args:?}");
         let note = cross_link_note(&target, None);
         assert!(note.contains("pass '--sysroot <dir>' or set PEPPER_SYSROOT_"), "{note}");
+    }
+
+    /// A Windows system root's library folders are found in Visual
+    /// Studio's layout and in xwin's, whatever their case.
+    #[test]
+    fn windows_library_dirs_follow_either_layout() {
+        let root = std::env::temp_dir().join(format!("pepper-winsysroot-{}", std::process::id()));
+        let vc = root.join("VC").join("Tools").join("MSVC");
+        let kits = root.join("Windows Kits").join("10").join("lib");
+        let sdk = kits.join("10.0.22621.0");
+        for dir in [vc.join("14.29.30133").join("lib").join("x64"), vc.join("14.40.33807").join("lib").join("x64"), sdk.join("um").join("x64"), sdk.join("ucrt").join("x64"), root.join("sdk").join("lib").join("um").join("x86_64")] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        assert_eq!(
+            windows_library_dirs(&root, "x86_64"),
+            [vc.join("14.40.33807").join("lib").join("x64"), sdk.join("um").join("x64"), sdk.join("ucrt").join("x64"), root.join("sdk").join("lib").join("um").join("x86_64")]
+        );
+        assert!(windows_library_dirs(&root, "aarch64").is_empty());
+        let windows = pepper_sema::Target::parse("x86_64-pc-windows-msvc").unwrap();
+        let args = target_arguments(&windows, Some(&root), None);
+        assert!(args.contains(&format!("-L{}", sdk.join("um").join("x64").display())), "{args:?}");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// A wasi-sdk is found from its own directory or its system root, and

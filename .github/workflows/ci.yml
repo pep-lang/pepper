@@ -343,9 +343,8 @@ jobs:
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
-      # check they print what the host build prints. Other operating systems'
-      # targets need their SDKs, which no runner has, so cross_compile_tests
-      # checks only their objects.
+      # check they print what the host build prints. Linking for the other
+      # operating systems needs their SDKs: the cross-link jobs below do that.
       - name: Cross-compile for Linux arm64
         shell: bash
         run: |
@@ -398,6 +397,148 @@ jobs:
           path: ${{ runner.temp }}/test.log
           if-no-files-found: ignore
           retention-days: 90
+
+  # Cross-linking for the other operating systems (#485): each host builds a
+  # few examples for the other two, with `--target` and their system roots,
+  # and each host runs what the others built for it and compares the output
+  # with its own native build's. Like test-macos, these do not gate merging.
+  #
+  # The system roots: Linux's glibc and macOS's SDK stubs come from the
+  # runners themselves (ci-export-sysroot.sh, a few megabytes, handed over as
+  # artifacts), and the Windows SDK and CRT from Microsoft's servers through
+  # `xwin`, cached on the runner (ci-provision-cross.sh).
+  cross-sysroots:
+    needs: changes
+    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: pepper-linux
+            os: linux
+          - runner: pepper-macos
+            os: macos
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pack the system root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash scripts/ci-export-sysroot.sh "$RUNNER_TEMP/sysroot-${{ matrix.os }}.tar.gz"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sysroot-${{ matrix.os }}
+          path: ${{ runner.temp }}/sysroot-${{ matrix.os }}.tar.gz
+          retention-days: 1
+
+  cross-link:
+    needs: [changes, cross-sysroots]
+    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: pepper-linux
+            os: linux
+          - runner: pepper-macos
+            os: macos
+          - runner: pepper-windows
+            os: windows
+    runs-on: ${{ matrix.runner }}
+    # A cold runner downloads the Windows SDK (or, on Windows, LLVM's
+    # archive for lld) once; later runs find them in the cache.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Provision LLVM
+        timeout-minutes: 15
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PEPPER_LLVM_MAJOR: 20
+        run: bash scripts/ci-provision-llvm.sh
+
+      # See test-windows: build beside the checkout, where its clean step
+      # cannot reach. The test jobs' directory, so a runner builds once.
+      - name: Use persistent target dir
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sysroot-*
+          path: ${{ runner.temp }}/sysroots
+          merge-multiple: true
+
+      - name: Provision lld, the Windows SDK and the system roots
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PEPPER_LLVM_MAJOR: 20
+        run: |
+          set -euxo pipefail
+          bash scripts/ci-provision-cross.sh "$RUNNER_WORKSPACE/cross-cache" "$RUNNER_TEMP/sysroots"
+
+      - name: Build the compiler
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo build --locked --bin pep-build
+
+      - name: Cross-link the examples
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash scripts/ci-cross-link.sh build "$CARGO_TARGET_DIR/debug/pep-build" "$RUNNER_TEMP/cross-from-${{ matrix.os }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cross-from-${{ matrix.os }}
+          path: ${{ runner.temp }}/cross-from-${{ matrix.os }}
+          retention-days: 3
+
+      - name: Diagnostics
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          set +e
+          env | grep -E '^(PEPPER_SYSROOT_|LLVM_SYS_|PATH=)' | sort
+          for tool in clang ld.lld ld64.lld lld-link; do
+            echo "$tool: $(command -v "$tool" || echo missing)"
+          done
+          ls "$RUNNER_WORKSPACE/cross-cache" "$RUNNER_WORKSPACE/cross-cache/sysroots"
+          ls "$RUNNER_TEMP/sysroots"
+          [ -n "${PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC:-}" ] && find "$PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC" -maxdepth 6 -type d
+
+  cross-run:
+    needs: [changes, cross-link]
+    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [pepper-linux, pepper-macos, pepper-windows]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cross-from-*
+          path: ${{ runner.temp }}/cross
+
+      - name: Run what the other hosts built
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash scripts/ci-cross-link.sh run "$RUNNER_TEMP/cross"
 
   # The required check. It always runs, even when the run is cancelled, so it
   # can never report the success a skipped job does: it passes only when

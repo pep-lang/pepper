@@ -415,13 +415,13 @@ impl<'ctx> DebugInfo<'ctx> {
         let section = module.add_global(text.get_type(), None, "__pep_debug_gdb_scripts");
         section.set_initializer(&text);
         section.set_constant(true);
-        section.set_section(Some(".debug_gdb_scripts"));
+        crate::target::set_section(section, ".debug_gdb_scripts");
         section.set_alignment(1);
         section.set_linkage(inkwell::module::Linkage::Private);
         let pointer = context.ptr_type(inkwell::AddressSpace::default());
         let used = module.add_global(pointer.array_type(1), None, "llvm.used");
         used.set_linkage(inkwell::module::Linkage::Appending);
-        used.set_section(Some("llvm.metadata"));
+        crate::target::set_section(used, "llvm.metadata");
         used.set_initializer(&pointer.const_array(&[section.as_pointer_value()]));
     }
 
