@@ -547,13 +547,14 @@ export _io_posix_address_result(rc: int, address: _SockAddr): IoResult<SocketAdd
 
 # ── Name resolution ──────────────────────────────────────────────────────────
 # struct addrinfo: ai_flags @0, ai_family @4, ai_socktype @8, ai_protocol @12,
-# ai_addrlen @16, then Linux has ai_addr @24 and ai_canonname @32, macOS the
-# two the other way round; ai_next @40; 48 bytes in all.
+# ai_addrlen @16, then glibc has ai_addr @24 and ai_canonname @32, macOS and
+# Android's bionic (both BSD-derived) the two the other way round; ai_next
+# @40; 48 bytes in all.
 
-[Target(OS(Linux))]
+[Target(OS(Linux) && !OS(Android))]
 export _io_addrinfo_address_offset(): ulong { return 24; }
 
-[Target(OS(Mac))]
+[Target(OS(Mac) || OS(Android))]
 export _io_addrinfo_address_offset(): ulong { return 32; }
 
 [Target(OS(Linux) || OS(Mac))]

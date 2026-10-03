@@ -51,8 +51,8 @@ export home_directory(): io.Path? {
     return Optional<io.Path>.Value(io.Path(path.value()));
 }
 
-## Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX,
-## `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
+## Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX
+## (`/data/local/tmp` on Android), `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
 ##
 ## @returns the temporary directory
 export temp_directory(): io.Path {

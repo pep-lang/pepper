@@ -19,6 +19,12 @@ export enum OperatingSystem {
     Windows,
     ## WASI: a WebAssembly runtime such as wasmtime (`--target wasm32-wasip1`).
     Wasi,
+    ## iOS and iPadOS, on a device or in the simulator (`--target
+    ## aarch64-apple-ios`). `[Target(OS(Mac))]` covers it too.
+    IOS,
+    ## Android (`--target aarch64-linux-android`). `[Target(OS(Linux))]`
+    ## covers it too.
+    Android,
 }
 
 ## Returns the operating system the program was built for.
@@ -37,8 +43,8 @@ export system_os(): OperatingSystem {
 }
 
 ## Returns the name of the operating system the program was built for, in
-## lowercase: `"linux"`, `"macos"`, `"windows"` or `"wasi"`, for printing
-## and for file and directory names.
+## lowercase: `"linux"`, `"macos"`, `"windows"`, `"wasi"`, `"ios"` or
+## `"android"`, for printing and for file and directory names.
 ##
 ## @returns the operating system's name
 ## @see system_os
@@ -48,6 +54,8 @@ export system_name(): String {
         Mac => { return "macos"; }
         Windows => { return "windows"; }
         Wasi => { return "wasi"; }
+        IOS => { return "ios"; }
+        Android => { return "android"; }
     }
 }
 

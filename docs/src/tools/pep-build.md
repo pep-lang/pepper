@@ -320,12 +320,16 @@ it, `-O` and `-g`. It is part of the build cache's key.
 
 Compiles for another platform, named by an LLVM target triple:
 `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
-`aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc` or
-`aarch64-pc-windows-msvc`, with a version allowed where clang allows one
-(`arm64-apple-macosx14.0`). An unsupported triple is an error that lists the
+`aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc`,
+`aarch64-pc-windows-msvc`, `wasm32-wasip1`, `aarch64-apple-ios`,
+`aarch64-apple-ios-simulator`, `x86_64-apple-ios-simulator`,
+`aarch64-linux-android` or `x86_64-linux-android`, with a version allowed
+where clang allows one (`arm64-apple-macosx14.0`, `aarch64-apple-ios17.0`,
+`aarch64-linux-android33`). An unsupported triple is an error that lists the
 supported ones. `[Target(...)]` selects code for the target. The default is
 the machine the compiler runs on. See
-[Cross-compiling](../language/platform-selection.md#cross-compiling).
+[Cross-compiling](../language/platform-selection.md#cross-compiling) and
+[iOS and Android](../language/mobile.md).
 
 ### `--sysroot <dir>`
 
@@ -333,7 +337,12 @@ The folder that holds the target's system headers and libraries, passed to
 the link driver, for linking with `--target`. Without it, the folder named by
 `PEPPER_SYSROOT_<TRIPLE>` when that is set: the triple in capitals, with `_`
 for each character that is not a letter or digit
-(`PEPPER_SYSROOT_AARCH64_APPLE_DARWIN` for `aarch64-apple-darwin`).
+(`PEPPER_SYSROOT_AARCH64_APPLE_DARWIN` for `aarch64-apple-darwin`). An iOS
+or Android triple's variable leaves out the OS version
+(`PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR` for
+`aarch64-apple-ios17.0-simulator`). For iOS it is an iOS SDK, which on a Mac
+defaults to the one `xcrun` names; for Android it is the NDK (see
+`ANDROID_NDK_HOME` below).
 
 ## Linking
 
@@ -476,6 +485,9 @@ a terminal; set `NO_COLOR` to turn color off. See
 | `PEPPER_OPT_LEVEL` | The optimization level (`0` to `3`) without `-O`; also the level the test suite's JIT uses | `-O<level>` |
 | `PEPPER_LIBRARY_PATH` | More folders the linker searches, after `-L` and `[Link(path = ...)]` | `-L` comes first |
 | `PEPPER_SYSROOT_<TRIPLE>` | The system libraries for linking with `--target <triple>` | `--sysroot` |
+| `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` | The Android NDK for linking with an Android `--target`, when neither `--sysroot` nor `PEPPER_SYSROOT_<TRIPLE>` names one | `--sysroot` |
+| `ANDROID_HOME`, `ANDROID_SDK_ROOT` | The Android SDK, whose newest `ndk/<version>` links an Android `--target` when nothing above names an NDK | `--sysroot` |
+| `WASI_SDK_PATH` | The wasi-sdk for linking with `--target wasm32-wasip1`, when neither `--sysroot` nor `PEPPER_SYSROOT_WASM32_WASIP1` names one | `--sysroot` |
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
 | `LLVM_SYS_<major>1_PREFIX` | The LLVM install whose `clang` and `lld` link the program (`LLVM_SYS_201_PREFIX` for LLVM 20); `cargo setup` writes it for builds | |

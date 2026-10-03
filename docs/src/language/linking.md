@@ -33,7 +33,9 @@ Every program is linked with:
 Any library file named `lib<name>.a` in the runtime directory is linked too.
 
 Anything else must be linked explicitly. On Linux, that includes `pthread`
-on older systems.
+on older systems. Android keeps `pthread` and `rt` in its C library and has
+no library of either name, so the compiler drops `-l pthread` and `-l rt`
+when linking for Android: one `[Link("pthread")]` serves both.
 
 ## Linking a library from the source: `[Link]`
 

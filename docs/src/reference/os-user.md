@@ -68,8 +68,8 @@ main(): int {
 temp_directory(): io.Path
 ```
 
-Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX,
-`GetTempPathW` on Windows. The same as `io.Directory.temp()`.
+Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX
+(`/data/local/tmp` on Android), `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
 
 **Returns**
 - the temporary directory

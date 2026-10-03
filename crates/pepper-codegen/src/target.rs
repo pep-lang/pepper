@@ -173,15 +173,20 @@ impl Default for Cpu {
 impl Cpu {
     /// Clang's default CPU for `triple`, from its driver
     /// (`clang/lib/Driver/ToolChains/Arch/{X86,AArch64}.cpp`): `x86-64`, or
-    /// `penryn` on macOS, tuned for `generic` on x86; `apple-m1` on Apple
-    /// arm64, else `generic` (Armv8-A, or WebAssembly's default features).
+    /// `penryn` on macOS and the iOS simulator, tuned for `generic` on x86,
+    /// with SSE4.2, POPCNT and CMPXCHG16B on Android, whose x86_64 ABI
+    /// requires them; `apple-m1` on Apple arm64 (the simulator runs on Apple
+    /// silicon Macs), `apple-a7` on an iPhone or iPad (the first arm64 one),
+    /// else `generic` (Armv8-A, or WebAssembly's default features).
     pub fn default_for(triple: &str) -> Cpu {
         let apple = triple.contains("-apple-");
         if is_x86(triple) {
             let name = if apple { "penryn" } else { "x86-64" };
-            Cpu { name: name.to_string(), features: String::new(), tune: Some("generic".to_string()) }
+            let features = if triple.contains("-android") { "+sse4.2,+popcnt,+cx16" } else { "" };
+            Cpu { name: name.to_string(), features: features.to_string(), tune: Some("generic".to_string()) }
         } else {
-            let name = if apple { "apple-m1" } else { "generic" };
+            let device = apple && triple.contains("-ios") && !triple.ends_with("-simulator");
+            let name = if device { "apple-a7" } else if apple { "apple-m1" } else { "generic" };
             Cpu { name: name.to_string(), features: String::new(), tune: None }
         }
     }
@@ -235,7 +240,7 @@ impl Cpu {
                 return Err(format!("unknown argument '-m{}'", option));
             }
         }
-        let mut features: Vec<String> = vec![];
+        let mut features: Vec<String> = vec![std::mem::take(&mut cpu.features)];
         let empty = |value: &str, option: &str| {
             if value.is_empty() {
                 Err(format!("missing value for '-m{}='", option))
@@ -554,14 +559,16 @@ mod tests {
     }
 
     /// Every triple `--target` accepts resolves to a machine on every host,
-    /// for the triple it names: both backends are registered everywhere.
+    /// for the triple it normalizes to: both backends are registered everywhere.
     #[test]
     fn every_supported_triple_resolves_to_a_target_machine() {
         for &name in pepper_sema::passes::platform::SUPPORTED_TRIPLES {
             let target = pepper_sema::Target::parse(name).expect("a supported triple parses");
+            // A mobile triple names its OS version once normalized.
+            let expected = target.triple.clone().expect("a cross target names its triple");
             pepper_sema::with_target(target, || {
                 let machine = target_machine().unwrap_or_else(|e| panic!("{name}: {e}"));
-                assert_eq!(machine.get_triple().as_str().to_string_lossy(), name);
+                assert_eq!(machine.get_triple().as_str().to_string_lossy(), expected);
             });
         }
     }

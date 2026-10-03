@@ -45,7 +45,7 @@ names and the pass order come from that implementation.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), and `install-vscode-extension.ps1`. |
+| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -764,7 +764,7 @@ with no extension (with `--lib`, the library's file name for the stem,
 
 `apply_platform_filters` evaluates every `[Target(<bool expr>)]` against the
 **target**: the host, or the platform `--target <triple>` names, with the
-build options `-D` defines (`Target::build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux|Wasi)`, `Arch(x64|aarch64|wasm32)`,
+build options `-D` defines (`Target::build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux|Wasi|IOS|Android)`, `Arch(x64|aarch64|wasm32)`,
 `BuildOption(NAME)`, a `BuildOption(NAME)` compared with a literal (`compare`:
 the literal's type says how the value is read), `!`, `&&`/`and`, and
 `||`/`or`. `[BuildOption("NAME")]` is `[Target(BuildOption(NAME))]`. Errors
@@ -799,7 +799,10 @@ parameter list (`body_or_semicolon` in the parser; `_function_body` in
 anywhere else, since only a trait method may lack one.
 The target is a `platform::Target` (`os`, `arch`, and the LLVM triple, or
 `None` for the host's own): `Target::parse` reads a `--target` triple (the
-supported ones are `SUPPORTED_TRIPLES`), and `with_target(target, f)` runs
+supported ones are `SUPPORTED_TRIPLES`; an iOS or Android triple is
+normalized to carry its OS version, `DEFAULT_IOS_VERSION` or
+`DEFAULT_ANDROID_API` when it has none, and `platform_triple` drops the
+version again to name the sysroot variable), and `with_target(target, f)` runs
 `f` compiling for it (thread-local; `current_target`, `target_os` and
 `target_arch` read it). The driver's `run` sets it from `--target`, and its
 `parallel` passes it to each codegen thread. Codegen's `target::triple`
@@ -1421,6 +1424,17 @@ How the language lowers:
   stays `!OS(Windows)` and picks wasi-libc's flag values, errno codes and
   `stat`/`dirent` layouts with `OS(Wasi)` declarations. Threads, fibers,
   sockets, TLS and processes are stubs that panic or return `ENOTSUP`.
+- **Runtime on iOS and Android.** The target's `os` is `"ios"` or
+  `"android"`, and `matches_os_value` makes `OS(Mac)` hold on iOS and
+  `OS(Linux)` on Android (as `TARGET_OS_MAC` and `__linux__` do), so the
+  macOS and Linux code serves them; the few declarations that differ add
+  `!OS(IOS)` or `!OS(Android)` and a variant: bionic's `__errno`, the
+  NDK's `_Unwind_Backtrace` for `debug` (bionic's `backtrace` is API 33),
+  and plain
+  `stat`/`readdir` on x86_64 iOS, which has no `$INODE64` variants.
+  `posix_spawn_file_actions_addchdir_np` (bionic API 34) is looked up
+  with `dlsym`, as on Linux. `scripts/mobile-test.sh` runs the docs examples in the simulator and
+  the emulator on a Mac (see the book's `language/mobile.md`).
 
 ### 4.2 Traits used as types (`sema/src/traits.rs`, `passes/convert_to_traits.rs`)
 
@@ -1559,7 +1573,13 @@ Windows), and a failed link ends with a note naming what is missing
 `-fuse-ld=<path>` (clang's WebAssembly driver ignores `--ld-path`), and the
 root is a wasi-sdk (`WasiSdk::locate`: the SDK or its `share/wasi-sysroot`,
 else `WASI_SDK_PATH`), which also gives `-resource-dir` for clang's wasm32
-builtins; `wasi-emulated-getpid` is a default library there. The default system libraries and the debug options
+builtins; `wasi-emulated-getpid` is a default library there. iOS links
+with `ld64.lld` against an iOS SDK, from `xcrun` on a Mac (`apple_sdk`)
+when no root is given, passed as `-isysroot` too. Android links with the
+NDK's own clang (`AndroidNdk::locate`: `--sysroot` naming the NDK or its
+`sysroot`, else `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` or the newest
+`$ANDROID_HOME/ndk/<version>`), which brings its lld, compiler-rt and
+libunwind. The default system libraries and the debug options
 follow the target's OS. The JIT stays host-only.
 
 **Optimization** (`codegen/src/target.rs`). `OptLevel` is `-O0` through

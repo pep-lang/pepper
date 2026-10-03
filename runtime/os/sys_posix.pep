@@ -103,14 +103,24 @@ _os_clock_nanoseconds(clock: int): long {
 
 # ── Machine ──────────────────────────────────────────────────────────────────
 
-[Target(OS(Linux))]
+[Target(OS(Linux) && !OS(Android))]
 export _os_sys_os(): OperatingSystem {
     return OperatingSystem.Linux;
 }
 
-[Target(OS(Mac))]
+[Target(OS(Android))]
+export _os_sys_os(): OperatingSystem {
+    return OperatingSystem.Android;
+}
+
+[Target(OS(Mac) && !OS(IOS))]
 export _os_sys_os(): OperatingSystem {
     return OperatingSystem.Mac;
+}
+
+[Target(OS(IOS))]
+export _os_sys_os(): OperatingSystem {
+    return OperatingSystem.IOS;
 }
 
 # The release field of struct utsname: six 65-byte fields on Linux, release

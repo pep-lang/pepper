@@ -53,6 +53,24 @@ Wasi
 
 WASI: a WebAssembly runtime such as wasmtime (`--target wasm32-wasip1`).
 
+#### IOS
+
+```pepper
+IOS
+```
+
+iOS and iPadOS, on a device or in the simulator (`--target
+aarch64-apple-ios`). `[Target(OS(Mac))]` covers it too.
+
+#### Android
+
+```pepper
+Android
+```
+
+Android (`--target aarch64-linux-android`). `[Target(OS(Linux))]`
+covers it too.
+
 ## system_os
 
 ```pepper
@@ -82,8 +100,8 @@ system_name(): String
 ```
 
 Returns the name of the operating system the program was built for, in
-lowercase: `"linux"`, `"macos"`, `"windows"` or `"wasi"`, for printing
-and for file and directory names.
+lowercase: `"linux"`, `"macos"`, `"windows"`, `"wasi"`, `"ios"` or
+`"android"`, for printing and for file and directory names.
 
 **Returns**
 - the operating system's name

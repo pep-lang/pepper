@@ -14,8 +14,13 @@ The target is the platform you compile on, unless you name another with
 `Target` takes one boolean condition built from these predicates:
 
 - `OS(...)` is true on the named operating system: `Windows`, `Mac` (or
-  `MacOS`), `Linux`, or `Wasi` (WebAssembly, see
-  [below](#webassembly)).
+  `MacOS`), `Linux`, `Wasi` (WebAssembly, see [below](#webassembly)),
+  `IOS` or `Android` (see [iOS and Android](mobile.md)). As in C, where
+  `TARGET_OS_MAC` holds on every Apple OS and `__linux__` on Android,
+  `OS(Mac)` is also true on iOS and `OS(Linux)` on Android: they share
+  the kernel and most of the C library, so code for macOS or Linux usually
+  works there unchanged. Write `OS(Mac) && !OS(IOS)` for macOS alone, and
+  `OS(Linux) && !OS(Android)` for desktop and server Linux alone.
 - `Arch(...)` is true on the named processor architecture: `x64`,
   `aarch64`, or `wasm32`.
 - `BuildOption(NAME)` is true when the build defines `NAME` with `-D`, and
@@ -92,7 +97,7 @@ f(): int { return 1; }
 ```
 
 ```text
-main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
+main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
     1 | [Target(OS(Darwin))]
       | ^~~~~~~~~~~~~~~~~~~~
 ```
@@ -125,11 +130,19 @@ and object format. The supported targets are each OS on each architecture:
 | `x86_64-pc-windows-msvc`    | Windows | `x64`     |
 | `aarch64-pc-windows-msvc`   | Windows | `aarch64` |
 | `wasm32-wasip1`             | Wasi    | `wasm32`  |
+| `aarch64-apple-ios`         | iOS     | `aarch64` |
+| `aarch64-apple-ios-simulator` | iOS (simulator) | `aarch64` |
+| `x86_64-apple-ios-simulator`  | iOS (simulator) | `x64`     |
+| `aarch64-linux-android`     | Android | `aarch64` |
+| `x86_64-linux-android`      | Android | `x64`     |
 
 clang's other spellings work too: `arm64` for `aarch64`, `amd64` for
-`x86_64`, any vendor, and an OS version (`arm64-apple-macosx14.0`). Any
-other triple is an error that lists these. `wasm32-wasi`,
-`wasm32-unknown-wasi` and `wasm32-unknown-wasip1` all mean `wasm32-wasip1`.
+`x86_64`, any vendor, and an OS version (`arm64-apple-macosx14.0`,
+`aarch64-apple-ios17.0`, `aarch64-linux-android33`). Any other triple is an
+error that lists these. `wasm32-wasi`, `wasm32-unknown-wasi` and
+`wasm32-unknown-wasip1` all mean `wasm32-wasip1`. The iOS and Android
+targets, their versions and their SDKs are described in
+[iOS and Android](mobile.md).
 
 ```sh
 pepper build --target aarch64-unknown-linux-gnu main.pep -o main

@@ -54,6 +54,7 @@
 - [Unit tests](language/testing.md)
 - [Calling C](language/c-interop.md)
 - [Platform selection](language/platform-selection.md)
+- [iOS and Android](language/mobile.md)
 - [Build options](language/build-options.md)
 - [Linking](language/linking.md)
 - [Compiler errors](language/compiler-errors.md)

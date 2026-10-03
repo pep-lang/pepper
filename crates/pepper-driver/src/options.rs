@@ -381,8 +381,9 @@ impl Options {
         if let Some(dir) = &self.sysroot {
             return Some(dir.clone());
         }
-        // The canonical triple: `wasm32-wasi` reads PEPPER_SYSROOT_WASM32_WASIP1.
-        let triple = self.effective_target().ok()?.triple?;
+        // The canonical triple: `wasm32-wasi` reads PEPPER_SYSROOT_WASM32_WASIP1,
+        // and `arm64-apple-ios17.0` PEPPER_SYSROOT_AARCH64_APPLE_IOS.
+        let triple = self.effective_target().ok()?.platform_triple()?;
         std::env::var_os(sysroot_variable(&triple)).filter(|dir| !dir.is_empty()).map(PathBuf::from)
     }
 

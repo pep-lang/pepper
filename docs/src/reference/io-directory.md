@@ -336,7 +336,8 @@ Returns the directory for temporary files. It is not created or
 checked, so it may not exist.
 
 On POSIX it is `$TMPDIR` with any trailing `/` removed, or `/tmp`
-when `TMPDIR` is unset or empty. On Windows it is what
+when `TMPDIR` is unset or empty (`/data/local/tmp` on Android, which
+has no `/tmp`; an app should use its cache directory instead). On Windows it is what
 `GetTempPathW` reports (from `TMP`, `TEMP`, `USERPROFILE`, or the
 Windows directory) with its trailing separator removed unless it is
 a root, or `.` if that call fails.

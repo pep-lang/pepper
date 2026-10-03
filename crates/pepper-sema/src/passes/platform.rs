@@ -349,7 +349,7 @@ pub fn undefined_build_option_comparisons(attribute: &ast::Attribute) -> Vec<(St
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Target {
     /// The OS, as `std::env::consts::OS` spells it (`"windows"`, `"macos"`,
-    /// `"linux"`), or `"wasi"` for WebAssembly.
+    /// `"linux"`, `"ios"`, `"android"`), or `"wasi"` for WebAssembly.
     pub os: String,
     /// The architecture, as `std::env::consts::ARCH` spells it (`"x86_64"`,
     /// `"aarch64"`, `"wasm32"`).
@@ -363,7 +363,9 @@ pub struct Target {
 }
 
 /// The triples `--target` accepts: each supported OS on each supported
-/// architecture, as clang spells them, and WebAssembly with WASI preview 1.
+/// architecture, as clang spells them, WebAssembly with WASI preview 1, and
+/// the mobile platforms (iOS devices and the simulator on Apple silicon and
+/// Intel Macs; Android on arm64 and x86_64).
 pub const SUPPORTED_TRIPLES: &[&str] = &[
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -372,7 +374,23 @@ pub const SUPPORTED_TRIPLES: &[&str] = &[
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
     "wasm32-wasip1",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-simulator",
+    "x86_64-apple-ios-simulator",
+    "aarch64-linux-android",
+    "x86_64-linux-android",
 ];
+
+/// The iOS version an `-apple-ios` triple without one targets: the oldest
+/// Xcode 16 and later still build for.
+pub const DEFAULT_IOS_VERSION: &str = "15.0";
+
+/// The Android API level an `-android` triple without one targets, and the
+/// oldest the runtime supports: Android 11, the first with `statx`. Its
+/// file layer calls it for one `stat` layout on every architecture, as on
+/// Linux; level 29 brought ELF thread-local storage (older levels need
+/// LLVM's emulated TLS), `posix_spawn` and `getrandom`.
+pub const DEFAULT_ANDROID_API: &str = "30";
 
 impl Target {
     /// The machine the compiler runs on, with the default build options
@@ -412,7 +430,11 @@ impl Target {
         // or stand in for it (`x86_64-linux-gnu`).
         let system = &parts[1..];
         let names = |prefix: &str| system.iter().any(|p| p.starts_with(prefix));
-        let os = if names("linux") && !names("android") && system.iter().any(|p| p.starts_with("gnu")) {
+        let os = if names("android") {
+            return Target::android(arch, system, triple);
+        } else if names("ios") {
+            return Target::ios(arch, system).ok_or_else(unsupported);
+        } else if names("linux") && system.iter().any(|p| p.starts_with("gnu")) {
             "linux"
         } else if names("darwin") || names("macos") {
             "macos"
@@ -422,6 +444,62 @@ impl Target {
             return Err(unsupported());
         };
         Ok(Target { os: os.to_string(), arch: arch.to_string(), triple: Some(triple.to_string()), build_options: default_build_options() })
+    }
+
+    /// An Android target: `<arch>-linux-android<api>`, with the API level
+    /// the triple's `android` part ends in (`android33`), else
+    /// [`DEFAULT_ANDROID_API`], which is also the oldest accepted. Any
+    /// vendor is accepted (`aarch64-unknown-linux-android`).
+    fn android(arch: &str, system: &[&str], triple: &str) -> Result<Target, String> {
+        let api = system.iter().find_map(|p| p.strip_prefix("android")).filter(|api| !api.is_empty()).unwrap_or(DEFAULT_ANDROID_API);
+        let oldest: u32 = DEFAULT_ANDROID_API.parse().unwrap_or(0);
+        match api.parse::<u32>() {
+            Ok(level) if level >= oldest => {}
+            Ok(_) => return Err(format!("unsupported target '{triple}': Pepper's runtime needs Android API level {oldest} or later (write 'android{oldest}')")),
+            Err(_) => return Err(format!("unsupported target '{triple}': '{api}' is not an Android API level")),
+        }
+        let triple = format!("{arch}-linux-android{api}");
+        Ok(Target { os: "android".to_string(), arch: arch.to_string(), triple: Some(triple), build_options: default_build_options() })
+    }
+
+    /// An iOS target: `<arch>-apple-ios<version>`, with `-simulator` for the
+    /// simulator, which Rust spells `-sim` and an x86_64 triple implies (no
+    /// iPhone is x86_64). The version is the triple's (`ios17.0`), else
+    /// [`DEFAULT_IOS_VERSION`]. `None` for an environment other than the
+    /// simulator (`-macabi`).
+    fn ios(arch: &str, system: &[&str]) -> Option<Target> {
+        let version = system.iter().find_map(|p| p.strip_prefix("ios")).filter(|v| !v.is_empty()).unwrap_or(DEFAULT_IOS_VERSION);
+        let simulator = match system.last() {
+            Some(&"simulator") | Some(&"sim") => true,
+            Some(last) if last.starts_with("ios") => arch == "x86_64",
+            _ => return None,
+        };
+        let triple = format!("{arch}-apple-ios{version}{}", if simulator { "-simulator" } else { "" });
+        Some(Target { os: "ios".to_string(), arch: arch.to_string(), triple: Some(triple), build_options: default_build_options() })
+    }
+
+    /// The triple without its OS version, which names the platform's system
+    /// root (`PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR` for every
+    /// `aarch64-apple-ios<version>-simulator`): an iOS version or Android API
+    /// level picks what the code may call, not where the SDK is.
+    pub fn platform_triple(&self) -> Option<String> {
+        let triple = self.triple.as_deref()?;
+        let strip = |prefix: &str| -> Option<String> {
+            let start = triple.find(prefix)? + prefix.len();
+            let end = triple[start..].find('-').map_or(triple.len(), |i| start + i);
+            Some(format!("{}{}", &triple[..start], &triple[end..]))
+        };
+        match self.os.as_str() {
+            "ios" => strip("-apple-ios"),
+            "android" => strip("-linux-android"),
+            _ => Some(triple.to_string()),
+        }
+    }
+
+    /// Whether this is an Apple platform built on Darwin (macOS or iOS):
+    /// Mach-O objects, libSystem, and the SDK's `.tbd` stubs.
+    pub fn is_apple(&self) -> bool {
+        matches!(self.os.as_str(), "macos" | "ios")
     }
 
     /// Whether this is the machine the compiler runs on: the code it
@@ -515,7 +593,7 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
     };
     let Expression::SymbolRef { id, .. } = value else {
         return Err(format!(
-            "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux, Wasi) in {attr}"
+            "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in {attr}"
         ));
     };
     let host = match target_os().as_str() {
@@ -523,6 +601,8 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
         "macos" => Some("macos"),
         "linux" => Some("linux"),
         "wasi" => Some("wasi"),
+        "ios" => Some("ios"),
+        "android" => Some("android"),
         _ => None,
     };
     match host {
@@ -534,14 +614,21 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
     }
 }
 
+/// Whether the `OS(value)` predicate holds on `host`. `Mac` holds on every
+/// Darwin OS (macOS and iOS), as `TARGET_OS_MAC` does in C, and `Linux` on
+/// every Linux kernel (Android too), as `__linux__` does: their system
+/// calls and C libraries are mostly the same. `IOS` and `Android` narrow
+/// that to the one OS.
 fn matches_os_value(value: &str, host: &str, attr: &ast::Attribute) -> Result<bool, String> {
     match value.to_ascii_lowercase().as_str() {
         "windows" => Ok(host == "windows"),
-        "mac" | "macos" => Ok(host == "macos"),
-        "linux" => Ok(host == "linux"),
+        "mac" | "macos" => Ok(host == "macos" || host == "ios"),
+        "linux" => Ok(host == "linux" || host == "android"),
         "wasi" => Ok(host == "wasi"),
+        "ios" => Ok(host == "ios"),
+        "android" => Ok(host == "android"),
         _ => Err(format!(
-            "unknown OS value `{value}` (expected Windows, Mac, MacOS, Linux, Wasi) in {attr}"
+            "unknown OS value `{value}` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in {attr}"
         )),
     }
 }

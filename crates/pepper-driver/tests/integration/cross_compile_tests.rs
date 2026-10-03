@@ -26,6 +26,14 @@ const PROGRAM: &str = "main(): int {
     {
         print(\"built for wasi\");
     }
+    [Target(OS(IOS))]
+    {
+        print(\"built for ios\");
+    }
+    [Target(OS(Android))]
+    {
+        print(\"built for android\");
+    }
     var squares = Array<int>();
     for (var i in 0..10) {
         squares.append(i * i);
@@ -99,8 +107,8 @@ fn object_kind(bytes: &[u8]) -> String {
 fn expected_kind(triple: &str) -> String {
     let target = pepper_sema::Target::parse(triple).unwrap();
     let format = match target.os.as_str() {
-        "linux" => "ELF",
-        "macos" => "Mach-O",
+        "linux" | "android" => "ELF",
+        "macos" | "ios" => "Mach-O",
         "wasi" => "WebAssembly",
         _ => "COFF",
     };
@@ -156,6 +164,72 @@ fn target_selection_follows_the_target_not_the_host() {
             assert!(!ir.contains(text), "{}: '{}' was kept", triple, text);
         }
     }
+}
+
+/// iOS is Darwin and Android is Linux: their own predicate and their
+/// desktop relative's both hold, as `TARGET_OS_MAC` and `__linux__` do in C.
+#[test]
+fn mobile_targets_keep_their_own_code_and_their_desktop_relatives() {
+    for (triple, normalized, kept, dropped) in [
+        ("aarch64-apple-ios", "aarch64-apple-ios15.0", ["built for ios", "built for macos"], ["built for linux", "built for android"]),
+        ("arm64-apple-ios17.0-simulator", "aarch64-apple-ios17.0-simulator", ["built for ios", "built for macos"], ["built for linux", "built for windows"]),
+        ("aarch64-linux-android", "aarch64-linux-android30", ["built for android", "built for linux"], ["built for macos", "built for ios"]),
+        ("x86_64-linux-android33", "x86_64-linux-android33", ["built for android", "built for linux"], ["built for macos", "built for wasi"]),
+    ] {
+        let dir = scratch(&format!("mobile_{}", triple));
+        compile(&dir, triple, &["--emit-llvm"]).unwrap_or_else(|e| panic!("{}: {}", triple, e));
+        let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(ir.contains(&format!("target triple = \"{}\"", normalized)), "{}: wrong triple", triple);
+        for text in kept {
+            assert!(ir.contains(text), "{}: '{}' was dropped", triple, text);
+        }
+        for text in dropped {
+            assert!(!ir.contains(text), "{}: '{}' was kept", triple, text);
+        }
+    }
+}
+
+#[test]
+fn mobile_triples_name_a_version_and_the_platform() {
+    for (spelling, os, triple, platform) in [
+        ("aarch64-apple-ios", "ios", "aarch64-apple-ios15.0", "aarch64-apple-ios"),
+        ("arm64-apple-ios17.2", "ios", "aarch64-apple-ios17.2", "aarch64-apple-ios"),
+        ("aarch64-apple-ios-sim", "ios", "aarch64-apple-ios15.0-simulator", "aarch64-apple-ios-simulator"),
+        ("x86_64-apple-ios", "ios", "x86_64-apple-ios15.0-simulator", "x86_64-apple-ios-simulator"),
+        ("x86_64-apple-ios16.0-simulator", "ios", "x86_64-apple-ios16.0-simulator", "x86_64-apple-ios-simulator"),
+        ("aarch64-linux-android", "android", "aarch64-linux-android30", "aarch64-linux-android"),
+        ("aarch64-unknown-linux-android34", "android", "aarch64-linux-android34", "aarch64-linux-android"),
+        ("x86_64-linux-android", "android", "x86_64-linux-android30", "x86_64-linux-android"),
+    ] {
+        let target = pepper_sema::Target::parse(spelling).unwrap_or_else(|e| panic!("{}: {}", spelling, e));
+        assert_eq!(target.os, os, "{}", spelling);
+        assert_eq!(target.triple.as_deref(), Some(triple), "{}", spelling);
+        assert_eq!(target.platform_triple().as_deref(), Some(platform), "{}", spelling);
+    }
+    assert_eq!(
+        pepper_sema::Target::parse("aarch64-linux-android24").unwrap_err(),
+        "unsupported target 'aarch64-linux-android24': Pepper's runtime needs Android API level 30 or later (write 'android30')"
+    );
+    assert!(pepper_sema::Target::parse("aarch64-apple-ios-macabi").unwrap_err().starts_with("unsupported target 'aarch64-apple-ios-macabi'; expected one of:"));
+    // The sysroot variable is the platform's, whatever the version.
+    assert_eq!(
+        pepper_driver::options::sysroot_variable(&pepper_sema::Target::parse("arm64-apple-ios17.0-simulator").unwrap().platform_triple().unwrap()),
+        "PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR"
+    );
+}
+
+#[test]
+fn an_android_link_without_the_ndk_says_where_to_find_it() {
+    if ["ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_HOME", "ANDROID_SDK_ROOT", "PEPPER_SYSROOT_AARCH64_LINUX_ANDROID"].iter().any(|v| std::env::var_os(v).is_some()) {
+        return;
+    }
+    let dir = scratch("no_ndk");
+    let error = compile(&dir, "aarch64-linux-android", &[]).expect_err("linking without the NDK");
+    let _ = std::fs::remove_dir_all(&dir);
+    let note = "note: linking for 'aarch64-linux-android30' needs the Android NDK (https://developer.android.com/ndk/downloads): \
+                pass '--sysroot <ndk>' or set PEPPER_SYSROOT_AARCH64_LINUX_ANDROID, ANDROID_NDK_HOME or ANDROID_HOME";
+    assert!(error.contains(note), "no note naming the NDK in:\n{}", error);
 }
 
 #[test]

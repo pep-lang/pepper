@@ -59,10 +59,13 @@ extern char* getenv(char* name);
 [Target(!OS(Windows))]
 extern int closedir(void* dir);
 
-# Linux: errno through glibc's accessor; statx for stat (one layout on x64
-# and aarch64, and present where glibc < 2.33 has no `stat` symbol).
-[Target(OS(Linux) || OS(Wasi))]
+# Linux: errno through glibc's accessor (bionic's on Android); statx for
+# stat (one layout on x64 and aarch64, and present where glibc < 2.33 has no
+# `stat` symbol; bionic has it from API level 30, the oldest Pepper targets).
+[Target((OS(Linux) && !OS(Android)) || OS(Wasi))]
 extern int* __errno_location();
+[Target(OS(Android))]
+extern int* __errno();
 [Target(OS(Linux))]
 extern int statx(int dirfd, char* path, int flags, uint mask, void* buf);
 [Target(OS(Linux))]
@@ -71,33 +74,34 @@ extern void* opendir(char* path);
 extern void* readdir(void* dir);
 
 # macOS: x64 binds the 64-bit-inode variants by their `$INODE64` symbols;
-# aarch64 only has those layouts, under the plain names.
+# aarch64 only has those layouts, under the plain names, and so does iOS on
+# both (its simulator included), which never had 32-bit inodes.
 [Target(OS(Mac))]
 extern int* __error();
-[Target(OS(Mac) && Arch(x64))]
+[Target(OS(Mac) && !OS(IOS) && Arch(x64))]
 [Link(name = "stat$INODE64")]
 extern int stat(char* path, void* buf);
-[Target(OS(Mac) && Arch(x64))]
+[Target(OS(Mac) && !OS(IOS) && Arch(x64))]
 [Link(name = "lstat$INODE64")]
 extern int lstat(char* path, void* buf);
-[Target(OS(Mac) && Arch(x64))]
+[Target(OS(Mac) && !OS(IOS) && Arch(x64))]
 [Link(name = "fstat$INODE64")]
 extern int fstat(int fd, void* buf);
-[Target(OS(Mac) && Arch(x64))]
+[Target(OS(Mac) && !OS(IOS) && Arch(x64))]
 [Link(name = "opendir$INODE64")]
 extern void* opendir(char* path);
-[Target(OS(Mac) && Arch(x64))]
+[Target(OS(Mac) && !OS(IOS) && Arch(x64))]
 [Link(name = "readdir$INODE64")]
 extern void* readdir(void* dir);
-[Target(OS(Mac) && Arch(aarch64))]
+[Target(OS(Mac) && (Arch(aarch64) || OS(IOS)))]
 extern int stat(char* path, void* buf);
-[Target(OS(Mac) && Arch(aarch64))]
+[Target(OS(Mac) && (Arch(aarch64) || OS(IOS)))]
 extern int lstat(char* path, void* buf);
-[Target(OS(Mac) && Arch(aarch64))]
+[Target(OS(Mac) && (Arch(aarch64) || OS(IOS)))]
 extern int fstat(int fd, void* buf);
-[Target(OS(Mac) && Arch(aarch64))]
+[Target(OS(Mac) && (Arch(aarch64) || OS(IOS)))]
 extern void* opendir(char* path);
-[Target(OS(Mac) && Arch(aarch64))]
+[Target(OS(Mac) && (Arch(aarch64) || OS(IOS)))]
 extern void* readdir(void* dir);
 
 # WASI: wasi-libc's own stat and dirent layouts, under the plain names.
@@ -114,9 +118,14 @@ extern void* readdir(void* dir);
 
 # ── errno ────────────────────────────────────────────────────────────────────
 
-[Target(OS(Linux) || OS(Wasi))]
+[Target((OS(Linux) && !OS(Android)) || OS(Wasi))]
 export _io_errno(): __ptr<int> {
     return __errno_location();
+}
+
+[Target(OS(Android))]
+export _io_errno(): __ptr<int> {
+    return __errno();
 }
 
 [Target(OS(Mac))]
@@ -904,11 +913,18 @@ export _io_sys_realpath(path: Path): IoResult<Path> {
     return IoResult<Path>.ok(Path(_io_string_from_c(r)));
 }
 
+# Android has no /tmp; /data/local/tmp is the one any process may write.
+[Target(!OS(Windows) && !OS(Android))]
+_io_default_temp_dir(): String { return "/tmp"; }
+
+[Target(OS(Android))]
+_io_default_temp_dir(): String { return "/data/local/tmp"; }
+
 [Target(!OS(Windows))]
 export _io_sys_temp_dir(): Path {
     var s = String(getenv("TMPDIR"));
     if (s.size == 0) {
-        return Path("/tmp");
+        return Path(_io_default_temp_dir());
     }
     # macOS's TMPDIR ends in '/'.
     var p = unsafe_cast<__ptr<u8>>(s.c_str());

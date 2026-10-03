@@ -17,6 +17,14 @@
 //! conventional `WASI_SDK_PATH`) names the SDK or its `share/wasi-sysroot`,
 //! and the SDK's `lib/clang/<version>` supplies the compiler-rt builtins
 //! that LLVM's own clang does not ship for WebAssembly (see [`WasiSdk`]).
+//!
+//! iOS links with `ld64.lld` against an iOS SDK: `--sysroot` (or
+//! `PEPPER_SYSROOT_<TRIPLE>`), else on a Mac the SDK `xcrun` reports for
+//! the device or the simulator (see [`apple_sdk`]). Android links with the
+//! NDK's own clang, which knows its system root, compiler-rt and unwinder:
+//! `--sysroot` names the NDK (or its `sysroot`), else `ANDROID_NDK_HOME`,
+//! `ANDROID_NDK_ROOT` or the newest NDK in the Android SDK (see
+//! [`AndroidNdk`]).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -171,11 +179,21 @@ pub fn default_system_libraries(os: &str) -> &'static [&'static str] {
         // root for another machine may not carry them at all.
         "linux" if host_glibc_before_2_34() => &["m", "pthread", "dl"],
         "linux" => &["m"],
+        // bionic keeps `pow` in libm too, and threads and `dlsym` in libc.
+        "android" => &["m"],
         // wasi-libc keeps `pow` in libc, and `getpid` in an emulation
         // library of its own.
         "wasi" => &["wasi-emulated-getpid"],
         _ => &[],
     }
+}
+
+/// Whether `lib` is a library whose functions `os` keeps in its C library,
+/// with no library of that name to link: Android's bionic has threads and
+/// real-time clocks in libc, and the NDK ships no `libpthread` or `librt`.
+/// Dropping them lets one `[Link("pthread")]` serve Linux and Android.
+fn is_built_into_libc(os: &str, lib: &str) -> bool {
+    os == "android" && matches!(lib, "pthread" | "rt")
 }
 
 /// Whether this compiler runs on a glibc older than 2.34, from its own
@@ -212,7 +230,7 @@ fn glibc_before_2_34(version: &str) -> bool {
 /// installs.
 fn find_lld(os: &str, driver: &Path) -> Option<PathBuf> {
     let name = match os {
-        "macos" => "ld64.lld",
+        "macos" | "ios" => "ld64.lld",
         "wasi" => "wasm-ld",
         _ => "ld.lld",
     };
@@ -261,6 +279,62 @@ impl WasiSdk {
         });
         Some(WasiSdk { sysroot, resource_dir })
     }
+}
+
+/// An Android NDK's link driver and system root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AndroidNdk {
+    /// `toolchains/llvm/prebuilt/<host>/bin/clang`, which links with the
+    /// NDK's `lld`, compiler-rt and libunwind, and finds `sysroot` itself.
+    pub clang: PathBuf,
+    /// `toolchains/llvm/prebuilt/<host>/sysroot`: bionic's headers and the
+    /// stub libraries of every API level.
+    pub sysroot: PathBuf,
+}
+
+impl AndroidNdk {
+    /// The NDK `dir` names: the NDK itself (holding `toolchains/llvm`), or
+    /// its `toolchains/llvm/prebuilt/<host>/sysroot`. `None` for no
+    /// directory: then `ANDROID_NDK_HOME` or `ANDROID_NDK_ROOT` (the NDK's
+    /// conventional variables), else the newest NDK the Android SDK
+    /// (`ANDROID_HOME` or `ANDROID_SDK_ROOT`) holds in `ndk/<version>`.
+    pub fn locate(dir: Option<&Path>) -> Option<AndroidNdk> {
+        let variable = |name: &str| std::env::var_os(name).filter(|d| !d.is_empty()).map(PathBuf::from);
+        let dir = match dir {
+            Some(dir) => dir.to_path_buf(),
+            None => variable("ANDROID_NDK_HOME").or_else(|| variable("ANDROID_NDK_ROOT")).or_else(|| {
+                let sdk = variable("ANDROID_HOME").or_else(|| variable("ANDROID_SDK_ROOT"))?;
+                let mut versions: Vec<PathBuf> = std::fs::read_dir(sdk.join("ndk")).ok()?.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_dir()).collect();
+                versions.sort_by_key(|p| p.file_name().and_then(|n| n.to_str()).map(|n| n.split('.').map(|part| part.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>()));
+                versions.pop()
+            })?,
+        };
+        // The prebuilt toolchain: the one folder under `prebuilt` (named for
+        // the host, `linux-x86_64`; macOS's is universal but named
+        // `darwin-x86_64`), or `dir`'s parent when `dir` is its sysroot.
+        let prebuilt = if dir.join("toolchains").join("llvm").join("prebuilt").is_dir() {
+            std::fs::read_dir(dir.join("toolchains").join("llvm").join("prebuilt")).ok()?.filter_map(|e| e.ok().map(|e| e.path())).find(|p| p.join("sysroot").is_dir())?
+        } else {
+            dir.parent()?.to_path_buf()
+        };
+        let clang = prebuilt.join("bin").join(if cfg!(windows) { "clang.exe" } else { "clang" });
+        let sysroot = prebuilt.join("sysroot");
+        (clang.is_file() && sysroot.is_dir()).then_some(AndroidNdk { clang, sysroot })
+    }
+}
+
+/// The iOS SDK for `target` that Xcode's `xcrun` reports (`iphoneos`, or
+/// `iphonesimulator` for the simulator), on a Mac with Xcode; `None`
+/// elsewhere.
+pub fn apple_sdk(target: &pepper_sema::Target) -> Option<PathBuf> {
+    if target.os != "ios" || !cfg!(target_os = "macos") {
+        return None;
+    }
+    let simulator = target.triple.as_deref().is_some_and(|t| t.ends_with("-simulator"));
+    let sdk = if simulator { "iphonesimulator" } else { "iphoneos" };
+    let out = Command::new("xcrun").args(["--sdk", sdk, "--show-sdk-path"]).output().ok()?;
+    let path = String::from_utf8(out.stdout).ok()?.trim().to_string();
+    (out.status.success() && !path.is_empty()).then(|| PathBuf::from(path))
 }
 
 /// The folders of a Windows system root (`--sysroot` for a Windows target)
@@ -330,6 +404,16 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
             None => args.push("-fuse-ld=lld".to_string()),
         }
     }
+    if target.os == "android" {
+        // The NDK's clang finds its own system root; any other clang is
+        // pointed at the one given.
+        if AndroidNdk::locate(sysroot).is_none() {
+            if let Some(sysroot) = sysroot {
+                args.push(format!("--sysroot={}", sysroot.display()));
+            }
+        }
+        return args;
+    }
     if target.os == "wasi" {
         if let Some(sdk) = WasiSdk::locate(sysroot) {
             args.push(format!("--sysroot={}", sdk.sysroot.display()));
@@ -353,6 +437,12 @@ fn target_arguments(target: &pepper_sema::Target, sysroot: Option<&Path>, lld: O
             }
         } else {
             args.push(format!("--sysroot={}", sysroot.display()));
+            if target.os == "ios" {
+                // clang's Darwin toolchain prefers `-isysroot`, which a
+                // clang configuration file (Homebrew's) may set to the
+                // macOS SDK.
+                args.push(format!("-isysroot{}", sysroot.display()));
+            }
         }
     }
     args
@@ -374,21 +464,28 @@ pub fn link(
     sysroot: Option<&Path>,
     shared: bool,
 ) -> Result<(), String> {
-    let driver = find_link_driver().ok_or_else(missing_link_driver)?;
     let target = pepper_sema::current_target();
+    let ndk = if target.os == "android" { AndroidNdk::locate(sysroot) } else { None };
+    let driver = match &ndk {
+        Some(ndk) => ndk.clang.clone(),
+        None => find_link_driver().ok_or_else(missing_link_driver)?,
+    };
+    let sdk = if sysroot.is_none() { apple_sdk(&target) } else { None };
+    let sysroot = sysroot.or(sdk.as_deref());
 
     let mut args: Vec<String> = vec!["-o".to_string(), output.to_string_lossy().into_owned()];
     if shared {
         args.push("-shared".to_string());
         let name = output.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        if target.os == "macos" {
+        if target.is_apple() {
             // Programs that link it find it on their run path.
             args.push(format!("-Wl,-install_name,@rpath/{}", name));
         } else if target.os != "windows" {
             args.push(format!("-Wl,-soname,{}", name));
         }
     }
-    let lld = if target.is_host() || target.os == "windows" { None } else { find_lld(&target.os, &driver) };
+    // The NDK's clang runs the NDK's own lld.
+    let lld = if target.is_host() || target.os == "windows" || ndk.is_some() { None } else { find_lld(&target.os, &driver) };
     args.extend(target_arguments(&target, sysroot, lld.as_deref()));
     if debug {
         args.push("-g".to_string());
@@ -421,7 +518,9 @@ pub fn link(
         args.push(format!("-L{}", dir.display()));
     }
     for lib in libraries {
-        args.push(format!("-l{}", lib));
+        if !is_built_into_libc(&target.os, lib) {
+            args.push(format!("-l{}", lib));
+        }
     }
     for lib in default_system_libraries(&target.os) {
         args.push(format!("-l{}", lib));
@@ -492,6 +591,22 @@ fn cross_link_note(target: &pepper_sema::Target, sysroot: Option<&Path>) -> Stri
         return String::new();
     }
     let triple = target.triple.as_deref().unwrap_or_default();
+    if target.os == "android" && AndroidNdk::locate(sysroot).is_none() {
+        return format!(
+            "\nnote: linking for '{}' needs the Android NDK (https://developer.android.com/ndk/downloads): \
+             pass '--sysroot <ndk>' or set {}, ANDROID_NDK_HOME or ANDROID_HOME",
+            triple,
+            crate::options::sysroot_variable(&target.platform_triple().unwrap_or_default())
+        );
+    }
+    if target.os == "ios" && sysroot.is_none() {
+        return format!(
+            "\nnote: linking for '{}' needs an iOS SDK (Xcode's): pass '--sysroot <sdk>' or set {}; on a Mac, `xcrun --sdk {} --show-sdk-path` names it",
+            triple,
+            crate::options::sysroot_variable(&target.platform_triple().unwrap_or_default()),
+            if triple.ends_with("-simulator") { "iphonesimulator" } else { "iphoneos" }
+        );
+    }
     if target.os == "wasi" {
         return match WasiSdk::locate(sysroot) {
             None => format!(
@@ -512,7 +627,7 @@ fn cross_link_note(target: &pepper_sema::Target, sysroot: Option<&Path>) -> Stri
             "\nnote: linking for '{}' needs that platform's system libraries and LLVM's linker (lld): \
              pass '--sysroot <dir>' or set {}",
             triple,
-            crate::options::sysroot_variable(triple)
+            crate::options::sysroot_variable(&target.platform_triple().unwrap_or_default())
         ),
         Some(sysroot) => format!(
             "\nnote: linking for '{}' with the system root '{}' needs LLVM's linker (lld) beside clang",
@@ -610,5 +725,44 @@ mod tests {
             ]
         );
         std::fs::remove_dir_all(&sdk).unwrap();
+    }
+
+    /// An Android NDK is found from its own directory or its system root,
+    /// and its clang links with no other target options than the triple.
+    #[test]
+    fn android_links_with_the_ndk_clang() {
+        let ndk = std::env::temp_dir().join(format!("pepper-ndk-{}", std::process::id()));
+        let prebuilt = ndk.join("toolchains").join("llvm").join("prebuilt").join("linux-x86_64");
+        let clang = prebuilt.join("bin").join(if cfg!(windows) { "clang.exe" } else { "clang" });
+        std::fs::create_dir_all(prebuilt.join("sysroot")).unwrap();
+        std::fs::create_dir_all(clang.parent().unwrap()).unwrap();
+        std::fs::write(&clang, "").unwrap();
+        let expected = AndroidNdk { clang: clang.clone(), sysroot: prebuilt.join("sysroot") };
+        assert_eq!(AndroidNdk::locate(Some(&ndk)), Some(expected.clone()));
+        assert_eq!(AndroidNdk::locate(Some(&prebuilt.join("sysroot"))), Some(expected));
+        let target = pepper_sema::Target::parse("aarch64-linux-android").unwrap();
+        assert_eq!(target_arguments(&target, Some(&ndk), None), ["--target=aarch64-linux-android30".to_string(), "-fuse-ld=lld".to_string()]);
+        // Without an NDK, another clang is pointed at the system root.
+        let other = std::env::temp_dir().join(format!("pepper-android-sysroot-{}", std::process::id()));
+        assert_eq!(target_arguments(&target, Some(&other), None)[2], format!("--sysroot={}", other.display()));
+        assert!(cross_link_note(&target, Some(&other)).contains("needs the Android NDK"));
+        // bionic keeps threads in libc, and the NDK has no libpthread.
+        assert!(is_built_into_libc("android", "pthread"));
+        assert!(!is_built_into_libc("linux", "pthread"));
+        std::fs::remove_dir_all(&ndk).unwrap();
+    }
+
+    /// iOS links with ld64.lld, like macOS, and its libraries are Darwin's.
+    #[test]
+    fn ios_links_like_macos() {
+        let target = pepper_sema::Target::parse("aarch64-apple-ios-simulator").unwrap();
+        assert!(target.is_apple());
+        assert_eq!(
+            target_arguments(&target, Some(Path::new("/sdk")), None),
+            ["--target=aarch64-apple-ios15.0-simulator".to_string(), "-fuse-ld=lld".to_string(), "--sysroot=/sdk".to_string(), "-isysroot/sdk".to_string()]
+        );
+        assert!(cross_link_note(&target, None).contains("needs an iOS SDK"));
+        assert!(default_system_libraries("ios").is_empty());
+        assert_eq!(default_system_libraries("android"), ["m"]);
     }
 }

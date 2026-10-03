@@ -30,8 +30,8 @@ impl LibraryKind {
     /// The library's file name for `name` on the target: `libname.a`,
     /// `libname.so` or `libname.dylib`; `name.lib` or `name.dll` on Windows.
     pub fn file_name(self, name: &str) -> String {
-        let os = &pepper_sema::current_target().os;
-        match (self, os == "windows", os == "macos") {
+        let target = pepper_sema::current_target();
+        match (self, target.os == "windows", target.is_apple()) {
             (LibraryKind::Static, true, _) => format!("{}.lib", name),
             (LibraryKind::Shared, true, _) => format!("{}.dll", name),
             (LibraryKind::Static, false, _) => format!("lib{}.a", name),
@@ -64,10 +64,10 @@ pub fn write_archive(objects: &[PathBuf], output: &Path) -> Result<(), String> {
         let name = object.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         members.push(NewArchiveMember::new(bytes, &DEFAULT_OBJECT_READER, name));
     }
-    let os = &pepper_sema::current_target().os;
-    let kind = if os == "windows" {
+    let target = pepper_sema::current_target();
+    let kind = if target.os == "windows" {
         ArchiveKind::Coff
-    } else if os == "macos" {
+    } else if target.is_apple() {
         ArchiveKind::Darwin
     } else {
         ArchiveKind::Gnu

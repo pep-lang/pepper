@@ -3,8 +3,12 @@
 # sys_wasi.pep declare the same `_debug_sys_*` functions with the same
 # signatures.
 
-[Target(OS(Linux) || OS(Mac))]
+[Target((OS(Linux) && !OS(Android)) || OS(Mac))]
 extern int backtrace(void* buffer, int size);
+[Target(OS(Android))]
+extern int _Unwind_Backtrace(extern (__ptr<void>, __ptr<void>) => int trace, void* state);
+[Target(OS(Android))]
+extern ulong _Unwind_GetIP(void* context);
 [Target(OS(Linux) || OS(Mac))]
 extern int open(char* path, int flags, ...);
 [Target(OS(Linux) || OS(Mac))]
@@ -19,7 +23,7 @@ extern int sysctl(int* name, uint count, void* value, ulong* size, void* new_val
 # Appends up to `limit` return addresses, innermost first: glibc's and
 # libSystem's `backtrace`, which unwinds through the tables every function
 # carries (`uwtable`).
-[Target(OS(Linux) || OS(Mac))]
+[Target((OS(Linux) && !OS(Android)) || OS(Mac))]
 export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
     __ptr<ulong> buffer = _pep_malloc((limit as ulong) * 8);
     var count = backtrace(buffer, limit);
@@ -29,6 +33,37 @@ export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
         index = index + 1;
     }
     _pep_free(buffer);
+}
+
+# Android: bionic has `backtrace` only from API level 33, so unwind with the
+# unwinder every Android program links (the NDK's libunwind), as `backtrace`
+# does. `state` holds the count so far, the limit, then the addresses.
+[Target(OS(Android))]
+export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
+    __ptr<ulong> state = _pep_malloc(((limit as ulong) + 2) * 8);
+    state[0] = 0;
+    state[1] = limit as ulong;
+    var trace: extern (__ptr<void>, __ptr<void>) => int = _debug_unwind_step;
+    _Unwind_Backtrace(trace, state);
+    ulong index = 0;
+    while (index < state[0]) {
+        addresses.append(state[index + 2]);
+        index = index + 1;
+    }
+    _pep_free(state);
+}
+
+# One frame of `_Unwind_Backtrace`: records its address, and stops the walk
+# (`_URC_END_OF_STACK`, 5) once `state` is full.
+[Target(OS(Android))]
+_debug_unwind_step(context: __ptr<void>, data: __ptr<void>): int {
+    __ptr<ulong> state = data;
+    if (state[0] >= state[1]) {
+        return 5;
+    }
+    state[state[0] + 2] = _Unwind_GetIP(context);
+    state[0] = state[0] + 1;
+    return 0;
 }
 
 # Linux and macOS have no debugger channel apart from the program's own
