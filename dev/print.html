@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0811de56.js";
+            window.path_to_searchindex_js = "searchindex-48f0d31e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57b6db41.js"></script>
@@ -17685,6 +17685,7 @@ are: <code>pepper &lt;command&gt; [arguments]</code> runs a separate program nam
 <pre><code class="language-bash">pepper build main.pep -o main     # runs pep-build main.pep -o main
 pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
+pepper -C my_app build            # runs pep-build in my_app
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -17693,7 +17694,7 @@ pepper --version                  # pepper's version; -v adds each command's
 is the program <code>pep-build</code>, so <code>pepper build</code> takes exactly the options the
 compiler does (see <a href="#the-compiler-pep-build">The compiler: pep-build</a>).</p>
 <h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
-<pre><code class="language-text">pepper &lt;command&gt; [arguments]
+<pre><code class="language-text">pepper [-C &lt;dir&gt;]... &lt;command&gt; [arguments]
 pepper help [&lt;command&gt;]
 pepper --version [-v]
 </code></pre>
@@ -17704,6 +17705,7 @@ pepper --version [-v]
 </thead>
 <tbody>
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
+<tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="#running-in-another-folder">Running in another folder</a>)</td></tr>
 <tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
 <tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version</td></tr>
@@ -17712,8 +17714,9 @@ pepper --version [-v]
 </table>
 </div>
 <p>Options go before the command: everything after the command belongs to it,
-so <code>pepper fmt --help</code> is <code>pep-fmt --help</code>. <code>pepper</code> with no arguments prints
-the usage to standard error and exits with status 2; an option other than
+so <code>pepper fmt --help</code> is <code>pep-fmt --help</code>. <code>pepper</code> with no arguments, or
+with only <code>-C</code> options, prints the usage to standard error and exits with
+status 2; so does a <code>-C</code> with no folder after it; an option other than
 <code>-v</code> or <code>--verbose</code> after <code>--version</code> is an error that exits with 2. An
 unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <h2 id="the-commands-in-this-repository"><a class="header" href="#the-commands-in-this-repository">The commands in this repository</a></h2>
@@ -17766,6 +17769,17 @@ Commands:
   build
   fmt
 </code></pre>
+<h2 id="running-in-another-folder"><a class="header" href="#running-in-another-folder">Running in another folder</a></h2>
+<p><code>-C &lt;dir&gt;</code> runs the command as if <code>pepper</code> had been started in <code>&lt;dir&gt;</code>, like
+<code>git -C</code>: <code>pepper -C my_app build</code> builds the project in <code>my_app</code> from
+anywhere. Repeated, each <code>-C</code> is relative to the one before, so
+<code>pepper -C a -C b build</code> runs in <code>a/b</code>; an empty <code>-C ""</code> changes nothing.
+A folder that cannot be entered is an error that exits with status 1:</p>
+<pre><code class="language-text">$ pepper -C nowhere build
+pepper: error: cannot change to 'nowhere': No such file or directory
+</code></pre>
+<p><code>-C</code> is the only option that goes before a command. It works with
+<code>help</code> and the old form too.</p>
 <h2 id="the-old-form"><a class="header" href="#the-old-form">The old form</a></h2>
 <p>Before <code>pepper build</code>, <code>pepper</code> was the compiler. A first argument that is a
 <code>.pep</code> file or an option still runs the compiler with the whole command line,
