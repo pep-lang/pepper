@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e407b0c6.js";
+            window.path_to_searchindex_js = "../searchindex-e5d9f19e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6e8bb89c.js"></script>
+        <script src="../toc-c0ee600d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -468,6 +468,20 @@ not found is reported with the places the compiler looked:</p>
 <p>The standard library’s <a href="../reference/io-module.html">io module</a> is found this
 way, in the runtime directory: <code>import io;</code> then <code>io.File</code>, or
 <code>import [File, Path] from io;</code>.</p>
+<p>A module nested in another module’s folder is imported with a dotted name:
+<code>import geometry.solids;</code> finds <code>geometry/solids/module.pep</code> and binds its
+last name, so its declarations are <code>solids.volume</code> (or, with
+<code>import geometry.solids as s;</code>, <code>s.volume</code>).</p>
+<h3 id="projects-and-packages"><a class="header" href="#projects-and-packages">Projects and packages</a></h3>
+<p>A project’s <code>pep.toml</code> lists the packages it depends on, and each key is the
+name source code imports:</p>
+<pre><code class="language-toml">[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+</code></pre>
+<p><code>import geometry;</code> then finds the package’s root <code>module.pep</code> in the
+project’s <code>.pep/deps</code>, with no <code>-I</code>, and <code>import geometry.solids;</code> the module
+in its <code>solids</code> folder. <code>pepper build</code> with no file builds the project. See
+<a href="../tools/projects.html">Projects: pep.toml</a>.</p>
 <h3 id="the-runtime-prelude-and---import"><a class="header" href="#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a></h3>
 <p>The runtime itself is not a module: its files are loaded into every program,
 and their exports, such as <code>String</code>, <code>Array</code>, and <code>Result</code>, are visible

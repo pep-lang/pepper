@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e407b0c6.js";
+            window.path_to_searchindex_js = "../searchindex-e5d9f19e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6e8bb89c.js"></script>
+        <script src="../toc-c0ee600d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@ for C code to link. <code>pepper build</code> runs it with the same arguments, s
 everything on this page applies to both spellings:</p>
 <pre><code class="language-bash">pepper build main.pep -o main          # the same as: pep-build main.pep -o main
 </code></pre>
-<pre><code class="language-text">pep-build [OPTIONS] &lt;entry.pep&gt;
+<pre><code class="language-text">pep-build [OPTIONS] [&lt;entry.pep&gt;]
 </code></pre>
 <p>This page lists every option. <code>pep-build --help</code> prints the same list in
 short, and <code>pepper help build</code> runs it.</p>
@@ -198,13 +198,13 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><th>Option</th><th>What it does</th><th>Default</th></tr>
 </thead>
 <tbody>
-<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>required</td></tr>
+<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>the project’s, from <code>pep.toml</code></td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
-<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code></td></tr>
+<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
@@ -220,7 +220,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
-<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code></td></tr>
+<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--verify-cache</code></td><td>Check cache hits against fresh code</td><td>off, or <code>PEPPER_CACHE_VERIFY</code></td></tr>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
@@ -242,12 +242,24 @@ with status 2 after a short usage message.</p>
 <p>The file that holds <code>main</code>. The compiler finds the files it imports on its
 own (see <a href="../language/modules.html">Modules and imports</a>), so a program of many
 files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored. With no file, the compiler stops with
-<code>error: no source files provided</code>.</p>
+is compiled; any others are ignored.</p>
+<p>With no file, the compiler builds the project whose <code>pep.toml</code> is in the
+current folder or the nearest folder above it: its <code>[build]</code> table names the
+entry file and the output, and the build goes in the project’s <code>.pep</code> (see
+<a href="projects.html">Projects: pep.toml</a>). With no file and no <code>pep.toml</code>, it stops
+with <code>error: no source files provided, and no pep.toml in &lt;folder&gt; or a folder above it</code>.</p>
+<pre><code class="language-bash">cd my_app/src
+pepper build              # builds my_app/pep.toml's program into my_app/
+</code></pre>
+<p>An entry file inside a project (under a folder with a <code>pep.toml</code>) imports the
+project’s dependencies, and its <code>[build]</code> table’s <code>include</code> folders and
+<code>link</code> libraries apply to it as well.</p>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
 looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
-given, before the runtime’s folder. See
+given, then a project’s <code>[build]</code> <code>include</code> folders, then the runtime’s
+folder. A project’s dependencies are found through its <code>pep.toml</code> instead.
+See
 <a href="../language/modules.html#dependencies-and-search-paths">Dependencies and search paths</a>.</p>
 <pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
@@ -271,8 +283,11 @@ describes, and <code>PEPPER_RUNTIME</code> names its folder outright.</p>
 <p>The path of the executable, or with <code>--lib</code> of the library. Without it, the
 output goes to the current folder, named after the entry file with no
 extension (<code>main</code> for <code>main.pep</code>); with <code>--lib</code>, the library’s usual file
-name for that stem (<code>libmain.a</code>). Windows runs only files ending in <code>.exe</code>,
-so name the output there: <code>-o main.exe</code>.</p>
+name for that stem (<code>libmain.a</code>). Building a project with no file, it is the
+<code>[build]</code> table’s <code>output</code>, else the package’s <code>name</code> in the project’s
+folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
+Windows and the name has no extension. Windows runs only files ending in
+<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C
 header beside it that declares the program’s <code>[Export]</code>ed functions. No
@@ -285,7 +300,8 @@ macOS, <code>name.dll</code> on Windows.</li>
 <p>See <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
 <h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
 <p>The folder for intermediate files: the program’s objects and, with
-<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder.</p>
+<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or
+in the project’s folder when building a project with no file.</p>
 <h3 id="--emit-llvm"><a class="header" href="#--emit-llvm"><code>--emit-llvm</code></a></h3>
 <p>Writes the whole program’s LLVM IR to <code>&lt;build&gt;/&lt;name&gt;.ll</code> (<code>.pep/build/main.ll</code>
 for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops there: nothing is
@@ -364,7 +380,7 @@ for each character that is not a letter or digit
 <h2 id="linking"><a class="header" href="#linking">Linking</a></h2>
 <h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
 <p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
-for more libraries. A program’s <code>[Link]</code> attributes name libraries from the
+for more libraries. A project’s <code>[build]</code> table adds its <code>link</code> libraries. A program’s <code>[Link]</code> attributes name libraries from the
 source instead. See <a href="../language/linking.html">Linking</a>.</p>
 <h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
 <p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
@@ -427,7 +443,8 @@ key. Deleting the cache folder is always safe.</p>
 <h3 id="--cache-dir"><a class="header" href="#--cache-dir"><code>--cache &lt;dir&gt;</code></a></h3>
 <p>Keeps the build cache in <code>&lt;dir&gt;</code>. Without it, the folder named by
 <code>PEPPER_CACHE_DIR</code> when that is set and not empty, else <code>.pep/cache</code> in the
-current folder.</p>
+current folder, or in the project’s folder when building a project with no
+file.</p>
 <h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
 <p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
 cache would reuse is compiled anyway, and the build fails if its code
@@ -492,7 +509,7 @@ please report it.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/pep-fmt.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/projects.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -506,7 +523,7 @@ please report it.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/pep-fmt.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/projects.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

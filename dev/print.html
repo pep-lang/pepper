@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e407b0c6.js";
+            window.path_to_searchindex_js = "searchindex-e5d9f19e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6e8bb89c.js"></script>
+        <script src="toc-c0ee600d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -238,7 +238,9 @@ TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsin
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
 flame graph, and <a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every
-tool, are themselves written in Pepper.
+tool, are themselves written in Pepper. A <a href="#projects-peptoml"><code>pep.toml</code></a>
+project builds with <code>pepper build</code> alone and imports the packages it depends
+on by name; fetching them with <code>pepper package</code> is not available yet.
 Some things you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,
@@ -12079,6 +12081,20 @@ not found is reported with the places the compiler looked:</p>
 <p>The standard library’s <a href="#the-io-module">io module</a> is found this
 way, in the runtime directory: <code>import io;</code> then <code>io.File</code>, or
 <code>import [File, Path] from io;</code>.</p>
+<p>A module nested in another module’s folder is imported with a dotted name:
+<code>import geometry.solids;</code> finds <code>geometry/solids/module.pep</code> and binds its
+last name, so its declarations are <code>solids.volume</code> (or, with
+<code>import geometry.solids as s;</code>, <code>s.volume</code>).</p>
+<h3 id="projects-and-packages"><a class="header" href="#projects-and-packages">Projects and packages</a></h3>
+<p>A project’s <code>pep.toml</code> lists the packages it depends on, and each key is the
+name source code imports:</p>
+<pre><code class="language-toml">[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+</code></pre>
+<p><code>import geometry;</code> then finds the package’s root <code>module.pep</code> in the
+project’s <code>.pep/deps</code>, with no <code>-I</code>, and <code>import geometry.solids;</code> the module
+in its <code>solids</code> folder. <code>pepper build</code> with no file builds the project. See
+<a href="#projects-peptoml">Projects: pep.toml</a>.</p>
 <h3 id="the-runtime-prelude-and---import"><a class="header" href="#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a></h3>
 <p>The runtime itself is not a module: its files are loaded into every program,
 and their exports, such as <code>String</code>, <code>Array</code>, and <code>Result</code>, are visible
@@ -17528,6 +17544,7 @@ API, and the reference leaves them out too.</p>
 are: <code>pepper &lt;command&gt; [arguments]</code> runs a separate program named
 <code>pep-&lt;command&gt;</code> with the remaining arguments.</p>
 <pre><code class="language-bash">pepper build main.pep -o main     # runs pep-build main.pep -o main
+pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
@@ -17567,7 +17584,7 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <tr><th>Command</th><th>Program</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (<a href="#the-compiler-pep-build">The compiler: pep-build</a>)</td></tr>
+<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program, or with no file the project (<a href="#the-compiler-pep-build">The compiler: pep-build</a>, <a href="#projects-peptoml">Projects: pep.toml</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="#formatting-with-pep-fmt">Formatting with pep-fmt</a>)</td></tr>
 <tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="#profiling-with-pep-profile">Profiling with pep-profile</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>)</td></tr>
@@ -17623,7 +17640,7 @@ for C code to link. <code>pepper build</code> runs it with the same arguments, s
 everything on this page applies to both spellings:</p>
 <pre><code class="language-bash">pepper build main.pep -o main          # the same as: pep-build main.pep -o main
 </code></pre>
-<pre><code class="language-text">pep-build [OPTIONS] &lt;entry.pep&gt;
+<pre><code class="language-text">pep-build [OPTIONS] [&lt;entry.pep&gt;]
 </code></pre>
 <p>This page lists every option. <code>pep-build --help</code> prints the same list in
 short, and <code>pepper help build</code> runs it.</p>
@@ -17634,13 +17651,13 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><th>Option</th><th>What it does</th><th>Default</th></tr>
 </thead>
 <tbody>
-<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>required</td></tr>
+<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>the project’s, from <code>pep.toml</code></td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
-<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
-<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code></td></tr>
+<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
@@ -17656,7 +17673,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
-<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code></td></tr>
+<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--verify-cache</code></td><td>Check cache hits against fresh code</td><td>off, or <code>PEPPER_CACHE_VERIFY</code></td></tr>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
@@ -17678,12 +17695,24 @@ with status 2 after a short usage message.</p>
 <p>The file that holds <code>main</code>. The compiler finds the files it imports on its
 own (see <a href="#modules-and-imports">Modules and imports</a>), so a program of many
 files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored. With no file, the compiler stops with
-<code>error: no source files provided</code>.</p>
+is compiled; any others are ignored.</p>
+<p>With no file, the compiler builds the project whose <code>pep.toml</code> is in the
+current folder or the nearest folder above it: its <code>[build]</code> table names the
+entry file and the output, and the build goes in the project’s <code>.pep</code> (see
+<a href="#projects-peptoml">Projects: pep.toml</a>). With no file and no <code>pep.toml</code>, it stops
+with <code>error: no source files provided, and no pep.toml in &lt;folder&gt; or a folder above it</code>.</p>
+<pre><code class="language-bash">cd my_app/src
+pepper build              # builds my_app/pep.toml's program into my_app/
+</code></pre>
+<p>An entry file inside a project (under a folder with a <code>pep.toml</code>) imports the
+project’s dependencies, and its <code>[build]</code> table’s <code>include</code> folders and
+<code>link</code> libraries apply to it as well.</p>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
 looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
-given, before the runtime’s folder. See
+given, then a project’s <code>[build]</code> <code>include</code> folders, then the runtime’s
+folder. A project’s dependencies are found through its <code>pep.toml</code> instead.
+See
 <a href="#dependencies-and-search-paths">Dependencies and search paths</a>.</p>
 <pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
@@ -17707,8 +17736,11 @@ describes, and <code>PEPPER_RUNTIME</code> names its folder outright.</p>
 <p>The path of the executable, or with <code>--lib</code> of the library. Without it, the
 output goes to the current folder, named after the entry file with no
 extension (<code>main</code> for <code>main.pep</code>); with <code>--lib</code>, the library’s usual file
-name for that stem (<code>libmain.a</code>). Windows runs only files ending in <code>.exe</code>,
-so name the output there: <code>-o main.exe</code>.</p>
+name for that stem (<code>libmain.a</code>). Building a project with no file, it is the
+<code>[build]</code> table’s <code>output</code>, else the package’s <code>name</code> in the project’s
+folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
+Windows and the name has no extension. Windows runs only files ending in
+<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C
 header beside it that declares the program’s <code>[Export]</code>ed functions. No
@@ -17721,7 +17753,8 @@ macOS, <code>name.dll</code> on Windows.</li>
 <p>See <a href="#calling-pepper-from-c">Calling Pepper from C</a>.</p>
 <h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
 <p>The folder for intermediate files: the program’s objects and, with
-<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder.</p>
+<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or
+in the project’s folder when building a project with no file.</p>
 <h3 id="--emit-llvm"><a class="header" href="#--emit-llvm"><code>--emit-llvm</code></a></h3>
 <p>Writes the whole program’s LLVM IR to <code>&lt;build&gt;/&lt;name&gt;.ll</code> (<code>.pep/build/main.ll</code>
 for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops there: nothing is
@@ -17800,7 +17833,7 @@ for each character that is not a letter or digit
 <h2 id="linking-1"><a class="header" href="#linking-1">Linking</a></h2>
 <h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
 <p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
-for more libraries. A program’s <code>[Link]</code> attributes name libraries from the
+for more libraries. A project’s <code>[build]</code> table adds its <code>link</code> libraries. A program’s <code>[Link]</code> attributes name libraries from the
 source instead. See <a href="#linking">Linking</a>.</p>
 <h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
 <p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
@@ -17863,7 +17896,8 @@ key. Deleting the cache folder is always safe.</p>
 <h3 id="--cache-dir"><a class="header" href="#--cache-dir"><code>--cache &lt;dir&gt;</code></a></h3>
 <p>Keeps the build cache in <code>&lt;dir&gt;</code>. Without it, the folder named by
 <code>PEPPER_CACHE_DIR</code> when that is set and not empty, else <code>.pep/cache</code> in the
-current folder.</p>
+current folder, or in the project’s folder when building a project with no
+file.</p>
 <h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
 <p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
 cache would reuse is compiled anyway, and the build fails if its code
@@ -17919,6 +17953,155 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 errors are on standard error), and 2 for a command line it cannot parse. A
 crash of the compiler itself exits with 101 after printing what went wrong;
 please report it.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="projects-peptoml"><a class="header" href="#projects-peptoml">Projects: pep.toml</a></h1>
+<p>A <code>pep.toml</code> file marks the root of a project. It names the project, says
+how <code>pepper build</code> builds it, and lists the packages it depends on, so a
+project builds with <code>pepper build</code> and nothing else:</p>
+<pre><code class="language-bash">cd my_app
+pepper build          # builds the program pep.toml describes
+./my_app
+</code></pre>
+<pre><code class="language-toml">[package]
+name = "my_app"
+version = "0.1.0"
+description = "Draws shapes"
+authors = ["Ada &lt;ada@example.com&gt;"]
+license = "MIT"
+repository = "https://github.com/me/my_app"
+
+[build]
+entry = "src/main.pep"
+
+[dependencies]
+geometry  = { github = "someone/geometry", version = "1.2" }
+json      = { gitlab = "group/pepper-json", version = "0.4.x" }
+fast_json = { github = "other/json", version = "2" }   # renamed: 'json' was taken
+http      = { codeberg = "someone/http", branch = "main" }
+shapes    = { path = "../shapes" }
+</code></pre>
+<p>A package is a project other projects depend on: a repository (or folder)
+with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
+dependency name imports, and any folder inside it holding a <code>module.pep</code> is a
+module of the package too.</p>
+<h2 id="package"><a class="header" href="#package"><code>[package]</code></a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it is</th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code></td><td>The project’s name: letters, digits and <code>_</code>, not starting with a digit. Required. <code>pepper build</code> names the executable after it.</td></tr>
+<tr><td><code>version</code></td><td>Its version, <code>major.minor.patch</code></td></tr>
+<tr><td><code>description</code></td><td>One line saying what it is</td></tr>
+<tr><td><code>authors</code></td><td>An array of names</td></tr>
+<tr><td><code>license</code></td><td>Its license, such as <code>MIT</code></td></tr>
+<tr><td><code>repository</code></td><td>Where its source lives</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="build"><a class="header" href="#build"><code>[build]</code></a></h2>
+<p><code>pepper build</code> with no file builds the project: it finds the nearest
+<code>pep.toml</code> in the current folder or a folder above it, and builds the
+<code>[build]</code> table’s entry file into its output. Every path is relative to the
+folder holding <code>pep.toml</code>, and the build’s intermediate files and cache go in
+that folder’s <code>.pep</code>, wherever <code>pepper build</code> runs.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it is</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>entry</code></td><td>The file that holds <code>main</code></td><td><code>main.pep</code></td></tr>
+<tr><td><code>output</code></td><td>The executable; building for Windows adds <code>.exe</code> to a name with no extension</td><td>the package’s <code>name</code></td></tr>
+<tr><td><code>include</code></td><td>An array of extra folders to search for modules, as <code>-I</code> adds</td><td>none</td></tr>
+<tr><td><code>link</code></td><td>An array of C libraries to link, as <code>-l</code> adds</td><td>none</td></tr>
+</tbody>
+</table>
+</div>
+<p>Options on the command line still apply: <code>pepper build -O</code> builds the
+project optimized, and <code>-o</code> names another output. A file argument builds that
+file instead (<code>pepper build tools/gen.pep</code>); the project’s dependencies,
+<code>include</code> folders and <code>link</code> libraries still apply to it, since it is in the
+project.</p>
+<h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
+<p>Each key is the name source code imports, and its value says where the
+package comes from and which revision to use:</p>
+<pre><code class="language-toml">[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+</code></pre>
+<pre><code class="language-pepper">import geometry;
+import geometry.solids;     # the module in the package's solids/ folder
+
+main(): int {
+    print("{0} {1}", geometry.area(3, 4), solids.volume(2));
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it is</th></tr>
+</thead>
+<tbody>
+<tr><td><code>github</code>, <code>gitlab</code>, <code>codeberg</code></td><td>The repository, <code>owner/name</code> (on GitLab, <code>group/subgroup/name</code> too)</td></tr>
+<tr><td><code>path</code></td><td>A folder on disk, relative to this <code>pep.toml</code>, instead of a repository</td></tr>
+<tr><td><code>version</code></td><td>A semver range of the repository’s version tags: <code>1.2</code>, <code>0.4.x</code>, <code>&gt;=1.0, &lt;2</code></td></tr>
+<tr><td><code>branch</code></td><td>A branch</td></tr>
+<tr><td><code>tag</code></td><td>A tag</td></tr>
+<tr><td><code>commit</code></td><td>A commit</td></tr>
+</tbody>
+</table>
+</div>
+<p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
+<code>tag</code> and <code>commit</code>; with none, it follows the repository’s default branch.
+A <code>path</code> dependency takes none of them.</p>
+<h3 id="imports"><a class="header" href="#imports">Imports</a></h3>
+<p><code>import geometry</code> imports the package’s root module, its <code>module.pep</code>.
+<code>import geometry.solids</code> imports the module in its <code>solids</code> folder, and binds
+the last name, so its declarations are <code>solids.volume</code>; <code>as</code> names it
+otherwise (<code>import geometry.solids as s</code>). A dotted import whose first name
+is not a dependency looks for the nested folder on the search paths:
+<code>import a.b</code> finds <code>a/b/module.pep</code>.</p>
+<p>Because the name lives only in <code>pep.toml</code>, a package that moves to another
+host or organization, or a switch to a fork, changes one line of <code>pep.toml</code>
+and no source file. Two packages whose repositories share a name get
+different keys:</p>
+<pre><code class="language-toml">json      = { gitlab = "group/pepper-json" }
+fast_json = { github = "other/json" }
+</code></pre>
+<h3 id="where-dependencies-live"><a class="header" href="#where-dependencies-live">Where dependencies live</a></h3>
+<p>A dependency from a Git host lives in the project’s
+<code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, such as
+<code>.pep/deps/github.com/someone/geometry</code>. One copy serves the whole project:
+each package’s own <code>pep.toml</code> names the packages it needs under its own
+keys, and an import in one of its files resolves against those keys, to the
+same copies.</p>
+<p>Fetching dependencies with <code>pepper package</code> is not available yet. Until it
+is, put a package’s files in its <code>.pep/deps</code> folder yourself (for example
+with <code>git clone</code>), or use a <code>path</code> dependency.</p>
+<h2 id="errors-4"><a class="header" href="#errors-4">Errors</a></h2>
+<p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
+<pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports
+    9 | io = { github = "someone/io" }
+      | ^~
+</code></pre>
+<ul>
+<li>Two dependencies with the same name, or a dependency named like a runtime
+module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
+<li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
+<code>import</code> uses.</li>
+<li>A dependency with no source or two, a repository not written <code>owner/name</code>,
+or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>.</li>
+<li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
+</ul>
+<p>An import of a dependency that is not on disk says which folder is missing:</p>
+<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry
+    1 | import geometry;
+      |        ^~~~~~~~
+</code></pre>
+<p>The language server reads <code>pep.toml</code> the same way, so imports of fetched
+dependencies resolve in the editor with no <code>-I</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="formatting-with-pep-fmt"><a class="header" href="#formatting-with-pep-fmt">Formatting with pep-fmt</a></h1>
 <p><code>pep-fmt</code> rewrites Pepper source in one standard style, so that every Pepper
