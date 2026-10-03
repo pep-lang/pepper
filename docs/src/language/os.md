@@ -70,14 +70,31 @@ be negative.
 | `system_version()` | the kernel release on Linux, the product version on macOS (`14.5`), `major.minor.build` on Windows |
 | `architecture()` | `"x64"`, `"aarch64"` or `"wasm32"`, as `[Target(Arch(...))]` names them |
 | `hostname()` | the machine's host name |
-| `logical_cpus()`, `physical_cpus()` | processor counts, the same as `async`'s |
-| `total_memory()`, `page_size()` | physical memory and the virtual memory page size, in bytes |
+| `logical_cpus()`, `physical_cpus()` | processor counts, the same as `async`'s, capped by a Linux container's CPU quota |
+| `total_memory()`, `page_size()` | physical memory, or a Linux container's lower memory limit, and the virtual memory page size, in bytes |
 | `user_name()` | the user the program runs as, or none |
 | `home_directory()` | `HOME` (on Windows `USERPROFILE`), or the user database's entry, or none |
 | `temp_directory()` | the directory for temporary files, the same as `io.Directory.temp()` |
 | `is_elevated()` | whether the program runs as root, or elevated ("Run as administrator") on Windows; never on WASI |
 
+## Containers
+
+On Linux, `total_memory()` and `logical_cpus()` report what a container
+lets the program use, as the JVM and Go do, so a pool or a cache sized from
+them fits inside it. Both read the process's cgroup and each cgroup above
+it, under `/sys/fs/cgroup`, with cgroup v2 or v1:
+
+- `total_memory()` returns the smallest of the physical memory and every
+  memory limit found (`memory.max`, or v1's `memory.limit_in_bytes`), as
+  `docker run --memory` sets it.
+- `logical_cpus()` returns the smaller of the online processors and the
+  smallest CPU quota (`cpu.max`, or v1's `cpu.cfs_quota_us` over
+  `cpu.cfs_period_us`), rounded up to whole processors: `docker run
+  --cpus=1.5` counts as 2. `physical_cpus()` is never more than that.
+
+Where no limit is set, or the files cannot be read, they report the
+machine.
+
 ## Current limitations
 
 - `async.timeout` still takes milliseconds, not a `Duration`.
-- `total_memory()` does not take a container's memory limit into account.

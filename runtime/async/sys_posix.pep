@@ -291,10 +291,110 @@ _async_monotonic_milliseconds(clock: int): ulong {
 
 # ── Processor counts (0 when unknown) ────────────────────────────────────────
 
+# Online processors, capped by a cgroup CPU quota (`docker run --cpus`) the
+# way Go and the JVM cap theirs: a quota of 1.5 processors counts as 2.
 [Target(OS(Linux))]
 export _async_sys_logical_cpus(): ulong {
     var count = sysconf(84);  # _SC_NPROCESSORS_ONLN
-    return count < 1 ? 0 : count as ulong;
+    if (count < 1) {
+        return 0;
+    }
+    var online = count as ulong;
+    var quota = _async_sys_cgroup_cpu_quota();
+    return quota != 0 && quota < online ? quota : online;
+}
+
+# The smallest CPU quota on this process's cgroup or its ancestors, in whole
+# processors rounded up, or 0 when none is set: cgroup v2's `cpu.max`
+# ("max 100000" or "150000 100000"), or v1's `cpu.cfs_quota_us` (-1 when
+# unlimited) over `cpu.cfs_period_us`.
+[Target(OS(Linux))]
+_async_sys_cgroup_cpu_quota(): ulong {
+    ulong smallest = 0;
+    for (var directory in _async_sys_cgroup_directories("cpu")) {
+        long quota = -1;
+        long period = 0;
+        var v2 = io.File.read_to_string(io.Path(directory + "/cpu.max"));
+        if (v2.is_ok()) {
+            var fields = v2.value().trim().split(" ");
+            if (fields.count == 2) {
+                quota = long.parse(fields[0]).value_or(-1);
+                period = long.parse(fields[1]).value_or(0);
+            }
+        } else {
+            var v1 = io.File.read_to_string(io.Path(directory + "/cpu.cfs_quota_us"));
+            var v1_period = io.File.read_to_string(io.Path(directory + "/cpu.cfs_period_us"));
+            if (v1.is_ok() && v1_period.is_ok()) {
+                quota = long.parse(v1.value().trim()).value_or(-1);
+                period = long.parse(v1_period.value().trim()).value_or(0);
+            }
+        }
+        if (quota > 0 && period > 0) {
+            var processors = ((quota + period - 1) / period) as ulong;
+            if (smallest == 0 || processors < smallest) {
+                smallest = processors;
+            }
+        }
+    }
+    return smallest;
+}
+
+# The directories of this process's cgroup and each of its ancestors for
+# `controller`, innermost first, read from /proc/self/cgroup: under
+# /sys/fs/cgroup/<controller> when a cgroup v1 hierarchy has the controller,
+# otherwise under the unified (v2) hierarchy at /sys/fs/cgroup. Empty
+# outside any cgroup. Some may not exist: in a container without a cgroup
+# namespace the path names the host's view, while the container sees its
+# own cgroup at the root, which the walk reaches last. Callers skip the
+# files they cannot read.
+[Target(OS(Linux))]
+export _async_sys_cgroup_directories(controller: String): String[] {
+    var directories = Array<String>();
+    var table = io.File.read_to_string(io.Path("/proc/self/cgroup"));
+    if (!table.is_ok()) {
+        return directories;
+    }
+    var root = String();
+    var path = String();
+    for (var line in table.value().lines()) {
+        # hierarchy-ID:controller-list:cgroup-path
+        var fields = line.split(":");
+        if (fields.count < 3) {
+            continue;
+        }
+        # The path may itself hold ':'.
+        var rest = line.substr_bytes(
+            fields[0].size + fields[1].size + 2, line.size - fields[0].size - fields[1].size - 2
+        );
+        if (fields[0] == "0" && fields[1].is_empty) {
+            if (root.is_empty) {
+                root = "/sys/fs/cgroup";
+                path = rest;
+            }
+        } else {
+            for (var name in fields[1].split(",")) {
+                if (name == controller) {
+                    root = "/sys/fs/cgroup/" + controller;
+                    path = rest;
+                }
+            }
+        }
+    }
+    if (root.is_empty) {
+        return directories;
+    }
+    while (true) {
+        while (path.ends_with("/")) {
+            path = path.substr_bytes(0, path.size - 1);
+        }
+        directories.append(root + path);
+        if (path.is_empty) {
+            break;
+        }
+        var slash = path.rfind("/");
+        path = slash < 0 ? String() : path.substr_bytes(0, slash as ulong);
+    }
+    return directories;
 }
 
 # One core per distinct list of hardware threads sharing it, read from the

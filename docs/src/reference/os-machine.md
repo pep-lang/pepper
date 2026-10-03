@@ -179,7 +179,8 @@ logical_cpus(): ulong
 ```
 
 Returns the number of logical processors: every hardware thread, so a
-core with hyperthreading counts two or more times. The same as
+core with hyperthreading counts two or more times. On Linux a cgroup
+CPU quota (`docker run --cpus`) caps it, rounded up. The same as
 `async.logical_cpus()`.
 
 **Returns**
@@ -210,11 +211,13 @@ total_memory(): ulong
 ```
 
 Returns the machine's physical memory in bytes. Inside a virtual
-machine this is what the guest sees; a container's memory limit is not
-taken into account. WASI does not report it.
+machine this is what the guest sees. On Linux, a lower memory limit on
+the process's cgroup or any cgroup above it (cgroup v2's `memory.max`
+or v1's `memory.limit_in_bytes`, as `docker run --memory` sets) is
+returned instead, as the JVM does. WASI does not report it.
 
 **Returns**
-- the total physical memory in bytes, or 0 when the system does not report it
+- the total physical memory, or the container's memory limit when that is lower, in bytes; 0 when the system does not report it
 
 ## page_size
 

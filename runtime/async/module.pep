@@ -53,7 +53,7 @@
 # This file only gathers the module's public API from its other files. The
 # platform layer (`_async_sys_*` in sys_posix.pep / sys_windows.pep) and the
 # `_async_*` helpers are exported between the async files but not from the
-# module.
+# module, except the one the os module needs (at the end).
 
 import "atomic";
 import "channel";
@@ -62,6 +62,7 @@ import "driver";
 import "mutex";
 import "once";
 import "select";
+import "sys_posix";
 import "task";
 import "task_local";
 import "thread";
@@ -101,3 +102,7 @@ export Deadline;
 export timeout;
 export Backend;
 export current_backend;
+
+# For the os module only: the cgroup directories total_memory() reads.
+[Target(OS(Linux))]
+export _async_sys_cgroup_directories;

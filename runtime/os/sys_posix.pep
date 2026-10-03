@@ -2,6 +2,8 @@
 # [Target(OS(Linux) || OS(Mac))] or a narrower target; sys_windows.pep declares the
 # same `_os_sys_*` functions with the same signatures for Windows.
 
+import async;
+import io;
 import "machine";
 import "user";
 
@@ -165,11 +167,27 @@ export _os_sys_hostname(): String {
     return name;
 }
 
-# _SC_PHYS_PAGES pages of _SC_PAGESIZE bytes.
+# _SC_PHYS_PAGES pages of _SC_PAGESIZE bytes, or less when a cgroup memory
+# limit on this process's cgroup or an ancestor is lower: v2's `memory.max`
+# ("max" when unlimited) or v1's `memory.limit_in_bytes` (a huge number when
+# unlimited), as the JVM reads them.
 [Target(OS(Linux))]
 export _os_sys_total_memory(): ulong {
     var pages = sysconf(85);
-    return pages < 1 ? 0 : (pages as ulong) * _os_sys_page_size();
+    ulong bytes = pages < 1 ? 0 : (pages as ulong) * _os_sys_page_size();
+    for (var directory in async._async_sys_cgroup_directories("memory")) {
+        var limit = io.File.read_to_string(io.Path(directory + "/memory.max"));
+        if (!limit.is_ok()) {
+            limit = io.File.read_to_string(io.Path(directory + "/memory.limit_in_bytes"));
+        }
+        if (limit.is_ok()) {
+            var value = long.parse(limit.value().trim()).value_or(0);
+            if (value > 0 && (bytes == 0 || (value as ulong) < bytes)) {
+                bytes = value as ulong;
+            }
+        }
+    }
+    return bytes;
 }
 
 [Target(OS(Mac))]

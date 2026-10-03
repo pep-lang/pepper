@@ -69,6 +69,8 @@ The [Thread reference](../reference/async-thread.md) documents every method.
 - `async.logical_cpus()` returns how many threads the machine can run at the
   same moment. A core with hyperthreading (SMT) counts two or more times.
   This is a good default size for a pool of CPU-bound worker threads.
+  In a Linux container with a CPU quota (`docker run --cpus`), it is the
+  quota rounded up, when that is fewer (see [Containers](os.md#containers)).
 - `async.physical_cpus()` counts each physical core once. On Linux it reads
   the kernel's CPU topology, on macOS `hw.physicalcpu`, and on Windows
   `GetLogicalProcessorInformationEx`. Inside a virtual machine it counts the
