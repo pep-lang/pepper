@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f5d1cf6c.js";
+            window.path_to_searchindex_js = "../searchindex-d6b97c60.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0a7546a5.js"></script>
@@ -431,7 +431,7 @@ method.</p>
 function’s result) gets a new <code>String</code>, so changing it never changes the
 literal: after <code>var s = "a"; s.append("b");</code> the next <code>"a"</code> is still <code>"a"</code>.
 Where a literal is only read, passed to a parameter that the function
-neither keeps nor changes (<code>builder.append("x")</code>, <code>name == "x"</code>), every
+neither keeps nor changes (<code>builder.append("x")</code>, <code>name.contains("x")</code>), every
 evaluation shares one constant object and allocates nothing.</p>
 <h4 id="string-constants"><a class="header" href="#string-constants">String constants</a></h4>
 <p>A literal’s own type is <a href="../reference/string.html"><code>StringConstant</code></a>: a pointer
@@ -455,7 +455,8 @@ picks a <code>String</code> parameter last, as an implicit conversion.</p>
 # allocation and no reference count.
 extern ulong strlen(char* text);
 
-const GREETING: StringConstant = "hello";
+# A `const` initialized from a literal is a StringConstant.
+const GREETING = "hello";
 
 shout(text: String): String {
     return text.upper() + "!";
@@ -475,6 +476,10 @@ main(): int {
     assert(copy == "pepper!" &amp;&amp; name == "pepper", "the copy has its own bytes");
     print(shout(GREETING));
 
+    # Compared with a String either way round, with no copy.
+    String typed = "pepper";
+    assert(name == typed &amp;&amp; typed == name &amp;&amp; GREETING &lt; typed, "mixed comparisons");
+
     # Copying a StringConstant copies a pointer.
     var also = name;
     assert(also == name, "same text");
@@ -483,17 +488,18 @@ main(): int {
 </code></pre>
 <ul>
 <li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
-return value of type <code>StringConstant</code>, and a <code>HashMap&lt;StringConstant, V&gt;</code>
-key. Everywhere else a literal is a <code>String</code>, as before.</li>
+return value of type <code>StringConstant</code>, a <code>HashMap&lt;StringConstant, V&gt;</code> key,
+and a <code>const</code> with no written type (<code>const GREETING = "hello";</code>), so a
+module-scope text constant allocates nothing and any thread may read it.
+Everywhere else, <code>var s = "x"</code> included, a literal is a <code>String</code>, as
+before.</li>
 <li><strong>Converting chains once</strong>: a literal reaches a type that converts from
 <code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
 does not, since conversions never chain. Write <code>String(text)</code> or pass a
 literal.</li>
-<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> on a <code>StringConstant</code>
-take another <code>StringConstant</code> (a literal included), so generic code such
-as a <code>HashMap&lt;StringConstant, V&gt;</code> compares two keys with no conversion. To
-compare with a <code>String</code>, put the <code>String</code> on the left (<code>name == constant</code>)
-or call <code>compare</code>, which takes a <code>String</code>.</li>
+<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
+<code>StringConstant</code> with another <code>StringConstant</code> (a literal included) or
+with a <code>String</code>, either way round, and copy nothing.</li>
 <li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
 </ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and

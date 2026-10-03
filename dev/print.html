@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f5d1cf6c.js";
+            window.path_to_searchindex_js = "searchindex-d6b97c60.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0a7546a5.js"></script>
@@ -1146,7 +1146,7 @@ method.</p>
 function’s result) gets a new <code>String</code>, so changing it never changes the
 literal: after <code>var s = "a"; s.append("b");</code> the next <code>"a"</code> is still <code>"a"</code>.
 Where a literal is only read, passed to a parameter that the function
-neither keeps nor changes (<code>builder.append("x")</code>, <code>name == "x"</code>), every
+neither keeps nor changes (<code>builder.append("x")</code>, <code>name.contains("x")</code>), every
 evaluation shares one constant object and allocates nothing.</p>
 <h4 id="string-constants"><a class="header" href="#string-constants">String constants</a></h4>
 <p>A literal’s own type is <a href="#string"><code>StringConstant</code></a>: a pointer
@@ -1170,7 +1170,8 @@ picks a <code>String</code> parameter last, as an implicit conversion.</p>
 # allocation and no reference count.
 extern ulong strlen(char* text);
 
-const GREETING: StringConstant = "hello";
+# A `const` initialized from a literal is a StringConstant.
+const GREETING = "hello";
 
 shout(text: String): String {
     return text.upper() + "!";
@@ -1190,6 +1191,10 @@ main(): int {
     assert(copy == "pepper!" &amp;&amp; name == "pepper", "the copy has its own bytes");
     print(shout(GREETING));
 
+    # Compared with a String either way round, with no copy.
+    String typed = "pepper";
+    assert(name == typed &amp;&amp; typed == name &amp;&amp; GREETING &lt; typed, "mixed comparisons");
+
     # Copying a StringConstant copies a pointer.
     var also = name;
     assert(also == name, "same text");
@@ -1198,17 +1203,18 @@ main(): int {
 </code></pre>
 <ul>
 <li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
-return value of type <code>StringConstant</code>, and a <code>HashMap&lt;StringConstant, V&gt;</code>
-key. Everywhere else a literal is a <code>String</code>, as before.</li>
+return value of type <code>StringConstant</code>, a <code>HashMap&lt;StringConstant, V&gt;</code> key,
+and a <code>const</code> with no written type (<code>const GREETING = "hello";</code>), so a
+module-scope text constant allocates nothing and any thread may read it.
+Everywhere else, <code>var s = "x"</code> included, a literal is a <code>String</code>, as
+before.</li>
 <li><strong>Converting chains once</strong>: a literal reaches a type that converts from
 <code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
 does not, since conversions never chain. Write <code>String(text)</code> or pass a
 literal.</li>
-<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> on a <code>StringConstant</code>
-take another <code>StringConstant</code> (a literal included), so generic code such
-as a <code>HashMap&lt;StringConstant, V&gt;</code> compares two keys with no conversion. To
-compare with a <code>String</code>, put the <code>String</code> on the left (<code>name == constant</code>)
-or call <code>compare</code>, which takes a <code>String</code>.</li>
+<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
+<code>StringConstant</code> with another <code>StringConstant</code> (a literal included) or
+with a <code>String</code>, either way round, and copy nothing.</li>
 <li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
 </ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
@@ -19852,7 +19858,21 @@ comparing bytes. Runs in O(size).</p>
 <ul>
 <li>true when both hold the same bytes</li>
 </ul>
-<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator +=</a></h4>
+<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether this String holds the same bytes as the
+<code>StringConstant</code> <code>rhs</code>, a literal included. Runs in O(size) and
+copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both hold the same bytes</li>
+</ul>
+<h4 id="operator--3-1"><a class="header" href="#operator--3-1">operator +=</a></h4>
 <pre><code class="language-pepper">+=(rhs: String): String
 </code></pre>
 <p>Appends <code>rhs</code> in place, like <code>append</code>, and returns this same String,
@@ -20134,7 +20154,7 @@ assert(s.substr(1, 2) == "ES", "middle");
 assert(s.substr(0, 99) == "TEST", "count is clamped");
 assert(s.substr(4, 5) == "", "start past the end");
 </code></pre>
-<h4 id="operator--3-1"><a class="header" href="#operator--3-1">operator !=</a></h4>
+<h4 id="operator--4-1"><a class="header" href="#operator--4-1">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> differ in content, the negation
@@ -20147,7 +20167,19 @@ of <code>==</code>. Runs in O(size).</p>
 <ul>
 <li>true when the contents differ</li>
 </ul>
-<h4 id="operator--4-1"><a class="header" href="#operator--4-1">operator +</a></h4>
+<h4 id="operator--5"><a class="header" href="#operator--5">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether this String differs from the <code>StringConstant</code> <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the contents differ</li>
+</ul>
+<h4 id="operator--6"><a class="header" href="#operator--6">operator +</a></h4>
 <pre><code class="language-pepper">+(rhs: String): String
 </code></pre>
 <p>Returns a new String that holds this String followed by <code>rhs</code>. Neither
@@ -20241,7 +20273,7 @@ other orders first. Runs in O(min(size, other.size)).</p>
 assert("ab".compare("abc") &lt; 0, "a prefix orders first");
 assert("x".compare("x") == 0, "equal");
 </code></pre>
-<h4 id="operator--5"><a class="header" href="#operator--5">operator &lt;</a></h4>
+<h4 id="operator--7"><a class="header" href="#operator--7">operator &lt;</a></h4>
 <pre><code class="language-pepper">&lt;(other: String): bool
 </code></pre>
 <p>Returns whether this String orders before <code>other</code>, as <code>compare</code> does.</p>
@@ -20253,7 +20285,20 @@ assert("x".compare("x") == 0, "equal");
 <ul>
 <li>true when <code>compare(other) &lt; 0</code></li>
 </ul>
-<h4 id="operator--6"><a class="header" href="#operator--6">operator &lt;=</a></h4>
+<h4 id="operator--8"><a class="header" href="#operator--8">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this String orders before the <code>StringConstant</code> <code>other</code>,
+byte by byte, a literal included. Copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is negative</li>
+</ul>
+<h4 id="operator--9"><a class="header" href="#operator--9">operator &lt;=</a></h4>
 <pre><code class="language-pepper">&lt;=(other: String): bool
 </code></pre>
 <p>Returns whether this String orders before <code>other</code> or equals it, as
@@ -20266,7 +20311,20 @@ assert("x".compare("x") == 0, "equal");
 <ul>
 <li>true when <code>compare(other) &lt;= 0</code></li>
 </ul>
-<h4 id="operator--7"><a class="header" href="#operator--7">operator &gt;</a></h4>
+<h4 id="operator--10"><a class="header" href="#operator--10">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this String orders before or equals the <code>StringConstant</code> <code>other</code>,
+byte by byte, a literal included. Copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not positive</li>
+</ul>
+<h4 id="operator--11"><a class="header" href="#operator--11">operator &gt;</a></h4>
 <pre><code class="language-pepper">&gt;(other: String): bool
 </code></pre>
 <p>Returns whether this String orders after <code>other</code>, as <code>compare</code> does.</p>
@@ -20278,7 +20336,20 @@ assert("x".compare("x") == 0, "equal");
 <ul>
 <li>true when <code>compare(other) &gt; 0</code></li>
 </ul>
-<h4 id="operator--8"><a class="header" href="#operator--8">operator &gt;=</a></h4>
+<h4 id="operator--12"><a class="header" href="#operator--12">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this String orders after the <code>StringConstant</code> <code>other</code>,
+byte by byte, a literal included. Copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is positive</li>
+</ul>
+<h4 id="operator--13"><a class="header" href="#operator--13">operator &gt;=</a></h4>
 <pre><code class="language-pepper">&gt;=(other: String): bool
 </code></pre>
 <p>Returns whether this String orders after <code>other</code> or equals it, as
@@ -20290,6 +20361,19 @@ assert("x".compare("x") == 0, "equal");
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when <code>compare(other) &gt;= 0</code></li>
+</ul>
+<h4 id="operator--14"><a class="header" href="#operator--14">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this String orders after or equals the <code>StringConstant</code> <code>other</code>,
+byte by byte, a literal included. Copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not negative</li>
 </ul>
 <h4 id="trim_end"><a class="header" href="#trim_end">trim_end</a></h4>
 <pre><code class="language-pepper">trim_end(): String
@@ -20400,8 +20484,10 @@ var indent = " ".repeat(8);   # eight spaces
 </code></pre>
 <p>The text of a string literal: a pointer to its bytes, which never change
 and are never freed, with their byte size and code-point length. A string
-literal’s type is <code>StringConstant</code>; where a <code>String</code> is expected, the
-literal is a <code>String</code> (see the Strings chapter of the book).</p>
+literal’s type is <code>StringConstant</code>, and so is a <code>const</code> with no written
+type initialized from one (<code>const NAME = "pepper";</code>); where a <code>String</code> is
+expected, the literal is a <code>String</code> (see the Strings chapter of the
+book).</p>
 <p>A <code>StringConstant</code> is a <code>[Value]</code> type: copying one copies the pointer
 and steps no reference count, and any thread may read it. Its bytes
 always end in a NUL byte, so <code>c_str()</code> goes to C as it is. It has
@@ -20485,7 +20571,7 @@ does. Runs in O(size).</p>
 <ul>
 <li>a new array of <code>size</code> bytes</li>
 </ul>
-<h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
+<h4 id="operator--15"><a class="header" href="#operator--15">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: int): String
 </code></pre>
 <p>Returns the code point at code-point index <code>idx</code> as a new
@@ -20503,12 +20589,11 @@ counts from the end. Runs in O(idx).</p>
 <ul>
 <li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized</li>
 </ul>
-<h4 id="operator--10"><a class="header" href="#operator--10">operator ==</a></h4>
+<h4 id="operator--16"><a class="header" href="#operator--16">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: StringConstant): bool
 </code></pre>
 <p>Returns whether two texts hold the same bytes, a literal <code>rhs</code>
-included. Runs in O(size). To compare with a <code>String</code>, put the
-<code>String</code> on the left (<code>name == constant</code>).</p>
+included. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the text to compare with</li>
@@ -20517,7 +20602,7 @@ included. Runs in O(size). To compare with a <code>String</code>, put the
 <ul>
 <li>true when both hold the same bytes</li>
 </ul>
-<h4 id="operator--11"><a class="header" href="#operator--11">operator !=</a></h4>
+<h4 id="operator--17"><a class="header" href="#operator--17">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: StringConstant): bool
 </code></pre>
 <p>Returns whether two texts differ.</p>
@@ -20529,7 +20614,32 @@ included. Runs in O(size). To compare with a <code>String</code>, put the
 <ul>
 <li>true when the bytes differ</li>
 </ul>
-<h4 id="operator--12"><a class="header" href="#operator--12">operator +</a></h4>
+<h4 id="operator--18"><a class="header" href="#operator--18">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: String): bool
+</code></pre>
+<p>Returns whether this text holds the same bytes as the String <code>rhs</code>.
+Runs in O(size) and copies nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both hold the same bytes</li>
+</ul>
+<h4 id="operator--19"><a class="header" href="#operator--19">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: String): bool
+</code></pre>
+<p>Returns whether this text differs from the String <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the bytes differ</li>
+</ul>
+<h4 id="operator--20"><a class="header" href="#operator--20">operator +</a></h4>
 <pre><code class="language-pepper">+(rhs: String): String
 </code></pre>
 <p>Returns a new String: this text followed by <code>rhs</code>.</p>
@@ -20668,7 +20778,7 @@ matches.</p>
 <ul>
 <li>a negative number, 0, or a positive number when this text sorts before, the same as, or after <code>other</code></li>
 </ul>
-<h4 id="operator--13"><a class="header" href="#operator--13">operator &lt;</a></h4>
+<h4 id="operator--21"><a class="header" href="#operator--21">operator &lt;</a></h4>
 <pre><code class="language-pepper">&lt;(other: StringConstant): bool
 </code></pre>
 <p>Returns whether this text sorts before <code>other</code>, byte by byte.</p>
@@ -20680,7 +20790,19 @@ matches.</p>
 <ul>
 <li>true when the byte-by-byte order is negative</li>
 </ul>
-<h4 id="operator--14"><a class="header" href="#operator--14">operator &lt;=</a></h4>
+<h4 id="operator--22"><a class="header" href="#operator--22">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: String): bool
+</code></pre>
+<p>Returns whether this text sorts before the String <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is negative</li>
+</ul>
+<h4 id="operator--23"><a class="header" href="#operator--23">operator &lt;=</a></h4>
 <pre><code class="language-pepper">&lt;=(other: StringConstant): bool
 </code></pre>
 <p>Returns whether this text sorts before or the same as <code>other</code>, byte by byte.</p>
@@ -20692,7 +20814,19 @@ matches.</p>
 <ul>
 <li>true when the byte-by-byte order is not positive</li>
 </ul>
-<h4 id="operator--15"><a class="header" href="#operator--15">operator &gt;</a></h4>
+<h4 id="operator--24"><a class="header" href="#operator--24">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: String): bool
+</code></pre>
+<p>Returns whether this text sorts before or the same as the String <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not positive</li>
+</ul>
+<h4 id="operator--25"><a class="header" href="#operator--25">operator &gt;</a></h4>
 <pre><code class="language-pepper">&gt;(other: StringConstant): bool
 </code></pre>
 <p>Returns whether this text sorts after <code>other</code>, byte by byte.</p>
@@ -20704,13 +20838,37 @@ matches.</p>
 <ul>
 <li>true when the byte-by-byte order is positive</li>
 </ul>
-<h4 id="operator--16"><a class="header" href="#operator--16">operator &gt;=</a></h4>
+<h4 id="operator--26"><a class="header" href="#operator--26">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: String): bool
+</code></pre>
+<p>Returns whether this text sorts after the String <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is positive</li>
+</ul>
+<h4 id="operator--27"><a class="header" href="#operator--27">operator &gt;=</a></h4>
 <pre><code class="language-pepper">&gt;=(other: StringConstant): bool
 </code></pre>
 <p>Returns whether this text sorts after or the same as <code>other</code>, byte by byte.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not negative</li>
+</ul>
+<h4 id="operator--28"><a class="header" href="#operator--28">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: String): bool
+</code></pre>
+<p>Returns whether this text sorts after or the same as the String <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -24924,7 +25082,7 @@ Does not change the elements or invalidate iterators.</p>
 <ul>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
-<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
+<h4 id="operator--29"><a class="header" href="#operator--29">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong): T
 </code></pre>
 <p>Returns the element at <code>idx</code>; this is the indexer read <code>a[idx]</code>.</p>
@@ -25660,7 +25818,7 @@ table grows. Expected O(1).</p>
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--18"><a class="header" href="#operator--18">operator []</a></h4>
+<h4 id="operator--30"><a class="header" href="#operator--30">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: returns the value for <code>key</code>, or the default of <code>V</code>
@@ -26204,7 +26362,7 @@ key and value. Does nothing when <code>key</code> is absent. O(log count).</p>
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--19"><a class="header" href="#operator--19">operator []</a></h4>
+<h4 id="operator--31"><a class="header" href="#operator--31">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
@@ -26755,7 +26913,7 @@ key and value. The other entries keep their order. Does nothing when
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--20"><a class="header" href="#operator--20">operator []</a></h4>
+<h4 id="operator--32"><a class="header" href="#operator--32">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
@@ -27774,7 +27932,7 @@ if (missing.is_empty()) { print("missing"); }
 <ul>
 <li>true when the optional is Empty</li>
 </ul>
-<h4 id="operator--21"><a class="header" href="#operator--21">operator !!</a></h4>
+<h4 id="operator--33"><a class="header" href="#operator--33">operator !!</a></h4>
 <pre><code class="language-pepper">!!(): bool
 </code></pre>
 <p>Reports whether this optional holds a value: the truth test, so an
@@ -29330,7 +29488,7 @@ if (real.is_ok()) {
     print(real.value().to_string());
 }
 </code></pre>
-<h4 id="operator--22"><a class="header" href="#operator--22">operator ==</a></h4>
+<h4 id="operator--34"><a class="header" href="#operator--34">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths have exactly the same text. The comparison
@@ -30886,7 +31044,7 @@ IPv4-mapped address).</p>
 <ul>
 <li>the text form, which <code>IpAddress.parse</code> reads back</li>
 </ul>
-<h4 id="operator--23"><a class="header" href="#operator--23">operator ==</a></h4>
+<h4 id="operator--35"><a class="header" href="#operator--35">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses are the same: same family and same
@@ -35262,7 +35420,7 @@ down.</p>
 <ul>
 <li>true for a zero-length duration</li>
 </ul>
-<h4 id="operator--24"><a class="header" href="#operator--24">operator +</a></h4>
+<h4 id="operator--36"><a class="header" href="#operator--36">operator +</a></h4>
 <pre><code class="language-pepper">+(other: Duration): Duration
 </code></pre>
 <p>Returns the sum of two durations.</p>
@@ -36932,7 +37090,7 @@ list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
 <h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
-<h4 id="operator--25"><a class="header" href="#operator--25">operator []</a></h4>
+<h4 id="operator--37"><a class="header" href="#operator--37">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
 <p>Reads <code>value[key]</code>: the member named <code>key</code> of an object.</p>
@@ -39400,7 +39558,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--26"><a class="header" href="#operator--26">operator []</a></h4>
+<h4 id="operator--38"><a class="header" href="#operator--38">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
