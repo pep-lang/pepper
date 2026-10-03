@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
+            window.path_to_searchindex_js = "../searchindex-1bc57b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2a342c12.js"></script>
@@ -213,7 +213,7 @@ main(): int {
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
 member of it; the files of one <a href="modules.html#modules">module</a> may share a
-set. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
+set, and so do the sets a file imports and its own functions of that name. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
 set too, and so are its static methods, its operators, its
 <a href="#constructors">constructors</a>, and the methods its
 <a href="#extensions-and-traits">extensions</a> add.</p>
@@ -235,9 +235,9 @@ main.pep:1:1: note: previous declaration is here
 a <code>redefinition of 'f'</code>.</p>
 </li>
 <li>
-<p><strong>A file’s own functions hide imported ones.</strong> A file’s functions of a
-name hide an imported function of that name: a file cannot add
-members to an imported set.</p>
+<p><strong>A file’s own functions join imported ones.</strong> A file’s functions of a
+name and the functions its imports bind to that name are one set (see
+<a href="#imported-sets-merge">Imported sets merge</a>).</p>
 </li>
 </ul>
 <h3 id="files-of-one-module-share-a-set"><a class="header" href="#files-of-one-module-share-a-set">Files of one module share a set</a></h3>
@@ -271,9 +271,54 @@ same set. Members from different files must still differ in their
 parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
 such as two structs <code>Point</code>, and a renaming re-export
 (<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
-<p>Two modules’ sets do not merge. When two imported modules, or two files
-outside any module, each export a set named <code>parse</code>, an unqualified <code>parse(…)</code> is an error (<code>'parse' is ambiguous: more than one import provides it</code>), even when their parameters differ. A qualifier
-(<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</p>
+<h3 id="imported-sets-merge"><a class="header" href="#imported-sets-merge">Imported sets merge</a></h3>
+<p>Sets of one name from different modules merge too, as they do in Swift:
+where two imports bind <code>describe</code>, and where the file declares <code>describe</code>
+itself, an unqualified <code>describe(…)</code> picks among every member. Here two
+modules each export one member and the file adds a third:</p>
+<pre><code class="language-pepper">export describe(n: int): String {
+    return "a number";
+}
+</code></pre>
+<pre><code class="language-pepper">export describe(flag: bool): String {
+    return "a flag";
+}
+</code></pre>
+<pre><code class="language-pepper">import "numbers";
+import "flags";
+
+# The file's own `describe` joins the two modules' sets.
+describe(text: String): String {
+    return "some text";
+}
+
+main(): int {
+    assert(describe(3) == "a number", "numbers' member");
+    assert(describe(true) == "a flag", "flags' member");
+    assert(describe("hi") == "some text", "this file's member");
+    return 0;
+}
+</code></pre>
+<p>Unlike files of one module, two modules may each export a member with the
+same parameters. That is no error until a call cannot tell them apart:</p>
+<pre><code class="language-text">main.pep:3:22: error: call to 'parse' is ambiguous
+    3 | main(): int { return parse(1); }
+      |                      ^~~~~
+a.pep:1:8: note: candidate function
+    1 | export parse(x: int): int { return 1; }
+      |        ^~~~~
+b.pep:1:8: note: candidate function
+    1 | export parse(x: int): int { return 2; }
+      |        ^~~~~
+</code></pre>
+<p>A qualifier (<code>a.parse(1)</code>) picks one module’s set. A file’s own member
+hides an imported member with the same parameters, so a file can replace
+one member of an imported set. Only functions merge: a struct or variable
+of the name hides imported functions of it (or, named in an import list,
+is <code>'parse' is imported but also declared in this file</code>), and the
+<a href="modules.html">prelude</a>’s functions, such as the runtime’s <code>print</code>, are
+hidden by a file’s own or imported functions of the name rather than
+joined.</p>
 <h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
 <p>Exported members are what other files see; a private member is a candidate
 only for calls in its own file. Here <code>shapes.pep</code> exports <code>area(int)</code> and
@@ -675,9 +720,9 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Overloads across modules</strong> do not merge: two modules’ sets of one name
-are ambiguous where both are imported, and a file’s own functions of a
-name hide an imported set of that name.</li>
+<li><strong>Joining the runtime’s sets</strong>: a file’s own or imported functions of a
+name that the runtime declares (<code>print</code>, <code>to_string</code>) hide the runtime’s
+functions of that name instead of joining them.</li>
 </ul>
 
                     </main>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
+            window.path_to_searchindex_js = "../searchindex-1bc57b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2a342c12.js"></script>
@@ -308,8 +308,9 @@ main(): int {
 <code>regex.Match</code> implement <code>ToString</code>. An enum is
 interpolated through a <code>to_string()</code> method it declares (<code>return name();</code>
 gives the case’s name).</p>
-<p>A plain overload such as <code>to_string(p: Point)</code> is not used: overloads of a name do not merge across modules (see
-<a href="overloading.html#files-of-one-module-share-a-set">overloading</a>), so the runtime cannot see yours. Write a
+<p>A plain overload such as <code>to_string(p: Point)</code> is not used: the runtime’s
+code does not import your file, so it cannot see yours (see
+<a href="overloading.html#imported-sets-merge">overloading</a>). Write a
 <code>to_string&lt;Point&gt;</code> override or a method instead.</p>
 <h2 id="format-specifications"><a class="header" href="#format-specifications">Format specifications</a></h2>
 <p>A <code>:</code> after the expression starts a format specification, which pads the

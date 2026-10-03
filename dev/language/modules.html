@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
+            window.path_to_searchindex_js = "../searchindex-1bc57b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2a342c12.js"></script>
@@ -411,8 +411,8 @@ stay visible only as they always are.</p>
 <p><strong>Collisions are errors.</strong> If two re-exports, or a re-export and one of the
 file’s own exports, publish one name for different declarations, the
 compiler reports it at the <code>export ... from</code> that adds the second one. List the names you want instead, or
-rename one with <code>as</code>. The exception is functions of one name from files
-of the same module: they join one
+rename one with <code>as</code>. The exception is functions declared under one
+name: they join one
 <a href="overloading.html#files-of-one-module-share-a-set">overload set</a>.
 Anything else collides:</p>
 <pre><code class="language-text">shapes/module.pep:2:1: error: 'area' is exported twice by module 'shapes'
@@ -521,12 +521,14 @@ comparisons.</li>
 parameter, or struct member hides a qualifier or an imported name of the
 same name.</li>
 <li><strong>A file may not import a name it also declares</strong> at top level:
-<code>'make' is imported but also declared in this file</code>.</li>
+<code>'make' is imported but also declared in this file</code>. Functions are the
+exception: a file’s own functions of a name join the imported ones in
+one <a href="overloading.html#imported-sets-merge">overload set</a>.</li>
 <li><strong>An import list wins.</strong> A name listed in <code>import [...]</code> takes priority over
 the same name from a whole-file import. When two whole-file imports provide
 the same name differently, using that name is an error because it is
-ambiguous, unless both are functions of that name from files of one
-module, which join one <a href="overloading.html#files-of-one-module-share-a-set">overload set</a>.</li>
+ambiguous, unless both are functions declared under that name, which
+join one <a href="overloading.html#imported-sets-merge">overload set</a>.</li>
 <li><strong>A local may share an imported declaration’s name.</strong> If <code>g.rect_area</code> is
 <code>shapes.pep</code>’s <code>area</code>, calling <code>g.rect_area(1, 2)</code> inside a function with a
 parameter named <code>area</code> calls <code>shapes.pep</code>’s function. The one exception is a
