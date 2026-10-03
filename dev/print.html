@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-05135ecb.js";
+            window.path_to_searchindex_js = "searchindex-dc5c0259.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4d1777b9.js"></script>
@@ -47181,14 +47181,15 @@ and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
 <p>The repository has two kinds of tests, split by what they check.</p>
 <ul>
 <li><strong>The runtime and the Pepper tools</strong> are tested in Pepper: <code>[Test]</code>
-functions (see <a href="#unit-tests">Unit tests</a>) that
-<a href="#testing-with-pep-test"><code>pep-test</code></a> builds and runs.</li>
+functions (see <a href="#unit-tests">Unit tests</a>) that <code>pepper test</code>
+(<a href="#testing-with-pep-test"><code>pep-test</code></a>) builds and runs.</li>
 <li><strong>The compiler</strong> is tested in Rust: diagnostics, codegen and IR facts,
 reference-count order, optimization, linking, cross-compiling, debug
 info, the build cache, the documentation checks, and the drivers. These
 live in <code>crates/*/tests/</code> and the root package’s <code>tests/*.rs</code> (see
-<code>INTERNALS.md</code>, section 9).</li>
+<code>INTERNALS.md</code>, section 9), and <code>cargo test --workspace</code> runs them.</li>
 </ul>
+<p>The two run separately, and CI runs both on every platform.</p>
 <p>A test that checks a library function’s result belongs with the runtime; a
 test that checks what the compiler emits or reports stays in Rust.</p>
 <h2 id="where-runtime-tests-live"><a class="header" href="#where-runtime-tests-live">Where runtime tests live</a></h2>
@@ -47210,22 +47211,35 @@ source file, which only a test of private internals needs. The reference
 generator and the doc-comment check skip <code>test/</code> folders, so a test file
 needs no <code>##</code> comments.</p>
 <h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
-<pre><code class="language-bash">cargo build --release
-target/release/pep-build -I tools tools/pep-test/main.pep -o target/release/pep-test
-cd runtime
-../target/release/pep-test                       # every runtime test
-../target/release/pep-test json/test             # one module's
-../target/release/pep-test -f parses test        # by name
+<p><code>scripts/pepper-tests.sh</code> runs them all:</p>
+<pre><code class="language-bash">cargo build                                      # or --release
+scripts/pepper-tests.sh                          # every runtime and tool test
+scripts/pepper-tests.sh -f parses                # by name, in each run
+</code></pre>
+<p>It builds <code>pepper</code> and <code>pep-test</code> with the <code>pep-build</code> you built (the
+release build if there is one, else the debug build; a folder given as the
+first argument overrides it), puts them beside it, and runs <code>pepper test</code>:</p>
+<ul>
+<li>in <code>runtime/</code>, every runtime test;</li>
+<li>in <code>runtime/</code>, the <code>compress</code> tests again with <code>-D USE_ZLIB</code> and the
+<code>digest</code> tests with <code>-D USE_LIBCRYPTO</code>, which link the system’s zlib and
+libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a folder
+holding <code>zlib.lib</code>, and is skipped without it);</li>
+<li>in <code>tools/</code>, with <code>-I .</code>, the tools’ tests.</li>
+</ul>
+<p>Once <code>pepper</code> is built, run any part of them by hand:</p>
+<pre><code class="language-bash">cd runtime
+pepper test                       # every runtime test
+pepper test json/test             # one module's
+pepper test -f parses test        # by name
 </code></pre>
 <p>Tests run with <code>runtime/</code> as the current folder, so a test reads data
 files kept beside it by a path from there (<code>archive/test/gnu.tar.gz</code>).
 The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writes
 files uses a fresh folder under the system’s temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
-<p><code>cargo test --workspace</code> runs them all too, on every platform CI runs:
-<code>the_runtime_tests_pass</code> in the root package’s <code>tests/pep_test_tool.rs</code>
-builds <code>pep-test</code> with this source’s <code>pep-build</code> and runs it in
-<code>runtime/</code>.</p>
+<p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo test --workspace</code> on
+Linux, macOS and Windows.</p>
 <h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
 <p>Each test counts the runtime’s live allocations before and after it runs,
 and fails when they differ:</p>
