@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4bd6f042.js";
+            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -225,7 +225,8 @@ not match the runtime, and CI runs it.</p>
 <p>What the compiler provides rather than the runtime declares is still
 declared in the runtime, marked <code>[__BuiltIn]</code>: <code>runtime/reflect.pep</code>
 declares the <code>reflect</code> functions of <code>static</code> blocks and the values they
-return. The compiler ignores such a declaration (its body is only <code>{}</code>), so
+return. The compiler ignores such a declaration (its functions and methods end in
+<code>;</code>, with no body), so
 it costs nothing and cannot clash with the built-in; the reference, the doc
 comment check and the language server read it like any other. A string
 argument names the built-in when it is not the declaration’s own name:
