@@ -8,6 +8,7 @@
 ##
 ## - [Tar archives](archive-tar.md): `TarReader`, `TarWriter`, `TarEntry`,
 ##   `EntryKind`
+## - [Entry paths](archive-path.md): `safe_components`
 ##
 ## @example
 ##     import archive;
@@ -28,9 +29,11 @@
 
 # This file only gathers the module's public API from its other files.
 
+import "path";
 import "tar";
 
 export EntryKind;
+export safe_components;
 export TarEntry;
 export TarReader;
 export TarWriter;

@@ -1,7 +1,7 @@
 //! The `archive` module: tar archives written and read back (long paths
 //! through the ustar prefix and pax headers), archives made by GNU tar and
 //! Python's tarfile, `.tar.gz` through `compress`, extraction with
-//! `strip_components`, unsafe paths, and damaged archives. Each check
+//! `strip_components`, unsafe paths (`archive.safe_components`), and damaged archives. Each check
 //! returns 0 on success or a distinct negative code per check, and must
 //! leave no allocation behind.
 
@@ -165,11 +165,23 @@ reports_damaged_archives(): int {
     if (archive.TarReader(io.ByteReader(Array<u8>())).next_entry().value().is_value()) { return -4; }
     return 0;
 }
+
+checks_entry_paths(): int {
+    var parts = archive.safe_components("a//./b/c.txt").value();
+    if (parts.count != 3 || parts[0] != "a" || parts[2] != "c.txt") { return -1; }
+    if (archive.safe_components("").value().count != 0) { return -2; }
+    for (var unsafe in ["/etc/passwd", "a/../../b", "..", "a\\b", "C:/x", "c:x"]) {
+        if (archive.safe_components(unsafe).is_value()) { return -3; }
+    }
+    var error = io.IoError.invalid_input("data.bin: bad header");
+    if (!error.is_invalid_input() || error.message != "data.bin: bad header") { return -4; }
+    return 0;
+}
 "##;
 
 /// Each check is a function of one program, compiled once.
 #[test]
 fn tar_archives() {
     let program = PROGRAM.replace("SCRATCH", &support::scratch_name("tar_extract"));
-    support::jit_cases(&program, &["writes_and_reads_back", "reads_archives_from_other_tools", "extracts_into_a_directory", "reports_damaged_archives"]);
+    support::jit_cases(&program, &["writes_and_reads_back", "reads_archives_from_other_tools", "extracts_into_a_directory", "reports_damaged_archives", "checks_entry_paths"]);
 }

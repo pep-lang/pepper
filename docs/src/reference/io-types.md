@@ -403,6 +403,30 @@ between (including one that allocates) may overwrite the code.
 **Returns**
 - an error holding the current `errno` / `GetLastError()` code and its message
 
+#### invalid_input
+
+```pepper
+static invalid_input(message: String): IoError
+```
+
+Makes an error for data or an argument that is not valid, such as a
+damaged file a library parses, with the platform's code for invalid
+input, so `is_invalid_input()` holds.
+
+**Parameters**
+- `message` — what is wrong
+
+**Returns**
+- the error
+
+**Example**
+```pepper
+import io;
+
+var error = io.IoError.invalid_input("data.bin: bad header");
+assert(error.is_invalid_input(), "the kind");
+```
+
 ### Methods
 
 #### kind

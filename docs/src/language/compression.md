@@ -99,7 +99,9 @@ the directory `target`:
 
 - It refuses, with an `is_invalid_input()` error, an entry whose path is
   absolute or holds a `..` component, a `\` or a `:`, so an archive cannot
-  write outside `target`.
+  write outside `target`. `archive.safe_components(path)` is that check,
+  for readers of other formats: it gives the path's components, or Empty
+  for an unsafe path.
 - `strip_components` drops leading path components, as tar's
   `--strip-components` does. A GitHub snapshot puts everything under
   `name-version/`, which `strip_components = 1` removes.
@@ -113,4 +115,37 @@ the directory `target`:
 data)` for any header, and `append_stream(entry, source)` to copy
 `entry.size` bytes from a stream. `finish()` writes the end marker.
 Paths longer than a ustar header holds get a pax header, so none is cut
-short. `.zip` archives are not supported yet.
+short.
+
+## Zip archives
+
+`.zip` archives are read and written by the
+[zip package](https://github.com/justinboswell/pepper-zip), which builds
+on `compress` and `archive`. It is a package rather than part of the
+runtime because the package manager needs only `.tar.gz`; add it with
+`pepper package add justinboswell/pepper-zip --name zip`.
+
+```pepper
+import zip;
+
+main(): int {
+    var writer = zip.Writer.create("bundle.zip").value();
+    writer.add("version.txt", "1.0.0".bytes()).value();
+    writer.finish().value();
+
+    var archive = zip.Archive.open("bundle.zip").value();
+    for (var entry in archive.entries()) {
+        print($"{entry.name}: {entry.size} bytes");
+    }
+    archive.extract_all("out").value();
+    return 0;
+}
+```
+
+- It reads and writes stored and DEFLATE entries, ZIP64 (archives and
+  entries past 4 GiB, more than 65,535 entries), and UTF-8 names; names in
+  older archives are decoded as code page 437 (`text.CodePage437`).
+- Entries compressed another way (bzip2, LZMA, zstd) or encrypted are
+  listed, and reading one is an error naming the entry and the method.
+- `extract_all` checks every name with `archive.safe_components` before
+  writing anything, and each entry's CRC-32 as it is written.

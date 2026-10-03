@@ -18,6 +18,13 @@ main(): int {
     assert(text.Ascii.encode(greeting).is_empty(), "not ASCII");
     assert(text.Ascii.encode_lossy("é").count == 1, "one '?'");
 
+    # Code page 437, as old zip archives name entries: é is 0x82, and every
+    # byte decodes, so decode gives a String.
+    var dos = text.CodePage437.encode("café").value();
+    assert(dos.count == 4 && dos[3] == 0x82, "one byte each");
+    assert(text.CodePage437.decode(dos) == "café", "round trip");
+    assert(text.CodePage437.encode(greeting).is_empty(), "no 🙂 in code page 437");
+
     # Strict decoding rejects invalid bytes; lossy decoding replaces them.
     var bad = Array<u8>();
     bad.append(104);

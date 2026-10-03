@@ -12,6 +12,7 @@ in a `compress.CompressWriter` to write one. A damaged archive is an
 
 - [Tar archives](archive-tar.md): `TarReader`, `TarWriter`, `TarEntry`,
   `EntryKind`
+- [Entry paths](archive-path.md): `safe_components`
 
 **Example**
 ```pepper

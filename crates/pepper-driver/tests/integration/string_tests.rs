@@ -431,10 +431,22 @@ test(): int {
     if (!(q.count == 3 && q[1] == 63)) { return -12; }
     if (!(text.Ascii.decode(bad).is_empty())) { return -13; }
     if (!(text.Ascii.decode_lossy(bad) == "h\u{FFFD}")) { return -14; }
+    var all = Array<u8>();
+    var byte = 0;
+    while (byte < 256) {
+        all.append(byte as u8);
+        byte += 1;
+    }
+    var dos = text.CodePage437.decode(all);
+    if (!(text.CodePage437.encode(dos).value() == all)) { return -16; }
+    if (!(text.CodePage437.decode(text.CodePage437.encode("Ç░α").value()) == "Ç░α")) { return -17; }
+    if (!(text.CodePage437.encode("a€").is_empty())) { return -18; }
+    if (!(text.CodePage437.encode_lossy("a€b") == "a?b".bytes())) { return -19; }
     var before = _pep_live_allocs();
     {
         var x = text.Utf16.decode_lossy(text.Utf16.encode(s));
         var y = text.Ascii.encode_lossy(x);
+        var z = text.CodePage437.decode(text.CodePage437.encode_lossy(x));
     }
     if (!(_pep_live_allocs() == before)) { return -15; }
     return 0;

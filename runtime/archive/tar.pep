@@ -4,6 +4,7 @@
 
 import io;
 import text;
+import "path";
 
 ## What a tar entry is.
 export enum EntryKind {
@@ -476,26 +477,17 @@ _tar_join(base: io.Path, components: String[]): io.Path {
 }
 
 # The components of archive path `path` after the first `strip` are
-# dropped, empty and `.` components left out; an error for a path that
-# could reach outside the directory it is extracted into.
+# dropped; an error for a path that could reach outside the directory it is
+# extracted into.
 _tar_safe_components(path: String, strip: ulong): io.IoResult<String[]> {
-    var unsafe = io.IoResult<String[]>.err(_tar_error($"tar entry '{path}' has an unsafe path"));
-    if (path.starts_with("/") || path.contains("\\") || path.contains(":")) {
-        return unsafe;
-    }
-    var components = Array<String>();
-    for (var component in path.split("/")) {
-        if (component == "..") {
-            return unsafe;
-        }
-        if (!component.is_empty && component != ".") {
-            components.append(component);
-        }
+    var components = safe_components(path);
+    if (components.is_empty()) {
+        return io.IoResult<String[]>.err(_tar_error($"tar entry '{path}' has an unsafe path"));
     }
     var kept = Array<String>();
     var index = strip;
-    while (index < components.count) {
-        kept.append(components[index]);
+    while (index < components.value().count) {
+        kept.append(components.value()[index]);
         index += 1;
     }
     return io.IoResult<String[]>.ok(kept);

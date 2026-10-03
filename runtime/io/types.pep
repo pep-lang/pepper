@@ -232,6 +232,21 @@ export struct IoError {
         return IoError(code, _io_sys_error_message(code));
     }
 
+    ## Makes an error for data or an argument that is not valid, such as a
+    ## damaged file a library parses, with the platform's code for invalid
+    ## input, so `is_invalid_input()` holds.
+    ##
+    ## @param message what is wrong
+    ## @returns the error
+    ## @example
+    ##     import io;
+    ##
+    ##     var error = io.IoError.invalid_input("data.bin: bad header");
+    ##     assert(error.is_invalid_input(), "the kind");
+    static invalid_input(message: String): IoError {
+        return IoError(_io_sys_code_invalid_input(), message);
+    }
+
     ## Returns the portable kind of the error: `code` sorted by the codes the
     ## current platform uses for each kind. Each predicate below is
     ## `kind() == ErrorKind.X` for its kind.
