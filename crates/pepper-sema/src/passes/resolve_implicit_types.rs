@@ -652,9 +652,11 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             if let Some(ty) = scopes.tables.functions.get(name) {
                 return ty.clone();
             }
-            // Constructor-style call `Name<...>(...)` resolves to Name<...>.
-            if scopes.tables.struct_bases.contains(name) {
-                return crate::passes::gather_generics::parse_type_string(function);
+            // Constructor-style call `Name<...>(...)` resolves to Name<...>;
+            // one of several overloaded constructors (`Name$2`) too.
+            let constructed = crate::passes::overloads::set_name(function);
+            if scopes.tables.struct_bases.contains(constructed.split('<').next().unwrap_or(constructed).trim()) {
+                return crate::passes::gather_generics::parse_type_string(constructed);
             }
             TypeName::auto()
         }

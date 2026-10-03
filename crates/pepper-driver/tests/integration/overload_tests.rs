@@ -562,6 +562,39 @@ test(): int {
     assert_eq!(value(source), 111);
 }
 
+/// A `var` initialized from a chain on an overloaded constructor's
+/// temporary is inferred when the chain needs a specialization made only
+/// after the constructor call resolved (`Optional<Found>.value()`): once
+/// resolved, `Finder$1(...)` is a `Finder` (#563).
+#[test]
+fn a_var_from_a_chain_on_an_overloaded_constructor_is_inferred() {
+    let source = r#"
+struct Found {
+    var at: int = 0;
+    construct(this.at = 0) {}
+}
+struct Finder {
+    var start: int = 0;
+    construct(text: String) { start = 3; }
+    construct(start: int) { this.start = start; }
+    find(): Found? { return Optional<Found>.Value(Found(start)); }
+}
+struct Holder<T> {
+    var value: T;
+    construct(v: T) { value = v; }
+    construct(a: T, b: T) { value = b; }
+    find(): Found? { return Optional<Found>.Value(Found(40)); }
+}
+test(): int {
+    var a = Finder("x").find().value();
+    var b = Finder(500).find().value();
+    var c = Holder<int>(1, 2).find().value();
+    return a.at + b.at + c.at;
+}
+"#;
+    assert_eq!(value(source), 543);
+}
+
 #[test]
 fn an_overloaded_constructor_is_a_function_value_by_type() {
     let source = r#"
