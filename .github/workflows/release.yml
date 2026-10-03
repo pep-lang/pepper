@@ -1,0 +1,177 @@
+# Builds the Pepper toolchain for each platform and publishes it on the
+# release, for the install scripts (scripts/install.sh, scripts/install.ps1)
+# to download.
+#
+# Each leg runs scripts/release-build.sh, which builds `pep-build` and the
+# other tools, lays them out as an install (bin/, runtime/), archives that as
+# `pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`
+# beside it, and smoke-tests the archive with scripts/release-smoke-test.sh:
+# unpacked outside the checkout with no LLVM variables set, `pepper build`
+# must build and run a program, and the binaries must load nothing a user
+# might not have.
+#
+#   linux-x64     ubuntu-latest, inside a manylinux_2_28 container, so the
+#                 binaries need only glibc 2.28 (RHEL 8, Debian 10 and later)
+#   macos-arm64   the self-hosted arm64 Mac
+#   macos-x64     a hosted Intel Mac: an arm64 Homebrew's LLVM cannot link
+#                 into an x86_64 pep-build
+#   windows-x64   the self-hosted Windows runner
+#
+# A vX.Y.Z tag publishes: the archives, their checksums, SHA256SUMS and the
+# install scripts go on the vX.Y.Z release (created if the tag has none
+# yet; repeat runs replace the assets). A dispatch, or a pull request that
+# changes the release scripts, builds and tests every leg and keeps the
+# archives as run artifacts.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/release-build.sh
+      - scripts/release-smoke-test.sh
+      - scripts/install.sh
+      - scripts/install.ps1
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runs-on: ubuntu-latest, container: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { target: macos-arm64, runs-on: pepper-macos, container: "" }
+          - { target: macos-x64, runs-on: macos-15-intel, container: "" }
+          - { target: windows-x64, runs-on: pepper-windows, container: "" }
+    runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
+    # LLVM provisioning plus a release build of the compiler, from cold on
+    # the hosted legs.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Checkout's clean step deletes target/, so a self-hosted runner builds
+      # beside the checkout instead, as in the CI workflow.
+      - name: Use persistent target dir (self-hosted)
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-release" >> "$GITHUB_ENV"
+
+      # The tag without its `v`, or `dev` for a build that publishes nothing.
+      - name: Version
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = tag ]; then
+            echo "PEPPER_VERSION=${REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "PEPPER_VERSION=dev" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build, package and smoke-test
+        shell: bash
+        env:
+          # ci-provision-llvm.sh reads the LLVM package from this repository's
+          # releases on Windows.
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.target }}
+        run: bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist
+
+      # Install the archive just built with the install script, which then
+      # builds and runs a program with it. Without a terminal to ask on,
+      # the script installs no prerequisites.
+      - name: Test install.sh
+        if: matrix.target != 'windows-x64'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euxo pipefail
+          sh scripts/install.sh --archive "dist/pepper-$PEPPER_VERSION-$TARGET.tar.gz" \
+            --prefix "$RUNNER_TEMP/pepper-home" --no-modify-path < /dev/null
+          sh scripts/install.sh --uninstall --prefix "$RUNNER_TEMP/pepper-home"
+          test ! -e "$RUNNER_TEMP/pepper-home"
+
+      # Under Windows PowerShell 5.1, which `irm ... | iex` runs in on most
+      # machines. This runner is a person's computer, so the script installs
+      # no prerequisites here.
+      - name: Test install.ps1
+        if: matrix.target == 'windows-x64'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $prefix = Join-Path $env:RUNNER_TEMP 'pepper-home'
+          .\scripts\install.ps1 -Archive "dist\pepper-$env:PEPPER_VERSION-windows-x64.zip" -Prefix $prefix -NoModifyPath -NoPrerequisites
+          .\scripts\install.ps1 -Uninstall -Prefix $prefix
+          if (Test-Path $prefix) { throw "$prefix is still there after -Uninstall" }
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: pepper-${{ matrix.target }}
+          path: |
+            dist/pepper-*.tar.gz
+            dist/pepper-*.zip
+            dist/pepper-*.sha256
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Collect archives
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euxo pipefail
+          cd dist
+          cat pepper-*.sha256 > SHA256SUMS
+          cat SHA256SUMS
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            printf '%s\n' \
+              "Pepper $TAG." \
+              "" \
+              "Install it with scripts/install.sh (Linux, macOS) or scripts/install.ps1 (Windows);" \
+              "see https://justinboswell.github.io/pepper/tools/install.html." \
+              > "$RUNNER_TEMP/notes.md"
+            # Another workflow on the same tag may create it in between.
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Pepper $TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              || gh release view "$TAG" >/dev/null
+          fi
+          gh release upload "$TAG" pepper-* SHA256SUMS ../scripts/install.sh ../scripts/install.ps1 --clobber

@@ -61,16 +61,97 @@ compile_error!(
      --features llvm18-1|llvm19-1|llvm20-1|llvm21-1|llvm22-1"
 );
 
-/// The link driver to invoke.
+/// The link driver to invoke: [`find_link_driver`]'s, or plain `clang`
+/// (which then fails to start) when there is none.
 pub fn link_driver() -> PathBuf {
-    let exe = if cfg!(windows) { "clang.exe" } else { "clang" };
+    find_link_driver().unwrap_or_else(|| PathBuf::from(executable_name("clang")))
+}
+
+/// The `clang` to link with, the first that exists of: the one in the LLVM
+/// install this compiler links against (`LLVM_SYS_<major>_PREFIX`, set in a
+/// development checkout), the one beside the running compiler, the first on
+/// the PATH (`clang`, then this LLVM's `clang-<major>`, which is all
+/// Ubuntu's `clang-<major>` package puts there), and then one in a folder
+/// where the platform's LLVM packages install it ([`llvm_install_dirs`]).
+/// An installed compiler has no prefix variable, so it relies on the rest.
+pub fn find_link_driver() -> Option<PathBuf> {
+    let exe = executable_name("clang");
+    let mut candidates: Vec<PathBuf> = vec![];
     if let Ok(prefix) = std::env::var(LLVM_PREFIX_ENV) {
-        let candidate = Path::new(&prefix).join("bin").join(exe);
-        if candidate.is_file() {
-            return candidate;
-        }
+        candidates.push(Path::new(&prefix).join("bin").join(&exe));
     }
-    PathBuf::from(exe)
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        candidates.push(dir.join(&exe));
+    }
+    let path: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect();
+    for name in [exe.clone(), executable_name(&format!("clang-{}", LLVM_MAJOR))] {
+        candidates.extend(path.iter().map(|dir| dir.join(&name)));
+    }
+    candidates.extend(llvm_install_dirs().into_iter().map(|dir| dir.join(&exe)));
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+/// `name` as an executable's file name on the host: `name.exe` on Windows.
+fn executable_name(name: &str) -> String {
+    if cfg!(windows) { format!("{}.exe", name) } else { name.to_string() }
+}
+
+/// The folders LLVM's packages install `clang` in when they leave it off the
+/// PATH: the llvm.org Windows installer's (which winget and Chocolatey run)
+/// and Scoop's; Homebrew's keg-only `llvm` and `llvm@<major>` on Apple
+/// silicon and Intel; Debian and Ubuntu's `/usr/lib/llvm-<major>`, this
+/// LLVM's major first, then the newest.
+fn llvm_install_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = vec![];
+    if cfg!(windows) {
+        for variable in ["ProgramFiles", "ProgramW6432"] {
+            if let Some(dir) = std::env::var_os(variable) {
+                dirs.push(Path::new(&dir).join("LLVM").join("bin"));
+            }
+        }
+        if let Some(home) = std::env::var_os("USERPROFILE") {
+            dirs.push(Path::new(&home).join("scoop").join("apps").join("llvm").join("current").join("bin"));
+        }
+    } else if cfg!(target_os = "macos") {
+        for root in ["/opt/homebrew/opt", "/usr/local/opt"] {
+            dirs.push(Path::new(root).join("llvm").join("bin"));
+            dirs.push(Path::new(root).join(format!("llvm@{}", LLVM_MAJOR)).join("bin"));
+        }
+    } else {
+        dirs.push(PathBuf::from(format!("/usr/lib/llvm-{}/bin", LLVM_MAJOR)));
+        let mut others: Vec<(u32, PathBuf)> = std::fs::read_dir("/usr/lib")
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let major = name.strip_prefix("llvm-")?.parse().ok()?;
+                Some((major, e.path().join("bin")))
+            })
+            .collect();
+        others.sort_by(|a, b| b.0.cmp(&a.0));
+        dirs.extend(others.into_iter().map(|(_, dir)| dir));
+    }
+    dirs
+}
+
+/// Why a link cannot start when [`find_link_driver`] finds no clang, and
+/// what to install on this platform.
+fn missing_link_driver() -> String {
+    let install = if cfg!(windows) {
+        "install LLVM with 'winget install LLVM.LLVM' (or 'scoop install llvm', or 'choco install llvm'), \
+         and the Visual Studio Build Tools' C++ workload, which supplies the MSVC libraries and Windows SDK"
+    } else if cfg!(target_os = "macos") {
+        "install Xcode's command line tools with 'xcode-select --install'"
+    } else {
+        "install it with 'sudo apt install clang' (Debian, Ubuntu), 'sudo dnf install clang' (Fedora, RHEL), \
+         'sudo pacman -S clang' (Arch) or 'sudo zypper install clang' (openSUSE)"
+    };
+    format!(
+        "Link failed: no clang found to link with: none beside the compiler, on the PATH, or where LLVM's packages install it\n\
+         note: {}; or put the folder holding clang on the PATH",
+        install
+    )
 }
 
 /// System libraries every Pepper executable (or shared library) needs on the
@@ -83,13 +164,44 @@ pub fn default_system_libraries(os: &str) -> &'static [&'static str] {
         // Pepper's documented Windows defaults (docs/src/language/linking.md).
         "windows" => &["kernel32", "user32", "shell32"],
         // A floating-point `**` calls `pow`, which glibc keeps in libm
-        // (macOS has it in libSystem, Windows in the UCRT).
+        // (macOS has it in libSystem, Windows in the UCRT). Before glibc
+        // 2.34, threads and `dlsym` lived in libpthread and libdl, so a
+        // host with an older glibc (the prebuilt toolchain supports 2.28)
+        // links those too. A newer glibc has them in libc, and a system
+        // root for another machine may not carry them at all.
+        "linux" if host_glibc_before_2_34() => &["m", "pthread", "dl"],
         "linux" => &["m"],
         // wasi-libc keeps `pow` in libc, and `getpid` in an emulation
         // library of its own.
         "wasi" => &["wasi-emulated-getpid"],
         _ => &[],
     }
+}
+
+/// Whether this compiler runs on a glibc older than 2.34, from its own
+/// version (`gnu_get_libc_version`). False on any other C library.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn host_glibc_before_2_34() -> bool {
+    unsafe extern "C" {
+        fn gnu_get_libc_version() -> *const std::ffi::c_char;
+    }
+    // SAFETY: glibc returns a static NUL-terminated string such as "2.28".
+    let version = unsafe { std::ffi::CStr::from_ptr(gnu_get_libc_version()) }.to_string_lossy().into_owned();
+    glibc_before_2_34(&version)
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn host_glibc_before_2_34() -> bool {
+    false
+}
+
+/// Whether the glibc `version` ("2.28") is older than 2.34.
+#[cfg_attr(not(all(target_os = "linux", target_env = "gnu")), allow(dead_code))]
+fn glibc_before_2_34(version: &str) -> bool {
+    let mut parts = version.split('.').map(|part| part.parse::<u32>().unwrap_or(0));
+    let major = parts.next().unwrap_or(0);
+    let minor = parts.next().unwrap_or(0);
+    (major, minor) < (2, 34)
 }
 
 /// LLVM's linker for an ELF, Mach-O or WebAssembly target (`ld.lld`,
@@ -110,8 +222,7 @@ fn find_lld(os: &str, driver: &Path) -> Option<PathBuf> {
         directories.push(Path::new(&prefix).join("bin"));
     }
     directories.extend(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()));
-    let exe = |n: &str| if cfg!(windows) { format!("{}.exe", n) } else { n.to_string() };
-    [exe(name), exe(&versioned)]
+    [executable_name(name), executable_name(&versioned)]
         .iter()
         .flat_map(|n| directories.iter().map(move |d| d.join(n)))
         .find(|candidate| candidate.is_file())
@@ -263,7 +374,7 @@ pub fn link(
     sysroot: Option<&Path>,
     shared: bool,
 ) -> Result<(), String> {
-    let driver = link_driver();
+    let driver = find_link_driver().ok_or_else(missing_link_driver)?;
     let target = pepper_sema::current_target();
 
     let mut args: Vec<String> = vec!["-o".to_string(), output.to_string_lossy().into_owned()];
@@ -416,6 +527,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_a_glibc_before_2_34_needs_libpthread_and_libdl() {
+        assert!(glibc_before_2_34("2.28"));
+        assert!(glibc_before_2_34("2.33"));
+        assert!(!glibc_before_2_34("2.34"));
+        assert!(!glibc_before_2_34("2.39"));
+    }
+
+    #[test]
     fn host_links_with_no_target_options() {
         assert!(target_arguments(&pepper_sema::Target::host(), None, None).is_empty());
     }
@@ -452,14 +571,18 @@ mod tests {
         for dir in [vc.join("14.29.30133").join("lib").join("x64"), vc.join("14.40.33807").join("lib").join("x64"), sdk.join("um").join("x64"), sdk.join("ucrt").join("x64"), root.join("sdk").join("lib").join("um").join("x86_64")] {
             std::fs::create_dir_all(dir).unwrap();
         }
+        // Compared without regard to case: on a file system that ignores
+        // case (Windows, macOS) the lookup finds `lib` under the name `Lib`.
+        let lowercase = |dirs: &[PathBuf]| dirs.iter().map(|d| d.to_string_lossy().to_lowercase()).collect::<Vec<_>>();
         assert_eq!(
-            windows_library_dirs(&root, "x86_64"),
-            [vc.join("14.40.33807").join("lib").join("x64"), sdk.join("um").join("x64"), sdk.join("ucrt").join("x64"), root.join("sdk").join("lib").join("um").join("x86_64")]
+            lowercase(&windows_library_dirs(&root, "x86_64")),
+            lowercase(&[vc.join("14.40.33807").join("lib").join("x64"), sdk.join("um").join("x64"), sdk.join("ucrt").join("x64"), root.join("sdk").join("lib").join("um").join("x86_64")])
         );
         assert!(windows_library_dirs(&root, "aarch64").is_empty());
         let windows = pepper_sema::Target::parse("x86_64-pc-windows-msvc").unwrap();
         let args = target_arguments(&windows, Some(&root), None);
-        assert!(args.contains(&format!("-L{}", sdk.join("um").join("x64").display())), "{args:?}");
+        let expected = format!("-L{}", sdk.join("um").join("x64").display()).to_lowercase();
+        assert!(args.iter().any(|a| a.to_lowercase() == expected), "{args:?}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

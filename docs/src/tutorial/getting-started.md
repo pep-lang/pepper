@@ -1,13 +1,36 @@
 # Getting started
 
-This chapter gets the Pepper compiler built on your machine, compiles and runs
-a first program, and sets up your editor. Pepper has no binary releases yet,
-so you build the compiler from source.
+This chapter installs Pepper on your machine, compiles and runs a first
+program, and sets up your editor.
 
-## Build the compiler
+## Install Pepper
 
-The compiler is a Rust program that generates code through LLVM. Building it
-takes three steps on every platform. The repository's
+Each release has the Pepper toolchain prebuilt for Linux, macOS and Windows.
+One command installs it:
+
+```sh
+# Linux and macOS
+curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+```
+
+It installs into `~/.pepper` (`%LOCALAPPDATA%\pepper` on Windows), adds its
+`bin` folder to your `PATH`, and offers to install what linking a program
+needs when it is missing: clang on Linux, Xcode's command line tools on
+macOS, LLVM and the Visual Studio Build Tools on Windows. Open a new terminal
+afterwards. [Installing Pepper](../tools/install.md) covers the options, what
+it installs, and uninstalling.
+
+## Building from source
+
+To work on Pepper itself, or on a platform with no prebuilt binaries, build
+the compiler from source. The compiler is a Rust program that generates code
+through LLVM. Building it takes three steps on every platform. The
+repository's
 [README](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
 has the full details for each platform; this is the short version.
 
@@ -49,7 +72,10 @@ On Windows, name the output `target\release\pepper.exe`. The compiler is
 `target/release/pep-build`; `pepper` is the entry point to every Pepper tool,
 so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
 [The pepper command](../tools/pepper.md)). To check that everything works,
-run the test suite with `cargo test --workspace`.
+run the test suite with `cargo test --workspace`. Add `target/release` to
+your `PATH` to run `pepper` from anywhere; from the repository root, you can
+also run the compiler through cargo: `cargo run --release -- hello.pep -o hello`
+runs `pep-build` directly.
 
 ## Your first program
 
@@ -85,11 +111,6 @@ not run a file without an extension, and run it as `.\hello.exe`. Without `-o`
 the executable is written to the current directory, named after the source
 file with no extension (`hello` for `hello.pep`).
 
-The examples here write `pepper`; use the path to the binary you built, or add
-`target/release` to your `PATH`. From the repository root, you can also run
-the compiler through cargo: `cargo run --release -- hello.pep -o hello`
-runs `pep-build` directly.
-
 ### Where the compiler finds the standard library
 
 Every program is compiled together with Pepper's standard library, the
@@ -102,8 +123,9 @@ Every program is compiled together with Pepper's standard library, the
 3. Starting from the directory that holds the compiler executable:
    `runtime/` beside it, then in each parent directory, up to five levels up.
 
-So a compiler built in `target/release` finds the runtime of the clone it was
-built from, wherever you run it. To use a different runtime, set
+So an installed compiler, in `~/.pepper/bin`, finds `~/.pepper/runtime`, and
+one built in `target/release` finds the runtime of the clone it was built
+from, wherever you run it. To use a different runtime, set
 `PEPPER_RUNTIME` or link the runtime into a project's `.pep` folder:
 
 ```sh

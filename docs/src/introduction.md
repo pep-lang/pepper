@@ -46,6 +46,9 @@ server, so editors such as VS Code show Pepper's errors as you type.
 Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
 to WebAssembly for WASI (`--target wasm32-wasip1`, see
 [WebAssembly](language/platform-selection.md#webassembly)).
+Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
+and macOS (arm64 and x64), and installs with one command: see
+[Installing Pepper](tools/install.md).
 
 ## Current status
 

@@ -24,8 +24,10 @@ extern int posix_spawn_file_actions_destroy(void* actions);
 extern int posix_spawn_file_actions_adddup2(void* actions, int from, int to);
 [Target(OS(Linux) || OS(Mac))]
 extern int posix_spawn_file_actions_addopen(void* actions, int descriptor, char* path, int flags, uint mode);
-[Target(OS(Linux) || OS(Mac))]
+[Target(OS(Mac))]
 extern int posix_spawn_file_actions_addchdir_np(void* actions, char* path);
+[Target(OS(Linux))]
+extern void* dlsym(void* handle, char* name);
 [Target(OS(Mac))]
 extern int posix_spawn_file_actions_addinherit_np(void* actions, int descriptor);
 [Target(OS(Linux) || OS(Mac))]
@@ -239,7 +241,7 @@ export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stder
     var directory = "";
     if (code == 0 && command._working_directory.is_value()) {
         directory = command._working_directory.value().to_string();
-        code = posix_spawn_file_actions_addchdir_np(actions, directory.c_str());
+        code = _process_add_chdir(actions, directory.c_str());
     }
 
     var argument_values = Array<String>();
@@ -424,3 +426,23 @@ export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
 
 [Target(OS(Linux) || OS(Mac))]
 export _process_sys_release(handle: _ProcessHandle) {}
+
+# Adds a change of folder to `actions`. glibc has
+# posix_spawn_file_actions_addchdir_np from 2.29 on, and the prebuilt
+# toolchain links for glibc 2.28, so Linux looks it up when a child needs a
+# working directory and fails with ENOSYS where there is none.
+[Target(OS(Linux))]
+_process_add_chdir(actions: __ptr<void>, path: __ptr<char>): int {
+    var name = "posix_spawn_file_actions_addchdir_np";
+    var symbol = dlsym(__null, name.c_str());
+    if (symbol == __null) {
+        return 38;
+    }
+    var add = symbol as extern (__ptr<void>, __ptr<char>) => int;
+    return add(actions, path);
+}
+
+[Target(OS(Mac))]
+_process_add_chdir(actions: __ptr<void>, path: __ptr<char>): int {
+    return posix_spawn_file_actions_addchdir_np(actions, path);
+}

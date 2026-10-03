@@ -63,6 +63,7 @@
 
 # Tools
 
+- [Installing Pepper](tools/install.md)
 - [The pepper command](tools/pepper.md)
 - [The compiler: pep-build](tools/pep-build.md)
 - [Projects: pep.toml](tools/projects.md)

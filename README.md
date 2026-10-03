@@ -9,6 +9,27 @@ language server and the book builder. Codegen goes through LLVM via `inkwell`.
 
 See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; build it with `cargo run -p pepper-docgen -- serve`) for the language itself, and [`INTERNALS.md`](INTERNALS.md) for how the compiler works.
 
+## Install
+
+Each release has the toolchain prebuilt for Linux (x64), macOS (arm64, x64)
+and Windows (x64). The install scripts download it, check it, put `bin` on
+the `PATH`, and offer to install what linking needs (clang, Xcode's command
+line tools, or LLVM and the Visual Studio Build Tools):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh   # Linux, macOS
+```
+
+```powershell
+irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex       # Windows
+```
+
+While the repository is private, set `GITHUB_TOKEN` to a token that can read
+it. Options, the layout, uninstalling and how releases are built
+(`.github/workflows/release.yml`) are in the book's
+[Installing Pepper](docs/src/tools/install.md). The rest of this file is for
+building Pepper from source.
+
 ## Setting up a development environment
 
 Three steps on every platform: install Rust, install the platform

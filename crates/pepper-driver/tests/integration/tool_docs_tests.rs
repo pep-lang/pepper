@@ -15,6 +15,8 @@
 //! | `pep-doc` | `tools/docgen/src/help.txt`, which it prints | `docs/src/tools/pep-doc.md` |
 //! | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 //! | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
+//! | `install.sh` | its `usage` text | `docs/src/tools/install.md` |
+//! | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
 
 use std::path::Path;
 use std::process::Command;
@@ -268,6 +270,26 @@ fn cargo_setup_options_are_documented() {
     let usage = repository_file("xtask/src/usage.txt");
     let mut problems = undocumented("cargo setup", PAGE, "option", &help_options(&usage), mentions);
     problems.extend(undocumented("cargo setup", PAGE, "environment variable", &variables_named(&usage), mentions));
+    assert_documented(problems);
+}
+
+#[test]
+fn install_script_options_are_documented() {
+    const PAGE: &str = "docs/src/tools/install.md";
+    let script = repository_file("scripts/install.sh");
+    let usage = script.split("<<'EOF'\n").nth(1).and_then(|rest| rest.split("\nEOF").next()).expect("install.sh has a usage text");
+    let mut problems = undocumented("install.sh", PAGE, "option", &help_options(usage), mentions);
+    problems.extend(undocumented("install.sh", PAGE, "environment variable", &variables_named(&script), mentions));
+    // `[string]$Version = ...` and `[switch]$Yes` in the param() block.
+    let parameters: Vec<String> = repository_file("scripts/install.ps1")
+        .lines()
+        .skip_while(|line| !line.starts_with("param("))
+        .take_while(|line| *line != ")")
+        .filter_map(|line| line.trim().strip_prefix("[string]$").or_else(|| line.trim().strip_prefix("[switch]$")))
+        .map(|rest| format!("-{}", rest.split([' ', ',']).next().unwrap_or_default()))
+        .collect();
+    assert!(parameters.len() >= 5, "no parameters found in install.ps1's param() block");
+    problems.extend(undocumented("install.ps1", PAGE, "parameter", &parameters, mentions));
     assert_documented(problems);
 }
 

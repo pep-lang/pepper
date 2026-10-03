@@ -46,7 +46,7 @@ names and the pass order come from that implementation.
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), and `install-vscode-extension.ps1`. |
-| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
+| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
 Dependency direction: `parser ← files ← sema ← codegen ← driver ← pep-build`.
@@ -1540,7 +1540,12 @@ machine made through the C API emits `.ctors`, which GNU ld folds into
 through `target::set_section`, not inkwell's, which on a macOS host
 prefixes `,` to a name with no comma (`,.init_array`) whatever the target.
 
-**Linking** (`linker.rs`). `link` runs clang as the link driver. For
+**Linking** (`linker.rs`). `link` runs clang as the link driver, which
+`find_link_driver` looks for in the `LLVM_SYS_<major>1_PREFIX` LLVM, beside
+the running compiler, on the PATH (`clang`, then `clang-<major>`), and in
+the folders LLVM's packages install it in off the PATH (`llvm_install_dirs`);
+an installed compiler has no prefix variable, and with no clang at all the
+link fails naming what to install (`missing_link_driver`). For
 another platform it adds `--target=<triple>`, LLVM's linker
 (`-fuse-ld=lld`, plus `--ld-path=` when `find_lld` finds
 `ld.lld`/`ld64.lld`, plain or as `ld.lld-<major>`, beside clang, in the
@@ -2762,6 +2767,16 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   push or a manual dispatch, and publishes the release from a tag or from
   `main`. There is no arm64 Windows or Linux runner, so those platforms get
   no bundled server.
+- **`release.yml`**: on a `vX.Y.Z` tag, builds the toolchain for
+  linux-x64 (in a `manylinux_2_28` container on `ubuntu-latest`, for glibc
+  2.28), macos-arm64 (`pepper-macos`), macos-x64 (hosted `macos-15-intel`)
+  and windows-x64 (`pepper-windows`) with `scripts/release-build.sh`, which
+  archives an install layout (`bin/`, `runtime/`) and smoke-tests it
+  (`scripts/release-smoke-test.sh`); then installs each archive with the
+  install script and uploads archives, checksums and the install scripts
+  (`scripts/install.sh`, `scripts/install.ps1`) to the tag's release. A
+  dispatch or a PR touching those files builds and tests without
+  publishing.
 - **`docs.yml`**: builds the mdBook site to `gh-pages` (`dev/` on `main`,
   `X.Y.Z/` on tags).
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped

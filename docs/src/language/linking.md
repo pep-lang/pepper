@@ -18,7 +18,10 @@ the first `clang` on your `PATH`.
 Every program is linked with:
 
 - **Linux:** the C library, which clang adds, and the math library (`m`),
-  which the Pepper compiler adds (a floating-point `**` calls its `pow`).
+  which the Pepper compiler adds (a floating-point `**` calls its `pow`),
+  and, when the compiler runs on a glibc older than 2.34, `pthread` and
+  `dl`, where that glibc keeps threads and `dlsym` (a newer one has them in
+  the C library).
 - **macOS:** `libSystem`, which contains the C library, plus the SDK and
   platform-version flags. clang adds all of these, using the Xcode Command
   Line Tools.

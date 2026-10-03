@@ -361,7 +361,11 @@ error on every platform; Windows executables link with clang and lld.
 
 The link driver is clang. When `LLVM_SYS_<major>1_PREFIX` (for the LLVM the
 compiler was built with, such as `LLVM_SYS_201_PREFIX` for LLVM 20) names an
-LLVM install, its `bin/clang` and `lld` are used, else those on the `PATH`.
+LLVM install, its `bin/clang` and `lld` are used; else a `clang` beside
+`pep-build`, then one on the `PATH` (`clang`, then `clang-<major>`), then one
+where LLVM's packages install it off the `PATH`. With none, the link fails
+with an error naming what to install. [Installing Pepper](install.md#what-linking-needs)
+lists the folders searched.
 
 ## Build options
 
