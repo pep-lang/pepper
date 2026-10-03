@@ -64,6 +64,7 @@
 - [The pepper command](tools/pepper.md)
 - [The compiler: pep-build](tools/pep-build.md)
 - [Projects: pep.toml](tools/projects.md)
+- [The package manager: pep-package](tools/pep-package.md)
 - [Formatting with pep-fmt](tools/pep-fmt.md)
 - [Profiling with pep-profile](tools/pep-profile.md)
 - [The language server: pep-lsp](tools/pep-lsp.md)

@@ -84,6 +84,13 @@ An entry file inside a project (under a folder with a `pep.toml`) imports the
 project's dependencies, and its `[build]` table's `include` folders and
 `link` libraries apply to it as well.
 
+Before compiling a program in a project, the compiler fetches whatever
+`pep.lock` lists and the project's `.pep/deps` lacks, and the dependencies
+`pep.toml` names that `pep.lock` does not list yet, by running
+`pep-package fetch` (beside `pep-build`, else on the `PATH`). Without
+`pep-package`, it checks the locked commits out with `git` itself. See
+[The package manager: pep-package](pep-package.md).
+
 ### `-I <dir>`
 
 Adds a folder to search for modules imported by name (`import geometry;`
@@ -387,6 +394,7 @@ a terminal; set `NO_COLOR` to turn color off. See
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
 | `LLVM_SYS_<major>1_PREFIX` | The LLVM install whose `clang` and `lld` link the program (`LLVM_SYS_201_PREFIX` for LLVM 20); `cargo setup` writes it for builds | |
+| `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Where a build fetching a project's locked dependencies clones that host's repositories from, when `pep-package` is not installed (see [pep-package](pep-package.md#environment-variables)) | |
 | `NO_COLOR` | Set and not empty: errors are not colored | |
 
 ## Exit status

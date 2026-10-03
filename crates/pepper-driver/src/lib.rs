@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod compiler;
+pub mod fetch;
 pub mod keys;
 pub mod library;
 pub mod lto;
@@ -90,6 +91,11 @@ fn run_for_target(options: Options) -> Result<i32, String> {
 
     if options.msvc {
         return Err("the MSVC linker path is not ported".to_string());
+    }
+
+    // A project builds with what pep.lock lists: fetch what is missing.
+    if let Some(entry) = options.source_files.first() {
+        fetch::fetch_dependencies(entry)?;
     }
 
     let build_dir = options.effective_build_dir();

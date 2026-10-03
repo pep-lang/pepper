@@ -388,3 +388,6 @@ FodyWeavers.xsd
 # scratch
 .review33/
 strings-plan.md
+
+# pep-package, built in its own folder by `pepper build`
+tools/pep-package/pep-package

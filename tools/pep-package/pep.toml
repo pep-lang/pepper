@@ -1,0 +1,14 @@
+# pep-package is itself a project: building it fetches the toml package.
+[package]
+name = "pep_package"
+version = "0.3.0"
+description = "The package manager, run as `pepper package`"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-package"
+
+[dependencies]
+toml = { github = "justinboswell/pepper-toml", branch = "main" }

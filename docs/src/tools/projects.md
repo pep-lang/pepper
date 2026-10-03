@@ -128,9 +128,17 @@ each package's own `pep.toml` names the packages it needs under its own
 keys, and an import in one of its files resolves against those keys, to the
 same copies.
 
-Fetching dependencies with `pepper package` is not available yet. Until it
-is, put a package's files in its `.pep/deps` folder yourself (for example
-with `git clone`), or use a `path` dependency.
+`pepper package` fetches them there and records the commit of each, the
+dependencies' dependencies included, in `pep.lock` beside `pep.toml`; commit
+`pep.lock` with `pep.toml`. `pepper build` fetches what `pep.lock` lists and
+`.pep/deps` lacks, so a fresh clone builds with `pepper build` alone. See
+[The package manager: pep-package](pep-package.md), which also says how
+versions are chosen when several packages need one.
+
+```bash
+pepper package add someone/geometry       # adds it to pep.toml and fetches it
+pepper build
+```
 
 ## Errors
 

@@ -10,6 +10,7 @@
 //! | `pepper` | `pepper --help` (built from `tools/pepper`) | `docs/src/tools/pepper.md` |
 //! | `pep-fmt` | `pep-fmt --help` (built from `tools/pep-fmt`) | `docs/src/tools/pep-fmt.md` |
 //! | `pep-profile` | `pep-profile --help` (built from `tools/pep-profile`) | `docs/src/tools/pep-profile.md` |
+//! | `pep-package` | `pep-package --help` and each command's `--help` (built from `tools/pep-package`) | `docs/src/tools/pep-package.md` |
 //! | `pep-doc` | `tools/docgen/src/help.txt`, which it prints | `docs/src/tools/pep-doc.md` |
 //! | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 //! | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
@@ -198,6 +199,25 @@ fn pep_profile_options_are_documented() {
     let output = Command::new(support::pepper_tool("pep-profile")).arg("--help").output().expect("run pep-profile --help");
     let help = stdout_of(&output);
     assert_documented(undocumented("pep-profile", "docs/src/tools/pep-profile.md", "option", &help_options(&help), mentions));
+}
+
+#[test]
+fn pep_package_commands_and_options_are_documented() {
+    const PAGE: &str = "docs/src/tools/pep-package.md";
+    let help = |arguments: &[&str]| {
+        let output = Command::new(support::pepper_tool("pep-package")).args(arguments).output().expect("run pep-package --help");
+        stdout_of(&output)
+    };
+    let top = help(&["--help"]);
+    let commands = help_commands(&top);
+    assert!(!commands.is_empty(), "no commands in pep-package --help");
+    let mut problems = undocumented("pep-package", PAGE, "command", &commands, mentions);
+    problems.extend(undocumented("pep-package", PAGE, "option", &help_options(&top), mentions));
+    for command in &commands {
+        let options = help_options(&help(&[command, "--help"]));
+        problems.extend(undocumented("pep-package", PAGE, &format!("'{command}' option"), &options, mentions));
+    }
+    assert_documented(problems);
 }
 
 #[test]

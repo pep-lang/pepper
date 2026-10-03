@@ -66,7 +66,8 @@ programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter,
 flame graph, and [`pepper`](tools/pepper.md), the entry point that runs every
 tool, are themselves written in Pepper. A [`pep.toml`](tools/projects.md)
 project builds with `pepper build` alone and imports the packages it depends
-on by name; fetching them with `pepper package` is not available yet.
+on by name, which [`pepper package`](tools/pep-package.md) fetches from
+GitHub, GitLab or Codeberg.
 Some things you will meet quickly:
 
 - Functions are values: a named function, an `extern` C function, a method (`p.norm`,

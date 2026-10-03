@@ -35,6 +35,10 @@ pub const MANIFEST_FILE: &str = "pep.toml";
 /// The folder, in a project's `.pep`, that holds its fetched dependencies.
 pub const DEPS_DIR: &str = "deps";
 
+/// The file, beside `pep.toml`, that records the exact revision of every
+/// dependency in the graph (`pepper package` writes it).
+pub const LOCK_FILE: &str = "pep.lock";
+
 /// A problem with a `pep.toml`, at a byte range of its text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManifestError {
@@ -119,6 +123,66 @@ impl Host {
         }
     }
 
+    /// The address git clones `repository` (`owner/name`) from:
+    /// `https://github.com/owner/name.git`, or under the address in
+    /// `PEPPER_PACKAGE_<HOST>_URL` when that is set (a mirror).
+    pub fn clone_url(self, repository: &str) -> String {
+        let variable = match self {
+            Host::GitHub => "PEPPER_PACKAGE_GITHUB_URL",
+            Host::GitLab => "PEPPER_PACKAGE_GITLAB_URL",
+            Host::Codeberg => "PEPPER_PACKAGE_CODEBERG_URL",
+        };
+        let base = std::env::var(variable).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| format!("https://{}", self.domain()));
+        format!("{}/{}.git", base.trim_end_matches('/'), repository)
+    }
+}
+
+/// Where a package's files live in the project `project`:
+/// `<project>/.pep/deps/<host domain>/<owner>/<name>`.
+pub fn package_directory(project: &Path, host: Host, repository: &str) -> PathBuf {
+    let mut dir = project.join(".pep").join(DEPS_DIR).join(host.domain());
+    dir.extend(repository.split('/'));
+    dir
+}
+
+/// One package `pep.lock` lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockedPackage {
+    pub host: Host,
+    /// `owner/name`.
+    pub repository: String,
+    /// The full commit to check out.
+    pub commit: String,
+}
+
+impl LockedPackage {
+    /// Its source as `pep.lock` writes it: `github:owner/name`.
+    pub fn source(&self) -> String {
+        format!("{}:{}", self.host.key(), self.repository)
+    }
+}
+
+/// The packages the `pep.lock` at `path` lists; none when it does not
+/// exist.
+pub fn read_lock(path: &Path) -> Result<Vec<LockedPackage>, String> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Ok(vec![]) };
+    let root = DeTable::parse(&text).map_err(|e| format!("{}: {}", path.display(), toml_message(e.message())))?;
+    let invalid = || format!("{}: 'package' must be an array of tables with a 'source' and a 'commit'", path.display());
+    let mut locked = vec![];
+    let Some(packages) = root.get_ref().iter().find(|(k, _)| k.get_ref() == "package").map(|(_, v)| v) else { return Ok(vec![]) };
+    let DeValue::Array(packages) = packages.get_ref() else { return Err(invalid()) };
+    for package in packages {
+        let DeValue::Table(package) = package.get_ref() else { return Err(invalid()) };
+        let field = |key: &str| match package.iter().find(|(k, _)| k.get_ref() == key).map(|(_, v)| v.get_ref()) {
+            Some(DeValue::String(s)) => Ok(s.to_string()),
+            _ => Err(invalid()),
+        };
+        let (source, commit) = (field("source")?, field("commit")?);
+        let (host, repository) = source.split_once(':').ok_or_else(invalid)?;
+        let host = Host::ALL.into_iter().find(|h| h.key() == host).ok_or_else(invalid)?;
+        locked.push(LockedPackage { host, repository: repository.to_string(), commit });
+    }
+    Ok(locked)
 }
 
 /// Which revision of a Git dependency to use.
@@ -151,12 +215,17 @@ impl Dependency {
     /// dependency, the folder itself for a path dependency.
     pub fn directory(&self, project: &Path, manifest_dir: &Path) -> PathBuf {
         match &self.source {
-            Source::Git { host, repository } => {
-                let mut dir = project.join(".pep").join(DEPS_DIR).join(host.domain());
-                dir.extend(repository.split('/'));
-                dir
-            }
+            Source::Git { host, repository } => package_directory(project, *host, repository),
             Source::Path(path) => manifest_dir.join(path),
+        }
+    }
+
+    /// Its source as `pep.lock` writes it (`github:owner/name`), for a Git
+    /// dependency.
+    pub fn locked_source(&self) -> Option<String> {
+        match &self.source {
+            Source::Git { host, repository } => Some(format!("{}:{}", host.key(), repository)),
+            Source::Path(_) => None,
         }
     }
 }
