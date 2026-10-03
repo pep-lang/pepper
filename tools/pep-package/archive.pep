@@ -115,11 +115,22 @@ _strip(path: String, strip: ulong): String {
 
 # The checksum of the files of `commit` in the git checkout `directory`,
 # from `git archive`, which writes the files as the host's archive holds
-# them (no line-ending conversion, `export-ignore` honored).
+# them: `export-ignore` honored, and no line-ending conversion beyond what
+# the repository's own `.gitattributes` asks for, whatever this machine's
+# `core.autocrlf` or `core.eol` (Git for Windows sets `core.autocrlf`).
 export checkout_sha256(directory: Path, commit: String): Result<String> {
     var file = directory.join(".git").join("pep-package-archive.tar");
     var written = git(
-        ["-c", "core.autocrlf=false", "archive", "--format=tar", "--output=" + file.to_string(), commit],
+        [
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "archive",
+            "--format=tar",
+            "--output=" + file.to_string(),
+            commit
+        ],
         directory.to_string()
     );
     if (written.is_err()) {

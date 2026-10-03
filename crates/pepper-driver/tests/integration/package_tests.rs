@@ -301,14 +301,16 @@ fn commit_of(name: &str, revision: &str) -> String {
 
 /// Writes GitHub's archive of `revision` of `name` (a `.tar.gz` whose files
 /// sit in one top-level folder) where the archive server serves the
-/// archive of `commit`: `<root>/<name>/<commit>.tar.gz`.
+/// archive of `commit`: `<root>/<name>/<commit>.tar.gz`. Like the host's,
+/// its files keep the line endings they were committed with, whatever this
+/// machine's `core.autocrlf` (Git for Windows turns it on).
 fn write_archive(root: &Path, name: &str, revision: &str, commit: &str) {
     let file = root.join(name).join(format!("{commit}.tar.gz"));
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     let short = name.rsplit('/').next().unwrap();
     let prefix = format!("--prefix={short}-{commit}/");
     let output = format!("--output={}", file.display());
-    git(&hosts().unwrap().join(format!("{name}.git")), &["archive", "--format=tar.gz", &prefix, &output, revision]);
+    git(&hosts().unwrap().join(format!("{name}.git")), &["-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "--format=tar.gz", &prefix, &output, revision]);
 }
 
 /// Runs `pep-package` with `arguments` in `dir`, with no git on the PATH
