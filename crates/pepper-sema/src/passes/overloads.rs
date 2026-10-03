@@ -557,6 +557,9 @@ pub struct Overloads {
     /// Present when some generic parameter is constrained: a generic
     /// member whose arguments do not meet its constraints is not viable.
     conformance: Option<crate::passes::constraints::Conformance>,
+    /// `Module::settle_overloads_by_arity`: no argument type is still to
+    /// come, so arity alone may pick the only non-generic member.
+    settle_by_arity: bool,
 }
 
 fn ordinal(n: usize) -> String {
@@ -711,6 +714,7 @@ impl Overloads {
             scopes,
             hidden,
             conformance,
+            settle_by_arity: module.settle_overloads_by_arity,
         }
     }
 
@@ -907,12 +911,37 @@ impl Overloads {
     }
 
     fn select_in(&self, members: &[Member], name: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
+        let outcome = self.select_ranked(members, name, explicit, args);
+        if !self.settle_by_arity || explicit.is_some() {
+            return outcome;
+        }
+        // No type is still to come and no generic member can be specialized
+        // any more. A call still waiting, or settling on a generic member
+        // only now (`print(r.name)`, a bound method typed last), takes its
+        // only non-generic member of that arity, so the argument's own error
+        // is reported against that member's parameter.
+        let generic = |callee: &str| members.iter().all(|m| m.name != callee || m.generic.is_some());
+        if !matches!(&outcome, Outcome::Pending) && !matches!(&outcome, Outcome::Chosen(c) if generic(&c.callee)) {
+            return outcome;
+        }
+        let count = args.len();
+        let mut fitting = members.iter().filter(|m| m.generic.is_none() && count >= m.required && count <= m.params.len());
+        match (fitting.next(), fitting.next()) {
+            (Some(only), None) => Outcome::Chosen(Choice { callee: only.name.clone(), ret: only.ret.clone(), raw_literals: vec![] }),
+            _ => outcome,
+        }
+    }
+
+    fn select_ranked(&self, members: &[Member], name: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
         let count = args.len();
         let arity_fits = |m: &Member| count >= m.required && count <= m.params.len();
         let pending = args.iter().any(ArgInfo::unknown);
         if pending {
-            // Arity alone may decide.
-            let mut fitting = members.iter().filter(|m| arity_fits(m) && explicit.is_none() == m.generic.is_none());
+            // Arity alone may decide, when one member fits and it is not
+            // generic. A generic member that also fits keeps the call
+            // waiting: it may be the better match once the type is known
+            // (`print(a.count)` is `print<ulong>`, not `print(String)`, #503).
+            let mut fitting = members.iter().filter(|m| arity_fits(m) && (explicit.is_none() || m.generic.is_some()));
             if let (Some(only), None) = (fitting.next(), fitting.next()) {
                 if only.generic.is_none() {
                     return Outcome::Chosen(Choice { callee: only.name.clone(), ret: only.ret.clone(), raw_literals: vec![] });

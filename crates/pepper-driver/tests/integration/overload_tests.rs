@@ -154,6 +154,22 @@ test(): int { return describe(7) * 100 + describe(1.5) * 10 + describe<int>(7); 
 }
 
 #[test]
+fn an_argument_typed_late_waits_for_the_generic_member() {
+    // A property or a generic call's result is typed after the call is first
+    // seen; arity alone must not settle on the non-generic member (#503).
+    let source = r#"
+describe<T>(v: T): int { return 1; }
+describe(text: String): int { return 2; }
+gen<T>(a: T): T { return a; }
+test(): int {
+    var a = Array<int>();
+    return describe(a.count) * 100 + describe(gen(3)) * 10 + describe(gen("x"));
+}
+"#;
+    assert_eq!(value(source), 112);
+}
+
+#[test]
 fn generic_members_differ_by_arity() {
     let source = r#"
 pick<T>(a: T): T { return a; }

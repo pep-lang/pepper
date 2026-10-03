@@ -242,7 +242,13 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // method's receiver.
     step!(function_references::reference_functions(module));
     step!(release_field_refs(module));
-    step!(resolve_implicit_types(module));
+    // Every type that will be known is: a call whose argument stayed
+    // unknown settles on arity, so the argument's own error is reported.
+    step!({
+        module.settle_overloads_by_arity = true;
+        resolve_implicit_types(module);
+        module.settle_overloads_by_arity = false;
+    });
     step!(check_tries::check_tries(module));
     step!(named_arguments::check_unbound(module));
     named_arguments::record_argument_names(module);

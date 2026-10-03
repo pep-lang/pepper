@@ -1676,6 +1676,13 @@ pub struct Module {
     /// generic functions are concrete overrides and marked them
     /// (`GenericParam::is_argument`): sema follows those marks alone.
     pub linked: bool,
+    /// Set for the last `resolve_implicit_types`, once every type that
+    /// will be known is: an overloaded call whose argument type stayed
+    /// unknown then takes its only non-generic member of that arity, so
+    /// the argument's own error is reported against it (see
+    /// `overloads::Overloads::select`).
+    #[serde(skip)]
+    pub settle_overloads_by_arity: bool,
 }
 
 /// Declarations already checked, by name (see [`Module::checked`]).
