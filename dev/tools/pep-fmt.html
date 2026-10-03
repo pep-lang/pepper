@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
+            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b1472c6c.js"></script>
+        <script src="../toc-2079cc94.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,6 +198,25 @@ pep-fmt -w main.pep src/    # rewrite each file that is not formatted
 pep-fmt --check src/        # list each file that is not formatted
 pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
+<h3 id="options"><a class="header" href="#options">Options</a></h3>
+<pre><code class="language-text">pep-fmt [OPTIONS] [paths]...
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;paths&gt;</code></td><td>Files to format, and directories to search for <code>.pep</code> files; none means standard input</td></tr>
+<tr><td><code>-w</code>, <code>--write</code></td><td>Rewrite each file that is not formatted, instead of printing it</td></tr>
+<tr><td><code>--check</code></td><td>Print the path of each file that is not formatted, and exit with 1 if there is one</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print <code>pep-fmt</code> and its version</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>-w</code> and <code>--check</code> need at least one path. <code>pepper fmt</code> runs <code>pep-fmt</code> with
+the same arguments.</p>
 <p>A directory stands for every <code>.pep</code> file under it, in name order, skipping
 directories whose names start with <code>.</code> (such as <code>.git</code> and the <code>.pep</code> build
 cache). <code>-w</code> (or <code>--write</code>) rewrites only the files whose formatting changes. <code>--check</code>
@@ -210,8 +229,8 @@ files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
 <pre><code class="language-text">main.pep:2:14: error: expected ')'
 </code></pre>
 <p>A file that cannot be read or written also exits with status 1, and an
-unknown option exits with status 2 after printing the usage (<code>pep-fmt -h</code>
-prints the full help). pep-fmt parses its options with the
+unknown option, or <code>-w</code> or <code>--check</code> without a path, exits with status 2
+after printing the usage (<code>pep-fmt -h</code> prints the full help). pep-fmt parses its options with the
 <a href="../language/cli.html"><code>cli</code> module</a>.</p>
 <h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
@@ -304,11 +323,11 @@ the pair must be in the same block (or both at the top level). Without a
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../tools/pepper.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tools/pep-build.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/debugging.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/pep-lsp.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -318,11 +337,11 @@ the pair must be in the same block (or both at the top level). Without a
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../tools/pepper.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tools/pep-build.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/debugging.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/pep-lsp.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

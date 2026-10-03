@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
+            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b1472c6c.js"></script>
+        <script src="../toc-2079cc94.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,31 @@ pepper --version                  # pepper's version; -v adds each command's
 </code></pre>
 <p><code>pepper</code> is itself written in Pepper (<code>tools/pepper/main.pep</code>). The compiler
 is the program <code>pep-build</code>, so <code>pepper build</code> takes exactly the options the
-compiler does.</p>
+compiler does (see <a href="pep-build.html">The compiler: pep-build</a>).</p>
+<h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
+<pre><code class="language-text">pepper &lt;command&gt; [arguments]
+pepper help [&lt;command&gt;]
+pepper --version [-v]
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
+<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
+<tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
+<tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version</td></tr>
+<tr><td><code>--version -v</code>, <code>--version --verbose</code></td><td>Also prints the version each command reports (its <code>--version</code>’s first line, or <code>(no version)</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Options go before the command: everything after the command belongs to it,
+so <code>pepper fmt --help</code> is <code>pep-fmt --help</code>. <code>pepper</code> with no arguments prints
+the usage to standard error and exits with status 2; an option other than
+<code>-v</code> or <code>--verbose</code> after <code>--version</code> is an error that exits with 2. An
+unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <h2 id="the-commands-in-this-repository"><a class="header" href="#the-commands-in-this-repository">The commands in this repository</a></h2>
 <div class="table-wrapper">
 <table>
@@ -201,10 +225,10 @@ compiler does.</p>
 <tr><th>Command</th><th>Program</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (the compiler)</td></tr>
+<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (<a href="pep-build.html">The compiler: pep-build</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="pep-fmt.html">Formatting with pep-fmt</a>)</td></tr>
-<tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start</td></tr>
-<tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book</td></tr>
+<tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="pep-lsp.html">The language server: pep-lsp</a>)</td></tr>
+<tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book (<a href="pep-doc.html">The documentation builder: pep-doc</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -258,7 +282,7 @@ pepper: warning: 'pepper main.pep ...' is deprecated; use 'pepper build main.pep
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/pep-fmt.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/pep-build.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -272,7 +296,7 @@ pepper: warning: 'pepper main.pep ...' is deprecated; use 'pepper build main.pep
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/pep-fmt.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/pep-build.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

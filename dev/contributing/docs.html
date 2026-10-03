@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
+            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b1472c6c.js"></script>
+        <script src="../toc-2079cc94.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,6 +192,8 @@ cargo run -p pepper-docgen -- reference       # regenerate the reference after c
 cargo run -p pepper-docgen -- build           # render into target/docs-site/dev/
 cargo run -p pepper-docgen -- build --version 0.2.0 --site &lt;dir&gt;
 </code></pre>
+<p><code>pep-doc</code>’s commands and options are described in
+<a href="../tools/pep-doc.html">The documentation builder: pep-doc</a>.</p>
 <h2 id="keeping-the-book-current"><a class="header" href="#keeping-the-book-current">Keeping the book current</a></h2>
 <p>Documentation changes land in the same PR as the code they describe. The
 checklist of what to update for each kind of change is in <code>AGENTS.md</code>, under
@@ -235,12 +237,23 @@ the file’s lines at column 0, which ends the list and the code block, so the
 rest of the example shows as prose and its <code>#</code> comments as headings. Put an
 included example at column 0, after the list or in its own <code>###</code> section. The runtime itself must meet the doc
 comment standard in <code>AGENTS.md</code>, which <code>runtime_docs_tests.rs</code> enforces.</p>
+<h2 id="tool-options-stay-documented"><a class="header" href="#tool-options-stay-documented">Tool options stay documented</a></h2>
+<p>Every command-line option of every tool has its place in the book:
+<code>docs/src/tools/&lt;tool&gt;.md</code> for <code>pep-build</code>, <code>pepper</code>, <code>pep-fmt</code>, <code>pep-lsp</code>
+and <code>pep-doc</code>, and <a href="setup.html">Setting up LLVM</a> for <code>cargo setup</code>.
+<code>crates/pepper-driver/tests/integration/tool_docs_tests.rs</code> takes each tool’s
+options from the tool itself (clap’s definition for <code>pep-build</code>, the
+<code>--help</code> text for the others) and fails, naming the tool, the option and the
+page, when a page does not mention one. It also checks <code>pep-build</code>’s trace
+channels and environment variables, and <code>pep-lsp</code>’s initialization options
+and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
+<code>help.txt</code> / <code>usage.txt</code>) and on its page in the same PR.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/tls-stream.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../contributing/setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -251,7 +264,7 @@ comment standard in <code>AGENTS.md</code>, which <code>runtime_docs_tests.rs</c
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/tls-stream.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../contributing/setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

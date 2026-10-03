@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
+            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b1472c6c.js"></script>
+        <script src="../toc-2079cc94.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -319,33 +319,19 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 </thead>
 <tbody>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable (or library, with <code>--lib</code>).</td></tr>
-<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link instead of an executable, with a C header declaring its <code>[Export]</code>ed functions. See <a href="../language/c-interop.html#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
+<tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>.</td></tr>
+<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg. See <a href="../tools/debugging.html">debugging</a>.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="../language/modules.html">modules and imports</a>.</td></tr>
-<tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="../language/linking.html">linking</a>.</td></tr>
-<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="../language/linking.html#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
-<tr><td><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></td><td>Define a build option, which <code>[BuildOption("name")]</code> and <code>[Target(BuildOption(name))]</code> select code by. A bare name is <code>name=1</code>. See <a href="../language/build-options.html">build options</a>.</td></tr>
-<tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
-<tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
-<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="../tools/debugging.html">debugging</a>.</td></tr>
-<tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>. Without it, <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when set. At <code>-O2</code> and <code>-O3</code> the whole program is also optimized together once every file is compiled.</td></tr>
-<tr><td><code>--lto=off</code></td><td>At <code>-O2</code> and <code>-O3</code>, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. <code>--lto=full</code> turns it on at <code>-O1</code>.</td></tr>
-<tr><td><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>Generate code for a CPU, as clang’s options of the same names do. On x86-64, <code>-march</code> names the CPU (<code>x86-64-v3</code>, <code>znver4</code>, <code>native</code> for the machine compiling). On AArch64, <code>-mcpu</code> names the CPU (<code>apple-m2</code>, <code>native</code>) and <code>-march</code> the architecture (<code>armv8.2-a+crypto</code>). <code>-mtune</code> only changes scheduling. <code>-m&lt;feature&gt;</code> adds a feature (<code>-mavx2</code>) and <code>-mno-&lt;feature&gt;</code> removes one. Without them, the program runs on any machine of its kind: clang’s default CPU (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64).</td></tr>
-<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform (<code>aarch64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>, <code>aarch64-unknown-linux-gnu</code>); see <a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a>.</td></tr>
-<tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The other platform’s system libraries, for linking with <code>--target</code>. Without it, <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when set.</td></tr>
-<tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>, optimized at the <code>-O</code> level.</td></tr>
-<tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
-<tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
-<tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
-<tr><td><code>-T passes</code></td><td>Print how long each pass of the checker took, summed over its runs, slowest first.</td></tr>
-<tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (its sources, and its imports’ declarations, unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
-<tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
-<tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
-<tr><td><code>--verify-cache</code></td><td>Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file’s code (for testing the compiler; also <code>PEPPER_CACHE_VERIFY=1</code>).</td></tr>
-<tr><td><code>--no-verify-cache</code></td><td>Do not verify the cache, even with <code>PEPPER_CACHE_VERIFY</code> set.</td></tr>
+<tr><td><code>-l &lt;lib&gt;</code>, <code>-L &lt;dir&gt;</code></td><td>Link a C library, and add a folder to find it in. See <a href="../language/linking.html">linking</a>.</td></tr>
+<tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a <a href="../language/build-options.html">build option</a>.</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform; see <a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a>.</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link. See <a href="../language/c-interop.html#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
 <tr><td><code>--help</code></td><td>List every option.</td></tr>
 </tbody>
 </table>
 </div>
+<p><a href="../tools/pep-build.html">The compiler: pep-build</a> describes every option and
+environment variable the compiler reads.</p>
 <p>A program can span several files: pass the entry file, and the compiler finds
 the files it imports on its own.</p>
 <h2 id="editor-support"><a class="header" href="#editor-support">Editor support</a></h2>

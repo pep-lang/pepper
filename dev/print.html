@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e6e6c4d6.js";
+            window.path_to_searchindex_js = "searchindex-f2c5c1c0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b1472c6c.js"></script>
+        <script src="toc-2079cc94.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -450,33 +450,19 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 </thead>
 <tbody>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable (or library, with <code>--lib</code>).</td></tr>
-<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link instead of an executable, with a C header declaring its <code>[Export]</code>ed functions. See <a href="#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
+<tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>.</td></tr>
+<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg. See <a href="#debugging">debugging</a>.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="#modules-and-imports">modules and imports</a>.</td></tr>
-<tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library. See <a href="#linking">linking</a>.</td></tr>
-<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches for libraries. Folders in <code>PEPPER_LIBRARY_PATH</code> are searched after it. See <a href="#library-search-directories-in-the-source-and-the-environment">linking</a>.</td></tr>
-<tr><td><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></td><td>Define a build option, which <code>[BuildOption("name")]</code> and <code>[Target(BuildOption(name))]</code> select code by. A bare name is <code>name=1</code>. See <a href="#build-options">build options</a>.</td></tr>
-<tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program, like the standard library.</td></tr>
-<tr><td><code>--build &lt;dir&gt;</code></td><td>Write intermediate files to <code>&lt;dir&gt;</code> instead of <code>.pep/build/</code>.</td></tr>
-<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg (a <code>.pdb</code> on Windows). See <a href="#debugging">debugging</a>.</td></tr>
-<tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>. Without it, <code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when set. At <code>-O2</code> and <code>-O3</code> the whole program is also optimized together once every file is compiled.</td></tr>
-<tr><td><code>--lto=off</code></td><td>At <code>-O2</code> and <code>-O3</code>, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. <code>--lto=full</code> turns it on at <code>-O1</code>.</td></tr>
-<tr><td><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>Generate code for a CPU, as clang’s options of the same names do. On x86-64, <code>-march</code> names the CPU (<code>x86-64-v3</code>, <code>znver4</code>, <code>native</code> for the machine compiling). On AArch64, <code>-mcpu</code> names the CPU (<code>apple-m2</code>, <code>native</code>) and <code>-march</code> the architecture (<code>armv8.2-a+crypto</code>). <code>-mtune</code> only changes scheduling. <code>-m&lt;feature&gt;</code> adds a feature (<code>-mavx2</code>) and <code>-mno-&lt;feature&gt;</code> removes one. Without them, the program runs on any machine of its kind: clang’s default CPU (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64).</td></tr>
-<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform (<code>aarch64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>, <code>aarch64-unknown-linux-gnu</code>); see <a href="#cross-compiling">Cross-compiling</a>.</td></tr>
-<tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The other platform’s system libraries, for linking with <code>--target</code>. Without it, <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when set.</td></tr>
-<tr><td><code>--emit-llvm</code></td><td>Also write the generated LLVM IR to the build directory, as <code>&lt;name&gt;.ll</code>, optimized at the <code>-O</code> level.</td></tr>
-<tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
-<tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
-<tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
-<tr><td><code>-T passes</code></td><td>Print how long each pass of the checker took, summed over its runs, slowest first.</td></tr>
-<tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (its sources, and its imports’ declarations, unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
-<tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
-<tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
-<tr><td><code>--verify-cache</code></td><td>Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file’s code (for testing the compiler; also <code>PEPPER_CACHE_VERIFY=1</code>).</td></tr>
-<tr><td><code>--no-verify-cache</code></td><td>Do not verify the cache, even with <code>PEPPER_CACHE_VERIFY</code> set.</td></tr>
+<tr><td><code>-l &lt;lib&gt;</code>, <code>-L &lt;dir&gt;</code></td><td>Link a C library, and add a folder to find it in. See <a href="#linking">linking</a>.</td></tr>
+<tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a <a href="#build-options">build option</a>.</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform; see <a href="#cross-compiling">Cross-compiling</a>.</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C code to link. See <a href="#calling-pepper-from-c">calling Pepper from C</a>.</td></tr>
 <tr><td><code>--help</code></td><td>List every option.</td></tr>
 </tbody>
 </table>
 </div>
+<p><a href="#the-compiler-pep-build">The compiler: pep-build</a> describes every option and
+environment variable the compiler reads.</p>
 <p>A program can span several files: pass the entry file, and the compiler finds
 the files it imports on its own.</p>
 <h2 id="editor-support"><a class="header" href="#editor-support">Editor support</a></h2>
@@ -17319,7 +17305,31 @@ pepper --version                  # pepper's version; -v adds each command's
 </code></pre>
 <p><code>pepper</code> is itself written in Pepper (<code>tools/pepper/main.pep</code>). The compiler
 is the program <code>pep-build</code>, so <code>pepper build</code> takes exactly the options the
-compiler does.</p>
+compiler does (see <a href="#the-compiler-pep-build">The compiler: pep-build</a>).</p>
+<h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
+<pre><code class="language-text">pepper &lt;command&gt; [arguments]
+pepper help [&lt;command&gt;]
+pepper --version [-v]
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
+<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
+<tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
+<tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version</td></tr>
+<tr><td><code>--version -v</code>, <code>--version --verbose</code></td><td>Also prints the version each command reports (its <code>--version</code>’s first line, or <code>(no version)</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Options go before the command: everything after the command belongs to it,
+so <code>pepper fmt --help</code> is <code>pep-fmt --help</code>. <code>pepper</code> with no arguments prints
+the usage to standard error and exits with status 2; an option other than
+<code>-v</code> or <code>--verbose</code> after <code>--version</code> is an error that exits with 2. An
+unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <h2 id="the-commands-in-this-repository"><a class="header" href="#the-commands-in-this-repository">The commands in this repository</a></h2>
 <div class="table-wrapper">
 <table>
@@ -17327,10 +17337,10 @@ compiler does.</p>
 <tr><th>Command</th><th>Program</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (the compiler)</td></tr>
+<tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (<a href="#the-compiler-pep-build">The compiler: pep-build</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="#formatting-with-pep-fmt">Formatting with pep-fmt</a>)</td></tr>
-<tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start</td></tr>
-<tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book</td></tr>
+<tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>)</td></tr>
+<tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book (<a href="#the-documentation-builder-pep-doc">The documentation builder: pep-doc</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -17376,6 +17386,292 @@ pepper: warning: 'pepper main.pep ...' is deprecated; use 'pepper build main.pep
 </code></pre>
 <p>The old form will be removed in a later release.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-compiler-pep-build"><a class="header" href="#the-compiler-pep-build">The compiler: pep-build</a></h1>
+<p><code>pep-build</code> compiles a Pepper program into an executable, or into a library
+for C code to link. <code>pepper build</code> runs it with the same arguments, so
+everything on this page applies to both spellings:</p>
+<pre><code class="language-bash">pepper build main.pep -o main          # the same as: pep-build main.pep -o main
+</code></pre>
+<pre><code class="language-text">pep-build [OPTIONS] &lt;entry.pep&gt;
+</code></pre>
+<p>This page lists every option. <code>pep-build --help</code> prints the same list in
+short, and <code>pepper help build</code> runs it.</p>
+<h2 id="all-options-at-a-glance"><a class="header" href="#all-options-at-a-glance">All options at a glance</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>required</td></tr>
+<tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
+<tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
+<tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code></td></tr>
+<tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
+<tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
+<tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
+<tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
+<tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
+<tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
+<tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target’s system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
+<tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform’s defaults</td></tr>
+<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
+<tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
+<tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
+<tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
+<tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
+<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code></td></tr>
+<tr><td><code>--verify-cache</code></td><td>Check cache hits against fresh code</td><td>off, or <code>PEPPER_CACHE_VERIFY</code></td></tr>
+<tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
+<tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
+<tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p>An option that takes a value accepts it as the next argument or attached:
+<code>-I lib</code>, <code>-Ilib</code>, <code>--target aarch64-apple-darwin</code> and
+<code>--target=aarch64-apple-darwin</code> are all the same. Options may come before or
+after the entry file. An unknown option is an error, and the compiler exits
+with status 2 after a short usage message.</p>
+<h2 id="inputs-and-imports"><a class="header" href="#inputs-and-imports">Inputs and imports</a></h2>
+<h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
+<pre><code class="language-bash">pepper build main.pep
+</code></pre>
+<p>The file that holds <code>main</code>. The compiler finds the files it imports on its
+own (see <a href="#modules-and-imports">Modules and imports</a>), so a program of many
+files is compiled by naming its entry file alone. Only the first file named
+is compiled; any others are ignored. With no file, the compiler stops with
+<code>error: no source files provided</code>.</p>
+<h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
+<p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
+looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
+given, before the runtime’s folder. See
+<a href="#dependencies-and-search-paths">Dependencies and search paths</a>.</p>
+<pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+</code></pre>
+<h3 id="--import-name"><a class="header" href="#--import-name"><code>--import &lt;name&gt;</code></a></h3>
+<p>Loads a module (<code>&lt;name&gt;/module.pep</code>) or a file (<code>&lt;name&gt;.pep</code>), found on the
+search paths, into every file of the program, the way the standard library’s
+prelude is loaded. Its definitions come ahead of the runtime’s, so one that
+redefines a runtime export wins. Repeat it for more modules. A name that
+cannot be found is an error that lists the folders searched. See
+<a href="#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a>.</p>
+<h3 id="--no-runtime"><a class="header" href="#--no-runtime"><code>--no-runtime</code></a></h3>
+<p>Compiles without the standard library: the runtime is neither looked for
+nor loaded, so only the program’s own files and what <code>-I</code> reaches are
+compiled. For testing the compiler; ordinary programs need the runtime
+(<code>print</code>, <code>String</code> and <code>Array</code> all live there).</p>
+<p>Without this option the compiler finds the runtime as
+<a href="#where-the-compiler-finds-the-standard-library">Getting started</a>
+describes, and <code>PEPPER_RUNTIME</code> names its folder outright.</p>
+<h2 id="output"><a class="header" href="#output">Output</a></h2>
+<h3 id="-o-file"><a class="header" href="#-o-file"><code>-o &lt;file&gt;</code></a></h3>
+<p>The path of the executable, or with <code>--lib</code> of the library. Without it, the
+output goes to the current folder, named after the entry file with no
+extension (<code>main</code> for <code>main.pep</code>); with <code>--lib</code>, the library’s usual file
+name for that stem (<code>libmain.a</code>). Windows runs only files ending in <code>.exe</code>,
+so name the output there: <code>-o main.exe</code>.</p>
+<h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
+<p>Builds a library for C code to link instead of an executable, with a C
+header beside it that declares the program’s <code>[Export]</code>ed functions. No
+<code>main</code> is needed.</p>
+<ul>
+<li><code>--lib static</code> writes an archive: <code>libname.a</code> (<code>name.lib</code> on Windows).</li>
+<li><code>--lib shared</code> links a shared library: <code>libname.so</code>, <code>libname.dylib</code> on
+macOS, <code>name.dll</code> on Windows.</li>
+</ul>
+<p>See <a href="#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
+<p>The folder for intermediate files: the program’s objects and, with
+<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder.</p>
+<h3 id="--emit-llvm"><a class="header" href="#--emit-llvm"><code>--emit-llvm</code></a></h3>
+<p>Writes the whole program’s LLVM IR to <code>&lt;build&gt;/&lt;name&gt;.ll</code> (<code>.pep/build/main.ll</code>
+for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops there: nothing is
+linked and no executable is written.</p>
+<pre><code class="language-bash">pepper build main.pep -O --emit-llvm      # .pep/build/main.ll
+</code></pre>
+<h3 id="--emit-ast"><a class="header" href="#--emit-ast"><code>--emit-ast</code></a></h3>
+<p>Parses the entry file only and prints its syntax tree to standard output,
+instead of compiling. Imports are not followed and nothing is checked.</p>
+<h2 id="optimization-and-code-generation"><a class="header" href="#optimization-and-code-generation">Optimization and code generation</a></h2>
+<h3 id="-o--olevel"><a class="header" href="#-o--olevel"><code>-O</code>, <code>-O&lt;level&gt;</code></a></h3>
+<p>The optimization level: <code>-O0</code> (no optimization, the default), <code>-O1</code>, <code>-O2</code>
+or <code>-O3</code>. <code>-O</code> alone is <code>-O2</code>, and it does not take the next argument as its
+level, so <code>pepper build -O main.pep</code> works. Each level runs the pipeline
+clang runs at that level. Without the option, the level is
+<code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when that is set and not empty.</p>
+<h3 id="--ltofull---ltooff"><a class="header" href="#--ltofull---ltooff"><code>--lto=full</code>, <code>--lto=off</code></a></h3>
+<p>Link-time optimization. With <code>--lto=full</code>, once every file is compiled the
+whole program is optimized again as one module, so a call into another file
+(the runtime included) can be inlined. <code>--lto=off</code> optimizes each file
+alone, which links sooner. The default is <code>full</code> at <code>-O2</code> and <code>-O3</code> and
+<code>off</code> below; <code>--lto=full</code> at <code>-O0</code> is an error that asks for <code>-O</code>.</p>
+<h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
+<p>The <code>-m</code> options choose the CPU the code is generated for, with clang’s
+names and meanings:</p>
+<ul>
+<li>On x86-64, <code>-march=&lt;cpu&gt;</code> names the CPU: <code>x86-64-v3</code>, <code>znver4</code>, or
+<code>native</code> for the machine compiling.</li>
+<li>On AArch64, <code>-mcpu=&lt;cpu&gt;</code> names the CPU (<code>apple-m2</code>, <code>native</code>) and
+<code>-march=&lt;arch&gt;</code> the architecture (<code>armv8.2-a+crypto</code>).</li>
+<li><code>-mtune=&lt;cpu&gt;</code> changes only how instructions are scheduled.</li>
+<li><code>-m&lt;feature&gt;</code> adds a CPU feature (<code>-mavx2</code>), and <code>-mno-&lt;feature&gt;</code> removes
+one (<code>-mno-avx2</code>).</li>
+</ul>
+<p>Without them the program runs on any machine of its kind: clang’s default
+CPU for the target (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64). An option the
+target’s architecture does not know is an error. The chosen CPU is part of
+the build cache’s key.</p>
+<h3 id="-g---emit-debug"><a class="header" href="#-g---emit-debug"><code>-g</code>, <code>--emit-debug</code></a></h3>
+<p>Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
+executable on Linux and macOS, and CodeView on Windows, where the linker
+writes <code>&lt;output&gt;.pdb</code> beside the executable. It works with <code>-O</code>. See
+<a href="#debugging">Debugging</a>.</p>
+<h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
+<h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
+<p>Compiles for another platform, named by an LLVM target triple:
+<code>x86_64-unknown-linux-gnu</code>, <code>aarch64-unknown-linux-gnu</code>,
+<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code> or
+<code>aarch64-pc-windows-msvc</code>, with a version allowed where clang allows one
+(<code>arm64-apple-macosx14.0</code>). An unsupported triple is an error that lists the
+supported ones. <code>[Target(...)]</code> selects code for the target. The default is
+the machine the compiler runs on. See
+<a href="#cross-compiling">Cross-compiling</a>.</p>
+<h3 id="--sysroot-dir"><a class="header" href="#--sysroot-dir"><code>--sysroot &lt;dir&gt;</code></a></h3>
+<p>The folder that holds the target’s system headers and libraries, passed to
+the link driver, for linking with <code>--target</code>. Without it, the folder named by
+<code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when that is set: the triple in capitals, with <code>_</code>
+for each character that is not a letter or digit
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>).</p>
+<h2 id="linking-1"><a class="header" href="#linking-1">Linking</a></h2>
+<h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
+<p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
+for more libraries. A program’s <code>[Link]</code> attributes name libraries from the
+source instead. See <a href="#linking">Linking</a>.</p>
+<h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
+<p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
+come first, then those of <code>[Link(path = ...)]</code>, then those in
+<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). See
+<a href="#library-search-directories-in-the-source-and-the-environment">Library search directories</a>.</p>
+<pre><code class="language-bash">pepper build main.pep -L libs -l foo        # links libs/libfoo
+</code></pre>
+<h3 id="--msvc"><a class="header" href="#--msvc"><code>--MSVC</code></a></h3>
+<p>Reserved for linking with Microsoft’s linker. It is not ported, so it is an
+error on every platform; Windows executables link with clang and lld.</p>
+<p>The link driver is clang. When <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the
+compiler was built with, such as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20) names an
+LLVM install, its <code>bin/clang</code> and <code>lld</code> are used, else those on the <code>PATH</code>.</p>
+<h2 id="build-options-1"><a class="header" href="#build-options-1">Build options</a></h2>
+<h3 id="-d-name--d-namevalue"><a class="header" href="#-d-name--d-namevalue"><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></a></h3>
+<p>Defines a build option. A bare name is <code>name=1</code>, as in C. <code>[BuildOption]</code>
+and <code>[Target(BuildOption(...))]</code> select code by it, and <code>static</code> blocks read
+it with <code>reflect.build_option</code>. Repeat it for more options; of two that name
+the same option, the later wins. A name must be an identifier
+(<code>-D 2FAST</code> is an error). Build options are part of the build cache’s key.
+See <a href="#build-options">Build options</a>.</p>
+<pre><code class="language-bash">pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
+</code></pre>
+<h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
+<h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>
+<p>Integer overflow, division by zero, an oversized shift, an index out of
+range and a call through a null reference panic at run time, at every
+optimization level. This option removes the kinds of check it names, as a
+comma-separated list, from an optimized build:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind</th><th>What is no longer checked</th><th>What happens instead</th></tr>
+</thead>
+<tbody>
+<tr><td><code>overflow</code></td><td>Integer overflow</td><td>Arithmetic wraps</td></tr>
+<tr><td><code>divide</code></td><td>Division by zero and <code>MIN / -1</code></td><td>Undefined behavior</td></tr>
+<tr><td><code>shift</code></td><td>A shift count of at least the width</td><td>The count is masked</td></tr>
+<tr><td><code>bounds</code></td><td>Array and string indexing</td><td>Undefined behavior</td></tr>
+<tr><td><code>null</code></td><td>Calls and matches through a null reference</td><td>Undefined behavior</td></tr>
+<tr><td><code>all</code></td><td>All of the above</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p>Removing <code>bounds</code> or <code>null</code> gives up memory safety. At <code>-O0</code> the option has
+no effect and prints <code>warning: '--no-runtime-checks' has no effect at -O0</code>.
+See <a href="#integer-overflow">Integer overflow</a>.</p>
+<pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
+</code></pre>
+<h2 id="the-build-cache"><a class="header" href="#the-build-cache">The build cache</a></h2>
+<p>Each file of the program (each import cycle, and the runtime as one) is
+compiled to its own object, and the build cache keeps them: a file whose
+sources, and whose imports’ declarations, did not change is not compiled or
+checked again. The optimization level, link-time optimization, debug info,
+CPU, removed runtime checks and build options are part of each object’s
+key. Deleting the cache folder is always safe.</p>
+<h3 id="--no-cache"><a class="header" href="#--no-cache"><code>--no-cache</code></a></h3>
+<p>Compiles every file without reading or writing the build cache.</p>
+<h3 id="--cache-dir"><a class="header" href="#--cache-dir"><code>--cache &lt;dir&gt;</code></a></h3>
+<p>Keeps the build cache in <code>&lt;dir&gt;</code>. Without it, the folder named by
+<code>PEPPER_CACHE_DIR</code> when that is set and not empty, else <code>.pep/cache</code> in the
+current folder.</p>
+<h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
+<p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
+cache would reuse is compiled anyway, and the build fails if its code
+differs from the cached object’s, or if skipping the reused files’ bodies
+changes another file’s code. Setting <code>PEPPER_CACHE_VERIFY</code> to anything but
+empty or <code>0</code> does the same. <code>--no-verify-cache</code> turns it off even when
+<code>PEPPER_CACHE_VERIFY</code> is set. The two options cannot be combined.</p>
+<h2 id="tracing-and-diagnostics"><a class="header" href="#tracing-and-diagnostics">Tracing and diagnostics</a></h2>
+<h3 id="-t-channel---tall"><a class="header" href="#-t-channel---tall"><code>-T &lt;channel&gt;</code>, <code>--Tall</code></a></h3>
+<p><code>-T</code> turns on a trace channel, which prints to standard error. Repeat it for
+more channels; <code>--Tall</code> turns on every one.</p>
+<ul>
+<li><code>-T time</code> prints how long each stage of the compile took
+(<code>time: check and build    470.763 ms</code>).</li>
+<li><code>-T passes</code> prints how long each pass of the checker took, summed over its
+runs, slowest first.</li>
+<li><code>-T cache</code> prints how the build cache supplied each object: <code>hit</code> (its
+sources, and its imports’ declarations, are unchanged), <code>hit (same code)</code>
+(compiled again, to the same code), or <code>miss</code>; and whether linking was
+skipped.</li>
+</ul>
+<p>Any other channel name is accepted and ignored.</p>
+<h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
+<p>Accepted for compatibility with other compilers; it prints nothing more yet.</p>
+<p>Errors and warnings are printed like clang’s, colored when standard error is
+a terminal; set <code>NO_COLOR</code> to turn color off. See
+<a href="#compiler-errors">Compiler errors</a>.</p>
+<h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
+<ul>
+<li><code>-h</code>, <code>--help</code> prints every option with a line of description.</li>
+<li><code>-V</code>, <code>--version</code> prints <code>pep-build</code> and its version.</li>
+</ul>
+<h2 id="environment-variables-1"><a class="header" href="#environment-variables-1">Environment variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>What it does</th><th>Option that overrides it</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PEPPER_RUNTIME</code></td><td>The folder holding the standard library; nothing else is searched</td><td><code>--no-runtime</code> skips the runtime</td></tr>
+<tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite’s JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
+<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
+<tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
+<tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
+<tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
+<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
+<tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="exit-status-1"><a class="header" href="#exit-status-1">Exit status</a></h2>
+<p><code>pep-build</code> exits with 0 when the program compiled, 1 when it did not (the
+errors are on standard error), and 2 for a command line it cannot parse. A
+crash of the compiler itself exits with 101 after printing what went wrong;
+please report it.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="formatting-with-pep-fmt"><a class="header" href="#formatting-with-pep-fmt">Formatting with pep-fmt</a></h1>
 <p><code>pep-fmt</code> rewrites Pepper source in one standard style, so that every Pepper
 file reads the same and nobody has to argue about layout. It changes only
@@ -17393,6 +17689,25 @@ pep-fmt -w main.pep src/    # rewrite each file that is not formatted
 pep-fmt --check src/        # list each file that is not formatted
 pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
+<h3 id="options"><a class="header" href="#options">Options</a></h3>
+<pre><code class="language-text">pep-fmt [OPTIONS] [paths]...
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;paths&gt;</code></td><td>Files to format, and directories to search for <code>.pep</code> files; none means standard input</td></tr>
+<tr><td><code>-w</code>, <code>--write</code></td><td>Rewrite each file that is not formatted, instead of printing it</td></tr>
+<tr><td><code>--check</code></td><td>Print the path of each file that is not formatted, and exit with 1 if there is one</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print <code>pep-fmt</code> and its version</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>-w</code> and <code>--check</code> need at least one path. <code>pepper fmt</code> runs <code>pep-fmt</code> with
+the same arguments.</p>
 <p>A directory stands for every <code>.pep</code> file under it, in name order, skipping
 directories whose names start with <code>.</code> (such as <code>.git</code> and the <code>.pep</code> build
 cache). <code>-w</code> (or <code>--write</code>) rewrites only the files whose formatting changes. <code>--check</code>
@@ -17405,8 +17720,8 @@ files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
 <pre><code class="language-text">main.pep:2:14: error: expected ')'
 </code></pre>
 <p>A file that cannot be read or written also exits with status 1, and an
-unknown option exits with status 2 after printing the usage (<code>pep-fmt -h</code>
-prints the full help). pep-fmt parses its options with the
+unknown option, or <code>-w</code> or <code>--check</code> without a path, exits with status 2
+after printing the usage (<code>pep-fmt -h</code> prints the full help). pep-fmt parses its options with the
 <a href="#command-line-options"><code>cli</code> module</a>.</p>
 <h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
@@ -17494,6 +17809,137 @@ const IDENTITY = matrix(1, 0, 0,
 <p>Each comment goes on its own line, between declarations or statements, and
 the pair must be in the same block (or both at the top level). Without a
 <code># format: on</code>, the region runs to the end of the block or file.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-language-server-pep-lsp"><a class="header" href="#the-language-server-pep-lsp">The language server: pep-lsp</a></h1>
+<p><code>pep-lsp</code> is Pepper’s language server. An editor starts it and talks to it
+over standard input and output with the
+<a href="https://microsoft.github.io/language-server-protocol/">Language Server Protocol</a>:
+it reports compiler errors and warnings as you type, and provides hover,
+completion, go to definition, document outlines and inlay hints. It checks
+code with the compiler’s own front end, and finds the standard library the
+way the compiler does (see
+<a href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
+<p>The <a href="#editor-support">VS Code extension</a> bundles
+it. For another editor, build it with
+<code>cargo build --release -p pepper-lsp</code> (it is
+<code>target/release/pep-lsp</code>) and configure the editor to run it for <code>.pep</code>
+files.</p>
+<h2 id="command-line-options-1"><a class="header" href="#command-line-options-1">Command-line options</a></h2>
+<pre><code class="language-text">pep-lsp [--stdio]
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--stdio</code></td><td>Talk over standard input and output: the default, accepted for editors that pass it</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options and exit</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print <code>pep-lsp</code> and its version, and exit</td></tr>
+</tbody>
+</table>
+</div>
+<p>Any other argument is an error, and the server exits with status 2 without
+starting.</p>
+<h2 id="initialization-options"><a class="header" href="#initialization-options">Initialization options</a></h2>
+<p>The server’s settings arrive in the <code>initializationOptions</code> of the LSP
+<code>initialize</code> request, read once when it starts:</p>
+<pre><code class="language-json">{
+  "inlayHints": { "implicitConversions": true, "parameterNames": true },
+  "buildOptions": ["USE_ZLIB", "LOG_LEVEL=2"]
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>inlayHints.implicitConversions</code></td><td>boolean</td><td><code>true</code></td><td>Show the constructor call an <a href="#implicit-conversions"><code>[Implicit]</code> conversion</a> inserts, such as <code>Path(</code> … <code>)</code> around a <code>String</code> passed where a <code>Path</code> is expected</td></tr>
+<tr><td><code>inlayHints.parameterNames</code></td><td>boolean</td><td><code>true</code></td><td>Show the parameter name before a literal argument passed by position (<code>resize(width: 800, height: 600)</code>)</td></tr>
+<tr><td><code>buildOptions</code></td><td>array of strings</td><td><code>[]</code></td><td>The <a href="#build-options">build options</a> to analyze with, as the compiler’s <code>-D</code> takes them: <code>NAME</code> or <code>NAME=VALUE</code>. One that does not parse is left out</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="vs-code-settings"><a class="header" href="#vs-code-settings">VS Code settings</a></h2>
+<p>The extension passes its settings to the server as the initialization
+options above, and restarts the server when one changes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pepper.lspPath</code></td><td>empty</td><td>The <code>pep-lsp</code> to run; empty uses the one bundled with the extension. The server restarts whenever that file is rebuilt</td></tr>
+<tr><td><code>pepper.inlayHints.implicitConversions</code></td><td><code>true</code></td><td><code>inlayHints.implicitConversions</code></td></tr>
+<tr><td><code>pepper.inlayHints.parameterNames</code></td><td><code>true</code></td><td><code>inlayHints.parameterNames</code></td></tr>
+<tr><td><code>pepper.buildOptions</code></td><td><code>[]</code></td><td><code>buildOptions</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Inlay hints also need VS Code’s own <code>editor.inlayHints.enabled</code>. The command
+<strong>Pepper: Restart Language Server</strong> (<code>pepper.restartServer</code>) restarts the
+server on demand.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-documentation-builder-pep-doc"><a class="header" href="#the-documentation-builder-pep-doc">The documentation builder: pep-doc</a></h1>
+<p><code>pep-doc</code> builds this book. It generates the
+<a href="reference/README.html">standard library reference</a> from the runtime’s
+<a href="#documentation-comments">documentation comments</a>, checks the book, and
+renders it with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>, which must be
+on the <code>PATH</code> (<code>cargo install mdbook --locked</code>).</p>
+<p>It works on the repository it was built from, wherever it is run. Build it
+with cargo; <code>pepper doc</code> runs it, and from the repository root
+<code>cargo run -p pepper-docgen -- &lt;command&gt;</code> builds and runs it in one step:</p>
+<pre><code class="language-bash">cargo run -p pepper-docgen -- reference     # the same as: pep-doc reference
+</code></pre>
+<pre><code class="language-text">pep-doc [&lt;command&gt;] [options]
+</code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="pep-doc-reference"><a class="header" href="#pep-doc-reference"><code>pep-doc reference</code></a></h3>
+<p>Regenerates <code>docs/src/reference/</code> and the reference’s entries in
+<code>docs/src/SUMMARY.md</code> from the doc comments under <code>runtime/</code>, and prints each
+file it changed. Run it after changing a runtime doc comment, and commit the
+result.</p>
+<h3 id="pep-doc-check"><a class="header" href="#pep-doc-check"><code>pep-doc check</code></a></h3>
+<p>Changes nothing, and fails (exit status 1) when the committed reference does
+not match the runtime, naming the stale pages, or when a chapter has
+Markdown that renders broken without an mdBook error, such as an include
+indented inside a list item. CI runs it.</p>
+<h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>
+<p>Regenerates the reference, renders the book into <code>&lt;site&gt;/&lt;version&gt;/</code>, and
+refreshes the site’s <code>versions.json</code> and <code>index.html</code>. Other versions in the
+site are left as they are, so every published version stays available. This
+is the command when none is given.</p>
+<ul>
+<li><code>--version &lt;VERSION&gt;</code>: the version to build, <code>X.Y.Z</code> or <code>dev</code> (the
+default). Anything else is an error.</li>
+<li><code>--site &lt;DIR&gt;</code>: the site folder (default: <code>target/docs-site</code>).</li>
+</ul>
+<pre><code class="language-bash">pep-doc build --version 0.3.0 --site site     # renders into site/0.3.0/
+</code></pre>
+<h3 id="pep-doc-serve"><a class="header" href="#pep-doc-serve"><code>pep-doc serve</code></a></h3>
+<p>Regenerates the reference and serves the book locally with <code>mdbook serve</code>,
+opening it in the browser and rebuilding as chapters change.</p>
+<h3 id="pep-doc-help"><a class="header" href="#pep-doc-help"><code>pep-doc help</code></a></h3>
+<p>Prints the commands and options, as <code>-h</code> and <code>--help</code> do.</p>
+<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--version &lt;VERSION&gt;</code></td><td>With <code>build</code>: the version to build</td></tr>
+<tr><td><code>--site &lt;DIR&gt;</code></td><td>With <code>build</code>: the site folder</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the commands and options</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>As the only argument: print <code>pep-doc</code> and its version</td></tr>
+</tbody>
+</table>
+</div>
+<p>An unknown command is an error. Each command exits with 0 on success and 1
+on failure, with the reason on standard error.</p>
+<p>See <a href="#building-this-documentation">Building this documentation</a> for how the
+book is organized and published.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="debugging"><a class="header" href="#debugging">Debugging</a></h1>
 <p>Build with <code>-g</code> to debug a Pepper program in gdb, lldb, Visual Studio or
@@ -27674,7 +28120,7 @@ var at = f.seek(SeekFrom.Current(-2)).value();    # 2
 </code></pre>
 <p>Standard input: file descriptor 0 on POSIX, <code>STD_INPUT_HANDLE</code> on
 Windows.</p>
-<h4 id="output"><a class="header" href="#output">Output</a></h4>
+<h4 id="output-1"><a class="header" href="#output-1">Output</a></h4>
 <pre><code class="language-pepper">Output
 </code></pre>
 <p>Standard output: file descriptor 1 on POSIX, <code>STD_OUTPUT_HANDLE</code> on
@@ -32602,7 +33048,7 @@ or writes where the parent writes.</p>
 </code></pre>
 <p>The stream is the null device: reading it finds the end at once, and
 what is written to it is thrown away.</p>
-<h2 id="output-1"><a class="header" href="#output-1">Output</a></h2>
+<h2 id="output-2"><a class="header" href="#output-2">Output</a></h2>
 <pre><code class="language-pepper">struct Output
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
@@ -36843,7 +37289,7 @@ in <code>main(args: String[])</code> and <code>process.arguments()</code>.</p>
 <li><a href="#parser">Parser</a>: <code>Parser</code>, and the handles its declarations
 return: <code>Flag</code>, <code>Argument</code>, <code>ArgumentList</code>; and <code>closest</code>, which
 picks the name a misspelled one most likely meant</li>
-<li><a href="#options">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
+<li><a href="#options-2">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
 that shape what <code>Parser.add_options</code> declares from a struct’s fields</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -37267,7 +37713,7 @@ argument lists; this constructor is for the runtime.</p>
 <li>a new array of the values, empty when none was given</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/options.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="options"><a class="header" href="#options">Options</a></h1>
+<h1 id="options-2"><a class="header" href="#options-2">Options</a></h1>
 <p>The attributes that shape the options <code>Parser.add_options</code> declares
 from a struct’s fields.</p>
 <p>Source: <code>runtime/cli/options.pep</code></p>
@@ -38230,6 +38676,69 @@ Closing a closed stream does nothing.</p>
 <li>an Ok result on success or when already closed; the platform error when closing the socket fails</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="setting-up-llvm-cargo-setup"><a class="header" href="#setting-up-llvm-cargo-setup">Setting up LLVM: cargo setup</a></h1>
+<p>The compiler links against LLVM, which cargo cannot build. <code>xtask</code>, a small
+program in this repository with no dependencies, provisions it, so it works
+on a fresh clone with nothing else installed:</p>
+<pre><code class="language-bash">cargo run -p xtask -- setup --devtools     # the first time
+cargo setup --devtools                     # afterwards
+</code></pre>
+<p>The first run writes <code>.cargo/config.toml</code>, which points the build at the
+LLVM it settled on (<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>) and defines the <code>cargo setup</code>
+alias. Run it again on each new machine rather than copying that file. The
+README’s
+<a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">Setting up a development environment</a>
+says what each platform needs first and how the versions are chosen.</p>
+<pre><code class="language-text">cargo setup [options]
+cargo run -p xtask -- setup [options]
+</code></pre>
+<h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
+<p><code>cargo setup</code> runs the platform’s script (<code>scripts/setup-llvm.sh</code> on Linux
+and macOS, <code>scripts/setup-llvm.ps1</code> on Windows), which:</p>
+<ul>
+<li>provisions LLVM, cheapest source first: an LLVM of the wanted major that
+is already installed, else the platform’s package manager (apt or
+Homebrew), else the LLVM release archive (cached, so a second run is
+free);</li>
+<li>writes <code>.cargo/config.toml</code>, so plain <code>cargo</code> commands build against it
+with no environment variables set;</li>
+<li>does nothing more when a valid install is already there.</li>
+</ul>
+<p>When it provisions an LLVM other than the default (20), it prints the
+<code>--features</code> flag cargo needs for it, such as
+<code>cargo build --no-default-features --features llvm19-1</code>.</p>
+<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--llvm &lt;major&gt;</code>, <code>--llvm=&lt;major&gt;</code></td><td>Provision this LLVM major (18 to 22) instead of the default, 20</td></tr>
+<tr><td><code>--devtools</code></td><td>Also set up the <code>lldb</code> debugger: installed into the same prefix on Windows; on Linux and macOS, checked for, with instructions when it is missing</td></tr>
+<tr><td><code>--no-devtools</code></td><td>Skip the debugger, even when <code>PEPPER_SETUP_DEVTOOLS</code> is set</td></tr>
+<tr><td><code>--no-packages</code></td><td>Do not use apt or Homebrew: use an LLVM already installed, or the release archive</td></tr>
+<tr><td><code>--check</code></td><td>Report what is configured and the command to build with it, changing nothing</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td></tr>
+</tbody>
+</table>
+</div>
+<p>Of <code>--devtools</code> and <code>--no-devtools</code>, the last one given wins. <code>--check</code> wins
+over everything else. An unknown argument is an error that prints the
+options and exits with status 1.</p>
+<h2 id="environment-variables-2"><a class="header" href="#environment-variables-2">Environment variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PEPPER_LLVM_MAJOR</code></td><td>The LLVM major to provision, as <code>--llvm</code> gives it</td></tr>
+<tr><td><code>PEPPER_SETUP_DEVTOOLS</code></td><td><code>1</code> sets up the debugger on every run, as <code>--devtools</code> does, so it can be turned on once per machine</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
 <p>This book lives in <code>docs/</code> and is rendered with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>.
 The standard library reference (<code>docs/src/reference/</code>) is generated from the
@@ -38241,6 +38750,8 @@ cargo run -p pepper-docgen -- reference       # regenerate the reference after c
 cargo run -p pepper-docgen -- build           # render into target/docs-site/dev/
 cargo run -p pepper-docgen -- build --version 0.2.0 --site &lt;dir&gt;
 </code></pre>
+<p><code>pep-doc</code>’s commands and options are described in
+<a href="#the-documentation-builder-pep-doc">The documentation builder: pep-doc</a>.</p>
 <h2 id="keeping-the-book-current"><a class="header" href="#keeping-the-book-current">Keeping the book current</a></h2>
 <p>Documentation changes land in the same PR as the code they describe. The
 checklist of what to update for each kind of change is in <code>AGENTS.md</code>, under
@@ -38284,6 +38795,17 @@ the file’s lines at column 0, which ends the list and the code block, so the
 rest of the example shows as prose and its <code>#</code> comments as headings. Put an
 included example at column 0, after the list or in its own <code>###</code> section. The runtime itself must meet the doc
 comment standard in <code>AGENTS.md</code>, which <code>runtime_docs_tests.rs</code> enforces.</p>
+<h2 id="tool-options-stay-documented"><a class="header" href="#tool-options-stay-documented">Tool options stay documented</a></h2>
+<p>Every command-line option of every tool has its place in the book:
+<code>docs/src/tools/&lt;tool&gt;.md</code> for <code>pep-build</code>, <code>pepper</code>, <code>pep-fmt</code>, <code>pep-lsp</code>
+and <code>pep-doc</code>, and <a href="#setting-up-llvm-cargo-setup">Setting up LLVM</a> for <code>cargo setup</code>.
+<code>crates/pepper-driver/tests/integration/tool_docs_tests.rs</code> takes each tool’s
+options from the tool itself (clap’s definition for <code>pep-build</code>, the
+<code>--help</code> text for the others) and fails, naming the tool, the option and the
+page, when a page does not mention one. It also checks <code>pep-build</code>’s trace
+channels and environment variables, and <code>pep-lsp</code>’s initialization options
+and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
+<code>help.txt</code> / <code>usage.txt</code>) and on its page in the same PR.</p>
 
                     </main>
 
