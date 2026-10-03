@@ -23,9 +23,16 @@ the debug info a `-g` build carries:
 - **WASI:** a WebAssembly program cannot walk its stack, so a backtrace
   is empty.
 
+A function the optimizer inlined into its caller has no frame of its
+own, so each address is expanded into its chain of inlined calls, from
+the debug info of a `-g` build: one `StackFrame` per call, marked
+`inlined`.
+
 Frames inside the runtime's own capture and panic code are left out, and
-so are the C runtime's frames below `main`. A function the optimizer
-inlined into its caller has no frame of its own.
+so are the runtime's operator methods (`Array<int>.__index_get`, what
+`a[i]` calls) between a panic and the code that caused it, and the C
+runtime's frames below `main`. `frames(full = true)`, or
+`PEPPER_BACKTRACE=full` for a panic's backtrace, keeps them all.
 
 Source: `runtime/debug/backtrace.pep`
 
@@ -37,6 +44,10 @@ struct StackFrame
 
 One call on the stack: where it returns to, and the function and source
 position that address belongs to.
+
+A call the optimizer inlined is a frame too, with `inlined` set: it
+shares its `address` with the frames of its callers, up to the first
+frame that is not inlined, which is the real one.
 
 **Example**
 ```pepper
@@ -94,6 +105,15 @@ var column: int
 
 The 1-based source column of the call; 0 when unknown.
 
+#### inlined
+
+```pepper
+var inlined: bool
+```
+
+Whether the optimizer inlined this call into its caller, the next
+frame: the function has no frame of its own on the stack.
+
 ### Constructor
 
 #### StackFrame()
@@ -117,8 +137,8 @@ to_string(): String
 ```
 
 Returns the frame as text: `function at file:line:column`, with the
-parts that are unknown left out, and the address in hexadecimal when
-the function is unknown.
+parts that are unknown left out, the address in hexadecimal when
+the function is unknown, and ` (inlined)` after an inlined call.
 
 **Returns**
 - the frame as text
@@ -171,15 +191,25 @@ Creates an empty Backtrace. Use `capture()` to record the stack.
 #### frames
 
 ```pepper
-frames(): Array<StackFrame>
+frames(full: bool = false): Array<StackFrame>
 ```
 
 Resolves each return address to its function and source position.
-Runs in time proportional to the program's symbol and line tables,
-which it reads each call.
+Runs in time proportional to the program's symbol table and debug
+info, which it reads each call.
 
-Leaves out the frames of `capture` and of the runtime's panic code at
-the top, and the C runtime's frames below `main`.
+In a `-g` build, an address inside code the optimizer inlined
+becomes a frame for each inlined call, innermost first, each marked
+`inlined`, followed by the real frame (Linux and macOS read the
+DWARF, Windows asks DbgHelp).
+
+Unless `full`, leaves out, at the top, the frames of `capture` and of
+the runtime's panic code and the runtime's operator methods
+(`Array<int>.__index_get` for `a[i]`) a panic came through; and at
+the bottom, the C runtime's frames below `main`.
+
+**Parameters**
+- `full` — whether to keep every frame
 
 **Returns**
 - the frames, innermost first
@@ -233,8 +263,9 @@ Writes the current call stack to standard error, a line per frame, after
 a `backtrace:` line: what a panic prints after its message.
 
 A panic prints it in a build without `-O`. Set the `PEPPER_BACKTRACE`
-environment variable to `1` to print it in an optimized build too, or to
-`0` to never print it.
+environment variable to `1` to print it in an optimized build too, to
+`full` to also print the runtime frames it leaves out (see
+`Backtrace.frames`), or to `0` to never print it.
 
 **Example**
 ```pepper

@@ -1,6 +1,6 @@
 # Resolving return addresses on Linux: the executable's ELF symbol table
-# names the function, its DWARF line table (in a `-g` build) the source
-# position, and `dladdr` the frames in shared libraries.
+# names the function, its DWARF (in a `-g` build) the source position and
+# the inlined calls, and `dladdr` the frames in shared libraries.
 
 import "backtrace";
 import "dwarf";
@@ -24,7 +24,7 @@ extern int munmap(void* address, ulong length);
 const _DEBUG_AT_ENTRY: ulong = 9;
 
 [Target(OS(Linux))]
-export _debug_sys_symbolize(frames: Array<StackFrame>) {
+export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
     # Dl_info { dli_fname, dli_fbase, dli_sname, dli_saddr }
     __ptr<ulong> info = _pep_malloc(32);
     ulong main_base = 0;
@@ -49,10 +49,9 @@ export _debug_sys_symbolize(frames: Array<StackFrame>) {
         targets.append(target);
     }
     _pep_free(info);
-    if (image.valid && image.line_size > 0) {
-        _debug_dwarf_lines(image.data + image.line_offset, image.line_size, targets, frames);
-    }
+    var all = image.valid ? _debug_dwarf_frames(image.debug, targets, frames) : frames;
     image.close();
+    return all;
 }
 
 # An ELF64 file mapped read-only, with the parts the symbolizer reads.
@@ -67,8 +66,8 @@ struct _DebugElf {
     var symbols_size: ulong;
     var names_offset: ulong;
     var names_size: ulong;
-    var line_offset: ulong;
-    var line_size: ulong;
+    # The DWARF sections, inside `data`.
+    var debug: _DwarfSections;
 
     construct(path: String) {
         data = __null;
@@ -79,8 +78,7 @@ struct _DebugElf {
         symbols_size = 0;
         names_offset = 0;
         names_size = 0;
-        line_offset = 0;
-        line_size = 0;
+        debug = _DwarfSections();
         _open(path);
     }
 
@@ -154,11 +152,20 @@ struct _DebugElf {
                     dynamic_symbols = offset;
                     dynamic_size = length;
                     dynamic_link = link;
-                } else if (section_type == 1 && _name_is(section_names + _debug_read(data, header, 4), ".debug_line")) {
-                    # SHF_COMPRESSED sections are not read.
-                    if ((_debug_read(data, header + 8, 8) & 0x800) == 0) {
-                        line_offset = offset;
-                        line_size = length;
+                } else if (section_type == 1 && (_debug_read(data, header + 8, 8) & 0x800) == 0) {
+                    # A DWARF section, unless SHF_COMPRESSED, which is not
+                    # read.
+                    var name = section_names + _debug_read(data, header, 4);
+                    if (_name_is(name, ".debug_info")) {
+                        debug.set(".debug_info", data + offset, length);
+                    } else if (_name_is(name, ".debug_abbrev")) {
+                        debug.set(".debug_abbrev", data + offset, length);
+                    } else if (_name_is(name, ".debug_str")) {
+                        debug.set(".debug_str", data + offset, length);
+                    } else if (_name_is(name, ".debug_ranges")) {
+                        debug.set(".debug_ranges", data + offset, length);
+                    } else if (_name_is(name, ".debug_line")) {
+                        debug.set(".debug_line", data + offset, length);
                     }
                 }
             }

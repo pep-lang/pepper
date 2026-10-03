@@ -8,7 +8,9 @@ import "backtrace";
 export _debug_sys_capture(addresses: Array<ulong>, limit: int) {}
 
 [Target(OS(Wasi))]
-export _debug_sys_symbolize(frames: Array<StackFrame>) {}
+export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
+    return frames;
+}
 
 [Target(OS(Wasi))]
 export _debug_sys_output(text: String) {

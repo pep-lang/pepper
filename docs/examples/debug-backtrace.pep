@@ -21,9 +21,9 @@ main(): int {
     for (var frame in frames) {
         print(frame.to_string());
     }
-    # The outermost frame is main. (With -O, `where` is inlined into main
-    # and has no frame of its own; WebAssembly cannot walk its stack, so
-    # there a backtrace is empty.)
+    # The outermost frame is main. (With -O and no -g, `where` is inlined
+    # into main and has no frame of its own; WebAssembly cannot walk its
+    # stack, so there a backtrace is empty.)
     if (frames.count > 0) {
         assert(frames[frames.count - 1].function == "main", "the outermost call");
     }

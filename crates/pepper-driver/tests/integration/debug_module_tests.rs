@@ -1,6 +1,7 @@
 //! The `debug` module (#500): `capture()` resolves frames to functions and,
-//! with `-g`, source lines; a panic prints a backtrace at `-O0`, none with
-//! `-O`, and `PEPPER_BACKTRACE` overrides the build; `output`,
+//! with `-g`, source lines, expanding inlined calls into frames of their
+//! own (#529); a panic prints a backtrace at `-O0`, none with `-O`, and
+//! `PEPPER_BACKTRACE` overrides the build; `output`,
 //! `is_debugger_attached` and `breakpoint` reach the platform.
 
 use crate::support::{output_text, parallel_map, run_linked_with, stdout_of};
@@ -27,7 +28,7 @@ helper<T>(value: T): Array<debug.StackFrame> {
 main(): int {
     var frames = helper<int>(3);
     for (var frame in frames) {
-        print($\"{frame.function}|{frame.file}|{frame.line}|{frame.column}\");
+        print($\"{frame.function}|{frame.file}|{frame.line}|{frame.column}|{frame.inlined}\");
     }
     return 0;
 }
@@ -48,6 +49,67 @@ fn capture_names_functions_and_lines_with_debug_info() {
     if !cfg!(windows) {
         // DbgHelp reports no columns.
         assert_eq!(frames[0][3], "16", "{text}");
+    }
+    assert!(frames.iter().all(|f| f[4] == "false"), "{text}");
+}
+
+/// Optimized, `Point.trace` and `helper<int>` inline into `main`: each
+/// inlined call is still a frame, at its own line, marked inlined.
+#[test]
+fn capture_expands_inlined_calls_with_debug_info() {
+    let output = run_linked_with("debug_capture_inlined", CAPTURE, &["-g", "-O2"], |_| {});
+    let text = stdout_of(&output);
+    assert!(output.status.success(), "{}", output_text(&output));
+    let frames: Vec<Vec<&str>> = text.lines().map(|l| l.split('|').collect()).collect();
+    let names: Vec<&str> = frames.iter().map(|f| f[0]).collect();
+    // CodeView names an inlined call without its type arguments.
+    let helper = if cfg!(windows) { "helper" } else { "helper<int>" };
+    assert_eq!(names, ["Point.trace", helper, "main"], "{text}");
+    let inlined: Vec<&str> = frames.iter().map(|f| f[4]).collect();
+    assert_eq!(inlined, ["true", "true", "false"], "{text}");
+    for (frame, line) in frames.iter().zip(["9", "15", "19"]) {
+        assert!(frame[1].ends_with("debug_capture_inlined.pep"), "{text}");
+        assert_eq!(frame[2], line, "{text}");
+    }
+    if !cfg!(windows) {
+        let columns: Vec<&str> = frames.iter().map(|f| f[3]).collect();
+        assert_eq!(columns, ["16", "14", "18"], "{text}");
+    }
+}
+
+const INDEXES: &str = "main(): int {
+    var a = Array<int>();
+    a.append(1);
+    return a[5];
+}
+";
+
+/// A panic in `[]` starts its backtrace at the user's `a[5]`, not in
+/// `Array<int>.__index_get`, inlined or not; `PEPPER_BACKTRACE=full` shows
+/// every frame.
+#[test]
+fn a_panic_through_an_operator_starts_at_the_caller() {
+    const CASES: &[(&str, &[&str], &str)] = &[
+        ("debug", &["-g"], "1"),
+        ("optimized", &["-g", "-O2"], "1"),
+        ("full", &["-g", "-O2"], "full"),
+    ];
+    let results = parallel_map(CASES, |&(name, args, setting)| {
+        run_linked_with(&format!("debug_index_{}", name), INDEXES, args, |command| {
+            command.env("PEPPER_BACKTRACE", setting);
+        })
+    });
+    for (&(name, _, setting), output) in CASES.iter().zip(results) {
+        assert!(!output.status.success(), "{name}: expected a panic");
+        let stderr = String::from_utf8_lossy(&output.stderr).replace('\r', "");
+        let first = stderr.lines().find(|l| l.starts_with("  0: ")).unwrap_or_default();
+        if setting == "full" {
+            assert!(stderr.contains("Array<int>.__index_get at "), "{name}: {stderr}");
+            assert!(stderr.contains("main at "), "{name}: {stderr}");
+        } else {
+            assert!(first.contains("main at ") && first.contains(&format!("debug_index_{name}.pep:4")), "{name}: {stderr}");
+            assert!(!stderr.contains("__index_get"), "{name}: {stderr}");
+        }
     }
 }
 

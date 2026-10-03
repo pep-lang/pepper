@@ -1,7 +1,7 @@
 # Resolving return addresses on macOS: the executable's Mach-O symbol
-# table (mapped in memory) names the function, the DWARF line table in the
-# `.dSYM` bundle a `-g` build writes beside it gives the source position,
-# and `dladdr` names the frames in system libraries.
+# table (mapped in memory) names the function, the DWARF in the `.dSYM`
+# bundle a `-g` build writes beside it gives the source position and the
+# inlined calls, and `dladdr` names the frames in system libraries.
 
 import "backtrace";
 import "dwarf";
@@ -26,7 +26,7 @@ extern void* mmap(void* address, ulong length, int protection, int flags, int de
 extern int munmap(void* address, ulong length);
 
 [Target(OS(Mac))]
-export _debug_sys_symbolize(frames: Array<StackFrame>) {
+export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
     __ptr<u8> header = _debug_executable_header();
     # Dl_info { dli_fname, dli_fbase, dli_sname, dli_saddr }
     __ptr<ulong> info = _pep_malloc(32);
@@ -47,7 +47,7 @@ export _debug_sys_symbolize(frames: Array<StackFrame>) {
         targets.append(target);
     }
     _pep_free(info);
-    _debug_dsym_lines(targets, frames);
+    return _debug_dsym_frames(targets, frames);
 }
 
 # The executable's Mach-O header: the loaded image whose file type is
@@ -208,10 +208,11 @@ _debug_name_is(field: __ptr<u8>, name: String): bool {
     return true;
 }
 
-# Fills source positions from `<executable>.dSYM/Contents/Resources/DWARF/
-# <name>`, when a `-g` build left one beside the executable.
+# Fills source positions and adds inlined calls from `<executable>.dSYM/
+# Contents/Resources/DWARF/<name>`, when a `-g` build left one beside the
+# executable; returns the frames.
 [Target(OS(Mac))]
-_debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
+_debug_dsym_frames(targets: Array<ulong>, frames: Array<StackFrame>): Array<StackFrame> {
     __ptr<char> buffer = _pep_malloc(4096);
     __ptr<uint> size = _pep_malloc(4);
     size[0] = 4096;
@@ -219,7 +220,7 @@ _debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
     _pep_free(size);
     _pep_free(buffer);
     if (executable.is_empty) {
-        return;
+        return frames;
     }
     var slash = executable.rfind("/");
     var name = slash >= 0 ?
@@ -228,7 +229,7 @@ _debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
     var path = $"{executable}.dSYM/Contents/Resources/DWARF/{name}";
     var fd = open(path.c_str(), 0);
     if (fd < 0) {
-        return;
+        return frames;
     }
     var length = lseek(fd, 0, 2);
     __ptr<u8> data = __null;
@@ -240,9 +241,10 @@ _debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
     }
     close(fd);
     if (data == __null) {
-        return;
+        return frames;
     }
     var file_size = length as ulong;
+    var dwarf = _DwarfSections();
     if (_debug_read(data, 0, 4) == 0xfeedfacf) {
         var commands = _debug_read(data, 16, 4);
         ulong command = 32;
@@ -256,11 +258,20 @@ _debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
                 ulong section = 0;
                 while (section < sections && command + 72 + (section + 1) * 80 <= file_size) {
                     var header = command + 72 + section * 80;
-                    if (_debug_name_is(data + header, "__debug_line")) {
-                        var bytes = _debug_read(data, header + 40, 8);
-                        var offset = _debug_read(data, header + 48, 4);
-                        if (offset + bytes <= file_size) {
-                            _debug_dwarf_lines(data + offset, bytes, targets, frames);
+                    var bytes = _debug_read(data, header + 40, 8);
+                    var offset = _debug_read(data, header + 48, 4);
+                    if (offset + bytes <= file_size) {
+                        # Mach-O spells `.debug_line` `__debug_line`.
+                        if (_debug_name_is(data + header, "__debug_info")) {
+                            dwarf.set(".debug_info", data + offset, bytes);
+                        } else if (_debug_name_is(data + header, "__debug_abbrev")) {
+                            dwarf.set(".debug_abbrev", data + offset, bytes);
+                        } else if (_debug_name_is(data + header, "__debug_str")) {
+                            dwarf.set(".debug_str", data + offset, bytes);
+                        } else if (_debug_name_is(data + header, "__debug_ranges")) {
+                            dwarf.set(".debug_ranges", data + offset, bytes);
+                        } else if (_debug_name_is(data + header, "__debug_line")) {
+                            dwarf.set(".debug_line", data + offset, bytes);
                         }
                     }
                     section = section + 1;
@@ -273,5 +284,7 @@ _debug_dsym_lines(targets: Array<ulong>, frames: Array<StackFrame>) {
             index = index + 1;
         }
     }
+    var all = _debug_dwarf_frames(dwarf, targets, frames);
     munmap(data, file_size);
+    return all;
 }

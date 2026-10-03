@@ -6,7 +6,7 @@ with `import debug`.
 | Function | Does |
 |---|---|
 | `debug.capture()` | Records the call stack as a `Backtrace`: the return address of each call, innermost first. |
-| `trace.frames()` | Resolves the addresses to `StackFrame`s: `function`, `file`, `line`, `column` and `address`. |
+| `trace.frames()` | Resolves the addresses to `StackFrame`s: `function`, `file`, `line`, `column`, `address` and `inlined`. |
 | `debug.print_backtrace()` | Writes the current stack to standard error, as a panic does. |
 | `debug.output(text)` | Writes to the platform's debugger channel. |
 | `debug.is_debugger_attached()` | Whether a debugger is attached. |
@@ -20,6 +20,15 @@ Built with `-g`, this prints:
 
 ```text
 Parser.where at debug-backtrace.pep:13:16
+main at debug-backtrace.pep:19:24
+done
+```
+
+Built with `-g -O2`, the optimizer inlines `where` into `main`, and the
+backtrace still shows it, marked as inlined:
+
+```text
+Parser.where at debug-backtrace.pep:13:16 (inlined)
 main at debug-backtrace.pep:19:24
 done
 ```
@@ -43,11 +52,32 @@ info a `-g` build carries:
 | WASI | none | none |
 
 A WebAssembly program cannot walk its own stack, so on WASI a backtrace is
-empty. A function the optimizer inlined into its caller has no frame of its
-own: with `-O`, the caller's frame shows the inlined code's line instead.
+empty.
 
-`frames()` leaves out the frames of `capture` itself and of the runtime's
-panic code at the top of the stack, and the C runtime's frames below `main`.
+## Inlined calls
+
+A function the optimizer inlined into its caller has no frame of its own on
+the stack. In a `-g` build, `frames()` puts it back: it expands each address
+into the chain of inlined calls it is inside, as `addr2line -i` and
+debuggers do, with one `StackFrame` per call, innermost first. Each of these
+frames has `inlined` set and is at the line of its own call, and the frame
+after them, which is not inlined, is the real one. All of them share its
+`address`. Linux and macOS read the inlined calls from the DWARF debug info,
+and Windows asks DbgHelp. On Windows an inlined call to a generic function
+is named without its type arguments (`helper`, not `helper<int>`), since
+the `.pdb` records inlined calls that way.
+
+Without `-g` there is no record of what was inlined, so an optimized build's
+backtrace shows only the real frames, each named after the function the
+code was inlined into.
+
+## Which frames are left out
+
+`frames()` leaves out, at the top of the stack, the frames of `capture`
+itself and of the runtime's panic code, and the runtime's operator methods a
+panic came through: a panic in `a[i]` starts at the line with `a[i]`, not in
+`Array<int>.__index_get`. It also leaves out the C runtime's frames below
+`main`. `frames(full = true)` keeps them all.
 
 ## Backtraces on panic
 
@@ -63,7 +93,8 @@ backtrace:
 
 An optimized build prints the message alone. The `PEPPER_BACKTRACE`
 environment variable overrides the build: `PEPPER_BACKTRACE=1` prints a
-backtrace in any build, and `PEPPER_BACKTRACE=0` never prints one. Without
+backtrace in any build, `PEPPER_BACKTRACE=full` also prints the frames
+`frames()` leaves out, and `PEPPER_BACKTRACE=0` never prints one. Without
 `-g`, each frame shows its function but no file or line.
 
 Only the first panic in a process prints a backtrace. If a second thread

@@ -19,9 +19,16 @@
 ## - **WASI:** a WebAssembly program cannot walk its stack, so a backtrace
 ##   is empty.
 ##
+## A function the optimizer inlined into its caller has no frame of its
+## own, so each address is expanded into its chain of inlined calls, from
+## the debug info of a `-g` build: one `StackFrame` per call, marked
+## `inlined`.
+##
 ## Frames inside the runtime's own capture and panic code are left out, and
-## so are the C runtime's frames below `main`. A function the optimizer
-## inlined into its caller has no frame of its own.
+## so are the runtime's operator methods (`Array<int>.__index_get`, what
+## `a[i]` calls) between a panic and the code that caused it, and the C
+## runtime's frames below `main`. `frames(full = true)`, or
+## `PEPPER_BACKTRACE=full` for a panic's backtrace, keeps them all.
 
 import "dwarf";
 import "symbols_elf";
@@ -32,6 +39,10 @@ import "sys_windows";
 
 ## One call on the stack: where it returns to, and the function and source
 ## position that address belongs to.
+##
+## A call the optimizer inlined is a frame too, with `inlined` set: it
+## shares its `address` with the frames of its callers, up to the first
+## frame that is not inlined, which is the real one.
 ##
 ## @example
 ##     import debug;
@@ -55,6 +66,9 @@ export struct StackFrame {
     var line: int;
     ## The 1-based source column of the call; 0 when unknown.
     var column: int;
+    ## Whether the optimizer inlined this call into its caller, the next
+    ## frame: the function has no frame of its own on the stack.
+    var inlined: bool;
 
     ## Creates a StackFrame for `address`, with no function or source
     ## position yet.
@@ -66,11 +80,12 @@ export struct StackFrame {
         file = "";
         line = 0;
         column = 0;
+        inlined = false;
     }
 
     ## Returns the frame as text: `function at file:line:column`, with the
-    ## parts that are unknown left out, and the address in hexadecimal when
-    ## the function is unknown.
+    ## parts that are unknown left out, the address in hexadecimal when
+    ## the function is unknown, and ` (inlined)` after an inlined call.
     ##
     ## @returns the frame as text
     to_string(): String {
@@ -83,6 +98,9 @@ export struct StackFrame {
                     text = $"{text}:{column}";
                 }
             }
+        }
+        if (inlined) {
+            text = $"{text} (inlined)";
         }
         return text;
     }
@@ -114,19 +132,30 @@ export struct Backtrace {
     }
 
     ## Resolves each return address to its function and source position.
-    ## Runs in time proportional to the program's symbol and line tables,
-    ## which it reads each call.
+    ## Runs in time proportional to the program's symbol table and debug
+    ## info, which it reads each call.
     ##
-    ## Leaves out the frames of `capture` and of the runtime's panic code at
-    ## the top, and the C runtime's frames below `main`.
+    ## In a `-g` build, an address inside code the optimizer inlined
+    ## becomes a frame for each inlined call, innermost first, each marked
+    ## `inlined`, followed by the real frame (Linux and macOS read the
+    ## DWARF, Windows asks DbgHelp).
     ##
+    ## Unless `full`, leaves out, at the top, the frames of `capture` and of
+    ## the runtime's panic code and the runtime's operator methods
+    ## (`Array<int>.__index_get` for `a[i]`) a panic came through; and at
+    ## the bottom, the C runtime's frames below `main`.
+    ##
+    ## @param full whether to keep every frame
     ## @returns the frames, innermost first
-    frames(): Array<StackFrame> {
-        var all = Array<StackFrame>();
+    frames(full: bool = false): Array<StackFrame> {
+        var physical = Array<StackFrame>();
         for (var address in addresses) {
-            all.append(StackFrame(address));
+            physical.append(StackFrame(address));
         }
-        _debug_sys_symbolize(all);
+        var all = _debug_sys_symbolize(physical);
+        if (full) {
+            return all;
+        }
         ulong first = 0;
         while (first < all.count && _debug_is_internal(all[first].function)) {
             first = first + 1;
@@ -148,17 +177,21 @@ export struct Backtrace {
     ##
     ## @returns the frames as text
     to_string(): String {
-        var text = StringBuilder();
-        ulong index = 0;
-        for (var frame in frames()) {
-            text.append($"  {index}: {frame.to_string()}\n");
-            index = index + 1;
-        }
-        return text.to_string();
+        return _debug_frames_text(frames());
     }
 }
 
 extend Backtrace with ToString;
+
+_debug_frames_text(frames: Array<StackFrame>): String {
+    var text = StringBuilder();
+    ulong index = 0;
+    for (var frame in frames) {
+        text.append($"  {index}: {frame.to_string()}\n");
+        index = index + 1;
+    }
+    return text.to_string();
+}
 
 ## Records the call stack: the return address of every call that led here.
 ## Cheap: the addresses are resolved only when `Backtrace.frames()` or
@@ -186,8 +219,9 @@ export capture(): Backtrace {
 ## a `backtrace:` line: what a panic prints after its message.
 ##
 ## A panic prints it in a build without `-O`. Set the `PEPPER_BACKTRACE`
-## environment variable to `1` to print it in an optimized build too, or to
-## `0` to never print it.
+## environment variable to `1` to print it in an optimized build too, to
+## `full` to also print the runtime frames it leaves out (see
+## `Backtrace.frames`), or to `0` to never print it.
 ##
 ## @example
 ##     import debug;
@@ -201,7 +235,9 @@ export print_backtrace() {
 }
 
 _debug_write_backtrace(trace: Backtrace) {
-    var text = $"backtrace:\n{trace.to_string()}";
+    var full = _debug_getenv("PEPPER_BACKTRACE");
+    var all = full != __null && String(full) == "full";
+    var text = $"backtrace:\n{_debug_frames_text(trace.frames(all))}";
     _pep_write_error(text.c_str());
 }
 
@@ -231,9 +267,14 @@ _debug_getenv(name: String): __ptr<char> {
 }
 
 # The runtime functions a captured stack starts with: `capture` and the
-# platform call under it, and the panic path that prints a backtrace.
+# platform call under it, the panic path that prints a backtrace, and the
+# operator methods (`Array<int>.__index_get`) whose checks panic.
 _debug_is_internal(function: String): bool {
     if (function.starts_with("_debug_") || function.starts_with("_pep_")) {
+        return true;
+    }
+    var dot = function.rfind(".");
+    if (dot >= 0 && function.substr_bytes((dot + 1) as ulong, function.size - (dot + 1) as ulong).starts_with("__")) {
         return true;
     }
     return function == "capture" || function == "print_backtrace" || function == "panic" || function == "assert";
