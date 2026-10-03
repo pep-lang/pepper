@@ -1,4 +1,5 @@
-## The user the program runs as: their name and directories.
+## The user the program runs as: their name, directories, and whether they
+## have administrator rights.
 
 import io;
 import "environment";
@@ -14,6 +15,17 @@ import "sys_windows";
 ## @returns the user name, or none when it cannot be found
 export user_name(): String? {
     return _os_sys_user_name();
+}
+
+## Returns whether the program runs with administrator rights: on POSIX,
+## as root (effective user id 0); on Windows, from an elevated
+## ("Run as administrator") process of a member of Administrators
+## (`IsUserAnAdmin`); never on WASI. Tools that need them, such as a
+## profiler that reads kernel events, check this to say so up front.
+##
+## @returns true when the program runs as root or elevated
+export is_elevated(): bool {
+    return _os_sys_is_elevated();
 }
 
 ## Returns the user's home directory: on POSIX `HOME`, or the user

@@ -13,7 +13,7 @@
 ##   `architecture()`, `hostname()`, processor counts, `total_memory()`,
 ##   `page_size()`
 ## - [User](os-user.md): `user_name()`, `home_directory()`,
-##   `temp_directory()`
+##   `temp_directory()`, `is_elevated()`
 ##
 ## @example
 ##     import os;
@@ -53,6 +53,7 @@ export total_memory;
 export page_size;
 export user_name;
 export home_directory;
+export is_elevated;
 export temp_directory;
 
 # For the process module only: the environment a child inherits.

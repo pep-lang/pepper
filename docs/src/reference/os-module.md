@@ -17,7 +17,7 @@ environment variables, clocks and time, and the machine and user.
   `architecture()`, `hostname()`, processor counts, `total_memory()`,
   `page_size()`
 - [User](os-user.md): `user_name()`, `home_directory()`,
-  `temp_directory()`
+  `temp_directory()`, `is_elevated()`
 
 **Example**
 ```pepper

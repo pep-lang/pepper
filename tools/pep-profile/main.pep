@@ -225,6 +225,13 @@ record(options: Options, scratch: Path): Result<String> {
         return Result<String>.Err(profiler.error().message);
     }
     var (kind, program) = profiler.value();
+    # samply records Windows' ETW events, which only an elevated process
+    # may: without one, it waits on a UAC prompt and then fails.
+    if (kind == "samply" and os.system_os() == os.OperatingSystem.Windows and !os.is_elevated()) {
+        return Result<String>.Err(
+            "samply needs administrator rights on Windows: run pep-profile from an Administrator terminal (\"Run as administrator\")"
+        );
+    }
     var command = Array<String>();
     if (options.pid.is_empty) {
         var executable = options.command[0];

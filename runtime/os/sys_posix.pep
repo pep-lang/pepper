@@ -234,6 +234,11 @@ export _os_sys_user_name(): String? {
 }
 
 [Target(OS(Linux) || OS(Mac))]
+export _os_sys_is_elevated(): bool {
+    return geteuid() == 0;
+}
+
+[Target(OS(Linux) || OS(Mac))]
 export _os_sys_home_directory(): String? {
     var home = _os_nonempty_environment("HOME");
     if (home.is_value()) {

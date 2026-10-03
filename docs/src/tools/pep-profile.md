@@ -27,6 +27,12 @@ It uses samply when it is installed, and otherwise perf on Linux or
 `sample` on macOS; on Windows, samply is the one supported. When none is
 installed it says what to install. `--profiler` picks one.
 
+On Windows, samply records the system's ETW events, which needs
+administrator rights: run `pep-profile` from an Administrator terminal
+("Run as administrator"). Without them it stops at once and says so, rather
+than waiting on a UAC prompt. Drawing a recording with `--input` needs no
+rights.
+
 `pep-profile` is written in Pepper (`tools/pep-profile`). Build it with the
 compiler, with `tools/` on the import path, and put it next to `pepper` so
 that `pepper profile` finds it:

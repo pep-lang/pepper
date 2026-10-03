@@ -34,6 +34,9 @@ extern int RtlGetVersion(void* info);
 [Target(OS(Windows))]
 [Link("advapi32")]
 extern int GetUserNameW(ushort* buffer, uint* size);
+[Target(OS(Windows))]
+[Link("shell32")]
+extern int IsUserAnAdmin();
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -194,6 +197,11 @@ export _os_sys_user_name(): String? {
         return found;
     }
     return _os_nonempty_environment("USERNAME");
+}
+
+[Target(OS(Windows))]
+export _os_sys_is_elevated(): bool {
+    return IsUserAnAdmin() != 0;
 }
 
 [Target(OS(Windows))]

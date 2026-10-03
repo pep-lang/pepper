@@ -2,7 +2,8 @@
 
 # User
 
-The user the program runs as: their name and directories.
+The user the program runs as: their name, directories, and whether they
+have administrator rights.
 
 Source: `runtime/os/user.pep`
 
@@ -19,6 +20,21 @@ on Windows `GetUserNameW`'s answer (else `USERNAME`), and on WASI
 
 **Returns**
 - the user name, or none when it cannot be found
+
+## is_elevated
+
+```pepper
+is_elevated(): bool
+```
+
+Returns whether the program runs with administrator rights: on POSIX,
+as root (effective user id 0); on Windows, from an elevated
+("Run as administrator") process of a member of Administrators
+(`IsUserAnAdmin`); never on WASI. Tools that need them, such as a
+profiler that reads kernel events, check this to say so up front.
+
+**Returns**
+- true when the program runs as root or elevated
 
 ## home_directory
 

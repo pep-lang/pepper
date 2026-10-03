@@ -73,6 +73,7 @@ be negative.
 | `user_name()` | the user the program runs as, or none |
 | `home_directory()` | `HOME` (on Windows `USERPROFILE`), or the user database's entry, or none |
 | `temp_directory()` | the directory for temporary files, the same as `io.Directory.temp()` |
+| `is_elevated()` | whether the program runs as root, or elevated ("Run as administrator") on Windows; never on WASI |
 
 ## Current limitations
 

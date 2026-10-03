@@ -106,6 +106,11 @@ export _os_sys_user_name(): String? {
 }
 
 [Target(OS(Wasi))]
+export _os_sys_is_elevated(): bool {
+    return false;
+}
+
+[Target(OS(Wasi))]
 export _os_sys_home_directory(): String? {
     return _os_nonempty_environment("HOME");
 }
