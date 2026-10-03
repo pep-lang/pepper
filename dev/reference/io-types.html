@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9d0d4f1b.js";
+            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-87a4dcdf.js"></script>
+        <script src="../toc-0d36e6a4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -461,6 +461,26 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
+<h4 id="invalid_input"><a class="header" href="#invalid_input">invalid_input</a></h4>
+<pre><code class="language-pepper">static invalid_input(message: String): IoError
+</code></pre>
+<p>Makes an error for data or an argument that is not valid, such as a
+damaged file a library parses, with the platform’s code for invalid
+input, so <code>is_invalid_input()</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — what is wrong</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var error = io.IoError.invalid_input("data.bin: bad header");
+assert(error.is_invalid_input(), "the kind");
+</code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="kind"><a class="header" href="#kind">kind</a></h4>
 <pre><code class="language-pepper">kind(): ErrorKind

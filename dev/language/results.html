@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9d0d4f1b.js";
+            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-87a4dcdf.js"></script>
+        <script src="../toc-0d36e6a4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -534,6 +534,9 @@ main(): int {
 </code></pre>
 <p>See <a href="../reference/io-types.html">io: errors and platform types</a> for the full list
 of kinds and the platform codes each one covers.</p>
+<p>A library that reads a file format reports damaged data the same way:
+<code>IoError.invalid_input(message)</code> makes an error whose <code>is_invalid_input()</code>
+holds, as <code>compress</code> and <code>archive</code> return for corrupt input.</p>
 <p>Reading a directory or a file line by line in a <code>for</code> loop yields one
 <code>IoResult</code> per element, so each error is handled where it happens; see
 <a href="iteration.html#reading-files-and-directories">Iteration</a>.</p>

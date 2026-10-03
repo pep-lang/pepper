@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9d0d4f1b.js";
+            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-87a4dcdf.js"></script>
+        <script src="../toc-0d36e6a4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -352,7 +352,9 @@ the directory <code>target</code>:</p>
 <ul>
 <li>It refuses, with an <code>is_invalid_input()</code> error, an entry whose path is
 absolute or holds a <code>..</code> component, a <code>\</code> or a <code>:</code>, so an archive cannot
-write outside <code>target</code>.</li>
+write outside <code>target</code>. <code>archive.safe_components(path)</code> is that check,
+for readers of other formats: it gives the path’s components, or Empty
+for an unsafe path.</li>
 <li><code>strip_components</code> drops leading path components, as tar’s
 <code>--strip-components</code> does. A GitHub snapshot puts everything under
 <code>name-version/</code>, which <code>strip_components = 1</code> removes.</li>
@@ -365,7 +367,37 @@ files get the default permissions, so a script loses its executable bit.</li>
 <code>append_directory(path)</code>, <code>append_symlink(path, target)</code>, <code>append(entry, data)</code> for any header, and <code>append_stream(entry, source)</code> to copy
 <code>entry.size</code> bytes from a stream. <code>finish()</code> writes the end marker.
 Paths longer than a ustar header holds get a pax header, so none is cut
-short. <code>.zip</code> archives are not supported yet.</p>
+short.</p>
+<h2 id="zip-archives"><a class="header" href="#zip-archives">Zip archives</a></h2>
+<p><code>.zip</code> archives are read and written by the
+<a href="https://github.com/justinboswell/pepper-zip">zip package</a>, which builds
+on <code>compress</code> and <code>archive</code>. It is a package rather than part of the
+runtime because the package manager needs only <code>.tar.gz</code>; add it with
+<code>pepper package add justinboswell/pepper-zip --name zip</code>.</p>
+<pre><code class="language-pepper">import zip;
+
+main(): int {
+    var writer = zip.Writer.create("bundle.zip").value();
+    writer.add("version.txt", "1.0.0".bytes()).value();
+    writer.finish().value();
+
+    var archive = zip.Archive.open("bundle.zip").value();
+    for (var entry in archive.entries()) {
+        print($"{entry.name}: {entry.size} bytes");
+    }
+    archive.extract_all("out").value();
+    return 0;
+}
+</code></pre>
+<ul>
+<li>It reads and writes stored and DEFLATE entries, ZIP64 (archives and
+entries past 4 GiB, more than 65,535 entries), and UTF-8 names; names in
+older archives are decoded as code page 437 (<code>text.CodePage437</code>).</li>
+<li>Entries compressed another way (bzip2, LZMA, zstd) or encrypted are
+listed, and reading one is an error naming the entry and the method.</li>
+<li><code>extract_all</code> checks every name with <code>archive.safe_components</code> before
+writing anything, and each entry’s CRC-32 as it is written.</li>
+</ul>
 
                     </main>
 

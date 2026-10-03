@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9d0d4f1b.js";
+            window.path_to_searchindex_js = "searchindex-f0339ea3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-87a4dcdf.js"></script>
+        <script src="toc-0d36e6a4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2252,6 +2252,13 @@ main(): int {
     assert(text.Ascii.encode(greeting).is_empty(), "not ASCII");
     assert(text.Ascii.encode_lossy("é").count == 1, "one '?'");
 
+    # Code page 437, as old zip archives name entries: é is 0x82, and every
+    # byte decodes, so decode gives a String.
+    var dos = text.CodePage437.encode("café").value();
+    assert(dos.count == 4 &amp;&amp; dos[3] == 0x82, "one byte each");
+    assert(text.CodePage437.decode(dos) == "café", "round trip");
+    assert(text.CodePage437.encode(greeting).is_empty(), "no 🙂 in code page 437");
+
     # Strict decoding rejects invalid bytes; lossy decoding replaces them.
     var bad = Array&lt;u8&gt;();
     bad.append(104);
@@ -2270,6 +2277,7 @@ main(): int {
 <tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String’s bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding, and <code>find_invalid</code> gives the offset of a String’s first invalid byte. <code>code_point_at</code> reads one code point and <code>append_code_point</code> writes one.</td></tr>
 <tr><td><code>text.Utf16</code></td><td>UTF-16, two bytes per code unit, little-endian by default (<code>encode(s, true)</code> and <code>decode(bytes, true)</code> for big-endian). A code point past U+FFFF takes a surrogate pair.</td></tr>
 <tr><td><code>text.Ascii</code></td><td>ASCII: code points below 128, one byte each. <code>is_ascii</code> checks a String.</td></tr>
+<tr><td><code>text.CodePage437</code></td><td>Code page 437, the IBM PC character set that old zip archives use for entry names: ASCII below 128, and one accented letter, Greek letter or box-drawing symbol for each byte above. Every byte decodes, so <code>decode</code> gives a String, not an Optional.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2279,7 +2287,8 @@ encoding (a stray UTF-8 continuation byte, an unpaired UTF-16 surrogate,
 an odd UTF-16 byte count, an ASCII byte of 128 or more).</li>
 <li><strong><code>decode_lossy</code></strong> always succeeds: whatever is invalid becomes U+FFFD,
 the replacement character.</li>
-<li><strong><code>Ascii.encode</code></strong> gives Empty for text with a code point past 127;
+<li><strong><code>Ascii.encode</code></strong> gives Empty for text with a code point past 127, and
+<strong><code>CodePage437.encode</code></strong> for a character the code page lacks;
 <strong><code>encode_lossy</code></strong> writes <code>?</code> for each instead.</li>
 <li>No byte-order mark is written, and one that is read stays in the text.</li>
 <li><code>io.File.read_string</code> decodes with <code>text.Utf8.decode</code>, and an HTTP body’s
@@ -3066,7 +3075,9 @@ the directory <code>target</code>:</p>
 <ul>
 <li>It refuses, with an <code>is_invalid_input()</code> error, an entry whose path is
 absolute or holds a <code>..</code> component, a <code>\</code> or a <code>:</code>, so an archive cannot
-write outside <code>target</code>.</li>
+write outside <code>target</code>. <code>archive.safe_components(path)</code> is that check,
+for readers of other formats: it gives the path’s components, or Empty
+for an unsafe path.</li>
 <li><code>strip_components</code> drops leading path components, as tar’s
 <code>--strip-components</code> does. A GitHub snapshot puts everything under
 <code>name-version/</code>, which <code>strip_components = 1</code> removes.</li>
@@ -3079,7 +3090,37 @@ files get the default permissions, so a script loses its executable bit.</li>
 <code>append_directory(path)</code>, <code>append_symlink(path, target)</code>, <code>append(entry, data)</code> for any header, and <code>append_stream(entry, source)</code> to copy
 <code>entry.size</code> bytes from a stream. <code>finish()</code> writes the end marker.
 Paths longer than a ustar header holds get a pax header, so none is cut
-short. <code>.zip</code> archives are not supported yet.</p>
+short.</p>
+<h2 id="zip-archives"><a class="header" href="#zip-archives">Zip archives</a></h2>
+<p><code>.zip</code> archives are read and written by the
+<a href="https://github.com/justinboswell/pepper-zip">zip package</a>, which builds
+on <code>compress</code> and <code>archive</code>. It is a package rather than part of the
+runtime because the package manager needs only <code>.tar.gz</code>; add it with
+<code>pepper package add justinboswell/pepper-zip --name zip</code>.</p>
+<pre><code class="language-pepper">import zip;
+
+main(): int {
+    var writer = zip.Writer.create("bundle.zip").value();
+    writer.add("version.txt", "1.0.0".bytes()).value();
+    writer.finish().value();
+
+    var archive = zip.Archive.open("bundle.zip").value();
+    for (var entry in archive.entries()) {
+        print($"{entry.name}: {entry.size} bytes");
+    }
+    archive.extract_all("out").value();
+    return 0;
+}
+</code></pre>
+<ul>
+<li>It reads and writes stored and DEFLATE entries, ZIP64 (archives and
+entries past 4 GiB, more than 65,535 entries), and UTF-8 names; names in
+older archives are decoded as code page 437 (<code>text.CodePage437</code>).</li>
+<li>Entries compressed another way (bzip2, LZMA, zstd) or encrypted are
+listed, and reading one is an error naming the entry and the method.</li>
+<li><code>extract_all</code> checks every name with <code>archive.safe_components</code> before
+writing anything, and each entry’s CRC-32 as it is written.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -11447,6 +11488,9 @@ main(): int {
 </code></pre>
 <p>See <a href="#errors-and-platform-types">io: errors and platform types</a> for the full list
 of kinds and the platform codes each one covers.</p>
+<p>A library that reads a file format reports damaged data the same way:
+<code>IoError.invalid_input(message)</code> makes an error whose <code>is_invalid_input()</code>
+holds, as <code>compress</code> and <code>archive</code> return for corrupt input.</p>
 <p>Reading a directory or a file line by line in a <code>for</code> loop yields one
 <code>IoResult</code> per element, so each error is handled where it happens; see
 <a href="#reading-files-and-directories">Iteration</a>.</p>
@@ -31579,6 +31623,26 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
+<h4 id="invalid_input"><a class="header" href="#invalid_input">invalid_input</a></h4>
+<pre><code class="language-pepper">static invalid_input(message: String): IoError
+</code></pre>
+<p>Makes an error for data or an argument that is not valid, such as a
+damaged file a library parses, with the platform’s code for invalid
+input, so <code>is_invalid_input()</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — what is wrong</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var error = io.IoError.invalid_input("data.bin: bad header");
+assert(error.is_invalid_input(), "the kind");
+</code></pre>
 <h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="kind"><a class="header" href="#kind">kind</a></h4>
 <pre><code class="language-pepper">kind(): ErrorKind
@@ -42002,12 +42066,14 @@ main(): int {
 <p>Bring it in with <code>import text</code>. A <code>String</code> always holds UTF-8; these
 types encode one into the bytes of an encoding (<code>u8[]</code>) and decode bytes
 back. Each <code>decode</code> is strict and gives none when the bytes are not valid
-in the encoding; each <code>decode_lossy</code> replaces what is invalid with U+FFFD
+in the encoding (code page 437’s always succeeds, since every byte is a
+character); each <code>decode_lossy</code> replaces what is invalid with U+FFFD
 and always succeeds.</p>
 <ul>
 <li><a href="#utf-8">UTF-8</a>: <code>Utf8</code></li>
 <li><a href="#utf-16">UTF-16</a>: <code>Utf16</code></li>
 <li><a href="#ascii">ASCII</a>: <code>Ascii</code></li>
+<li><a href="#code-page-437">Code page 437</a>: <code>CodePage437</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import text;
@@ -42310,6 +42376,67 @@ U+FFFD, so it always succeeds.</p>
 <ul>
 <li>the text</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/text/code_page_437.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="code-page-437"><a class="header" href="#code-page-437">Code page 437</a></h1>
+<p>Code page 437, the character set of the original IBM PC, which old zip
+archives use for entry names.</p>
+<p>Source: <code>runtime/text/code_page_437.pep</code></p>
+<h2 id="codepage437"><a class="header" href="#codepage437">CodePage437</a></h2>
+<pre><code class="language-pepper">struct CodePage437
+</code></pre>
+<p>Encodes a <code>String</code> to code page 437 bytes and decodes them back. Bytes
+below 128 are ASCII; each of the 128 above stands for one character
+(accented letters, Greek letters, box-drawing and math symbols), so
+every byte decodes and <code>decode</code> always succeeds. Bytes below 32 decode
+as the ASCII control characters, not the PC’s graphical glyphs, as zip
+readers do.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import text;
+
+var bytes = text.CodePage437.encode("café").value();
+assert(bytes.count == 4 &amp;&amp; bytes[3] == 0x82, "é is 0x82");
+assert(text.CodePage437.decode(bytes) == "café", "round trip");
+</code></pre>
+<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
+<h4 id="encode-3"><a class="header" href="#encode-3">encode</a></h4>
+<pre><code class="language-pepper">static encode(value: String): u8[]?
+</code></pre>
+<p>Returns the code page 437 bytes of <code>value</code>, or none when it holds a
+character the code page lacks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of one byte per code point, or none</li>
+</ul>
+<h4 id="encode_lossy-1"><a class="header" href="#encode_lossy-1">encode_lossy</a></h4>
+<pre><code class="language-pepper">static encode_lossy(value: String): u8[]
+</code></pre>
+<p>Returns the code page 437 bytes of <code>value</code>, with <code>?</code> for each
+character the code page lacks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to encode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of one byte per code point</li>
+</ul>
+<h4 id="decode-4"><a class="header" href="#decode-4">decode</a></h4>
+<pre><code class="language-pepper">static decode(bytes: u8[]): String
+</code></pre>
+<p>Decodes code page 437 <code>bytes</code>. Every byte is a character, so it
+always succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to decode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/regex/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-regex-module"><a class="header" href="#the-regex-module">The regex module</a></h1>
 <p>Regular expressions: test whether text matches a pattern, find the
@@ -42384,7 +42511,7 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
+<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
 <h4 id="parse-14"><a class="header" href="#parse-14">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
@@ -42864,7 +42991,7 @@ text or the code wrote them, so a document round-trips unchanged.</p>
 <ul>
 <li><code>members</code> — the members, by key</li>
 </ul>
-<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
+<h3 id="static-methods-32"><a class="header" href="#static-methods-32">Static methods</a></h3>
 <h4 id="object-1"><a class="header" href="#object-1">object</a></h4>
 <pre><code class="language-pepper">static object(): JsonValue
 </code></pre>
@@ -43395,7 +43522,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h2 id="encode-3"><a class="header" href="#encode-3">encode</a></h2>
+<h2 id="encode-4"><a class="header" href="#encode-4">encode</a></h2>
 <pre><code class="language-pepper">encode&lt;T&gt;(value: T, indent: int = 0, ascii_only: bool = false): String
 </code></pre>
 <p>Writes <code>value</code> as JSON text, converting it as <code>to_json</code> does.</p>
@@ -43479,7 +43606,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h2 id="decode-4"><a class="header" href="#decode-4">decode</a></h2>
+<h2 id="decode-5"><a class="header" href="#decode-5">decode</a></h2>
 <pre><code class="language-pepper">decode&lt;T&gt;( text: String, unknown_keys: UnknownKeys = UnknownKeys.Ignore, comments: bool = false, path: String = "" ): Result&lt;T, JsonError&gt;
 </code></pre>
 <p>Parses JSON text and converts it to a <code>T</code>: <code>parse</code>, then <code>from_json</code>.</p>
@@ -43687,7 +43814,7 @@ var data = "abcabcabcabc".bytes();
 var packed = compress.Deflate.compress(data);
 assert(compress.Deflate.decompress(packed).value() == data, "round trip");
 </code></pre>
-<h3 id="static-methods-32"><a class="header" href="#static-methods-32">Static methods</a></h3>
+<h3 id="static-methods-33"><a class="header" href="#static-methods-33">Static methods</a></h3>
 <h4 id="compress"><a class="header" href="#compress">compress</a></h4>
 <pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
 </code></pre>
@@ -43963,7 +44090,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Makes a checksum of no data yet (<code>value</code> is 0).</p>
-<h3 id="static-methods-33"><a class="header" href="#static-methods-33">Static methods</a></h3>
+<h3 id="static-methods-34"><a class="header" href="#static-methods-34">Static methods</a></h3>
 <h4 id="of"><a class="header" href="#of">of</a></h4>
 <pre><code class="language-pepper">static of(data: u8[]): uint
 </code></pre>
@@ -44046,6 +44173,7 @@ in a <code>compress.CompressWriter</code> to write one. A damaged archive is an
 <ul>
 <li><a href="#tar-archives-1">Tar archives</a>: <code>TarReader</code>, <code>TarWriter</code>, <code>TarEntry</code>,
 <code>EntryKind</code></li>
+<li><a href="#entry-paths">Entry paths</a>: <code>safe_components</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import archive;
@@ -44378,6 +44506,36 @@ nothing. It does not close the sink.</p>
 <ul>
 <li>an Ok result; an error when writing to the sink fails</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/archive/path.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="entry-paths"><a class="header" href="#entry-paths">Entry paths</a></h1>
+<p><code>safe_components</code>: checking an entry’s path before extracting it, so an
+archive cannot write outside the directory it is extracted into.</p>
+<p>Source: <code>runtime/archive/path.pep</code></p>
+<h2 id="safe_components"><a class="header" href="#safe_components">safe_components</a></h2>
+<pre><code class="language-pepper">safe_components(path: String): String[]?
+</code></pre>
+<p>Splits the path of an archive entry into its components, or gives none
+when extracting it could write outside the target directory (“zip
+slip”): an absolute path, a <code>..</code> component, a <code>\</code> or a <code>:</code> (which
+Windows would read as a separator or a drive letter). Empty and <code>.</code>
+components are left out, so <code>a//./b/</code> gives <code>a</code> and <code>b</code>.</p>
+<p><code>TarReader.extract</code> checks every entry with it, and so does the zip
+package; a reader of another archive format should too.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the entry’s path as stored, with <code>/</code> between components</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the components to join onto the target directory, or none for an unsafe path</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import archive;
+
+assert(archive.safe_components("docs/./readme.md").value().count == 2, "safe");
+assert(archive.safe_components("../etc/passwd").is_empty(), "climbs out");
+assert(archive.safe_components("C:/Windows").is_empty(), "a drive");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-digest-module"><a class="header" href="#the-digest-module">The digest module</a></h1>
 <p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.</p>
@@ -45738,7 +45896,7 @@ main(): int {
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-34"><a class="header" href="#static-methods-34">Static methods</a></h3>
+<h3 id="static-methods-35"><a class="header" href="#static-methods-35">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -45865,7 +46023,7 @@ stream.write_all("ping");
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-35"><a class="header" href="#static-methods-35">Static methods</a></h3>
+<h3 id="static-methods-36"><a class="header" href="#static-methods-36">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>

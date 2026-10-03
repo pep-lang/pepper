@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9d0d4f1b.js";
+            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-87a4dcdf.js"></script>
+        <script src="../toc-0d36e6a4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,12 +187,14 @@
 <p>Bring it in with <code>import text</code>. A <code>String</code> always holds UTF-8; these
 types encode one into the bytes of an encoding (<code>u8[]</code>) and decode bytes
 back. Each <code>decode</code> is strict and gives none when the bytes are not valid
-in the encoding; each <code>decode_lossy</code> replaces what is invalid with U+FFFD
+in the encoding (code page 437’s always succeeds, since every byte is a
+character); each <code>decode_lossy</code> replaces what is invalid with U+FFFD
 and always succeeds.</p>
 <ul>
 <li><a href="text-utf8.html">UTF-8</a>: <code>Utf8</code></li>
 <li><a href="text-utf16.html">UTF-16</a>: <code>Utf16</code></li>
 <li><a href="text-ascii.html">ASCII</a>: <code>Ascii</code></li>
+<li><a href="text-code_page_437.html">Code page 437</a>: <code>CodePage437</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import text;
