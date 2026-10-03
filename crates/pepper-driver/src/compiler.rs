@@ -169,7 +169,12 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     timer.stage("check and build");
     // Warnings print whether or not the passes succeed, as clang prints
     // them beside errors.
-    let result = run_passes(&mut module);
+    let result = if options.debug_static_expanded() {
+        let (result, expansions) = pepper_sema::passes::static_source::record(|| run_passes(&mut module));
+        result.and_then(|()| crate::emit_static::write_debug_sources(options, &mut module, &program, &expansions))
+    } else {
+        run_passes(&mut module)
+    };
     crate::report_warnings(&module.render_warnings());
     result?;
     timer.stage("sema passes");

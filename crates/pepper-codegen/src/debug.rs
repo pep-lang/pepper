@@ -55,6 +55,24 @@ pub struct DebugInfo<'ctx> {
     pub(crate) building: std::collections::HashSet<String>,
     /// The plain enums, by name: `(location, representation, cases)`.
     pub(crate) enums: HashMap<String, (Loc, String, Vec<(String, i64)>)>,
+    /// The file each of `scopes` is in.
+    scope_files: Vec<FileId>,
+    /// A block of a scope in another file than the scope's, by scope and
+    /// file: where a location in that file goes ([`Self::scope_for`]).
+    file_blocks: HashMap<(LLVMMetadataRef, FileId), DIScope<'ctx>>,
+    /// `--debug-static=expanded`: where each emitted statement and pass
+    /// header is in the expanded source (`Module::static_locations`).
+    pub static_locations: HashMap<u32, Loc>,
+    /// The passes of `static` blocks being compiled, innermost last (see
+    /// [`Self::push_static`]).
+    static_passes: Vec<StaticPlaces>,
+}
+
+/// A pass's places in the expanded source: its header, and each statement
+/// it emits, by the location of its source.
+struct StaticPlaces {
+    header: Option<(Loc, Loc)>,
+    lines: Vec<(Loc, Loc)>,
 }
 
 impl<'ctx> DebugInfo<'ctx> {
@@ -119,6 +137,10 @@ impl<'ctx> DebugInfo<'ctx> {
             types: HashMap::new(),
             building: Default::default(),
             enums: HashMap::new(),
+            scope_files: vec![],
+            file_blocks: HashMap::new(),
+            static_locations: HashMap::new(),
+            static_passes: vec![],
         }
     }
 
@@ -179,16 +201,19 @@ impl<'ctx> DebugInfo<'ctx> {
         let flags = if synthesized { DIFlags::ARTIFICIAL } else { DIFlags::PROTOTYPED };
         let subprogram = self.subprogram(function, name, file, line, flags);
         self.scopes = vec![subprogram.as_debug_info_scope()];
+        self.scope_files = vec![loc.file];
     }
 
     /// Done compiling the current function.
     pub fn end_function(&mut self) {
         self.scopes.clear();
+        self.scope_files.clear();
     }
 
     /// Enter a block of the current function that starts at `loc` (its
     /// first statement's location; the enclosing scope's when unknown).
     pub fn push_block(&mut self, loc: Loc) {
+        let loc = self.place(loc);
         let (Some(&parent), Some(subprogram)) = (self.scopes.last(), self.scopes.first()) else { return };
         let subprogram = subprogram.as_mut_ptr();
         let (line, column) = self.line_column(loc).unwrap_or((0, 0));
@@ -196,13 +221,92 @@ impl<'ctx> DebugInfo<'ctx> {
         let block = self.builder.create_lexical_block(parent, file, line, column).as_debug_info_scope();
         self.block_owners.insert(block.as_mut_ptr(), subprogram);
         self.scopes.push(block);
+        let file = loc.known().map_or_else(|| self.scope_files.last().copied().unwrap_or_default(), |loc| loc.file);
+        self.scope_files.push(file);
     }
 
     /// Leave the block [`Self::push_block`] entered.
     pub fn pop_block(&mut self) {
         if self.scopes.len() > 1 {
             self.scopes.pop();
+            self.scope_files.pop();
         }
+    }
+
+    /// Enter a pass of a `static` block: with `--debug-static=expanded`,
+    /// the locations of its header and of the statements it emits are
+    /// moved to the expanded source ([`Self::place`]) until
+    /// [`Self::pop_static`]. Returns whether it was entered.
+    pub fn push_static(&mut self, loc: Loc, header: Option<u32>, lines: &[(Loc, u32)]) -> bool {
+        if self.static_locations.is_empty() {
+            return false;
+        }
+        let header = header.and_then(|id| Some((loc, *self.static_locations.get(&id)?)));
+        let lines = lines.iter().filter_map(|(source, id)| Some((*source, *self.static_locations.get(id)?))).collect();
+        self.static_passes.push(StaticPlaces { header, lines });
+        true
+    }
+
+    /// Leave the pass [`Self::push_static`] entered.
+    pub fn pop_static(&mut self) {
+        self.static_passes.pop();
+    }
+
+    /// Where the debugger shows `loc`: in the expanded source, when it is
+    /// the header of a pass being compiled or inside a statement one
+    /// emitted (see [`Self::push_static`]); else `loc`.
+    fn place(&self, loc: Loc) -> Loc {
+        for pass in self.static_passes.iter().rev() {
+            if let Some((header, target)) = pass.header
+                && header == loc
+            {
+                return target;
+            }
+            for &(statement, target) in &pass.lines {
+                if statement.file == loc.file && statement.span.start <= loc.span.start && loc.span.start < statement.span.end {
+                    return self.relocate(loc, statement, target);
+                }
+            }
+        }
+        loc
+    }
+
+    /// `loc`, inside the statement written at `statement`, in its expanded
+    /// copy at `target`, which keeps the statement's lines: the same line
+    /// and column relative to the statement's start (the column is
+    /// approximate where placeholders changed the text's length).
+    fn relocate(&self, loc: Loc, statement: Loc, target: Loc) -> Loc {
+        let (Some((line, column)), Some((first_line, first_column)), Some((target_line, target_column))) =
+            (self.line_column(loc), self.line_column(statement), self.line_column(target))
+        else {
+            return target;
+        };
+        let Some((_, starts)) = self.lines.get(&target.file) else { return target };
+        let line = target_line + line.saturating_sub(first_line);
+        let Some(&start) = starts.get(line as usize - 1) else { return target };
+        let end = starts.get(line as usize).map_or(u32::MAX, |&next| next.saturating_sub(1));
+        let column = (target_column as i64 + column as i64 - first_column as i64).max(1) as u32;
+        let offset = (start + column - 1).min(end) as usize;
+        Loc::new(target.file, pepper_parser::ast::Span { start: offset, end: offset })
+    }
+
+    /// The current scope, or for a location in another file, a block of it
+    /// in that file: a location takes its file from its scope.
+    fn scope_for(&mut self, loc: Loc) -> Option<DIScope<'ctx>> {
+        let scope = *self.scopes.last()?;
+        let Some(file) = loc.known().map(|loc| loc.file) else { return Some(scope) };
+        if self.scope_files.last() == Some(&file) {
+            return Some(scope);
+        }
+        if let Some(&block) = self.file_blocks.get(&(scope.as_mut_ptr(), file)) {
+            return Some(block);
+        }
+        let subprogram = self.scopes.first()?.as_mut_ptr();
+        let di_file = self.file(file);
+        let block = self.builder.create_lexical_block(scope, di_file, 0, 0).as_debug_info_scope();
+        self.block_owners.insert(block.as_mut_ptr(), subprogram);
+        self.file_blocks.insert((scope.as_mut_ptr(), file), block);
+        Some(block)
     }
 
     /// Declare the variable `name` of type `ty`, declared at `loc` and
@@ -218,7 +322,8 @@ impl<'ctx> DebugInfo<'ctx> {
         argument: Option<u32>,
         block: BasicBlock<'ctx>,
     ) {
-        let Some(&scope) = self.scopes.last() else { return };
+        let loc = self.place(loc);
+        let Some(scope) = self.scope_for(loc) else { return };
         let file = self.file_of(loc);
         // A parameter without a location (`this`) is declared on its
         // function's line.
@@ -283,9 +388,10 @@ impl<'ctx> DebugInfo<'ctx> {
 
     /// The location of `loc` in the current function, or `None` outside a
     /// function or for no location.
-    pub fn location(&self, context: &'ctx Context, loc: Loc) -> Option<DILocation<'ctx>> {
-        let scope = *self.scopes.last()?;
+    pub fn location(&mut self, context: &'ctx Context, loc: Loc) -> Option<DILocation<'ctx>> {
+        let loc = self.place(loc);
         let (line, column) = self.line_column(loc)?;
+        let scope = self.scope_for(loc)?;
         Some(self.builder.create_debug_location(context, line, column, scope, None))
     }
 

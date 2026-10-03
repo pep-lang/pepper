@@ -385,3 +385,64 @@ fn gdb_steps_through_static_passes() {
         "{text}"
     );
 }
+
+/// With `--debug-static=expanded`, `-g` writes `main.static.pep` beside the
+/// output, `STATIC` with its block expanded, and the debug info places the
+/// expansion's statements in it, each pass's `{` as its header (#521).
+#[test]
+fn debug_static_expanded_writes_and_points_at_the_expanded_source() {
+    let dir = scratch("static_expanded");
+    std::fs::write(dir.join("main.pep"), STATIC).unwrap();
+    let exe = dir.join("main");
+    compile(&dir, &["-g", "--debug-static=expanded", "--emit-llvm", "-o", exe.to_str().unwrap()]);
+    let expanded = std::fs::read_to_string(dir.join("main.static.pep")).expect("no main.static.pep beside the output");
+    let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let line_of = |text: &str| expanded.lines().position(|l| l.trim() == text).unwrap_or_else(|| panic!("no '{text}' in:\n{expanded}")) as u32 + 1;
+    assert!(expanded.contains("# static (sum, p) expanded from main.pep:9:5"), "{expanded}");
+    let file = ir.lines().find(|l| l.contains("!DIFile(filename:") && l.contains("main.static.pep")).expect("no DIFile for main.static.pep");
+    let file = file.split(" = ").next().unwrap();
+    // Each pass's statement, on its line of the expanded file, in a scope
+    // in that file.
+    let scopes: Vec<&str> = ir.lines().filter(|l| l.contains(&format!("file: {file},"))).map(|l| l.split(" = ").next().unwrap()).collect();
+    for text in ["sum = sum + p.x;", "sum = sum + p.y;", "sum = sum + p.z;", "sum = sum + 1;", "sum = sum * 2;"] {
+        let line = line_of(text);
+        assert!(
+            ir.lines().any(|l| l.contains(&format!("!DILocation(line: {line},")) && scopes.iter().any(|s| l.contains(&format!("scope: {s})")) || l.contains(&format!("scope: {s},")))),
+            "no location on line {line} ('{text}') of main.static.pep"
+        );
+    }
+}
+
+/// gdb stops on a breakpoint set on a line of the expanded file, in the
+/// pass that line belongs to, and steps through the expansion's lines in
+/// order. Skipped where gdb is not installed or cannot run the program.
+#[test]
+fn gdb_steps_through_the_expanded_source() {
+    if !cfg!(target_os = "linux") || std::process::Command::new("gdb").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = scratch("static_expanded_gdb");
+    std::fs::write(dir.join("main.pep"), STATIC).unwrap();
+    let exe = dir.join("main");
+    compile(&dir, &["-g", "--debug-static=expanded", "-o", exe.to_str().unwrap()]);
+    let expanded = std::fs::read_to_string(dir.join("main.static.pep")).unwrap();
+    let line_of = |text: &str| expanded.lines().position(|l| l.trim() == text).unwrap() + 1;
+    let y = line_of("sum = sum + p.y;");
+    let script = format!("break main.static.pep:{y}\nrun\nprint field.name\nnext\nnext\nnext\nnext\n");
+    std::fs::write(dir.join("gdb.cmd"), script).unwrap();
+    let output = std::process::Command::new("gdb").arg("-nx").arg("-batch").arg("-x").arg(dir.join("gdb.cmd")).arg(&exe).output().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let text = String::from_utf8_lossy(&output.stdout);
+    if !text.contains("Breakpoint 1, total") {
+        return;
+    }
+    assert!(text.contains(&format!("main.static.pep:{y}")), "{text}");
+    assert!(text.contains("$1 = ") && text.contains("\"y\""), "{text}");
+    // After the `y` pass: the `z` pass's `{`, its statement, then the
+    // `while`'s first pass.
+    let stops: Vec<usize> = text.lines().filter_map(|l| l.split_once('\t')?.0.parse().ok()).collect();
+    let z = line_of("sum = sum + p.z;");
+    let zero = line_of("sum = sum + 0;");
+    assert_eq!(stops, [y, z - 1, z, zero - 1, zero], "{text}");
+}

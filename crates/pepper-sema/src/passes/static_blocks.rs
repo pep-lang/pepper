@@ -490,12 +490,15 @@ struct Expander<'m> {
     recording: bool,
     /// The placeholders the statement being filled replaced, as source.
     edits: Vec<Edit>,
+    /// When recording, the statements emitted so far into each pass being
+    /// expanded, innermost last: what its [`StaticPass::lines`] holds.
+    lines: Vec<Vec<(Loc, u32)>>,
 }
 
 impl<'m> Expander<'m> {
     fn new(module: &'m Module, lowered: bool, context: Context) -> Expander<'m> {
         let recording = static_source::recording();
-        Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None, recording, edits: vec![] }
+        Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None, recording, edits: vec![], lines: vec![] }
     }
 
     /// Replaces each `static` block in `block` with what it emits. An error
@@ -532,8 +535,10 @@ impl<'m> Expander<'m> {
         self.scopes = vec![HashMap::new()];
         self.passes.clear();
         self.jump = None;
+        self.lines.clear();
         let mut text = vec![];
-        let items = self.items(&block.items, &mut text).map_err(|error| {
+        let (items, lines) = self.collecting(|this| this.items(&block.items, &mut text));
+        let items = items.map_err(|error| {
             let mut error = error;
             if !self.context.name.is_empty() {
                 error = error.with_note(format!("in the static block of '{}'", self.context.name), Some(self.context.loc));
@@ -543,15 +548,17 @@ impl<'m> Expander<'m> {
         })?;
         // A module-scope block emits nothing: its constants hold what it computed.
         if self.recording && !self.context.symbol.is_empty() && block.span.end > block.span.start {
-            let mut lines = vec![];
-            static_source::write_lines(&[Rendered::Block(text)], 0, &mut lines);
-            if lines.is_empty() {
-                lines = vec!["{}".to_string()];
+            let (mut written, mut positions) = (vec![], vec![]);
+            static_source::write_lines(&[Rendered::Block(text, None)], 0, &mut written, &mut positions);
+            if written.is_empty() {
+                written = vec!["{}".to_string()];
             }
             let type_arguments = block.type_map.iter().map(|(param, ty)| (param.clone(), demangle(&ty.display()).into_owned())).collect();
-            static_source::add(static_source::Expansion { loc: block.loc, span: block.span, type_arguments, lines });
+            static_source::add(static_source::Expansion { loc: block.loc, span: block.span, type_arguments, lines: written, positions });
         }
-        Ok(block_of(items))
+        // The statements emitted outside any pass, for the debugger.
+        let marker = StaticPass { loc: block.loc, stop: false, values: vec![], header: None, lines };
+        Ok(block_of(if marker.lines.is_empty() { items } else { with_stop(marker, items) }))
     }
 
     /// `error` with a note for each specialization that led to the one
@@ -592,6 +599,27 @@ impl<'m> Expander<'m> {
         diagnostic
     }
 
+    /// Runs `run`, collecting the statements it emits for a pass's
+    /// [`StaticPass::lines`] (nothing unless recording).
+    fn collecting<T>(&mut self, run: impl FnOnce(&mut Self) -> T) -> (T, Vec<(Loc, u32)>) {
+        self.lines.push(vec![]);
+        let result = run(self);
+        (result, self.lines.pop().unwrap_or_default())
+    }
+
+    /// A new id for a statement or header of the expansion, when recording.
+    fn new_id(&self) -> Option<u32> {
+        self.recording.then(static_source::next_id)
+    }
+
+    /// Records that the statement written at `span` was emitted as `id`.
+    fn emitted_as(&mut self, span: ast::Span, id: Option<u32>) {
+        let loc = self.at(span);
+        if let (Some(id), Some(lines)) = (id, self.lines.last_mut()) {
+            lines.push((loc, id));
+        }
+    }
+
     fn scoped<T>(&mut self, run: impl FnOnce(&mut Self) -> T) -> T {
         self.scopes.push(HashMap::new());
         let result = run(self);
@@ -617,15 +645,19 @@ impl<'m> Expander<'m> {
                     for (index, element) in list.iter().enumerate() {
                         self.passes.push((*loc, index, list.len(), format!("{} '{}'", element.kind(), element.display())));
                         let mut pass_text = vec![];
-                        let pass = self.scoped(|this| {
-                            this.scopes.last_mut().unwrap().insert(name.clone(), element.clone());
-                            let values = this.debug_values();
-                            this.items(body, &mut pass_text).map(|items| (values, items))
+                        let header = self.new_id();
+                        let (pass, lines) = self.collecting(|this| {
+                            this.scoped(|this| {
+                                this.scopes.last_mut().unwrap().insert(name.clone(), element.clone());
+                                let values = this.debug_values();
+                                this.items(body, &mut pass_text).map(|items| (values, items))
+                            })
                         });
                         self.passes.pop();
                         let (values, pass) = pass?;
-                        out.push(Statement::Block(block_of(with_stop(*loc, values, pass))));
-                        text.push(Rendered::Block(pass_text));
+                        let marker = StaticPass { loc: *loc, stop: true, values, header, lines };
+                        out.push(Statement::Block(block_of(with_stop(marker, pass))));
+                        text.push(Rendered::Block(pass_text, header));
                         if self.jump.take() == Some(ast::LoopBreakKind::Break) {
                             break;
                         }
@@ -650,12 +682,14 @@ impl<'m> Expander<'m> {
                         self.passes.push((*loc, iteration, 0, String::new()));
                         let values = self.debug_values();
                         let mut pass_text = vec![];
-                        let pass = self.scoped(|this| this.items(body, &mut pass_text));
+                        let header = self.new_id();
+                        let (pass, lines) = self.collecting(|this| this.scoped(|this| this.items(body, &mut pass_text)));
                         self.passes.pop();
                         let pass = pass?;
                         if !pass.is_empty() {
-                            out.push(Statement::Block(block_of(with_stop(*loc, values, pass))));
-                            text.push(Rendered::Block(pass_text));
+                            let marker = StaticPass { loc: *loc, stop: true, values, header, lines };
+                            out.push(Statement::Block(block_of(with_stop(marker, pass))));
+                            text.push(Rendered::Block(pass_text, header));
                         }
                         iteration += 1;
                         if self.jump.take() == Some(ast::LoopBreakKind::Break) {
@@ -675,28 +709,32 @@ impl<'m> Expander<'m> {
                     let branch = if taken { then_items } else { else_items };
                     let values = self.debug_values();
                     let mut branch_text = vec![];
-                    let expanded = self.scoped(|this| this.items(branch, &mut branch_text))?;
-                    out.push(Statement::Block(block_of(with_stop(*loc, values, expanded))));
-                    text.push(Rendered::Block(branch_text));
+                    let header = self.new_id();
+                    let (expanded, lines) = self.collecting(|this| this.scoped(|this| this.items(branch, &mut branch_text)));
+                    let marker = StaticPass { loc: *loc, stop: true, values, header, lines };
+                    out.push(Statement::Block(block_of(with_stop(marker, expanded?))));
+                    text.push(Rendered::Block(branch_text, header));
                 }
                 StaticItem::EmitIf { condition, then_items, else_items, span } => {
                     let mut condition = condition.clone();
                     self.fill_expression(&mut condition)?;
                     let condition_text = self.source_of(*span, false);
+                    let id = self.new_id();
+                    self.emitted_as(*span, id);
                     let (mut then_text, mut else_text) = (vec![], vec![]);
                     let if_block = block_of(self.scoped(|this| this.items(then_items, &mut then_text))?);
                     let else_block = if else_items.is_empty() { None } else { Some(block_of(self.scoped(|this| this.items(else_items, &mut else_text))?)) };
                     out.push(Statement::Branch(Branch { condition, if_block, else_block }));
                     if let Some(condition) = condition_text {
                         let else_items = if else_items.is_empty() { None } else { Some(else_text) };
-                        text.push(Rendered::Branch { condition: condition.join("\n"), then_items: then_text, else_items });
+                        text.push(Rendered::Branch { condition: condition.join("\n"), then_items: then_text, else_items, id });
                     }
                 }
                 StaticItem::Block(inner) => {
                     let mut inner_text = vec![];
                     let expanded = self.scoped(|this| this.items(inner, &mut inner_text))?;
                     out.push(Statement::Block(block_of(expanded)));
-                    text.push(Rendered::Block(inner_text));
+                    text.push(Rendered::Block(inner_text, None));
                 }
                 StaticItem::Var { name, value, .. } => {
                     let value = self.evaluate(value)?;
@@ -709,8 +747,10 @@ impl<'m> Expander<'m> {
                     let mut stmt = stmt.clone();
                     self.fill_statement(&mut stmt)?;
                     out.push(stmt);
+                    let id = self.new_id();
+                    self.emitted_as(*span, id);
                     if let Some(lines) = self.source_of(*span, true) {
-                        text.push(Rendered::Code(lines));
+                        text.push(Rendered::Code(lines, id));
                     }
                 }
             }
@@ -1621,14 +1661,14 @@ fn case_of(def: &EnumDef, index: usize) -> Case {
     }
 }
 
-/// A pass's statements, after a [`StaticPass`] at `loc` declaring `values`
-/// when it emits any: a pass that emits nothing has nowhere to stop.
-fn with_stop(loc: Loc, values: Vec<(String, StaticConstant)>, items: Vec<Statement>) -> Vec<Statement> {
+/// A pass's statements, after its `marker` when it emits any: a pass that
+/// emits nothing has nowhere to stop.
+fn with_stop(marker: StaticPass, items: Vec<Statement>) -> Vec<Statement> {
     if items.is_empty() {
         return items;
     }
     let mut out = Vec::with_capacity(items.len() + 1);
-    out.push(Statement::StaticPass(StaticPass { loc, values }));
+    out.push(Statement::StaticPass(marker));
     out.extend(items);
     out
 }

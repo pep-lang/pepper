@@ -231,6 +231,13 @@ describe<Point>(value: Point): String {
   specialization's expansion above it as comments.
 - An error in the emitted code shows when the copy is built, at the line
   of the copy that has it.
+- To debug the program in the expanded source, build it with
+  `-g --debug-static=expanded`: the copy is written beside the program as
+  `main.static.pep`, and the debugger steps through it (see
+  [Stepping through a `static` block](../tools/debugging.md#stepping-through-a-static-block)).
+  In a method of a generic struct or a generic method, where the copy
+  shows the expansion only as comments, the debugger shows the block as
+  written.
 
 [pep-build](../tools/pep-build.md#--emit-static---emit-statickeep) lists
 the details.

@@ -127,6 +127,25 @@ $1 = {name = 0x55555559073f "x", type_name = 0x555555590a57 "int", index = 0, is
 $2 = 0x5555555909ba "y"
 ```
 
+To step through the code each pass emits instead, with the compile-time
+values filled in, build with `--debug-static=expanded`. Beside the program
+it writes `debugging-static.static.pep`, the source with the block
+expanded as [`--emit-static`](pep-build.md#--emit-static---emit-statickeep)
+writes it, and the debugger shows that file for the block's code:
+
+```text
+$ pepper build -g --debug-static=expanded debugging-static.pep -o debugging-static
+$ gdb ./debugging-static
+(gdb) break debugging-static.static.pep:18
+(gdb) run
+Breakpoint 1, total (p=0x55555559c6b0) at debugging-static.static.pep:18
+18	            sum = sum + p.y;
+(gdb) print field.name
+$1 = 0x5555555909ba "y"
+```
+
+The rest of the function, and the program, stays in its own files.
+
 A breakpoint on a line of the body stops in every pass. A member or case
 shows as a structure of what `reflect` reads from it (`name`, `index`,
 `is_last`, and so on); a list does not show. The stop on the header is a

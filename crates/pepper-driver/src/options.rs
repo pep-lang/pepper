@@ -119,6 +119,15 @@ pub struct Options {
     #[arg(short = 'g', long = "emit-debug")]
     pub emit_debug: bool,
 
+    /// With `-g`, where the debugger shows the code a `static` block emits:
+    /// `source` (the default), the block as written, stopping on a loop's
+    /// header once per pass; or `expanded`, a copy of each file with its
+    /// blocks expanded as `--emit-static` writes them, saved beside the
+    /// output as `<name>.static.pep`, stepping through the expanded
+    /// statements. `expanded` builds without the build cache
+    #[arg(long = "debug-static", value_name = "VIEW", requires = "emit_debug", value_parser = ["source", "expanded"])]
+    pub debug_static: Option<String>,
+
     /// Keep the frame pointer in every function, even when optimizing, so
     /// profilers and stack walkers unwind the stack cheaply (clang's
     /// `-fno-omit-frame-pointer`). `pep-profile` builds with it.
@@ -388,7 +397,9 @@ impl Options {
     /// The build cache directory, or `None` with `--no-cache`: `--cache`,
     /// else `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`.
     pub fn effective_cache_dir(&self) -> Option<PathBuf> {
-        if self.no_cache {
+        // A cached unit's sema is skipped, so its expansions would not be
+        // written for `--debug-static=expanded`.
+        if self.no_cache || self.debug_static_expanded() {
             return None;
         }
         if let Some(dir) = &self.cache_dir {
@@ -420,6 +431,12 @@ impl Options {
 
     /// Output path: `-o`, else $CWD/<primary source stem>, or with `--lib`
     /// the library's file name for that stem (`libmain.a`).
+    /// `--debug-static=expanded`: the debugger steps through the expanded
+    /// source of `static` blocks.
+    pub fn debug_static_expanded(&self) -> bool {
+        self.debug_static.as_deref() == Some("expanded")
+    }
+
     pub fn output_path(&self) -> Result<PathBuf, String> {
         if let Some(out) = &self.output {
             return Ok(out.clone());

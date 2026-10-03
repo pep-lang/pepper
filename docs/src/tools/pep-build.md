@@ -34,6 +34,7 @@ short, and `pepper help build` runs it.
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
 | `-g`, `--emit-debug` | Emit debug info | off |
+| `--debug-static=source`, `--debug-static=expanded` | With `-g`, step through `static` blocks as written or expanded | `source` |
 | `--frame-pointers` | Keep every function's frame pointer, for profilers | off |
 | `--target <triple>` | Compile for another platform | the machine compiling |
 | `--sysroot <dir>` | The target's system libraries | `PEPPER_SYSROOT_<TRIPLE>` |
@@ -282,6 +283,26 @@ program is built for the Mac it runs on. It works with `-O`. See
 A Windows build without `-g` also writes `<output>.pdb`, holding only the
 program's function names, which is where [backtraces](../language/debug.md)
 read them.
+
+### `--debug-static=source`, `--debug-static=expanded`
+
+With `-g`, chooses which source the debugger shows for the code a `static`
+block emits (see
+[Stepping through a `static` block](debugging.md#stepping-through-a-static-block)):
+
+- `source`, the default: the block as written. Stepping stops on a
+  compile-time loop's header once per pass, then on its body.
+- `expanded`: a copy of each file with its blocks expanded, as
+  `--emit-static` writes it (unformatted), saved beside the output as
+  `<name>.static.pep` (`main.static.pep` for `main.pep`; a file in a folder
+  under the entry's keeps that folder). The debugger steps through the
+  expanded statements, `sum = sum + p.y;`, and a breakpoint on one of its
+  lines stops in that pass. The rest of the program stays in its own
+  files. A build with it does not use the build cache.
+
+```bash
+pepper build -g --debug-static=expanded main.pep -o main   # main, main.static.pep
+```
 
 ### `--frame-pointers`
 

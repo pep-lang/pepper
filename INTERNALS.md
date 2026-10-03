@@ -1018,6 +1018,22 @@ language side.
   a block in other generic code stays, with its expansions above it as
   comments. `pep-fmt`, beside the compiler or on `PATH`, formats the
   copies.
+- **`-g --debug-static=expanded`** points the debug info at that copy.
+  `compile_program_with` records the passes too, and
+  `emit_static::write_debug_sources` writes each user file with an
+  expansion, unformatted, as `<name>.static.pep` beside the output,
+  registers it in `module.sources`, and fills `Module::static_locations`:
+  while recording, each emitted statement, runtime `if` and pass header gets
+  an id (`static_source::next_id`); the `Rendered` parts carry it,
+  `write_lines` and the driver's `expanded`/`expand_file` track where each
+  lands (`Expansion::positions`, then byte offsets), and each pass's
+  `StaticPass` lists its statements by source `Loc` and id (`lines`,
+  `header`; a `stop: false` one starts the whole expansion). Codegen's
+  `DebugInfo::push_static` (from `codegen_scoped_block`) resolves them, and
+  `DebugInfo::place` moves any location inside such a statement to the
+  same relative line in the copy (§4.4). The option turns the build cache
+  off (`effective_cache_dir`): a cached unit's sema, and so its expansions,
+  would be skipped.
 - **Cases.** A case of a reference or `[Value]` enum lists its `values` as
   members whose `field` is the payload field (`Circle.radius`), so `get`
   reads it; `case.matches(v)` emits a `__tag` comparison (a comparison with
@@ -1887,6 +1903,12 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
   `double`, `bool`, a string as a `char*` to a constant, and a member,
   case, function or attribute as a structure of what `reflect` reads from
   it (`reflect.Member`, ...; `static_record_type`).
+- **Locations in another file.** A `DILocation` takes its file from its
+  scope, so `DebugInfo::location` gives a location in another file than its
+  scope's (`scope_files`) a lexical block of that scope in its file
+  (`scope_for`, cached in `file_blocks`). `--debug-static=expanded` relies
+  on it: `place` moves a `static` block's emitted code into the expanded
+  copy (§2.8), whose passes' blocks are then in that file too.
 - **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
   chains itself, and `docs_examples_tests` builds every example at
   `-O2 -g`, so the verifier checks them.

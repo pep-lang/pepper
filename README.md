@@ -249,6 +249,7 @@ cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
 cargo run -- tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
+cargo run -- tests/hello.pep -g --debug-static=expanded  # ...stepping through static blocks expanded (hello.static.pep)
 cargo run -- tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
 cargo run -- tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 cargo run -- tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries

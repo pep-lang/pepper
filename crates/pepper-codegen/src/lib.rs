@@ -378,6 +378,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let unit_name = self.debug_unit_name(module);
             let optimized = self.opt_level != target::OptLevel::O0;
             let mut debug = debug::DebugInfo::new(&self.module, &module.sources, &unit_name, optimized);
+            debug.static_locations = module.static_locations.clone();
             for e in module.enums.iter().filter(|e| e.cases.iter().all(|c| c.payload.is_empty())) {
                 let cases = e.cases.iter().map(|c| (c.name.clone(), c.value)).collect();
                 debug.enums.insert(e.name.clone(), (e.loc, e.representation.to_string(), cases));
@@ -408,7 +409,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// restore with [`Self::leave_location`].
     fn enter_location(&mut self, loc: Loc) -> Option<inkwell::debug_info::DILocation<'ctx>> {
         let saved = self.debug_location;
-        if let Some(location) = self.debug.as_ref().and_then(|d| d.location(self.context, loc)) {
+        if let Some(location) = self.debug.as_mut().and_then(|d| d.location(self.context, loc)) {
             self.builder.set_current_debug_location(location);
             self.debug_location = Some(location);
         }
@@ -2673,13 +2674,22 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// A block nested in a function: its own lexical scope for the debugger.
     fn codegen_scoped_block(&mut self, block: &Block) -> Result<(), String> {
+        let mut in_pass = false;
         if let Some(debug) = self.debug.as_mut() {
+            // A pass of a `static` block: its places in the expanded source
+            // apply from its scope on.
+            if let Some(Statement::StaticPass(pass)) = block.items.first() {
+                in_pass = debug.push_static(pass.loc, pass.header, &pass.lines);
+            }
             let first = block.items.iter().map(statement_loc).find(|loc| !loc.is_none()).unwrap_or(Loc::NONE);
             debug.push_block(first);
         }
         let result = self.codegen_block(block);
         if let Some(debug) = self.debug.as_mut() {
             debug.pop_block();
+            if in_pass {
+                debug.pop_static();
+            }
         }
         result
     }

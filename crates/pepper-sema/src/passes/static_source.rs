@@ -28,11 +28,17 @@ pub struct Expansion {
     /// What it emits: a `{ ... }` block, indented four spaces a level from
     /// column 0.
     pub lines: Vec<String>,
+    /// Where each emitted statement and pass header is in `lines`, for
+    /// `--debug-static=expanded`: its id ([`crate::model::StaticPass`]),
+    /// line and byte column.
+    pub positions: Vec<(u32, usize, usize)>,
 }
 
 thread_local! {
     /// The expansions recorded so far; `None` when not recording.
     static RECORDED: RefCell<Option<Vec<Expansion>>> = const { RefCell::new(None) };
+    /// The last id [`next_id`] gave.
+    static LAST_ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Runs `run` (which runs the sema passes) recording every `static` block
@@ -42,6 +48,14 @@ pub fn record<T>(run: impl FnOnce() -> T) -> (T, Vec<Expansion>) {
     let result = run();
     let recorded = RECORDED.with(|r| r.replace(previous)).unwrap_or_default();
     (result, recorded)
+}
+
+/// A new id for an emitted statement or pass header, unique in the process.
+pub(crate) fn next_id() -> u32 {
+    LAST_ID.with(|last| {
+        last.set(last.get() + 1);
+        last.get()
+    })
 }
 
 pub(crate) fn recording() -> bool {
@@ -56,44 +70,58 @@ pub(crate) fn add(expansion: Expansion) {
     });
 }
 
-/// Emitted code, as it will be written.
+/// Emitted code, as it will be written. Each part carries the id that
+/// places it for the debugger, when it has one.
 #[derive(Debug, Clone)]
 pub(crate) enum Rendered {
     /// A statement: its first line, and the others indented relative to it.
-    Code(Vec<String>),
+    Code(Vec<String>, Option<u32>),
     /// `{ ... }`: a pass of a loop, the branch a compile-time `if` kept, or
     /// a nested block.
-    Block(Vec<Rendered>),
+    Block(Vec<Rendered>, Option<u32>),
     /// A runtime `if`.
-    Branch { condition: String, then_items: Vec<Rendered>, else_items: Option<Vec<Rendered>> },
+    Branch { condition: String, then_items: Vec<Rendered>, else_items: Option<Vec<Rendered>>, id: Option<u32> },
 }
 
-/// `items` as lines, at `depth` levels of indentation.
-pub(crate) fn write_lines(items: &[Rendered], depth: usize, out: &mut Vec<String>) {
+/// `items` as lines, at `depth` levels of indentation, adding to
+/// `positions` the line and column of each part with an id.
+pub(crate) fn write_lines(items: &[Rendered], depth: usize, out: &mut Vec<String>, positions: &mut Vec<(u32, usize, usize)>) {
     let indent = "    ".repeat(depth);
     for item in items {
         match item {
-            Rendered::Code(lines) => out.extend(lines.iter().map(|line| if line.is_empty() { String::new() } else { format!("{}{}", indent, line) })),
-            Rendered::Block(inner) => {
+            Rendered::Code(lines, id) => {
+                if let Some(id) = id {
+                    positions.push((*id, out.len(), indent.len()));
+                }
+                out.extend(lines.iter().map(|line| if line.is_empty() { String::new() } else { format!("{}{}", indent, line) }))
+            }
+            Rendered::Block(inner, id) => {
                 // A block holding only a block is that block, and an empty
                 // one changes nothing.
+                let mut ids: Vec<u32> = id.iter().copied().collect();
                 let mut inner = inner;
-                while let [Rendered::Block(only)] = inner.as_slice() {
+                while let [Rendered::Block(only, id)] = inner.as_slice() {
+                    ids.extend(id);
                     inner = only;
                 }
                 if !inner.is_empty() {
+                    positions.extend(ids.iter().map(|&id| (id, out.len(), indent.len())));
                     out.push(format!("{}{{", indent));
-                    write_lines(inner, depth + 1, out);
+                    write_lines(inner, depth + 1, out, positions);
                     out.push(format!("{}}}", indent));
                 }
             }
-            Rendered::Branch { condition, then_items, else_items } => {
+            Rendered::Branch { condition, then_items, else_items, id } => {
+                if let Some(id) = id {
+                    // At the condition, after `if (`.
+                    positions.push((*id, out.len(), indent.len() + 4));
+                }
                 out.push(format!("{}if ({}) {{", indent, without_parentheses(condition)));
-                write_lines(then_items, depth + 1, out);
+                write_lines(then_items, depth + 1, out, positions);
                 match else_items {
                     Some(else_items) => {
                         out.push(format!("{}}} else {{", indent));
-                        write_lines(else_items, depth + 1, out);
+                        write_lines(else_items, depth + 1, out, positions);
                         out.push(format!("{}}}", indent));
                     }
                     None => out.push(format!("{}}}", indent)),

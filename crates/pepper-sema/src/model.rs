@@ -937,10 +937,19 @@ pub struct StaticPass {
     /// instruction there, so stepping stops on the header once per pass,
     /// as it does for a runtime loop.
     pub loc: Loc,
+    /// Whether to stop on the header: false for the one that starts a
+    /// whole expansion, which only carries `lines`.
+    pub stop: bool,
     /// The compile-time variables in scope, by name, with their values in
     /// this pass, which codegen declares for the debugger in the pass's
     /// scope.
     pub values: Vec<(String, StaticConstant)>,
+    /// Only while `static_source` records (`--debug-static=expanded`): the
+    /// id of the header's line in the expanded source, and each statement
+    /// this pass emits (not those of nested passes), as the location of
+    /// its source and its id. `Module::static_locations` places the ids.
+    pub header: Option<u32>,
+    pub lines: Vec<(Loc, u32)>,
 }
 
 /// A compile-time value as the debugger shows it.
@@ -1644,6 +1653,11 @@ pub struct Module {
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     #[serde(skip)]
     pub sources: pepper_parser::diagnostic::SourceMap,
+    /// With `--debug-static=expanded`: where each emitted statement and
+    /// pass header ([`StaticPass::lines`], [`StaticPass::header`]) is in the
+    /// expanded source the driver registered in `sources`, by id.
+    #[serde(skip)]
+    pub static_locations: std::collections::HashMap<u32, Loc>,
     /// Each file's namespace, by `FileId`, filled with `sources`. Names sema
     /// synthesizes for a file's code (closure structs) take it, so they do
     /// not depend on the other files of the program. `merge` leaves it alone.

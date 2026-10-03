@@ -23,6 +23,8 @@
 
 use crate::compiler;
 use crate::Options;
+use pepper_sema::program::Program;
+use pepper_sema::model::Module as SemaModule;
 use pepper_parser::ast;
 use pepper_sema::passes::static_source::{substitute_names, Expansion};
 use std::collections::BTreeMap;
@@ -58,7 +60,7 @@ pub fn run(options: &Options, keep: bool) -> Result<i32, String> {
         };
         let display = relative.to_string_lossy().replace('\\', "/");
         let text = match by_file.get(&index) {
-            Some(expansions) => expand_file(&file.source, &display, expansions, keep)?,
+            Some(expansions) => expand_file(&file.source, &display, expansions, keep)?.0,
             None => file.source.clone(),
         };
         let target = out_dir.join(relative);
@@ -83,6 +85,45 @@ pub fn run(options: &Options, keep: bool) -> Result<i32, String> {
     Ok(0)
 }
 
+/// `-g --debug-static=expanded`: writes each file of the program under
+/// the entry file's folder that has an expansion as `<name>.static.pep`,
+/// beside the output (mirroring the folders below the entry's), as
+/// `--emit-static` would write it but unformatted, registers it in
+/// `module.sources`, and places the expansions' ids in it
+/// (`Module::static_locations`), so the debug info points there.
+pub fn write_debug_sources(options: &Options, module: &mut SemaModule, program: &Program, expansions: &[Expansion]) -> Result<(), String> {
+    let entry = options.source_files.first().ok_or_else(|| "no source files".to_string())?;
+    let root = match entry.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => absolute(parent),
+        _ => absolute(Path::new(".")),
+    };
+    let output = absolute(&options.output_path()?);
+    let out_dir = output.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let mut by_file: BTreeMap<usize, Vec<Expansion>> = BTreeMap::new();
+    for expansion in expansions {
+        by_file.entry(expansion.loc.file.0 as usize).or_default().push(expansion.clone());
+    }
+    for (index, expansions) in by_file {
+        let Some(file) = program.files.get(index).filter(|f| !f.prelude && !f.prelude_part) else { continue };
+        let path = absolute(Path::new(&file.name));
+        let Some(relative) = path.strip_prefix(&root).ok().filter(|r| !r.components().any(|c| c == Component::Normal(".pep".as_ref()))) else {
+            continue;
+        };
+        let display = relative.to_string_lossy().replace('\\', "/");
+        let (text, placed) = expand_file(&file.source, &display, &expansions, false)?;
+        let target = out_dir.join(relative.with_extension("static.pep"));
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
+        }
+        std::fs::write(&target, &text).map_err(|e| format!("cannot write {}: {}", target.display(), e))?;
+        let id = module.sources.add(target.to_string_lossy(), text);
+        for (place, offset) in placed {
+            module.static_locations.insert(place, pepper_parser::diagnostic::Loc::new(id, ast::Span { start: offset, end: offset }));
+        }
+    }
+    Ok(())
+}
+
 /// `pep-fmt`: beside this compiler's executable, else on `PATH`.
 fn formatter() -> Option<PathBuf> {
     let name = if cfg!(windows) { "pep-fmt.exe" } else { "pep-fmt" };
@@ -102,9 +143,14 @@ struct Block<'e> {
     expansions: Vec<&'e Expansion>,
 }
 
-/// `source` with its recorded blocks expanded (see the module comment).
-/// `name` is the file's path as the output shows it.
-fn expand_file(source: &str, name: &str, expansions: &[Expansion], keep: bool) -> Result<String, String> {
+/// Where each id of an expansion ([`Expansion::positions`]) is in a text,
+/// as a byte offset.
+type Placed = Vec<(u32, usize)>;
+
+/// `source` with its recorded blocks expanded (see the module comment), and
+/// where each id of the expansions is in it. `name` is the file's path as
+/// the output shows it.
+fn expand_file(source: &str, name: &str, expansions: &[Expansion], keep: bool) -> Result<(String, Placed), String> {
     let mut blocks: BTreeMap<usize, Block> = BTreeMap::new();
     for expansion in expansions {
         let block = blocks.entry(expansion.span.start).or_insert_with(|| Block { span: expansion.span, expansions: vec![] });
@@ -133,19 +179,20 @@ fn expand_file(source: &str, name: &str, expansions: &[Expansion], keep: bool) -
         }
     }
     let mut out = String::with_capacity(source.len() * 2);
+    let mut placed = vec![];
     let mut at = 0;
     let mut pending = overrides.iter().peekable();
     for block in blocks.values() {
         // Overrides go after their generic function, before any later block.
         while let Some((function, end, inside)) = pending.next_if(|(_, end, _)| *end <= block.span.start) {
             out.push_str(&source[at..*end]);
-            out.push_str(&specializations(source, name, function, *end, inside));
+            append(&mut out, &mut placed, specializations(source, name, function, *end, inside));
             at = *end;
         }
         out.push_str(&source[at..block.span.start]);
         let indent = line_indent(source, block.span.start);
         if !is_generic(block) {
-            out.push_str(&expanded(source, name, block.span, &block.expansions[0].lines, &indent, keep, &[]));
+            append(&mut out, &mut placed, expanded(source, name, block.span, block.expansions[0], &indent, keep, &[]));
             at = block.span.end;
         } else if overrides.iter().any(|(_, _, inside)| inside.iter().any(|b| b.span.start == block.span.start)) {
             // Expanded in the overrides; the generic function stays as written.
@@ -158,11 +205,17 @@ fn expand_file(source: &str, name: &str, expansions: &[Expansion], keep: bool) -
     }
     for (function, end, inside) in pending {
         out.push_str(&source[at..*end]);
-        out.push_str(&specializations(source, name, function, *end, inside));
+        append(&mut out, &mut placed, specializations(source, name, function, *end, inside));
         at = *end;
     }
     out.push_str(&source[at..]);
-    Ok(out)
+    Ok((out, placed))
+}
+
+/// Appends `text` to `out`, and the places in it to `placed`.
+fn append(out: &mut String, placed: &mut Placed, (text, places): (String, Placed)) {
+    placed.extend(places.into_iter().map(|(id, offset)| (id, out.len() + offset)));
+    out.push_str(&text);
 }
 
 fn is_generic(block: &Block) -> bool {
@@ -189,10 +242,11 @@ fn head(source: &str, span: ast::Span) -> String {
     text[..text.find('{').unwrap_or(text.len())].split_whitespace().collect::<Vec<_>>().join(" ").replace("( ", "(").replace(" )", ")")
 }
 
-/// The block at `span` replaced by `lines`, bracketed by comments, with
-/// lines after the first at `indent`; with `keep`, the block as written
-/// first, as `#` comments. `label` names a specialization's type arguments.
-fn expanded(source: &str, name: &str, span: ast::Span, lines: &[String], indent: &str, keep: bool, label: &[(String, String)]) -> String {
+/// The block at `span` replaced by `expansion`'s lines, bracketed by
+/// comments, with lines after the first at `indent`, and where its ids are;
+/// with `keep`, the block as written first, as `#` comments. `label` names
+/// a specialization's type arguments.
+fn expanded(source: &str, name: &str, span: ast::Span, expansion: &Expansion, indent: &str, keep: bool, label: &[(String, String)]) -> (String, Placed) {
     let mut out = vec![];
     if keep {
         for line in source[span.start..span.end].lines().enumerate().map(|(i, line)| if i == 0 { line } else { strip_indent(line, indent) }) {
@@ -204,13 +258,27 @@ fn expanded(source: &str, name: &str, span: ast::Span, lines: &[String], indent:
         first.push_str(&format!(" for {}", arguments(label)));
     }
     out.push(first);
-    out.extend(lines.iter().cloned());
+    let first_line = out.len();
+    out.extend(expansion.lines.iter().cloned());
     out.push("# end static".to_string());
-    out.iter()
-        .enumerate()
-        .map(|(i, line)| if i == 0 || line.is_empty() { line.clone() } else { format!("{}{}", indent, line) })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut text = String::new();
+    let mut starts = vec![];
+    for (i, line) in out.iter().enumerate() {
+        if i > 0 {
+            text.push('\n');
+        }
+        starts.push(text.len());
+        if i > 0 && !line.is_empty() {
+            text.push_str(indent);
+        }
+        text.push_str(line);
+    }
+    let placed = expansion
+        .positions
+        .iter()
+        .filter_map(|&(id, line, column)| Some((id, starts.get(first_line + line)? + indent.len() + column)))
+        .collect();
+    (text, placed)
 }
 
 fn strip_indent<'l>(line: &'l str, indent: &str) -> &'l str {
@@ -241,7 +309,7 @@ fn commented(source: &str, name: &str, block: &Block, indent: &str) -> String {
 /// After generic `function`, which ends at `end`, a concrete override per specialization whose
 /// blocks expanded, each with its type arguments in place of the type
 /// parameters and its blocks expanded.
-fn specializations(source: &str, name: &str, function: &ast::FunctionDecl, end: usize, blocks: &[&Block]) -> String {
+fn specializations(source: &str, name: &str, function: &ast::FunctionDecl, end: usize, blocks: &[&Block]) -> (String, Placed) {
     let mut by_arguments: BTreeMap<Vec<(String, String)>, Vec<(&Block, &Expansion)>> = BTreeMap::new();
     for block in blocks {
         for expansion in &block.expansions {
@@ -251,6 +319,7 @@ fn specializations(source: &str, name: &str, function: &ast::FunctionDecl, end: 
     let params: Vec<&str> = function.generic_params.iter().map(|p| p.name.as_str()).collect();
     let indent = line_indent(source, function.name_span.start);
     let mut out = String::new();
+    let mut placed = vec![];
     for (type_arguments, expanded_blocks) in by_arguments {
         // Only the function's own parameters name a specialization.
         let names: Vec<(String, String)> = type_arguments.iter().filter(|(param, _)| params.contains(&param.as_str())).cloned().collect();
@@ -272,13 +341,15 @@ fn specializations(source: &str, name: &str, function: &ast::FunctionDecl, end: 
         for (block, expansion) in inside {
             text.push_str(&substitute_names(source, ast::Span { start: at, end: block.span.start }, &names));
             let block_indent = line_indent(source, block.span.start);
-            text.push_str(&expanded(source, name, block.span, &expansion.lines, &block_indent, false, &names));
+            let (block_text, places) = expanded(source, name, block.span, expansion, &block_indent, false, &names);
+            placed.extend(places.into_iter().map(|(id, offset)| (id, out.len() + text.len() + offset)));
+            text.push_str(&block_text);
             at = block.span.end;
         }
         text.push_str(&substitute_names(source, ast::Span { start: at, end }, &names));
         out.push_str(&text);
     }
-    out
+    (out, placed)
 }
 
 /// The end of the generic parameter list `<...>` starting at `at` (after

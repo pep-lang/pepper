@@ -27,7 +27,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         if self.debug.is_none() {
             return Ok(());
         }
-        if self.opt_level == crate::target::OptLevel::O0 && !crate::target::triple_name().starts_with("wasm") {
+        if pass.stop && self.opt_level == crate::target::OptLevel::O0 && !crate::target::triple_name().starts_with("wasm") {
             let asm_type = self.context.void_type().fn_type(&[], false);
             let nop = self.context.create_inline_asm(asm_type, "nop".to_string(), String::new(), true, false, None, false);
             self.builder.build_indirect_call(asm_type, nop, &[], "").map_err(|e| e.to_string())?;
