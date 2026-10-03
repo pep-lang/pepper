@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1bc57b2f.js";
+            window.path_to_searchindex_js = "searchindex-9d0d4f1b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2a342c12.js"></script>
+        <script src="toc-87a4dcdf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -239,7 +239,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
 <code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
@@ -14987,7 +14987,9 @@ takes. It only moves forward, whatever the system’s date is set to.
 <li><code>SystemTime</code> reads the wall clock: nanoseconds since the Unix epoch
 (1970-01-01 00:00:00 UTC). <code>unix_seconds()</code> is what file systems and most
 protocols record. Since the wall clock can be set back,
-<code>duration_since(earlier)</code> is an optional: none when <code>earlier</code> is later.</li>
+<code>duration_since(earlier)</code> is an optional: none when <code>earlier</code> is later.
+The <a href="#dates-times-and-time-zones"><code>time</code> module</a> turns it into a date and time, in UTC or a
+time zone, and back.</li>
 </ul>
 <pre><code class="language-pepper">import os;
 
@@ -15058,10 +15060,199 @@ main(): int {
 </div>
 <h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
 <ul>
-<li>Dates, time zones, and formatting a <code>SystemTime</code> as a date are not
-supported yet.</li>
 <li><code>async.timeout</code> still takes milliseconds, not a <code>Duration</code>.</li>
 <li><code>total_memory()</code> does not take a container’s memory limit into account.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="dates-times-and-time-zones"><a class="header" href="#dates-times-and-time-zones">Dates, times and time zones</a></h1>
+<p>The <code>time</code> module turns instants into calendar dates and times of day, and
+back: dates and times with no zone, fixed offsets from UTC, time zones with
+daylight saving time, and the text forms of RFC 3339, ISO 8601, HTTP and
+C’s <code>strftime</code>. Bring it in with <code>import time</code>. The full API is in the
+<a href="#the-time-module">reference</a>.</p>
+<p>An instant itself is an <a href="#time"><code>os.SystemTime</code></a>: nanoseconds since
+the Unix epoch. <code>time</code> says what date and time that is somewhere, and
+which instant a date and time names.</p>
+<p>The calendar is the proleptic Gregorian calendar, which extends today’s
+rules to years before it was adopted, and leap seconds are ignored, as Unix
+time, Go and Java ignore them: every day has 86400 seconds.</p>
+<h2 id="dates-and-times-of-day"><a class="header" href="#dates-and-times-of-day">Dates and times of day</a></h2>
+<p>Four <a href="#value-structs">value types</a> carry no time zone. Each is copied,
+compared with <code>==</code>, <code>&lt;</code> and the other comparisons, and never allocated.</p>
+<ul>
+<li><code>Date</code> is a year, a month (1 to 12) and a day. It knows its <code>weekday()</code>,
+<code>day_of_year()</code> and whether its year <code>is_leap_year()</code>, and moves with
+<code>add_days</code>, <code>add_months</code> and <code>add_years</code>. A month or year later keeps the
+day when it can and otherwise takes the month’s last day, so a month
+after January 31 is February 28 or 29.</li>
+<li><code>Time</code> is an hour, minute, second and nanosecond within a day.</li>
+<li><code>DateTime</code> is a <code>Date</code> and a <code>Time</code> together: what TOML calls a local
+date-time. Adding or subtracting an <code>os.Duration</code> moves it.</li>
+<li><code>Weekday</code> is an enum, <code>Monday</code> to <code>Sunday</code>, whose values are ISO 8601’s
+numbers, 1 to 7.</li>
+</ul>
+<pre><code class="language-pepper">import os;
+import time;
+
+main(): int {
+    # A Date is a day on the calendar, with no time of day or zone.
+    var leap_day = time.Date(2024, 2, 29);
+    assert(leap_day.weekday() == time.Weekday.Thursday, "2024-02-29 was a Thursday");
+    assert(leap_day.day_of_year() == 60, "the 60th day of the year");
+    assert(leap_day.add_years(1) == time.Date(2025, 2, 28), "no February 29 in 2025");
+    assert(time.Date(2024, 1, 31).add_months(1) == leap_day, "the last day of February");
+    assert(time.Date(2024, 12, 25).days_since(leap_day) == 300, "days between dates");
+
+    # Parts from outside the program are checked, not trusted.
+    assert(time.Date.checked(2023, 2, 29).is_empty(), "2023 is not a leap year");
+    assert(time.Date.parse("2024-02-29").value() == leap_day, "ISO 8601 text");
+
+    # A DateTime adds a time of day; durations move it.
+    var start = time.DateTime(2024, 3, 1, 23, 30);
+    var end = start + os.Duration.from_seconds(90 * 60);
+    print(end);  # 2024-03-02T01:00:00
+    assert(end.date == time.Date(2024, 3, 2) &amp;&amp; end.time == time.Time(1, 0), "past midnight");
+    assert(start &lt; end, "date times compare");
+    return 0;
+}
+</code></pre>
+<p>The constructors (<code>Date(2024, 2, 29)</code>) panic on parts that name no date or
+time, which suits values written in the program. For parts that come from
+outside it, <code>checked</code> returns an optional instead, and <code>parse</code> a
+<a href="#error-handling-with-result"><code>Result</code></a>. Years run from -999999 to 999999, and year 0 is
+1 BC.</p>
+<h2 id="offsets-and-timestamps"><a class="header" href="#offsets-and-timestamps">Offsets and timestamps</a></h2>
+<p><code>Offset</code> is a fixed offset from UTC, east positive: <code>Offset.from_hours(5, 30)</code> is <code>+05:30</code>. <code>OffsetDateTime</code> is a <code>DateTime</code> at an <code>Offset</code>, which
+names one instant: RFC 3339’s timestamp and TOML’s offset date-time.</p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    # An OffsetDateTime is an RFC 3339 timestamp: a date and time at an
+    # offset from UTC, which together name one instant.
+    var meeting = time.OffsetDateTime.parse("2024-03-01T09:00:00+01:00").value();
+    print(meeting.to_utc());  # 2024-03-01T08:00:00Z
+    assert(meeting.offset == time.Offset.from_hours(1), "the offset it was written at");
+
+    # The same instant at two offsets is not ==, but compares as equal.
+    var utc = meeting.to_utc();
+    assert(utc != meeting &amp;&amp; !(utc &lt; meeting) &amp;&amp; !(utc &gt; meeting), "one instant");
+    assert(utc.to_system_time() == meeting.to_system_time(), "one SystemTime");
+
+    # strftime codes lay a date out any way.
+    assert(meeting.format("%A %e %B %Y, %H:%M %:z") == "Friday  1 March 2024, 09:00 +01:00", "strftime");
+    assert(meeting.format("%G-W%V-%u") == "2024-W09-5", "the ISO week date");
+
+    # HTTP's Date and Last-Modified headers, both ways.
+    var header = meeting.to_http_date();
+    assert(header == "Fri, 01 Mar 2024 08:00:00 GMT", "an IMF-fixdate, in GMT");
+    assert(time.OffsetDateTime.parse_http_date(header).value() == utc, "and back");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>OffsetDateTime.from_system_time(t, offset)</code> is the instant <code>t</code> at
+<code>offset</code> (UTC by default), and <code>to_system_time()</code> goes back.
+<code>to_offset</code> and <code>to_utc</code> show the same instant at another offset.</li>
+<li><code>==</code> compares the date, time and offset, so the same instant written at
+two offsets is not <code>==</code>. <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare instants.</li>
+<li><code>DateTime.from_system_time(t)</code> and <code>to_system_time()</code> read a <code>DateTime</code>
+as UTC.</li>
+</ul>
+<h2 id="text-1"><a class="header" href="#text-1">Text</a></h2>
+<p>Each type’s <code>to_string()</code> writes ISO 8601, and its static <code>parse</code> reads it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Text</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Date</code></td><td><code>2024-02-29</code>; outside the years 0 to 9999, signed: <code>-0001-12-31</code>, <code>+10000-01-01</code></td></tr>
+<tr><td><code>Time</code></td><td><code>08:30:00</code>, with the fraction of a second when there is one: <code>08:30:00.25</code></td></tr>
+<tr><td><code>DateTime</code></td><td><code>2024-03-01T09:00:00</code></td></tr>
+<tr><td><code>Offset</code></td><td><code>+01:00</code>; <code>parse</code> also takes <code>Z</code>, <code>+0100</code> and <code>+01</code></td></tr>
+<tr><td><code>OffsetDateTime</code></td><td><code>2024-03-01T09:00:00+01:00</code>, <code>Z</code> for UTC</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>parse</code> also reads what TOML allows: a space or <code>t</code> for the <code>T</code>, <code>z</code> for
+the <code>Z</code>, and a time without its seconds (<code>09:00</code>). Digits of a fraction
+past the nanosecond are dropped.</p>
+<p><code>format(pattern)</code> lays a value out with <code>strftime</code>’s <code>%</code> codes, such as
+<code>%Y-%m-%d</code>, <code>%A</code>, <code>%B</code> and <code>%H:%M</code>; the <a href="#the-time-module">module
+reference</a> lists them all. Names are English
+whatever the locale. <code>%z</code>, <code>%:z</code> and <code>%s</code> need an offset, so only an
+<code>OffsetDateTime</code> takes them; an unknown code panics.</p>
+<p>HTTP dates (RFC 9110) go both ways: <code>to_http_date()</code> writes the
+IMF-fixdate of <code>Date</code> and <code>Last-Modified</code> headers, <code>Fri, 01 Mar 2024 08:00:00 GMT</code>, and <code>OffsetDateTime.parse_http_date</code> reads it and the two
+obsolete forms servers must still accept, RFC 850’s and C’s <code>asctime</code>.</p>
+<h2 id="time-zones"><a class="header" href="#time-zones">Time zones</a></h2>
+<p>A <code>TimeZone</code> gives the offset from UTC at each instant in one place:</p>
+<ul>
+<li><code>TimeZone.utc()</code>, and <code>TimeZone.fixed(offset)</code> for an offset that never
+changes.</li>
+<li><code>TimeZone.local()</code>, the system’s zone: the <code>TZ</code> environment variable or
+<code>/etc/localtime</code> on Linux and macOS, as the C library’s <code>localtime</code> reads
+them, and the zone in Windows’ settings. WebAssembly has no local zone,
+so it is UTC there.</li>
+<li><code>TimeZone.named("Europe/Paris")</code>, a zone of the IANA time zone database,
+with its daylight saving time and history, or an error when the system
+does not know the name.</li>
+</ul>
+<p><code>zone.offset_at(t)</code> is the offset at the instant <code>t</code>, and <code>zone.at(t)</code> its
+date and time there. <code>zone.at_local(date_time)</code> goes the other way, from
+a date and time on the zone’s clocks to the instant. Where the clocks go
+back, a time happens twice, and <code>at_local</code> picks the earlier; where they go
+forward, a time never happens, and it moves on by the length of the gap.
+<code>time.now()</code> is the current date and time in the local zone, and
+<code>time.now_utc()</code> in UTC.</p>
+<pre><code class="language-pepper">import os;
+import time;
+
+main(): int {
+    # The local zone and UTC are always there.
+    var now = os.SystemTime.now();
+    print($"here: {time.TimeZone.local().at(now)}");
+    print($"UTC:  {time.now_utc()}");
+
+    # Named zones come from the system's time zone database.
+    var found = time.TimeZone.named("Europe/Paris");
+    if (found is Ok(paris)) {
+        var bastille = time.OffsetDateTime.parse("2024-07-14T10:00:00Z").value();
+        assert(paris.at(bastille.to_system_time()).to_string() == "2024-07-14T12:00:00+02:00", "summer time");
+
+        # A local time in the zone gets the offset in effect then.
+        var christmas = paris.at_local(time.DateTime(2024, 12, 25, 18, 0));
+        assert(christmas.offset == time.Offset.from_hours(1), "winter time");
+
+        # 02:30 never happens on the night the clocks go forward: it moves
+        # on by the hour that was skipped.
+        var skipped = paris.at_local(time.DateTime(2024, 3, 31, 2, 30));
+        assert(skipped.to_string() == "2024-03-31T03:30:00+02:00", "the gap");
+    }
+    assert(time.TimeZone.named("Nowhere/Atlantis").is_err(), "an unknown zone");
+    return 0;
+}
+</code></pre>
+<p>Nothing is bundled: named zones come from the system.</p>
+<ul>
+<li>On Linux and macOS, the TZif files under <code>/usr/share/zoneinfo</code>, or the
+folder the <code>TZDIR</code> environment variable names. A minimal Linux container
+may have none until its <code>tzdata</code> package is installed. The rule at the
+end of each file covers instants after its last listed change.</li>
+<li>On Windows, ICU (<code>icu.dll</code>, part of Windows 10 version 1903 and later),
+which knows the same names, or the TZif files in the folder <code>TZDIR</code>
+names when it is set.</li>
+<li>On WebAssembly, TZif files under <code>/usr/share/zoneinfo</code> (or <code>TZDIR</code>) when
+the host lends the program that folder.</li>
+</ul>
+<h2 id="current-limitations-2"><a class="header" href="#current-limitations-2">Current limitations</a></h2>
+<ul>
+<li><code>format</code> writes text but nothing reads a <code>strftime</code> pattern back; parse
+ISO 8601, RFC 3339 and HTTP dates with the <code>parse</code> functions.</li>
+<li>Names in <code>format</code> are English only, and there are no locale formats
+(<code>%c</code>, <code>%x</code>, <code>%X</code>) or zone abbreviations (<code>%Z</code>).</li>
+<li>On Android, named zones are not found: its database is one packed file,
+not a folder of TZif files.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="command-line-options"><a class="header" href="#command-line-options">Command-line options</a></h1>
@@ -38549,8 +38740,8 @@ clock.</p>
 the Unix epoch (1970-01-01 00:00:00 UTC), like Rust’s
 <code>std::time::SystemTime</code>. It reaches from the year 1677 to 2262.</p>
 <p>The wall clock can jump, backwards too, when the system’s time is set,
-so measure how long something takes with <code>Instant</code> instead. Dates, time
-zones and formatting are not part of <code>os</code>.</p>
+so measure how long something takes with <code>Instant</code> instead. The <code>time</code>
+module turns it into dates, times of day and time zones, and back.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import os;
 
@@ -38956,6 +39147,1430 @@ main(): int {
 <ul>
 <li>the temporary directory</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/time/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-time-module"><a class="header" href="#the-time-module">The time module</a></h1>
+<p>Calendar time: dates, times of day, offsets from UTC, time zones, and
+formatting and parsing them, on the proleptic Gregorian calendar. Leap
+seconds are ignored, as in Unix time. <code>os.SystemTime</code> is the instant
+this module turns into dates and back.</p>
+<p><code>time</code> is a module: bring it in with <code>import time</code> (and write
+<code>time.Date(2024, 2, 29)</code>) or import names directly with
+<code>import [Date, TimeZone] from time</code>.</p>
+<ul>
+<li><a href="#dates-and-times">Dates and times</a>: <code>Date</code>, <code>Time</code>, <code>DateTime</code>,
+<code>Weekday</code>, <code>is_leap_year</code> and <code>days_in_month</code>, with no time zone</li>
+<li><a href="#offsets">Offsets</a>: <code>Offset</code>, a fixed offset from UTC, and
+<code>OffsetDateTime</code>, an RFC 3339 timestamp, with HTTP dates</li>
+<li><a href="#time-zones-1">Time zones</a>: <code>TimeZone</code> (UTC, fixed, local, or named
+from the system’s database), <code>now()</code> and <code>now_utc()</code></li>
+</ul>
+<p>Every type’s <code>format(pattern)</code> lays it out with C <code>strftime</code> codes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Gives</th><th>Code</th><th>Gives</th></tr>
+</thead>
+<tbody>
+<tr><td><code>%Y</code></td><td>year, at least four digits (<code>2024</code>)</td><td><code>%H</code></td><td>hour, <code>00</code> to <code>23</code></td></tr>
+<tr><td><code>%C</code></td><td>century (<code>20</code>)</td><td><code>%I</code></td><td>hour, <code>01</code> to <code>12</code></td></tr>
+<tr><td><code>%y</code></td><td>year in the century, <code>00</code> to <code>99</code></td><td><code>%p</code></td><td><code>AM</code> or <code>PM</code></td></tr>
+<tr><td><code>%m</code></td><td>month, <code>01</code> to <code>12</code></td><td><code>%M</code></td><td>minute, <code>00</code> to <code>59</code></td></tr>
+<tr><td><code>%d</code></td><td>day, <code>01</code> to <code>31</code></td><td><code>%S</code></td><td>second, <code>00</code> to <code>59</code></td></tr>
+<tr><td><code>%e</code></td><td>day, space-padded (<code> 1</code>)</td><td><code>%N</code></td><td>nanoseconds, nine digits; <code>%3N</code> milliseconds</td></tr>
+<tr><td><code>%j</code></td><td>day of the year, <code>001</code> to <code>366</code></td><td><code>%T</code></td><td><code>%H:%M:%S</code></td></tr>
+<tr><td><code>%F</code></td><td><code>%Y-%m-%d</code></td><td><code>%R</code></td><td><code>%H:%M</code></td></tr>
+<tr><td><code>%a</code></td><td>weekday, <code>Mon</code></td><td><code>%z</code></td><td>offset, <code>+0100</code></td></tr>
+<tr><td><code>%A</code></td><td>weekday, <code>Monday</code></td><td><code>%:z</code></td><td>offset, <code>+01:00</code></td></tr>
+<tr><td><code>%b</code>, <code>%h</code></td><td>month, <code>Jan</code></td><td><code>%s</code></td><td>Unix seconds</td></tr>
+<tr><td><code>%B</code></td><td>month, <code>January</code></td><td><code>%u</code></td><td>ISO weekday, <code>1</code> (Monday) to <code>7</code></td></tr>
+<tr><td><code>%G</code></td><td>ISO 8601 week-numbering year</td><td><code>%w</code></td><td>weekday, <code>0</code> (Sunday) to <code>6</code></td></tr>
+<tr><td><code>%V</code></td><td>ISO 8601 week, <code>01</code> to <code>53</code></td><td><code>%n</code>, <code>%t</code>, <code>%%</code></td><td>newline, tab, <code>%</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Names are English, whatever the locale. <code>%z</code>, <code>%:z</code> and <code>%s</code> need an
+offset, so only <code>OffsetDateTime.format</code> takes them.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+import time;
+
+main(): int {
+    var now = time.now();
+    print(now);                                  # 2024-03-01T09:00:00.25+01:00
+    print(now.format("%A %e %B %Y, %H:%M"));     # Friday  1 March 2024, 09:00
+    print(now.to_http_date());                   # Fri, 01 Mar 2024 08:00:00 GMT
+    var date = time.Date.parse("2024-02-29").value();
+    print(date.add_years(1));                    # 2025-02-28
+    return 0;
+}
+</code></pre>
+<p>Source: <code>runtime/time/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/time/civil.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="dates-and-times"><a class="header" href="#dates-and-times">Dates and times</a></h1>
+<p>Calendar dates and times of day with no time zone: <code>Date</code>, <code>Time</code>,
+<code>DateTime</code> and <code>Weekday</code>, on the proleptic Gregorian calendar, plus
+<code>is_leap_year</code> and <code>days_in_month</code>.</p>
+<p>Source: <code>runtime/time/civil.pep</code></p>
+<h2 id="is_leap_year"><a class="header" href="#is_leap_year">is_leap_year</a></h2>
+<pre><code class="language-pepper">is_leap_year(year: int): bool
+</code></pre>
+<p>Returns whether <code>year</code> is a leap year on the Gregorian calendar: divisible
+by 4, except centuries not divisible by 400. Year 0 (1 BC) is one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when February of <code>year</code> has 29 days</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(time.is_leap_year(2024) &amp;&amp; !time.is_leap_year(1900), "leap years");
+</code></pre>
+<h2 id="days_in_month"><a class="header" href="#days_in_month">days_in_month</a></h2>
+<pre><code class="language-pepper">days_in_month(year: int, month: int): int
+</code></pre>
+<p>Returns the number of days in <code>month</code> of <code>year</code>: 28 to 31.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year, for February</li>
+<li><code>month</code> — the month, 1 (January) to 12 (December)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of days in that month</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>month</code> is not from 1 to 12</li>
+</ul>
+<h2 id="weekday"><a class="header" href="#weekday">Weekday</a></h2>
+<pre><code class="language-pepper">enum Weekday
+</code></pre>
+<p>A day of the week. Each case’s value is its ISO 8601 number, Monday 1 to
+Sunday 7, so <code>day as int</code> gives that number, and <code>day.name()</code> its English
+name.</p>
+<h3 id="cases-7"><a class="header" href="#cases-7">Cases</a></h3>
+<h4 id="monday"><a class="header" href="#monday">Monday</a></h4>
+<pre><code class="language-pepper">Monday = 1
+</code></pre>
+<p>The first day of the ISO week.</p>
+<h4 id="tuesday"><a class="header" href="#tuesday">Tuesday</a></h4>
+<pre><code class="language-pepper">Tuesday
+</code></pre>
+<p>The second day.</p>
+<h4 id="wednesday"><a class="header" href="#wednesday">Wednesday</a></h4>
+<pre><code class="language-pepper">Wednesday
+</code></pre>
+<p>The third day.</p>
+<h4 id="thursday"><a class="header" href="#thursday">Thursday</a></h4>
+<pre><code class="language-pepper">Thursday
+</code></pre>
+<p>The fourth day.</p>
+<h4 id="friday"><a class="header" href="#friday">Friday</a></h4>
+<pre><code class="language-pepper">Friday
+</code></pre>
+<p>The fifth day.</p>
+<h4 id="saturday"><a class="header" href="#saturday">Saturday</a></h4>
+<pre><code class="language-pepper">Saturday
+</code></pre>
+<p>The sixth day.</p>
+<h4 id="sunday"><a class="header" href="#sunday">Sunday</a></h4>
+<pre><code class="language-pepper">Sunday
+</code></pre>
+<p>The seventh and last day of the ISO week.</p>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the weekday’s English name, as <code>name()</code> does: <code>Monday</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the name</li>
+</ul>
+<h2 id="date"><a class="header" href="#date">Date</a></h2>
+<pre><code class="language-pepper">[Value] struct Date
+</code></pre>
+<p>A date on the proleptic Gregorian calendar, which extends the calendar’s
+rules to years before it was adopted: a year, a month (1 to 12) and a
+day of the month (1 to 31), with no time of day or time zone.</p>
+<p>A value struct: copied, compared with <code>==</code>, <code>&lt;</code> and the other
+comparisons, and never allocated. Years run from -999999 to 999999; year
+0 is 1 BC. Its text is ISO 8601’s <code>2024-02-29</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    var day = time.Date(2024, 2, 28).add_days(1);
+    print(day);               # 2024-02-29
+    print(day.weekday());     # Thursday
+    return 0;
+}
+</code></pre>
+<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h4 id="year"><a class="header" href="#year">year</a></h4>
+<pre><code class="language-pepper">var year: int { get; }
+</code></pre>
+<p>The year: 2024, or 0 for 1 BC and -1 for 2 BC.</p>
+<h4 id="month"><a class="header" href="#month">month</a></h4>
+<pre><code class="language-pepper">var month: int { get; }
+</code></pre>
+<p>The month, 1 (January) to 12 (December).</p>
+<h4 id="day"><a class="header" href="#day">day</a></h4>
+<pre><code class="language-pepper">var day: int { get; }
+</code></pre>
+<p>The day of the month, 1 to 31.</p>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h4 id="date-1"><a class="header" href="#date-1">Date()</a></h4>
+<pre><code class="language-pepper">construct(year: int = 1970, month: int = 1, day: int = 1)
+</code></pre>
+<p>Makes the date <code>year</code>-<code>month</code>-<code>day</code>; with no arguments, the Unix
+epoch’s 1970-01-01.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year, from -999999 to 999999</li>
+<li><code>month</code> — the month, 1 to 12</li>
+<li><code>day</code> — the day of the month, 1 to the month’s last day</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the parts do not name a date: use <code>checked</code> for parts that come from outside the program</li>
+</ul>
+<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
+<h4 id="checked"><a class="header" href="#checked">checked</a></h4>
+<pre><code class="language-pepper">static checked(year: int, month: int, day: int): Date?
+</code></pre>
+<p>Returns the date <code>year</code>-<code>month</code>-<code>day</code>, or none when the parts do not
+name one, such as February 30.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year, from -999999 to 999999</li>
+<li><code>month</code> — the month, 1 to 12</li>
+<li><code>day</code> — the day of the month</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date, or none</li>
+</ul>
+<h4 id="from_days"><a class="header" href="#from_days">from_days</a></h4>
+<pre><code class="language-pepper">static from_days(days: long): Date
+</code></pre>
+<p>Returns the date <code>days</code> days after 1970-01-01.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>days</code> — days since the Unix epoch; negative for earlier dates</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the date is outside the years -999999 to 999999</li>
+</ul>
+<h4 id="parse-12"><a class="header" href="#parse-12">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;Date&gt;
+</code></pre>
+<p>Returns the date in the ISO 8601 form <code>2024-02-29</code>, or none when
+<code>text</code> is not a date. Years outside 0 to 9999 take a sign and more
+digits (<code>+10000-01-01</code>, <code>-0001-12-31</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h4 id="days"><a class="header" href="#days">days</a></h4>
+<pre><code class="language-pepper">days(): long
+</code></pre>
+<p>Returns the number of days from 1970-01-01 to this date.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>days since the Unix epoch; negative for earlier dates</li>
+</ul>
+<h4 id="weekday-1"><a class="header" href="#weekday-1">weekday</a></h4>
+<pre><code class="language-pepper">weekday(): Weekday
+</code></pre>
+<p>Returns the day of the week.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the weekday</li>
+</ul>
+<h4 id="day_of_year"><a class="header" href="#day_of_year">day_of_year</a></h4>
+<pre><code class="language-pepper">day_of_year(): int
+</code></pre>
+<p>Returns the day of the year, 1 for January 1 to 366 for December 31
+of a leap year.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the ordinal day</li>
+</ul>
+<h4 id="is_leap_year-1"><a class="header" href="#is_leap_year-1">is_leap_year</a></h4>
+<pre><code class="language-pepper">is_leap_year(): bool
+</code></pre>
+<p>Returns whether this date’s year is a leap year.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the year has a February 29</li>
+</ul>
+<h4 id="days_in_month-1"><a class="header" href="#days_in_month-1">days_in_month</a></h4>
+<pre><code class="language-pepper">days_in_month(): int
+</code></pre>
+<p>Returns the number of days in this date’s month.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>28 to 31</li>
+</ul>
+<h4 id="add_days"><a class="header" href="#add_days">add_days</a></h4>
+<pre><code class="language-pepper">add_days(days: long): Date
+</code></pre>
+<p>Returns the date <code>days</code> days later, or earlier when <code>days</code> is
+negative.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>days</code> — the number of days to move</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the date is outside the years -999999 to 999999</li>
+</ul>
+<h4 id="add_months"><a class="header" href="#add_months">add_months</a></h4>
+<pre><code class="language-pepper">add_months(months: long): Date
+</code></pre>
+<p>Returns the date <code>months</code> months later, or earlier when <code>months</code> is
+negative. A day past the end of the new month becomes its last day:
+a month after January 31 is February 28 or 29.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>months</code> — the number of months to move</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the date is outside the years -999999 to 999999</li>
+</ul>
+<h4 id="add_years"><a class="header" href="#add_years">add_years</a></h4>
+<pre><code class="language-pepper">add_years(years: long): Date
+</code></pre>
+<p>Returns the date <code>years</code> years later, or earlier when <code>years</code> is
+negative. February 29 becomes February 28 in a year that is not a
+leap year.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>years</code> — the number of years to move</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the date is outside the years -999999 to 999999</li>
+</ul>
+<h4 id="days_since"><a class="header" href="#days_since">days_since</a></h4>
+<pre><code class="language-pepper">days_since(earlier: Date): long
+</code></pre>
+<p>Returns the number of days from <code>earlier</code> to this date: negative when
+<code>earlier</code> is later.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>earlier</code> — the date to count from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of days between them</li>
+</ul>
+<h4 id="at"><a class="header" href="#at">at</a></h4>
+<pre><code class="language-pepper">at(time: Time = Time()): DateTime
+</code></pre>
+<p>Returns the start of this date, midnight, as a <code>DateTime</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the time of day; midnight by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time</li>
+</ul>
+<h4 id="operator--37"><a class="header" href="#operator--37">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: Date): bool
+</code></pre>
+<p>Returns whether this date is earlier than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: Date): bool
+</code></pre>
+<p>Returns whether this date is earlier than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--2-7"><a class="header" href="#operator--2-7">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: Date): bool
+</code></pre>
+<p>Returns whether this date is later than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--3-6"><a class="header" href="#operator--3-6">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: Date): bool
+</code></pre>
+<p>Returns whether this date is later than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<h4 id="format"><a class="header" href="#format">format</a></h4>
+<pre><code class="language-pepper">format(pattern: String): String
+</code></pre>
+<p>Returns the date as text laid out by <code>pattern</code>, whose <code>%</code> codes are
+those of C’s <code>strftime</code> (see the <a href="#the-time-module">time module</a>). The
+time of day is midnight, and an offset code (<code>%z</code>) panics.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the layout, such as <code>"%d %B %Y"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the formatted date</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pattern</code> has an unknown code, or an offset code</li>
+</ul>
+<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the date in ISO 8601 form: <code>2024-02-29</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date as text</li>
+</ul>
+<h2 id="time-2"><a class="header" href="#time-2">Time</a></h2>
+<pre><code class="language-pepper">[Value] struct Time
+</code></pre>
+<p>A time of day with no date or time zone: an hour (0 to 23), a minute,
+a second and a nanosecond. Leap seconds are not represented, as in Unix
+time.</p>
+<p>A value struct: copied, compared with <code>==</code>, <code>&lt;</code> and the other
+comparisons, and never allocated. Its text is ISO 8601’s <code>08:30:00</code>,
+with a fraction of a second when there is one (<code>08:30:00.25</code>).</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    var lunch = time.Time(12, 30);
+    print(lunch);   # 12:30:00
+    return 0;
+}
+</code></pre>
+<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h4 id="hour"><a class="header" href="#hour">hour</a></h4>
+<pre><code class="language-pepper">var hour: int { get; }
+</code></pre>
+<p>The hour, 0 to 23.</p>
+<h4 id="minute"><a class="header" href="#minute">minute</a></h4>
+<pre><code class="language-pepper">var minute: int { get; }
+</code></pre>
+<p>The minute, 0 to 59.</p>
+<h4 id="second"><a class="header" href="#second">second</a></h4>
+<pre><code class="language-pepper">var second: int { get; }
+</code></pre>
+<p>The second, 0 to 59.</p>
+<h4 id="nanosecond"><a class="header" href="#nanosecond">nanosecond</a></h4>
+<pre><code class="language-pepper">var nanosecond: int { get; }
+</code></pre>
+<p>The nanosecond within the second, 0 to 999999999.</p>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h4 id="time-1-1"><a class="header" href="#time-1-1">Time()</a></h4>
+<pre><code class="language-pepper">construct(hour: int = 0, minute: int = 0, second: int = 0, nanosecond: int = 0)
+</code></pre>
+<p>Makes the time <code>hour</code>:<code>minute</code>:<code>second</code>; with no arguments,
+midnight.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hour</code> — the hour, 0 to 23</li>
+<li><code>minute</code> — the minute, 0 to 59</li>
+<li><code>second</code> — the second, 0 to 59</li>
+<li><code>nanosecond</code> — the nanosecond within the second, 0 to 999999999</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a part is out of range: use <code>checked</code> for parts that come from outside the program</li>
+</ul>
+<h3 id="static-methods-1-6"><a class="header" href="#static-methods-1-6">Static methods</a></h3>
+<h4 id="checked-1"><a class="header" href="#checked-1">checked</a></h4>
+<pre><code class="language-pepper">static checked(hour: int, minute: int, second: int = 0, nanosecond: int = 0): Time?
+</code></pre>
+<p>Returns the time <code>hour</code>:<code>minute</code>:<code>second</code>, or none when a part is out
+of range.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hour</code> — the hour, 0 to 23</li>
+<li><code>minute</code> — the minute, 0 to 59</li>
+<li><code>second</code> — the second, 0 to 59</li>
+<li><code>nanosecond</code> — the nanosecond within the second</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time, or none</li>
+</ul>
+<h4 id="from_nanoseconds-1"><a class="header" href="#from_nanoseconds-1">from_nanoseconds</a></h4>
+<pre><code class="language-pepper">static from_nanoseconds(nanoseconds: long): Time
+</code></pre>
+<p>Returns the time <code>nanoseconds</code> nanoseconds after midnight.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nanoseconds</code> — nanoseconds since midnight, less than a day’s</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>nanoseconds</code> is negative or a day or more</li>
+</ul>
+<h4 id="parse-1-2"><a class="header" href="#parse-1-2">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;Time&gt;
+</code></pre>
+<p>Returns the time in the ISO 8601 form <code>08:30:00</code>, with an optional
+fraction of a second (<code>08:30:00.25</code>), or an error when <code>text</code> is not
+a time. The seconds may be left out (<code>08:30</code>), as TOML 1.1 allows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h4 id="nanoseconds-1"><a class="header" href="#nanoseconds-1">nanoseconds</a></h4>
+<pre><code class="language-pepper">nanoseconds(): long
+</code></pre>
+<p>Returns the number of nanoseconds since midnight.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>nanoseconds since midnight</li>
+</ul>
+<h4 id="seconds-1"><a class="header" href="#seconds-1">seconds</a></h4>
+<pre><code class="language-pepper">seconds(): long
+</code></pre>
+<p>Returns the number of whole seconds since midnight.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>seconds since midnight</li>
+</ul>
+<h4 id="operator--4-4"><a class="header" href="#operator--4-4">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: Time): bool
+</code></pre>
+<p>Returns whether this time is earlier in the day than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--5-3"><a class="header" href="#operator--5-3">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: Time): bool
+</code></pre>
+<p>Returns whether this time is earlier than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--6-2"><a class="header" href="#operator--6-2">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: Time): bool
+</code></pre>
+<p>Returns whether this time is later in the day than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--7-2"><a class="header" href="#operator--7-2">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: Time): bool
+</code></pre>
+<p>Returns whether this time is later than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<h4 id="format-1"><a class="header" href="#format-1">format</a></h4>
+<pre><code class="language-pepper">format(pattern: String): String
+</code></pre>
+<p>Returns the time as text laid out by <code>pattern</code>, whose <code>%</code> codes are
+those of C’s <code>strftime</code> (see the <a href="#the-time-module">time module</a>). The
+date is 1970-01-01, and an offset code (<code>%z</code>) panics.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the layout, such as <code>"%H:%M"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the formatted time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pattern</code> has an unknown code, or an offset code</li>
+</ul>
+<h4 id="to_string-2-1"><a class="header" href="#to_string-2-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the time in ISO 8601 form: <code>08:30:00</code>, with the fraction of a
+second when it is not zero, without trailing zeros (<code>08:30:00.25</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time as text</li>
+</ul>
+<h2 id="datetime"><a class="header" href="#datetime">DateTime</a></h2>
+<pre><code class="language-pepper">[Value] struct DateTime
+</code></pre>
+<p>A date and a time of day with no time zone, such as a meeting’s
+<code>2024-03-01 09:00</code> written down without saying where. TOML calls it a
+local date-time. Attach an offset with <code>OffsetDateTime</code>, or a zone’s
+rules with <code>TimeZone.at_local</code>, to name an instant.</p>
+<p>A value struct: copied, compared with <code>==</code>, <code>&lt;</code> and the other
+comparisons, and never allocated. Its text is ISO 8601’s
+<code>2024-03-01T09:00:00</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    var start = time.DateTime(2024, 3, 1, 9, 0);
+    var end = start + os.Duration.from_seconds(90 * 60);
+    print(end);   # 2024-03-01T10:30:00
+    return 0;
+}
+</code></pre>
+<h3 id="properties-2-2"><a class="header" href="#properties-2-2">Properties</a></h3>
+<h4 id="date-2"><a class="header" href="#date-2">date</a></h4>
+<pre><code class="language-pepper">var date: Date { get; }
+</code></pre>
+<p>The date.</p>
+<h4 id="time-2-1"><a class="header" href="#time-2-1">time</a></h4>
+<pre><code class="language-pepper">var time: Time { get; }
+</code></pre>
+<p>The time of day.</p>
+<h4 id="year-1"><a class="header" href="#year-1">year</a></h4>
+<pre><code class="language-pepper">var year: int { get; }
+</code></pre>
+<p>The year, as <code>date.year</code>.</p>
+<h4 id="month-1"><a class="header" href="#month-1">month</a></h4>
+<pre><code class="language-pepper">var month: int { get; }
+</code></pre>
+<p>The month, 1 to 12, as <code>date.month</code>.</p>
+<h4 id="day-1"><a class="header" href="#day-1">day</a></h4>
+<pre><code class="language-pepper">var day: int { get; }
+</code></pre>
+<p>The day of the month, as <code>date.day</code>.</p>
+<h4 id="hour-1"><a class="header" href="#hour-1">hour</a></h4>
+<pre><code class="language-pepper">var hour: int { get; }
+</code></pre>
+<p>The hour, 0 to 23, as <code>time.hour</code>.</p>
+<h4 id="minute-1"><a class="header" href="#minute-1">minute</a></h4>
+<pre><code class="language-pepper">var minute: int { get; }
+</code></pre>
+<p>The minute, as <code>time.minute</code>.</p>
+<h4 id="second-1"><a class="header" href="#second-1">second</a></h4>
+<pre><code class="language-pepper">var second: int { get; }
+</code></pre>
+<p>The second, as <code>time.second</code>.</p>
+<h4 id="nanosecond-1"><a class="header" href="#nanosecond-1">nanosecond</a></h4>
+<pre><code class="language-pepper">var nanosecond: int { get; }
+</code></pre>
+<p>The nanosecond within the second, as <code>time.nanosecond</code>.</p>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h4 id="datetime-1"><a class="header" href="#datetime-1">DateTime()</a></h4>
+<pre><code class="language-pepper">construct( year: int = 1970, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0, nanosecond: int = 0 )
+</code></pre>
+<p>Makes the date and time from its parts; with no arguments, the Unix
+epoch’s 1970-01-01T00:00:00.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year, from -999999 to 999999</li>
+<li><code>month</code> — the month, 1 to 12</li>
+<li><code>day</code> — the day of the month</li>
+<li><code>hour</code> — the hour, 0 to 23</li>
+<li><code>minute</code> — the minute, 0 to 59</li>
+<li><code>second</code> — the second, 0 to 59</li>
+<li><code>nanosecond</code> — the nanosecond within the second</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the parts do not name a date and time</li>
+</ul>
+<h3 id="static-methods-2-5"><a class="header" href="#static-methods-2-5">Static methods</a></h3>
+<h4 id="combine"><a class="header" href="#combine">combine</a></h4>
+<pre><code class="language-pepper">static combine(date: Date, time: Time): DateTime
+</code></pre>
+<p>Returns <code>date</code> at <code>time</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>date</code> — the date</li>
+<li><code>time</code> — the time of day</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time</li>
+</ul>
+<h4 id="from_unix_nanoseconds-1"><a class="header" href="#from_unix_nanoseconds-1">from_unix_nanoseconds</a></h4>
+<pre><code class="language-pepper">static from_unix_nanoseconds(nanoseconds: long): DateTime
+</code></pre>
+<p>Returns the date and time <code>nanoseconds</code> nanoseconds after
+1970-01-01T00:00:00, counting every day as 86400 seconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nanoseconds</code> — nanoseconds since the epoch; negative for earlier</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time</li>
+</ul>
+<h4 id="from_unix_seconds-1"><a class="header" href="#from_unix_seconds-1">from_unix_seconds</a></h4>
+<pre><code class="language-pepper">static from_unix_seconds(seconds: long, nanosecond: int = 0): DateTime
+</code></pre>
+<p>Returns the date and time <code>seconds</code> seconds after
+1970-01-01T00:00:00, counting every day as 86400 seconds, as Unix
+time does. Reaches further than a <code>SystemTime</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seconds</code> — seconds since the epoch; negative for earlier</li>
+<li><code>nanosecond</code> — the nanosecond within the second</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>nanosecond</code> is not from 0 to 999999999, or the date is outside the years -999999 to 999999</li>
+</ul>
+<h4 id="from_system_time"><a class="header" href="#from_system_time">from_system_time</a></h4>
+<pre><code class="language-pepper">static from_system_time(time: os.SystemTime): DateTime
+</code></pre>
+<p>Returns the date and time in UTC of a wall-clock reading.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the instant</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its date and time in UTC</li>
+</ul>
+<h4 id="parse-2-1"><a class="header" href="#parse-2-1">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;DateTime&gt;
+</code></pre>
+<p>Returns the date and time in the ISO 8601 form
+<code>2024-03-01T09:00:00</code>, or an error when <code>text</code> is not one. A space or
+a lowercase <code>t</code> may stand for the <code>T</code>, as TOML allows, and the
+seconds may be left out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
+<h4 id="unix_seconds-1"><a class="header" href="#unix_seconds-1">unix_seconds</a></h4>
+<pre><code class="language-pepper">unix_seconds(): long
+</code></pre>
+<p>Returns the number of seconds from 1970-01-01T00:00:00 to this date
+and time, rounded down, counting every day as 86400 seconds.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>seconds since the epoch; negative for earlier</li>
+</ul>
+<h4 id="to_system_time"><a class="header" href="#to_system_time">to_system_time</a></h4>
+<pre><code class="language-pepper">to_system_time(): os.SystemTime
+</code></pre>
+<p>Returns this date and time as a <code>SystemTime</code>, reading it as UTC.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the instant</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the date is outside what a <code>SystemTime</code> reaches, the years 1677 to 2262</li>
+</ul>
+<h4 id="weekday-2"><a class="header" href="#weekday-2">weekday</a></h4>
+<pre><code class="language-pepper">weekday(): Weekday
+</code></pre>
+<p>Returns the day of the week.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the weekday</li>
+</ul>
+<h4 id="operator--8-2"><a class="header" href="#operator--8-2">operator +</a></h4>
+<pre><code class="language-pepper">+(duration: os.Duration): DateTime
+</code></pre>
+<p>Returns the date and time <code>duration</code> later.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move forward</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the later date and time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is past the year 999999</li>
+</ul>
+<h4 id="operator---4"><a class="header" href="#operator---4">operator -</a></h4>
+<pre><code class="language-pepper">-(duration: os.Duration): DateTime
+</code></pre>
+<p>Returns the date and time <code>duration</code> earlier.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move back</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the earlier date and time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the result is before the year -999999</li>
+</ul>
+<h4 id="operator--9-2"><a class="header" href="#operator--9-2">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: DateTime): bool
+</code></pre>
+<p>Returns whether this date and time is earlier than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date and time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--10-2"><a class="header" href="#operator--10-2">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: DateTime): bool
+</code></pre>
+<p>Returns whether this date and time is earlier than or the same as
+<code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date and time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--11-2"><a class="header" href="#operator--11-2">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: DateTime): bool
+</code></pre>
+<p>Returns whether this date and time is later than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date and time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--12-2"><a class="header" href="#operator--12-2">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: DateTime): bool
+</code></pre>
+<p>Returns whether this date and time is later than or the same as
+<code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the date and time to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<h4 id="format-2"><a class="header" href="#format-2">format</a></h4>
+<pre><code class="language-pepper">format(pattern: String): String
+</code></pre>
+<p>Returns the date and time as text laid out by <code>pattern</code>, whose <code>%</code>
+codes are those of C’s <code>strftime</code> (see the
+<a href="#the-time-module">time module</a>). An offset code (<code>%z</code>) panics.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the layout, such as <code>"%Y-%m-%d %H:%M"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the formatted date and time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pattern</code> has an unknown code, or an offset code</li>
+</ul>
+<h4 id="to_string-3-1"><a class="header" href="#to_string-3-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the date and time in ISO 8601 form: <code>2024-03-01T09:00:00</code>,
+with the fraction of a second when it is not zero.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time as text</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/time/offset.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="offsets"><a class="header" href="#offsets">Offsets</a></h1>
+<p>Fixed offsets from UTC, <code>Offset</code>, and the date and time at one,
+<code>OffsetDateTime</code>: an instant written the way RFC 3339 and TOML write it.</p>
+<p>Source: <code>runtime/time/offset.pep</code></p>
+<h2 id="offset-1"><a class="header" href="#offset-1">Offset</a></h2>
+<pre><code class="language-pepper">[Value] struct Offset
+</code></pre>
+<p>A fixed offset from UTC, east positive: <code>+02:00</code> for Central European
+Summer Time, <code>-05:00</code> for US Eastern Standard Time, <code>+00:00</code> for UTC.</p>
+<p>A value struct: copied, compared with <code>==</code>, and never allocated. It is
+less than a day either way, to the second. Its text is <code>+02:00</code>, with the
+seconds when there are any (<code>+00:19:32</code>).</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    var india = time.Offset.from_hours(5, 30);
+    print(india);            # +05:30
+    print(india.seconds);    # 19800
+    return 0;
+}
+</code></pre>
+<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
+<h4 id="seconds-2"><a class="header" href="#seconds-2">seconds</a></h4>
+<pre><code class="language-pepper">var seconds: int { get; }
+</code></pre>
+<p>The offset in seconds, east of UTC positive.</p>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h4 id="offset-1-1"><a class="header" href="#offset-1-1">Offset()</a></h4>
+<pre><code class="language-pepper">construct(seconds: int = 0)
+</code></pre>
+<p>Makes the offset <code>seconds</code> seconds east of UTC (west when negative);
+with no argument, UTC itself.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seconds</code> — the offset in seconds, east positive</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the offset is a day or more either way</li>
+</ul>
+<h3 id="static-methods-24"><a class="header" href="#static-methods-24">Static methods</a></h3>
+<h4 id="utc"><a class="header" href="#utc">utc</a></h4>
+<pre><code class="language-pepper">static utc(): Offset
+</code></pre>
+<p>Returns UTC, the zero offset.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the zero offset</li>
+</ul>
+<h4 id="from_hours"><a class="header" href="#from_hours">from_hours</a></h4>
+<pre><code class="language-pepper">static from_hours(hours: int, minutes: int = 0): Offset
+</code></pre>
+<p>Returns the offset <code>hours</code> hours and <code>minutes</code> minutes from UTC. Both
+take the offset’s sign: <code>from_hours(-3, -30)</code> is <code>-03:30</code>, and
+<code>from_hours(0, -30)</code> is <code>-00:30</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hours</code> — whole hours, east positive</li>
+<li><code>minutes</code> — minutes on top of the hours, with the same sign</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the offset is a day or more either way</li>
+</ul>
+<h4 id="parse-13"><a class="header" href="#parse-13">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;Offset&gt;
+</code></pre>
+<p>Returns the offset written as <code>+02:00</code>, <code>-0530</code>, <code>+02</code> or <code>Z</code> (UTC),
+or an error when <code>text</code> is not one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h4 id="is_utc"><a class="header" href="#is_utc">is_utc</a></h4>
+<pre><code class="language-pepper">is_utc(): bool
+</code></pre>
+<p>Returns whether this is UTC, the zero offset.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for <code>+00:00</code></li>
+</ul>
+<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the offset as text: <code>+02:00</code>, <code>-05:30</code>, <code>+00:00</code>, with the
+seconds when there are any (<code>+00:19:32</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset as text</li>
+</ul>
+<h2 id="offsetdatetime"><a class="header" href="#offsetdatetime">OffsetDateTime</a></h2>
+<pre><code class="language-pepper">[Value] struct OffsetDateTime
+</code></pre>
+<p>A date and time at a fixed offset from UTC, such as
+<code>2024-03-01T09:00:00+01:00</code>: an instant, together with the local date and
+time it was written in. This is RFC 3339’s timestamp and TOML’s offset
+date-time.</p>
+<p>A value struct: copied and never allocated. <code>==</code> compares the date, time
+and offset, so the same instant at two offsets is not <code>==</code>; compare
+instants with <code>to_system_time()</code>, or with <code>&lt;</code> and the other comparisons,
+which compare instants. Its text is RFC 3339’s, with <code>Z</code> for UTC.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import time;
+
+main(): int {
+    var meeting = time.OffsetDateTime.parse("2024-03-01T09:00:00+01:00").value();
+    print(meeting.to_utc());   # 2024-03-01T08:00:00Z
+    print(meeting.to_http_date());   # Fri, 01 Mar 2024 08:00:00 GMT
+    return 0;
+}
+</code></pre>
+<h3 id="properties-1-5"><a class="header" href="#properties-1-5">Properties</a></h3>
+<h4 id="date_time"><a class="header" href="#date_time">date_time</a></h4>
+<pre><code class="language-pepper">var date_time: DateTime { get; }
+</code></pre>
+<p>The local date and time at <code>offset</code>.</p>
+<h4 id="offset-2"><a class="header" href="#offset-2">offset</a></h4>
+<pre><code class="language-pepper">var offset: Offset { get; }
+</code></pre>
+<p>The offset from UTC that <code>date_time</code> is at.</p>
+<h4 id="date-3"><a class="header" href="#date-3">date</a></h4>
+<pre><code class="language-pepper">var date: Date { get; }
+</code></pre>
+<p>The local date, as <code>date_time.date</code>.</p>
+<h4 id="time-3"><a class="header" href="#time-3">time</a></h4>
+<pre><code class="language-pepper">var time: Time { get; }
+</code></pre>
+<p>The local time of day, as <code>date_time.time</code>.</p>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h4 id="offsetdatetime-1"><a class="header" href="#offsetdatetime-1">OffsetDateTime()</a></h4>
+<pre><code class="language-pepper">construct(date_time: DateTime = DateTime(), offset: Offset = Offset())
+</code></pre>
+<p>Makes the date and time <code>date_time</code> at <code>offset</code>; with no arguments,
+the Unix epoch, 1970-01-01T00:00:00Z.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>date_time</code> — the local date and time</li>
+<li><code>offset</code> — its offset from UTC</li>
+</ul>
+<h3 id="static-methods-1-7"><a class="header" href="#static-methods-1-7">Static methods</a></h3>
+<h4 id="from_system_time-1"><a class="header" href="#from_system_time-1">from_system_time</a></h4>
+<pre><code class="language-pepper">static from_system_time(time: os.SystemTime, offset: Offset = Offset()): OffsetDateTime
+</code></pre>
+<p>Returns the date and time of a wall-clock reading at <code>offset</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the instant</li>
+<li><code>offset</code> — the offset to show it at; UTC by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the instant’s date and time at <code>offset</code></li>
+</ul>
+<h4 id="parse-1-3"><a class="header" href="#parse-1-3">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): Result&lt;OffsetDateTime&gt;
+</code></pre>
+<p>Returns the RFC 3339 timestamp in <code>text</code>, such as
+<code>2024-03-01T09:00:00+01:00</code> or <code>2024-03-01T08:00:00.5Z</code>, or an error
+when it is not one. A space or a lowercase <code>t</code> may stand for the <code>T</code>
+and a lowercase <code>z</code> for the <code>Z</code>, and the seconds may be left out, as
+TOML allows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h4 id="parse_http_date"><a class="header" href="#parse_http_date">parse_http_date</a></h4>
+<pre><code class="language-pepper">static parse_http_date(text: String): Result&lt;OffsetDateTime&gt;
+</code></pre>
+<p>Returns the HTTP date in <code>text</code>, as RFC 9110 defines it, or an error
+when it is not one. It reads the preferred IMF-fixdate
+(<code>Sun, 06 Nov 1994 08:49:37 GMT</code>) and the two obsolete forms that
+servers must still accept: RFC 850’s (<code>Sunday, 06-Nov-94 08:49:37 GMT</code>, where a two-digit year from 70 is in the 1900s and below 70 in
+the 2000s) and C’s <code>asctime</code> (<code>Sun Nov  6 08:49:37 1994</code>). The
+weekday must match the date.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time in UTC, or an error saying what is wrong with <code>text</code></li>
+</ul>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h4 id="unix_seconds-2"><a class="header" href="#unix_seconds-2">unix_seconds</a></h4>
+<pre><code class="language-pepper">unix_seconds(): long
+</code></pre>
+<p>Returns the seconds from the Unix epoch to this instant, rounded
+down.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>seconds since 1970-01-01T00:00:00Z; negative for earlier</li>
+</ul>
+<h4 id="to_system_time-1"><a class="header" href="#to_system_time-1">to_system_time</a></h4>
+<pre><code class="language-pepper">to_system_time(): os.SystemTime
+</code></pre>
+<p>Returns this instant as a <code>SystemTime</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the instant</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the instant is outside what a <code>SystemTime</code> reaches, the years 1677 to 2262</li>
+</ul>
+<h4 id="to_offset"><a class="header" href="#to_offset">to_offset</a></h4>
+<pre><code class="language-pepper">to_offset(offset: Offset): OffsetDateTime
+</code></pre>
+<p>Returns the same instant at another offset.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the offset to show the instant at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time at <code>offset</code></li>
+</ul>
+<h4 id="to_utc"><a class="header" href="#to_utc">to_utc</a></h4>
+<pre><code class="language-pepper">to_utc(): OffsetDateTime
+</code></pre>
+<p>Returns the same instant in UTC.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time at offset zero</li>
+</ul>
+<h4 id="weekday-3"><a class="header" href="#weekday-3">weekday</a></h4>
+<pre><code class="language-pepper">weekday(): Weekday
+</code></pre>
+<p>Returns the day of the week of the local date.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the weekday</li>
+</ul>
+<h4 id="operator--38"><a class="header" href="#operator--38">operator +</a></h4>
+<pre><code class="language-pepper">+(duration: os.Duration): OffsetDateTime
+</code></pre>
+<p>Returns the instant <code>duration</code> later, at the same offset.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move forward</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the later date and time</li>
+</ul>
+<h4 id="operator---5"><a class="header" href="#operator---5">operator -</a></h4>
+<pre><code class="language-pepper">-(duration: os.Duration): OffsetDateTime
+</code></pre>
+<p>Returns the instant <code>duration</code> earlier, at the same offset.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>duration</code> — how far to move back</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the earlier date and time</li>
+</ul>
+<h4 id="operator--1-11"><a class="header" href="#operator--1-11">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: OffsetDateTime): bool
+</code></pre>
+<p>Returns whether this instant is earlier than <code>other</code>, whatever their
+offsets.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is earlier</li>
+</ul>
+<h4 id="operator--2-8"><a class="header" href="#operator--2-8">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: OffsetDateTime): bool
+</code></pre>
+<p>Returns whether this instant is earlier than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not later</li>
+</ul>
+<h4 id="operator--3-7"><a class="header" href="#operator--3-7">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: OffsetDateTime): bool
+</code></pre>
+<p>Returns whether this instant is later than <code>other</code>, whatever their
+offsets.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is later</li>
+</ul>
+<h4 id="operator--4-5"><a class="header" href="#operator--4-5">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: OffsetDateTime): bool
+</code></pre>
+<p>Returns whether this instant is later than or the same as <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the instant to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this one is not earlier</li>
+</ul>
+<h4 id="format-3"><a class="header" href="#format-3">format</a></h4>
+<pre><code class="language-pepper">format(pattern: String): String
+</code></pre>
+<p>Returns the date and time as text laid out by <code>pattern</code>, whose <code>%</code>
+codes are those of C’s <code>strftime</code> (see the
+<a href="#the-time-module">time module</a>). <code>%z</code> is the offset as <code>+0200</code>, <code>%:z</code>
+as <code>+02:00</code>, and <code>%s</code> the Unix seconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pattern</code> — the layout, such as <code>"%Y-%m-%d %H:%M %z"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the formatted date and time</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pattern</code> has an unknown code</li>
+</ul>
+<h4 id="to_http_date"><a class="header" href="#to_http_date">to_http_date</a></h4>
+<pre><code class="language-pepper">to_http_date(): String
+</code></pre>
+<p>Returns the instant as an HTTP date in UTC, the IMF-fixdate of RFC
+9110 that <code>Date</code> and <code>Last-Modified</code> headers carry:
+<code>Fri, 01 Mar 2024 08:00:00 GMT</code>. The fraction of a second is dropped.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date as an HTTP date</li>
+</ul>
+<h4 id="to_string-1-3"><a class="header" href="#to_string-1-3">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the date and time as an RFC 3339 timestamp:
+<code>2024-03-01T09:00:00+01:00</code>, <code>Z</code> for UTC, with the fraction of a
+second when it is not zero.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time as text</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/time/zone.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="time-zones-1"><a class="header" href="#time-zones-1">Time zones</a></h1>
+<p>Time zones: <code>TimeZone</code>, the rules that give an instant’s offset from UTC,
+for UTC, a fixed offset, the system’s local zone, or a named zone such as
+<code>Europe/Paris</code> from the system’s time zone database; and <code>now()</code>.</p>
+<p>Source: <code>runtime/time/zone.pep</code></p>
+<h2 id="timezone"><a class="header" href="#timezone">TimeZone</a></h2>
+<pre><code class="language-pepper">struct TimeZone
+</code></pre>
+<p>The rules that give the offset from UTC at each instant in one place:
+UTC, a fixed offset, the system’s local time zone, or a named zone from
+the IANA time zone database, such as <code>Europe/Paris</code> or
+<code>America/New_York</code>, with its daylight saving time and its history.</p>
+<p>Named zones come from the system’s database, nothing is bundled: the
+files under <code>/usr/share/zoneinfo</code> on Linux and macOS, and ICU’s
+(<code>icu.dll</code>, Windows 10 version 1903 and later) on Windows. On every
+system, a folder of database files that the <code>TZDIR</code> environment variable
+names takes their place. Leap seconds are ignored, as in Unix time.</p>
+<p>A zone is a reference, and it does not change once made, so copies share
+it.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+import time;
+
+main(): int {
+    var paris = time.TimeZone.named("Europe/Paris").value();
+    var instant = time.OffsetDateTime.parse("2024-07-14T10:00:00Z").value();
+    print(paris.at(instant.to_system_time()));   # 2024-07-14T12:00:00+02:00
+    var local = paris.at_local(time.DateTime(2024, 12, 25, 18, 0));
+    print(local.offset);                         # +01:00
+    return 0;
+}
+</code></pre>
+<h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
+<h4 id="name-7"><a class="header" href="#name-7">name</a></h4>
+<pre><code class="language-pepper">var name: String { get; }
+</code></pre>
+<p>The zone’s name: <code>UTC</code>, <code>Local</code>, the offset of a fixed zone
+(<code>+05:30</code>), or the database name of a named one (<code>Europe/Paris</code>).</p>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h4 id="timezone-1"><a class="header" href="#timezone-1">TimeZone()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes UTC; the same as <code>TimeZone.utc()</code>.</p>
+<h3 id="static-methods-25"><a class="header" href="#static-methods-25">Static methods</a></h3>
+<h4 id="utc-1"><a class="header" href="#utc-1">utc</a></h4>
+<pre><code class="language-pepper">static utc(): TimeZone
+</code></pre>
+<p>Returns UTC.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the zone whose offset is always zero</li>
+</ul>
+<h4 id="fixed"><a class="header" href="#fixed">fixed</a></h4>
+<pre><code class="language-pepper">static fixed(offset: Offset): TimeZone
+</code></pre>
+<p>Returns a zone whose offset is always <code>offset</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the offset from UTC</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the zone, named after the offset (<code>+05:30</code>)</li>
+</ul>
+<h4 id="local"><a class="header" href="#local">local</a></h4>
+<pre><code class="language-pepper">static local(): TimeZone
+</code></pre>
+<p>Returns the system’s local time zone, as the C library’s <code>localtime</code>
+sees it: the <code>TZ</code> environment variable or <code>/etc/localtime</code> on Linux
+and macOS, and the zone in Windows’ settings. WebAssembly (WASI) has
+no local zone, so it is UTC there.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local zone, named <code>Local</code></li>
+</ul>
+<h4 id="named"><a class="header" href="#named">named</a></h4>
+<pre><code class="language-pepper">static named(name: String): Result&lt;TimeZone&gt;
+</code></pre>
+<p>Returns the zone <code>name</code> from the system’s time zone database, such
+as <code>Europe/Paris</code>, <code>America/New_York</code> or <code>Asia/Kolkata</code>, or an error
+when the system does not know it. <code>UTC</code> is always known.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the IANA name of the zone, which is case-sensitive</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the zone, or an error saying it was not found</li>
+</ul>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h4 id="offset_at"><a class="header" href="#offset_at">offset_at</a></h4>
+<pre><code class="language-pepper">offset_at(time: os.SystemTime): Offset
+</code></pre>
+<p>Returns the offset from UTC in this zone at <code>time</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the instant</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the offset in effect then</li>
+</ul>
+<h4 id="at-1"><a class="header" href="#at-1">at</a></h4>
+<pre><code class="language-pepper">at(time: os.SystemTime): OffsetDateTime
+</code></pre>
+<p>Returns the date and time in this zone at <code>time</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the instant</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its local date and time, with the offset in effect</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var here = time.TimeZone.local().at(os.SystemTime.now());
+</code></pre>
+<h4 id="at_local"><a class="header" href="#at_local">at_local</a></h4>
+<pre><code class="language-pepper">at_local(local: DateTime): OffsetDateTime
+</code></pre>
+<p>Returns the instant that a local date and time names in this zone,
+with its offset.</p>
+<p>Where the clocks go back, a local time happens twice; this returns
+the earlier, at the offset from before the change. Where they go
+forward, a local time never happens; this moves it forward by the
+length of the gap, so 02:30 on a night that skips from 02:00 to
+03:00 is 03:30. This is what Java’s <code>ZonedDateTime.of</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>local</code> — the date and time on the zone’s clocks</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date and time with the zone’s offset at that instant</li>
+</ul>
+<h2 id="now-2"><a class="header" href="#now-2">now</a></h2>
+<pre><code class="language-pepper">now(): OffsetDateTime
+</code></pre>
+<p>Returns the current date and time in the system’s local time zone.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>now, at the local offset</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">print(time.now());   # such as 2024-03-01T09:00:00.123456789+01:00
+</code></pre>
+<h2 id="now_utc"><a class="header" href="#now_utc">now_utc</a></h2>
+<pre><code class="language-pepper">now_utc(): OffsetDateTime
+</code></pre>
+<p>Returns the current date and time in UTC.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>now, at offset zero</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/math/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-math-module"><a class="header" href="#the-math-module">The math module</a></h1>
 <p>Numbers beyond the operators: the math library as it grows.</p>
@@ -39124,7 +40739,7 @@ width. Every other operation is defined for every input.</p>
 <li><code>T</code> — the lane type: an integer or floating-point type</li>
 <li><code>N</code> — the lane count: a power of two from 1 to 64</li>
 </ul>
-<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h3 id="properties-15"><a class="header" href="#properties-15">Properties</a></h3>
 <h4 id="count-6"><a class="header" href="#count-6">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
@@ -39142,7 +40757,7 @@ width. Every other operation is defined for every input.</p>
 <ul>
 <li><code>value</code> — the value of every lane</li>
 </ul>
-<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
+<h3 id="static-methods-26"><a class="header" href="#static-methods-26">Static methods</a></h3>
 <h4 id="load-1"><a class="header" href="#load-1">load</a></h4>
 <pre><code class="language-pepper">static load(pointer: __ptr&lt;T&gt;): Vector&lt;T, N&gt;
 </code></pre>
@@ -39189,7 +40804,7 @@ vector’s size (<code>N</code> times the size of <code>T</code>).</p>
 <ul>
 <li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
 </ul>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="store-1"><a class="header" href="#store-1">store</a></h4>
 <pre><code class="language-pepper">store(pointer: __ptr&lt;T&gt;)
 </code></pre>
@@ -39225,7 +40840,7 @@ aligned to the vector’s size.</p>
 <ul>
 <li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
 </ul>
-<h4 id="operator--37"><a class="header" href="#operator--37">operator []</a></h4>
+<h4 id="operator--39"><a class="header" href="#operator--39">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): T
 </code></pre>
 <p>Returns lane <code>index</code>.</p>
@@ -39241,7 +40856,7 @@ aligned to the vector’s size.</p>
 <ul>
 <li>if <code>index</code> is not less than <code>N</code></li>
 </ul>
-<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
+<h4 id="operator--1-12"><a class="header" href="#operator--1-12">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong, value: T): T
 </code></pre>
 <p>Sets lane <code>index</code> to <code>value</code>.</p>
@@ -39258,7 +40873,7 @@ aligned to the vector’s size.</p>
 <ul>
 <li>if <code>index</code> is not less than <code>N</code></li>
 </ul>
-<h4 id="operator--2-7"><a class="header" href="#operator--2-7">operator +</a></h4>
+<h4 id="operator--2-9"><a class="header" href="#operator--2-9">operator +</a></h4>
 <pre><code class="language-pepper">+(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>Adds each lane of <code>other</code> to the same lane of this vector. Integer
@@ -39271,7 +40886,7 @@ lanes wrap around on overflow.</p>
 <ul>
 <li>the lane-wise sums</li>
 </ul>
-<h4 id="operator--3-6"><a class="header" href="#operator--3-6">operator +</a></h4>
+<h4 id="operator--3-8"><a class="header" href="#operator--3-8">operator +</a></h4>
 <pre><code class="language-pepper">+(other: T): Vector&lt;T, N&gt;
 </code></pre>
 <p>Adds <code>other</code> to every lane. Integer lanes wrap around on overflow.</p>
@@ -39283,7 +40898,7 @@ lanes wrap around on overflow.</p>
 <ul>
 <li>the lane-wise sums</li>
 </ul>
-<h4 id="operator---4"><a class="header" href="#operator---4">operator -</a></h4>
+<h4 id="operator---6"><a class="header" href="#operator---6">operator -</a></h4>
 <pre><code class="language-pepper">-(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>Subtracts each lane of <code>other</code> from the same lane of this vector.
@@ -39309,7 +40924,7 @@ overflow.</p>
 <ul>
 <li>the lane-wise differences</li>
 </ul>
-<h4 id="operator--4-4"><a class="header" href="#operator--4-4">operator *</a></h4>
+<h4 id="operator--4-6"><a class="header" href="#operator--4-6">operator *</a></h4>
 <pre><code class="language-pepper">*(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>Multiplies each lane by the same lane of <code>other</code>. Integer lanes wrap
@@ -39322,7 +40937,7 @@ around on overflow.</p>
 <ul>
 <li>the lane-wise products</li>
 </ul>
-<h4 id="operator--5-3"><a class="header" href="#operator--5-3">operator *</a></h4>
+<h4 id="operator--5-4"><a class="header" href="#operator--5-4">operator *</a></h4>
 <pre><code class="language-pepper">*(other: T): Vector&lt;T, N&gt;
 </code></pre>
 <p>Multiplies every lane by <code>other</code>. Integer lanes wrap around on
@@ -39344,7 +40959,7 @@ itself.</p>
 <ul>
 <li>the negated lanes</li>
 </ul>
-<h4 id="operator--6-2"><a class="header" href="#operator--6-2">operator ==</a></h4>
+<h4 id="operator--6-3"><a class="header" href="#operator--6-3">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: Vector&lt;T, N&gt;): bool
 </code></pre>
 <p>Whether every lane equals the same lane of <code>other</code>. A NaN lane equals
@@ -39357,7 +40972,7 @@ nothing. For a mask per lane, use <code>equal</code>.</p>
 <ul>
 <li>true when all lanes are equal</li>
 </ul>
-<h4 id="operator--7-2"><a class="header" href="#operator--7-2">operator !=</a></h4>
+<h4 id="operator--7-3"><a class="header" href="#operator--7-3">operator !=</a></h4>
 <pre><code class="language-pepper">!=(other: Vector&lt;T, N&gt;): bool
 </code></pre>
 <p>Whether some lane differs from the same lane of <code>other</code>.</p>
@@ -39664,8 +41279,8 @@ operators, shifts and rotates.</p>
 <li><code>T</code> — the integer lane type</li>
 <li><code>N</code> — the lane count</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
-<h4 id="operator--8-2"><a class="header" href="#operator--8-2">operator /</a></h4>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h4 id="operator--8-3"><a class="header" href="#operator--8-3">operator /</a></h4>
 <pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>Divides each lane by the same lane of <code>other</code>. Division truncates
@@ -39682,7 +41297,7 @@ toward zero.</p>
 <ul>
 <li>if a lane of <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
 </ul>
-<h4 id="operator--9-2"><a class="header" href="#operator--9-2">operator /</a></h4>
+<h4 id="operator--9-3"><a class="header" href="#operator--9-3">operator /</a></h4>
 <pre><code class="language-pepper">/(other: T): Vector&lt;T, N&gt;
 </code></pre>
 <p>Divides every lane by <code>other</code>. Division truncates toward zero.</p>
@@ -39698,7 +41313,7 @@ toward zero.</p>
 <ul>
 <li>if <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
 </ul>
-<h4 id="operator--10-2"><a class="header" href="#operator--10-2">operator %</a></h4>
+<h4 id="operator--10-3"><a class="header" href="#operator--10-3">operator %</a></h4>
 <pre><code class="language-pepper">%(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>The remainder of dividing each lane by the same lane of <code>other</code>, with
@@ -39715,7 +41330,7 @@ the sign of this vector’s lane.</p>
 <ul>
 <li>if a lane of <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
 </ul>
-<h4 id="operator--11-2"><a class="header" href="#operator--11-2">operator %</a></h4>
+<h4 id="operator--11-3"><a class="header" href="#operator--11-3">operator %</a></h4>
 <pre><code class="language-pepper">%(other: T): Vector&lt;T, N&gt;
 </code></pre>
 <p>The remainder of dividing every lane by <code>other</code>, with the sign of the
@@ -39732,7 +41347,7 @@ lane.</p>
 <ul>
 <li>if <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
 </ul>
-<h4 id="operator--12-2"><a class="header" href="#operator--12-2">operator &amp;</a></h4>
+<h4 id="operator--12-3"><a class="header" href="#operator--12-3">operator &amp;</a></h4>
 <pre><code class="language-pepper">&amp;(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
 <p>The bitwise AND of each lane with the same lane of <code>other</code>.</p>
@@ -39881,7 +41496,7 @@ rounding.</p>
 <li><code>T</code> — the floating-point lane type</li>
 <li><code>N</code> — the lane count</li>
 </ul>
-<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
 <h4 id="operator--21-1"><a class="header" href="#operator--21-1">operator /</a></h4>
 <pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
@@ -39964,7 +41579,7 @@ division does: a zero divisor gives an infinity or NaN.</p>
 <ul>
 <li><code>N</code> — the lane count: a power of two from 1 to 64</li>
 </ul>
-<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h3 id="properties-1-6"><a class="header" href="#properties-1-6">Properties</a></h3>
 <h4 id="count-1-3"><a class="header" href="#count-1-3">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
@@ -39982,7 +41597,7 @@ division does: a zero divisor gives an infinity or NaN.</p>
 <ul>
 <li><code>value</code> — the value of every lane</li>
 </ul>
-<h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
+<h3 id="methods-3-10"><a class="header" href="#methods-3-10">Methods</a></h3>
 <h4 id="operator--25-1"><a class="header" href="#operator--25-1">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): bool
 </code></pre>
@@ -40193,7 +41808,7 @@ info.</p>
 </code></pre>
 <p>Whether the optimizer inlined this call into its caller, the next
 frame: the function has no frame of its own on the stack.</p>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="stackframe-1"><a class="header" href="#stackframe-1">StackFrame()</a></h4>
 <pre><code class="language-pepper">construct(address: ulong = 0)
 </code></pre>
@@ -40203,8 +41818,8 @@ position yet.</p>
 <ul>
 <li><code>address</code> — the return address</li>
 </ul>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
-<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the frame as text: <code>function at file:line:column</code>, with the
@@ -40236,12 +41851,12 @@ main(): int {
 </code></pre>
 <p>The return address of each call, innermost first, as captured: it
 includes the frames of <code>capture</code> itself, which <code>frames()</code> leaves out.</p>
-<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
 <h4 id="backtrace-1"><a class="header" href="#backtrace-1">Backtrace()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty Backtrace. Use <code>capture()</code> to record the stack.</p>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="frames"><a class="header" href="#frames">frames</a></h4>
 <pre><code class="language-pepper">frames(full: bool = false): Array&lt;StackFrame&gt;
 </code></pre>
@@ -40264,7 +41879,7 @@ the bottom, the C runtime’s frames below <code>main</code>.</p>
 <ul>
 <li>the frames, innermost first</li>
 </ul>
-<h4 id="to_string-1-2"><a class="header" href="#to_string-1-2">to_string</a></h4>
+<h4 id="to_string-1-4"><a class="header" href="#to_string-1-4">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the frames as text, one per line, each numbered and indented
@@ -40420,7 +42035,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
 var bytes = text.Utf8.encode("hi");
 assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-24"><a class="header" href="#static-methods-24">Static methods</a></h3>
+<h3 id="static-methods-27"><a class="header" href="#static-methods-27">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -40574,7 +42189,7 @@ var bytes = text.Utf16.encode("hi");
 assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
 assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-25"><a class="header" href="#static-methods-25">Static methods</a></h3>
+<h3 id="static-methods-28"><a class="header" href="#static-methods-28">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -40631,7 +42246,7 @@ points below 128 have an ASCII byte.</p>
 assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
 assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-26"><a class="header" href="#static-methods-26">Static methods</a></h3>
+<h3 id="static-methods-29"><a class="header" href="#static-methods-29">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -40769,8 +42384,8 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-27"><a class="header" href="#static-methods-27">Static methods</a></h3>
-<h4 id="parse-12"><a class="header" href="#parse-12">parse</a></h4>
+<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
+<h4 id="parse-14"><a class="header" href="#parse-14">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
 <p>Compiles <code>pattern</code>, or reports why it is invalid.</p>
@@ -40806,7 +42421,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
 assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -40970,7 +42585,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 var parts = regex.Regex(",\\s*").split("a, b,c");
 assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
+<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -40986,7 +42601,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -40998,8 +42613,8 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
-<h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
 <p>Returns the matched text.</p>
@@ -41082,7 +42697,7 @@ when it did not take part.</p>
 <ul>
 <li>if <code>index</code> is greater than <code>group_count()</code></li>
 </ul>
-<h4 id="to_string-1-3"><a class="header" href="#to_string-1-3">to_string</a></h4>
+<h4 id="to_string-1-5"><a class="header" href="#to_string-1-5">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the matched text.</p>
@@ -41095,7 +42710,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
 <h4 id="matches-1-1"><a class="header" href="#matches-1-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -41106,7 +42721,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
+<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
 <h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -41193,7 +42808,7 @@ assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
 assert(reply["id"].as_int().value() == 42, "a lookup");
 assert(reply["missing"]["deeper"].is_null(), "lookups chain");
 </code></pre>
-<h3 id="cases-7"><a class="header" href="#cases-7">Cases</a></h3>
+<h3 id="cases-8"><a class="header" href="#cases-8">Cases</a></h3>
 <h4 id="null-1"><a class="header" href="#null-1">Null</a></h4>
 <pre><code class="language-pepper">Null
 </code></pre>
@@ -41249,7 +42864,7 @@ text or the code wrote them, so a document round-trips unchanged.</p>
 <ul>
 <li><code>members</code> — the members, by key</li>
 </ul>
-<h3 id="static-methods-28"><a class="header" href="#static-methods-28">Static methods</a></h3>
+<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
 <h4 id="object-1"><a class="header" href="#object-1">object</a></h4>
 <pre><code class="language-pepper">static object(): JsonValue
 </code></pre>
@@ -41284,8 +42899,8 @@ var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
 list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
-<h4 id="operator--38"><a class="header" href="#operator--38">operator []</a></h4>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h4 id="operator--40"><a class="header" href="#operator--40">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
 <p>Reads <code>value[key]</code>: the member named <code>key</code> of an object.</p>
@@ -41297,7 +42912,7 @@ assert(list.to_string() == "[1,2]", "two elements");
 <ul>
 <li>the member, or <code>Null</code> when this is not an object or has no member named <code>key</code></li>
 </ul>
-<h4 id="operator--1-11"><a class="header" href="#operator--1-11">operator []</a></h4>
+<h4 id="operator--1-13"><a class="header" href="#operator--1-13">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String, member: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of an
@@ -41315,7 +42930,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>if this is not an object (“JsonValue[key] = value needs an object”)</li>
 </ul>
-<h4 id="operator--2-8"><a class="header" href="#operator--2-8">operator []</a></h4>
+<h4 id="operator--2-10"><a class="header" href="#operator--2-10">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): JsonValue
 </code></pre>
 <p>Reads <code>value[index]</code>: an element of an array.</p>
@@ -41327,7 +42942,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>the element, or <code>Null</code> when this is not an array or <code>index</code> is not less than its count</li>
 </ul>
-<h4 id="operator--3-7"><a class="header" href="#operator--3-7">operator []</a></h4>
+<h4 id="operator--3-9"><a class="header" href="#operator--3-9">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong, element: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[index] = element</code>: replaces an element of an array.</p>
@@ -41448,7 +43063,7 @@ value holds, not a copy.</p>
 <ul>
 <li>the members of an <code>Object</code>, or none</li>
 </ul>
-<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
+<h4 id="to_string-32"><a class="header" href="#to_string-32">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as compact JSON text, with no spaces or line
@@ -41460,7 +43075,7 @@ JSON cannot spell) is written as <code>null</code>.</p>
 <ul>
 <li>the JSON text</li>
 </ul>
-<h4 id="to_string-1-4"><a class="header" href="#to_string-1-4">to_string</a></h4>
+<h4 id="to_string-1-6"><a class="header" href="#to_string-1-6">to_string</a></h4>
 <pre><code class="language-pepper">to_string(ascii_only: bool): String
 </code></pre>
 <p>Returns the value as compact JSON text, like <code>to_string()</code>, choosing
@@ -41537,7 +43152,7 @@ has no text to point into.</p>
 </code></pre>
 <p>The column of the error, from 1, counting bytes as clang does; 0
 when <code>line</code> is.</p>
-<h4 id="offset-1"><a class="header" href="#offset-1">offset</a></h4>
+<h4 id="offset-3"><a class="header" href="#offset-3">offset</a></h4>
 <pre><code class="language-pepper">var offset: ulong
 </code></pre>
 <p>The byte offset of the error in the text, from 0.</p>
@@ -41547,7 +43162,7 @@ when <code>line</code> is.</p>
 <p>Where in the document the value an error is about is, as a path from
 the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
 syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -41560,8 +43175,8 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
-<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h4 id="to_string-33"><a class="header" href="#to_string-33">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the error as a compiler prints one:
@@ -41571,7 +43186,7 @@ is no path and without <code>line:column:</code> when <code>line</code> is 0.</p
 <ul>
 <li>the rendered error</li>
 </ul>
-<h2 id="parse-13"><a class="header" href="#parse-13">parse</a></h2>
+<h2 id="parse-15"><a class="header" href="#parse-15">parse</a></h2>
 <pre><code class="language-pepper">parse( text: String, comments: bool = false, path: String = "", max_depth: ulong = 1000 ): Result&lt;JsonValue, JsonError&gt;
 </code></pre>
 <p>Parses JSON text into a <code>JsonValue</code>.</p>
@@ -41642,7 +43257,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
 <p>The document’s value.</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="jsondocument-1"><a class="header" href="#jsondocument-1">JsonDocument()</a></h4>
 <pre><code class="language-pepper">construct(root: JsonValue = JsonValue.Null)
 </code></pre>
@@ -41651,7 +43266,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <ul>
 <li><code>root</code> — the document’s value</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="comments-1"><a class="header" href="#comments-1">comments</a></h4>
 <pre><code class="language-pepper">comments(path: String): Array&lt;String&gt;
 </code></pre>
@@ -41679,7 +43294,7 @@ must be a whole comment, <code>// ...</code> (one line) or <code>/* ... */</code
 <ul>
 <li>if a comment does not start with <code>//</code> or <code>/*</code> (“a JSONC comment starts with ‘//’ or ‘/*’”)</li>
 </ul>
-<h4 id="to_string-32"><a class="header" href="#to_string-32">to_string</a></h4>
+<h4 id="to_string-34"><a class="header" href="#to_string-34">to_string</a></h4>
 <pre><code class="language-pepper">to_string(indent: int = 2, ascii_only: bool = false): String
 </code></pre>
 <p>Returns the document as indented JSONC text with its comments, each
@@ -41725,7 +43340,7 @@ and back, through reflection, with no per-type code to write.</p>
 </code></pre>
 <p>What <code>decode</code> does with an object key that names no property of the
 struct it is read into.</p>
-<h3 id="cases-8"><a class="header" href="#cases-8">Cases</a></h3>
+<h3 id="cases-9"><a class="header" href="#cases-9">Cases</a></h3>
 <h4 id="ignore"><a class="header" href="#ignore">Ignore</a></h4>
 <pre><code class="language-pepper">Ignore
 </code></pre>
@@ -41929,7 +43544,7 @@ struct ServerConfig {
 }
 </code></pre>
 <p>Source: <code>runtime/serialize/module.pep</code></p>
-<h2 id="name-7"><a class="header" href="#name-7">Name</a></h2>
+<h2 id="name-8"><a class="header" href="#name-8">Name</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Name
 </code></pre>
 <p>Writes a property, or an enum case, under <code>value</code> rather than under its
@@ -42034,7 +43649,7 @@ main(): int {
 <p><code>Format</code>, the one-call <code>Deflate</code>, <code>Zlib</code> and <code>Gzip</code> functions, and the
 streaming <code>DecompressReader</code> and <code>CompressWriter</code>.</p>
 <p>Source: <code>runtime/compress/format.pep</code></p>
-<h2 id="format"><a class="header" href="#format">Format</a></h2>
+<h2 id="format-4"><a class="header" href="#format-4">Format</a></h2>
 <pre><code class="language-pepper">enum Format
 </code></pre>
 <p>The framing around DEFLATE-compressed data.</p>
@@ -42044,7 +43659,7 @@ streaming <code>DecompressReader</code> and <code>CompressWriter</code>.</p>
 var packed = compress.Gzip.compress("hi".bytes());
 var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
 </code></pre>
-<h3 id="cases-9"><a class="header" href="#cases-9">Cases</a></h3>
+<h3 id="cases-10"><a class="header" href="#cases-10">Cases</a></h3>
 <h4 id="raw"><a class="header" href="#raw">Raw</a></h4>
 <pre><code class="language-pepper">Raw
 </code></pre>
@@ -42072,7 +43687,7 @@ var data = "abcabcabcabc".bytes();
 var packed = compress.Deflate.compress(data);
 assert(compress.Deflate.decompress(packed).value() == data, "round trip");
 </code></pre>
-<h3 id="static-methods-29"><a class="header" href="#static-methods-29">Static methods</a></h3>
+<h3 id="static-methods-32"><a class="header" href="#static-methods-32">Static methods</a></h3>
 <h4 id="compress"><a class="header" href="#compress">compress</a></h4>
 <pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
 </code></pre>
@@ -42114,7 +43729,7 @@ var packed = compress.Zlib.compress("hello".bytes());
 assert(packed[0] == 0x78, "the zlib header");
 assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
 </code></pre>
-<h3 id="static-methods-1-6"><a class="header" href="#static-methods-1-6">Static methods</a></h3>
+<h3 id="static-methods-1-8"><a class="header" href="#static-methods-1-8">Static methods</a></h3>
 <h4 id="compress-1"><a class="header" href="#compress-1">compress</a></h4>
 <pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
 </code></pre>
@@ -42159,7 +43774,7 @@ var packed = compress.Gzip.compress("hello".bytes());
 io.File.write_bytes(io.Path("hello.txt.gz"), packed);
 assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
 </code></pre>
-<h3 id="static-methods-2-5"><a class="header" href="#static-methods-2-5">Static methods</a></h3>
+<h3 id="static-methods-2-6"><a class="header" href="#static-methods-2-6">Static methods</a></h3>
 <h4 id="compress-2"><a class="header" href="#compress-2">compress</a></h4>
 <pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
 </code></pre>
@@ -42211,7 +43826,7 @@ for (var line in reader.lines()) {
     print(line.value());
 }
 </code></pre>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="decompressreader-1"><a class="header" href="#decompressreader-1">DecompressReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader, format: Format)
 </code></pre>
@@ -42221,7 +43836,7 @@ for (var line in reader.lines()) {
 <li><code>source</code> — the stream of compressed bytes</li>
 <li><code>format</code> — the framing of the compressed data</li>
 </ul>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
 <h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -42262,7 +43877,7 @@ writer.print_line("second line");
 writer.finish();
 file.close();
 </code></pre>
-<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
+<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
 <h4 id="compresswriter-1"><a class="header" href="#compresswriter-1">CompressWriter()</a></h4>
 <pre><code class="language-pepper">construct(sink: io.Writer, format: Format, level: int = 6)
 </code></pre>
@@ -42277,7 +43892,7 @@ file.close();
 <ul>
 <li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -42338,17 +43953,17 @@ crc.update("world".bytes());
 assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
 assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 </code></pre>
-<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
+<h3 id="properties-16"><a class="header" href="#properties-16">Properties</a></h3>
 <h4 id="value-6"><a class="header" href="#value-6">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Makes a checksum of no data yet (<code>value</code> is 0).</p>
-<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
+<h3 id="static-methods-33"><a class="header" href="#static-methods-33">Static methods</a></h3>
 <h4 id="of"><a class="header" href="#of">of</a></h4>
 <pre><code class="language-pepper">static of(data: u8[]): uint
 </code></pre>
@@ -42361,7 +43976,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
 <h4 id="update"><a class="header" href="#update">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -42384,17 +43999,17 @@ over data given in one or more pieces.</p>
 
 assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 </code></pre>
-<h3 id="properties-1-5"><a class="header" href="#properties-1-5">Properties</a></h3>
+<h3 id="properties-1-7"><a class="header" href="#properties-1-7">Properties</a></h3>
 <h4 id="value-1-2"><a class="header" href="#value-1-2">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
+<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
 <h4 id="adler32-1"><a class="header" href="#adler32-1">Adler32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Makes a checksum of no data yet (<code>value</code> is 1).</p>
-<h3 id="static-methods-1-7"><a class="header" href="#static-methods-1-7">Static methods</a></h3>
+<h3 id="static-methods-1-9"><a class="header" href="#static-methods-1-9">Static methods</a></h3>
 <h4 id="of-1"><a class="header" href="#of-1">of</a></h4>
 <pre><code class="language-pepper">static of(data: u8[]): uint
 </code></pre>
@@ -42407,7 +44022,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
 <h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -42460,7 +44075,7 @@ extracted safely into a directory, or written.</p>
 <pre><code class="language-pepper">enum EntryKind
 </code></pre>
 <p>What a tar entry is.</p>
-<h3 id="cases-10"><a class="header" href="#cases-10">Cases</a></h3>
+<h3 id="cases-11"><a class="header" href="#cases-11">Cases</a></h3>
 <h4 id="file-5"><a class="header" href="#file-5">File</a></h4>
 <pre><code class="language-pepper">File
 </code></pre>
@@ -42517,7 +44132,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var link_target: String
 </code></pre>
 <p>The target of a symlink or hard link; empty otherwise.</p>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
 <pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
 </code></pre>
@@ -42554,7 +44169,7 @@ while (true) {
     print(entry.value().path);
 }
 </code></pre>
-<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
+<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
 <h4 id="tarreader-1"><a class="header" href="#tarreader-1">TarReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader)
 </code></pre>
@@ -42563,7 +44178,7 @@ while (true) {
 <ul>
 <li><code>source</code> — the stream of the archive</li>
 </ul>
-<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
+<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
 <h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
 <pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
 </code></pre>
@@ -42648,7 +44263,7 @@ tar.append_file("docs/readme.txt", "hello\n".bytes());
 tar.finish();
 assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 </code></pre>
-<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
 <h4 id="tarwriter-1"><a class="header" href="#tarwriter-1">TarWriter()</a></h4>
 <pre><code class="language-pepper">construct(sink: io.Writer)
 </code></pre>
@@ -42657,7 +44272,7 @@ assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 <ul>
 <li><code>sink</code> — the stream the archive is written to</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
 <h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
 <pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
 </code></pre>
@@ -42816,12 +44431,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
+<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
 <h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -42923,12 +44538,12 @@ hasher.update("blob 0");
 hasher.update(nul);
 assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
+<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
 <h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -43021,12 +44636,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -43188,14 +44803,14 @@ main(args: String[]): int {
     return 0;
 }
 </code></pre>
-<h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
+<h3 id="properties-17"><a class="header" href="#properties-17">Properties</a></h3>
 <h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
 <pre><code class="language-pepper">var is_selected: bool { get; }
 </code></pre>
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -43206,7 +44821,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
+<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
 </code></pre>
@@ -43412,7 +45027,7 @@ yourself; <code>parse</code> does it the usual way.</p>
 <ul>
 <li>some text when <code>--help</code> or <code>--version</code> was given (the program should print it and exit with 0), none when the arguments were parsed, or an error when they are wrong, with a clang-style message such as <code>missing value for '-o'</code></li>
 </ul>
-<h4 id="parse-14"><a class="header" href="#parse-14">parse</a></h4>
+<h4 id="parse-16"><a class="header" href="#parse-16">parse</a></h4>
 <pre><code class="language-pepper">parse(args: String[]): bool
 </code></pre>
 <p>Parses <code>args</code> and fills in every handle.</p>
@@ -43458,7 +45073,7 @@ var best = cli.closest("buidl", names);   # some("build")
 <pre><code class="language-pepper">struct Flag
 </code></pre>
 <p>An option that takes no value, from <code>Parser.flag</code>.</p>
-<h3 id="properties-1-6"><a class="header" href="#properties-1-6">Properties</a></h3>
+<h3 id="properties-1-8"><a class="header" href="#properties-1-8">Properties</a></h3>
 <h4 id="is_set-2"><a class="header" href="#is_set-2">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
@@ -43467,7 +45082,7 @@ var best = cli.closest("buidl", names);   # some("build")
 <pre><code class="language-pepper">var occurrences: int { get; }
 </code></pre>
 <p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
-<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
+<h3 id="constructor-1-27"><a class="header" href="#constructor-1-27">Constructor</a></h3>
 <h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -43482,13 +45097,13 @@ for the runtime.</p>
 </code></pre>
 <p>An option or positional argument that takes one value, from
 <code>Parser.option</code> or <code>Parser.positional</code>.</p>
-<h3 id="properties-2-2"><a class="header" href="#properties-2-2">Properties</a></h3>
+<h3 id="properties-2-3"><a class="header" href="#properties-2-3">Properties</a></h3>
 <h4 id="is_set-1-1"><a class="header" href="#is_set-1-1">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
 <p>Whether a value was given on the command line; false when the
 argument was left out, even when it has a default.</p>
-<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
+<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
 <h4 id="argument-1-1"><a class="header" href="#argument-1-1">Argument()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -43498,7 +45113,7 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
+<h3 id="methods-1-32"><a class="header" href="#methods-1-32">Methods</a></h3>
 <h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
@@ -43544,7 +45159,7 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
+<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
 <h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;String&gt;
 </code></pre>
@@ -43583,7 +45198,7 @@ struct Options {
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
 <p>What the option does, for the help.</p>
-<h4 id="name-8"><a class="header" href="#name-8">name</a></h4>
+<h4 id="name-9"><a class="header" href="#name-9">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The long name, without <code>--</code>; empty for the field’s name with each
@@ -43676,17 +45291,17 @@ headers.add("Accept", "text/html");
 headers["accept"] = "application/json";   # replaces it
 assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-15"><a class="header" href="#properties-15">Properties</a></h3>
+<h3 id="properties-18"><a class="header" href="#properties-18">Properties</a></h3>
 <h4 id="count-7"><a class="header" href="#count-7">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
+<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -43757,7 +45372,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--39"><a class="header" href="#operator--39">operator []</a></h4>
+<h4 id="operator--41"><a class="header" href="#operator--41">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
@@ -43771,7 +45386,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-12"><a class="header" href="#operator--1-12">operator []</a></h4>
+<h4 id="operator--1-14"><a class="header" href="#operator--1-14">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -43812,7 +45427,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
+<h3 id="constructor-1-28"><a class="header" href="#constructor-1-28">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -43822,7 +45437,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
+<h3 id="methods-1-33"><a class="header" href="#methods-1-33">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -43884,7 +45499,7 @@ binary body. The array is the body itself, not a copy.</p>
 <ul>
 <li>the body; empty for none</li>
 </ul>
-<h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
+<h4 id="text-3"><a class="header" href="#text-3">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
 <p>Returns the body as text, decoded as UTF-8. For a binary body, call
@@ -43922,7 +45537,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
+<h3 id="constructor-2-14"><a class="header" href="#constructor-2-14">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -43931,7 +45546,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
+<h3 id="methods-2-18"><a class="header" href="#methods-2-18">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -44028,7 +45643,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
+<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
 <h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -44112,7 +45727,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
+<h3 id="constructor-49"><a class="header" href="#constructor-49">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -44123,7 +45738,7 @@ main(): int {
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
+<h3 id="static-methods-34"><a class="header" href="#static-methods-34">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -44150,7 +45765,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
+<h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -44241,7 +45856,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
+<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -44250,7 +45865,7 @@ stream.write_all("ping");
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-32"><a class="header" href="#static-methods-32">Static methods</a></h3>
+<h3 id="static-methods-35"><a class="header" href="#static-methods-35">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -44259,7 +45874,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
+<h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -44329,7 +45944,7 @@ while (true) {
     }
 }
 </code></pre>
-<h3 id="constructor-1-27"><a class="header" href="#constructor-1-27">Constructor</a></h3>
+<h3 id="constructor-1-29"><a class="header" href="#constructor-1-29">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -44338,7 +45953,7 @@ while (true) {
 <ul>
 <li><code>context</code> — the platform’s server context, or null for none</li>
 </ul>
-<h3 id="static-methods-1-8"><a class="header" href="#static-methods-1-8">Static methods</a></h3>
+<h3 id="static-methods-1-10"><a class="header" href="#static-methods-1-10">Static methods</a></h3>
 <h4 id="create-1-1"><a class="header" href="#create-1-1">create</a></h4>
 <pre><code class="language-pepper">static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;TlsAcceptor&gt;
 </code></pre>
@@ -44353,7 +45968,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-32"><a class="header" href="#methods-1-32">Methods</a></h3>
+<h3 id="methods-1-34"><a class="header" href="#methods-1-34">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -44393,7 +46008,7 @@ var reply = Array&lt;u8&gt;();
 while (stream.read(reply, 4096).value() &gt; 0) {
 }
 </code></pre>
-<h3 id="constructor-2-14"><a class="header" href="#constructor-2-14">Constructor</a></h3>
+<h3 id="constructor-2-15"><a class="header" href="#constructor-2-15">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -44404,7 +46019,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-18"><a class="header" href="#methods-2-18">Methods</a></h3>
+<h3 id="methods-2-19"><a class="header" href="#methods-2-19">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -44554,7 +46169,7 @@ when it returns; a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
 status 124 and a message on standard error.</li>
 </ul>
-<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
+<h3 id="constructor-51"><a class="header" href="#constructor-51">Constructor</a></h3>
 <h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>
 <pre><code class="language-pepper">construct(file: String)
 </code></pre>
@@ -44563,7 +46178,7 @@ status 124 and a message on standard error.</li>
 <ul>
 <li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it</li>
 </ul>
-<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
+<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
 <h4 id="add-1"><a class="header" href="#add-1">add</a></h4>
 <pre><code class="language-pepper">add(name: String, body: () =&gt; void, line: int)
 </code></pre>
