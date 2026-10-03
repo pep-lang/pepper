@@ -313,7 +313,8 @@ list_tests(program: String, file: String, tests: Array<Test>): String? {
     if (!output.status.success()) {
         return Optional<String>.Value(output.stderr.is_empty ? output.status.to_string() : output.stderr.trim());
     }
-    for (var line in output.stdout.split("\n")) {
+    # Windows writes a text-mode stdout with "\r\n" line ends.
+    for (var line in output.stdout.replace("\r\n", "\n").split("\n")) {
         if (line.is_empty) {
             continue;
         }

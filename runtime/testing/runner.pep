@@ -109,6 +109,7 @@ export struct TestRunner {
 
     # Runs `test`, ending the program after `seconds` (when not 0).
     _run(test: _TestCase, seconds: ulong): int {
+        _end_crashes_at_once();
         if (seconds > 0) {
             var name = test.name;
             var limit = seconds;
@@ -141,3 +142,23 @@ export struct TestRunner {
 _one_line(text: String): String {
     return text.replace("\t", " ").replace("\r", " ").replace("\n", " ");
 }
+
+[Target(OS(Windows))]
+extern uint _set_abort_behavior(uint flags, uint mask);
+[Target(OS(Windows))]
+extern uint SetErrorMode(uint mode);
+
+# By default Windows hands `abort()`, and so a panic, and a crash to Windows
+# Error Reporting, which can take seconds before the process ends (long
+# enough for the timeout to fire) or open a dialog. A test that fails
+# should end at once.
+[Target(OS(Windows))]
+_end_crashes_at_once() {
+    # _WRITE_ABORT_MSG | _CALL_REPORTFAULT
+    _set_abort_behavior(0, 3);
+    # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX
+    SetErrorMode(3);
+}
+
+[Target(!OS(Windows))]
+_end_crashes_at_once() {}

@@ -379,12 +379,3 @@ pub fn docs_example_sample() -> Vec<(String, PathBuf)> {
         .collect()
 }
 
-/// The `pep-build` cargo built beside this test binary
-/// (`target/<profile>/pep-build`), for a test that runs a tool which runs
-/// the compiler (`pep-test`); `None` when it has not been built, as after
-/// `cargo test -p pepper-driver` alone, and such a test skips.
-pub fn compiler_binary() -> Option<PathBuf> {
-    let deps = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let compiler = deps.parent()?.join(if cfg!(windows) { "pep-build.exe" } else { "pep-build" });
-    compiler.is_file().then_some(compiler)
-}

@@ -88,3 +88,7 @@ which `pep-test` runs with one of two requests:
 - `--run NAME [--timeout SECONDS]` runs one test and exits with 0 when it
   returns. A panic aborts the program; a test that runs past the timeout
   ends it with exit status 124.
+
+On Windows, a test program turns off Windows Error Reporting for its
+crashes and `abort()`, so a test that panics or crashes ends at once,
+without a dialog.
