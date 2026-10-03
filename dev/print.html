@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f5c7fdc0.js";
+            window.path_to_searchindex_js = "searchindex-f5d1cf6c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0a7546a5.js"></script>
@@ -19937,8 +19937,12 @@ when it does not occur.</p>
 <p>The offset counts bytes, not code points. To use it with <code>s[i]</code> or
 <code>substr</code>, convert it with <code>String.length_of(s.c_str(), offset)</code>.
 An empty <code>needle</code> is found at 0 unless this String is empty, in which
-case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(size * needle.size).</p>
+case the result is -1. The result is also -1 when <code>needle</code> is not valid
+UTF-8, or when this String holds invalid UTF-8 before the first match.
+Bytes past the match are not checked, so searching on from each match
+(as <code>split</code> and <code>replace</code> do) reads the String once in all. Runs in
+O(offset * needle.size) at worst, where offset is where the search
+stops.</p>
 <p>With <code>from</code>, the search starts at that byte offset, which must be a
 code point boundary (an offset <code>find</code> returned, plus a match’s size,
 is one); an offset past the end, or inside a code point, finds
