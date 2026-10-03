@@ -261,19 +261,36 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
     out
 }
 
-/// The built-in a use at `offset` names, spelled as its `[__BuiltIn]`
-/// declaration names it: `reflect.name` in `reflect.name<T>()`. `None`
-/// when the expression there is not `q.name` with `q` a bare name.
-fn built_in_spelled(module: &ast::Module, offset: usize) -> Option<String> {
-    let spelled = match find_expr(module, offset)? {
-        ast::Expression::MemberAccess { lhs, name, .. } => match lhs.as_ref() {
+/// The built-in a use at `offset` may name, spelled as a `[__BuiltIn]`
+/// declaration names it: `reflect.name` in `reflect.name<T>()`,
+/// `__default` in `__default<T>()`, `__ptr` in the type `__ptr<char>`,
+/// `sizeof`, `__null`. Only [`built_in_named`] decides whether it is one.
+fn built_in_spelled(module: &ast::Module, text: &str, offset: usize) -> Option<String> {
+    // `sizeof<T>()` spans only its type.
+    if word_at(text, offset).is_some_and(|w| &text[w.start..w.end] == "sizeof") {
+        return Some("sizeof".to_string());
+    }
+    let spelled = match find_expr(module, offset) {
+        Some(ast::Expression::MemberAccess { lhs, name, name_span, .. }) if name_span.start <= offset => match lhs.as_ref() {
             ast::Expression::SymbolRef { id, .. } => format!("{}.{}", id, name),
             _ => return None,
         },
-        ast::Expression::TypeLiteral(ty) if ty.name.contains('.') => ty.name.clone(),
-        _ => return None,
+        Some(ast::Expression::SymbolRef { id, .. }) => id.clone(),
+        Some(ast::Expression::TypeLiteral(ty)) => ty.name.clone(),
+        Some(ast::Expression::Literal { value: ast::Literal::Null, .. }) => "__null".to_string(),
+        _ => imports::type_at(module, offset)?.name.clone(),
     };
     Some(spelled.split('<').next().unwrap_or(&spelled).to_string())
+}
+
+/// The `[__BuiltIn]` declaration of the built-in `name`, in any file of
+/// `program`.
+fn built_in_named(program: &Program, name: &str) -> Option<imports::Target> {
+    program.files.iter().enumerate().find_map(|(file, f)| {
+        let decl = f.module.declarations.iter().find(|d| d.built_in_name().as_deref() == Some(name))?;
+        let symbol = collect_globals(&f.module).into_iter().find(|s| s.name_span == decl.name_span())?;
+        Some(imports::Target::Declaration { file, symbol })
+    })
 }
 
 /// Local declarations visible at `offset` inside `block`, in source order.
@@ -2113,8 +2130,8 @@ impl PepperLsp {
         // A use of a compiler built-in, which its `[__BuiltIn]` declaration
         // in the runtime documents (`reflect.name<T>()`).
         if let Some(program) = program
-            && let Some(spelled) = built_in_spelled(&ast, offset)
-            && let Some(target) = imports::declaration_named(program, &spelled)
+            && let Some(spelled) = built_in_spelled(&ast, text, offset)
+            && let Some(target) = built_in_named(program, &spelled)
         {
             return imported((spelled, target));
         }
@@ -2456,8 +2473,8 @@ Returns a fresh value: it shares nothing with the arguments.");
         // A use of a compiler built-in, which its `[__BuiltIn]` declaration
         // in the runtime documents (`reflect.name<T>()`).
         if let Some(program) = program
-            && let Some(spelled) = built_in_spelled(&ast, offset)
-            && let Some(target) = imports::declaration_named(program, &spelled)
+            && let Some(spelled) = built_in_spelled(&ast, text, offset)
+            && let Some(target) = built_in_named(program, &spelled)
         {
             return imported((spelled, target));
         }

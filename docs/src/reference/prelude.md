@@ -7,6 +7,7 @@ The prelude is the part of the standard library every program gets without an im
 - [Built-in functions](internals.md): `assert` and `panic`, which every program can call without an import.
 - [Built-in attributes](attributes.md): The built-in attributes, declared as `[Attribute]` structs so a `static` block can read them like its own: `field.has_attribute<Deprecated>()` tests for one and `function.attribute<Deprecated>().message` reads its value (see the reflection chapter).
 - [The reflect module (compile time)](reflect.md): `reflect` exists only inside a [`static` block](../language/reflection.md), which runs while compiling.
+- [Compiler built-ins](builtins.md): The types and functions the compiler provides itself: raw pointers, weak references, atomics, checked arithmetic and the other `__` intrinsics the runtime is built on.
 - [Arguments and exit (deprecated)](process.md): The running program's arguments and exit, kept for the deprecated prelude `arguments()` and `exit()`; the `process` module has them now.
 - [String](string.md): A mutable, reference-counted string of UTF-8 text.
 - [Numbers](number.md): Reading numbers from text, and arithmetic that says what to do on overflow.

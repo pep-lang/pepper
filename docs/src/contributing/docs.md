@@ -59,16 +59,19 @@ not match the runtime, and CI runs it.
 What the compiler provides rather than the runtime declares is still
 declared in the runtime, marked `[__BuiltIn]`: `runtime/reflect.pep`
 declares the `reflect` functions of `static` blocks and the values they
-return. The compiler ignores such a declaration (its functions and methods end in
+return, and `runtime/builtins.pep` the raw pointer and weak reference
+types, `__null`, `sizeof`, `unsafe_cast` and the `__` intrinsics. The compiler ignores such a declaration (its functions and methods end in
 `;`, with no body), so
 it costs nothing and cannot clash with the built-in; the reference, the doc
 comment check and the language server read it like any other. A string
 argument names the built-in when it is not the declaration's own name:
 `[__BuiltIn("reflect.name")]` titles the entry and its signature
 `reflect.name`, and hover and go-to-definition on a use of `reflect.name`
-lead to it. Only the runtime may use the attribute. A docgen test fails
+lead to it. Only the runtime may use the attribute. Docgen tests fail
 when the compiler gains a `reflect` function or property that
-`runtime/reflect.pep` does not declare, or loses one it does.
+`runtime/reflect.pep` does not declare, or loses one it does, and when
+`runtime/builtins.pep` declares an intrinsic the compiler does not have (or
+with another argument count), or misses one `convert_intrinsics` converts.
 
 Each reference page's title and place in the table of contents come from
 `PAGES` in `tools/docgen/src/reference.rs`. A new runtime file with public

@@ -183,7 +183,9 @@ C++. Any other pointer conversion reinterprets memory, so it is spelled
 `unsafe_cast`](types-and-variables.md#reinterpreting-with-unsafe_cast)).
 
 `__null` is the null pointer. `sizeof<T>()` gives the size of a type in bytes,
-which you need to allocate memory for C.
+which you need to allocate memory for C. The
+[compiler built-ins](../reference/builtins.md) reference lists these and the
+other `__` intrinsics.
 
 `T*` spelling is for extern prototypes only, since they mirror C. Everywhere
 else (parameters, return types, struct fields, locals, globals, type aliases,

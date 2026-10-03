@@ -223,6 +223,25 @@ fn built_in_leads_to_its_declaration_in_the_runtime() {
 }
 
 #[test]
+fn intrinsics_lead_to_their_declarations_in_the_runtime() {
+    let main = "test(location: __ptr<char> = __caller_location()): ulong {\n    var p: __ptr<int> = __null;\n    var z = __default<int>();\n    return sizeof<int>();\n}\n";
+    let (uri, text, program) = load("intrinsics", main, "main.pep");
+    for (needle, delta, starts) in [
+        ("__caller_location", 2, "__caller_location()"),
+        ("__ptr", 2, "__ptr<T>"),
+        ("__null", 2, "null_pointer"),
+        ("__default", 2, "__default<T>()"),
+        ("sizeof", 1, "size_of<T>()"),
+    ] {
+        let (file, rest) = definition(&uri, &text, &program, at(&text, needle, 0, delta));
+        assert_eq!(file, "runtime/builtins.pep", "{}", needle);
+        assert!(rest.starts_with(starts), "{}: {}", needle, rest);
+    }
+    let shown = hover(&uri, &text, &program, at(&text, "__caller_location", 0, 2));
+    assert!(shown.contains("The place of the call"), "{}", shown);
+}
+
+#[test]
 fn hover_spells_a_private_type_as_written() {
     // util's private `Tally` is mangled in the linked program.
     let main = "import \"util\";\ntest(): int { var t = tally(); return t.n; }\n";

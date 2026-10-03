@@ -149,3 +149,15 @@ export struct Export {
     ## otherwise.
     const name: String = "";
 }
+
+## Declares a compiler built-in in the runtime, for the reference and the
+## editor: the compiler ignores the declaration, whose functions end in `;`.
+## `[__BuiltIn("reflect.name")]` names the built-in when it is not the
+## declaration's own name. Only the runtime may use it.
+[__BuiltIn]
+[Attribute]
+export struct __BuiltIn {
+    ## The built-in's name, when it differs from the declaration's; empty
+    ## otherwise.
+    const name: String = "";
+}

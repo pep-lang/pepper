@@ -330,3 +330,25 @@ const name: String = ""
 
 The C symbol, when it differs from the function's name; empty
 otherwise.
+
+## __BuiltIn
+
+```pepper
+[Attribute] struct __BuiltIn
+```
+
+Declares a compiler built-in in the runtime, for the reference and the
+editor: the compiler ignores the declaration, whose functions end in `;`.
+`[__BuiltIn("reflect.name")]` names the built-in when it is not the
+declaration's own name. Only the runtime may use it.
+
+### Fields
+
+#### name
+
+```pepper
+const name: String = ""
+```
+
+The built-in's name, when it differs from the declaration's; empty
+otherwise.

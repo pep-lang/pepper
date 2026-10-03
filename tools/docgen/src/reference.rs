@@ -21,6 +21,7 @@ const PAGES: &[(&str, &str)] = &[
     ("internals.pep", "Built-in functions"),
     ("attributes.pep", "Built-in attributes"),
     ("reflect.pep", "The reflect module (compile time)"),
+    ("builtins.pep", "Compiler built-ins"),
     ("process.pep", "Arguments and exit (deprecated)"),
     ("string.pep", "String"),
     ("number.pep", "Numbers"),
@@ -647,6 +648,54 @@ mod tests {
         let members: Vec<&String> = declared.iter().flat_map(|(_, members)| members).collect();
         for name in &properties {
             assert!(members.contains(&name), "runtime/reflect.pep does not declare the property or method '{}'; add it", name);
+        }
+    }
+
+    /// Every `.rs` file under `dir`, concatenated.
+    fn rust_sources(dir: &Path, out: &mut String) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_sources(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push_str(&std::fs::read_to_string(&path).unwrap());
+            }
+        }
+    }
+
+    /// `runtime/builtins.pep` declares only intrinsics the compiler has, with
+    /// the argument counts it converts, and every intrinsic
+    /// `convert_intrinsics` converts.
+    #[test]
+    fn builtin_declarations_match_the_compiler() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = std::fs::read_to_string(root.join("runtime/builtins.pep")).unwrap();
+        let module = pepper_parser::parser::parse_source("runtime/builtins.pep", &source).unwrap();
+        let mut compiler = String::new();
+        rust_sources(&root.join("crates/pepper-sema/src"), &mut compiler);
+        rust_sources(&root.join("crates/pepper-codegen/src"), &mut compiler);
+        let intrinsics = std::fs::read_to_string(root.join("crates/pepper-sema/src/passes/convert_intrinsics.rs")).unwrap();
+        let mut declared = vec![];
+        for d in &module.declarations {
+            let name = d.built_in_name().unwrap_or_else(|| panic!("runtime/builtins.pep: '{}' is not [__BuiltIn]", d.name()));
+            let Declaration::Function(f) = d else { continue };
+            if !name.starts_with("__") {
+                continue;
+            }
+            // `__atomic_fetch_add` is the arm `"add"` under `"__atomic_fetch_"`.
+            let known = compiler.contains(&format!("\"{}\"", name))
+                || name.strip_prefix("__atomic_fetch_").is_some_and(|op| intrinsics.contains(&format!("\"{}\" =>", op)));
+            assert!(known, "runtime/builtins.pep declares '{}', which the compiler does not have", name);
+            let arity = format!("base == \"{}\" && args.len() == ", name);
+            if let Some(at) = intrinsics.find(&arity) {
+                let count: usize = intrinsics[at + arity.len()..].chars().take_while(char::is_ascii_digit).collect::<String>().parse().unwrap();
+                assert_eq!(f.parameters.len(), count, "runtime/builtins.pep: '{}' takes {} arguments", name, count);
+            }
+            declared.push(name);
+        }
+        for part in intrinsics.split("base == \"").skip(1) {
+            let name = part.split('"').next().unwrap();
+            assert!(declared.iter().any(|d| d == name), "runtime/builtins.pep does not declare the intrinsic '{}'; add it", name);
         }
     }
 

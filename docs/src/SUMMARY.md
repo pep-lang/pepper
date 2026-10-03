@@ -75,6 +75,7 @@
     - [Built-in functions](reference/internals.md)
     - [Built-in attributes](reference/attributes.md)
     - [The reflect module (compile time)](reference/reflect.md)
+    - [Compiler built-ins](reference/builtins.md)
     - [Arguments and exit (deprecated)](reference/process.md)
     - [String](reference/string.md)
     - [Numbers](reference/number.md)

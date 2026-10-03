@@ -2214,9 +2214,12 @@ diagnostics"). The mechanics:
   declaration's doc comment (`declaration_doc`, `member_doc` →
   `DocComment::to_markdown`). A use of a compiler built-in
   (`reflect.name<T>()`, spelled by `built_in_spelled`) leads to its
-  `[__BuiltIn]` declaration in the runtime: `collect_globals` lists such a
-  declaration under the built-in's name, so `imports::declaration_named`
-  finds it, and a plain name (`assert`) never does. Definition of a member
+  `[__BuiltIn]` declaration in the runtime (`runtime/reflect.pep`,
+  `runtime/builtins.pep`): `collect_globals` lists such a declaration under
+  the built-in's name, and `built_in_named` finds it by that name, so a
+  plain `assert` never leads to `reflect.assert`. `built_in_spelled` also
+  spells bare intrinsics (`__default<T>()`), types (`__ptr<char>`),
+  `sizeof` and `__null`. Definition of a member
   of any expression (`x.y.z`, `f().m()`) asks the sema model:
   `pepper_sema::member_lookup::member_declaration` finds the innermost
   `MemberRef` or `MethodCall` whose name covers the offset, types its owner
