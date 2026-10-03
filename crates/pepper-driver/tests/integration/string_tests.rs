@@ -525,6 +525,15 @@ test(): int {
     if ("héllo".find("l", 2) != -1) { return -12; }
     if ("héllo".find("é") != 1) { return -13; }
     if ("x".find("xy") != -1) { return -14; }
+    # split and replace stop at the first separator with invalid UTF-8
+    # before it, as `find` from there would.
+    var mixed = raw("a,b", 0xFF, ",c");
+    if (mixed.split(",").count != 2) { return -15; }
+    if (!(mixed.split(",")[0] == "a")) { return -16; }
+    if (mixed.replace(",", ";").find(";") != 1) { return -17; }
+    if (mixed.replace(",", ";").size != mixed.size) { return -18; }
+    if ("é,ü,".split(",").count != 3) { return -19; }
+    if (!("é,ü,".replace(",", "") == "éü")) { return -20; }
     return 0;
 }"#
         ),

@@ -1407,13 +1407,26 @@ _string_split(data: __ptr<char>, size: ulong, separator: String, location: __ptr
     assert(separator._size > 0, "String.split: the separator is empty", location);
     var result = Array<String>();
     ulong start = 0;
-    while (true) {
-        var found = _string_find(data, size, separator._data, separator._size, start);
+    var matches = _pep_utf8_valid(separator._data, separator._size);
+    while (matches) {
+        # As `find` from `start` would, but counting the piece's code points
+        # checks its UTF-8 too, so it is read once instead of twice.
+        var found = _pep_utf8_search(data + start, size - start, separator._data, separator._size);
         if (found < 0) {
             break;
         }
-        result.append(_string_piece(data + start, (found as ulong) - start));
-        start = (found as ulong) + separator._size;
+        var count = found as ulong;
+        if (count == 0) {
+            result.append(String());
+        } else {
+            var (end, length) = _pep_utf8_scan(data + start, count, count);
+            if (end != count) {
+                # Not valid UTF-8 before the separator: `find` finds nothing.
+                break;
+            }
+            result.append(String(data + start, count, length));
+        }
+        start = start + count + separator._size;
     }
     result.append(_string_piece(data + start, size - start));
     return result;
@@ -1451,15 +1464,21 @@ _string_replace(data: __ptr<char>, size: ulong, from: String, to: String, locati
     assert(from._size > 0, "String.replace: the text to replace is empty", location);
     var out = StringBuilder();
     ulong start = 0;
-    while (true) {
-        var found = _string_find(data, size, from._data, from._size, start);
+    var matches = _pep_utf8_valid(from._data, from._size);
+    while (matches) {
+        # As in `_string_split`: counting the piece's code points checks it.
+        var found = _pep_utf8_search(data + start, size - start, from._data, from._size);
         if (found < 0) {
             break;
         }
-        var count = (found as ulong) - start;
-        out._append_bytes(data + start, count, _pep_utf8_length(data + start, count));
+        var count = found as ulong;
+        var (end, length) = _pep_utf8_scan(data + start, count, count);
+        if (end != count) {
+            break;
+        }
+        out._append_bytes(data + start, count, length);
         out.append(to);
-        start = (found as ulong) + from._size;
+        start = start + count + from._size;
     }
     out._append_bytes(data + start, size - start, _pep_utf8_length(data + start, size - start));
     return out.to_string();
