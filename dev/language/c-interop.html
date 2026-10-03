@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
+            window.path_to_searchindex_js = "../searchindex-19b4dea8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6599482c.js"></script>
@@ -869,10 +869,18 @@ apply(f: extern (int) =&gt; int, x: int): int {
     return f(x);
 }
 
+# A String arrives as UTF-8 bytes and their size, and leaves as a
+# NUL-terminated copy that C frees with `pepper_string_free`.
+[Export]
+greet(name: String): String {
+    return "hello, " + name;
+}
+
 main(): int {
     var counter = make_counter(41);
     assert(counter_increment(counter) == 42, "the counter counts");
     assert(add(2, 3) == 5, "add adds");
+    assert(greet("C") == "hello, C", "greet greets");
     return 0;
 }
 </code></pre>
@@ -885,10 +893,13 @@ pepper build counter.pep --lib shared     # libcounter.so and counter.h
 void counter_retain(Counter* handle);
 void counter_release(Counter* handle);
 
+void pepper_string_free(char* text);
+
 int32_t add(int32_t a, int32_t b);
 int32_t apply(int32_t (*f)(int32_t), int32_t x);
 int32_t counter_increment(Counter* counter);
 Counter* counter_new(int32_t start);
+char* greet(const char* name, size_t name_size);
 </code></pre>
 <p>and a C program calls them like any C function:</p>
 <pre><code class="language-c">#include &lt;stdio.h&gt;
@@ -901,6 +912,9 @@ int main(void) {
     printf("%d\n", counter_increment(counter));   /* 42 */
     counter_release(counter);
     printf("%d\n", apply(twice, add(2, 3)));      /* 10 */
+    char* greeting = greet("C", 1);
+    printf("%s\n", greeting);                       /* hello, C */
+    pepper_string_free(greeting);
     return 0;
 }
 </code></pre>
@@ -932,19 +946,38 @@ declaration visible to other Pepper files (see
 <tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
 <tr><td><code>__ptr&lt;T&gt;</code></td><td><code>T*</code> for a number type, else <code>void*</code></td></tr>
 <tr><td><code>extern (P...) =&gt; R</code></td><td>a C function pointer, <code>R (*name)(P...)</code></td></tr>
+<tr><td><code>String</code></td><td>a parameter: <code>const char* name, size_t name_size</code>; a result: <code>char*</code> (see <a href="#strings">Strings</a>)</td></tr>
 <tr><td>a struct</td><td>an opaque handle, <code>Name*</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Anything else is an error at the parameter or result that C cannot hold:</p>
-<pre><code class="language-text">main.pep:2:14: error: cannot export 'length': C cannot hold 'String'
-    2 | length(text: String): int {
-      |              ^~~~~~
-note: pass the bytes as a '__ptr&lt;u8&gt;' and a 'ulong' size, and make the String with 'String(p, size)'
+<pre><code class="language-text">main.pep:2:15: error: cannot export 'total': C cannot hold 'Array&lt;int&gt;'
+    2 | total(values: Array&lt;int&gt;): int {
+      |               ^~~~~~~~~~
+note: only a non-generic struct passes to C, as a handle
 </code></pre>
-<p><code>String</code> is not supported yet; pass its bytes as above. A generic struct
-(<code>Array&lt;int&gt;</code>), a value struct, an enum, a trait, a tuple, <code>Optional</code> and a
-Pepper function type cannot cross either.</p>
+<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct, an enum, a trait, a tuple,
+<code>Optional</code> and a Pepper function type cannot cross. Pass an array as a
+pointer to its elements and a count, or wrap it in a struct of your own and
+pass a handle.</p>
+<h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
+<p>A <code>String</code> crosses as UTF-8 bytes, copied each way, so neither side keeps a
+pointer into the other’s memory:</p>
+<ul>
+<li>A <code>String</code> <strong>parameter</strong> is two C parameters: a pointer to the bytes and
+their size, <code>const char* name, size_t name_size</code>. The bytes need no NUL
+terminator, and may contain NULs. The function gets its own copy for the
+call; C keeps its buffer. A size of 0 (with any pointer, <code>NULL</code>
+included) is the empty string.</li>
+<li>A <code>String</code> <strong>result</strong> is a NUL-terminated copy of its bytes, as <code>char*</code>,
+which the C code owns and frees with <code>pepper_string_free</code>, never with
+<code>free</code>. An empty <code>String</code> is <code>""</code>, never <code>NULL</code>. A string with NULs inside
+ends at its first one for C; return a pointer and a size instead when that
+matters.</li>
+<li>The header declares <code>pepper_string_free</code> when some export returns a
+<code>String</code>.</li>
+</ul>
 <h3 id="handles"><a class="header" href="#handles">Handles</a></h3>
 <p>A struct reaches C as a pointer to an incomplete C type (<code>Counter*</code>), which
 C code passes back but never looks inside. Handles follow Pepper’s
@@ -981,6 +1014,9 @@ links them itself.</li>
 <li>On Windows, <code>--lib static</code> and <code>--lib shared</code> both write <code>name.lib</code> (the
 archive, or the DLL’s import library), so build them into different
 folders.</li>
+<li>A C program links at most one Pepper static library: each holds its own
+copy of the runtime, and two would define it twice. Shared libraries
+keep their runtimes to themselves, so a program may load several.</li>
 </ul>
 <h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
 <ul>
