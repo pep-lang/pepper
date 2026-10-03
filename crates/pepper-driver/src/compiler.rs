@@ -25,14 +25,19 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     // Files whose text is unchanged come from the build cache's syntax trees.
     let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_build()?)).transpose()?;
+    let forced_imports = options.effective_forced_imports();
     let setup = Setup {
         import_dirs: &options.import_paths,
-        forced_imports: &options.forced_imports,
+        forced_imports: &forced_imports,
         runtime: !options.no_runtime,
         parsed: cache.as_ref().map(|c| c as &dyn program::ParseCache),
         ..Setup::default()
     };
-    program::load_program(Root::from_file(entry_source)?, &setup)
+    let mut root = Root::from_file(entry_source)?;
+    if options.test {
+        crate::test_main::add_test_main(&mut root);
+    }
+    program::load_program(root, &setup)
 }
 
 pub use pepper_sema::program::merge;
@@ -77,7 +82,7 @@ pub fn compile(
 /// they give any.
 pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String> {
     let mut target = pepper_sema::current_target();
-    if !options.build_options.is_empty() {
+    if !options.effective_build_options().is_empty() {
         target.build_options = options.effective_build_options();
     }
     pepper_sema::with_target(target, || compile_program_with(options, None, false)).map(|(module, program, _)| (module, program))

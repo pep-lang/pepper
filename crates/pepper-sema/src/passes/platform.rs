@@ -14,6 +14,7 @@
 use crate::model::*;
 use pepper_parser::ast::{self, Expression, Literal, Span};
 use pepper_parser::diagnostic::FileId;
+use pepper_parser::namespace::{demangle_name, display_name};
 use pepper_parser::parser::parsers::{
     contains_platform_predicate, is_build_option_predicate_name, is_os_or_arch_name, is_platform_predicate_name,
 };
@@ -580,12 +581,88 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
     }
 }
 
+/// The attribute that marks a unit test: `[Test]`.
+pub const TEST_ATTRIBUTE: &str = "Test";
+
+/// The attribute that makes a `[Test]` pass only when it panics.
+pub const SHOULD_PANIC_ATTRIBUTE: &str = "ShouldPanic";
+
+/// The build option `pep-build --test` defines: `[Test]` functions are
+/// kept only when it is, and `[BuildOption("TEST")]` marks test-only code.
+pub const TEST_BUILD_OPTION: &str = "TEST";
+
+fn has_attribute(attributes: &[ast::Attribute], name: &str) -> bool {
+    attributes.iter().any(|a| a.name() == Some(name))
+}
+
+/// Where an attribute's name is written: `Test` in `[Test]` and
+/// `ShouldPanic` in `[ShouldPanic("m")]`.
+fn attribute_name_loc(attribute: &ast::Attribute, file: FileId) -> Loc {
+    let span = match &attribute.body {
+        Expression::FunctionCall { function, .. } => function.span(),
+        body => body.span(),
+    };
+    Loc::new(file, span)
+}
+
+/// Report a `[Test]` that is not on a free function taking nothing and
+/// returning nothing, and a `[ShouldPanic]` without `[Test]`. Runs in every
+/// build, before `[Test]` functions are dropped from a build without
+/// `--test`, so a malformed test is caught everywhere.
+fn check_tests(module: &Module) -> Result<(), Diagnostic> {
+    for f in &module.functions {
+        let file = f.loc.file;
+        if let Some(should_panic) = f.attributes.iter().find(|a| a.name() == Some(SHOULD_PANIC_ATTRIBUTE)) {
+            if !has_attribute(&f.attributes, TEST_ATTRIBUTE) {
+                return Err(Diagnostic::error("'ShouldPanic' applies only to a '[Test]' function")
+                    .at(attribute_name_loc(should_panic, file)));
+            }
+        }
+        if !has_attribute(&f.attributes, TEST_ATTRIBUTE) {
+            continue;
+        }
+        let name = demangle_name(&f.name);
+        if let Some(parameter) = f.parameters.first() {
+            return Err(Diagnostic::error(format!("test '{}' must take no parameters", name)).at(parameter.loc));
+        }
+        if !f.generic_params.is_empty() {
+            return Err(Diagnostic::error(format!("test '{}' cannot be generic", name)).at(f.loc));
+        }
+        // A test declares no return type (`__auto` until bodies are
+        // inferred) or `void`.
+        if !(matches!(f.ty.name.as_str(), "void" | "__auto") && f.ty.sub_types.is_empty()) {
+            return Err(Diagnostic::error(format!("test '{}' must return nothing, not '{}'", name, display_name(&f.ty.display())))
+                .at(f.loc));
+        }
+    }
+    let members = module
+        .structs
+        .iter()
+        .flat_map(|s| s.method_members.iter().chain(&s.constructors))
+        .chain(module.traits.iter().flat_map(|t| &t.methods))
+        .chain(module.extensions.iter().flat_map(|e| &e.methods));
+    for m in members {
+        for attribute in &m.attributes {
+            if let Some(name @ (TEST_ATTRIBUTE | SHOULD_PANIC_ATTRIBUTE)) = attribute.name() {
+                return Err(Diagnostic::error(format!("'{}' applies only to a free function", name))
+                    .at(attribute_name_loc(attribute, m.loc.file)));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Keep a node iff every attribute on it evaluates true (AND semantics).
 /// Attributes that are not `Target(...)` selections (`[Export]`, `[Align(8)]`)
 /// never drop anything, except `[__BuiltIn]`: a declaration of a compiler
 /// built-in, which only the tools read, is dropped everywhere.
 pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
     if ast::is_built_in(attributes) {
+        return Ok(false);
+    }
+    // A `[Test]` function is kept only in a test build, as if it said
+    // `[BuildOption("TEST")]`.
+    if has_attribute(attributes, TEST_ATTRIBUTE) && !target_build_options().contains_key(TEST_BUILD_OPTION) {
         return Ok(false);
     }
     for attr in attributes {
@@ -661,6 +738,7 @@ fn filter_function(function: &mut FunctionDef, file: FileId) -> Result<(), Diagn
 /// Apply platform selection to the whole module. Runs before
 /// `struct_body::apply` so filtered code is never synthesized over.
 pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
+    check_tests(module)?;
     // Validate every top-level predicate first so a bad attribute in dropped
     // code is still reported. `validate` evaluates each attribute (no
     // short-circuit on a false one) so a malformed later attribute is caught.

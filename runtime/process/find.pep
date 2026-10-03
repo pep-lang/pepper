@@ -1,9 +1,10 @@
 ## Finding programs: `find_executable` looks a program up on the `PATH`, as
-## a shell does before running it, and `is_executable` tells whether a file
-## can be run.
+## a shell does before running it, `find_companion` looks beside the running
+## program first, and `is_executable` tells whether a file can be run.
 
 import io;
 import os;
+import "current";
 
 ## Returns the program `name` would run as a command: the first file named
 ## `name` in the directories `PATH` lists, in order, that this process may
@@ -72,4 +73,35 @@ export is_executable(path: io.Path): bool {
         return true;
     }
     return (metadata.value().permissions & 73) != 0;  # 0111
+}
+
+## Returns the program `name` installed beside the running one, else the
+## one `find_executable` finds on the `PATH`: how a tool finds the other
+## tools of its suite, as `pep-test` finds `pep-build`. On Windows, `.exe`
+## is added to `name` when looking beside the running program.
+##
+## @param name the program's file name, such as `"pep-build"`
+## @returns the program's path, or none when neither place holds it
+## @example
+##     import process;
+##
+##     main(): int {
+##         var compiler = process.find_companion("pep-build");
+##         print(compiler.is_value() ? compiler.value().to_string() : "pep-build is not installed");
+##         return 0;
+##     }
+export find_companion(name: String): io.Path? {
+    var windows = os.system_os() == os.OperatingSystem.Windows;
+    var file_name = windows and io.Path(name).extension().is_empty() ? name + ".exe" : name;
+    var executable = executable_path();
+    if (executable.is_ok()) {
+        var parent = executable.value().parent();
+        if (parent.is_value()) {
+            var beside = parent.value().join(file_name);
+            if (is_executable(beside)) {
+                return Optional<io.Path>.Value(beside);
+            }
+        }
+    }
+    return find_executable(name);
 }

@@ -267,7 +267,7 @@ record(options: Options, scratch: Path): Result<String> {
 # Builds `source` for profiling, optimized with debug info and frame
 # pointers, and returns the executable's path.
 build(source: String, imports: Array<String>, scratch: Path): Result<String> {
-    var compiler = find_tool("pep-build");
+    var compiler = process.find_companion("pep-build");
     if (compiler.is_empty()) {
         return Result<String>.Err("cannot find pep-build next to pep-profile or on the PATH to build '" + source + "'");
     }
@@ -645,22 +645,6 @@ open_file(path: String) {
     if (ran.is_err() or !ran.value().status.success()) {
         File.stderr().write_all($"pep-profile: warning: cannot open '{path}'\n");
     }
-}
-
-# A pep-* tool: the one next to this program, else the one on the PATH.
-find_tool(name: String): Path? {
-    var file_name = name + executable_suffix();
-    var executable = process.executable_path();
-    if (executable.is_ok()) {
-        var parent = executable.value().parent();
-        if (parent.is_value()) {
-            var beside = parent.value().join(file_name);
-            if (process.is_executable(beside)) {
-                return Optional<Path>.Value(beside);
-            }
-        }
-    }
-    return process.find_executable(name);
 }
 
 executable_suffix(): String {

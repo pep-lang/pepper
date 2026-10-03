@@ -24,3 +24,4 @@ The prelude is the part of the standard library every program gets without an im
 - [Optional](optional.md): A value of type `T` that may be absent: either Value, holding a `T`, or Empty, holding nothing, like Rust's `Option<T>` and Swift's `Optional`.
 - [Copying](copy.md): Deep copies: `copy(value)` makes a copy that shares no object that is not thread-safe with the original, so it can be handed to another thread; `Copyable<T>` lets a type say how it is copied.
 - [URI](uri.md): URI references (RFC 3986): parse any URI, such as `https://example.com/a?b#c`, `mailto:someone@example.com` or `/items?page=2`, into its parts.
+- [Test checks](expect.md): Checks for tests: `expect_equal`, `expect_not_equal`, `expect_true` and `expect_false`, which every program can call without an import.

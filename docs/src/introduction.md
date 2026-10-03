@@ -60,10 +60,12 @@ closures, modules (with `export * from` re-exports), `Result`-based error handli
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see [text](language/text.md)),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing `JsonValue`s, JSONC documents that keep their comments, and converting structs with `json.encode` and `json.decode`), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information), and the `debug` module (stack backtraces, which a panic also prints, and the debugger). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing `JsonValue`s, JSONC documents that keep their comments, and converting structs with `json.encode` and `json.decode`), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information), and the `debug` module (stack backtraces, which a panic also prints, and the debugger). [Unit tests](language/testing.md) are `[Test]` functions that
+`pepper test` runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter,
 [pep-profile](tools/pep-profile.md), which profiles a program and draws a
-flame graph, and [`pepper`](tools/pepper.md), the entry point that runs every
+flame graph, [pep-test](tools/pep-test.md), which runs unit tests, and
+[`pepper`](tools/pepper.md), the entry point that runs every
 tool, are themselves written in Pepper. A [`pep.toml`](tools/projects.md)
 project builds with `pepper build` alone and imports the packages it depends
 on by name, which [`pepper package`](tools/pep-package.md) fetches from
@@ -129,8 +131,8 @@ chapter shows a feature, the example was compiled and run to check it.
   [naming conventions](language/naming.md). Read it in order, or jump to the
   topic you need.
 - **Tools.** [The pepper command](tools/pepper.md),
-  [pep-fmt](tools/pep-fmt.md), [pep-profile](tools/pep-profile.md) and
-  [debugging](tools/debugging.md).
+  [pep-fmt](tools/pep-fmt.md), [pep-profile](tools/pep-profile.md),
+  [pep-test](tools/pep-test.md) and [debugging](tools/debugging.md).
 - **Standard library reference.** Every type and function in the runtime,
   generated from the runtime's own documentation comments. Start at the
   [overview](reference/README.md).

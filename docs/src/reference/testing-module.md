@@ -1,0 +1,18 @@
+<!-- Generated from runtime/testing/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+
+# The testing module
+
+The test program `pep-build --test` builds: a `main` that lists the
+entry file's `[Test]` functions or runs one of them.
+
+A test build loads `testing` into every file, as `--import testing`
+would, and adds to the entry file a `main` (marked `[TestMain]`, which
+replaces the file's own) that registers each `[Test]` function with a
+`TestRunner` and calls `run`. Test files do not import it themselves:
+the checks they call, such as `expect_equal`, are in the prelude.
+
+`pep-test` (`pepper test`) drives the program: it lists the tests with
+`--list` and runs each in a child process of its own with `--run NAME`
+(see the testing chapter).
+
+Source: `runtime/testing/module.pep`

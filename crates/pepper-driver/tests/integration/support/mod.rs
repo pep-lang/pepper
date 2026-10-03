@@ -125,8 +125,14 @@ pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -
 /// runs a tool written in Pepper. Panics with the rendered error when it
 /// does not compile.
 pub fn build_executable(main: &Path, import_paths: &[&Path], out: &Path, build: &Path) {
+    build_executable_with(main, import_paths, &[], out, build);
+}
+
+/// [`build_executable`] with more compiler options (`--test`, `-D X`).
+pub fn build_executable_with(main: &Path, import_paths: &[&Path], options: &[&str], out: &Path, build: &Path) {
     use clap::Parser;
     let mut argv = vec!["pep-build".to_string(), main.to_string_lossy().into_owned()];
+    argv.extend(options.iter().map(|o| o.to_string()));
     for path in import_paths {
         argv.push("-I".to_string());
         argv.push(path.to_string_lossy().into_owned());
@@ -371,4 +377,14 @@ pub fn docs_example_sample() -> Vec<(String, PathBuf)> {
                 .unwrap_or_else(|| panic!("docs/examples has no '{name}'; update DOCS_EXAMPLE_SAMPLE"))
         })
         .collect()
+}
+
+/// The `pep-build` cargo built beside this test binary
+/// (`target/<profile>/pep-build`), for a test that runs a tool which runs
+/// the compiler (`pep-test`); `None` when it has not been built, as after
+/// `cargo test -p pepper-driver` alone, and such a test skips.
+pub fn compiler_binary() -> Option<PathBuf> {
+    let deps = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let compiler = deps.parent()?.join(if cfg!(windows) { "pep-build.exe" } else { "pep-build" });
+    compiler.is_file().then_some(compiler)
 }

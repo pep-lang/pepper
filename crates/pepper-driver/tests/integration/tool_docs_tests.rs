@@ -11,6 +11,7 @@
 //! | `pep-fmt` | `pep-fmt --help` (built from `tools/pep-fmt`) | `docs/src/tools/pep-fmt.md` |
 //! | `pep-profile` | `pep-profile --help` (built from `tools/pep-profile`) | `docs/src/tools/pep-profile.md` |
 //! | `pep-package` | `pep-package --help` and each command's `--help` (built from `tools/pep-package`) | `docs/src/tools/pep-package.md` |
+//! | `pep-test` | `pep-test --help` (built from `tools/pep-test`) | `docs/src/tools/pep-test.md` |
 //! | `pep-doc` | `tools/docgen/src/help.txt`, which it prints | `docs/src/tools/pep-doc.md` |
 //! | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 //! | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
@@ -280,4 +281,11 @@ fn help_parsing_finds_every_spelling() {
     assert!(mentions("ends with -T time.", "-T time"));
     assert!(mentions_variable("`PEPPER_SYSROOT_<TRIPLE>`", "PEPPER_SYSROOT_AARCH64_APPLE_DARWIN"));
     assert_eq!(variables_named("set PEPPER_A or PEPPER_B_C, not XPEPPER_D"), ["PEPPER_A", "PEPPER_B_C"]);
+}
+
+#[test]
+fn pep_test_options_are_documented() {
+    let output = Command::new(support::pepper_tool("pep-test")).arg("--help").output().expect("run pep-test --help");
+    let help = stdout_of(&output);
+    assert_documented(undocumented("pep-test", "docs/src/tools/pep-test.md", "option", &help_options(&help), mentions));
 }

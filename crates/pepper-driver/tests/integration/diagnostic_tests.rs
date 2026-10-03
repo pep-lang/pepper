@@ -5179,3 +5179,43 @@ fn dependency_not_fetched() {
         )
     );
 }
+
+#[test]
+fn test_with_a_parameter() {
+    assert_eq!(
+        error_of("test_parameter", "[Test]\nchecks(x: int) {}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:8: error: test 'checks' must take no parameters\n\
+         \x20   2 | checks(x: int) {}\n\
+         \x20     |        ^"
+    );
+}
+
+#[test]
+fn test_that_returns_a_value() {
+    assert_eq!(
+        error_of("test_returns", "[Test]\nchecks(): int {\n    return 1;\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:1: error: test 'checks' must return nothing, not 'int'\n\
+         \x20   2 | checks(): int {\n\
+         \x20     | ^~~~~~"
+    );
+}
+
+#[test]
+fn should_panic_without_test() {
+    assert_eq!(
+        error_of("should_panic_alone", "[ShouldPanic]\nchecks() {}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:2: error: 'ShouldPanic' applies only to a '[Test]' function\n\
+         \x20   1 | [ShouldPanic]\n\
+         \x20     |  ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn test_on_a_method() {
+    assert_eq!(
+        error_of("test_method", "struct S {\n    [Test]\n    checks() {}\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:2:6: error: 'Test' applies only to a free function\n\
+         \x20   2 |     [Test]\n\
+         \x20     |      ^~~~"
+    );
+}

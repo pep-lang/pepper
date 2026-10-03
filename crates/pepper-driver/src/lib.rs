@@ -9,6 +9,7 @@ pub mod library;
 pub mod lto;
 pub mod linker;
 pub mod options;
+pub mod test_main;
 /// Import resolution, now in `pepper-files` (shared with the LSP server).
 pub use pepper_files::imports;
 /// Runtime discovery, now in `pepper-files` (shared with the LSP server).

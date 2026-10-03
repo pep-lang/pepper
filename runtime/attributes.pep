@@ -140,6 +140,23 @@ export struct MoveSource {}
 [Attribute]
 export struct Locked {}
 
+## Marks a function as a unit test: `pep-test` (`pepper test`) builds it
+## into a test program and runs it in a child process of its own. The
+## function takes no parameters and returns nothing; it passes when it
+## returns and fails when it panics (see `expect_equal`). A build without
+## `--test` leaves `[Test]` functions out.
+[Attribute]
+export struct Test {}
+
+## Marks a `[Test]` function as one that passes only when it panics:
+## `[ShouldPanic]` takes any panic, and `[ShouldPanic("index out of
+## range")]` only a panic whose message contains that text.
+[Attribute]
+export struct ShouldPanic {
+    ## Text the panic's message must contain; empty for any panic.
+    const message: String = "";
+}
+
 ## Makes a free function callable from C, in a library built with
 ## `--lib static` or `--lib shared`: `[Export]`, or
 ## `[Export(name = "c_name")]` for a C symbol other than its name.

@@ -96,6 +96,12 @@ pub struct Options {
     #[arg(long = "no-runtime-checks", value_name = "CHECKS", value_parser = parse_runtime_checks)]
     pub no_runtime_checks: Option<pepper_codegen::checks::RuntimeChecks>,
 
+    /// Build the entry file's tests: keep its `[Test]` functions, define
+    /// the build option `TEST`, and replace its `main` with one that lists
+    /// or runs them (`--list`, `--run NAME`). `pep-test` builds with it.
+    #[arg(long = "test", conflicts_with = "library")]
+    pub test: bool,
+
     /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
@@ -325,8 +331,24 @@ impl Options {
 
     /// The build options `-D` defines; of two that name one option, the
     /// later wins.
+    /// `--test` defines `TEST`, unless `-D` gave it a value.
     pub fn effective_build_options(&self) -> pepper_sema::BuildOptions {
-        self.build_options.iter().cloned().collect()
+        let mut options: pepper_sema::BuildOptions = pepper_sema::BuildOptions::new();
+        if self.test {
+            options.insert(pepper_sema::passes::platform::TEST_BUILD_OPTION.to_string(), "1".to_string());
+        }
+        options.extend(self.build_options.iter().cloned());
+        options
+    }
+
+    /// The modules `--import` loads into every file, and in a test build
+    /// the runtime's `testing` module.
+    pub fn effective_forced_imports(&self) -> Vec<String> {
+        let mut imports = self.forced_imports.clone();
+        if self.test && !imports.iter().any(|name| name == crate::test_main::TESTING_MODULE) {
+            imports.push(crate::test_main::TESTING_MODULE.to_string());
+        }
+        imports
     }
 
     /// The CPU `-march`, `-mcpu`, `-mtune` and `-m<feature>` choose for the

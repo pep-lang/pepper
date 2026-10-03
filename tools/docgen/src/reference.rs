@@ -38,6 +38,7 @@ const PAGES: &[(&str, &str)] = &[
     ("optional.pep", "Optional"),
     ("copy.pep", "Copying"),
     ("uri.pep", "URI"),
+    ("expect.pep", "Test checks"),
     ("io/module.pep", "The io module"),
     ("io/types.pep", "Errors and platform types"),
     ("io/stream.pep", "Reader and Writer"),
@@ -108,6 +109,8 @@ const PAGES: &[(&str, &str)] = &[
     ("http/server.pep", "Server"),
     ("tls/module.pep", "The tls module"),
     ("tls/stream.pep", "Connectors and streams"),
+    ("testing/module.pep", "The testing module"),
+    ("testing/runner.pep", "TestRunner"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

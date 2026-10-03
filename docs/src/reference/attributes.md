@@ -310,6 +310,38 @@ as `move` does.
 Marks a function-typed parameter that is called while a lock is held, so
 it may use the locked value.
 
+## Test
+
+```pepper
+[Attribute] struct Test
+```
+
+Marks a function as a unit test: `pep-test` (`pepper test`) builds it
+into a test program and runs it in a child process of its own. The
+function takes no parameters and returns nothing; it passes when it
+returns and fails when it panics (see `expect_equal`). A build without
+`--test` leaves `[Test]` functions out.
+
+## ShouldPanic
+
+```pepper
+[Attribute] struct ShouldPanic
+```
+
+Marks a `[Test]` function as one that passes only when it panics:
+`[ShouldPanic]` takes any panic, and `[ShouldPanic("index out of
+range")]` only a panic whose message contains that text.
+
+### Fields
+
+#### message
+
+```pepper
+const message: String = ""
+```
+
+Text the panic's message must contain; empty for any panic.
+
 ## Export
 
 ```pepper

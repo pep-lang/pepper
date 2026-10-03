@@ -50,6 +50,7 @@
 - [Cryptographic hashes](language/digest.md)
 - [Optimizer hints](language/hints.md)
 - [Backtraces and the debugger](language/debug.md)
+- [Unit tests](language/testing.md)
 - [Calling C](language/c-interop.md)
 - [Platform selection](language/platform-selection.md)
 - [Build options](language/build-options.md)
@@ -67,6 +68,7 @@
 - [The package manager: pep-package](tools/pep-package.md)
 - [Formatting with pep-fmt](tools/pep-fmt.md)
 - [Profiling with pep-profile](tools/pep-profile.md)
+- [Testing with pep-test](tools/pep-test.md)
 - [The language server: pep-lsp](tools/pep-lsp.md)
 - [The documentation builder: pep-doc](tools/pep-doc.md)
 - [Debugging](tools/debugging.md)
@@ -96,6 +98,7 @@
     - [Optional](reference/optional.md)
     - [Copying](reference/copy.md)
     - [URI](reference/uri.md)
+    - [Test checks](reference/expect.md)
   - [The io module](reference/io-module.md)
     - [Errors and platform types](reference/io-types.md)
     - [Reader and Writer](reference/io-stream.md)
@@ -166,6 +169,8 @@
     - [Server](reference/http-server.md)
   - [The tls module](reference/tls-module.md)
     - [Connectors and streams](reference/tls-stream.md)
+  - [The testing module](reference/testing-module.md)
+    - [TestRunner](reference/testing-runner.md)
 <!-- reference:end -->
 
 # Contributing

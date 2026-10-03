@@ -15,6 +15,9 @@ pep-build main.pep -D USE_LIBCRYPTO -D LOG_LEVEL=2 -D BACKEND=zlib -o app
 - Repeat `-D` for more options. When two name the same option, the later
   one wins.
 
+`pep-build --test` defines `TEST`, which keeps the `[Test]` functions and
+can mark code only tests use (see [Unit tests](testing.md#test-builds)).
+
 A name is a letter or `_`, then letters, digits and `_`. Any other name is
 an error:
 

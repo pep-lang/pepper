@@ -25,6 +25,7 @@ short, and `pepper help build` runs it.
 | `--no-runtime` | Compile without the standard library | the runtime is used |
 | `-o <file>` | Name the executable or library | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
+| `--test` | Build the entry file's `[Test]` functions into a test program | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-ast` | Print the syntax tree instead of compiling | off |
@@ -148,6 +149,25 @@ header beside it that declares the program's `[Export]`ed functions. No
   macOS, `name.dll` on Windows.
 
 See [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
+
+### `--test`
+
+Builds the entry file's tests into a test program, which
+[pep-test](pep-test.md) runs. A build without it leaves every `[Test]`
+function out. With it:
+
+- the `[Test]` functions are kept, and the build option `TEST` is defined
+  (as by `-D TEST`), for code only tests use (`[BuildOption("TEST")]`);
+- the runtime's `testing` module is loaded into every file (as by
+  `--import testing`);
+- the entry file's `main` is replaced by one that answers `--list` (one
+  line per test: name, `file:line`, `returns` or `panics`, and the text a
+  `[ShouldPanic]` panic must contain, separated by tabs) and
+  `--run NAME [--timeout SECONDS]` (run that test; a test still running
+  after the timeout ends the program with exit status 124).
+
+Only the entry file's `[Test]` functions become tests. It cannot be
+combined with `--lib`. See [Unit tests](../language/testing.md).
 
 ### `--build <dir>`
 

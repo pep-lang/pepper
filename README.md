@@ -237,7 +237,7 @@ Every option and environment variable the compiler reads is described in
 the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
 other tools' options are in [The pepper command](docs/src/tools/pepper.md),
 [pep-fmt](docs/src/tools/pep-fmt.md), [pep-profile](docs/src/tools/pep-profile.md),
-[pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
+[pep-test](docs/src/tools/pep-test.md), [pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
 From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash
@@ -394,6 +394,23 @@ target/release/pep-profile --pid 4242 -d 10  # a running process, for 10 seconds
 
 Its options are in the book's
 [Profiling with pep-profile](docs/src/tools/pep-profile.md) chapter.
+
+## Run unit tests with pep-test
+
+`pep-test` builds the `[Test]` functions of Pepper files with
+`pep-build --test` and runs each in a child process of its own, in
+parallel, reporting which pass. It is written in Pepper (`tools/pep-test`)
+and finds `pep-build` next to itself:
+
+```bash
+cargo run --release -- tools/pep-test/main.pep -o target/release/pep-test
+target/release/pep-test src                 # every test under src/
+target/release/pep-test -f words src        # only tests whose name contains "words"
+```
+
+Writing tests is covered in the book's
+[Unit tests](docs/src/language/testing.md) chapter, and the options in
+[Testing with pep-test](docs/src/tools/pep-test.md).
 
 ## VS Code extension from any branch
 

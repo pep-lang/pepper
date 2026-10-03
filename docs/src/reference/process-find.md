@@ -3,8 +3,8 @@
 # Finding programs
 
 Finding programs: `find_executable` looks a program up on the `PATH`, as
-a shell does before running it, and `is_executable` tells whether a file
-can be run.
+a shell does before running it, `find_companion` looks beside the running
+program first, and `is_executable` tells whether a file can be run.
 
 Source: `runtime/process/find.pep`
 
@@ -51,3 +51,31 @@ macOS, a file with an execute permission bit set; on Windows, any file.
 
 **Returns**
 - true when `path` names a file that may be run
+
+## find_companion
+
+```pepper
+find_companion(name: String): io.Path?
+```
+
+Returns the program `name` installed beside the running one, else the
+one `find_executable` finds on the `PATH`: how a tool finds the other
+tools of its suite, as `pep-test` finds `pep-build`. On Windows, `.exe`
+is added to `name` when looking beside the running program.
+
+**Parameters**
+- `name` — the program's file name, such as `"pep-build"`
+
+**Returns**
+- the program's path, or none when neither place holds it
+
+**Example**
+```pepper
+import process;
+
+main(): int {
+    var compiler = process.find_companion("pep-build");
+    print(compiler.is_value() ? compiler.value().to_string() : "pep-build is not installed");
+    return 0;
+}
+```

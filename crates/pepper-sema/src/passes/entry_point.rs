@@ -33,6 +33,7 @@ pub fn is_entry_point(function: &FunctionDef) -> bool {
 /// Rewrite a `main(args: String[])` as described in the module comment,
 /// reporting any other parameter list on `main`.
 pub fn lower_main_arguments(module: &mut Module) {
+    replace_main_with_test_main(module);
     let mains: Vec<usize> = (0..module.functions.len())
         .filter(|&i| module.functions[i].name == "main" && module.functions[i].parent.is_none())
         .collect();
@@ -104,6 +105,19 @@ pub fn lower_main_arguments(module: &mut Module) {
         trait_default: None,
         owner: Loc::NONE,
     });
+}
+
+/// The attribute on the `main` that `pep-build --test` adds to the entry
+/// file (see `pepper_driver::test_main`).
+pub const TEST_MAIN_ATTRIBUTE: &str = "TestMain";
+
+/// In a test build, drop every top-level `main` but the `[TestMain]` one,
+/// which takes the program's own `main`'s place.
+fn replace_main_with_test_main(module: &mut Module) {
+    let is_test_main = |f: &FunctionDef| f.parent.is_none() && f.name == "main" && f.attributes.iter().any(|a| a.name() == Some(TEST_MAIN_ATTRIBUTE));
+    if module.functions.iter().any(is_test_main) {
+        module.functions.retain(|f| f.parent.is_some() || f.name != "main" || is_test_main(f));
+    }
 }
 
 /// `String[]`, as the builder spells it: `Array<String>`.
