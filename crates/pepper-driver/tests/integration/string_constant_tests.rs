@@ -164,6 +164,55 @@ read_api(): int {
     return 0;
 }
 
+builders(): int {
+    StringConstant csv = ",a,,é,";
+    var parts = csv.split(",");
+    if (parts.count != 5 || parts[0] != "" || parts[2] != "" || parts[3] != "é" || parts[3].length != 1 || parts[4] != "") {
+        return 1;
+    }
+    var pair = csv.split_once("é");
+    if (pair.is_empty()) {
+        return 2;
+    }
+    match (pair) {
+        Value(halves) => {
+            if (halves.0 != ",a,," || halves.1 != ",") {
+                return 3;
+            }
+        }
+        Empty => {
+            return 3;
+        }
+    }
+    StringConstant text = "aéa";
+    var replaced = text.replace("a", "bb");
+    if (replaced != "bbébb" || replaced.length != 5 || text.replace("x", "y") != "aéa") {
+        return 4;
+    }
+    StringConstant crlf = "one\r\ntwo\n\nthree";
+    var lines = crlf.lines();
+    if (lines.count != 4 || lines[0] != "one" || lines[2] != "" || lines[3] != "three") {
+        return 5;
+    }
+    StringConstant mixed = "AbÉ";
+    if (mixed.lower() != "abÉ" || mixed.upper() != "ABÉ" || mixed.lower().length != 3) {
+        return 6;
+    }
+    StringConstant dash = "-é-";
+    var joined = dash.join(lines);
+    if (joined != "one-é-two-é--é-three" || joined.length != 20) {
+        return 7;
+    }
+    var empty = StringConstant();
+    if (empty.repeat(3) != "" || empty.lower() != "" || empty.lines().count != 0 || empty.split(",").count != 1) {
+        return 8;
+    }
+    if (dash.repeat(2).length != 6 || dash.repeat(0) != "") {
+        return 9;
+    }
+    return 0;
+}
+
 hash_keys(): int {
     var counts = HashMap<StringConstant, int>();
     counts["a"] = 1;
@@ -195,7 +244,7 @@ hash_keys(): int {
 fn string_constants_run() {
     jit_cases(
         PROGRAM,
-        &["literals_are_constants", "literals_are_strings", "overloads_prefer_constants", "converts_to_string", "read_api", "hash_keys"],
+        &["literals_are_constants", "literals_are_strings", "overloads_prefer_constants", "converts_to_string", "read_api", "builders", "hash_keys"],
     );
 }
 

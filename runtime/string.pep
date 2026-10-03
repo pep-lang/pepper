@@ -467,19 +467,7 @@ export struct String {
     ##     assert(parts.count == 4, "four pieces");
     ##     assert(parts[2] == "", "an empty piece");
     split(separator: String, location: __ptr<char> = __caller_location()): String[] {
-        assert(separator._size > 0, "String.split: the separator is empty", location);
-        var result = Array<String>();
-        ulong start = 0;
-        while (true) {
-            var found = find(separator, start);
-            if (found < 0) {
-                break;
-            }
-            result.append(substr_bytes(start, (found as ulong) - start));
-            start = (found as ulong) + separator._size;
-        }
-        result.append(substr_bytes(start, _size - start));
-        return result;
+        return _string_split(_data, _size, separator, location);
     }
 
     ## Splits the String at the first occurrence of `separator`: the text
@@ -495,14 +483,7 @@ export struct String {
     ##     var (name, value) = header.value();
     ##     assert(name == "Host" && value == "example.com", "split");
     split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)? {
-        assert(separator._size > 0, "String.split_once: the separator is empty", location);
-        var found = find(separator);
-        if (found < 0) {
-            return Optional<(String, String)>.Empty;
-        }
-        var at = found as ulong;
-        var after = at + separator._size;
-        return Optional<(String, String)>.Value((substr_bytes(0, at), substr_bytes(after, _size - after)));
+        return _string_split_once(_data, _size, separator, location);
     }
 
     ## Returns the pieces of `parts` joined into one String, with this String
@@ -517,17 +498,7 @@ export struct String {
     ##     parts.append("b");
     ##     assert(", ".join(parts) == "a, b", "joined");
     join(parts: String[]): String {
-        var out = StringBuilder();
-        ulong index = 0;
-        var count = parts.count;
-        while (index < count) {
-            if (index > 0) {
-                out.append(this);
-            }
-            out.append(parts[index]);
-            index = index + 1;
-        }
-        return out.to_string();
+        return _string_join(_data, _size, _length, parts);
     }
 
     ## Returns a copy of this String with every occurrence of `from` replaced
@@ -542,20 +513,7 @@ export struct String {
     ## @example
     ##     assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
     replace(from: String, to: String, location: __ptr<char> = __caller_location()): String {
-        assert(from._size > 0, "String.replace: the text to replace is empty", location);
-        var out = StringBuilder();
-        ulong start = 0;
-        while (true) {
-            var found = find(from, start);
-            if (found < 0) {
-                break;
-            }
-            out.append(substr_bytes(start, (found as ulong) - start));
-            out.append(to);
-            start = (found as ulong) + from._size;
-        }
-        out.append(substr_bytes(start, _size - start));
-        return out.to_string();
+        return _string_replace(_data, _size, from, to, location);
     }
 
     ## Returns whether `needle` occurs in this String (`find(needle) >= 0`).
@@ -770,7 +728,7 @@ export struct String {
     ##     assert("Content-Type".lower() == "content-type", "ASCII lowered");
     ##     assert("Ärger".lower() == "Ärger", "non-ASCII kept");
     lower(): String {
-        return _map_case('A', 'a' - 'A');
+        return _string_map_case(_data, _size, _length, 'A', 'a' - 'A');
     }
 
     ## Returns a new String with the ASCII letters `a` to `z` changed to `A`
@@ -782,24 +740,7 @@ export struct String {
     ## @example
     ##     assert("get".upper() == "GET", "ASCII raised");
     upper(): String {
-        return _map_case('a', 'A' - 'a');
-    }
-
-    # A copy with the 26 letters from `first` shifted by `shift`.
-    _map_case(first: int, shift: int): String {
-        __ptr<char> copy = _pep_malloc(_size + 1);
-        ulong index = 0;
-        while (index < _size) {
-            int value = (_data[index] as byte) as int;
-            if (value >= first && value < first + 26) {
-                value = value + shift;
-            }
-            copy[index] = value as char;
-            index = index + 1;
-        }
-        var result = String(copy, _size, _length);
-        _pep_free(copy);
-        return result;
+        return _string_map_case(_data, _size, _length, 'a', 'A' - 'a');
     }
 
     ## Splits the String into lines and returns them without their line
@@ -815,24 +756,7 @@ export struct String {
     ##     assert(lines[1] == "second", "\\r\\n removed");
     ##     assert(lines[2] == "", "an empty line");
     lines(): String[] {
-        var result = Array<String>();
-        ulong start = 0;
-        ulong index = 0;
-        while (index < _size) {
-            if ((_data[index] as byte) == '\n') {
-                ulong end = index;
-                if (end > start && (_data[end - 1] as byte) == '\r') {
-                    end = end - 1;
-                }
-                result.append(substr_bytes(start, end - start));
-                start = index + 1;
-            }
-            index = index + 1;
-        }
-        if (start < _size) {
-            result.append(substr_bytes(start, _size - start));
-        }
-        return result;
+        return _string_lines(_data, _size);
     }
 
     ## Returns a new String that holds this String `count` times in a row.
@@ -845,18 +769,7 @@ export struct String {
     ##     assert("ab".repeat(3) == "ababab", "three copies");
     ##     var indent = " ".repeat(8);   # eight spaces
     repeat(count: ulong): String {
-        if (count == 0 || _size == 0) {
-            return String();
-        }
-        var result = String();
-        result.grow(_size * count);
-        ulong index = 0;
-        while (index < count) {
-            memcpy(result._data + index * _size, _data, _size);
-            index = index + 1;
-        }
-        result._length = _length * count;
-        return result;
+        return _string_repeat(_data, _size, _length, count);
     }
 }
 
@@ -1150,21 +1063,18 @@ export struct StringConstant {
         return substr_bytes(start, end - start);
     }
 
-    # The methods below build their result with `String`'s, from a String
-    # copy of the text.
-
     ## Returns a new String with the ASCII letters in lowercase.
     ##
     ## @returns a new String
     lower(): String {
-        return to_string().lower();
+        return _string_map_case(c_str(), _size, _length, 'A', 'a' - 'A');
     }
 
     ## Returns a new String with the ASCII letters in uppercase.
     ##
     ## @returns a new String
     upper(): String {
-        return to_string().upper();
+        return _string_map_case(c_str(), _size, _length, 'a', 'A' - 'a');
     }
 
     ## Returns the lines of the text, split at `"\n"` or `"\r\n"`, as
@@ -1172,7 +1082,7 @@ export struct StringConstant {
     ##
     ## @returns a new array of Strings, without the line breaks
     lines(): String[] {
-        return to_string().lines();
+        return _string_lines(c_str(), _size);
     }
 
     ## Returns a new String of `count` copies of the text.
@@ -1180,7 +1090,7 @@ export struct StringConstant {
     ## @param count the number of copies
     ## @returns a new String; empty when `count` is 0
     repeat(count: ulong): String {
-        return to_string().repeat(count);
+        return _string_repeat(c_str(), _size, _length, count);
     }
 
     ## Returns the pieces of the text between each `separator`, as
@@ -1190,7 +1100,7 @@ export struct StringConstant {
     ## @returns a new array of Strings
     ## @panics if `separator` is empty
     split(separator: String, location: __ptr<char> = __caller_location()): String[] {
-        return to_string().split(separator, location);
+        return _string_split(c_str(), _size, separator, location);
     }
 
     ## Returns the text before and after the first `separator`, or `Empty`
@@ -1200,7 +1110,7 @@ export struct StringConstant {
     ## @returns the two pieces, or `Empty`
     ## @panics if `separator` is empty
     split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)? {
-        return to_string().split_once(separator, location);
+        return _string_split_once(c_str(), _size, separator, location);
     }
 
     ## Returns `parts` joined into a new String with this text between each
@@ -1209,7 +1119,7 @@ export struct StringConstant {
     ## @param parts the Strings to join
     ## @returns a new String
     join(parts: String[]): String {
-        return to_string().join(parts);
+        return _string_join(c_str(), _size, _length, parts);
     }
 
     ## Returns a new String with every occurrence of `from` replaced by
@@ -1220,7 +1130,7 @@ export struct StringConstant {
     ## @returns a new String
     ## @panics if `from` is empty
     replace(from: String, to: String, location: __ptr<char> = __caller_location()): String {
-        return to_string().replace(from, to, location);
+        return _string_replace(c_str(), _size, from, to, location);
     }
 
     ## Returns an iterator over the code points, so `for (var c in text)`
@@ -1371,6 +1281,133 @@ _string_is_boundary(data: __ptr<char>, size: ulong, offset: ulong): bool {
         return true;
     }
     return ((data[offset] as byte) & 0xC0) != 0x80;
+}
+
+# The text of `count` bytes at `data`, as a new String.
+_string_piece(data: __ptr<char>, count: ulong): String {
+    # A zero size would tell the constructor to measure the C string.
+    if (count == 0) {
+        return String();
+    }
+    return String(data, count);
+}
+
+# The pieces of a span between each `separator`.
+_string_split(data: __ptr<char>, size: ulong, separator: String, location: __ptr<char>): String[] {
+    assert(separator._size > 0, "String.split: the separator is empty", location);
+    var result = Array<String>();
+    ulong start = 0;
+    while (true) {
+        var found = _string_find(data, size, separator._data, separator._size, start);
+        if (found < 0) {
+            break;
+        }
+        result.append(_string_piece(data + start, (found as ulong) - start));
+        start = (found as ulong) + separator._size;
+    }
+    result.append(_string_piece(data + start, size - start));
+    return result;
+}
+
+# A span's text before and after its first `separator`, or `Empty`.
+_string_split_once(data: __ptr<char>, size: ulong, separator: String, location: __ptr<char>): (String, String)? {
+    assert(separator._size > 0, "String.split_once: the separator is empty", location);
+    var found = _string_find(data, size, separator._data, separator._size, 0);
+    if (found < 0) {
+        return Optional<(String, String)>.Empty;
+    }
+    var at = found as ulong;
+    var after = at + separator._size;
+    return Optional<(String, String)>.Value((_string_piece(data, at), _string_piece(data + after, size - after)));
+}
+
+# `parts` joined with the span between each two.
+_string_join(data: __ptr<char>, size: ulong, length: ulong, parts: String[]): String {
+    var out = StringBuilder();
+    ulong index = 0;
+    var count = parts.count;
+    while (index < count) {
+        if (index > 0) {
+            out._append_bytes(data, size, length);
+        }
+        out.append(parts[index]);
+        index = index + 1;
+    }
+    return out.to_string();
+}
+
+# A span with every `from` replaced by `to`.
+_string_replace(data: __ptr<char>, size: ulong, from: String, to: String, location: __ptr<char>): String {
+    assert(from._size > 0, "String.replace: the text to replace is empty", location);
+    var out = StringBuilder();
+    ulong start = 0;
+    while (true) {
+        var found = _string_find(data, size, from._data, from._size, start);
+        if (found < 0) {
+            break;
+        }
+        var count = (found as ulong) - start;
+        out._append_bytes(data + start, count, _pep_utf8_length(data + start, count));
+        out.append(to);
+        start = (found as ulong) + from._size;
+    }
+    out._append_bytes(data + start, size - start, _pep_utf8_length(data + start, size - start));
+    return out.to_string();
+}
+
+# A copy of a span with the 26 letters from `first` shifted by `shift`.
+_string_map_case(data: __ptr<char>, size: ulong, length: ulong, first: int, shift: int): String {
+    __ptr<char> copy = _pep_malloc(size + 1);
+    ulong index = 0;
+    while (index < size) {
+        int value = (data[index] as byte) as int;
+        if (value >= first && value < first + 26) {
+            value = value + shift;
+        }
+        copy[index] = value as char;
+        index = index + 1;
+    }
+    var result = String(copy, size, length);
+    _pep_free(copy);
+    return result;
+}
+
+# The lines of a span, split at `"\n"` or `"\r\n"`.
+_string_lines(data: __ptr<char>, size: ulong): String[] {
+    var result = Array<String>();
+    ulong start = 0;
+    ulong index = 0;
+    while (index < size) {
+        if ((data[index] as byte) == '\n') {
+            ulong end = index;
+            if (end > start && (data[end - 1] as byte) == '\r') {
+                end = end - 1;
+            }
+            result.append(_string_piece(data + start, end - start));
+            start = index + 1;
+        }
+        index = index + 1;
+    }
+    if (start < size) {
+        result.append(_string_piece(data + start, size - start));
+    }
+    return result;
+}
+
+# `count` copies of a span, as a new String.
+_string_repeat(data: __ptr<char>, size: ulong, length: ulong, count: ulong): String {
+    if (count == 0 || size == 0) {
+        return String();
+    }
+    var result = String();
+    result.grow(size * count);
+    ulong index = 0;
+    while (index < count) {
+        memcpy(result._data + index * size, data, size);
+        index = index + 1;
+    }
+    result._length = length * count;
+    return result;
 }
 
 # Orders two spans byte by byte: negative, zero or positive.
@@ -2081,7 +2118,13 @@ export struct StringBuilder {
     ##     var b = StringBuilder();
     ##     b.append("a").append("b");   # b.to_string() == "ab"
     append(text: String): StringBuilder {
-        ulong needed = _size + text._size;
+        _append_bytes(text._data, text._size, text._length);
+        return this;
+    }
+
+    # Appends `size` bytes at `data` holding `length` code points.
+    _append_bytes(data: __ptr<char>, size: ulong, length: ulong) {
+        ulong needed = _size + size;
         if (needed > _capacity) {
             ulong capacity = _capacity * 2;
             if (capacity < 16) {
@@ -2093,12 +2136,11 @@ export struct StringBuilder {
             _data = _pep_realloc(_data, _capacity, capacity) as __ptr<char>;
             _capacity = capacity;
         }
-        if (text._size > 0) {
-            memcpy(_data + _size, text._data, text._size);
+        if (size > 0) {
+            memcpy(_data + _size, data, size);
         }
         _size = needed;
-        _length = _length + text._length;
-        return this;
+        _length = _length + length;
     }
 
     ## The number of bytes of UTF-8 appended so far. O(1).
