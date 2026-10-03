@@ -47,6 +47,8 @@ allocated.
   (1970-01-01 00:00:00 UTC). `unix_seconds()` is what file systems and most
   protocols record. Since the wall clock can be set back,
   `duration_since(earlier)` is an optional: none when `earlier` is later.
+  The [`time` module](time.md) turns it into a date and time, in UTC or a
+  time zone, and back.
 
 ```pepper
 {{#include ../../examples/os-time.pep}}
@@ -77,7 +79,5 @@ be negative.
 
 ## Current limitations
 
-- Dates, time zones, and formatting a `SystemTime` as a date are not
-  supported yet.
 - `async.timeout` still takes milliseconds, not a `Duration`.
 - `total_memory()` does not take a container's memory limit into account.

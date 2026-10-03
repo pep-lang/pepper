@@ -505,8 +505,8 @@ the Unix epoch (1970-01-01 00:00:00 UTC), like Rust's
 `std::time::SystemTime`. It reaches from the year 1677 to 2262.
 
 The wall clock can jump, backwards too, when the system's time is set,
-so measure how long something takes with `Instant` instead. Dates, time
-zones and formatting are not part of `os`.
+so measure how long something takes with `Instant` instead. The `time`
+module turns it into dates, times of day and time zones, and back.
 
 **Example**
 ```pepper

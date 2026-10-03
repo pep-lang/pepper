@@ -92,6 +92,7 @@ mod simd_tests;
 mod socket_tests;
 mod task_tests;
 mod test_harness_tests;
+mod time_tests;
 mod tls_tests;
 mod tool_docs_tests;
 mod static_call_tests;

@@ -1148,7 +1148,7 @@ fn other_platforms_compile() {
 /// locks, files, sockets, clocks and processes.
 #[test]
 fn runtime_compiles_on_other_platforms() {
-    let source = format!("import os;\nimport process;\n{}", crate::http_tests::HTTP_PROGRAM.replace("SECURE", "true"));
+    let source = format!("import os;\nimport process;\nimport time;\n{}", crate::http_tests::HTTP_PROGRAM.replace("SECURE", "true"));
     let failures: Vec<String> = support::parallel_map(&SIMULATED_HOSTS, |&(os, arch)| {
         with_codegen_as(os, arch, "runtime_platform", &source, |generator, module| {
             generator.generate(module).map_err(|d| module.sources.render(&d))?;
@@ -1170,6 +1170,7 @@ fn runtime_compiles_on_other_platforms() {
                     "@WSASocketW(",
                     "QueryPerformanceCounter",
                     "CreateProcessW",
+                    "@ucal_open(",
                 ],
                 "macos" => [
                     "@kevent(",
@@ -1181,6 +1182,7 @@ fn runtime_compiles_on_other_platforms() {
                     "@socket(",
                     "clock_gettime",
                     "posix_spawnp",
+                    "@localtime_r(",
                 ],
                 _ => [
                     "@epoll_wait(",
@@ -1192,6 +1194,7 @@ fn runtime_compiles_on_other_platforms() {
                     "@accept4(",
                     "clock_gettime",
                     "posix_spawnp",
+                    "@localtime_r(",
                 ],
             });
             let missing: Vec<&str> = expected.into_iter().filter(|e| !ir.contains(e)).collect();
