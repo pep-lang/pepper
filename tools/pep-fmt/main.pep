@@ -21,8 +21,16 @@ import [Directory, File, Path] from io;
 import syntax;
 import "format";
 
+# The release this tool belongs to. A test keeps it equal to the workspace
+# version in Cargo.toml.
+version(): String {
+    return "0.3.0";
+}
+
 main(args: String[]): int {
-    var parser = cli.Parser("pep-fmt", "Formats Pepper source; with no files, standard input to standard output.");
+    var parser = cli.Parser(
+        "pep-fmt", "Formats Pepper source; with no files, standard input to standard output.", version = version()
+    );
     var write = parser.flag("write", "w", "rewrite each file that is not formatted");
     var check = parser.flag("check", help = "list each file that is not formatted, and exit with 1 if any is");
     var sources = parser.positionals("paths", "files, and directories to search for .pep files");

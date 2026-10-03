@@ -6,7 +6,8 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(name = "pep-build", version, about = "Pepper compiler")]
 pub struct Options {
-    /// Source files to compile (≥1).
+    /// The program's entry file. The files it imports are found on their
+    /// own; only the first file named is compiled.
     pub source_files: Vec<PathBuf>,
 
     /// Add a directory to the import search path.
@@ -103,7 +104,7 @@ pub struct Options {
     #[arg(short = 'g', long = "emit-debug")]
     pub emit_debug: bool,
 
-    /// Verbose output.
+    /// Accepted for compatibility; prints nothing more yet.
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
 
@@ -115,11 +116,10 @@ pub struct Options {
     #[arg(long = "emit-ast")]
     pub emit_ast: bool,
 
-    /// Enable a trace channel. `time` prints how long each compile stage
-    /// took; `passes` prints how long each sema pass took, summed over its
-    /// runs; `cache` prints whether each unit's object came from the build
-    /// cache; the others (codegen|ast|parser|ir|debuginfo|link) are accepted
-    /// and ignored.
+    /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
+    /// each compile stage took; `passes` prints how long each sema pass
+    /// took, summed over its runs; `cache` prints whether each unit's object
+    /// came from the build cache; any other name is accepted and ignored.
     #[arg(short = 'T', value_name = "CHAN")]
     pub trace: Vec<String>,
 
@@ -147,10 +147,14 @@ pub struct Options {
     #[arg(long = "no-verify-cache")]
     pub no_verify_cache: bool,
 
-    /// Use the MSVC linker (not ported; errors on non-Windows).
+    /// Use the MSVC linker. Not ported: always an error.
     #[arg(long = "MSVC")]
     pub msvc: bool,
 }
+
+/// The channels `-T` turns on (`--Tall` turns on all of them). The book's
+/// tools/pep-build.md documents each, and `tool_docs_tests` checks it does.
+pub const TRACE_CHANNELS: [&str; 3] = ["time", "passes", "cache"];
 
 /// The environment variable naming `triple`'s system root:
 /// `PEPPER_SYSROOT_AARCH64_APPLE_DARWIN` for `aarch64-apple-darwin`.
@@ -291,6 +295,7 @@ impl Options {
 
     /// Whether trace channel `channel` (`-T channel`, or `--Tall`) is on.
     pub fn tracing(&self, channel: &str) -> bool {
+        debug_assert!(TRACE_CHANNELS.contains(&channel), "trace channel '{}' is missing from TRACE_CHANNELS", channel);
         self.trace_all || self.trace.iter().any(|c| c == channel)
     }
 

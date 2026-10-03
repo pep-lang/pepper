@@ -25,6 +25,23 @@ pep-fmt --check src/        # list each file that is not formatted
 pep-fmt < main.pep          # no files: standard input to standard output
 ```
 
+### Options
+
+```text
+pep-fmt [OPTIONS] [paths]...
+```
+
+| Option | What it does |
+| --- | --- |
+| `<paths>` | Files to format, and directories to search for `.pep` files; none means standard input |
+| `-w`, `--write` | Rewrite each file that is not formatted, instead of printing it |
+| `--check` | Print the path of each file that is not formatted, and exit with 1 if there is one |
+| `-h`, `--help` | Print the options |
+| `-V`, `--version` | Print `pep-fmt` and its version |
+
+`-w` and `--check` need at least one path. `pepper fmt` runs `pep-fmt` with
+the same arguments.
+
 A directory stands for every `.pep` file under it, in name order, skipping
 directories whose names start with `.` (such as `.git` and the `.pep` build
 cache). `-w` (or `--write`) rewrites only the files whose formatting changes. `--check`
@@ -41,8 +58,8 @@ main.pep:2:14: error: expected ')'
 ```
 
 A file that cannot be read or written also exits with status 1, and an
-unknown option exits with status 2 after printing the usage (`pep-fmt -h`
-prints the full help). pep-fmt parses its options with the
+unknown option, or `-w` or `--check` without a path, exits with status 2
+after printing the usage (`pep-fmt -h` prints the full help). pep-fmt parses its options with the
 [`cli` module](../language/cli.md).
 
 ## The style

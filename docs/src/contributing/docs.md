@@ -13,6 +13,9 @@ cargo run -p pepper-docgen -- build           # render into target/docs-site/dev
 cargo run -p pepper-docgen -- build --version 0.2.0 --site <dir>
 ```
 
+`pep-doc`'s commands and options are described in
+[The documentation builder: pep-doc](../tools/pep-doc.md).
+
 ## Keeping the book current
 
 Documentation changes land in the same PR as the code they describe. The
@@ -70,3 +73,16 @@ the file's lines at column 0, which ends the list and the code block, so the
 rest of the example shows as prose and its `#` comments as headings. Put an
 included example at column 0, after the list or in its own `###` section. The runtime itself must meet the doc
 comment standard in `AGENTS.md`, which `runtime_docs_tests.rs` enforces.
+
+## Tool options stay documented
+
+Every command-line option of every tool has its place in the book:
+`docs/src/tools/<tool>.md` for `pep-build`, `pepper`, `pep-fmt`, `pep-lsp`
+and `pep-doc`, and [Setting up LLVM](setup.md) for `cargo setup`.
+`crates/pepper-driver/tests/integration/tool_docs_tests.rs` takes each tool's
+options from the tool itself (clap's definition for `pep-build`, the
+`--help` text for the others) and fails, naming the tool, the option and the
+page, when a page does not mention one. It also checks `pep-build`'s trace
+channels and environment variables, and `pep-lsp`'s initialization options
+and VS Code settings. A new option goes in the tool's `--help` (or
+`help.txt` / `usage.txt`) and on its page in the same PR.

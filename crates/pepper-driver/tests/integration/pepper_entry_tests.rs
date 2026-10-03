@@ -13,7 +13,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::support;
-use crate::support::{repo_root, stdout_of};
+use crate::support::stdout_of;
 
 /// Prints its arguments joined by `|`, and exits with the number after an
 /// argument `exit`, or 0.
@@ -66,8 +66,7 @@ fn layout() -> &'static Layout {
         let elsewhere = root.join("elsewhere");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::create_dir_all(&elsewhere).unwrap();
-        let entry = repo_root().join("tools").join("pepper").join("main.pep");
-        support::build_executable(&entry, &[], &executable(&bin, "pepper"), &root.join("obj"));
+        std::fs::copy(support::pepper_tool("pepper"), executable(&bin, "pepper")).unwrap();
         let echo_source = root.join("echo.pep");
         std::fs::write(&echo_source, ECHO).unwrap();
         let echo = executable(&bin, "pep-echo");

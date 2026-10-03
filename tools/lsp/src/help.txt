@@ -1,0 +1,10 @@
+The Pepper language server. Editors start it and talk to it over standard
+input and output; its settings arrive as LSP initialization options.
+
+usage: pep-lsp [options]
+
+Options:
+  --stdio        talk over standard input and output (the default; accepted
+                 for editors that pass it)
+  -h, --help     show this help
+  -V, --version  show pep-lsp's version

@@ -232,6 +232,10 @@ help(): String {
     var text = usage();
     text = text + "\nRuns the program pep-<command>, found next to pepper or on the PATH,\n";
     text = text + "with the remaining arguments.\n\n";
+    text = text + "Options:\n";
+    text = text + "  -h, --help     show this help; 'pepper help <command>' runs 'pep-<command> --help'\n";
+    text = text + "  --version      show pepper's version\n";
+    text = text + "  -v, --verbose  after --version: also show each command's version\n\n";
     return text + command_list(find_commands());
 }
 

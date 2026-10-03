@@ -1,19 +1,7 @@
-//! Pepper documentation builder.
-//!
-//! ```text
-//! cargo run -p pepper-docgen -- reference
-//!     Regenerate docs/src/reference/ from the runtime's doc comments.
-//! cargo run -p pepper-docgen -- check
-//!     Fail if the committed reference is out of date, or if a chapter has
-//!     Markdown that renders broken (an include inside a list item).
-//! cargo run -p pepper-docgen -- build [--version <semver>|dev] [--site <dir>]
-//!     Regenerate the reference, render the book with mdBook into
-//!     <site>/<version>/ (default: target/docs-site/dev/), and refresh the
-//!     site's versions.json and index.html. Other versions are left as they
-//!     are, so every published version stays available.
-//! cargo run -p pepper-docgen -- serve
-//!     Regenerate the reference and serve the book locally (mdbook serve).
-//! ```
+//! Pepper documentation builder: `pep-doc`, run as `pepper doc` or
+//! `cargo run -p pepper-docgen -- <command>`. `help.txt` is its `--help`,
+//! listing each command and option; the book's tools/pep-doc.md documents
+//! them, and `tool_docs_tests` checks that it does.
 //!
 //! mdBook must be on PATH (`cargo install mdbook --locked`).
 
@@ -51,9 +39,23 @@ fn mdbook(args: &[&str], root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// What `pep-doc --help` prints.
+const HELP: &str = include_str!("help.txt");
+
 fn run(args: &[String]) -> Result<(), String> {
-    let root = repo_root();
     let command = args.first().map(String::as_str).unwrap_or("build");
+    match command {
+        "help" | "--help" | "-h" => {
+            print!("{}", HELP);
+            return Ok(());
+        }
+        "--version" | "-V" => {
+            println!("pep-doc {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        _ => {}
+    }
+    let root = repo_root();
     let option = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     match command {
         "reference" => {
@@ -110,7 +112,7 @@ fn run(args: &[String]) -> Result<(), String> {
             regenerate(&root)?;
             mdbook(&["serve", "docs", "--open"], &root)
         }
-        other => Err(format!("unknown command '{}': expected reference, check, build, or serve", other)),
+        other => Err(format!("unknown command '{}': expected reference, check, build, serve, or help", other)),
     }
 }
 

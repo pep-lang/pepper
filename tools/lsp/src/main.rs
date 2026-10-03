@@ -3117,7 +3117,38 @@ fn guarded<R>(f: impl FnOnce() -> R) -> Option<R> {
 /// thread is too small even so, and a stack overflow cannot be caught.
 const STACK_SIZE: usize = 8 << 20;
 
+/// What `pep-lsp --help` prints. The book's tools/pep-lsp.md documents
+/// each option it lists, and `tool_docs_tests` checks that it does.
+const HELP: &str = include_str!("help.txt");
+
+/// Answers `--help` and `--version`, and rejects an argument the server
+/// does not take: `Some(exit code)` when the server should not start.
+fn handle_arguments(args: &[String]) -> Option<i32> {
+    for arg in args {
+        match arg.as_str() {
+            "--stdio" => {}
+            "-h" | "--help" => {
+                print!("{}", HELP);
+                return Some(0);
+            }
+            "-V" | "--version" => {
+                println!("pep-lsp {}", env!("CARGO_PKG_VERSION"));
+                return Some(0);
+            }
+            other => {
+                eprintln!("pep-lsp: error: unknown argument '{}'\nusage: pep-lsp [--stdio]; pep-lsp --help lists the options", other);
+                return Some(2);
+            }
+        }
+    }
+    None
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = handle_arguments(&args) {
+        std::process::exit(code);
+    }
     // The main thread's stack is fixed by the linker, so serve from a
     // thread that has `STACK_SIZE`, as the runtime's workers do.
     let server = std::thread::Builder::new()

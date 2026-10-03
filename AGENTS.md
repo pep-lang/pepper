@@ -36,11 +36,14 @@ opening a PR, check each of these against the diff:
   `docs/src/reference/`.
 - **Compiler structure** (a crate, stage, pass, file, or pattern that
   INTERNALS.md names moves, is added, or changes): update INTERNALS.md.
-- **CLI, setup, or tooling**: update README.md and, when it affects writing
-  the docs, `docs/src/contributing/docs.md`.
+- **CLI, setup, or tooling**: document every option, command and
+  environment variable in the tool's page, `docs/src/tools/<tool>.md`
+  (`cargo setup`'s is `docs/src/contributing/setup.md`); update README.md
+  and, when it affects writing the docs, `docs/src/contributing/docs.md`.
 
 CI enforces what it can: `runtime_docs_tests` fails on an undocumented
-public runtime declaration, `docs_examples_tests` compiles and runs every
+public runtime declaration, `tool_docs_tests` on a tool option missing from
+its page, `docs_examples_tests` compiles and runs every
 example, and `pep-doc check` fails when the reference is stale. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.

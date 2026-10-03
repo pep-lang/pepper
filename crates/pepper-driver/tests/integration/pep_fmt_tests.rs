@@ -8,26 +8,13 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
 
 use crate::support;
 use crate::support::repo_root;
 
-/// Builds pep-fmt once per test process and returns the executable.
+/// pep-fmt, built once per test process.
 fn pep_fmt() -> &'static Path {
-    static EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
-    EXECUTABLE.get_or_init(|| {
-        let root = repo_root();
-        // chdir so runtime discovery resolves like the CLI.
-        std::env::set_current_dir(&root).unwrap();
-        let build = std::env::temp_dir().join(format!("pepper_pep_fmt_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&build);
-        std::fs::create_dir_all(&build).unwrap();
-        let out = build.join(if cfg!(windows) { "pep-fmt.exe" } else { "pep-fmt" });
-        let tools = root.join("tools");
-        support::build_executable(&tools.join("pep-fmt").join("main.pep"), &[&tools], &out, &build.join("obj"));
-        out
-    })
+    support::pepper_tool("pep-fmt")
 }
 
 /// Runs pep-fmt on `source`: Ok(stdout) on success, Err(stderr) on failure.
@@ -470,4 +457,10 @@ fn pep_fmt_spaces_collection_literals() {
         "main(): int {\n    var a = [1,2 , 3];\n    var m = [\"a\" :1, \"b\":[2]];\n    HashMap<String, int> e = [ : ];\n    return 0;\n}\n",
         "main(): int {\n    var a = [1, 2, 3];\n    var m = [\"a\": 1, \"b\": [2]];\n    HashMap<String, int> e = [:];\n    return 0;\n}\n",
     );
+}
+
+#[test]
+fn pep_fmt_version_is_the_workspace_version() {
+    let output = Command::new(pep_fmt()).arg("--version").output().expect("run pep-fmt");
+    assert_eq!(support::stdout_of(&output), format!("pep-fmt {}\n", env!("CARGO_PKG_VERSION")));
 }

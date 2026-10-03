@@ -61,7 +61,10 @@
 # Tools
 
 - [The pepper command](tools/pepper.md)
+- [The compiler: pep-build](tools/pep-build.md)
 - [Formatting with pep-fmt](tools/pep-fmt.md)
+- [The language server: pep-lsp](tools/pep-lsp.md)
+- [The documentation builder: pep-doc](tools/pep-doc.md)
 - [Debugging](tools/debugging.md)
 
 # Standard library reference
@@ -158,4 +161,5 @@
 
 # Contributing
 
+- [Setting up LLVM: cargo setup](contributing/setup.md)
 - [Building this documentation](contributing/docs.md)

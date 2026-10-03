@@ -1651,3 +1651,13 @@ test(): int {
     let (_, rest) = definition(&uri, &text, &program, at(&text, "dollars as", 0, 0));
     assert!(rest.starts_with("dollars: long"), "{}", rest);
 }
+
+#[test]
+fn arguments_start_the_server_or_answer_without_it() {
+    let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+    assert_eq!(handle_arguments(&args(&[])), None);
+    assert_eq!(handle_arguments(&args(&["--stdio"])), None);
+    assert_eq!(handle_arguments(&args(&["--version"])), Some(0));
+    assert_eq!(handle_arguments(&args(&["--help"])), Some(0));
+    assert_eq!(handle_arguments(&args(&["--port", "9000"])), Some(2));
+}

@@ -164,30 +164,17 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | Option | What it does |
 |---|---|
 | `-o <file>` | Name the output executable (or library, with `--lib`). |
-| `--lib static`, `--lib shared` | Build a library for C code to link instead of an executable, with a C header declaring its `[Export]`ed functions. See [calling Pepper from C](../language/c-interop.md#calling-pepper-from-c). |
+| `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. |
+| `-g` | Emit debug info for gdb, lldb, Visual Studio and WinDbg. See [debugging](../tools/debugging.md). |
 | `-I <dir>` | Add a directory to search for imported modules. See [modules and imports](../language/modules.md). |
-| `-l <lib>` | Link a C library. See [linking](../language/linking.md). |
-| `-L <dir>` | Add a folder the linker searches for libraries. Folders in `PEPPER_LIBRARY_PATH` are searched after it. See [linking](../language/linking.md#library-search-directories-in-the-source-and-the-environment). |
-| `-D <name>`, `-D <name>=<value>` | Define a build option, which `[BuildOption("name")]` and `[Target(BuildOption(name))]` select code by. A bare name is `name=1`. See [build options](../language/build-options.md). |
-| `--import <name>` | Load a module into every file of the program, like the standard library. |
-| `--build <dir>` | Write intermediate files to `<dir>` instead of `.pep/build/`. |
-| `-g` | Emit debug info for gdb, lldb, Visual Studio and WinDbg (a `.pdb` on Windows). See [debugging](../tools/debugging.md). |
-| `-O`, `-O<n>` | Optimize: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `PEPPER_OPT_LEVEL` (`0` to `3`) when set. At `-O2` and `-O3` the whole program is also optimized together once every file is compiled. |
-| `--lto=off` | At `-O2` and `-O3`, optimize each file alone, without link-time optimization: builds link sooner, and calls between files are not inlined. `--lto=full` turns it on at `-O1`. |
-| `-march=<cpu>`, `-mcpu=<cpu>`, `-mtune=<cpu>`, `-m<feature>`, `-mno-<feature>` | Generate code for a CPU, as clang's options of the same names do. On x86-64, `-march` names the CPU (`x86-64-v3`, `znver4`, `native` for the machine compiling). On AArch64, `-mcpu` names the CPU (`apple-m2`, `native`) and `-march` the architecture (`armv8.2-a+crypto`). `-mtune` only changes scheduling. `-m<feature>` adds a feature (`-mavx2`) and `-mno-<feature>` removes one. Without them, the program runs on any machine of its kind: clang's default CPU (`x86-64`; `apple-m1` on Apple arm64). |
-| `--target <triple>` | Compile for another platform (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `aarch64-unknown-linux-gnu`); see [Cross-compiling](../language/platform-selection.md#cross-compiling). |
-| `--sysroot <dir>` | The other platform's system libraries, for linking with `--target`. Without it, `PEPPER_SYSROOT_<TRIPLE>` when set. |
-| `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`, optimized at the `-O` level. |
-| `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
-| `-v` | Print what the compiler is doing. |
-| `-T time` | Print how long each stage of the compile took. |
-| `-T passes` | Print how long each pass of the checker took, summed over its runs, slowest first. |
-| `-T cache` | Print how the build cache supplied each object: `hit` (its sources, and its imports' declarations, unchanged), `hit (same code)` (recompiled, same code), or `miss`. |
-| `--no-cache` | Compile everything without reading or writing the build cache. |
-| `--cache <dir>` | Keep the build cache in `<dir>` instead of `.pep/cache/` (also `PEPPER_CACHE_DIR`). |
-| `--verify-cache` | Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file's code (for testing the compiler; also `PEPPER_CACHE_VERIFY=1`). |
-| `--no-verify-cache` | Do not verify the cache, even with `PEPPER_CACHE_VERIFY` set. |
+| `-l <lib>`, `-L <dir>` | Link a C library, and add a folder to find it in. See [linking](../language/linking.md). |
+| `-D <name>[=<value>]` | Define a [build option](../language/build-options.md). |
+| `--target <triple>` | Compile for another platform; see [Cross-compiling](../language/platform-selection.md#cross-compiling). |
+| `--lib static`, `--lib shared` | Build a library for C code to link. See [calling Pepper from C](../language/c-interop.md#calling-pepper-from-c). |
 | `--help` | List every option. |
+
+[The compiler: pep-build](../tools/pep-build.md) describes every option and
+environment variable the compiler reads.
 
 A program can span several files: pass the entry file, and the compiler finds
 the files it imports on its own.

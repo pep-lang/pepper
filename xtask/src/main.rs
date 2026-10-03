@@ -30,23 +30,10 @@ use std::process::{Command, ExitCode};
 /// makes cargo rebuild this when that table changes.
 const WORKSPACE_MANIFEST: &str = include_str!("../../Cargo.toml");
 
-const USAGE: &str = "\
-Provision the LLVM toolchain this workspace builds against.
-
-  cargo run -p xtask -- setup [options]     (first time)
-  cargo setup [options]                     (afterwards; the alias is written
-                                             into .cargo/config.toml)
-
-Options:
-  --llvm <major>   provision this LLVM major instead of the default
-  --devtools       also set up a debugger (lldb)
-  --no-devtools    skip that, overriding PEPPER_SETUP_DEVTOOLS if it is set
-  --no-packages    skip apt/Homebrew; use an existing install or the archive
-  --check          report the current state and exit without changing anything
-  -h, --help       this text
-
-Environment: PEPPER_LLVM_MAJOR and PEPPER_SETUP_DEVTOOLS work too, and are
-what CI sets.";
+/// What `cargo setup --help` prints. The book's contributing/setup.md
+/// documents each option it lists, and the driver's `tool_docs_tests`
+/// checks that it does.
+const USAGE: &str = include_str!("usage.txt");
 
 /// What the arguments asked for.
 enum Plan {
@@ -117,14 +104,14 @@ fn main() -> ExitCode {
     let plan = match plan(&args) {
         Ok(plan) => plan,
         Err(message) => {
-            eprintln!("{message}\n\n{USAGE}");
+            eprintln!("{message}\n\n{}", USAGE.trim_end());
             return ExitCode::FAILURE;
         }
     };
 
     match plan {
         Plan::Help => {
-            println!("{USAGE}");
+            println!("{}", USAGE.trim_end());
             ExitCode::SUCCESS
         }
         Plan::Check => {

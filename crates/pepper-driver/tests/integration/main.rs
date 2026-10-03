@@ -86,6 +86,7 @@ mod shared_ptr_semantics_tests;
 mod socket_tests;
 mod task_tests;
 mod tls_tests;
+mod tool_docs_tests;
 mod static_call_tests;
 mod store_type_tests;
 mod static_string_tests;

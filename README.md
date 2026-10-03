@@ -95,7 +95,8 @@ cargo setup --llvm 19        # provision a different major
 cargo setup --check          # what is configured, and how to build it
 ```
 
-Under the hood it runs the platform's script, which you can also invoke
+Every option of `cargo setup` is in the book's
+[Setting up LLVM](docs/src/contributing/setup.md). Under the hood it runs the platform's script, which you can also invoke
 directly — that is what CI does:
 
 ```bash
@@ -228,11 +229,16 @@ runs `pep-fmt`, and `pepper help` lists the `pep-*` commands it finds next to
 itself or on the `PATH` (see the book's
 [pepper command](https://justinboswell.github.io/pepper/tools/pepper.html)).
 `pepper main.pep` still runs the compiler, with a deprecation warning.
+Every option and environment variable the compiler reads is described in
+the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
+other tools' options are in [The pepper command](docs/src/tools/pepper.md),
+[pep-fmt](docs/src/tools/pep-fmt.md), [pep-lsp](docs/src/tools/pep-lsp.md)
+and [pep-doc](docs/src/tools/pep-doc.md).
 From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash
 cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout
-cargo run -- tests/hello.pep --emit-llvm    # emit IR to .pep/build/hello.ll
+cargo run -- tests/hello.pep --emit-llvm    # write IR to .pep/build/hello.ll instead of linking
 cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 cargo run -- tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)

@@ -181,6 +181,31 @@ pub fn run_under_wasmtime(wasi: &Wasi, entry: &Path, extra: &[&str], build: &Pat
     Ok(output)
 }
 
+/// The tool written in Pepper at `tools/<name>/main.pep` (`pep-fmt`,
+/// `pepper`), compiled once per test process with `tools/` on the import
+/// path, as its build instructions say. Returns the executable, named
+/// `<name>` (`<name>.exe` on Windows) in a scratch directory of its own.
+pub fn pepper_tool(name: &str) -> &'static Path {
+    static BUILT: Mutex<Vec<(String, &'static Path)>> = Mutex::new(Vec::new());
+    // Held while building, so two tests asking for one tool build it once.
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, path)) = built.iter().find(|(built, _)| built == name) {
+        return path;
+    }
+    let root = repo_root();
+    // chdir so runtime discovery resolves like the CLI.
+    std::env::set_current_dir(&root).unwrap();
+    let build = std::env::temp_dir().join(format!("pepper_tool_{}_{}", name, std::process::id()));
+    let _ = std::fs::remove_dir_all(&build);
+    std::fs::create_dir_all(&build).unwrap();
+    let out = build.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+    let tools = root.join("tools");
+    build_executable(&tools.join(name).join("main.pep"), &[&tools], &out, &build.join("obj"));
+    let path: &'static Path = Box::leak(out.into_boxed_path());
+    built.push((name.to_string(), path));
+    path
+}
+
 /// The repository root, two levels above this crate.
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
