@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3b035b99.js";
+            window.path_to_searchindex_js = "searchindex-0811de56.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57b6db41.js"></script>
@@ -18768,6 +18768,9 @@ the panic must contain.</li>
 returns. A panic aborts the program; a test that runs past the timeout
 ends it with exit status 124.</li>
 </ul>
+<p>On Windows, a test program turns off Windows Error Reporting for its
+crashes and <code>abort()</code>, so a test that panics or crashes ends at once,
+without a dialog.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-language-server-pep-lsp"><a class="header" href="#the-language-server-pep-lsp">The language server: pep-lsp</a></h1>
 <p><code>pep-lsp</code> is Pepper’s language server. An editor starts it and talks to it
