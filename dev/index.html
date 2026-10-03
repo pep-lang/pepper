@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d41a7b3.js"></script>
+        <script src="toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -221,9 +221,11 @@ detail.</p>
 generates native code through <a href="https://llvm.org">LLVM</a>, then links an
 executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
-<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
+<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), compiles
 to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
-<a href="language/platform-selection.html#webassembly">WebAssembly</a>).
+<a href="language/platform-selection.html#webassembly">WebAssembly</a>), and builds
+libraries that iOS and Android apps call (see
+<a href="language/mobile.html">iOS and Android</a>).
 Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
 and macOS (arm64 and x64), and installs with one command: see
 <a href="tools/install.html">Installing Pepper</a>.</p>

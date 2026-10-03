@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d41a7b3.js"></script>
+        <script src="../toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -443,18 +443,27 @@ it, <code>-O</code> and <code>-g</code>. It is part of the build cache’s key.<
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
 <code>x86_64-unknown-linux-gnu</code>, <code>aarch64-unknown-linux-gnu</code>,
-<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code> or
-<code>aarch64-pc-windows-msvc</code>, with a version allowed where clang allows one
-(<code>arm64-apple-macosx14.0</code>). An unsupported triple is an error that lists the
+<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>,
+<code>aarch64-pc-windows-msvc</code>, <code>wasm32-wasip1</code>, <code>aarch64-apple-ios</code>,
+<code>aarch64-apple-ios-simulator</code>, <code>x86_64-apple-ios-simulator</code>,
+<code>aarch64-linux-android</code> or <code>x86_64-linux-android</code>, with a version allowed
+where clang allows one (<code>arm64-apple-macosx14.0</code>, <code>aarch64-apple-ios17.0</code>,
+<code>aarch64-linux-android33</code>). An unsupported triple is an error that lists the
 supported ones. <code>[Target(...)]</code> selects code for the target. The default is
 the machine the compiler runs on. See
-<a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a>.</p>
+<a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a> and
+<a href="../language/mobile.html">iOS and Android</a>.</p>
 <h3 id="--sysroot-dir"><a class="header" href="#--sysroot-dir"><code>--sysroot &lt;dir&gt;</code></a></h3>
 <p>The folder that holds the target’s system headers and libraries, passed to
 the link driver, for linking with <code>--target</code>. Without it, the folder named by
 <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when that is set: the triple in capitals, with <code>_</code>
 for each character that is not a letter or digit
-(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>).</p>
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>). An iOS
+or Android triple’s variable leaves out the OS version
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code> for
+<code>aarch64-apple-ios17.0-simulator</code>). For iOS it is an iOS SDK, which on a Mac
+defaults to the one <code>xcrun</code> names; for Android it is the NDK (see
+<code>ANDROID_NDK_HOME</code> below).</p>
 <h2 id="linking"><a class="header" href="#linking">Linking</a></h2>
 <h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
 <p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
@@ -570,6 +579,9 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite’s JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
 <tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
 <tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_NDK_HOME</code>, <code>ANDROID_NDK_ROOT</code></td><td>The Android NDK for linking with an Android <code>--target</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> names one</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>

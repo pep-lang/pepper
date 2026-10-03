@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d41a7b3.js"></script>
+        <script src="../toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,6 +212,15 @@ uses.</p>
 <pre><code class="language-pepper">Wasi
 </code></pre>
 <p>WASI: a WebAssembly runtime such as wasmtime (<code>--target wasm32-wasip1</code>).</p>
+<h4 id="ios"><a class="header" href="#ios">IOS</a></h4>
+<pre><code class="language-pepper">IOS
+</code></pre>
+<p>iOS and iPadOS, on a device or in the simulator (<code>--target aarch64-apple-ios</code>). <code>[Target(OS(Mac))]</code> covers it too.</p>
+<h4 id="android"><a class="header" href="#android">Android</a></h4>
+<pre><code class="language-pepper">Android
+</code></pre>
+<p>Android (<code>--target aarch64-linux-android</code>). <code>[Target(OS(Linux))]</code>
+covers it too.</p>
 <h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
 <pre><code class="language-pepper">system_os(): OperatingSystem
 </code></pre>
@@ -233,8 +242,8 @@ main(): int {
 <pre><code class="language-pepper">system_name(): String
 </code></pre>
 <p>Returns the name of the operating system the program was built for, in
-lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code> or <code>"wasi"</code>, for printing
-and for file and directory names.</p>
+lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code>, <code>"wasi"</code>, <code>"ios"</code> or
+<code>"android"</code>, for printing and for file and directory names.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the operating system’s name</li>

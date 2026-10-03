@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d41a7b3.js"></script>
+        <script src="../toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,8 +193,13 @@ version side by side.</p>
 <p><code>Target</code> takes one boolean condition built from these predicates:</p>
 <ul>
 <li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
-<code>MacOS</code>), <code>Linux</code>, or <code>Wasi</code> (WebAssembly, see
-<a href="#webassembly">below</a>).</li>
+<code>MacOS</code>), <code>Linux</code>, <code>Wasi</code> (WebAssembly, see <a href="#webassembly">below</a>),
+<code>IOS</code> or <code>Android</code> (see <a href="mobile.html">iOS and Android</a>). As in C, where
+<code>TARGET_OS_MAC</code> holds on every Apple OS and <code>__linux__</code> on Android,
+<code>OS(Mac)</code> is also true on iOS and <code>OS(Linux)</code> on Android: they share
+the kernel and most of the C library, so code for macOS or Linux usually
+works there unchanged. Write <code>OS(Mac) &amp;&amp; !OS(IOS)</code> for macOS alone, and
+<code>OS(Linux) &amp;&amp; !OS(Android)</code> for desktop and server Linux alone.</li>
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
 <code>aarch64</code>, or <code>wasm32</code>.</li>
 <li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
@@ -323,7 +328,7 @@ never a silent “no match”:</p>
 <pre><code class="language-pepper">[Target(OS(Darwin))]
 f(): int { return 1; }
 </code></pre>
-<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
+<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
     1 | [Target(OS(Darwin))]
       | ^~~~~~~~~~~~~~~~~~~~
 </code></pre>
@@ -357,13 +362,21 @@ and object format. The supported targets are each OS on each architecture:</p>
 <tr><td><code>x86_64-pc-windows-msvc</code></td><td>Windows</td><td><code>x64</code></td></tr>
 <tr><td><code>aarch64-pc-windows-msvc</code></td><td>Windows</td><td><code>aarch64</code></td></tr>
 <tr><td><code>wasm32-wasip1</code></td><td>Wasi</td><td><code>wasm32</code></td></tr>
+<tr><td><code>aarch64-apple-ios</code></td><td>iOS</td><td><code>aarch64</code></td></tr>
+<tr><td><code>aarch64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-linux-android</code></td><td>Android</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-linux-android</code></td><td>Android</td><td><code>x64</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>clang’s other spellings work too: <code>arm64</code> for <code>aarch64</code>, <code>amd64</code> for
-<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>). Any
-other triple is an error that lists these. <code>wasm32-wasi</code>,
-<code>wasm32-unknown-wasi</code> and <code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>.</p>
+<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>,
+<code>aarch64-apple-ios17.0</code>, <code>aarch64-linux-android33</code>). Any other triple is an
+error that lists these. <code>wasm32-wasi</code>, <code>wasm32-unknown-wasi</code> and
+<code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>. The iOS and Android
+targets, their versions and their SDKs are described in
+<a href="mobile.html">iOS and Android</a>.</p>
 <pre><code class="language-sh">pepper build --target aarch64-unknown-linux-gnu main.pep -o main
 </code></pre>
 <p>Linking an executable for another platform needs that platform’s system
@@ -452,7 +465,7 @@ version, and no total memory.</li>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../language/build-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/mobile.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -466,7 +479,7 @@ version, and no total memory.</li>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../language/build-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/mobile.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

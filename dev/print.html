@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d41a7b3.js"></script>
+        <script src="toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -219,9 +219,11 @@ detail.</p>
 generates native code through <a href="https://llvm.org">LLVM</a>, then links an
 executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
-<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
+<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), compiles
 to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
-<a href="#webassembly">WebAssembly</a>).
+<a href="#webassembly">WebAssembly</a>), and builds
+libraries that iOS and Android apps call (see
+<a href="#ios-and-android">iOS and Android</a>).
 Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
 and macOS (arm64 and x64), and installs with one command: see
 <a href="#installing-pepper">Installing Pepper</a>.</p>
@@ -308,7 +310,7 @@ program.</li>
 topic you need.</li>
 <li><strong>Tools.</strong> <a href="#the-pepper-command">The pepper command</a>,
 <a href="#formatting-with-pep-fmt">pep-fmt</a>, <a href="#profiling-with-pep-profile">pep-profile</a>,
-<a href="#testing-with-pep-test">pep-test</a> and <a href="#debugging">debugging</a>.</li>
+<a href="#testing-with-pep-test">pep-test</a> and <a href="#debugging-1">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime’s own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>
@@ -477,7 +479,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tbody>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the output executable (or library, with <code>--lib</code>).</td></tr>
 <tr><td><code>-O</code>, <code>-O&lt;n&gt;</code></td><td>Optimize: <code>-O0</code> (the default) through <code>-O3</code>; <code>-O</code> alone is <code>-O2</code>.</td></tr>
-<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg. See <a href="#debugging">debugging</a>.</td></tr>
+<tr><td><code>-g</code></td><td>Emit debug info for gdb, lldb, Visual Studio and WinDbg. See <a href="#debugging-1">debugging</a>.</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a directory to search for imported modules. See <a href="#modules-and-imports">modules and imports</a>.</td></tr>
 <tr><td><code>-l &lt;lib&gt;</code>, <code>-L &lt;dir&gt;</code></td><td>Link a C library, and add a folder to find it in. See <a href="#linking">linking</a>.</td></tr>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a <a href="#build-options">build option</a>.</td></tr>
@@ -9170,7 +9172,7 @@ specialization it happened in (see <a href="#in-generic-code">In generic code</a
 <p><strong>The emitted code runs like code written by hand.</strong> Each statement a
 block emits keeps the source line of the statement it came from, so a
 runtime <code>print</code> it emits shows values as the program runs, and a
-<a href="#debugging">debugger</a> breakpoint on that line (with <code>-g</code>)
+<a href="#debugging-1">debugger</a> breakpoint on that line (with <code>-g</code>)
 stops there, in every pass. Stepping goes through an unrolled loop pass
 by pass, stopping on the <code>for</code> line and then on the body, and the
 debugger shows the compile-time variables, such as the loop’s <code>field</code>
@@ -15706,7 +15708,7 @@ ends the program, so guard it:</p>
 }
 </code></pre>
 <p><code>break</code> is a keyword, so the function is called <code>breakpoint</code>.</p>
-<p>See <a href="#debugging">Debugging</a> for running a program under gdb,
+<p>See <a href="#debugging-1">Debugging</a> for running a program under gdb,
 lldb or Visual Studio.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="unit-tests"><a class="header" href="#unit-tests">Unit tests</a></h1>
@@ -16737,8 +16739,13 @@ version side by side.</p>
 <p><code>Target</code> takes one boolean condition built from these predicates:</p>
 <ul>
 <li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
-<code>MacOS</code>), <code>Linux</code>, or <code>Wasi</code> (WebAssembly, see
-<a href="#webassembly">below</a>).</li>
+<code>MacOS</code>), <code>Linux</code>, <code>Wasi</code> (WebAssembly, see <a href="#webassembly">below</a>),
+<code>IOS</code> or <code>Android</code> (see <a href="#ios-and-android">iOS and Android</a>). As in C, where
+<code>TARGET_OS_MAC</code> holds on every Apple OS and <code>__linux__</code> on Android,
+<code>OS(Mac)</code> is also true on iOS and <code>OS(Linux)</code> on Android: they share
+the kernel and most of the C library, so code for macOS or Linux usually
+works there unchanged. Write <code>OS(Mac) &amp;&amp; !OS(IOS)</code> for macOS alone, and
+<code>OS(Linux) &amp;&amp; !OS(Android)</code> for desktop and server Linux alone.</li>
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
 <code>aarch64</code>, or <code>wasm32</code>.</li>
 <li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
@@ -16867,7 +16874,7 @@ never a silent “no match”:</p>
 <pre><code class="language-pepper">[Target(OS(Darwin))]
 f(): int { return 1; }
 </code></pre>
-<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
+<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
     1 | [Target(OS(Darwin))]
       | ^~~~~~~~~~~~~~~~~~~~
 </code></pre>
@@ -16901,13 +16908,21 @@ and object format. The supported targets are each OS on each architecture:</p>
 <tr><td><code>x86_64-pc-windows-msvc</code></td><td>Windows</td><td><code>x64</code></td></tr>
 <tr><td><code>aarch64-pc-windows-msvc</code></td><td>Windows</td><td><code>aarch64</code></td></tr>
 <tr><td><code>wasm32-wasip1</code></td><td>Wasi</td><td><code>wasm32</code></td></tr>
+<tr><td><code>aarch64-apple-ios</code></td><td>iOS</td><td><code>aarch64</code></td></tr>
+<tr><td><code>aarch64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-linux-android</code></td><td>Android</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-linux-android</code></td><td>Android</td><td><code>x64</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>clang’s other spellings work too: <code>arm64</code> for <code>aarch64</code>, <code>amd64</code> for
-<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>). Any
-other triple is an error that lists these. <code>wasm32-wasi</code>,
-<code>wasm32-unknown-wasi</code> and <code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>.</p>
+<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>,
+<code>aarch64-apple-ios17.0</code>, <code>aarch64-linux-android33</code>). Any other triple is an
+error that lists these. <code>wasm32-wasi</code>, <code>wasm32-unknown-wasi</code> and
+<code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>. The iOS and Android
+targets, their versions and their SDKs are described in
+<a href="#ios-and-android">iOS and Android</a>.</p>
 <pre><code class="language-sh">pepper build --target aarch64-unknown-linux-gnu main.pep -o main
 </code></pre>
 <p>Linking an executable for another platform needs that platform’s system
@@ -16986,6 +17001,218 @@ permission bits (<code>read_only</code> is false) and no creation time.</li>
 version, and no total memory.</li>
 <li>Pointers and C’s <code>long</code> and <code>size_t</code> are 32 bits; see
 <a href="#32-bit-targets">32-bit targets</a>.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ios-and-android"><a class="header" href="#ios-and-android">iOS and Android</a></h1>
+<p>Pepper compiles natively for iOS and Android through the same LLVM backend
+it uses everywhere else: <code>--target</code> picks the platform, and the result is
+ordinary machine code for an iPhone, an iPad, the iOS simulator, or an
+Android phone. An app calls the Pepper code through C, as any C library is
+called: mark the functions <code>[Export]</code>, build a library with <code>--lib static</code>
+(see <a href="#calling-pepper-from-c">Calling Pepper from C</a>), and call
+it from Swift directly, or from Kotlin and Java through JNI.</p>
+<h2 id="targets"><a class="header" href="#targets">Targets</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Triple</th><th>Runs on</th></tr>
+</thead>
+<tbody>
+<tr><td><code>aarch64-apple-ios</code></td><td>iPhone and iPad</td></tr>
+<tr><td><code>aarch64-apple-ios-simulator</code></td><td>the iOS simulator on an Apple silicon Mac</td></tr>
+<tr><td><code>x86_64-apple-ios-simulator</code></td><td>the iOS simulator on an Intel Mac</td></tr>
+<tr><td><code>aarch64-linux-android</code></td><td>Android phones and tablets (<code>arm64-v8a</code>)</td></tr>
+<tr><td><code>x86_64-linux-android</code></td><td>the Android emulator on x64 (<code>x86_64</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>
+<p><strong>Versions.</strong> A triple can name the oldest OS version the code runs on:
+<code>aarch64-apple-ios17.0</code>, <code>aarch64-apple-ios17.0-simulator</code>,
+<code>aarch64-linux-android33</code>. Without one, iOS code runs on iOS 15 and later
+and Android code on API level 30 (Android 11) and later. Pepper’s runtime
+needs API level 30, so an older one is an error:</p>
+<pre><code class="language-text">error: unsupported target 'aarch64-linux-android24': Pepper's runtime needs Android API level 30 or later (write 'android30')
+</code></pre>
+</li>
+<li>
+<p><strong>Spellings.</strong> <code>arm64</code> works for <code>aarch64</code>, as do Rust’s <code>-sim</code> for
+<code>-simulator</code> and any vendor (<code>aarch64-unknown-linux-android</code>).
+<code>x86_64-apple-ios</code> means the simulator, since no iPhone is x64.</p>
+</li>
+<li>
+<p><strong>CPU.</strong> Code for an iPhone runs on every arm64 iPhone (clang’s
+<code>apple-a7</code>); add <code>-mcpu=apple-a14</code> to use what newer ones have. Android
+x64 code uses SSE4.2 and POPCNT, which the Android x86_64 ABI requires.</p>
+</li>
+</ul>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>A library for an app needs no SDK, only the compiler:</p>
+<pre><code class="language-sh">pepper build --target aarch64-apple-ios --lib static greeter.pep -o ios/libgreeter.a
+pepper build --target aarch64-linux-android --lib static greeter.pep -o android/libgreeter.a
+</code></pre>
+<p>Each writes <code>greeter.h</code> beside the library. Build the library once for each
+target the app ships: the device and the simulator on iOS, and each
+Android ABI.</p>
+<p>Linking, for a shared library or an executable to run in the simulator or
+an emulator, needs the platform’s SDK:</p>
+<ul>
+<li><strong>iOS</strong> links with LLVM’s <code>ld64.lld</code> against an iOS SDK. On a Mac with
+Xcode the compiler asks <code>xcrun</code> for it (<code>iphoneos</code>, or <code>iphonesimulator</code>
+for the simulator). Elsewhere name it with <code>--sysroot</code>, or set
+<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS</code> (and
+<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code>, and so on): the variable is
+named for the triple without its version.</li>
+<li><strong>Android</strong> links with the NDK’s own clang, which brings the NDK’s
+linker, compiler-rt and unwinder. Name the NDK with <code>--sysroot &lt;ndk&gt;</code> or
+<code>PEPPER_SYSROOT_AARCH64_LINUX_ANDROID</code>, or set <code>ANDROID_NDK_HOME</code> or
+<code>ANDROID_NDK_ROOT</code>; otherwise the newest NDK in the Android SDK
+(<code>$ANDROID_HOME/ndk/&lt;version&gt;</code>, as Android Studio installs it) is used.
+NDK r27 is the version tested.</li>
+</ul>
+<p>When the SDK is missing, the link error says where to point the compiler:</p>
+<pre><code class="language-text">note: linking for 'aarch64-linux-android30' needs the Android NDK (https://developer.android.com/ndk/downloads): pass '--sysroot &lt;ndk&gt;' or set PEPPER_SYSROOT_AARCH64_LINUX_ANDROID, ANDROID_NDK_HOME or ANDROID_HOME
+</code></pre>
+<h2 id="selecting-code-for-a-platform"><a class="header" href="#selecting-code-for-a-platform">Selecting code for a platform</a></h2>
+<p><code>[Target(OS(IOS))]</code> and <code>[Target(OS(Android))]</code> select code for one of
+them. Most code needs neither: iOS is Darwin, like macOS, and Android runs
+the Linux kernel, so <code>OS(Mac)</code> is true on iOS and <code>OS(Linux)</code> on Android,
+as <code>TARGET_OS_MAC</code> and <code>__linux__</code> are in C (see
+<a href="#writing-a-condition">Platform selection</a>). The
+runtime’s macOS and Linux code serves them, with a few declarations
+narrowed where they differ. At run time, <code>os.system_os()</code> returns
+<code>OperatingSystem.IOS</code> or <code>OperatingSystem.Android</code>.</p>
+<h2 id="calling-pepper-from-swift"><a class="header" href="#calling-pepper-from-swift">Calling Pepper from Swift</a></h2>
+<p>Swift calls C directly. Give <code>swiftc</code> the generated header as the bridging
+header, and link the library:</p>
+<pre><code class="language-sh">xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
+  -import-objc-header greeter.h App.swift -L . -lgreeter -o App.app/App
+</code></pre>
+<p>In an Xcode project, add the library to the target’s <em>Link Binary With
+Libraries</em> phase and <code>#include "greeter.h"</code> in the target’s bridging header.
+A <code>String</code> crosses as a pointer and a size, and a returned string is freed
+with <code>pepper_string_free</code>:</p>
+<pre><code class="language-swift">func pepperGreeting(_ name: String) -&gt; String {
+    let result = name.withCString { greet($0, strlen($0)) }!
+    defer { pepper_string_free(result) }
+    return String(cString: result)
+}
+</code></pre>
+<h2 id="calling-pepper-from-kotlin-or-java"><a class="header" href="#calling-pepper-from-kotlin-or-java">Calling Pepper from Kotlin or Java</a></h2>
+<p>Kotlin and Java reach C through JNI: a shared library holds the Pepper code
+and a C function for each <code>native</code> method, named for its class, which
+converts Java’s types to the C ones the header declares. Link both with the
+NDK’s clang into the <code>.so</code> the app loads:</p>
+<pre><code class="language-sh">pepper build --target aarch64-linux-android --lib static greeter.pep -o pepper/libgreeter.a
+$NDK/toolchains/llvm/prebuilt/*/bin/clang --target=aarch64-linux-android30 -shared -fPIC \
+  -I pepper jni.c pepper/libgreeter.a -lm -o jniLibs/arm64-v8a/libgreeter.so
+</code></pre>
+<pre><code class="language-c">JNIEXPORT jstring JNICALL
+Java_dev_pepper_demo_MainActivity_greet(JNIEnv* env, jclass cls, jstring name) {
+    const char* bytes = (*env)-&gt;GetStringUTFChars(env, name, NULL);
+    char* result = greet(bytes, strlen(bytes));
+    (*env)-&gt;ReleaseStringUTFChars(env, name, bytes);
+    jstring greeting = (*env)-&gt;NewStringUTF(env, result);
+    pepper_string_free(result);
+    return greeting;
+}
+</code></pre>
+<p>The Kotlin side declares the function <code>external</code> and loads the library
+once:</p>
+<pre><code class="language-kotlin">class MainActivity : Activity() {
+    companion object {
+        init { System.loadLibrary("greeter") }
+        @JvmStatic external fun greet(name: String): String
+    }
+}
+</code></pre>
+<p>With Gradle, put each ABI’s <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
+(<code>arm64-v8a</code>, <code>x86_64</code>), or build it from the module’s <code>CMakeLists.txt</code>
+with the static library as an imported target.</p>
+<h2 id="threads-1"><a class="header" href="#threads-1">Threads</a></h2>
+<p>Exported functions may be called from any thread (see
+<a href="#initialization-panics-and-threads">Initialization, panics and threads</a>),
+so the app decides where Pepper code runs. Keep long work off the main
+thread (iOS’s main queue, Android’s UI thread): call it from a background
+queue, a coroutine on <code>Dispatchers.Default</code>, or a Pepper thread or task the
+library starts itself. Pepper code never calls back into UIKit or Android’s
+views on its own; hand results back to the main thread on the app’s side.</p>
+<h2 id="what-works-differently"><a class="header" href="#what-works-differently">What works differently</a></h2>
+<p>The runtime runs the documentation’s examples on both platforms, with these
+differences:</p>
+<ul>
+<li><strong>Starting processes.</strong> An iOS app cannot start other programs, and the
+<code>process</code> module’s <code>Command.spawn</code> returns an <code>IoError</code> there. On Android
+it works, but an app has few programs to start, and below API level 34
+<code>Command.working_directory</code> makes <code>spawn</code> return an <code>IoError</code> (bionic
+lacks <code>posix_spawn_file_actions_addchdir_np</code> there).</li>
+<li><strong>TLS.</strong> The <code>tls</code> module (and HTTPS) loads OpenSSL at run time, which
+neither platform ships, so making a TLS context returns an <code>IoError</code>
+unless the app bundles <code>libssl</code>. Use the platform’s own networking
+(<code>URLSession</code>, OkHttp) for HTTPS for now.</li>
+<li><strong>Files.</strong> An app reads and writes inside its own container: pass the
+path the platform gives (<code>FileManager</code>’s documents directory,
+<code>Context.getFilesDir()</code>) to the Pepper code. <code>os.home_directory()</code> and
+the temporary directory point into the container on iOS. Android has no
+<code>/tmp</code>: without <code>TMPDIR</code>, <code>io.Directory.temp()</code> is <code>/data/local/tmp</code>,
+which an app cannot write, so an app passes its cache directory. A Unix
+socket’s path is at most 104 bytes there, and the container’s own path
+takes most of them, so give a socket there a short name. On Android, an
+app creates Unix socket files in its own data folder
+(<code>Context.getFilesDir()</code>); SELinux refuses them elsewhere, and from an
+<code>adb shell</code> program everywhere, with a permission error.</li>
+<li><strong>Backtraces.</strong> Android’s backtraces come from the NDK’s unwinder
+(bionic’s <code>backtrace</code> needs API level 33), and both platforms name
+functions from the binary’s own symbols, so strip a release build only
+after keeping a copy for symbolication.</li>
+<li><strong>Standard output</strong> goes to the Xcode console and the simulator’s
+<code>--stdout</code> file on iOS. On Android it goes nowhere in an app: log with the
+platform’s logger instead (<code>__android_log_write</code> through an <code>extern</code>).</li>
+</ul>
+<h2 id="shipping"><a class="header" href="#shipping">Shipping</a></h2>
+<ul>
+<li>Pepper compiles ahead of time, so iOS’s ban on JIT compilation does not
+apply. Bitcode is no longer required by the App Store.</li>
+<li>A static library is linked into the app’s own binary, so its code is
+covered by the app’s signature; strip the release build’s symbols as
+usual (Xcode’s <em>Strip Linked Product</em>, the Android Gradle plugin’s
+<code>strip</code> of <code>jniLibs</code>). A Pepper library adds the runtime parts the
+program uses: the prototype app’s library below is about 1 MB unstripped.</li>
+<li>Each Android ABI needs its own <code>.so</code>; Google Play requires <code>arm64-v8a</code>.</li>
+</ul>
+<h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
+<p><code>-g</code> writes DWARF, which LLDB reads in both Xcode and Android Studio. Build
+the library with <code>-g</code> and the app in its debug configuration, and set
+breakpoints in the <code>.pep</code> files by path.</p>
+<h2 id="the-prototype-apps"><a class="header" href="#the-prototype-apps">The prototype apps</a></h2>
+<p><code>docs/examples/mobile/</code> holds a small app for each platform that calls the
+same Pepper library, <a href="../examples/mobile/greeter.pep"><code>greeter.pep</code></a>:</p>
+<ul>
+<li><code>ios/</code>: a SwiftUI app (<code>PepperDemo.swift</code>), and <code>build.sh</code>, which builds
+it with <code>swiftc</code> for the simulator and for devices, installs it in a
+booted simulator, launches it and checks its output.</li>
+<li><code>android/</code>: an activity in Java with the JNI functions in <code>jni.c</code>, and
+<code>build.sh</code>, which builds the APK with the Android SDK’s own tools
+(<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed), installs it
+in the emulator, starts it and checks its log.</li>
+</ul>
+<p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
+it builds every documentation example for the iOS simulator and for Android,
+runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
+(<code>adb shell</code>), then builds and runs the two apps.</p>
+<pre><code class="language-sh">bash scripts/mobile-test.sh target/debug/pep-build /tmp/mobile all
+</code></pre>
+<h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
+<ul>
+<li><strong>TLS through the platform</strong>: Security.framework on iOS, and on Android
+the system’s BoringSSL through Conscrypt or a bundled OpenSSL.</li>
+<li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
+by hand; a generator could write them from the header.</li>
+<li><strong>Packaging</strong>: an <code>.xcframework</code> holding the device and simulator
+libraries, a Swift package, and an Android library (<code>.aar</code>).</li>
+<li><strong>Other targets</strong>: 32-bit Android (<code>armeabi-v7a</code>, <code>x86</code>), Mac Catalyst,
+tvOS, watchOS and visionOS.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="build-options"><a class="header" href="#build-options">Build options</a></h1>
@@ -17171,7 +17398,9 @@ libraries itself, so you do not need a Developer Command Prompt.</li>
 </ul>
 <p>Any library file named <code>lib&lt;name&gt;.a</code> in the runtime directory is linked too.</p>
 <p>Anything else must be linked explicitly. On Linux, that includes <code>pthread</code>
-on older systems.</p>
+on older systems. Android keeps <code>pthread</code> and <code>rt</code> in its C library and has
+no library of either name, so the compiler drops <code>-l pthread</code> and <code>-l rt</code>
+when linking for Android: one <code>[Link("pthread")]</code> serves both.</p>
 <h2 id="linking-a-library-from-the-source-link"><a class="header" href="#linking-a-library-from-the-source-link">Linking a library from the source: <code>[Link]</code></a></h2>
 <p>Attach <code>[Link("name")]</code> (or <code>[Link(lib = "name")]</code>) to an <code>extern</code>
 declaration to link the library that defines it. The compiler passes <code>-lname</code> to the linker, just like <code>-l</code> on the
@@ -18497,7 +18726,7 @@ executable on Linux and macOS, and CodeView on Windows, where the linker
 writes <code>&lt;output&gt;.pdb</code> beside the executable. On macOS it also runs
 <code>dsymutil</code> to write <code>&lt;output&gt;.dSYM</code> beside the executable, when the
 program is built for the Mac it runs on. It works with <code>-O</code>. See
-<a href="#debugging">Debugging</a>.</p>
+<a href="#debugging-1">Debugging</a>.</p>
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program’s function names, which is where <a href="#backtraces-and-the-debugger">backtraces</a>
 read them.</p>
@@ -18530,18 +18759,27 @@ it, <code>-O</code> and <code>-g</code>. It is part of the build cache’s key.<
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
 <code>x86_64-unknown-linux-gnu</code>, <code>aarch64-unknown-linux-gnu</code>,
-<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code> or
-<code>aarch64-pc-windows-msvc</code>, with a version allowed where clang allows one
-(<code>arm64-apple-macosx14.0</code>). An unsupported triple is an error that lists the
+<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>,
+<code>aarch64-pc-windows-msvc</code>, <code>wasm32-wasip1</code>, <code>aarch64-apple-ios</code>,
+<code>aarch64-apple-ios-simulator</code>, <code>x86_64-apple-ios-simulator</code>,
+<code>aarch64-linux-android</code> or <code>x86_64-linux-android</code>, with a version allowed
+where clang allows one (<code>arm64-apple-macosx14.0</code>, <code>aarch64-apple-ios17.0</code>,
+<code>aarch64-linux-android33</code>). An unsupported triple is an error that lists the
 supported ones. <code>[Target(...)]</code> selects code for the target. The default is
 the machine the compiler runs on. See
-<a href="#cross-compiling">Cross-compiling</a>.</p>
+<a href="#cross-compiling">Cross-compiling</a> and
+<a href="#ios-and-android">iOS and Android</a>.</p>
 <h3 id="--sysroot-dir"><a class="header" href="#--sysroot-dir"><code>--sysroot &lt;dir&gt;</code></a></h3>
 <p>The folder that holds the target’s system headers and libraries, passed to
 the link driver, for linking with <code>--target</code>. Without it, the folder named by
 <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when that is set: the triple in capitals, with <code>_</code>
 for each character that is not a letter or digit
-(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>).</p>
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>). An iOS
+or Android triple’s variable leaves out the OS version
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code> for
+<code>aarch64-apple-ios17.0-simulator</code>). For iOS it is an iOS SDK, which on a Mac
+defaults to the one <code>xcrun</code> names; for Android it is the NDK (see
+<code>ANDROID_NDK_HOME</code> below).</p>
 <h2 id="linking-1"><a class="header" href="#linking-1">Linking</a></h2>
 <h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
 <p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
@@ -18657,6 +18895,9 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite’s JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
 <tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
 <tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_NDK_HOME</code>, <code>ANDROID_NDK_ROOT</code></td><td>The Android NDK for linking with an Android <code>--target</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> names one</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
@@ -19525,7 +19766,7 @@ on failure, with the reason on standard error.</p>
 <p>See <a href="#building-this-documentation">Building this documentation</a> for how the
 book is organized and published.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="debugging"><a class="header" href="#debugging">Debugging</a></h1>
+<h1 id="debugging-1"><a class="header" href="#debugging-1">Debugging</a></h1>
 <p>Build with <code>-g</code> to debug a Pepper program in gdb, lldb, Visual Studio or
 WinDbg. The compiler then describes the program to the debugger, which can:</p>
 <ul>
@@ -33230,7 +33471,8 @@ resolve against the new directory.</p>
 <p>Returns the directory for temporary files. It is not created or
 checked, so it may not exist.</p>
 <p>On POSIX it is <code>$TMPDIR</code> with any trailing <code>/</code> removed, or <code>/tmp</code>
-when <code>TMPDIR</code> is unset or empty. On Windows it is what
+when <code>TMPDIR</code> is unset or empty (<code>/data/local/tmp</code> on Android, which
+has no <code>/tmp</code>; an app should use its cache directory instead). On Windows it is what
 <code>GetTempPathW</code> reports (from <code>TMP</code>, <code>TEMP</code>, <code>USERPROFILE</code>, or the
 Windows directory) with its trailing separator removed unless it is
 a root, or <code>.</code> if that call fails.</p>
@@ -38472,6 +38714,15 @@ uses.</p>
 <pre><code class="language-pepper">Wasi
 </code></pre>
 <p>WASI: a WebAssembly runtime such as wasmtime (<code>--target wasm32-wasip1</code>).</p>
+<h4 id="ios"><a class="header" href="#ios">IOS</a></h4>
+<pre><code class="language-pepper">IOS
+</code></pre>
+<p>iOS and iPadOS, on a device or in the simulator (<code>--target aarch64-apple-ios</code>). <code>[Target(OS(Mac))]</code> covers it too.</p>
+<h4 id="android"><a class="header" href="#android">Android</a></h4>
+<pre><code class="language-pepper">Android
+</code></pre>
+<p>Android (<code>--target aarch64-linux-android</code>). <code>[Target(OS(Linux))]</code>
+covers it too.</p>
 <h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
 <pre><code class="language-pepper">system_os(): OperatingSystem
 </code></pre>
@@ -38493,8 +38744,8 @@ main(): int {
 <pre><code class="language-pepper">system_name(): String
 </code></pre>
 <p>Returns the name of the operating system the program was built for, in
-lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code> or <code>"wasi"</code>, for printing
-and for file and directory names.</p>
+lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code>, <code>"wasi"</code>, <code>"ios"</code> or
+<code>"android"</code>, for printing and for file and directory names.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the operating system’s name</li>
@@ -38650,8 +38901,8 @@ main(): int {
 <h2 id="temp_directory"><a class="header" href="#temp_directory">temp_directory</a></h2>
 <pre><code class="language-pepper">temp_directory(): io.Path
 </code></pre>
-<p>Returns the directory for temporary files: <code>TMPDIR</code> or <code>/tmp</code> on POSIX,
-<code>GetTempPathW</code> on Windows. The same as <code>io.Directory.temp()</code>.</p>
+<p>Returns the directory for temporary files: <code>TMPDIR</code> or <code>/tmp</code> on POSIX
+(<code>/data/local/tmp</code> on Android), <code>GetTempPathW</code> on Windows. The same as <code>io.Directory.temp()</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the temporary directory</li>

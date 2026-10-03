@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d08a603e.js";
+            window.path_to_searchindex_js = "../searchindex-d33e958f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d41a7b3.js"></script>
+        <script src="../toc-2a342c12.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -211,7 +211,9 @@ libraries itself, so you do not need a Developer Command Prompt.</li>
 </ul>
 <p>Any library file named <code>lib&lt;name&gt;.a</code> in the runtime directory is linked too.</p>
 <p>Anything else must be linked explicitly. On Linux, that includes <code>pthread</code>
-on older systems.</p>
+on older systems. Android keeps <code>pthread</code> and <code>rt</code> in its C library and has
+no library of either name, so the compiler drops <code>-l pthread</code> and <code>-l rt</code>
+when linking for Android: one <code>[Link("pthread")]</code> serves both.</p>
 <h2 id="linking-a-library-from-the-source-link"><a class="header" href="#linking-a-library-from-the-source-link">Linking a library from the source: <code>[Link]</code></a></h2>
 <p>Attach <code>[Link("name")]</code> (or <code>[Link(lib = "name")]</code>) to an <code>extern</code>
 declaration to link the library that defines it. The compiler passes <code>-lname</code> to the linker, just like <code>-l</code> on the
