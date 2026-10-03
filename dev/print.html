@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f9884282.js";
+            window.path_to_searchindex_js = "searchindex-6e36c851.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-65765d64.js"></script>
+        <script src="toc-6e8bb89c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -235,9 +235,10 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
 TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). That is enough to write real
-programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, and
-<a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every tool, are
-themselves written in Pepper.
+programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
+<a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
+flame graph, and <a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every
+tool, are themselves written in Pepper.
 Some things you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,
@@ -298,7 +299,8 @@ program.</li>
 <a href="#naming-conventions-1">naming conventions</a>. Read it in order, or jump to the
 topic you need.</li>
 <li><strong>Tools.</strong> <a href="#the-pepper-command">The pepper command</a>,
-<a href="#formatting-with-pep-fmt">pep-fmt</a> and <a href="#debugging">debugging</a>.</li>
+<a href="#formatting-with-pep-fmt">pep-fmt</a>, <a href="#profiling-with-pep-profile">pep-profile</a> and
+<a href="#debugging">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime’s own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>
@@ -14734,6 +14736,16 @@ read and change the directory relative paths are resolved against, as
 </ul>
 <p><code>arguments()</code> and <code>exit()</code> without <code>import process</code> still work, but are
 deprecated and warn.</p>
+<h2 id="finding-a-program"><a class="header" href="#finding-a-program">Finding a program</a></h2>
+<p><code>process.find_executable(name)</code> looks a program up on the <code>PATH</code> as a shell
+does, returning the path of the first match that may be run, or none, so a
+tool can say what to install before trying to run it.
+<code>process.is_executable(path)</code> tells whether a file may be run.</p>
+<pre><code class="language-pepper">var perf = process.find_executable("perf");
+if (perf.is_empty()) {
+    print("perf is not installed");
+}
+</code></pre>
 <p>See the <a href="#the-process-module">process module reference</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-operating-system"><a class="header" href="#the-operating-system">The operating system</a></h1>
@@ -17556,14 +17568,15 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (<a href="#the-compiler-pep-build">The compiler: pep-build</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="#formatting-with-pep-fmt">Formatting with pep-fmt</a>)</td></tr>
+<tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="#profiling-with-pep-profile">Profiling with pep-profile</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>)</td></tr>
 <tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book (<a href="#the-documentation-builder-pep-doc">The documentation builder: pep-doc</a>)</td></tr>
 </tbody>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code> and <code>pepper</code> are Pepper programs, built with
-<code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code> and <code>pepper</code> are Pepper
+programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>
@@ -17633,6 +17646,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--frame-pointers</code></td><td>Keep every function’s frame pointer, for profilers</td><td>off</td></tr>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target’s system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform’s defaults</td></tr>
@@ -17758,6 +17772,14 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program’s function names, which is where <a href="#backtraces-and-the-debugger">backtraces</a>
 read them.</p>
+<h3 id="--frame-pointers"><a class="header" href="#--frame-pointers"><code>--frame-pointers</code></a></h3>
+<p>Keeps the frame pointer in every function, even when optimizing, as clang’s
+<code>-fno-omit-frame-pointer</code> does. A sampling profiler then walks the stack of
+each sample by following frame pointers, which is fast and finds every
+frame of Pepper code; without them, optimized code reuses the register and
+a profiler loses the callers of whatever was running. It costs a register
+and a few instructions per call. <a href="#profiling-with-pep-profile">pep-profile</a> builds with
+it, <code>-O</code> and <code>-g</code>. It is part of the build cache’s key.</p>
 <h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
@@ -18035,6 +18057,150 @@ const IDENTITY = matrix(1, 0, 0,
 the pair must be in the same block (or both at the top level). Without a
 <code># format: on</code>, the region runs to the end of the block or file.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="profiling-with-pep-profile"><a class="header" href="#profiling-with-pep-profile">Profiling with pep-profile</a></h1>
+<p><code>pep-profile</code> runs a program under a sampling profiler and writes a
+<a href="https://www.brendangregg.com/flamegraphs.html">flame graph</a> of where it
+spends its time: an SVG that any browser opens, with one box per function,
+as wide as the share of samples the function was on the stack for, above
+the function that called it. Hover over a box to see its numbers; click it
+to zoom in, and click “Reset zoom” to zoom back out.</p>
+<pre><code class="language-bash">pepper profile main.pep                     # build it, run it, write main.svg
+pepper profile ./server -- --port 8080      # an executable, with its arguments
+pepper profile --pid 4242 --duration 10     # a running process, for 10 seconds
+pepper profile -i main.json -o main.svg     # draw a recording made earlier
+</code></pre>
+<p><code>pep-profile</code> records with a profiler that is already installed rather than
+sampling the program itself:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Profiler</th><th>Platforms</th><th>Install</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://github.com/mstange/samply">samply</a></td><td>Linux, macOS, Windows</td><td><code>cargo install --locked samply</code></td></tr>
+<tr><td>perf</td><td>Linux</td><td>your distribution’s <code>linux-tools</code> (or <code>perf</code>) package</td></tr>
+<tr><td><code>sample</code></td><td>macOS</td><td>comes with macOS</td></tr>
+</tbody>
+</table>
+</div>
+<p>It uses samply when it is installed, and otherwise perf on Linux or
+<code>sample</code> on macOS; on Windows, samply is the one supported. When none is
+installed it says what to install. <code>--profiler</code> picks one.</p>
+<p><code>pep-profile</code> is written in Pepper (<code>tools/pep-profile</code>). Build it with the
+compiler, with <code>tools/</code> on the import path, and put it next to <code>pepper</code> so
+that <code>pepper profile</code> finds it:</p>
+<pre><code class="language-bash">target/release/pep-build -I tools tools/pep-profile/main.pep -o target/release/pep-profile
+</code></pre>
+<h2 id="usage-and-options-1"><a class="header" href="#usage-and-options-1">Usage and options</a></h2>
+<pre><code class="language-text">pep-profile [options] &lt;program.pep | executable&gt; [-- arguments...]
+pep-profile [options] --pid &lt;PID&gt;
+pep-profile [options] --input &lt;FILE&gt;
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;program&gt;</code></td><td>The <code>.pep</code> file or executable to profile, then its arguments</td><td></td></tr>
+<tr><td><code>-o &lt;file&gt;</code>, <code>--output &lt;file&gt;</code></td><td>The flame graph to write</td><td>the program’s name with <code>.svg</code></td></tr>
+<tr><td><code>-F &lt;hz&gt;</code>, <code>--frequency &lt;hz&gt;</code></td><td>Samples per second</td><td>999</td></tr>
+<tr><td><code>-d &lt;seconds&gt;</code>, <code>--duration &lt;seconds&gt;</code></td><td>Stop recording after this long</td><td>when the program ends; 10 s with <code>--pid</code></td></tr>
+<tr><td><code>-p &lt;pid&gt;</code>, <code>--pid &lt;pid&gt;</code></td><td>Record a running process instead of starting one</td><td></td></tr>
+<tr><td><code>-i &lt;file&gt;</code>, <code>--input &lt;file&gt;</code></td><td>Draw a recording made earlier instead of recording</td><td></td></tr>
+<tr><td><code>--profiler &lt;name&gt;</code></td><td>Record with <code>samply</code>, <code>perf</code> or <code>sample</code>, or the profiler at a path</td><td>the first installed</td></tr>
+<tr><td><code>--symbolizer &lt;path&gt;</code></td><td>The <code>llvm-symbolizer</code> that names frames, or <code>none</code></td><td>found on the <code>PATH</code></td></tr>
+<tr><td><code>-l</code>, <code>--lines</code></td><td>End each frame’s name with its file and line</td><td>off</td></tr>
+<tr><td><code>--title &lt;text&gt;</code></td><td>The flame graph’s title</td><td><code>Flame graph: &lt;name&gt;</code></td></tr>
+<tr><td><code>--renderer &lt;name&gt;</code></td><td>What draws the flame graph: <code>builtin</code>, <code>inferno</code> or <code>flamegraph.pl</code></td><td><code>builtin</code></td></tr>
+<tr><td><code>--folded &lt;file&gt;</code></td><td>Also write the folded stacks</td><td></td></tr>
+<tr><td><code>--raw &lt;file&gt;</code></td><td>Also keep the profiler’s own recording</td><td></td></tr>
+<tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports, when building a <code>.pep</code> file</td><td></td></tr>
+<tr><td><code>--open</code></td><td>Open the flame graph when it is written</td><td>off</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p>Give exactly one of a program, <code>--pid</code> and <code>--input</code>. The program’s own
+arguments go after it; put <code>--</code> before them when any starts with <code>-</code>, so
+that <code>pep-profile</code> does not read them as its own options. <code>pep-profile</code>
+exits with 0 once the flame graph is written, whatever the program’s own
+exit status, with 1 when it cannot record or draw one, and with 2 for a
+usage error.</p>
+<h2 id="profiling-a-program"><a class="header" href="#profiling-a-program">Profiling a program</a></h2>
+<p>Given a <code>.pep</code> file, <code>pep-profile</code> first builds it with <code>pep-build</code>, found
+next to <code>pep-profile</code> or on the <code>PATH</code>, as</p>
+<pre><code class="language-bash">pep-build main.pep -O -g --frame-pointers -o &lt;scratch&gt;/main
+</code></pre>
+<p><code>-O</code> profiles the code that ships; <code>-g</code> gives the frames their names and
+lines; and <code>--frame-pointers</code> keeps the frame pointer in every function, so
+that the profiler walks each sampled stack quickly and completely (see
+<a href="#--frame-pointers">pep-build</a>). Pass <code>-I</code> for each folder the
+program imports from. An executable is run as it is: build it with the
+same options to get the same detail.</p>
+<p>The program runs with the terminal’s standard input and output. Recording
+stops when it exits, or after <code>--duration</code> seconds. With perf, <code>--duration</code>
+stops the program with <code>timeout</code>; with samply and <code>sample</code> the program
+keeps running once recording stops, and <code>sample</code> then ends it.</p>
+<p><code>--pid</code> records a process that is already running, for <code>--duration</code>
+seconds (10 by default). samply and perf need permission to do that: on
+Linux, <code>kernel.perf_event_paranoid</code> must allow it (samply asks for 1 or
+lower) or the profiler must run as root; on macOS, <code>sample</code> can attach to
+your own processes.</p>
+<h2 id="names-in-the-flame-graph"><a class="header" href="#names-in-the-flame-graph">Names in the flame graph</a></h2>
+<p>Every frame is named the way the source names it:</p>
+<ul>
+<li>A function or method by its name: <code>work</code>, <code>Point.length</code>,
+<code>Box&lt;int&gt;.get</code>. A generic specialization keeps its type arguments.</li>
+<li>A closure by where it is written: <code>closure at main.pep:14</code>.</li>
+<li>A function the optimizer inlined still has a frame of its own, inside the
+function it was inlined into.</li>
+<li>With <code>--lines</code>, a frame also gives the file and line it is at:
+<code>work (main.pep:17)</code>. A function then gets one frame per line that was
+running, which shows where in a long function the time goes.</li>
+</ul>
+<p>These names come from the program’s debug info, read by
+<a href="https://llvm.org/docs/CommandGuide/llvm-symbolizer.html"><code>llvm-symbolizer</code></a>,
+which LLVM installs: <code>pep-profile</code> looks for <code>llvm-symbolizer</code> and its
+versioned names (<code>llvm-symbolizer-20</code>) on the <code>PATH</code>, then in
+<code>$LLVM_SYS_&lt;major&gt;1_PREFIX/bin</code> and the usual LLVM install folders.
+<code>--symbolizer</code> names one, and <code>--symbolizer none</code> skips it. Without one,
+frames take the profiler’s symbol names, which <code>pep-profile</code> demangles:
+Pepper’s linker name <code>_PArray_3cint_3e.count</code> shows as <code>Array&lt;int&gt;.count</code>,
+and a closure as <code>closure #0 in main</code>. Inlined functions then have no
+frames of their own, and <code>--lines</code> adds nothing.</p>
+<h2 id="recordings"><a class="header" href="#recordings">Recordings</a></h2>
+<p><code>--raw &lt;file&gt;</code> keeps the profiler’s recording: samply’s profile (with its
+symbols beside it, in <code>&lt;file&gt;</code> with <code>.syms.json</code> in place of <code>.json</code>),
+perf’s <code>perf.data</code>, or <code>sample</code>’s report. A samply profile opens in the
+<a href="https://profiler.firefox.com/">Firefox Profiler</a> (<code>samply load &lt;file&gt;</code>),
+which shows the samples over time; <code>perf.data</code> opens in <code>perf report</code>.</p>
+<p><code>--input &lt;file&gt;</code> draws a flame graph from such a recording instead of
+making a new one, telling the format from what the file holds:</p>
+<ul>
+<li>a samply profile (JSON);</li>
+<li>a <code>perf.data</code> file (read with <code>perf script</code>), or the text
+<code>perf script -F ip,sym,symoff,dso</code> writes;</li>
+<li>the report <code>sample</code> writes;</li>
+<li>folded stacks, as <code>--folded</code> writes them.</li>
+</ul>
+<p>Frames are named from the libraries the recording names, when they are
+still on this machine.</p>
+<p><code>--folded &lt;file&gt;</code> writes the folded stacks the flame graph is drawn from,
+in the “collapsed” format other flame graph tools read: one line per
+distinct stack, its frames from the outermost in, joined by <code>;</code>, then a
+space and its sample count.</p>
+<pre><code class="language-text">_start;__libc_start_main_impl;main;work;Box&lt;int&gt;.get 533
+</code></pre>
+<h2 id="renderers"><a class="header" href="#renderers">Renderers</a></h2>
+<p>The flame graph is drawn by a renderer built into <code>pep-profile</code>, so it needs
+nothing else installed. <code>--renderer inferno</code> draws it with
+<a href="https://github.com/jonhoo/inferno">inferno</a>’s <code>inferno-flamegraph</code>
+(<code>cargo install inferno</code>), and <code>--renderer flamegraph.pl</code> with Brendan
+Gregg’s <a href="https://github.com/brendangregg/FlameGraph"><code>flamegraph.pl</code></a>, each
+found on the <code>PATH</code>, for their extra features such as search.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-language-server-pep-lsp"><a class="header" href="#the-language-server-pep-lsp">The language server: pep-lsp</a></h1>
 <p><code>pep-lsp</code> is Pepper’s language server. An editor starts it and talks to it
 over standard input and output with the
@@ -18239,7 +18405,7 @@ The <code>.pdb</code> beside the executable is found automatically.</p>
 <li><strong>Functions</strong> under the names you wrote: <code>total</code>, <code>Point.length</code>,
 <code>Array&lt;int&gt;.append</code>. Methods the compiler writes for a struct, such as
 <code>__acquire</code> and <code>__release</code>, are marked artificial and placed on the
-struct’s line.</li>
+struct’s line. A closure is named for where it is written: <code>closure at main.pep:14</code>.</li>
 <li><strong>Structs.</strong> A variable of a struct type holds a reference, so the
 debugger shows an address. Dereference it (<code>print *first</code>) to see the
 fields. The fields include the <code>__refcount</code> and <code>__weakcount</code> head, which
@@ -34794,6 +34960,8 @@ returns a <code>Child</code>, and <code>exec()</code> runs it in place of the ru
 and its <code>ExitStatus</code></li>
 <li><a href="#the-running-process-1">The running process</a>: <code>id()</code> and
 <code>executable_path()</code></li>
+<li><a href="#finding-programs">Finding programs</a>: <code>find_executable()</code> looks a
+program up on the <code>PATH</code>, and <code>is_executable()</code> checks a file</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import process;
@@ -35335,6 +35503,50 @@ process, every thread included. The same as <code>io.Directory.set_current</code
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing, <code>is_not_a_directory()</code> when it is a file, or <code>is_permission_denied()</code></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/find.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="finding-programs"><a class="header" href="#finding-programs">Finding programs</a></h1>
+<p>Finding programs: <code>find_executable</code> looks a program up on the <code>PATH</code>, as
+a shell does before running it, and <code>is_executable</code> tells whether a file
+can be run.</p>
+<p>Source: <code>runtime/process/find.pep</code></p>
+<h2 id="find_executable"><a class="header" href="#find_executable">find_executable</a></h2>
+<pre><code class="language-pepper">find_executable(name: String): io.Path?
+</code></pre>
+<p>Returns the program <code>name</code> would run as a command: the first file named
+<code>name</code> in the directories <code>PATH</code> lists, in order, that this process may
+run. A <code>name</code> that holds a path separator is not looked up: it is
+returned when it names such a file itself. On Windows, a <code>name</code> with no
+extension also matches <code>name.exe</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the program’s file name, such as <code>"perf"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the program’s path, or none when no directory on the <code>PATH</code> holds it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    var git = process.find_executable("git");
+    print(git.is_value() ? git.value().to_string() : "git is not installed");
+    return 0;
+}
+</code></pre>
+<h2 id="is_executable"><a class="header" href="#is_executable">is_executable</a></h2>
+<pre><code class="language-pepper">is_executable(path: io.Path): bool
+</code></pre>
+<p>Returns whether <code>path</code> is a file this process may run: on Linux and
+macOS, a file with an execute permission bit set; on Windows, any file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to check</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>path</code> names a file that may be run</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-os-module"><a class="header" href="#the-os-module">The os module</a></h1>

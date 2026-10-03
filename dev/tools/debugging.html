@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f9884282.js";
+            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-65765d64.js"></script>
+        <script src="../toc-6e8bb89c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -254,7 +254,7 @@ The <code>.pdb</code> beside the executable is found automatically.</p>
 <li><strong>Functions</strong> under the names you wrote: <code>total</code>, <code>Point.length</code>,
 <code>Array&lt;int&gt;.append</code>. Methods the compiler writes for a struct, such as
 <code>__acquire</code> and <code>__release</code>, are marked artificial and placed on the
-struct’s line.</li>
+struct’s line. A closure is named for where it is written: <code>closure at main.pep:14</code>.</li>
 <li><strong>Structs.</strong> A variable of a struct type holds a reference, so the
 debugger shows an address. Dereference it (<code>print *first</code>) to see the
 fields. The fields include the <code>__refcount</code> and <code>__weakcount</code> head, which

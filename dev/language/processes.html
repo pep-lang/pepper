@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f9884282.js";
+            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-65765d64.js"></script>
+        <script src="../toc-6e8bb89c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -346,6 +346,16 @@ read and change the directory relative paths are resolved against, as
 </ul>
 <p><code>arguments()</code> and <code>exit()</code> without <code>import process</code> still work, but are
 deprecated and warn.</p>
+<h2 id="finding-a-program"><a class="header" href="#finding-a-program">Finding a program</a></h2>
+<p><code>process.find_executable(name)</code> looks a program up on the <code>PATH</code> as a shell
+does, returning the path of the first match that may be run, or none, so a
+tool can say what to install before trying to run it.
+<code>process.is_executable(path)</code> tells whether a file may be run.</p>
+<pre><code class="language-pepper">var perf = process.find_executable("perf");
+if (perf.is_empty()) {
+    print("perf is not installed");
+}
+</code></pre>
 <p>See the <a href="../reference/process-module.html">process module reference</a>.</p>
 
                     </main>

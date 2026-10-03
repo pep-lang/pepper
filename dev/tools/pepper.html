@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f9884282.js";
+            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-65765d64.js"></script>
+        <script src="../toc-6e8bb89c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,14 +227,15 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program (<a href="pep-build.html">The compiler: pep-build</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="pep-fmt.html">Formatting with pep-fmt</a>)</td></tr>
+<tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="pep-profile.html">Profiling with pep-profile</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="pep-lsp.html">The language server: pep-lsp</a>)</td></tr>
 <tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book (<a href="pep-doc.html">The documentation builder: pep-doc</a>)</td></tr>
 </tbody>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code> and <code>pepper</code> are Pepper programs, built with
-<code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code> and <code>pepper</code> are Pepper
+programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>

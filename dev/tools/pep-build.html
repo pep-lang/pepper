@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f9884282.js";
+            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-65765d64.js"></script>
+        <script src="../toc-6e8bb89c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -211,6 +211,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--frame-pointers</code></td><td>Keep every function’s frame pointer, for profilers</td><td>off</td></tr>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target’s system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform’s defaults</td></tr>
@@ -336,6 +337,14 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program’s function names, which is where <a href="../language/debug.html">backtraces</a>
 read them.</p>
+<h3 id="--frame-pointers"><a class="header" href="#--frame-pointers"><code>--frame-pointers</code></a></h3>
+<p>Keeps the frame pointer in every function, even when optimizing, as clang’s
+<code>-fno-omit-frame-pointer</code> does. A sampling profiler then walks the stack of
+each sample by following frame pointers, which is fast and finds every
+frame of Pepper code; without them, optimized code reuses the register and
+a profiler loses the callers of whatever was running. It costs a register
+and a few instructions per call. <a href="pep-profile.html">pep-profile</a> builds with
+it, <code>-O</code> and <code>-g</code>. It is part of the build cache’s key.</p>
 <h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
