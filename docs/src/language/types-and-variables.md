@@ -438,7 +438,9 @@ conversions"), so code ported from C gives the same results:
 - **Conditionals.** `c ? a : b` with numeric arms of different types has
   their common type by the same rules (`c ? 0 : s.length` is a `ulong`), and
   so does a [`match` expression](enums.md#match-expressions-is-and-literal-patterns)
-  over its arms. The value converts from that type wherever it goes.
+  over its arms. The value converts from that type wherever it goes, and a
+  `var` it initializes has that type (`var n = c ? 0 : s.length` is a
+  `ulong`, not an `int`).
 - **Shifts** take the type of the (promoted) left operand. `>>` keeps the sign for
   signed types and fills with zeros for unsigned types.
 - **Overflow** is where Pepper leaves C: it panics, for signed and unsigned

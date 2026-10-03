@@ -706,16 +706,25 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // `x as T` resolves to the cast target.
         Expression::Cast { ty, .. } => ty.clone(),
         // Both ternary arms have the same type (enforced by sema): report it
-        // so `var x = c ? A() : B()` infers the arm's type.
+        // so `var x = c ? A() : B()` infers the arm's type. Numeric arms
+        // have their common type, as `static_type` gives the expression,
+        // so `var x = c ? 0 : big` is not cut to `int`.
         // A `match` expression's chain: the first arm's type (its last `?:`
         // may fall through to `NoMatch`, which has none).
         Expression::Ternary { true_expr, false_expr, .. } => {
             let ty = type_of_expr(true_expr, scopes, current_struct);
             if ty.is_auto() && matches!(true_expr.as_ref(), Expression::NoMatch) {
-                type_of_expr(false_expr, scopes, current_struct)
-            } else {
-                ty
+                return type_of_expr(false_expr, scopes, current_struct);
             }
+            let (true_name, false_ty) = (ty.to_string(), type_of_expr(false_expr, scopes, current_struct));
+            let false_name = false_ty.to_string();
+            if !false_ty.is_auto()
+                && crate::arithmetic::is_numeric_type(&true_name)
+                && crate::arithmetic::is_numeric_type(&false_name)
+            {
+                return TypeName::new(&crate::arithmetic::conditional_result(&true_name, &false_name));
+            }
+            ty
         }
         _ => TypeName::auto(),
     }
